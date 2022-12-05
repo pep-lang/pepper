@@ -16,7 +16,6 @@ internal class Context {
     private delegate int IntMain0();
     public LLVMContextRef Ctx { get; private set; }
     public LLVMBuilderRef Builder { get; private set; }
-
     public LLVMModuleRef Module { get; private set; }
 
     public Context(string name) {
