@@ -7,9 +7,18 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>False</Optimize>
+  </PropertyGroup>
+
   <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.11.1" />
     <PackageReference Include="LLVMSharp" Version="15.0.0-beta1" />
     <PackageReference Include="NUnit" Version="3.13.3" />
   </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="antlr4 -o $(ProjectDir)\Parser -package Pepper.Parser -Dlanguage=CSharp $(ProjectDir)\Pepper.g4" />
+  </Target>
 
 </Project>
