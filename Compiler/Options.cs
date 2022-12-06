@@ -8,7 +8,10 @@ using CommandLine;
 
 namespace Pepper.Compiler {
     internal class Options {
-        [Value(index: 0, Required = true, HelpText = "Input source files")]
+        [Value(index: 0, Required = true)]
+        public string CompilerPath { get; set; } = String.Empty;
+
+        [Value(index: 1, Required = true, HelpText = "Input source files")]
         public string Input { get; set; } = String.Empty;
 
         [Option(shortName: 'o', longName: "output", Default = "bin/a.out", HelpText = "Output binary path")]

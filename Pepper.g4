@@ -288,7 +288,7 @@ jumpStatement
     |   'return' expression?
     |   'goto' unaryExpression // GCC extension
     )
-    ';'
+    ';'?
     ;
 
 compilationUnit
@@ -306,7 +306,7 @@ externalDeclaration
     ;
 
 functionDefinition
-    :   declarationSpecifiers? declarator declarationList? compoundStatement
+    :   declarationSpecifiers? declarator '(' initDeclaratorList? ')' compoundStatement
     ;
 
 declarationList
