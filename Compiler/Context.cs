@@ -18,8 +18,12 @@ internal class Context {
     public LLVMBuilderRef Builder { get; private set; }
     public LLVMModuleRef Module { get; private set; }
 
-    public Context(string name) {
-        Module = LLVMModuleRef.CreateWithName(name);
+    public Options Options { get; private set; }
+
+    public Context() {
+        Options = Options.Parse();
+
+        Module = LLVMModuleRef.CreateWithName(Options.ModuleName);
         Ctx = Module.Context;
         Builder = Ctx.CreateBuilder();
         
