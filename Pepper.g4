@@ -131,18 +131,7 @@ storageClassSpecifier
 	;
 
 typeSpecifier
-	: 
-	(
-	  'void'
-	| 'byte'
-	| 'i32'
-	| 'u32'
-	| 'i64'
-	| 'u64'
-	| 'f32'
-	| 'f64'
-	| 'bool'
-	)
+	: Identifier
 	| structSpecifier
 	| enumSpecifier
 	;
@@ -196,6 +185,8 @@ typeQualifier
 // This probably needs way more
 declarator
 	: Identifier
+    | declarator '(' parameterTypeList? ')'
+    | declarator '(' identifierList? ')'
 	;
 
 typeQualifierList
@@ -256,17 +247,17 @@ blockItem
     ;
 
 expressionStatement
-    :   expression? ';'
+    :   expression
     ;
 
 selectionStatement
-    :   'if' '(' expression ')' statement ('else' statement)?
-    |   'switch' '(' expression ')' statement
+    :   If '(' expression ')' statement ('else' statement)?
+    |   Switch '(' expression ')' statement
     ;
 
 iterationStatement
     :   While '(' expression ')' statement
-    |   Do statement While '(' expression ')' ';'
+    |   Do statement While '(' expression ')' ';'?
     |   For '(' forCondition ')' statement
     ;
 
@@ -283,12 +274,10 @@ forExpression
     ;
 
 jumpStatement
-    :   ('goto' Identifier
-    |   ('continue'| 'break')
-    |   'return' expression?
-    |   'goto' unaryExpression // GCC extension
-    )
-    ';'?
+    : 
+    ( Continue
+    | Break   
+    | Return expression? ) ';'?
     ;
 
 compilationUnit
@@ -301,12 +290,15 @@ translationUnit
 
 externalDeclaration
     :   functionDefinition
-    |   declaration
     |   ';' // stray ;
     ;
 
 functionDefinition
-    :   declarationSpecifiers? declarator '(' initDeclaratorList? ')' compoundStatement
+    :   returnType? Identifier '(' initDeclaratorList? ')' compoundStatement
+    ;
+
+returnType
+    : Identifier
     ;
 
 declarationList

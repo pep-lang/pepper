@@ -12,18 +12,41 @@ using NUnit.Framework;
 namespace Pepper.Compiler;
 
 internal class Context {
-    
-    public LLVMContextRef Ctx { get; private set; }
-    public LLVMBuilderRef Builder { get; private set; }
+
+    // One context per thread, it's not possible for there to be multiple any other way
+    private static readonly ThreadLocal<Context> ThreadContext = new(() => new Context());
+    public static Context Default {
+        get {
+            if (!ThreadContext.IsValueCreated) {
+                ThreadContext.Value.RegisterGlobals();
+            }
+            return ThreadContext.Value!;
+        }
+    }
+
     public LLVMModuleRef Module { get; private set; }
 
     public Options Options { get; private set; }
 
+    public Scope Globals { get; private set; } = new();
+    public Scope Locals { get; private set; }
+
     public Context() {
         Options = Options.Parse();
-
         Module = LLVMModuleRef.CreateWithName(Options.ModuleName);
-        Ctx = Module.Context;
-        Builder = Ctx.CreateBuilder();
+        Locals = Globals;
+    }
+
+    void RegisterGlobals() {
+        IntegralType.StaticInit();
+    }
+
+    public Scope PushScope() {
+        return Locals = new Scope(Locals);
+    }
+
+    public Scope PopScope() {
+        return Locals = Locals.Outer ?? Globals;
     }
 }
+

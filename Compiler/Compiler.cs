@@ -17,56 +17,49 @@ namespace Pepper.Compiler {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int IntMain0();
 
-        Context Ctx;
-        Scope Globals = new Scope();
-        Scope LocalScope;
+        static Context Context { get { return Context.Default; } }
 
-        Compiler(Context context) {
-            Ctx = context;
-            LocalScope = Globals;
-        }
+        public Scope Globals { get { return Context.Globals; } }
+        public Scope Locals { get { return Context.Locals; } }
 
-        public static void Compile(Context Ctx) {
-            var inputStream = CharStreams.fromPath(Ctx.Options.Input);
+        Compiler() {}
+
+        public static void Compile() {
+            var inputStream = CharStreams.fromPath(Context.Options.Input);
 
             var lexer = new PepperLexer(inputStream);
             var tokens = new BufferedTokenStream(lexer);
             var parser = new PepperParser(tokens);
             parser.BuildParseTree = true;
+            parser.Trace = true;
 
             var tree = parser.compilationUnit();
-            var compiler = new Compiler(Ctx);
+            var compiler = new Compiler();
             ParseTreeWalker.Default.Walk(compiler, tree);
 
-            //(_, var main) = Ctx.Module.AddFunction(LLVMTypeRef.Int32, "main", Array.Empty<LLVMTypeRef>(), (func, builder) => {
-            //    builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0));
-            //});
-
-            Ctx.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+            Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 
             _ = LLVM.InitializeNativeTarget();
             _ = LLVM.InitializeNativeAsmParser();
             _ = LLVM.InitializeNativeAsmPrinter();
 
-            var engine = Ctx.Module.CreateMCJITCompiler();
+            var engine = Context.Module.CreateMCJITCompiler();
             var main = compiler.Globals.GetFunction("main")!.Ref;
             var entry = engine.GetPointerToGlobal<IntMain0>(main);
             var result = entry();
             Assert.AreEqual(0, result);
-        }
-
-        Scope PushScope() {
-            return LocalScope = new Scope(LocalScope);
-        }
-
-        Scope PopScope() {
-            return LocalScope = LocalScope.Outer ?? Globals;
-        }
+        }        
 
         public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
             base.EnterFunctionDefinition(context);
-            var identifier = context.declarator().Identifier().ToString()!;
+            var identifier = context.Identifier().ToString()!;
+            string returnTypeName = context.returnType()?.Identifier().ToString()! ?? IntegralType.Void.Name;
+            var returnType = Locals.GetType(returnTypeName);
+            if (returnType == null) {
+                throw new Exception($"Unknown return type {returnType}");
+            }
             var paramList = context.initDeclaratorList();
+            var parameters = new List<Variable>();
             if (paramList != null) {
                 var paramDecls = paramList.initDeclarator();
                 //var params = paramDecls.Select(p => {
@@ -74,9 +67,9 @@ namespace Pepper.Compiler {
                 //    var decls = p.initDeclaratorList().initDeclarator();
                 //});
             }
-            var args = new List<Variable>();
-            (var funcType, var funcRef) = Ctx.Module.AddFunction(LLVMTypeRef.Int32, identifier, Array.Empty<LLVMTypeRef>(), (func, builder) => {
-                var body = context.compoundStatement();
+            var func = new Function(identifier, returnType, parameters);
+            var body = context.compoundStatement();
+            if (body != null) {
                 var exprs = body.blockItemList().blockItem();
                 foreach (var expr in exprs) {
                     var decl = expr.declaration();
@@ -87,19 +80,11 @@ namespace Pepper.Compiler {
                     var statement = expr.statement();
                     if (statement != null) {
                         if (statement.jumpStatement().Return() != null) {
-                            builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0));
+                            func.Builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0));
                         }
                     }
                 }
-            });
-            var func = new Function {
-                TypeRef = funcType,
-                Ref = funcRef,
-                Name = identifier,
-                ReturnType = "void",
-                Parameters = args,
-            };
-            LocalScope.Functions.Add(identifier, func);
+            }
         }
     }
 }
