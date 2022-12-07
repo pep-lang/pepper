@@ -56,7 +56,7 @@ namespace Pepper.Compiler {
             string returnTypeName = context.returnType()?.Identifier().ToString()! ?? IntegralType.Void.Name;
             var returnType = Locals.GetType(returnTypeName);
             if (returnType == null) {
-                throw new Exception($"Unknown return type {returnType}");
+                throw new CompileException($"Unknown return type {returnType}");
             }
             var paramList = context.initDeclaratorList();
             var parameters = new List<Variable>();
@@ -103,7 +103,7 @@ namespace Pepper.Compiler {
             } else if (Double.TryParse(value, out var doubleVal)) {
                 return Locals.PushStack(LLVMValueRef.CreateConstFPCast(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(uintVal)), LLVMTypeRef.Double));
             }
-            throw new Exception($"Unable to parse numeric constant '{constant}'");
+            throw new CompileException($"Unable to parse numeric constant '{constant}'");
         }
 
         public override void EnterAssignmentExpression([NotNull] PepperParser.AssignmentExpressionContext context) {
