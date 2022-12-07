@@ -101,7 +101,7 @@ constantExpression
     ;
 
 declaration
-	: declarationSpecifiers initDeclaratorList?
+	: declarationSpecifiers initDeclaratorList? ';'
 	;
 
 declarationSpecifiers
@@ -145,8 +145,8 @@ structDeclarationList
 	;
 
 structDeclaration
-	: specifierQualifierList structDeclaratorList ';'?
-	| specifierQualifierList ';'?
+	: specifierQualifierList structDeclaratorList ';'
+	| specifierQualifierList ';'
 	;
 
 specifierQualifierList
@@ -247,7 +247,7 @@ blockItem
     ;
 
 expressionStatement
-    :   expression
+    :   expression ';'
     ;
 
 selectionStatement
