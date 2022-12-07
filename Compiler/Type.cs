@@ -34,6 +34,7 @@ namespace Pepper.Compiler {
         }
 
         public static void StaticInit() {
+            Context.Default.Locals.AliasType(I8, "char");
             Context.Default.Locals.AliasType(U8, "byte");
             Context.Default.Locals.AliasType(I32, "int");
             Context.Default.Locals.AliasType(U32, "uint");
@@ -48,6 +49,9 @@ namespace Pepper.Compiler {
         }
 
         public static readonly IntegralType Void = new("void", LLVMTypeRef.Void, (_, _) => throw new Exception("Cannot convert a value to void"));
+        public static readonly IntegralType I8 = new("i8", LLVMTypeRef.Int8, (val, type) => {
+            return LLVMValueRef.CreateConstIntCast(val, type, true);
+        });
         public static readonly IntegralType U8 = new("u8", LLVMTypeRef.Int8, (val, type) => {
             return LLVMValueRef.CreateConstIntCast(val, type, false);
         });
