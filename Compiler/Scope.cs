@@ -8,12 +8,28 @@ using System.Threading.Tasks;
 namespace Pepper.Compiler {
     internal class Scope {
         public Scope? Outer { get; private set; } = null;
-        private Dictionary<string, Type> Types = new();
-        private Dictionary<string, Function> Functions = new();
-        private Dictionary<string, Variable> Variables = new();
+        private LLVMBuilderRef? ScopeBuilder = null;
+        private readonly Dictionary<string, Type> Types = new();
+        private readonly Dictionary<string, Function> Functions = new();
+        private readonly Dictionary<string, Variable> Variables = new();
+        private readonly Stack<LLVMValueRef> Stack = new();
+        public Function? ScopeReturnTarget = null;
 
-        public Scope(Scope? outer = null) {
+        public LLVMBuilderRef Builder {
+            get {
+                return ScopeBuilder ?? Outer!.Builder;
+            }
+        }
+
+        public Function ReturnTarget {
+            get {
+                return ScopeReturnTarget ?? Outer!.ReturnTarget;
+            }
+        }
+
+        public Scope(Scope? outer = null, LLVMBuilderRef? builder = null) {
             Outer = outer;
+            ScopeBuilder = builder;
         }
 
         internal Type AddType(Type NewType) {
@@ -28,6 +44,7 @@ namespace Pepper.Compiler {
 
         public Function AddFunction(Function NewFunction) {
             Functions[NewFunction.Name] = NewFunction;
+            ScopeReturnTarget = NewFunction;
             return NewFunction;
         }
 
@@ -48,6 +65,15 @@ namespace Pepper.Compiler {
 
         public bool Exists(string name) {
             return GetType(name) != null || GetFunction(name) != null || GetVariable(name) != null;
+        }
+
+        public LLVMValueRef PushStack(LLVMValueRef val) {
+            Stack.Push(val);
+            return val;
+        }
+
+        public LLVMValueRef PopStack() {
+            return Stack.Pop();
         }
     }
 }

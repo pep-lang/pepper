@@ -18,7 +18,7 @@ internal class Context {
     public static Context Default {
         get {
             if (!ThreadContext.IsValueCreated) {
-                ThreadContext.Value.RegisterGlobals();
+                ThreadContext.Value!.RegisterGlobals();
             }
             return ThreadContext.Value!;
         }
@@ -28,12 +28,13 @@ internal class Context {
 
     public Options Options { get; private set; }
 
-    public Scope Globals { get; private set; } = new();
+    public Scope Globals { get; private set; }
     public Scope Locals { get; private set; }
 
     public Context() {
         Options = Options.Parse();
         Module = LLVMModuleRef.CreateWithName(Options.ModuleName);
+        Globals = new(null, Module.Context.CreateBuilder());
         Locals = Globals;
     }
 
@@ -41,8 +42,8 @@ internal class Context {
         IntegralType.StaticInit();
     }
 
-    public Scope PushScope() {
-        return Locals = new Scope(Locals);
+    public Scope PushScope(LLVMBuilderRef? builder) {
+        return Locals = new Scope(Locals, builder);
     }
 
     public Scope PopScope() {

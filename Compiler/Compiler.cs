@@ -68,23 +68,62 @@ namespace Pepper.Compiler {
                 //});
             }
             var func = new Function(identifier, returnType, parameters);
-            var body = context.compoundStatement();
-            if (body != null) {
-                var exprs = body.blockItemList().blockItem();
-                foreach (var expr in exprs) {
-                    var decl = expr.declaration();
-                    if (decl != null) {
-                        // do something
-                    }
+            Context.PushScope(func.Builder);
+        }
 
-                    var statement = expr.statement();
-                    if (statement != null) {
-                        if (statement.jumpStatement().Return() != null) {
-                            func.Builder.BuildRet(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, 0));
-                        }
-                    }
-                }
+        public override void ExitFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
+            base.ExitFunctionDefinition(context);
+            Context.PopScope();
+        }
+
+        public override void EnterDeclaration([NotNull] PepperParser.DeclarationContext context) {
+            base.EnterDeclaration(context);
+        }
+
+        public override void EnterJumpStatement([NotNull] PepperParser.JumpStatementContext context) {
+            base.EnterJumpStatement(context);
+        }
+
+        public override void ExitJumpStatement([NotNull] PepperParser.JumpStatementContext context) {
+            base.ExitJumpStatement(context);
+
+            if (context.Return() != null && context.expression() != null) {
+                var returnValue = Locals.PopStack();
+                var func = Locals.ReturnTarget;
+                var returnType = func!.ReturnType;
+                returnValue = returnType.Coerce(returnValue);
+                Locals.Builder.BuildRet(returnValue);
             }
+        }
+
+        LLVMValueRef EvalConstant(ITerminalNode constant) {
+            var value = constant.ToString();
+            if (Int64.TryParse(value, out var uintVal)) {
+                return Locals.PushStack(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)uintVal));
+            } else if (Double.TryParse(value, out var doubleVal)) {
+                return Locals.PushStack(LLVMValueRef.CreateConstFPCast(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(uintVal)), LLVMTypeRef.Double));
+            }
+            throw new Exception($"Unable to parse numeric constant '{constant}'");
+        }
+
+        public override void EnterAssignmentExpression([NotNull] PepperParser.AssignmentExpressionContext context) {
+            base.EnterAssignmentExpression(context);
+            var constant = context.Constant();
+            if (constant != null) {
+                EvalConstant(constant);
+            }
+        }
+
+        public override void EnterPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
+            base.EnterPrimaryExpression(context);
+            var constant = context.Constant();
+            if (constant != null) {
+                EvalConstant(constant);
+            }
+        }
+
+        public override void EnterExpression([NotNull] PepperParser.ExpressionContext context) {
+            base.EnterExpression(context);
         }
     }
 }

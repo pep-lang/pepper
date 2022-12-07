@@ -8,7 +8,7 @@ primaryExpression
 	;
 
 postfixExpression
-	: 
+	: primaryExpression
 	(
 		'[' expression ']'
 		| '(' argumentExpressionList ')'
@@ -85,7 +85,7 @@ ternaryExpression
 assignmentExpression
 	: ternaryExpression
 	| unaryExpression assignmentOperator assignmentExpression
-	| DigitSequence
+	| Constant
 	;
 
 assignmentOperator
