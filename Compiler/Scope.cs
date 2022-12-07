@@ -37,6 +37,11 @@ namespace Pepper.Compiler {
             return NewType;
         }
 
+        internal Type AliasType(Type SourceType, string alias) {
+            Types[alias] = SourceType;
+            return SourceType;
+        }
+
         public Type? GetType(string name) {
             if (Types.TryGetValue(name, out var type)) return type;
             return Outer?.GetType(name);

@@ -34,8 +34,13 @@ namespace Pepper.Compiler {
         }
 
         public static void StaticInit() {
-            // Force static initialization
-            var dummy = Void;
+            Context.Default.Locals.AliasType(U8, "byte");
+            Context.Default.Locals.AliasType(I32, "int");
+            Context.Default.Locals.AliasType(U32, "uint");
+            Context.Default.Locals.AliasType(I64, "long");
+            Context.Default.Locals.AliasType(U64, "ulong");
+            Context.Default.Locals.AliasType(Double, "double");
+            Context.Default.Locals.AliasType(Float, "float");
         }
 
         public override LLVMValueRef Coerce(LLVMValueRef val) {
@@ -43,6 +48,9 @@ namespace Pepper.Compiler {
         }
 
         public static readonly IntegralType Void = new("void", LLVMTypeRef.Void, (_, _) => throw new Exception("Cannot convert a value to void"));
+        public static readonly IntegralType U8 = new("u8", LLVMTypeRef.Int8, (val, type) => {
+            return LLVMValueRef.CreateConstIntCast(val, type, false);
+        });
         public static readonly IntegralType I32 = new("i32", LLVMTypeRef.Int32, (val, type) => {
             return LLVMValueRef.CreateConstIntCast(val, type, true);
         });

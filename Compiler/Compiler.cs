@@ -48,7 +48,17 @@ namespace Pepper.Compiler {
             var entry = engine.GetPointerToGlobal<IntMain0>(main);
             var result = entry();
             Assert.AreEqual(0, result);
-        }        
+        }
+
+        LLVMValueRef EvalConstant(ITerminalNode constant) {
+            var value = constant.ToString();
+            if (Int64.TryParse(value, out var uintVal)) {
+                return Locals.PushStack(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)uintVal));
+            } else if (Double.TryParse(value, out var doubleVal)) {
+                return Locals.PushStack(LLVMValueRef.CreateConstFPCast(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(uintVal)), LLVMTypeRef.Double));
+            }
+            throw new CompileException($"Unable to parse numeric constant '{constant}'");
+        }
 
         public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
             base.EnterFunctionDefinition(context);
@@ -94,16 +104,6 @@ namespace Pepper.Compiler {
                 returnValue = returnType.Coerce(returnValue);
                 Locals.Builder.BuildRet(returnValue);
             }
-        }
-
-        LLVMValueRef EvalConstant(ITerminalNode constant) {
-            var value = constant.ToString();
-            if (Int64.TryParse(value, out var uintVal)) {
-                return Locals.PushStack(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)uintVal));
-            } else if (Double.TryParse(value, out var doubleVal)) {
-                return Locals.PushStack(LLVMValueRef.CreateConstFPCast(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(uintVal)), LLVMTypeRef.Double));
-            }
-            throw new CompileException($"Unable to parse numeric constant '{constant}'");
         }
 
         public override void EnterAssignmentExpression([NotNull] PepperParser.AssignmentExpressionContext context) {

@@ -277,7 +277,7 @@ jumpStatement
     : 
     ( Continue
     | Break   
-    | Return expression? ) ';'?
+    | Return expression? ) ';'
     ;
 
 compilationUnit
