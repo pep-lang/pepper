@@ -40,6 +40,9 @@ internal class Context {
 
     void RegisterGlobals() {
         IntegralType.StaticInit();
+        //Globals.AddFunction(new ExternFunction("printf", IntegralType.I32, new Variable[] { 
+        //    new Variable("fmt", IntegralType.I8),
+        //}, true));
     }
 
     public Scope PushScope(LLVMBuilderRef? builder) {

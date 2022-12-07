@@ -52,12 +52,16 @@ namespace Pepper.Compiler {
 
         LLVMValueRef EvalConstant(ITerminalNode constant) {
             var value = constant.ToString();
-            if (Int64.TryParse(value, out var uintVal)) {
-                return Locals.PushStack(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)uintVal));
-            } else if (Double.TryParse(value, out var doubleVal)) {
-                return Locals.PushStack(LLVMValueRef.CreateConstFPCast(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(uintVal)), LLVMTypeRef.Double));
+            if (long.TryParse(value, out var longVal)) {
+                return Locals.PushStack(new ConstantInt(longVal, builder: Locals.Builder));
+            } else if (double.TryParse(value, out var doubleVal)) {
+                return Locals.PushStack(new ConstantDouble(doubleVal, builder: Locals.Builder));
             }
             throw new CompileException($"Unable to parse numeric constant '{constant}'");
+        }
+
+        void Print(Value val) {
+
         }
 
         public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
@@ -69,7 +73,7 @@ namespace Pepper.Compiler {
                 throw new CompileException($"Unknown return type {returnType}");
             }
             var paramList = context.initDeclaratorList();
-            var parameters = new List<Variable>();
+            var parameters = new List<Value>();
             if (paramList != null) {
                 var paramDecls = paramList.initDeclarator();
                 //var params = paramDecls.Select(p => {
@@ -77,7 +81,7 @@ namespace Pepper.Compiler {
                 //    var decls = p.initDeclaratorList().initDeclarator();
                 //});
             }
-            var func = new Function(identifier, returnType, parameters);
+            var func = new UserFunction(identifier, returnType, parameters);
             Context.PushScope(func.Builder);
         }
 

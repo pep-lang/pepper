@@ -11,8 +11,8 @@ namespace Pepper.Compiler {
         private LLVMBuilderRef? ScopeBuilder = null;
         private readonly Dictionary<string, Type> Types = new();
         private readonly Dictionary<string, Function> Functions = new();
-        private readonly Dictionary<string, Variable> Variables = new();
-        private readonly Stack<LLVMValueRef> Stack = new();
+        private readonly Dictionary<string, Value> Variables = new();
+        private readonly Stack<Value> Stack = new();
         public Function? ScopeReturnTarget = null;
 
         public LLVMBuilderRef Builder {
@@ -47,6 +47,10 @@ namespace Pepper.Compiler {
             return Outer?.GetType(name);
         }
 
+        public T? GetType<T>(string name) where T: Type {
+            return (T?)GetType(name);
+        }
+
         public Function AddFunction(Function NewFunction) {
             Functions[NewFunction.Name] = NewFunction;
             ScopeReturnTarget = NewFunction;
@@ -58,12 +62,12 @@ namespace Pepper.Compiler {
             return Outer?.GetFunction(name);
         }
 
-        public Variable AddVariable(Variable NewVariable) {
+        public Value AddVariable(Value NewVariable) {
             Variables[NewVariable.Name] = NewVariable;
             return NewVariable;
         }
 
-        public Variable? GetVariable(string name) {
+        public Value? GetVariable(string name) {
             if (Variables.TryGetValue(name, out var variable)) return variable;
             return Outer?.GetVariable(name);
         }
@@ -72,12 +76,12 @@ namespace Pepper.Compiler {
             return GetType(name) != null || GetFunction(name) != null || GetVariable(name) != null;
         }
 
-        public LLVMValueRef PushStack(LLVMValueRef val) {
+        public Value PushStack(Value val) {
             Stack.Push(val);
             return val;
         }
 
-        public LLVMValueRef PopStack() {
+        public Value PopStack() {
             return Stack.Pop();
         }
     }
