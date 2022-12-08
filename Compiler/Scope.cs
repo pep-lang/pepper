@@ -13,11 +13,20 @@ namespace Pepper.Compiler {
         private readonly Dictionary<string, Function> Functions = new();
         private readonly Dictionary<string, Value> Variables = new();
         private readonly Stack<Value> Stack = new();
-        public Function? ScopeReturnTarget = null;
+        public UserFunction? ScopeReturnTarget = null;
 
         public LLVMBuilderRef Builder {
             get {
                 return ScopeBuilder ?? Outer!.Builder;
+            }
+        }
+
+        public LLVMBuilderRef FunctionRegisters {
+            get {
+                var funcStart = ScopeReturnTarget!.Body.FirstInstruction;
+                var tempBuilder = Context.Default.Module.Context.CreateBuilder();
+                tempBuilder.PositionBefore(funcStart);
+                return tempBuilder;
             }
         }
 
@@ -51,10 +60,12 @@ namespace Pepper.Compiler {
             return (T)GetType(name)!;
         }
 
-        public Function AddFunction(Function NewFunction) {
-            Functions[NewFunction.Name] = NewFunction;
-            ScopeReturnTarget = NewFunction;
-            return NewFunction;
+        public Function AddFunction(Function newFunction) {
+            if (newFunction is UserFunction userFunction) {
+                ScopeReturnTarget = userFunction;
+            }
+            Functions[newFunction.Name] = newFunction;
+            return newFunction;
         }
 
         public Function AliasFunction(Function sourceFunction, string alias) {

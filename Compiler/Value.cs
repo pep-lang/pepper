@@ -6,52 +6,59 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Pepper.Compiler {
-    internal class Value {
+    internal class TypedValue {
         public Type Type;
         public string Name { get; private set; }
-        LLVMValueRef? AddressRef;
 
+        public TypedValue(Type type, string name) {
+            Type = type;
+            Name = name;
+        }
+    }
+
+    internal class Value : TypedValue {
+        LLVMValueRef? AddressRef;
         public LLVMValueRef Address {
             get {
                 if (AddressRef.HasValue) {
                     return AddressRef.Value;
                 }
-                return (LLVMValueRef)(AddressRef = Alloc(Context.Default.Locals.Builder));
+                return (LLVMValueRef)(AddressRef = Alloc(Context.Default.Locals.FunctionRegisters));
             }
             protected set {
                 AddressRef = value;
             }
         }
 
-        public Value(Type type, string name = "") {
-            Type = type;
-            Name = name;
-        }
-
+        // Take ownership of an already constructed value directly
         public Value(Type type, LLVMValueRef value, string name = "")
-            : this(type, name) {
+            : base(type, name) {
             AddressRef = value;
         }
 
-        public Value(Type type, Value value, string name = "") 
-            : this(type, name) {
-            AddressRef = Store(value, Context.Default.Locals.Builder);
+        // Copy/Store another value as Type
+        public Value(Type type, Value value, string name = "", LLVMBuilderRef? builder = null) 
+            : base(type, name) {
+            Store(value, builder ?? Context.Default.Locals.FunctionRegisters);
         }
 
-        public virtual LLVMValueRef Alloc(LLVMBuilderRef builder) {
+        public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
+            builder ??= Context.Default.Locals.FunctionRegisters;
             return Type.Alloc(builder);
         }
 
-        public virtual LLVMValueRef Store(Value value, LLVMBuilderRef builder) {
+        public virtual LLVMValueRef Store(Value value, LLVMBuilderRef? builder) {
             return Store(value.Load(builder), builder);
         }
 
-        public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef builder) {
-            return builder.BuildStore(value, Address);
+        public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) {
+            builder ??= Context.Default.Locals.FunctionRegisters;
+            return builder.Value.BuildStore(value, Address);
         }
 
-        public virtual LLVMValueRef Load(LLVMBuilderRef builder) {
-            return builder.BuildLoad2(Type, Address, Name);
+        public virtual LLVMValueRef Load(LLVMBuilderRef? builder = null) {
+            builder ??= Context.Default.Locals.FunctionRegisters;
+            return builder.Value.BuildLoad2(Type, Address, Name);
         }
 
         public override string ToString() {
@@ -62,13 +69,13 @@ namespace Pepper.Compiler {
     }
 
     internal class Constant : Value {
-        public Constant(Type type, string name)
-            : base(type, name) {
+        public Constant(Type type, LLVMValueRef value, string name)
+            : base(type, value, name) {
         }
 
-        public override LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef builder) => throw new CompileException($"Cannot store to constant {this}");
+        public override LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) => throw new CompileException($"Cannot store to constant {this}");
 
-        public override LLVMValueRef Load(LLVMBuilderRef builder) {
+        public override LLVMValueRef Load(LLVMBuilderRef? builder) {
             return Address;
         }
     }
@@ -76,12 +83,12 @@ namespace Pepper.Compiler {
     internal class ConstantInt : Constant {
         private readonly long Value;
         public ConstantInt(long value, string name = "") 
-            : base(IntegralType.Int64, name) {
+            : base(IntegralType.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
             Value = value;
         }
 
-        public override LLVMValueRef Alloc(LLVMBuilderRef builder) {
-            return LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)Value);
+        public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
+            return this;
         }
 
         public override string ToString() => $"{Type} {Value}";
@@ -90,12 +97,13 @@ namespace Pepper.Compiler {
     internal class ConstantDouble : Constant {
         private readonly double Value;
         public ConstantDouble(double value, string name = "")
-            : base(IntegralType.Double, name) {
+            : base(IntegralType.Double, LLVMValueRef.CreateConstReal(IntegralType.Double, value), name) {
             Value = value;
         }
 
-        public override LLVMValueRef Alloc(LLVMBuilderRef builder) {
-            return builder.BuildStore(LLVMValueRef.CreateConstReal(IntegralType.Double, Value), Address);
+        public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
+            return this;
+            //return builder.Value.BuildStore(LLVMValueRef.CreateConstReal(IntegralType.Double, Value), Address);
             //return builder.BuildStore(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(Value)), Address);
         }
 
@@ -105,12 +113,12 @@ namespace Pepper.Compiler {
     internal class ConstantString : Constant {
         private readonly string Value;
         public ConstantString(string value, string name = "")
-            : base(IntegralType.Int8.Pointer(), name) {
+            : base(IntegralType.Int8Ptr, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
             Value = value;
         }
 
-        public override LLVMValueRef Alloc(LLVMBuilderRef builder) {
-            return builder.BuildGlobalString(Value, Name);
+        public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
+            return this;
         }
 
         public override string ToString() => $"{Type} \"{Value}\"";

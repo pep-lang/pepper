@@ -8,16 +8,16 @@ using System.Threading.Tasks;
 
 namespace Pepper.Compiler {
     internal abstract class Function : Value {
-        public Type ReturnType = IntegralType.Void;
-        public IEnumerable<Value> Parameters { get; private set; }
-        public bool Varargs = false;
+        public new FunctionType Type => base.Type as FunctionType;
+        public Type ReturnType => Type.ReturnType;
+        public IEnumerable<TypedValue> Parameters => Type.Parameters;
+        public bool Varargs => Type.Varargs;
 
-        public Function(string name, Type returnType, IEnumerable<Value> parameters, bool varargs = false) 
-            : base(FunctionType.Create(returnType, parameters), name) {
-            ReturnType = returnType;
-            Parameters = parameters;
-            Varargs = varargs;
-
+        public Function(string name, Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) 
+            : base(
+                  FunctionType.Create(returnType, parameters, varargs), 
+                  Context.Default.Module.AddFunction(name, FunctionType.Create(returnType, parameters, varargs)),
+                  name) {
             Context.Default.Locals.AddFunction(this);
         }
 
@@ -48,7 +48,6 @@ namespace Pepper.Compiler {
 
         public UserFunction(string name, Type returnType, IEnumerable<Value> parameters) 
             : base(name, returnType, parameters) {
-            Address = Context.Default.Module.AddFunction(name, Type.Ref);
             Body = Address.AppendBasicBlock(string.Empty);
             Builder = Context.Default.Module.Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
@@ -56,12 +55,11 @@ namespace Pepper.Compiler {
     }
 
     internal class ExternFunction : Function {
-        public ExternFunction(string name, Type returnType, IEnumerable<Value> parameters, bool varargs = false)
+        public ExternFunction(string name, Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
             : base(name, returnType, parameters, varargs) {
-            Address = Context.Default.Module.AddFunction(name, Type);
         }
 
-        public ExternFunction(string name, Type returnType, params Value[] parameters) 
+        public ExternFunction(string name, Type returnType, params TypedValue[] parameters) 
             : this(name, returnType, parameters, false) {
         }
 
@@ -70,6 +68,6 @@ namespace Pepper.Compiler {
             Context.Default.Locals.AliasFunction(Puts, "print");
         }
 
-        public static readonly ExternFunction Puts = new("puts", IntegralType.Int32, new Value(IntegralType.Int8Ptr, "str"));
+        public static readonly ExternFunction Puts = new("puts", IntegralType.Int32, new TypedValue(IntegralType.Int8Ptr, "str"));
     }
 }

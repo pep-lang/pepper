@@ -20,7 +20,6 @@ namespace Pepper.Compiler {
             Context.Default.Locals.AddType(this);
         }
 
-        public abstract Value New(string name = "");
         public abstract Value Coerce(Value val);
 
         internal abstract Type Pointer();
@@ -29,8 +28,9 @@ namespace Pepper.Compiler {
             return (T)Pointer();
         }
 
-        internal LLVMValueRef Alloc(LLVMBuilderRef builder, string name = "") {
-            return builder.BuildAlloca(this, name);
+        internal LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
+            builder ??= Context.Default.Locals.FunctionRegisters;
+            return builder.Value.BuildAlloca(this, name);
         }
 
         public override bool Equals(object? other) => (other is Type rhs) && Ref == rhs.Ref;
@@ -47,10 +47,6 @@ namespace Pepper.Compiler {
         public NativeType(string name, LLVMTypeRef typeRef, CoerceFunc coerce) : base(name) {
             Ref = typeRef;
             EmitCoerce = coerce;
-        }
-
-        public override Value New(string name) {
-            return new Value(this, name);
         }
 
         public override Value Coerce(Value val) {
@@ -161,10 +157,10 @@ namespace Pepper.Compiler {
 
     internal class FunctionType : Type {
         public Type ReturnType = IntegralType.Void;
-        public IEnumerable<Value> Parameters { get; private set; }
+        public IEnumerable<TypedValue> Parameters { get; private set; }
         public bool Varargs = false;
 
-        private FunctionType(Type returnType, IEnumerable<Value> parameters, bool varargs = false)
+        private FunctionType(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
             : base(Signature(returnType, parameters, varargs)) {
             Ref = LLVMTypeRef.CreateFunction(returnType, parameters.Select(p => p.Type.Ref).ToArray(), varargs);
             ReturnType = returnType;
@@ -174,15 +170,11 @@ namespace Pepper.Compiler {
 
         internal override Type Pointer() => throw new NotImplementedException();
 
-        public override Value New(string name = "") {
-            throw new NotImplementedException();
-        }
-
         public override Value Coerce(Value val) {
             throw new NotImplementedException();
         }
 
-        public static FunctionType Create(Type returnType, IEnumerable<Value> parameters, bool varargs = false) {
+        public static FunctionType Create(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) {
             string sig = Signature(returnType, parameters, varargs);
             var func = Context.Default.Locals.GetType<FunctionType>(sig);
             if (func != null) {
@@ -191,7 +183,7 @@ namespace Pepper.Compiler {
             return new FunctionType(returnType, parameters, varargs);
         }
 
-        static string Signature(Type returnType, IEnumerable<Value> parameters, bool varargs = false) {
+        static string Signature(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) {
             var paramsList = string.Join(", ", parameters.Select(p => $"{p.Type.Name} {p.Name}"));
             var ellipsis = varargs ? ", ..." : "";
             return $"{returnType.Name}({paramsList}{ellipsis})";
