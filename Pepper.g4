@@ -4,18 +4,28 @@ grammar Pepper;
 primaryExpression
 	: Identifier
 	| Constant
+    | StringLiteral+
 	| '(' expression ')'
 	;
 
 postfixExpression
-	: primaryExpression
-	(
-		'[' expression ']'
-		| '(' argumentExpressionList ')'
-		| '.' Identifier
-		| ('++' | '--')
-	)*
+	: primaryExpression (PlusPlus | MinusMinus)*
+	| arrayAccess
+    | functionCall
+    | memberAccess
 	;
+
+arrayAccess
+    : primaryExpression '[' expression ']'
+    ;
+
+functionCall
+    : primaryExpression '(' argumentExpressionList? ')'
+    ;
+
+memberAccess
+    : primaryExpression '.' Identifier
+    ;
 
 argumentExpressionList
 	: assignmentExpression (',' assignmentExpression)*
@@ -23,9 +33,8 @@ argumentExpressionList
 
 unaryExpression
 	: ('++' | '--' | 'typeof')*
-	(
-		postfixExpression
-		| unaryOperator castExpression
+	(postfixExpression
+	| unaryOperator castExpression
 	)
 	;
 
@@ -47,7 +56,7 @@ addSubExpression
 	;
 
 shiftExpression
-	: addSubExpression (('<<'|'>>') addSubExpression)
+	: addSubExpression (('<<'|'>>') addSubExpression)*
 	;
 
 relationExpression
@@ -85,7 +94,7 @@ ternaryExpression
 assignmentExpression
 	: ternaryExpression
 	| unaryExpression assignmentOperator assignmentExpression
-	| Constant
+	| DigitSequence
 	;
 
 assignmentOperator
@@ -225,6 +234,7 @@ statement
 	| selectionStatement
 	| iterationStatement
 	| jumpStatement
+    | '(' (logicalOrExpression (',' logicalOrExpression)*)? (':' (logicalOrExpression (',' logicalOrExpression)*)?)* ')' ';'
 	;
 
 labeledStatement

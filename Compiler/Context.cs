@@ -40,6 +40,7 @@ internal class Context {
 
     void RegisterGlobals() {
         IntegralType.StaticInit();
+        ExternFunction.StaticInit();
         //Globals.AddFunction(new ExternFunction("printf", IntegralType.I32, new Variable[] { 
         //    new Variable("fmt", IntegralType.I8),
         //}, true));

@@ -21,16 +21,25 @@ namespace Pepper.Compiler {
             Context.Default.Locals.AddFunction(this);
         }
 
-        public void Call(LLVMBuilderRef builder, IEnumerable<Value> args) {
-            builder.BuildCall2(this, this, args.Select(a => a.Ref).ToArray(), Name);
+        public Value Call(IEnumerable<Value> args) {
+            var coercedArgs = args.Select((arg, idx) => {
+                var argType = Parameters.ElementAt(idx).Type;
+                return argType.Coerce(arg);
+            });
+            var returnValue = Context.Default.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Address).ToArray(), Name);
+            return new Value(ReturnType, returnValue, $"return {Name}");
         }
 
-        public void Call(LLVMBuilderRef builder, params Value[] args) {
-            Call(builder, args);
+        public Value Call(params Value[] args) {
+            return Call(args);
+        }
+
+        public override string ToString() {
+            return $"{Type} {Name}";
         }
 
         public static implicit operator LLVMTypeRef(Function func) => func.Type;
-        public static implicit operator LLVMValueRef(Function func) => func.Ref;
+        public static implicit operator LLVMValueRef(Function func) => func.Address;
     }
 
     internal class UserFunction : Function {
@@ -39,8 +48,8 @@ namespace Pepper.Compiler {
 
         public UserFunction(string name, Type returnType, IEnumerable<Value> parameters) 
             : base(name, returnType, parameters) {
-            Ref = Context.Default.Module.AddFunction(name, Type.Ref);
-            Body = Ref.AppendBasicBlock(string.Empty);
+            Address = Context.Default.Module.AddFunction(name, Type.Ref);
+            Body = Address.AppendBasicBlock(string.Empty);
             Builder = Context.Default.Module.Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
         }
@@ -49,15 +58,18 @@ namespace Pepper.Compiler {
     internal class ExternFunction : Function {
         public ExternFunction(string name, Type returnType, IEnumerable<Value> parameters, bool varargs = false)
             : base(name, returnType, parameters, varargs) {
-            Ref = Context.Default.Module.AddFunction(name, Type);
+            Address = Context.Default.Module.AddFunction(name, Type);
         }
 
-        public ExternFunction(string name, Type returnType, params Value[] parameters) : base(name, returnType, parameters) { }
+        public ExternFunction(string name, Type returnType, params Value[] parameters) 
+            : this(name, returnType, parameters, false) {
+        }
 
         public static void StaticInit() {
             
+            Context.Default.Locals.AliasFunction(Puts, "print");
         }
 
-        public static readonly ExternFunction Puts = new("puts", IntegralType.I32, new Value(IntegralType.I8.Pointer()));
+        public static readonly ExternFunction Puts = new("puts", IntegralType.Int32, new Value(IntegralType.Int8Ptr, "str"));
     }
 }

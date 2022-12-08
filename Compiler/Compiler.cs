@@ -37,6 +37,7 @@ namespace Pepper.Compiler {
             var compiler = new Compiler();
             ParseTreeWalker.Default.Walk(compiler, tree);
 
+            Log.Info(Context.Module.PrintToString());
             Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
 
             _ = LLVM.InitializeNativeTarget();
@@ -44,24 +45,29 @@ namespace Pepper.Compiler {
             _ = LLVM.InitializeNativeAsmPrinter();
 
             var engine = Context.Module.CreateMCJITCompiler();
-            var main = compiler.Globals.GetFunction("main")!.Ref;
+            var main = compiler.Globals.GetFunction("main")!.Address;
             var entry = engine.GetPointerToGlobal<IntMain0>(main);
             var result = entry();
             Assert.AreEqual(0, result);
         }
 
-        LLVMValueRef EvalConstant(ITerminalNode constant) {
+        Value EvalConstant(ITerminalNode constant) {
             var value = constant.ToString();
             if (long.TryParse(value, out var longVal)) {
-                return Locals.PushStack(new ConstantInt(longVal, builder: Locals.Builder));
+                return Locals.PushStack(new ConstantInt(longVal));
             } else if (double.TryParse(value, out var doubleVal)) {
-                return Locals.PushStack(new ConstantDouble(doubleVal, builder: Locals.Builder));
+                return Locals.PushStack(new ConstantDouble(doubleVal));
             }
             throw new CompileException($"Unable to parse numeric constant '{constant}'");
         }
 
-        void Print(Value val) {
+        //Value EvalStringLiteral(ITerminalNode stringLiteral) {
+        //    var value = stringLiteral.ToString();
+        //    return EvalStringLiteral(value!);
+        //}
 
+        Value EvalStringLiteral(string value) {
+            return Locals.PushStack(new ConstantString(value));
         }
 
         public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
@@ -105,14 +111,14 @@ namespace Pepper.Compiler {
                 var returnValue = Locals.PopStack();
                 var func = Locals.ReturnTarget;
                 var returnType = func!.ReturnType;
-                returnValue = returnType.Coerce(returnValue);
-                Locals.Builder.BuildRet(returnValue);
+                var coercedReturnValue = returnType.Coerce(returnValue);
+                Locals.Builder.BuildRet(coercedReturnValue);
             }
         }
 
         public override void EnterAssignmentExpression([NotNull] PepperParser.AssignmentExpressionContext context) {
             base.EnterAssignmentExpression(context);
-            var constant = context.Constant();
+            var constant = context.DigitSequence();
             if (constant != null) {
                 EvalConstant(constant);
             }
@@ -123,11 +129,41 @@ namespace Pepper.Compiler {
             var constant = context.Constant();
             if (constant != null) {
                 EvalConstant(constant);
+                return;
+            }
+            var stringLiterals = context.StringLiteral();
+            if (stringLiterals.Length > 0) {
+                // Combine consecutive strings together like C
+                var stringLiteral = stringLiterals.Select(s => s.ToString()).Aggregate("", (contents, literal) => contents + literal.Trim('"'));
+                EvalStringLiteral(stringLiteral);
+                return;
             }
         }
 
-        public override void EnterExpression([NotNull] PepperParser.ExpressionContext context) {
-            base.EnterExpression(context);
+        public override void EnterPostfixExpression([NotNull] PepperParser.PostfixExpressionContext context) {
+            base.EnterPostfixExpression(context);
+        }
+
+        public override void EnterFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
+            base.EnterFunctionCall(context);
+        }
+
+        public override void ExitFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
+            base.ExitFunctionCall(context);
+            var identifier = context.primaryExpression().Identifier();
+            var func = identifier != null ? Locals.GetFunction(identifier.ToString()!) : Locals.PopStack<Function>();
+            if (func == null) {
+                throw new CompileException("Unable to resolve function");
+            }
+            var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
+            var args = new List<Value>();
+            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
+                args.Add(Locals.PopStack());
+            }
+            if (func.ReturnType != IntegralType.Void) {
+                var result = func.Call(args);
+                Locals.PushStack(result);
+            }            
         }
     }
 }

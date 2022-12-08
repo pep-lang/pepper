@@ -47,14 +47,19 @@ namespace Pepper.Compiler {
             return Outer?.GetType(name);
         }
 
-        public T? GetType<T>(string name) where T: Type {
-            return (T?)GetType(name);
+        public T GetType<T>(string name) where T: Type {
+            return (T)GetType(name)!;
         }
 
         public Function AddFunction(Function NewFunction) {
             Functions[NewFunction.Name] = NewFunction;
             ScopeReturnTarget = NewFunction;
             return NewFunction;
+        }
+
+        public Function AliasFunction(Function sourceFunction, string alias) {
+            Functions[alias] = sourceFunction;
+            return sourceFunction;
         }
 
         public Function? GetFunction(string name) {
@@ -83,6 +88,11 @@ namespace Pepper.Compiler {
 
         public Value PopStack() {
             return Stack.Pop();
+        }
+
+        public T PopStack<T>() where T: class {
+            var top = PopStack();
+            return top as T ?? throw new InternalCompilerException($"Tried to pop {typeof(T)} from stack, found {top.GetType()}");
         }
     }
 }

@@ -2,6 +2,6 @@
 
 
 i32 main() {
-	
+	print("Hello World!");
 	return 0;
 }
