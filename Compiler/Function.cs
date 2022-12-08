@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Pepper.Compiler {
     internal abstract class Function : Value {
-        public new FunctionType Type => base.Type as FunctionType;
+        public new FunctionType Type => (base.Type as FunctionType)!;
         public Type ReturnType => Type.ReturnType;
         public IEnumerable<TypedValue> Parameters => Type.Parameters;
         public bool Varargs => Type.Varargs;
