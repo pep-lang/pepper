@@ -35,6 +35,28 @@ namespace Pepper.UnitTests {
             CompileAndRun("Let", source, 12);
         }
 
+        [Test] 
+        public void Add() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    return x + 5;
+                }
+                """;
+            CompileAndRun("Add", source, 17);
+        }
+
+        [Test]
+        public void Subtract() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    return x - 5;
+                }
+                """;
+            CompileAndRun("Subtract", source, 7);
+        }
+
         [Test]
         public void Multiply() {
             var source = """

@@ -5,6 +5,7 @@ using LLVMSharp.Interop;
 using Pepper.Parser;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 
 namespace Pepper {
     public class Compiler : PepperBaseListener {
@@ -51,7 +52,7 @@ namespace Pepper {
             _ = LLVM.InitializeNativeAsmParser();
             _ = LLVM.InitializeNativeAsmPrinter();
 
-            var engine = Context.Module.CreateMCJITCompiler();
+            using var engine = Context.Module.CreateMCJITCompiler();
             var entryAddress = Context.Globals.GetFunction(entryFunction)!.Address;
             var entry = engine.GetPointerToGlobal<IntMain0>(entryAddress);
             if (entry == null) {
@@ -217,12 +218,34 @@ namespace Pepper {
             Locals.AddVariable(variable);
         }
 
+        void EmitBinaryOp(Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef> op, string name) {
+            var rhs = Locals.PopStack();
+            var lhs = Locals.PopStack();
+            var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
+            var result = new Value(resultType, op(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load(), ""), name);
+            Locals.PushStack(result);
+        }
+
         public override void EnterAddSubExpression([NotNull] PepperParser.AddSubExpressionContext context) {
             base.EnterAddSubExpression(context);
         }
 
         public override void ExitAddSubExpression([NotNull] PepperParser.AddSubExpressionContext context) {
             base.ExitAddSubExpression(context);
+
+            Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef>? op = null;
+            string name = "";
+            if (context.Plus().Length > 0) {
+                op = Context.Locals.Builder.BuildAdd;
+                name = "add";
+            } else if (context.Minus().Length > 0) {
+                op = Context.Locals.Builder.BuildSub;
+                name = "sub";
+            }
+
+            if (op != null) {
+                EmitBinaryOp(op, name);
+            }
         }
 
         public override void EnterMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
@@ -231,28 +254,25 @@ namespace Pepper {
 
         public override void ExitMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
             base.ExitMulDivExpression(context);
-            Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef>? Op = null;
-            string OpName = "";
+
+            Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef>? op = null;
+            string name = "";
             if (context.Star().Length > 0) {
-                Op = Context.Locals.Builder.BuildMul;
-                OpName = "mul";
+                op = Context.Locals.Builder.BuildMul;
+                name = "mul";
             } else if (context.Div().Length > 0) {
-                Op = Context.Locals.Builder.BuildSDiv;
-                OpName = "div";
+                op = Context.Locals.Builder.BuildSDiv;
+                name = "div";
             } else if (context.Mod().Length > 0) {
-                Op = Context.Locals.Builder.BuildSRem;
-                OpName = "mod";
+                op = Context.Locals.Builder.BuildSRem;
+                name = "mod";
             } else if (context.Pow().Length > 0) {
                 // todo
                 throw new NotImplementedException();
             }
 
-            if (Op != null) {
-                var rhs = Locals.PopStack();
-                var lhs = Locals.PopStack();
-                var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
-                var result = new Value(resultType, Op(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load(), ""), OpName);
-                Locals.PushStack(result);
+            if (op != null) {
+                EmitBinaryOp(op, name);
             }
         }
     }
