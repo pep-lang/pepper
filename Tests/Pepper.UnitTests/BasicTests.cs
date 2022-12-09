@@ -7,6 +7,12 @@ namespace Pepper.UnitTests {
         public void Setup() {
         }
 
+        static void CompileAndRun(string module, string source) {
+            Compiler.Compile("HelloWorld", CharStreams.fromString(source));
+            int result = Compiler.JIT("main");
+            Assert.That(result, Is.EqualTo(0));
+        }
+
         [Test]
         public void HelloWorld() {
             var source = """
@@ -15,9 +21,18 @@ namespace Pepper.UnitTests {
                     return 0;
                 }
                 """;
-            Compiler.Compile("HelloWorld", CharStreams.fromString(source));
-            int result = Compiler.JIT("main");
-            Assert.That(result, Is.EqualTo(0));
+            CompileAndRun("HelloWorld", source);
+        }
+
+        [Test]
+        public void Let() {
+            var source = """
+                int main() {
+                    int x = 0;
+                    return x;
+                }
+                """;
+            CompileAndRun("Let", source);
         }
     }
 }
