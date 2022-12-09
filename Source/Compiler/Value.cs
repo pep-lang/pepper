@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Pepper.Compiler {
+namespace Pepper {
     internal class TypedValue {
         public Type Type;
         public string Name { get; private set; }

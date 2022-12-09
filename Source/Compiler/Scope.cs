@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Pepper.Compiler {
+namespace Pepper {
     internal class Scope {
         public Scope? Outer { get; private set; } = null;
         private LLVMBuilderRef? ScopeBuilder = null;

@@ -72,7 +72,7 @@ bitAndExpression
 	;
 
 bitXorExpression
-	: bitAndExpression (BitXor bitXorExpression)*
+	: bitAndExpression (Caret bitXorExpression)*
 	;
 
 bitOrExpression

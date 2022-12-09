@@ -2,53 +2,67 @@
 using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
 using LLVMSharp.Interop;
-using NUnit.Framework;
 using Pepper.Parser;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Pepper.Compiler {
-    internal class Compiler : PepperBaseListener {
+namespace Pepper {
+    public class Compiler : PepperBaseListener {
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int IntMain0();
 
         static Context Context { get { return Context.Default; } }
 
-        public Scope Globals { get { return Context.Globals; } }
-        public Scope Locals { get { return Context.Locals; } }
+        internal Scope Globals { get { return Context.Globals; } }
+        internal Scope Locals { get { return Context.Locals; } }
 
         Compiler() {}
 
-        public static void Compile() {
-            var inputStream = CharStreams.fromPath(Context.Options.Input);
+        public static void CompileAndRun() {
+            Compile(Options.Parse());
+            var exitCode = JIT("main");
+            Environment.Exit(exitCode);
+        }
 
+        public static void Compile(Options options) {
+            var inputStream = CharStreams.fromPath(options.Input);
+            Compile(options.ModuleName, inputStream);
+        }
+
+        public static void Compile(string moduleName, ICharStream inputStream) {
             var lexer = new PepperLexer(inputStream);
             var tokens = new BufferedTokenStream(lexer);
-            var parser = new PepperParser(tokens);
-            parser.BuildParseTree = true;
-            parser.Trace = true;
+            var parser = new PepperParser(tokens) {
+                BuildParseTree = true,
+                Trace = true
+            };
 
             var tree = parser.compilationUnit();
-            var compiler = new Compiler();
+            var compiler = new Compiler(moduleName);
             ParseTreeWalker.Default.Walk(compiler, tree);
 
             Log.Info(Context.Module.PrintToString());
             Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+        }
 
+        public static int JIT(string entryFunction) {
             _ = LLVM.InitializeNativeTarget();
             _ = LLVM.InitializeNativeAsmParser();
             _ = LLVM.InitializeNativeAsmPrinter();
 
             var engine = Context.Module.CreateMCJITCompiler();
-            var main = compiler.Globals.GetFunction("main")!.Address;
-            var entry = engine.GetPointerToGlobal<IntMain0>(main);
+            var entryAddress = Context.Globals.GetFunction(entryFunction)!.Address;
+            var entry = engine.GetPointerToGlobal<IntMain0>(entryAddress);
+            if (entry == null) {
+                throw new CompileException($"Entry function {entryFunction} not found");
+            }
             var result = entry();
-            Assert.AreEqual(0, result);
+            return result;
+        }
+
+        private Compiler(string moduleName) {
+            _ = new Context(moduleName);
         }
 
         Value EvalConstant(ITerminalNode constant) {
@@ -199,7 +213,7 @@ namespace Pepper.Compiler {
             }
             var value = Locals.PopStack();
             var coercedValue = type.Coerce(value);
-            var variable = new Value(type, coercedValue, varName);
+            var variable = new Value(type, coercedValue.Load(), varName);
             Locals.AddVariable(variable);
         }
 

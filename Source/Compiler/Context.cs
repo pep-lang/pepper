@@ -7,35 +7,30 @@ using System.Threading.Tasks;
 
 using LLVMSharp;
 using LLVMSharp.Interop;
-using NUnit.Framework;
-
-namespace Pepper.Compiler;
+namespace Pepper;
 
 internal class Context {
 
     // One context per thread, it's not possible for there to be multiple any other way
-    private static readonly ThreadLocal<Context> ThreadContext = new(() => new Context());
+    //private static readonly ThreadLocal<Context> ThreadContext = new(() => new Context());
+    private static Context? ThreadContext = null;
     public static Context Default {
         get {
-            if (!ThreadContext.IsValueCreated) {
-                ThreadContext.Value!.RegisterGlobals();
-            }
-            return ThreadContext.Value!;
+            return ThreadContext!;
         }
     }
 
     public LLVMModuleRef Module { get; private set; }
 
-    public Options Options { get; private set; }
-
     public Scope Globals { get; private set; }
     public Scope Locals { get; private set; }
 
-    public Context() {
-        Options = Options.Parse();
-        Module = LLVMModuleRef.CreateWithName(Options.ModuleName);
+    public Context(string moduleName) {
+        ThreadContext = this;
+        Module = LLVMModuleRef.CreateWithName(moduleName);
         Globals = new(null, Module.Context.CreateBuilder());
         Locals = Globals;
+        RegisterGlobals();
     }
 
     void RegisterGlobals() {

@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 
 using CommandLine;
 
-namespace Pepper.Compiler {
-    internal class Options {
+namespace Pepper {
+    public class Options {
         [Value(index: 0, Required = true)]
         public string CompilerPath { get; set; } = String.Empty;
 

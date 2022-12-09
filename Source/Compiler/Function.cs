@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Pepper.Compiler {
+namespace Pepper {
     internal abstract class Function : Value {
         public new FunctionType Type => (base.Type as FunctionType)!;
         public Type ReturnType => Type.ReturnType;

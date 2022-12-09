@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Pepper.Compiler {
+namespace Pepper {
     using CoerceFunc = Func<LLVMValueRef, Type, Value>;
 
     internal abstract class Type {
