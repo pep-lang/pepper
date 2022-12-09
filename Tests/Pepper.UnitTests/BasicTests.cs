@@ -7,10 +7,10 @@ namespace Pepper.UnitTests {
         public void Setup() {
         }
 
-        static void CompileAndRun(string module, string source) {
+        static void CompileAndRun(string module, string source, int expectedResult = 0) {
             Compiler.Compile("HelloWorld", CharStreams.fromString(source));
             int result = Compiler.JIT("main");
-            Assert.That(result, Is.EqualTo(0));
+            Assert.That(result, Is.EqualTo(expectedResult));
         }
 
         [Test]
@@ -28,11 +28,22 @@ namespace Pepper.UnitTests {
         public void Let() {
             var source = """
                 int main() {
-                    int x = 0;
+                    int x = 12;
                     return x;
                 }
                 """;
-            CompileAndRun("Let", source);
+            CompileAndRun("Let", source, 12);
+        }
+
+        [Test]
+        public void Multiply() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    return x * 5;
+                }
+                """;
+            CompileAndRun("Multiply", source, 60);
         }
     }
 }
