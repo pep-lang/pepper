@@ -45,5 +45,27 @@ namespace Pepper.UnitTests {
                 """;
             CompileAndRun("Multiply", source, 60);
         }
+
+        [Test]
+        public void Divide() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    return x / 5;
+                }
+                """;
+            CompileAndRun("Divide", source, 2);
+        }
+
+        [Test]
+        public void Modulo() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    return x % 5;
+                }
+                """;
+            CompileAndRun("Modulo", source, 2);
+        }
     }
 }

@@ -217,17 +217,41 @@ namespace Pepper {
             Locals.AddVariable(variable);
         }
 
+        public override void EnterAddSubExpression([NotNull] PepperParser.AddSubExpressionContext context) {
+            base.EnterAddSubExpression(context);
+        }
+
+        public override void ExitAddSubExpression([NotNull] PepperParser.AddSubExpressionContext context) {
+            base.ExitAddSubExpression(context);
+        }
+
         public override void EnterMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
             base.EnterMulDivExpression(context);
         }
 
         public override void ExitMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
             base.ExitMulDivExpression(context);
+            Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef>? Op = null;
+            string OpName = "";
             if (context.Star().Length > 0) {
+                Op = Context.Locals.Builder.BuildMul;
+                OpName = "mul";
+            } else if (context.Div().Length > 0) {
+                Op = Context.Locals.Builder.BuildSDiv;
+                OpName = "div";
+            } else if (context.Mod().Length > 0) {
+                Op = Context.Locals.Builder.BuildSRem;
+                OpName = "mod";
+            } else if (context.Pow().Length > 0) {
+                // todo
+                throw new NotImplementedException();
+            }
+
+            if (Op != null) {
                 var rhs = Locals.PopStack();
                 var lhs = Locals.PopStack();
                 var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
-                var result = new Value(resultType, Locals.Builder.BuildMul(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load()), "mul");
+                var result = new Value(resultType, Op(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load(), ""), OpName);
                 Locals.PushStack(result);
             }
         }
