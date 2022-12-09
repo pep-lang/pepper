@@ -53,7 +53,7 @@ namespace Pepper.Compiler {
             if (val.Type.Equals(this) && val is not Constant) {
                 return val;
             }
-            return EmitCoerce(val.Load(Context.Default.Locals.Builder), this);
+            return EmitCoerce(val, this);
         }
     }
 

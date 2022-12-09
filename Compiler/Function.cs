@@ -45,10 +45,11 @@ namespace Pepper.Compiler {
     internal class UserFunction : Function {
         public LLVMBuilderRef Builder;
         public LLVMBasicBlockRef Body;
+        public uint NumLocals = 0;
 
         public UserFunction(string name, Type returnType, IEnumerable<Value> parameters) 
             : base(name, returnType, parameters) {
-            Body = Address.AppendBasicBlock(string.Empty);
+            Body = Address.AppendBasicBlock("entry");
             Builder = Context.Default.Module.Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
         }

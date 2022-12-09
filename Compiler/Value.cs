@@ -1,6 +1,7 @@
 ﻿using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -23,9 +24,9 @@ namespace Pepper.Compiler {
                 if (AddressRef.HasValue) {
                     return AddressRef.Value;
                 }
-                return (LLVMValueRef)(AddressRef = Alloc(Context.Default.Locals.FunctionRegisters));
+                return Alloc(Context.Default.Locals.FunctionRegisters);
             }
-            protected set {
+            private set {
                 AddressRef = value;
             }
         }
@@ -39,12 +40,14 @@ namespace Pepper.Compiler {
         // Copy/Store another value as Type
         public Value(Type type, Value value, string name = "", LLVMBuilderRef? builder = null) 
             : base(type, name) {
-            Store(value, builder ?? Context.Default.Locals.FunctionRegisters);
+            Store(value, builder);
         }
 
         public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
+            Debug.Assert(!AddressRef.HasValue);
             builder ??= Context.Default.Locals.FunctionRegisters;
-            return Type.Alloc(builder);
+            AddressRef = Type.Alloc(builder);
+            return Address;
         }
 
         public virtual LLVMValueRef Store(Value value, LLVMBuilderRef? builder) {
@@ -52,12 +55,15 @@ namespace Pepper.Compiler {
         }
 
         public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) {
-            builder ??= Context.Default.Locals.FunctionRegisters;
+            builder ??= Context.Default.Locals.Builder;
             return builder.Value.BuildStore(value, Address);
         }
 
         public virtual LLVMValueRef Load(LLVMBuilderRef? builder = null) {
-            builder ??= Context.Default.Locals.FunctionRegisters;
+            if (Address.IsAConstant != null) {
+                return Address;
+            }
+            builder ??= Context.Default.Locals.Builder;
             return builder.Value.BuildLoad2(Type, Address, Name);
         }
 

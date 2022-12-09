@@ -20,7 +20,7 @@ arrayAccess
     ;
 
 functionCall
-    : primaryExpression '(' argumentExpressionList? ')'
+    : (Identifier|'(' expression ')') '(' argumentExpressionList? ')'
     ;
 
 memberAccess
@@ -32,7 +32,7 @@ argumentExpressionList
 	;
 
 unaryExpression
-	: ('++' | '--' | 'typeof')*
+	: (PlusPlus | MinusMinus | 'typeof')*
 	(postfixExpression
 	| unaryOperator castExpression
 	)
@@ -48,43 +48,43 @@ castExpression
 	;
 
 mulDivExpression
-	: castExpression (('*'|'**'|'/'|'%') castExpression)*
+	: castExpression ((Star|Pow|Div|Mod) castExpression)*
 	;
 
 addSubExpression
-	: mulDivExpression (('+'|'-') mulDivExpression)*
+	: mulDivExpression ((Plus|Minus) mulDivExpression)*
 	;
 
 shiftExpression
-	: addSubExpression (('<<'|'>>') addSubExpression)*
+	: addSubExpression ((LeftShift|RightShift) addSubExpression)*
 	;
 
 relationExpression
-	: shiftExpression (('<'|'>'|'<='|'>=') shiftExpression)*
+	: shiftExpression ((Less|Greater|LessEqual|GreaterEqual) shiftExpression)*
 	;
 
 equalExpression
-	: relationExpression (('=='|'!=') relationExpression)*
+	: relationExpression ((Equal|NotEqual) relationExpression)*
 	;
 
 bitAndExpression
-	: equalExpression ('&' equalExpression)*
+	: equalExpression (BitAnd equalExpression)*
 	;
 
 bitXorExpression
-	: bitAndExpression ('^' bitXorExpression)*
+	: bitAndExpression (BitXor bitXorExpression)*
 	;
 
 bitOrExpression
-	: bitXorExpression ('|' bitXorExpression)*
+	: bitXorExpression (BitOr bitXorExpression)*
 	;
 
 logicalAndExpression
-	: bitOrExpression (('&&'|And) bitOrExpression)*
+	: bitOrExpression ((AndAnd|And) bitOrExpression)*
 	;
 
 logicalOrExpression
-	: logicalAndExpression (('||'|Or) logicalAndExpression)*
+	: logicalAndExpression ((OrOr|Or) logicalAndExpression)*
 	;
 
 ternaryExpression
@@ -140,10 +140,14 @@ storageClassSpecifier
 	;
 
 typeSpecifier
-	: Identifier
+	: variableSpecifier
 	| structSpecifier
 	| enumSpecifier
 	;
+
+variableSpecifier
+    : Identifier Identifier Assign assignmentExpression
+    ;
 
 structSpecifier
 	: Struct Identifier? '{' structDeclarationList '}'
@@ -355,6 +359,7 @@ PlusPlus : '++';
 Minus : '-';
 MinusMinus : '--';
 Star : '*';
+Pow : '**';
 Div : '/';
 Mod : '%';
 

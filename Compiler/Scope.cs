@@ -23,10 +23,18 @@ namespace Pepper.Compiler {
 
         public LLVMBuilderRef FunctionRegisters {
             get {
-                var funcStart = ScopeReturnTarget!.Body.FirstInstruction;
-                var tempBuilder = Context.Default.Module.Context.CreateBuilder();
-                tempBuilder.PositionBefore(funcStart);
-                return tempBuilder;
+                var func = (ReturnTarget as UserFunction)!;
+                var funcStart = func.Body.FirstInstruction;
+                if (funcStart.Handle != 0) {
+                    // skip past existing locals
+                    for (int localIdx = 0; localIdx < func.NumLocals; ++localIdx)
+                        funcStart = funcStart.NextInstruction;
+                    var tempBuilder = Context.Default.Module.Context.CreateBuilder();
+                    tempBuilder.PositionBefore(funcStart);
+                    return tempBuilder;
+                }
+                ++func.NumLocals;
+                return func.Builder;
             }
         }
 

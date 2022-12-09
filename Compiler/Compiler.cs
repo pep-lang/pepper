@@ -61,11 +61,6 @@ namespace Pepper.Compiler {
             throw new CompileException($"Unable to parse numeric constant '{constant}'");
         }
 
-        //Value EvalStringLiteral(ITerminalNode stringLiteral) {
-        //    var value = stringLiteral.ToString();
-        //    return EvalStringLiteral(value!);
-        //}
-
         Value EvalStringLiteral(string value) {
             return Locals.PushStack(new ConstantString(value));
         }
@@ -134,10 +129,19 @@ namespace Pepper.Compiler {
             var stringLiterals = context.StringLiteral();
             if (stringLiterals.Length > 0) {
                 // Combine consecutive strings together like C
-                var stringLiteral = stringLiterals.Select(s => s.ToString()).Aggregate("", (contents, literal) => contents + literal.Trim('"'));
+                var stringLiteral = stringLiterals.Select(s => s.ToString()).Aggregate("", (contents, literal) => contents + literal?.Trim('"'));
                 EvalStringLiteral(stringLiteral);
                 return;
             }
+            if (context.Identifier() != null) {
+                var identifier = context.Identifier().ToString()!;
+                var variable = Locals.GetVariable(identifier);
+                if (variable == null) {
+                    throw new CompileException($"Could not find variable {identifier}");
+                }
+                Locals.PushStack(variable);
+            }
+
         }
 
         public override void EnterPostfixExpression([NotNull] PepperParser.PostfixExpressionContext context) {
@@ -150,10 +154,10 @@ namespace Pepper.Compiler {
 
         public override void ExitFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
             base.ExitFunctionCall(context);
-            var identifier = context.primaryExpression().Identifier();
-            var func = identifier != null ? Locals.GetFunction(identifier.ToString()!) : Locals.PopStack<Function>();
+            var identifier = context.Identifier()?.ToString();
+            var func = identifier != null ? Locals.GetFunction(identifier) : Locals.PopStack<Function>();
             if (func == null) {
-                throw new CompileException("Unable to resolve function");
+                throw new CompileException($"Unable to resolve function {identifier}");
             }
             var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
             var args = new List<Value>();
@@ -164,6 +168,56 @@ namespace Pepper.Compiler {
                 var result = func.Call(args);
                 Locals.PushStack(result);
             }            
+        }
+
+        public override void EnterInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
+            base.EnterInitDeclarator(context);
+        }
+
+        public override void ExitInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
+            base.ExitInitDeclarator(context);
+            if (context.Assign() != null) {
+                var type = context.declarator();
+                var identifier = context.declarator().Identifier();
+            }
+        }
+
+        public override void EnterVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
+            base.EnterVariableSpecifier(context);
+        }
+
+        public override void ExitVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
+            base.ExitVariableSpecifier(context);
+            if (context.Identifier().Length != 2) {
+                throw new CompileException("Expected <type> <name> while parsing variable declaration");
+            }
+            var identifiers = context.Identifier().Select(i => i.ToString()!).ToArray();
+            (var typeName, var varName) = (identifiers[0], identifiers[1]);
+            var type = Locals.GetType(typeName);
+            if (type == null) {
+                throw new CompileException($"Unknown type {typeName}");
+            }
+            var value = Locals.PopStack();
+            var coercedValue = type.Coerce(value);
+            var variable = new Value(type, coercedValue, varName);
+            Locals.AddVariable(variable);
+        }
+
+        public override void EnterMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
+            base.EnterMulDivExpression(context);
+        }
+
+        public override void ExitMulDivExpression([NotNull] PepperParser.MulDivExpressionContext context) {
+            base.ExitMulDivExpression(context);
+            if (context.Star().Length > 0) {
+                var rhs = Locals.PopStack();
+                var lhs = Locals.PopStack();
+                var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
+                var left = resultType.Coerce(lhs);
+                var right = resultType.Coerce(rhs);
+                var result = new Value(resultType, new Value(resultType, Locals.Builder.BuildMul(left, right), "mul"), "res");
+                Locals.PushStack(result);
+            }
         }
     }
 }
