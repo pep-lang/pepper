@@ -107,7 +107,7 @@ namespace Pepper.Compiler {
                 var func = Locals.ReturnTarget;
                 var returnType = func!.ReturnType;
                 var coercedReturnValue = returnType.Coerce(returnValue);
-                Locals.Builder.BuildRet(coercedReturnValue);
+                Locals.Builder.BuildRet(coercedReturnValue.Load());
             }
         }
 
@@ -213,9 +213,7 @@ namespace Pepper.Compiler {
                 var rhs = Locals.PopStack();
                 var lhs = Locals.PopStack();
                 var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
-                var left = resultType.Coerce(lhs);
-                var right = resultType.Coerce(rhs);
-                var result = new Value(resultType, new Value(resultType, Locals.Builder.BuildMul(left, right), "mul"), "res");
+                var result = new Value(resultType, Locals.Builder.BuildMul(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load()), "mul");
                 Locals.PushStack(result);
             }
         }

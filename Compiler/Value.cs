@@ -34,7 +34,7 @@ namespace Pepper.Compiler {
         // Take ownership of an already constructed value directly
         public Value(Type type, LLVMValueRef value, string name = "")
             : base(type, name) {
-            AddressRef = value;
+            Address = value;
         }
 
         // Copy/Store another value as Type
@@ -46,7 +46,7 @@ namespace Pepper.Compiler {
         public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
             Debug.Assert(!AddressRef.HasValue);
             builder ??= Context.Default.Locals.FunctionRegisters;
-            AddressRef = Type.Alloc(builder);
+            Address = Type.Alloc(builder, Name);
             return Address;
         }
 
