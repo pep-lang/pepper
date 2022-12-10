@@ -13,16 +13,16 @@ namespace Pepper.UnitTests {
             Assert.That(result, Is.EqualTo(expectedResult));
         }
 
-        //[Test]
-        //public void HelloWorld() {
-        //    var source = """
-        //        int main() {
-        //            print("Hello World!");
-        //            return 0;
-        //        }
-        //        """;
-        //    CompileAndRun("HelloWorld", source);
-        //}
+        [Test]
+        public void HelloWorld() {
+            var source = """
+                int main() {
+                    print("Hello World!");
+                    return 0;
+                }
+                """;
+            CompileAndRun("HelloWorld", source);
+        }
 
         [Test]
         public void Let() {

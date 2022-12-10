@@ -91,7 +91,7 @@ namespace Pepper {
         }
 
         public override Value Coerce(Value val) {
-            if (val.Type.Equals(this)) {
+            if (val.Type.Equals(this) && val is not Constant) {
                 return val;
             }
 
