@@ -136,8 +136,8 @@ namespace Pepper {
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.Add(Locals.PopStack());
             }
+            var result = func.Call(args);
             if (func.ReturnType != VoidType.Void) {
-                var result = func.Call(args);
                 Locals.PushStack(result);
             }
         }
