@@ -17,6 +17,7 @@ namespace Pepper {
         public bool IsInt { get; protected set; } = false;
         public bool IsReal { get; protected set; } = false;
         public bool IsPointer { get; protected set; } = false;
+        public virtual uint Bits => 0;
 
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
@@ -61,6 +62,8 @@ namespace Pepper {
                 return Context.Default.Locals.Builder;
             }
         }
+
+        public override uint Bits => Ref.IntWidth;
 
         public NativeType(string name, LLVMTypeRef typeRef) 
             : base(name, typeRef) {            
@@ -126,7 +129,6 @@ namespace Pepper {
 
     internal class IntegerType : NativeType {
         public readonly bool Signed = true;
-        public uint Width => Ref.IntWidth;
 
         public IntegerType(string name, LLVMTypeRef typeRef, bool signed = true)
             : base(name, typeRef) {

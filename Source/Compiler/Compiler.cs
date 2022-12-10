@@ -242,13 +242,13 @@ namespace Pepper {
         }
 
         Type BinaryOpResultType() {
-            var lhs = Locals.PeekStack<Value>(0);
-            var rhs = Locals.PeekStack<Value>(1);
+            var lhs = Locals.PeekStack<Value>(0)!;
+            var rhs = Locals.PeekStack<Value>(1)!;
             return BinaryOpResultType(lhs.Type, rhs.Type);
         }
 
         static Type BinaryOpResultType(Type lhs, Type rhs) {
-            var resultType = (lhs.Ref.IntWidth > rhs.Ref.IntWidth) ? lhs : rhs;
+            var resultType = (lhs.Bits > rhs.Bits) ? lhs : rhs;
             return resultType;
         }
 
