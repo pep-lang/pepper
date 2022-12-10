@@ -13,16 +13,16 @@ namespace Pepper.UnitTests {
             Assert.That(result, Is.EqualTo(expectedResult));
         }
 
-        [Test]
-        public void HelloWorld() {
-            var source = """
-                int main() {
-                    print("Hello World!");
-                    return 0;
-                }
-                """;
-            CompileAndRun("HelloWorld", source);
-        }
+        //[Test]
+        //public void HelloWorld() {
+        //    var source = """
+        //        int main() {
+        //            print("Hello World!");
+        //            return 0;
+        //        }
+        //        """;
+        //    CompileAndRun("HelloWorld", source);
+        //}
 
         [Test]
         public void Let() {
@@ -110,7 +110,7 @@ namespace Pepper.UnitTests {
                     return x << 2;
                 }
                 """;
-            CompileAndRun("Leftshift", source, 48);
+            CompileAndRun("LeftShift", source, 48);
         }
 
         [Test]
@@ -121,7 +121,29 @@ namespace Pepper.UnitTests {
                     return x >> 2;
                 }
                 """;
-            CompileAndRun("Rightshift", source, 3);
+            CompileAndRun("RightShift", source, 3);
+        }
+
+        [Test]
+        public void LessThanInt() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x < 2;
+                }
+                """;
+            CompileAndRun("LessThanInt", source);
+        }
+
+        [Test]
+        public void LessThanReal() {
+            var source = """
+                    int main() {
+                    float x = 12.0;
+                    return x < 2.0;
+                }
+                """;
+            CompileAndRun("LessThanFloat", source);
         }
 
         [Test]

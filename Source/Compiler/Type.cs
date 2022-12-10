@@ -142,12 +142,21 @@ namespace Pepper {
         }) { IsInt = true };
 
         public static readonly IntegralType Double = new("f64", LLVMTypeRef.Double, (val, type) => {
-            return new Value(Double!, LLVMValueRef.CreateConstFPCast(val, type));
+            if (type.IsInt) {
+                return new Value(Double!, LLVMValueRef.CreateConstSIToFP(val, type));
+            } else {
+                return new Value(Double!, LLVMValueRef.CreateConstFPExt(val, type));
+            }
+            
         }) { IsReal = true };
         public static readonly IntegralType DoublePtr = Double.Pointer<IntegralType>();
 
         public static readonly IntegralType Float = new("f32", LLVMTypeRef.Float, (val, type) => {
-            return new Value(Float!, LLVMValueRef.CreateConstFPCast(val, type));
+            if (type.IsInt) {
+                return new Value(Float!, LLVMValueRef.CreateConstSIToFP(val, type));
+            } else {
+                return new Value(Float!, LLVMValueRef.CreateConstFPExt(val, type));
+            }
         }) { IsReal = true };
         public static readonly IntegralType FloatPtr = Float.Pointer<IntegralType>();
     }

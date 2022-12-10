@@ -296,11 +296,17 @@ namespace Pepper {
             var lhs = Locals.PopStack<Value>();
             bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
             if (isInt) {
-                var compare = Context.Locals.Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, lhs.Load(), rhs.Load(), "");
+                var operandType = IntegralType.Int64;
+                var compare = Context.Locals.Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, 
+                    operandType.Coerce(lhs).Load(), operandType.Coerce(rhs).Load(), "");
                 var result = new Value(IntegralType.Bool, compare, "less");
                 Locals.PushStack(result);
             } else {
-                var compare = Context.Locals.Builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, lhs.Load(), rhs.Load(), "");
+                var operandType = IntegralType.Double;
+                var coercedLhs = new Value(operandType, operandType.Coerce(lhs)).Load();
+                var coercedRhs = new Value(operandType, operandType.Coerce(rhs)).Load();
+                var compare = Context.Locals.Builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, 
+                    coercedLhs, coercedRhs, "");
                 var result = new Value(IntegralType.Bool, compare, "less");
                 Locals.PushStack(result);
             }
