@@ -124,6 +124,24 @@ namespace Pepper {
             Context.PopScope();
         }
 
+        public override void ExitFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
+            base.ExitFunctionCall(context);
+            var identifier = context.Identifier()?.ToString();
+            var func = identifier != null ? Locals.GetFunction(identifier) : Locals.PopStack<Function>();
+            if (func == null) {
+                throw new CompileException($"Unable to resolve function {identifier}");
+            }
+            var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
+            var args = new List<Value>();
+            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
+                args.Add(Locals.PopStack());
+            }
+            if (func.ReturnType != IntegralType.Void) {
+                var result = func.Call(args);
+                Locals.PushStack(result);
+            }
+        }
+
         public override void EnterDeclaration([NotNull] PepperParser.DeclarationContext context) {
             base.EnterDeclaration(context);
         }
@@ -188,24 +206,6 @@ namespace Pepper {
 
         public override void EnterFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
             base.EnterFunctionCall(context);
-        }
-
-        public override void ExitFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
-            base.ExitFunctionCall(context);
-            var identifier = context.Identifier()?.ToString();
-            var func = identifier != null ? Locals.GetFunction(identifier) : Locals.PopStack<Function>();
-            if (func == null) {
-                throw new CompileException($"Unable to resolve function {identifier}");
-            }
-            var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
-            var args = new List<Value>();
-            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.Add(Locals.PopStack());
-            }
-            if (func.ReturnType != IntegralType.Void) {
-                var result = func.Call(args);
-                Locals.PushStack(result);
-            }            
         }
 
         public override void EnterInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
