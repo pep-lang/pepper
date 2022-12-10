@@ -170,12 +170,17 @@ namespace Pepper {
         }
 
         public StackEntry StackTop() {
-            return Stack.First();
+            return Stack.Peek();
         }
 
         public T? StackTop<T>() where T : class {
             var top = StackTop();
             return top.As<T>();
+        }
+
+        public T? PeekStack<T>(int idx) where T : class {
+            var peek = Stack.ElementAt(idx);
+            return peek.As<T>();
         }
     }
 }

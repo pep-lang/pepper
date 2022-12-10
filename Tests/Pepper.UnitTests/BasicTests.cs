@@ -103,6 +103,28 @@ namespace Pepper.UnitTests {
         }
 
         [Test]
+        public void LeftShift() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x << 2;
+                }
+                """;
+            CompileAndRun("Leftshift", source, 48);
+        }
+
+        [Test]
+        public void RightShift() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x >> 2;
+                }
+                """;
+            CompileAndRun("Rightshift", source, 3);
+        }
+
+        [Test]
         public void CompoundFormula() {
             var source = """
                 int main() {

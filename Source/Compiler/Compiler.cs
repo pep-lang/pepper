@@ -280,7 +280,33 @@ namespace Pepper {
             EmitBinaryOp(Context.Locals.Builder.BuildSub, "sub");
         }
 
-        
+        public override void ExitLShift([NotNull] PepperParser.LShiftContext context) {
+            base.ExitLShift(context);
+            EmitBinaryOp(Context.Locals.Builder.BuildShl, "lshift");
+        }
+
+        public override void ExitRShift([NotNull] PepperParser.RShiftContext context) {
+            base.ExitRShift(context);
+            EmitBinaryOp(Context.Locals.Builder.BuildAShr, "rshift");
+        }
+
+        public override void ExitLess([NotNull] PepperParser.LessContext context) {
+            base.ExitLess(context);
+            var rhs = Locals.PopStack<Value>();
+            var lhs = Locals.PopStack<Value>();
+            bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
+            if (isInt) {
+                var compare = Context.Locals.Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, lhs.Load(), rhs.Load(), "");
+                var result = new Value(IntegralType.Bool, compare, "less");
+                Locals.PushStack(result);
+            } else {
+                var compare = Context.Locals.Builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, lhs.Load(), rhs.Load(), "");
+                var result = new Value(IntegralType.Bool, compare, "less");
+                Locals.PushStack(result);
+            }
+            
+        }
+
         //public override void VisitTerminal([NotNull] ITerminalNode node) {
         //    base.VisitTerminal(node);
         //    Log.Info($"{node}");

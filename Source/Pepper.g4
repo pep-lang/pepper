@@ -48,7 +48,7 @@ castExpression
 	;
 
 binaryOpExpression
-	: castExpression #ignored
+	: castExpression #binaryOpDefault
     | binaryOpExpression Star binaryOpExpression #Mul
     | binaryOpExpression Div binaryOpExpression #Div
     | binaryOpExpression Mod binaryOpExpression #Mod
@@ -60,7 +60,11 @@ binaryOpExpression
 	;
 
 relationExpression
-	: binaryOpExpression ((Less|Greater|LessEqual|GreaterEqual) binaryOpExpression)*
+	: binaryOpExpression #relationDefault
+    | relationExpression Less relationExpression #Less
+    | relationExpression Greater relationExpression #Greater
+    | relationExpression LessEqual relationExpression #LessEqual
+    | relationExpression GreaterEqual relationExpression #GreaterEqual
 	;
 
 equalExpression

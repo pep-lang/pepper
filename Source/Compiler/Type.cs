@@ -13,6 +13,9 @@ namespace Pepper {
     internal abstract class Type {
         public string Name;
         public LLVMTypeRef Ref;
+        public bool IsInt = false;
+        public bool IsReal = false;
+        public bool IsPointer = false;
 
         public Type(string name) {
             System.Diagnostics.Debug.Assert(!name.EndsWith("**"));
@@ -69,7 +72,7 @@ namespace Pepper {
         }
 
         private Type Pointer(CoerceFunc coerce) {
-            return new IntegralType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0), coerce);
+            return new IntegralType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0), coerce) { IsPointer = true };
         }
 
         private T Pointer<T>(CoerceFunc coerce) where T : Type {
@@ -94,58 +97,58 @@ namespace Pepper {
 
         public static readonly IntegralType Int8 = new("i8", LLVMTypeRef.Int8, (val, type) => {
             return new Value(Int8!, LLVMValueRef.CreateConstIntCast(val, Int8!, true));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType Int8Ptr = Int8.Pointer<IntegralType>((val, type) => {
             return new Value(Int8Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int8Ptr!));
         });
 
         public static readonly IntegralType UInt8 = new("u8", LLVMTypeRef.Int8, (val, type) => {
             return new Value(UInt8!, LLVMValueRef.CreateConstIntCast(val, UInt8!, false));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType UInt8Ptr = UInt8.Pointer<IntegralType>((val, type) => {
             return new Value(UInt8Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt8Ptr!));
         });
         
         public static readonly IntegralType Int32 = new("i32", LLVMTypeRef.Int32, (val, type) => {
             return new Value(Int32!, LLVMValueRef.CreateConstIntCast(val, Int32!, true));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType Int32Ptr = Int32.Pointer<IntegralType>((val, type) => {
             return new Value(Int32Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int32Ptr!));
         });
 
         public static readonly IntegralType UInt32 = new("u32", LLVMTypeRef.Int32, (val, type) => {
             return new Value(UInt32!, LLVMValueRef.CreateConstIntCast(val, UInt32!, false));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType UInt32Ptr = UInt32.Pointer<IntegralType>((val, type) => {
             return new Value(UInt32Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt32Ptr!));
         });
 
         public static readonly IntegralType Int64 = new("i64", LLVMTypeRef.Int64, (val, type) => {
             return new Value(Int64!, LLVMValueRef.CreateConstIntCast(val, Int64!, true));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType Int64Ptr = Int64.Pointer<IntegralType>((val, type) => {
             return new Value(Int64Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int64Ptr!));
         });
 
         public static readonly IntegralType UInt64 = new("u64", LLVMTypeRef.Int64, (val, type) => {
             return new Value(UInt64!, LLVMValueRef.CreateConstIntCast(val, UInt64!, false));
-        });
+        }) { IsInt = true };
         public static readonly IntegralType UInt64Ptr = UInt64.Pointer<IntegralType>((val, type) => {
             return new Value(UInt64Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt64Ptr!));
         });
 
         public static readonly IntegralType Bool = new("bool", LLVMTypeRef.Int1, (val, type) => {
             return new Value(Bool!, LLVMValueRef.CreateConstIntCast(val, type, false));
-        });
+        }) { IsInt = true };
 
         public static readonly IntegralType Double = new("f64", LLVMTypeRef.Double, (val, type) => {
             return new Value(Double!, LLVMValueRef.CreateConstFPCast(val, type));
-        });
+        }) { IsReal = true };
         public static readonly IntegralType DoublePtr = Double.Pointer<IntegralType>();
 
-        public static readonly IntegralType Float = new("f32", LLVMTypeRef.Float, (val, type) => { 
-            return new Value(Float!, LLVMValueRef.CreateConstFPCast(val, type)); 
-        });
+        public static readonly IntegralType Float = new("f32", LLVMTypeRef.Float, (val, type) => {
+            return new Value(Float!, LLVMValueRef.CreateConstFPCast(val, type));
+        }) { IsReal = true };
         public static readonly IntegralType FloatPtr = Float.Pointer<IntegralType>();
     }
 
