@@ -47,20 +47,20 @@ castExpression
 	| unaryExpression
 	;
 
-mulDivExpression
-	: castExpression ((Star|Pow|Div|Mod) castExpression)*
-	;
-
-addSubExpression
-	: mulDivExpression ((Plus|Minus) mulDivExpression)*
-	;
-
-shiftExpression
-	: addSubExpression ((LeftShift|RightShift) addSubExpression)*
+binaryOpExpression
+	: castExpression #ignored
+    | binaryOpExpression Star binaryOpExpression #Mul
+    | binaryOpExpression Div binaryOpExpression #Div
+    | binaryOpExpression Mod binaryOpExpression #Mod
+    | binaryOpExpression Pow binaryOpExpression #Pow
+    | binaryOpExpression Plus binaryOpExpression #Add
+    | binaryOpExpression Minus binaryOpExpression #Sub
+    | binaryOpExpression LeftShift binaryOpExpression #LShift
+    | binaryOpExpression RightShift binaryOpExpression #RShift
 	;
 
 relationExpression
-	: shiftExpression ((Less|Greater|LessEqual|GreaterEqual) shiftExpression)*
+	: binaryOpExpression ((Less|Greater|LessEqual|GreaterEqual) binaryOpExpression)*
 	;
 
 equalExpression

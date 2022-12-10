@@ -68,8 +68,9 @@ namespace Pepper {
         }
 
         public override string ToString() {
-            var addr = (AddressRef.HasValue ? AddressRef.ToString() : "undefined");
-            return $"{Type} {Name}{addr}";
+            var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
+            var name = Name != "" ? $"{Name} " : "";
+            return $"{name}{addr}";
         }
         public static implicit operator LLVMValueRef(Value v) => v.Address;
     }

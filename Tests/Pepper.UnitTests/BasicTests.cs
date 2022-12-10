@@ -89,5 +89,29 @@ namespace Pepper.UnitTests {
                 """;
             CompileAndRun("Modulo", source, 2);
         }
+
+        [Test]
+        public void MultiVariableAdd() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 42;
+                    return x + y;
+                }
+                """;
+            CompileAndRun("MultiVariableAdd", source, 54);
+        }
+
+        [Test]
+        public void CompoundFormula() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 16;
+                    return x * 5 / y;
+                }
+                """;
+            CompileAndRun("Modulo", source, 3);
+        }
     }
 }
