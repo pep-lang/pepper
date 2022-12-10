@@ -69,6 +69,6 @@ namespace Pepper {
             Context.Default.Locals.AliasFunction(Puts, "print");
         }
 
-        public static readonly ExternFunction Puts = new("puts", IntegralType.Int32, new TypedValue(IntegralType.Int8Ptr, "str"));
+        public static readonly ExternFunction Puts = new("puts", IntegerType.Int32, new TypedValue(IntegerType.Int8Ptr, "str"));
     }
 }

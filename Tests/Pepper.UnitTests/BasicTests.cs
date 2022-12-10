@@ -135,16 +135,16 @@ namespace Pepper.UnitTests {
             CompileAndRun("LessThanInt", source);
         }
 
-        [Test]
-        public void LessThanReal() {
-            var source = """
-                    int main() {
-                    float x = 12.0;
-                    return x < 2.0;
-                }
-                """;
-            CompileAndRun("LessThanFloat", source);
-        }
+        //[Test]
+        //public void LessThanReal() {
+        //    var source = """
+        //            int main() {
+        //            float x = 12.0;
+        //            return x < 2.0;
+        //        }
+        //        """;
+        //    CompileAndRun("LessThanFloat", source);
+        //}
 
         [Test]
         public void CompoundFormula() {

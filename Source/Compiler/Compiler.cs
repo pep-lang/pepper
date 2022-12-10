@@ -101,7 +101,7 @@ namespace Pepper {
         public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
             base.EnterFunctionDefinition(context);
             var identifier = context.Identifier().ToString()!;
-            string returnTypeName = context.returnType()?.Identifier().ToString()! ?? IntegralType.Void.Name;
+            string returnTypeName = context.returnType()?.Identifier().ToString()! ?? VoidType.Void.Name;
             var returnType = Locals.GetType(returnTypeName);
             if (returnType == null) {
                 throw new CompileException($"Unknown return type {returnType}");
@@ -136,7 +136,7 @@ namespace Pepper {
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.Add(Locals.PopStack());
             }
-            if (func.ReturnType != IntegralType.Void) {
+            if (func.ReturnType != VoidType.Void) {
                 var result = func.Call(args);
                 Locals.PushStack(result);
             }
@@ -296,18 +296,18 @@ namespace Pepper {
             var lhs = Locals.PopStack<Value>();
             bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
             if (isInt) {
-                var operandType = IntegralType.Int64;
+                var operandType = IntegerType.Int64;
                 var compare = Context.Locals.Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, 
                     operandType.Coerce(lhs).Load(), operandType.Coerce(rhs).Load(), "");
-                var result = new Value(IntegralType.Bool, compare, "less");
+                var result = new Value(IntegerType.Bool, compare, "less");
                 Locals.PushStack(result);
             } else {
-                var operandType = IntegralType.Double;
+                var operandType = FloatType.Double;
                 var coercedLhs = new Value(operandType, operandType.Coerce(lhs)).Load();
                 var coercedRhs = new Value(operandType, operandType.Coerce(rhs)).Load();
                 var compare = Context.Locals.Builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, 
                     coercedLhs, coercedRhs, "");
-                var result = new Value(IntegralType.Bool, compare, "less");
+                var result = new Value(IntegerType.Bool, compare, "less");
                 Locals.PushStack(result);
             }
             

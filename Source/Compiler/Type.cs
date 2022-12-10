@@ -11,25 +11,20 @@ namespace Pepper {
     using CoerceFunc = Func<LLVMValueRef, Type, Value>;
 
     internal abstract class Type {
-        public string Name;
-        public LLVMTypeRef Ref;
-        public bool IsInt = false;
-        public bool IsReal = false;
-        public bool IsPointer = false;
+        public readonly string Name;
+        public LLVMTypeRef Ref { get; protected set; }
+        public bool IsInt { get; protected set; } = false;
+        public bool IsReal { get; protected set; } = false;
+        public bool IsPointer { get; protected set; } = false;
 
-        public Type(string name) {
-            System.Diagnostics.Debug.Assert(!name.EndsWith("**"));
+        public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
+            Ref = typeRef;
             Context.Default.Locals.AddType(this);
         }
 
         public abstract Value Coerce(Value val);
-
-        internal abstract Type Pointer();
-
-        internal T Pointer<T>() where T: Type {
-            return (T)Pointer();
-        }
+        public abstract PointerType Pointer();
 
         internal LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
             builder ??= Context.Default.Locals.FunctionRegisters;
@@ -45,120 +40,141 @@ namespace Pepper {
     }
 
     internal abstract class NativeType : Type {
-        public CoerceFunc EmitCoerce;
+        public NativeType(string name, LLVMTypeRef typeRef) 
+            : base(name, typeRef) {            
+        }
 
-        public NativeType(string name, LLVMTypeRef typeRef, CoerceFunc coerce) : base(name) {
-            Ref = typeRef;
-            EmitCoerce = coerce;
+        public override PointerType Pointer() {
+            return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
+        }
+
+        public static void StaticInit() {
+            VoidType.StaticInit();
+            IntegerType.StaticInit();
+            FloatType.StaticInit();
+        }
+    }
+
+    internal class PointerType : Type {
+        public PointerType(string name, LLVMTypeRef typeRef)
+            : base(name, typeRef) {
+            IsPointer = true;
+        }
+
+        public override PointerType Pointer() {
+            throw new CompileException($"Pointer to {this} is disallowed");
+        }
+
+        public override Value Coerce(Value val) {
+            if (val.Type.Equals(this)) {
+                return val;
+            }
+
+            var type = val.Type;
+            if (type.IsPointer) {
+                return new Value(this, LLVMValueRef.CreateConstPointerCast(val, this));
+            }
+            throw new CompileException($"Cannot convert non-pointer type {type} to {this}");
+        }
+    }
+
+    internal class VoidType : NativeType {
+        public VoidType(string name, LLVMTypeRef typeRef)
+            : base(name, typeRef) {
+        }
+
+        public override PointerType Pointer() {
+            return new PointerType("void*", this);
+        }
+
+        public override Value Coerce(Value val) {
+            throw new CompileException($"Cannot convert {val.Type} to void");
+        }
+
+        public static new void StaticInit() {
+
+        }
+
+        public static readonly VoidType Void = new("void", LLVMTypeRef.Void);
+        public static readonly PointerType VoidPtr = Void.Pointer();
+    }
+
+    internal class IntegerType : NativeType {
+        public readonly bool Signed = true;
+        public uint Width => Ref.IntWidth;
+
+        public IntegerType(string name, LLVMTypeRef typeRef, bool signed = true)
+            : base(name, typeRef) {
+            Signed = signed;
+            IsInt = true;
         }
 
         public override Value Coerce(Value val) {
             if (val.Type.Equals(this) && val is not Constant) {
                 return val;
             }
-            return EmitCoerce(val, this);
-        }
-    }
-
-    internal class IntegralType : NativeType {
-
-        public IntegralType(string name, LLVMTypeRef typeRef, CoerceFunc coerce) : base(name, typeRef, coerce) { }
-
-        internal override Type Pointer() {
-            return Pointer((val, type) => {
-                var ptrType = Context.Default.Locals.GetType($"{Name}*")!;
-                return new Value(ptrType, LLVMValueRef.CreateConstPointerCast(val, this), val.Name);
-            });
+            return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, Signed));
         }
 
-        private Type Pointer(CoerceFunc coerce) {
-            return new IntegralType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0), coerce) { IsPointer = true };
-        }
-
-        private T Pointer<T>(CoerceFunc coerce) where T : Type {
-            return (T)Pointer(coerce);
-        }
-
-        public static void StaticInit() {
+        public static new void StaticInit() {
             Context.Default.Locals.AliasType(Int8, "char");
             Context.Default.Locals.AliasType(UInt8, "byte");
             Context.Default.Locals.AliasType(Int32, "int");
             Context.Default.Locals.AliasType(UInt32, "uint");
             Context.Default.Locals.AliasType(Int64, "long");
             Context.Default.Locals.AliasType(UInt64, "ulong");
-            Context.Default.Locals.AliasType(Double, "double");
-            Context.Default.Locals.AliasType(Float, "float");
         }
 
-        public static readonly IntegralType Void = new("void", LLVMTypeRef.Void, (_, _) => throw new Exception("Cannot convert a value to void"));
-        public static readonly IntegralType VoidPtr = Void.Pointer<IntegralType>((val, type) => {
-            return new Value(VoidPtr!, LLVMValueRef.CreateConstPointerCast(val, VoidPtr!));
-        });
+        public static readonly IntegerType Int8 = new("i8", LLVMTypeRef.Int8, true);
+        public static readonly PointerType Int8Ptr = Int8.Pointer();
 
-        public static readonly IntegralType Int8 = new("i8", LLVMTypeRef.Int8, (val, type) => {
-            return new Value(Int8!, LLVMValueRef.CreateConstIntCast(val, Int8!, true));
-        }) { IsInt = true };
-        public static readonly IntegralType Int8Ptr = Int8.Pointer<IntegralType>((val, type) => {
-            return new Value(Int8Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int8Ptr!));
-        });
+        public static readonly IntegerType UInt8 = new("u8", LLVMTypeRef.Int8, false);
+        public static readonly PointerType UInt8Ptr = UInt8.Pointer();
 
-        public static readonly IntegralType UInt8 = new("u8", LLVMTypeRef.Int8, (val, type) => {
-            return new Value(UInt8!, LLVMValueRef.CreateConstIntCast(val, UInt8!, false));
-        }) { IsInt = true };
-        public static readonly IntegralType UInt8Ptr = UInt8.Pointer<IntegralType>((val, type) => {
-            return new Value(UInt8Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt8Ptr!));
-        });
-        
-        public static readonly IntegralType Int32 = new("i32", LLVMTypeRef.Int32, (val, type) => {
-            return new Value(Int32!, LLVMValueRef.CreateConstIntCast(val, Int32!, true));
-        }) { IsInt = true };
-        public static readonly IntegralType Int32Ptr = Int32.Pointer<IntegralType>((val, type) => {
-            return new Value(Int32Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int32Ptr!));
-        });
+        public static readonly IntegerType Int32 = new("i32", LLVMTypeRef.Int32, true);
+        public static readonly PointerType Int32Ptr = Int32.Pointer();
 
-        public static readonly IntegralType UInt32 = new("u32", LLVMTypeRef.Int32, (val, type) => {
-            return new Value(UInt32!, LLVMValueRef.CreateConstIntCast(val, UInt32!, false));
-        }) { IsInt = true };
-        public static readonly IntegralType UInt32Ptr = UInt32.Pointer<IntegralType>((val, type) => {
-            return new Value(UInt32Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt32Ptr!));
-        });
+        public static readonly IntegerType UInt32 = new("u32", LLVMTypeRef.Int32, false);
+        public static readonly PointerType UInt32Ptr = UInt32.Pointer();
 
-        public static readonly IntegralType Int64 = new("i64", LLVMTypeRef.Int64, (val, type) => {
-            return new Value(Int64!, LLVMValueRef.CreateConstIntCast(val, Int64!, true));
-        }) { IsInt = true };
-        public static readonly IntegralType Int64Ptr = Int64.Pointer<IntegralType>((val, type) => {
-            return new Value(Int64Ptr!, LLVMValueRef.CreateConstPointerCast(val, Int64Ptr!));
-        });
+        public static readonly IntegerType Int64 = new("i64", LLVMTypeRef.Int64, true);
+        public static readonly PointerType Int64Ptr = Int64.Pointer();
 
-        public static readonly IntegralType UInt64 = new("u64", LLVMTypeRef.Int64, (val, type) => {
-            return new Value(UInt64!, LLVMValueRef.CreateConstIntCast(val, UInt64!, false));
-        }) { IsInt = true };
-        public static readonly IntegralType UInt64Ptr = UInt64.Pointer<IntegralType>((val, type) => {
-            return new Value(UInt64Ptr!, LLVMValueRef.CreateConstPointerCast(val, UInt64Ptr!));
-        });
+        public static readonly IntegerType UInt64 = new("u64", LLVMTypeRef.Int64, false);
+        public static readonly PointerType UInt64Ptr = UInt64.Pointer();
 
-        public static readonly IntegralType Bool = new("bool", LLVMTypeRef.Int1, (val, type) => {
-            return new Value(Bool!, LLVMValueRef.CreateConstIntCast(val, type, false));
-        }) { IsInt = true };
+        public static readonly IntegerType Bool = new("bool", LLVMTypeRef.Int1, false);
+    }
 
-        public static readonly IntegralType Double = new("f64", LLVMTypeRef.Double, (val, type) => {
+    internal class FloatType : NativeType {
+        public FloatType(string name, LLVMTypeRef typeRef) 
+            : base(name, typeRef) {
+            IsReal = true;
+        }
+
+        public override Value Coerce(Value val) {
+            if (val.Type.Equals(this) && val is not Constant) {
+                return val;
+            }
+
+            var type = val.Type;
             if (type.IsInt) {
                 return new Value(Double!, LLVMValueRef.CreateConstSIToFP(val, type));
             } else {
                 return new Value(Double!, LLVMValueRef.CreateConstFPExt(val, type));
             }
-            
-        }) { IsReal = true };
-        public static readonly IntegralType DoublePtr = Double.Pointer<IntegralType>();
+        }
 
-        public static readonly IntegralType Float = new("f32", LLVMTypeRef.Float, (val, type) => {
-            if (type.IsInt) {
-                return new Value(Float!, LLVMValueRef.CreateConstSIToFP(val, type));
-            } else {
-                return new Value(Float!, LLVMValueRef.CreateConstFPExt(val, type));
-            }
-        }) { IsReal = true };
-        public static readonly IntegralType FloatPtr = Float.Pointer<IntegralType>();
+        public static new void StaticInit() {
+            Context.Default.Locals.AliasType(Double, "double");
+            Context.Default.Locals.AliasType(Float, "float");
+        }
+
+        public static readonly FloatType Double = new("f64", LLVMTypeRef.Double);
+        public static readonly PointerType DoublePtr = Double.Pointer();
+
+        public static readonly FloatType Float = new("f32", LLVMTypeRef.Float);
+        public static readonly PointerType FloatPtr = Float.Pointer();
     }
 
     //internal class UserType : Type {
@@ -168,19 +184,18 @@ namespace Pepper {
     //}
 
     internal class FunctionType : Type {
-        public Type ReturnType = IntegralType.Void;
+        public Type ReturnType { get; private set; }
         public IEnumerable<TypedValue> Parameters { get; private set; }
-        public bool Varargs = false;
+        public bool Varargs { get; private set; } = false;
 
         private FunctionType(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
-            : base(Signature(returnType, parameters, varargs)) {
-            Ref = LLVMTypeRef.CreateFunction(returnType, parameters.Select(p => p.Type.Ref).ToArray(), varargs);
+            : base(Signature(returnType, parameters, varargs), LLVMTypeRef.CreateFunction(returnType, parameters.Select(p => p.Type.Ref).ToArray(), varargs)) {
             ReturnType = returnType;
             Parameters = parameters;
             Varargs = varargs;
         }
 
-        internal override Type Pointer() => throw new NotImplementedException();
+        public override PointerType Pointer() => throw new NotImplementedException();
 
         public override Value Coerce(Value val) {
             throw new NotImplementedException();

@@ -34,7 +34,7 @@ internal class Context {
     }
 
     void RegisterGlobals() {
-        IntegralType.StaticInit();
+        NativeType.StaticInit();
         ExternFunction.StaticInit();
     }
 
