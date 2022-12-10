@@ -50,11 +50,12 @@ namespace Pepper {
             return Address;
         }
 
-        public virtual LLVMValueRef Store(Value value, LLVMBuilderRef? builder) {
+        public virtual LLVMValueRef Store(Value value, LLVMBuilderRef? builder = null) {
+            builder ??= Context.Default.Locals.Builder;
             return Store(value.Load(builder), builder);
         }
 
-        public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) {
+        public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder = null) {
             builder ??= Context.Default.Locals.Builder;
             return builder.Value.BuildStore(value, Address);
         }

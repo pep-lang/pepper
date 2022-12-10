@@ -241,53 +241,71 @@ namespace Pepper {
             Locals.AddVariable(variable);
         }
 
-        void EmitBinaryOp(Func<LLVMValueRef, LLVMValueRef, string, LLVMValueRef> op, string name) {
+        Type BinaryOpResultType() {
+            var lhs = Locals.PeekStack<Value>(0);
+            var rhs = Locals.PeekStack<Value>(1);
+            return BinaryOpResultType(lhs.Type, rhs.Type);
+        }
+
+        static Type BinaryOpResultType(Type lhs, Type rhs) {
+            var resultType = (lhs.Ref.IntWidth > rhs.Ref.IntWidth) ? lhs : rhs;
+            return resultType;
+        }
+
+        void EmitBinaryOp(Func<Value, Value, Value> op) {
             var rhs = Locals.PopStack<Value>();
             var lhs = Locals.PopStack<Value>();
-            var resultType = (lhs.Type.Ref.IntWidth > rhs.Type.Ref.IntWidth) ? lhs.Type : rhs.Type;
-            var result = new Value(resultType, op(resultType.Coerce(lhs).Load(), resultType.Coerce(rhs).Load(), ""), name);
+            var resultType = BinaryOpResultType(lhs.Type, rhs.Type);
+            var result = op(resultType.Coerce(lhs), resultType.Coerce(rhs));
             Locals.PushStack(result);
         }
 
         public override void ExitMul([NotNull] PepperParser.MulContext context) {
             base.ExitMul(context);
-
-            EmitBinaryOp(Context.Locals.Builder.BuildMul, "mul");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.Mul);
         }
 
         public override void ExitDiv([NotNull] PepperParser.DivContext context) {
             base.ExitDiv(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildSDiv, "div");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.Div);
         }
 
         public override void ExitMod([NotNull] PepperParser.ModContext context) {
             base.ExitMod(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildSRem, "mod");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.Mod);
         }
 
         public override void ExitPow([NotNull] PepperParser.PowContext context) {
             base.ExitPow(context);
+            var resultType = BinaryOpResultType();
             throw new NotImplementedException();
         }
 
         public override void ExitAdd([NotNull] PepperParser.AddContext context) {
             base.ExitAdd(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildAdd, "add");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.Add);
         }
 
         public override void ExitSub([NotNull] PepperParser.SubContext context) {
             base.ExitSub(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildSub, "sub");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.Sub);
         }
 
         public override void ExitLShift([NotNull] PepperParser.LShiftContext context) {
             base.ExitLShift(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildShl, "lshift");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.LShift);
         }
 
         public override void ExitRShift([NotNull] PepperParser.RShiftContext context) {
             base.ExitRShift(context);
-            EmitBinaryOp(Context.Locals.Builder.BuildAShr, "rshift");
+            var resultType = BinaryOpResultType();
+            EmitBinaryOp(resultType.RShift);
         }
 
         public override void ExitLess([NotNull] PepperParser.LessContext context) {

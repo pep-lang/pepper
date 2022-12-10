@@ -1,4 +1,5 @@
-﻿using LLVMSharp.Interop;
+﻿using LLVMSharp;
+using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,6 +32,21 @@ namespace Pepper {
             return builder.Value.BuildAlloca(this, name);
         }
 
+        public virtual Value Add(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Sub(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Mul(Value lhs, Value rhs)=> throw new NotImplementedException();
+        public virtual Value Div(Value lhs, Value rhs)=> throw new NotImplementedException();
+        public virtual Value Mod(Value lhs, Value rhs)=> throw new NotImplementedException();
+        public virtual Value Pow(Value lhs, Value rhs)=> throw new NotImplementedException();
+        public virtual Value Less(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Greater(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value LessEqual(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value GreaterEqual(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value LShift(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value RShift(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Equal(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Assign(Value lhs, Value rhs) => throw new NotImplementedException();
+
         public override bool Equals(object? other) => (other is Type rhs) && Ref == rhs.Ref;
 
         public override int GetHashCode() => Ref.GetHashCode();
@@ -40,6 +56,12 @@ namespace Pepper {
     }
 
     internal abstract class NativeType : Type {
+        protected static LLVMBuilderRef Builder {
+            get {
+                return Context.Default.Locals.Builder;
+            }
+        }
+
         public NativeType(string name, LLVMTypeRef typeRef) 
             : base(name, typeRef) {            
         }
@@ -55,7 +77,7 @@ namespace Pepper {
         }
     }
 
-    internal class PointerType : Type {
+    internal class PointerType : NativeType {
         public PointerType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsPointer = true;
@@ -76,6 +98,9 @@ namespace Pepper {
             }
             throw new CompileException($"Cannot convert non-pointer type {type} to {this}");
         }
+
+        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs));
+        public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
     internal class VoidType : NativeType {
@@ -115,6 +140,21 @@ namespace Pepper {
             }
             return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, Signed));
         }
+
+        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs, rhs, "add"));
+        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildSub(lhs, rhs, "sub"));
+        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildMul(lhs, rhs, "mul"));
+        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildSDiv(lhs, rhs, "div"));
+        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildSRem(lhs, rhs, "mod"));
+        public override Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
+        public override Value Less(Value lhs, Value rhs) => new(Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntULT, lhs, rhs, "lt"));
+        public override Value Greater(Value lhs, Value rhs) => new(Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntUGT, lhs, rhs, "gt"));
+        public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLE, lhs, rhs, "le"));
+        public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSGE, lhs, rhs, "ge"));
+        public override Value LShift(Value lhs, Value rhs) => new(this, Builder.BuildShl(lhs, rhs, "lshift"));
+        public override Value RShift(Value lhs, Value rhs) => new(this, Builder.BuildAShr(lhs, rhs, "rshift"));
+        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs, "eq"));
+        public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
 
         public static new void StaticInit() {
             Context.Default.Locals.AliasType(Int8, "char");
@@ -164,6 +204,19 @@ namespace Pepper {
                 return new Value(Double!, LLVMValueRef.CreateConstFPExt(val, type));
             }
         }
+
+        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildFAdd(lhs, rhs, "add"));
+        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildFSub(lhs, rhs, "sub"));
+        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildFMul(lhs, rhs, "mul"));
+        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildFDiv(lhs, rhs, "div"));
+        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildFRem(lhs, rhs, "mod"));
+        public override Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
+        public override Value Less(Value lhs, Value rhs) => new(IntegerType.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, lhs, rhs, "lt"));
+        public override Value Greater(Value lhs, Value rhs) => new(IntegerType.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, lhs, rhs, "gt"));
+        public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs, rhs, "le"));
+        public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs, rhs, "ge"));
+        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs, rhs, "eq"));
+        public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
 
         public static new void StaticInit() {
             Context.Default.Locals.AliasType(Double, "double");
