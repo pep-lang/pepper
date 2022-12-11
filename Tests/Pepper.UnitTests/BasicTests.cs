@@ -1,25 +1,10 @@
-using System.Runtime.CompilerServices;
+
 using Antlr4.Runtime;
 
 namespace Pepper.UnitTests {
-    public class Tests {
-        [SetUp]
-        public void Setup() {
-        }
+    public class BasicTests {
 
-        static void CompileAndRun(string module, string source, int expectedResult = 0) {
-            using var compiler = Compiler.Compile(module, CharStreams.fromString(source));
-            int result = compiler.JIT("main");
-            try
-            {
-                Log.Info($"main returned {result}");
-                Assert.That(result, Is.EqualTo(expectedResult));
-            } catch (Exception ex)
-            {
-                Log.Error(ex.Message);
-            }
-            
-        }
+        
 
         [Test]
         public void HelloWorld() {
@@ -29,7 +14,7 @@ namespace Pepper.UnitTests {
                     return 0;
                 }
                 """;
-            CompileAndRun("HelloWorld", source);
+            Utils.CompileAndRun("HelloWorld", source);
         }
 
         [Test]
@@ -40,152 +25,10 @@ namespace Pepper.UnitTests {
                     return x;
                 }
                 """;
-            CompileAndRun("Let", source, 12);
+            Utils.CompileAndRun("Let", source, 12);
         }
 
-        [Test] 
-        public void Add() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x + 5;
-                }
-                """;
-            CompileAndRun("Add", source, 17);
-        }
-
-        [Test]
-        public void Subtract() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x - 5;
-                }
-                """;
-            CompileAndRun("Subtract", source, 7);
-        }
-
-        [Test]
-        public void Multiply() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x * 5;
-                }
-                """;
-            CompileAndRun("Multiply", source, 60);
-        }
-
-        [Test]
-        public void Divide() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x / 5;
-                }
-                """;
-            CompileAndRun("Divide", source, 2);
-        }
-
-        [Test]
-        public void Modulo() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x % 5;
-                }
-                """;
-            CompileAndRun("Modulo", source, 2);
-        }
-
-        [Test]
-        public void MultiVariableAdd() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    int y = 42;
-                    return x + y;
-                }
-                """;
-            CompileAndRun("MultiVariableAdd", source, 54);
-        }
-
-        [Test]
-        public void LeftShift() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x << 2;
-                }
-                """;
-            CompileAndRun("LeftShift", source, 48);
-        }
-
-        [Test]
-        public void RightShift() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x >> 2;
-                }
-                """;
-            CompileAndRun("RightShift", source, 3);
-        }
-
-        [Test]
-        public void LessThanInt() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x < 2;
-                }
-                """;
-            CompileAndRun("LessThanInt", source);
-        }
-
-        //[Test]
-        //public void LessThanReal() {
-        //    var source = """
-        //            int main() {
-        //            float x = 12.0;
-        //            return x < 2.0;
-        //        }
-        //        """;
-        //    CompileAndRun("LessThanFloat", source);
-        //}
-
-        [Test]
-        public void BitwiseAnd() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x & 1;
-                }
-                """;
-            CompileAndRun("BitwiseAnd", source);
-        }
-
-        [Test]
-        public void BitwiseOr() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x | 1;
-                }
-                """;
-            CompileAndRun("BitwiseOr", source, 13);
-        }
-
-        [Test]
-        public void BitwiseXor() {
-            var source = """
-                int main() {
-                    int x = 12;
-                    return x ^ 1;
-                }
-                """;
-            CompileAndRun("BitwiseXor", source, 13);
-        }
+        
 
         [Test]
         public void LogicalAnd() {
@@ -196,7 +39,7 @@ namespace Pepper.UnitTests {
                     return x && y;
                 }
                 """;
-            CompileAndRun("LogicalAnd", source);
+            Utils.CompileAndRun("LogicalAnd", source);
         }
 
         [Test]
@@ -208,7 +51,7 @@ namespace Pepper.UnitTests {
                     return x || y;
                 }
                 """;
-            CompileAndRun("LogicalOr", source, 1);
+            Utils.CompileAndRun("LogicalOr", source, 1);
         }
 
         [Test]
@@ -220,7 +63,7 @@ namespace Pepper.UnitTests {
                     return x * 5 / y;
                 }
                 """;
-            CompileAndRun("Modulo", source, 3);
+            Utils.CompileAndRun("Modulo", source, 3);
         }
     }
 }
