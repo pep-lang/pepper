@@ -262,6 +262,8 @@ namespace Pepper {
         }
 
         static Type BinaryOpResultType(Type lhs, Type rhs) {
+            if (lhs.IsReal || rhs.IsReal)
+                return lhs.Bits > 32 ? Types.Double : Types.Float;
             var resultType = (lhs.Bits > rhs.Bits) ? lhs : rhs;
             return resultType;
         }
@@ -283,19 +285,19 @@ namespace Pepper {
         public override void ExitMul([NotNull] PepperParser.MulContext context) {
             base.ExitMul(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.Mul);
+            EmitBinaryOp(resultType, resultType.Mul);
         }
 
         public override void ExitDiv([NotNull] PepperParser.DivContext context) {
             base.ExitDiv(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.Div);
+            EmitBinaryOp(resultType, resultType.Div);
         }
 
         public override void ExitMod([NotNull] PepperParser.ModContext context) {
             base.ExitMod(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.Mod);
+            EmitBinaryOp(resultType, resultType.Mod);
         }
 
         public override void ExitPow([NotNull] PepperParser.PowContext context) {
@@ -307,25 +309,25 @@ namespace Pepper {
         public override void ExitAdd([NotNull] PepperParser.AddContext context) {
             base.ExitAdd(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.Add);
+            EmitBinaryOp(resultType, resultType.Add);
         }
 
         public override void ExitSub([NotNull] PepperParser.SubContext context) {
             base.ExitSub(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.Sub);
+            EmitBinaryOp(resultType, resultType.Sub);
         }
 
         public override void ExitLShift([NotNull] PepperParser.LShiftContext context) {
             base.ExitLShift(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.LShift);
+            EmitBinaryOp(resultType, resultType.LShift);
         }
 
         public override void ExitRShift([NotNull] PepperParser.RShiftContext context) {
             base.ExitRShift(context);
             var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType.RShift);
+            EmitBinaryOp(resultType, resultType.RShift);
         }
 
         Type ComparisonOperandType() {
@@ -336,28 +338,35 @@ namespace Pepper {
             return operandType;
         }
 
+        void EmitCompareOp(Type compareType, Func<Value, Value, Value> op) {
+            var rhs = Locals.PopStack<Value>();
+            var lhs = Locals.PopStack<Value>();
+            var result = op(compareType.Coerce(lhs), compareType.Coerce(rhs));
+            Locals.PushStack(result);
+        }
+
         public override void ExitLess([NotNull] PepperParser.LessContext context) {
             base.ExitLess(context);
             var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.Less);
+            EmitCompareOp(operandType, operandType.Less);
         }
 
         public override void ExitGreater([NotNull] PepperParser.GreaterContext context) {
             base.ExitGreater(context);
             var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.Greater);
+            EmitCompareOp(operandType, operandType.Greater);
         }
 
         public override void ExitLessEqual([NotNull] PepperParser.LessEqualContext context) {
             base.ExitLessEqual(context);
             var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.LessEqual);
+            EmitCompareOp(operandType, operandType.LessEqual);
         }
 
         public override void ExitGreaterEqual([NotNull] PepperParser.GreaterEqualContext context) {
             base.ExitGreaterEqual(context);
             var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.GreaterEqual);
+            EmitCompareOp(operandType, operandType.GreaterEqual);
         }
 
         Type BitwiseOperandType() {

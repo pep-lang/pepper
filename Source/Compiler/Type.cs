@@ -127,7 +127,11 @@ namespace Pepper {
                 return val;
             }
             bool signed = val.Type != Types.Bool && Signed;
-            return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, signed));
+            if (val.Type.IsInt) {                
+                return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, signed));
+            }
+            Func<LLVMValueRef, LLVMTypeRef, LLVMValueRef> convert = signed ? LLVMValueRef.CreateConstFPToSI : LLVMValueRef.CreateConstFPToUI;
+            return new Value(this, convert(val, this));
         }
 
         public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs, rhs, "add"));
@@ -164,9 +168,9 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsInt) {
-                return new Value(Types.Double!, LLVMValueRef.CreateConstSIToFP(val, type));
+                return new Value(Types.Double, LLVMValueRef.CreateConstSIToFP(val, Types.Double));
             } else {
-                return new Value(Types.Double!, LLVMValueRef.CreateConstFPExt(val, type));
+                return new Value(Types.Double, LLVMValueRef.CreateConstFPExt(val, Types.Double));
             }
         }
 
@@ -178,10 +182,10 @@ namespace Pepper {
         public override Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
         public override Value Less(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, lhs, rhs, "lt"));
         public override Value Greater(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, lhs, rhs, "gt"));
-        public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs, rhs, "le"));
-        public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs, rhs, "ge"));
-        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs, rhs, "eq"));
-        public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs, rhs, "ne"));
+        public override Value LessEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs, rhs, "le"));
+        public override Value GreaterEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs, rhs, "ge"));
+        public override Value Equal(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs, rhs, "eq"));
+        public override Value NotEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs, rhs, "ne"));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
