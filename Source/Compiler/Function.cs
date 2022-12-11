@@ -68,9 +68,9 @@ namespace Pepper {
             Context.Default.Locals.AliasFunction(Puts, "print");
         }
 
-        public static readonly ExternFunction Puts = new("puts", IntegerType.Int32, new TypedValue(IntegerType.Int8Ptr, "str"));
-        public static readonly ExternFunction Malloc = new("malloc", VoidType.VoidPtr, new TypedValue(IntegerType.UInt64, "size"));
-        public static readonly ExternFunction Free = new("free", VoidType.Void, new TypedValue(IntegerType.Int8Ptr, "ptr"));
-        public static readonly ExternFunction Realloc = new("realloc", VoidType.VoidPtr, new TypedValue(IntegerType.Int8Ptr, "ptr"), new TypedValue(IntegerType.UInt64, "new_size"));
+        public static readonly ExternFunction Puts = new("puts", Types.Int32, new TypedValue(Types.Int8Ptr, "str"));
+        public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new TypedValue(Types.UInt64, "size"));
+        public static readonly ExternFunction Free = new("free", Types.Void, new TypedValue(Types.Int8Ptr, "ptr"));
+        public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new TypedValue(Types.Int8Ptr, "ptr"), new TypedValue(Types.UInt64, "new_size"));
     }
 }

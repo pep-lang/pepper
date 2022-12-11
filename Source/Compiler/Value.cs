@@ -91,7 +91,7 @@ namespace Pepper {
     internal class ConstantInt : Constant {
         private readonly long Value;
         public ConstantInt(long value, string name = "") 
-            : base(IntegerType.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
+            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
             Value = value;
         }
 
@@ -105,7 +105,7 @@ namespace Pepper {
     internal class ConstantDouble : Constant {
         private readonly double Value;
         public ConstantDouble(double value, string name = "")
-            : base(FloatType.Double, LLVMValueRef.CreateConstReal(FloatType.Double, value), name) {
+            : base(Types.Double, LLVMValueRef.CreateConstReal(Types.Double, value), name) {
             Value = value;
         }
 
@@ -121,7 +121,7 @@ namespace Pepper {
     internal class ConstantString : Constant {
         private readonly string Value;
         public ConstantString(string value, string name = "")
-            : base(IntegerType.Int8Ptr, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
+            : base(Types.Int8Ptr, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
             Value = value;
         }
 
