@@ -36,14 +36,20 @@ namespace Pepper {
             var tokens = new BufferedTokenStream(lexer);
             var parser = new PepperParser(tokens) {
                 BuildParseTree = true,
-                //Trace = true
+                Trace = true
             };
 
-            var tree = parser.compilationUnit();
-            var compiler = new Compiler(moduleName);
-            ParseTreeWalker.Default.Walk(compiler, tree);
-
-            //Log.Info(FormatTree(tree.ToStringTree(parser)));
+            PepperParser.CompilationUnitContext? tree = null;
+            try {
+                tree = parser.compilationUnit();
+                var compiler = new Compiler(moduleName);
+                ParseTreeWalker.Default.Walk(compiler, tree);
+            } catch (InputMismatchException imex) {
+                Log.Error(imex.Message);
+                var stringTree = tree?.ToStringTree(parser);
+                Log.Info(FormatTree(stringTree));
+            }
+            
             Log.Info(Context.Module.PrintToString());
             Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
         }

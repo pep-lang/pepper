@@ -180,6 +180,30 @@ namespace Pepper.UnitTests {
         }
 
         [Test]
+        public void LogicalAnd() {
+            var source = """
+                    int main() {
+                    int x = 1;
+                    int y = 0
+                    return x && y;
+                }
+                """;
+            CompileAndRun("LogicalAnd", source);
+        }
+
+        [Test]
+        public void LogicalOr() {
+            var source = """
+                    int main() {
+                    int x = 1;
+                    int y = 0
+                    return x || y;
+                }
+                """;
+            CompileAndRun("LogicalOr", source, 1);
+        }
+
+        [Test]
         public void CompoundFormula() {
             var source = """
                 int main() {
