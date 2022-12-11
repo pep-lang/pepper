@@ -15,8 +15,12 @@
     <PackageReference Include="Antlr4.Runtime.Standard" Version="4.11.1" />
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="LLVMSharp" Version="15.0.0-beta1" />
+    <PackageReference Include="libLLVM.runtime.osx-x64" Version="15.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="libLLVM.runtime.osx-x64" />
+  </ItemGroup>
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
     <Exec Command="antlr4 -o $(ProjectDir)\Parser -package Pepper.Parser -Dlanguage=CSharp $(ProjectDir)\Pepper.g4" />
   </Target>

@@ -36,7 +36,7 @@ namespace Pepper {
             var tokens = new BufferedTokenStream(lexer);
             var parser = new PepperParser(tokens) {
                 BuildParseTree = true,
-                Trace = true
+                //Trace = true
             };
 
             var tree = parser.compilationUnit();
