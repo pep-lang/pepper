@@ -70,5 +70,8 @@ namespace Pepper {
         }
 
         public static readonly ExternFunction Puts = new("puts", IntegerType.Int32, new TypedValue(IntegerType.Int8Ptr, "str"));
+        public static readonly ExternFunction Malloc = new("malloc", VoidType.VoidPtr, new TypedValue(IntegerType.UInt64, "size"));
+        public static readonly ExternFunction Free = new("free", VoidType.Void, new TypedValue(VoidType.VoidPtr, "ptr"));
+        public static readonly ExternFunction Realloc = new("realloc", VoidType.VoidPtr, new TypedValue(VoidType.VoidPtr, "ptr"), new TypedValue(IntegerType.UInt64, "new_size"));
     }
 }
