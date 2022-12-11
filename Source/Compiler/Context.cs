@@ -49,9 +49,9 @@ internal class Context {
     private void InjectRuntime() {
         foreach (var pair in Runtime.GetFunctions().Where(f => f.Value is ExternFunction)) {
             string name = pair.Key;
-            var function = pair.Value;
+            var function = (pair.Value as ExternFunction)!;
             if (name == function.Name) // no aliases
-                Module.AddFunction(name, function.Type);
+                function.Rebind(Module.AddFunction(name, function.Type));
         }
     }
 

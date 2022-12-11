@@ -79,6 +79,10 @@ namespace Pepper {
             return sourceFunction;
         }
 
+        internal void Rebind(LLVMValueRef funcRef) {
+            Address = funcRef;
+        }
+
         public static readonly ExternFunction Puts = new("puts", Types.Int32, new TypedValue(Types.Int8Ptr, "str"));
         public static readonly ExternFunction Print = Alias(Puts, "print");
         public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new TypedValue(Types.UInt64, "size"));

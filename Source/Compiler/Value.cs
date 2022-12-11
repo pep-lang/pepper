@@ -26,7 +26,7 @@ namespace Pepper {
                 }
                 return Alloc(Context.Default.Locals.FunctionRegisters);
             }
-            private set {
+            protected set {
                 AddressRef = value;
             }
         }
