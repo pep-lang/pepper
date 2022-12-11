@@ -26,7 +26,7 @@ namespace Pepper {
         }
 
         public static Compiler Compile(Options options) {
-            var inputStream = CharStreams.fromPath(options.Input.First());
+            var inputStream = CharStreams.fromPath(options.Inputs.First());
             return Compile(options.ModuleName, inputStream);
         }
 
@@ -46,8 +46,7 @@ namespace Pepper {
                 ParseTreeWalker.Default.Walk(compiler, tree);
             } catch (ParseCanceledException pcex) {
                 Log.Error(pcex.Message);
-                var imex = pcex.InnerException as InputMismatchException;
-                if (imex != null) {
+                if (pcex.InnerException is InputMismatchException imex) {
                     Log.Error($"Unexpected token \"{imex.OffendingToken.Text}\"");
                 }
                 Environment.Exit(-1);

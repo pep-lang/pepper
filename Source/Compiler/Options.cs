@@ -12,7 +12,7 @@ namespace Pepper {
         public string CompilerPath { get; set; } = String.Empty;
 
         [Value(1, MetaName="InputFiles", HelpText = "Input source files")]
-        public IEnumerable<string> Input { get; set; } = new List<string>();
+        public IEnumerable<string> Inputs { get; set; } = new List<string>();
 
         [Option(shortName: 'o', longName: "output", Default = "bin/a.out", HelpText = "Output binary path")]
         public string Output { get; set; } = "bin/a.out";
@@ -23,7 +23,7 @@ namespace Pepper {
                 {
                     Path.GetFileNameWithoutExtension(Output);
                 }
-                return Path.GetFileNameWithoutExtension(Input.First());
+                return Path.GetFileNameWithoutExtension(Inputs.First());
             }
         }
 
