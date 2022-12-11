@@ -30,10 +30,9 @@ internal class Context {
         Module = LLVMModuleRef.CreateWithName(moduleName);
         Globals = new(null, Module.Context.CreateBuilder());
         Locals = Globals;
-        RegisterGlobals();
     }
 
-    void RegisterGlobals() {
+    internal void RegisterGlobals() {
         NativeType.StaticInit();
         ExternFunction.StaticInit();
     }

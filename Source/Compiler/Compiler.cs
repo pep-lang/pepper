@@ -82,6 +82,7 @@ namespace Pepper {
 
         private Compiler(string moduleName) {
             _ = new Context(moduleName);
+            Context.Default.RegisterGlobals();
         }
 
         Value EvalConstant(ITerminalNode constant) {
