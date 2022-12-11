@@ -16,7 +16,7 @@ namespace Pepper {
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
             Ref = typeRef;
-            Context.Default.Locals.AddType(this);
+            Context.Runtime.AddType(this);
         }
 
         public abstract Value Coerce(Value val);
@@ -187,15 +187,15 @@ namespace Pepper {
 
     internal static class Types {
         public static void StaticInit() {
-            Context.Default.Locals.AliasType(Int8, "char");
-            Context.Default.Locals.AliasType(UInt8, "byte");
-            Context.Default.Locals.AliasType(Int32, "int");
-            Context.Default.Locals.AliasType(UInt32, "uint");
-            Context.Default.Locals.AliasType(Int64, "long");
-            Context.Default.Locals.AliasType(UInt64, "ulong");
+            Context.Runtime.AliasType(Int8, "char");
+            Context.Runtime.AliasType(UInt8, "byte");
+            Context.Runtime.AliasType(Int32, "int");
+            Context.Runtime.AliasType(UInt32, "uint");
+            Context.Runtime.AliasType(Int64, "long");
+            Context.Runtime.AliasType(UInt64, "ulong");
 
-            Context.Default.Locals.AliasType(Double, "double");
-            Context.Default.Locals.AliasType(Float, "float");
+            Context.Runtime.AliasType(Double, "double");
+            Context.Runtime.AliasType(Float, "float");
         }
 
         public static readonly VoidType Void = new("void", LLVMTypeRef.Void);
@@ -254,10 +254,16 @@ namespace Pepper {
 
         public static FunctionType Create(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) {
             string sig = Signature(returnType, parameters, varargs);
-            var func = Context.Default.Locals.GetType<FunctionType>(sig);
-            if (func != null) {
-                return func;
+            try {
+                var func = Context.Default.Locals.GetType<FunctionType>(sig);
+                if (func != null)
+                    return func;
+            } catch {
+                var func = Context.Runtime.GetType<FunctionType>(sig);
+                if (func != null)
+                    return func;
             }
+            
             return new FunctionType(returnType, parameters, varargs);
         }
 

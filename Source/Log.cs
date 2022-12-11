@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Pepper {
-    internal static class Log {
+    public static class Log {
         private static void RawLog(string message) {
             Console.WriteLine(message);
             System.Diagnostics.Debug.WriteLine(message);

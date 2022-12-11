@@ -8,8 +8,9 @@ namespace Pepper.UnitTests {
         }
 
         static void CompileAndRun(string module, string source, int expectedResult = 0) {
-            Compiler.Compile("HelloWorld", CharStreams.fromString(source));
-            int result = Compiler.JIT("main");
+            using var compiler = Compiler.Compile("HelloWorld", CharStreams.fromString(source));
+            int result = compiler.JIT("main");
+            Log.Info($"main returned {result}");
             Assert.That(result, Is.EqualTo(expectedResult));
         }
 
@@ -17,7 +18,7 @@ namespace Pepper.UnitTests {
         public void HelloWorld() {
             var source = """
                 int main() {
-                    puts("Hello World!");
+                    print("Hello World!");
                     return 0;
                 }
                 """;

@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
 namespace Pepper {
-    public class Compiler : PepperBaseListener {
+    public class Compiler : PepperBaseListener, IDisposable {
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int IntMain0();
@@ -19,30 +19,30 @@ namespace Pepper {
         internal Scope Locals { get { return Context.Locals; } }
 
         public static void CompileAndRun() {
-            Compile(Options.Parse());
-            var exitCode = JIT("main");
+            using var compiler = Compile(Options.Parse());
+            var exitCode = compiler.JIT("main");
             Log.Info($"main returned {exitCode}");
             Environment.Exit(exitCode);
         }
 
-        public static void Compile(Options options) {
+        public static Compiler Compile(Options options) {
             var inputStream = CharStreams.fromPath(options.Input.First());
-            Compile(options.ModuleName, inputStream);
+            return Compile(options.ModuleName, inputStream);
         }
 
-        public static void Compile(string moduleName, ICharStream inputStream) {
+        public static Compiler Compile(string moduleName, ICharStream inputStream) {
             var lexer = new PepperLexer(inputStream);
             var tokens = new BufferedTokenStream(lexer);
             var parser = new PepperParser(tokens) {
                 BuildParseTree = true,
-                Trace = true,
+                //Trace = true,
                 ErrorHandler = new BailErrorStrategy(),
             };
 
+            var compiler = new Compiler(moduleName);
             try
             {
                 var tree = parser.compilationUnit();
-                var compiler = new Compiler(moduleName);
                 ParseTreeWalker.Default.Walk(compiler, tree);
             } catch (ParseCanceledException pcex) {
                 Log.Error(pcex.Message);
@@ -57,21 +57,27 @@ namespace Pepper {
             //Log.Info(FormatTree(tree.ToStringTree(parser)));
             Log.Info(Context.Module.PrintToString());
             Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+            return compiler;
         }
 
-        public static int JIT(string entryFunction) {
+        public int JIT(string entryFunction) {
             _ = LLVM.InitializeNativeTarget();
             _ = LLVM.InitializeNativeAsmParser();
             _ = LLVM.InitializeNativeAsmPrinter();
 
-            using var engine = Context.Module.CreateMCJITCompiler();
-            var entryAddress = Context.Globals.GetFunction(entryFunction)!.Address;
-            var entry = engine.GetPointerToGlobal<IntMain0>(entryAddress);
-            if (entry == null) {
-                throw new CompileException($"Entry function {entryFunction} not found");
+            try {
+                using var engine = Context.Module.CreateMCJITCompiler();
+                var entryAddress = Context.Globals.GetFunction(entryFunction)!.Address;
+                var entry = engine.GetPointerToGlobal<IntMain0>(entryAddress);
+                if (entry == null) {
+                    throw new CompileException($"Entry function {entryFunction} not found");
+                }
+                var result = entry();
+                return result;
+            } catch (Exception ex) {
+                Log.Error($"JIT execution error: {ex}");
             }
-            var result = entry();
-            return result;
+            return -1;
         }
 
         public static string FormatTree(string tree) {
@@ -92,8 +98,13 @@ namespace Pepper {
         }
 
         private Compiler(string moduleName) {
-            _ = new Context(moduleName);
-            Context.Default.RegisterGlobals();
+            Context.Create(moduleName);
+        }
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            Context.Destroy();
         }
 
         Value EvalConstant(ITerminalNode constant) {

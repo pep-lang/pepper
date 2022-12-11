@@ -22,19 +22,37 @@ internal class Context {
 
     public LLVMModuleRef Module { get; private set; }
 
+    static Context() {
+        Types.StaticInit();
+        ExternFunction.StaticInit();
+    }
+
+    public static Scope Runtime = new Scope();
     public Scope Globals { get; private set; }
     public Scope Locals { get; private set; }
 
-    public Context(string moduleName) {
-        ThreadContext = this;
-        Module = LLVMModuleRef.CreateWithName(moduleName);
-        Globals = new(null, Module.Context.CreateBuilder());
-        Locals = Globals;
+    public static Context Create(string moduleName) {
+        return ThreadContext = new Context(moduleName);
     }
 
-    internal void RegisterGlobals() {
-        Types.StaticInit();
-        ExternFunction.StaticInit();
+    public static void Destroy() {
+        ThreadContext = null;
+    }
+
+    private Context(string moduleName) {
+        Module = LLVMModuleRef.CreateWithName(moduleName);
+        Globals = new(Runtime, Module.Context.CreateBuilder());
+        Locals = Globals;
+        InjectRuntime();
+    }
+
+    private void InjectRuntime() {
+        foreach (var pair in Runtime.GetFunctions().Where(f => f.Value is ExternFunction)) {
+            string name = pair.Key;
+            var function = pair.Value;
+            if (name == function.Name) // no aliases
+                Module.AddFunction(name, function.Type);
+        }
     }
 
     public Scope PushScope(LLVMBuilderRef? builder) {

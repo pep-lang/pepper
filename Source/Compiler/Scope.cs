@@ -1,6 +1,7 @@
 ﻿using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -63,9 +64,10 @@ namespace Pepper {
         private LLVMBuilderRef? ScopeBuilder = null;
         private readonly Dictionary<string, Type> Types = new();
         private readonly Dictionary<string, Function> Functions = new();
-        private readonly Dictionary<string, Value> Variables = new();
+        private readonly Dictionary<string, Value> Locals = new();
         private readonly Stack<StackEntry> Stack = new();
         public UserFunction? ScopeReturnTarget = null;
+        public bool LogStack = false;
 
         public LLVMBuilderRef Builder {
             get {
@@ -120,6 +122,10 @@ namespace Pepper {
             return (T)GetType(name)!;
         }
 
+        public ImmutableDictionary<string, Type> GetTypes() {
+            return Types.ToImmutableDictionary();
+        }
+
         public Function AddFunction(Function newFunction) {
             if (newFunction is UserFunction userFunction) {
                 ScopeReturnTarget = userFunction;
@@ -138,13 +144,17 @@ namespace Pepper {
             return Outer?.GetFunction(name);
         }
 
+        public ImmutableDictionary<string, Function> GetFunctions() {
+            return Functions.ToImmutableDictionary();
+        }
+
         public Value AddVariable(Value NewVariable) {
-            Variables[NewVariable.Name] = NewVariable;
+            Locals[NewVariable.Name] = NewVariable;
             return NewVariable;
         }
 
         public Value? GetVariable(string name) {
-            if (Variables.TryGetValue(name, out var variable)) return variable;
+            if (Locals.TryGetValue(name, out var variable)) return variable;
             return Outer?.GetVariable(name);
         }
 
@@ -154,13 +164,13 @@ namespace Pepper {
 
         public StackEntry PushStack(StackEntry val) {
             Stack.Push(val);
-            Log.Info($"PUSH {val}");
+            if (LogStack) Log.Info($"PUSH {val}");
             return val;
         }
 
         public StackEntry PopStack() {
             var val = Stack.Pop();
-            Log.Info($"POP  {val}");
+            if (LogStack) Log.Info($"POP  {val}");
             return val;
         }
 

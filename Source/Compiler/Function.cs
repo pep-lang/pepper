@@ -21,6 +21,11 @@ namespace Pepper {
             Context.Default.Locals.AddFunction(this);
         }
 
+        protected Function(string name, Type type)
+            : base(type, LLVMValueRef.CreateConstNull(Types.Int8Ptr), name) {
+            Context.Runtime.AddFunction(this);
+        }
+
         public Value Call(IEnumerable<Value> args) {
             var coercedArgs = args.Select((arg, idx) => {
                 var argType = Parameters.ElementAt(idx).Type;
@@ -49,6 +54,7 @@ namespace Pepper {
 
         public UserFunction(string name, Type returnType, IEnumerable<Value> parameters) 
             : base(name, returnType, parameters) {
+            Context.Default.Locals.AddFunction(this);
             Body = Address.AppendBasicBlock("entry");
             Builder = Context.Default.Module.Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
@@ -57,7 +63,7 @@ namespace Pepper {
 
     internal class ExternFunction : Function {
         public ExternFunction(string name, Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
-            : base(name, returnType, parameters, varargs) {
+            : base(name, FunctionType.Create(returnType, parameters, varargs)) {
         }
 
         public ExternFunction(string name, Type returnType, params TypedValue[] parameters) 
@@ -65,10 +71,16 @@ namespace Pepper {
         }
 
         public static void StaticInit() {
-            Context.Default.Locals.AliasFunction(Puts, "print");
+            _ = Puts;
+        }
+
+        private static ExternFunction Alias(ExternFunction sourceFunction, string name) {
+            Context.Runtime.AliasFunction(sourceFunction, name);
+            return sourceFunction;
         }
 
         public static readonly ExternFunction Puts = new("puts", Types.Int32, new TypedValue(Types.Int8Ptr, "str"));
+        public static readonly ExternFunction Print = Alias(Puts, "print");
         public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new TypedValue(Types.UInt64, "size"));
         public static readonly ExternFunction Free = new("free", Types.Void, new TypedValue(Types.Int8Ptr, "ptr"));
         public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new TypedValue(Types.Int8Ptr, "ptr"), new TypedValue(Types.UInt64, "new_size"));
