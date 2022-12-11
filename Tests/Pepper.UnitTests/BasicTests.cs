@@ -147,6 +147,39 @@ namespace Pepper.UnitTests {
         //}
 
         [Test]
+        public void BitwiseAnd() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x & 1;
+                }
+                """;
+            CompileAndRun("BitwiseAnd", source);
+        }
+
+        [Test]
+        public void BitwiseOr() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x | 1;
+                }
+                """;
+            CompileAndRun("BitwiseOr", source, 13);
+        }
+
+        [Test]
+        public void BitwiseXor() {
+            var source = """
+                    int main() {
+                    int x = 12;
+                    return x ^ 1;
+                }
+                """;
+            CompileAndRun("BitwiseXor", source, 1);
+        }
+
+        [Test]
         public void CompoundFormula() {
             var source = """
                 int main() {

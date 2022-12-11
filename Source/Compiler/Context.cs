@@ -33,7 +33,7 @@ internal class Context {
     }
 
     internal void RegisterGlobals() {
-        NativeType.StaticInit();
+        Types.StaticInit();
         ExternFunction.StaticInit();
     }
 

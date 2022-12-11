@@ -68,6 +68,8 @@ namespace Pepper {
             return builder.Value.BuildLoad2(Type, Address, Name);
         }
 
+        public Value AsBool() => Type.AsBool(this);
+
         public override string ToString() {
             var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
             var name = Name != "" ? $"{Name} " : "";

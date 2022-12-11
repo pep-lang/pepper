@@ -68,37 +68,45 @@ relationExpression
 	;
 
 equalExpression
-	: relationExpression ((Equal|NotEqual) relationExpression)*
+	: relationExpression #equalDefault
+    | relationExpression Equal relationExpression #Equal
+    | relationExpression NotEqual relationExpression #NotEqual
 	;
 
 bitAndExpression
-	: equalExpression (BitAnd equalExpression)*
+	: equalExpression #bitAndDefault
+    | equalExpression BitAnd equalExpression #BitwiseAnd
 	;
 
 bitXorExpression
-	: bitAndExpression (Caret bitXorExpression)*
+	: bitAndExpression #bitXorDefault
+    | bitAndExpression Caret bitAndExpression #BitwiseXor
 	;
 
 bitOrExpression
-	: bitXorExpression (BitOr bitXorExpression)*
+	: bitXorExpression #bitOrDefault
+    | bitXorExpression BitOr bitXorExpression #BitwiseOr
 	;
 
 logicalAndExpression
-	: bitOrExpression ((AndAnd|And) bitOrExpression)*
+	: bitOrExpression #logicalAndDefault
+    | bitOrExpression (AndAnd|And) bitOrExpression #LogicalAnd
 	;
 
 logicalOrExpression
-	: logicalAndExpression ((OrOr|Or) logicalAndExpression)*
+	: logicalAndExpression #logicalOrDefault
+    | logicalAndExpression (OrOr|Or) logicalAndExpression #LogicalOr
 	;
 
 ternaryExpression
-	: logicalOrExpression ('?' expression ':' ternaryExpression)*
+	: logicalOrExpression #ternaryDefault
+    | logicalOrExpression '?' expression ':' ternaryExpression #Ternary
 	;
 
 assignmentExpression
-	: ternaryExpression
-	| unaryExpression assignmentOperator assignmentExpression
-	| DigitSequence
+	: ternaryExpression #assignmentDefault
+	| unaryExpression assignmentOperator assignmentExpression #Assignment
+	| DigitSequence #AssignmentDigits
 	;
 
 assignmentOperator

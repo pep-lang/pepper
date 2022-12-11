@@ -163,14 +163,6 @@ namespace Pepper {
             }
         }
 
-        public override void EnterAssignmentExpression([NotNull] PepperParser.AssignmentExpressionContext context) {
-            base.EnterAssignmentExpression(context);
-            var constant = context.DigitSequence();
-            if (constant != null) {
-                EvalConstant(constant);
-            }
-        }
-
         public override void EnterPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
             base.EnterPrimaryExpression(context);
         }
@@ -254,9 +246,15 @@ namespace Pepper {
         }
 
         void EmitBinaryOp(Func<Value, Value, Value> op) {
+            var rhs = Locals.PeekStack<Value>(0)!;
+            var lhs = Locals.PeekStack<Value>(1)!;
+            var resultType = BinaryOpResultType(lhs.Type, rhs.Type);
+            EmitBinaryOp(resultType, op);
+        }
+
+        void EmitBinaryOp(Type resultType, Func<Value, Value, Value> op) {
             var rhs = Locals.PopStack<Value>();
             var lhs = Locals.PopStack<Value>();
-            var resultType = BinaryOpResultType(lhs.Type, rhs.Type);
             var result = op(resultType.Coerce(lhs), resultType.Coerce(rhs));
             Locals.PushStack(result);
         }
@@ -309,27 +307,107 @@ namespace Pepper {
             EmitBinaryOp(resultType.RShift);
         }
 
+        Type ComparisonOperandType() {
+            var rhs = Locals.PeekStack<Value>(0)!;
+            var lhs = Locals.PeekStack<Value>(1)!;
+            bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
+            NativeType operandType = isInt ? Types.Int64 : Types.Double;
+            return operandType;
+        }
+
         public override void ExitLess([NotNull] PepperParser.LessContext context) {
             base.ExitLess(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.Less);
+        }
+
+        public override void ExitGreater([NotNull] PepperParser.GreaterContext context) {
+            base.ExitGreater(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.Greater);
+        }
+
+        public override void ExitLessEqual([NotNull] PepperParser.LessEqualContext context) {
+            base.ExitLessEqual(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.LessEqual);
+        }
+
+        public override void ExitGreaterEqual([NotNull] PepperParser.GreaterEqualContext context) {
+            base.ExitGreaterEqual(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.GreaterEqual);
+        }
+
+        Type BitwiseOperandType() {
+            return ComparisonOperandType();
+        }
+
+        public override void ExitBitwiseAnd([NotNull] PepperParser.BitwiseAndContext context) {
+            base.ExitBitwiseAnd(context);
+            var operandType = BitwiseOperandType();
+            EmitBinaryOp(operandType, operandType.BitAnd);
+        }
+
+        public override void ExitBitwiseOr([NotNull] PepperParser.BitwiseOrContext context) {
+            base.ExitBitwiseOr(context);
+            var operandType = BitwiseOperandType();
+            EmitBinaryOp(operandType, operandType.BitOr);
+        }
+
+        public override void ExitBitwiseXor([NotNull] PepperParser.BitwiseXorContext context) {
+            base.ExitBitwiseXor(context);
+            var operandType = BitwiseOperandType();
+            EmitBinaryOp(operandType, operandType.BitXor);
+        }
+
+        void EmitLogicalOp(Func<Value, Value, Value> op) {
             var rhs = Locals.PopStack<Value>();
             var lhs = Locals.PopStack<Value>();
-            bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
-            if (isInt) {
-                var operandType = Types.Int64;
-                var compare = Context.Locals.Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLT, 
-                    operandType.Coerce(lhs).Load(), operandType.Coerce(rhs).Load(), "");
-                var result = new Value(Types.Bool, compare, "less");
-                Locals.PushStack(result);
-            } else {
-                var operandType = Types.Double;
-                var coercedLhs = new Value(operandType, operandType.Coerce(lhs)).Load();
-                var coercedRhs = new Value(operandType, operandType.Coerce(rhs)).Load();
-                var compare = Context.Locals.Builder.BuildFCmp(LLVMRealPredicate.LLVMRealOLT, 
-                    coercedLhs, coercedRhs, "");
-                var result = new Value(Types.Bool, compare, "less");
-                Locals.PushStack(result);
+            var result = op(lhs.AsBool(), rhs.AsBool());
+            Locals.PushStack(result);
+        }
+
+        public override void ExitLogicalAnd([NotNull] PepperParser.LogicalAndContext context) {
+            base.ExitLogicalAnd(context);
+            EmitLogicalOp(Types.Bool.BitAnd);
+        }
+
+        public override void ExitLogicalOr([NotNull] PepperParser.LogicalOrContext context) {
+            base.ExitLogicalOr(context);
+            EmitLogicalOp(Types.Bool.BitOr);
+        }
+
+        public override void ExitEqual([NotNull] PepperParser.EqualContext context) {
+            base.ExitEqual(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.Equal);
+        }
+
+        public override void ExitNotEqual([NotNull] PepperParser.NotEqualContext context) {
+            base.ExitNotEqual(context);
+            var operandType = ComparisonOperandType();
+            EmitBinaryOp(Types.Bool, operandType.NotEqual);
+        }
+
+        public override void ExitAssignment([NotNull] PepperParser.AssignmentContext context) {
+            base.ExitAssignment(context);
+            var rhs = Locals.PopStack<Value>();
+            var lhs = Locals.PopStack<Value>();
+            var result = lhs.Type.Assign(lhs, rhs);
+            Locals.PushStack(result);
+        }
+
+        public override void ExitAssignmentDigits([NotNull] PepperParser.AssignmentDigitsContext context) {
+            base.ExitAssignmentDigits(context);
+            var constant = context.DigitSequence();
+            if (constant != null) {
+                EvalConstant(constant);
             }
-            
+        }
+
+        public override void ExitTernary([NotNull] PepperParser.TernaryContext context) {
+            base.ExitTernary(context);
         }
 
         //public override void VisitTerminal([NotNull] ITerminalNode node) {

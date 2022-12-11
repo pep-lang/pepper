@@ -2,15 +2,9 @@
 using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Metadata;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+using System.Data;
 
 namespace Pepper {
-    using CoerceFunc = Func<LLVMValueRef, Type, Value>;
-
     internal abstract class Type {
         public readonly string Name;
         public LLVMTypeRef Ref { get; protected set; }
@@ -46,7 +40,12 @@ namespace Pepper {
         public virtual Value LShift(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value RShift(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Equal(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value NotEqual(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Assign(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value BitAnd(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value BitOr(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value BitXor(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value AsBool(Value val) => throw new NotImplementedException();
 
         public override bool Equals(object? other) => (other is Type rhs) && Ref == rhs.Ref;
 
@@ -71,12 +70,6 @@ namespace Pepper {
 
         public override PointerType Pointer() {
             return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
-        }
-
-        public static void StaticInit() {
-            VoidType.StaticInit();
-            IntegerType.StaticInit();
-            FloatType.StaticInit();
         }
     }
 
@@ -118,10 +111,6 @@ namespace Pepper {
         public override Value Coerce(Value val) {
             throw new CompileException($"Cannot convert {val.Type} to void");
         }
-
-        public static new void StaticInit() {
-
-        }
     }
 
     internal class IntegerType : NativeType {
@@ -153,7 +142,12 @@ namespace Pepper {
         public override Value LShift(Value lhs, Value rhs) => new(this, Builder.BuildShl(lhs, rhs, "lshift"));
         public override Value RShift(Value lhs, Value rhs) => new(this, Builder.BuildAShr(lhs, rhs, "rshift"));
         public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs, "eq"));
+        public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, lhs, rhs, "ne"));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
+        public override Value BitAnd(Value lhs, Value rhs) => new(this, Builder.BuildAnd(lhs, rhs, "and"));
+        public override Value BitOr(Value lhs, Value rhs) => new(this, Builder.BuildOr(lhs, rhs, "or"));
+        public override Value BitXor(Value lhs, Value rhs) => new(this, Builder.BuildXor(lhs, rhs, "xor"));
+        public override Value AsBool(Value val) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, val, new ConstantInt(0), "asbool"));
     }
 
     internal class FloatType : NativeType {
@@ -186,6 +180,7 @@ namespace Pepper {
         public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs, rhs, "le"));
         public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs, rhs, "ge"));
         public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs, rhs, "eq"));
+        public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs, rhs, "ne"));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
