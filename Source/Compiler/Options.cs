@@ -8,18 +8,22 @@ using CommandLine;
 
 namespace Pepper {
     public class Options {
-        [Value(index: 0, Required = true)]
+        [Value(0, MetaName="CompilerPath", Required = true)]
         public string CompilerPath { get; set; } = String.Empty;
 
-        [Value(index: 1, Required = true, HelpText = "Input source files")]
-        public string Input { get; set; } = String.Empty;
+        [Value(1, MetaName="InputFiles", HelpText = "Input source files")]
+        public IEnumerable<string> Input { get; set; } = new List<string>();
 
         [Option(shortName: 'o', longName: "output", Default = "bin/a.out", HelpText = "Output binary path")]
         public string Output { get; set; } = "bin/a.out";
 
         public string ModuleName {
             get {
-                return Path.GetFileNameWithoutExtension(Output);
+                if (Output != "bin/a.out")
+                {
+                    Path.GetFileNameWithoutExtension(Output);
+                }
+                return Path.GetFileNameWithoutExtension(Input.First());
             }
         }
 

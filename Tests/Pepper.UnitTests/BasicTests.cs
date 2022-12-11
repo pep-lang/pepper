@@ -105,7 +105,7 @@ namespace Pepper.UnitTests {
         [Test]
         public void LeftShift() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x << 2;
                 }
@@ -116,7 +116,7 @@ namespace Pepper.UnitTests {
         [Test]
         public void RightShift() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x >> 2;
                 }
@@ -127,7 +127,7 @@ namespace Pepper.UnitTests {
         [Test]
         public void LessThanInt() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x < 2;
                 }
@@ -149,7 +149,7 @@ namespace Pepper.UnitTests {
         [Test]
         public void BitwiseAnd() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x & 1;
                 }
@@ -160,7 +160,7 @@ namespace Pepper.UnitTests {
         [Test]
         public void BitwiseOr() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x | 1;
                 }
@@ -171,20 +171,20 @@ namespace Pepper.UnitTests {
         [Test]
         public void BitwiseXor() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 12;
                     return x ^ 1;
                 }
                 """;
-            CompileAndRun("BitwiseXor", source, 1);
+            CompileAndRun("BitwiseXor", source, 13);
         }
 
         [Test]
         public void LogicalAnd() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 1;
-                    int y = 0
+                    int y = 0;
                     return x && y;
                 }
                 """;
@@ -194,9 +194,9 @@ namespace Pepper.UnitTests {
         [Test]
         public void LogicalOr() {
             var source = """
-                    int main() {
+                int main() {
                     int x = 1;
-                    int y = 0
+                    int y = 0;
                     return x || y;
                 }
                 """;

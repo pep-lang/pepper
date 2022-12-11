@@ -18,16 +18,15 @@ namespace Pepper {
         internal Scope Globals { get { return Context.Globals; } }
         internal Scope Locals { get { return Context.Locals; } }
 
-        Compiler() {}
-
         public static void CompileAndRun() {
             Compile(Options.Parse());
             var exitCode = JIT("main");
+            Log.Info($"main returned {exitCode}");
             Environment.Exit(exitCode);
         }
 
         public static void Compile(Options options) {
-            var inputStream = CharStreams.fromPath(options.Input);
+            var inputStream = CharStreams.fromPath(options.Input.First());
             Compile(options.ModuleName, inputStream);
         }
 
@@ -36,20 +35,26 @@ namespace Pepper {
             var tokens = new BufferedTokenStream(lexer);
             var parser = new PepperParser(tokens) {
                 BuildParseTree = true,
-                Trace = true
+                Trace = true,
+                ErrorHandler = new BailErrorStrategy(),
             };
 
-            PepperParser.CompilationUnitContext? tree = null;
-            try {
-                tree = parser.compilationUnit();
+            try
+            {
+                var tree = parser.compilationUnit();
                 var compiler = new Compiler(moduleName);
                 ParseTreeWalker.Default.Walk(compiler, tree);
-            } catch (InputMismatchException imex) {
-                Log.Error(imex.Message);
-                var stringTree = tree?.ToStringTree(parser);
-                Log.Info(FormatTree(stringTree));
+            } catch (ParseCanceledException pcex) {
+                Log.Error(pcex.Message);
+                var imex = pcex.InnerException as InputMismatchException;
+                if (imex != null) {
+                    Log.Error($"Unexpected token \"{imex.OffendingToken.Text}\"");
+                }
+                Environment.Exit(-1);
             }
             
+
+            //Log.Info(FormatTree(tree.ToStringTree(parser)));
             Log.Info(Context.Module.PrintToString());
             Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
         }

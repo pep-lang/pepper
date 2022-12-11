@@ -21,7 +21,7 @@ namespace Pepper {
         }
 
         public static void Error(string message) {
-            message = $"ERROR: ${message}";
+            message = $"ERROR: {message}";
             RawLog(message);
         }
     }

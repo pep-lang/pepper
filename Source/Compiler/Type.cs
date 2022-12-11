@@ -126,7 +126,8 @@ namespace Pepper {
             if (val.Type.Equals(this) && val is not Constant) {
                 return val;
             }
-            return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, Signed));
+            bool signed = val.Type != Types.Bool && Signed;
+            return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, signed));
         }
 
         public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs, rhs, "add"));
