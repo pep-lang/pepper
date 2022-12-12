@@ -61,7 +61,7 @@ namespace Pepper {
         }
 
         public virtual LLVMValueRef Load(LLVMBuilderRef? builder = null) {
-            if (Address.IsAConstant != null) {
+            if (Address.IsAConstant != null || Address.IsAAllocaInst == null) {
                 return Address;
             }
             builder ??= Context.Default.Locals.Builder;
@@ -72,7 +72,7 @@ namespace Pepper {
 
         public override string ToString() {
             var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
-            var name = Name != "" ? $"{Name} " : "";
+            var name = Name != "" && !addr.Contains($"%{Name}") ? $"{Name} " : "";
             return $"{name}{addr}";
         }
         public static implicit operator LLVMValueRef(Value v) => v.Address;
