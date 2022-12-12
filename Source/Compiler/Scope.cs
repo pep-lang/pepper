@@ -79,16 +79,16 @@ namespace Pepper {
             get {
                 var func = (ReturnTarget as UserFunction)!;
                 var funcStart = func.Body.FirstInstruction;
+                var builder = func.Builder;
                 if (funcStart.Handle != 0) {
                     // skip past existing locals
                     for (int localIdx = 0; localIdx < func.NumLocals; ++localIdx)
                         funcStart = funcStart.NextInstruction;
-                    var tempBuilder = Context.Default.Module.Context.CreateBuilder();
-                    tempBuilder.PositionBefore(funcStart);
-                    return tempBuilder;
+                    builder = Context.Default.Module.Context.CreateBuilder();
+                    builder.PositionBefore(funcStart);
                 }
                 ++func.NumLocals;
-                return func.Builder;
+                return builder;
             }
         }
 
