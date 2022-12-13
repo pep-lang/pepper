@@ -46,14 +46,14 @@ file(DOWNLOAD "https://www.antlr.org/download/antlr-4.11.1-complete.jar" "${ANTL
 
 # Generate source files
 add_custom_command(
-    OUTPUT source/parser/PepperLexer.h source/parser/PepperLexer.cpp
-    source/parser/PepperParser.h source/parser/PepperParser.cpp
-    source/parser/PepperListener.h source/parser/PepperListener.cpp
-    source/parser/PepperBaseListener.h source/parser/PepperBaseListener.cpp
+    OUTPUT ${CMAKE_BINARY_DIR}/source/parser/PepperLexer.h ${CMAKE_BINARY_DIR}/source/parser/PepperLexer.cpp
+    ${CMAKE_BINARY_DIR}/source/parser/PepperParser.h ${CMAKE_BINARY_DIR}/source/parser/PepperParser.cpp
+    ${CMAKE_BINARY_DIR}/source/parser/PepperListener.h ${CMAKE_BINARY_DIR}/source/parser/PepperListener.cpp
+    ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.h ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.cpp
     COMMAND ${CMAKE_COMMAND} -E make_directory source/parser
-    COMMAND ${Java_JAVA_EXECUTABLE} -jar ${ANTLR_JAR} -o ${CMAKE_BINARY_DIR}/source/parser -package "Pepper::Parser" -Dlanguage=Cpp grammar/Pepper.g4
+    COMMAND ${Java_JAVA_EXECUTABLE} -jar ${ANTLR_JAR} -o ${CMAKE_BINARY_DIR}/source/parser -package "Pepper::Parser" -Dlanguage=Cpp Pepper.g4
     MAIN_DEPENDENCY grammar/Pepper.g4
-    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/grammar")
 
 list(APPEND PARSER_SRC
     ${CMAKE_BINARY_DIR}/source/parser/PepperLexer.h ${CMAKE_BINARY_DIR}/source/parser/PepperLexer.cpp
