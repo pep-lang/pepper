@@ -1,0 +1,10 @@
+{
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "cmake.configureArgs": [
+    "-Wno-dev",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  ],
+  "C_Cpp.default.compileCommands": "build/compile_commands.json",
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.cStandard": "c11"
+}
