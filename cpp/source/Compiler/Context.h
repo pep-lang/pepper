@@ -1,11 +1,14 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
+#include <string>
 
 namespace llvm {
     class Module;
-}
+    class IRBuilderBase;
+} // namespace llvm
 
 class Scope;
 
@@ -18,15 +21,10 @@ class Context {
     std::shared_ptr<Scope> Locals = nullptr;
 
   public:
-    static Context& get() {
-        if(!Instance) {
-            Instance = new Context();
-        }
-        return *Instance;
-    }
+    static Context& get();
 
     Context(const std::string& moduleName);
-    ~Context() = default;
+    ~Context();
 
     llvm::Module* module() const { return Module; }
 

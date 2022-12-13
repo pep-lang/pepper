@@ -1,9 +1,9 @@
 
-#include "Parser.h"
+#include "Compiler/Parser.h"
 
 #include "ANTLRInputStream.h"
-#include "Codegen.h"
-#include "Exceptions.h"
+#include "Compiler/Codegen.h"
+#include "Compiler/Exceptions.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"

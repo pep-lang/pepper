@@ -24,4 +24,4 @@ class InternalCompilerError : public std::exception {
         : Message(msg) {}
 
     const char* what() const noexcept override { return Message.c_str(); }
-}
+};

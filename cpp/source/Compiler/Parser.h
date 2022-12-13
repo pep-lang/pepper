@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "Codegen.h"
-
 #include <memory>
 
 class Codegen;
@@ -12,7 +10,8 @@ class Parser {
     std::shared_ptr<Codegen> Generator;
 
   public:
-    Parser(std::shared_ptr<Codegen> gen) : Generator(gen) {}
+    Parser(std::shared_ptr<Codegen> gen)
+        : Generator(gen) {}
 
     ~Parser() = default;
 

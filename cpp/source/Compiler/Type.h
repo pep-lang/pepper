@@ -1,10 +1,17 @@
 
 #pragma once
 
+#include "Core/RTTI.h"
+#include <memory>
+#include <string>
+#include <vector>
+
 class Value;
 class ValueRef;
+class Type;
+using TypeRef = std::shared_ptr<Type>;
 class PointerType;
-class PointerTypeRef;
+class TypedValue;
 
 namespace llvm {
     class Type;
@@ -13,12 +20,14 @@ namespace llvm {
 } // namespace llvm
 
 class Type {
+    DECLARE_RTTI(Type);
+
   private:
     std::string Name;
     llvm::Type* Ref = nullptr;
-    uint32_t IsInt : 1 = false;
-    uint32_t IsReal : 1 = false;
-    uint32_t IsPointer : 1 = false;
+    uint32_t IsInt : 1;
+    uint32_t IsReal : 1;
+    uint32_t IsPointer : 1;
 
   public:
     Type(const std::string name, llvm::Type* type)
@@ -30,10 +39,10 @@ class Type {
     operator llvm::Type*() const;
 
     virtual ValueRef coerce(ValueRef value) const = 0;
-    virtual PointerTypeRef pointer() const = 0;
+    virtual TypeRef pointer() const = 0;
     virtual uint32_t bits() const = 0;
 
-    llvm::Value* alloc(IRBuilderBase* builder);
+    llvm::Value* alloc(llvm::IRBuilderBase* builder) const;
 
     virtual ValueRef add(ValueRef lhs, ValueRef rhs) const = 0;
     virtual ValueRef sub(ValueRef lhs, ValueRef rhs) const = 0;
@@ -56,9 +65,8 @@ class Type {
     virtual ValueRef asBool(ValueRef lhs, ValueRef rhs) const = 0;
 };
 
-using TypeRef = std::shared_ptr<Type>;
-
 class NativeType : public Type {
+    DECLARE_RTTI(NativeType, Type)
   protected:
     static llvm::IRBuilderBase* builder();
 
@@ -67,34 +75,35 @@ class NativeType : public Type {
     ~NativeType() = default;
 
     uint32_t bits() const override;
-    PointerTypeRef pointer() const override;
+    TypeRef pointer() const override;
 };
 
 class PointerType : public NativeType {
+    DECLARE_RTTI(PointerType, NativeType)
   public:
     PointerType(const std::string& name, llvm::Type* type);
     ~PointerType() = default;
 
-    PointerTypeRef pointer() const override;
+    TypeRef pointer() const override;
     ValueRef coerce(ValueRef value) const override;
 
     ValueRef equal(ValueRef lhs, ValueRef rhs) const override;
     ValueRef notEqual(ValueRef lhs, ValueRef rhs) const override;
     ValueRef assign(ValueRef lhs, ValueRef rhs) const override;
-}
-
-using PointerTypeRef = std::shared_ptr<PointerType>;
+};
 
 class VoidType : public NativeType {
+    DECLARE_RTTI(VoidType, NativeType)
   public:
     VoidType(const std::string& name, llvm::Type* type);
     ~VoidType() = default;
 
-    PointerTypeRef pointer() const override;
+    TypeRef pointer() const override;
     ValueRef coerce(ValueRef value) const override;
-}
+};
 
 class IntegerType : public NativeType {
+    DECLARE_RTTI(IntegerType, NativeType)
     bool Signed = false;
 
   public:
@@ -122,9 +131,10 @@ class IntegerType : public NativeType {
     ValueRef bitXor(ValueRef lhs, ValueRef rhs) const override;
     ValueRef bitOr(ValueRef lhs, ValueRef rhs) const override;
     ValueRef asBool(ValueRef lhs, ValueRef rhs) const override;
-}
+};
 
 class FloatType : public NativeType {
+    DECLARE_RTTI(FloatType, NativeType)
   public:
     FloatType(const std::string& name, llvm::Type* type);
     ~FloatType() = default;
@@ -150,15 +160,17 @@ class FloatType : public NativeType {
     ValueRef bitXor(ValueRef lhs, ValueRef rhs) const override;
     ValueRef bitOr(ValueRef lhs, ValueRef rhs) const override;
     ValueRef asBool(ValueRef lhs, ValueRef rhs) const override;
-}
+};
 
 class UserType : Type {
+    DECLARE_RTTI(UserType, Type)
   public:
     UserType(const std::string& name, llvm::Type* type);
     ~UserType() = default;
-}
+};
 
 class FunctionType : Type {
+    DECLARE_RTTI(FunctionType, Type)
     TypeRef ReturnType;
     std::vector<TypedValue> Params;
     bool Varargs = false;
@@ -167,39 +179,39 @@ class FunctionType : Type {
     FunctionType(TypeRef returnType, const std::vector<TypedValue>& params, bool varargs = false);
     ~FunctionType() = default;
 
-    static FunctionTypeRef(TypeRef returnType, const std::vector<TypedValue>& params, bool varargs = false);
+    static FunctionType Create(TypeRef returnType, const std::vector<TypedValue>& params, bool varargs = false);
     static std::string Signature(TypeRef returnType, const std::vector<TypedValue>& params, bool varargs = false);
-}
+};
 
 namespace Types {
     void StaticInit();
 
-    const VoidType Void;
-    const PointerType VoidPtr;
+    const TypeRef Void;
+    const TypeRef VoidPtr;
 
-    const IntegerType Int8;
-    const PointerType Int8Ptr;
+    const TypeRef Int8;
+    const TypeRef Int8Ptr;
 
-    const IntegerType UInt8;
-    const PointerType UInt8Ptr;
+    const TypeRef UInt8;
+    const TypeRef UInt8Ptr;
 
-    const IntegerType Int32;
-    const PointerType Int32Ptr;
+    const TypeRef Int32;
+    const TypeRef Int32Ptr;
 
-    const IntegerType UInt32;
-    const PointerType UInt32Ptr;
+    const TypeRef UInt32;
+    const TypeRef UInt32Ptr;
 
-    const IntegerType Int64;
-    const PointerType Int64Ptr;
+    const TypeRef Int64;
+    const TypeRef Int64Ptr;
 
-    const IntegerType UInt64;
-    const PointerType UInt64Ptr;
+    const TypeRef UInt64;
+    const TypeRef UInt64Ptr;
 
-    const IntegerType Bool;
+    const TypeRef Bool;
 
-    const FloatType Double;
-    const PointerType DoublePtr;
+    const TypeRef Double;
+    const TypeRef DoublePtr;
 
-    const FloatType Float;
-    const PointerType FloatPtr;
-}
+    const TypeRef Float;
+    const TypeRef FloatPtr;
+} // namespace Types

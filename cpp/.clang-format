@@ -34,9 +34,10 @@ MaxEmptyLinesToKeep: 1
 NamespaceIndentation: All
 PPIndentWidth: 4
 PackConstructorInitializers: Never
-PenaltyReturnTypeOnItsOwnLine: 100
+PenaltyReturnTypeOnItsOwnLine: 10000
 PenaltyBreakBeforeFirstCallParameter: 100
 PenaltyBreakOpenParenthesis: 100
+PenaltyBreakTemplateDeclaration: 10000
 SeparateDefinitionBlocks: Always
 SortUsingDeclarations: true
 SpaceAfterTemplateKeyword: true
@@ -44,7 +45,7 @@ SpaceBeforeAssignmentOperators: true
 SpaceBeforeCaseColon: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
-SpaceBeforeParens: Never
+SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
 SpacesInAngles: Never
 TabWidth: 4
