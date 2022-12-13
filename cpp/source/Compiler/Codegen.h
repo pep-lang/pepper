@@ -3,69 +3,69 @@
 
 class Codegen {
   public:
-    void BeginFunction();
+    void beginFunction();
 
-    void EndFunction();
+    void endFunction();
 
-    void FunctionCall();
+    void functionCall();
 
-    void StringLiteral();
+    void stringLiteral();
 
-    void Identifier();
+    void identifier();
 
-    void VariableDeclaration();
+    void variableDeclaration();
 
-    void BinaryMul();
+    void binaryMul();
 
-    void BinaryDiv();
+    void binaryDiv();
 
-    void BinaryMod();
+    void binaryMod();
 
-    void BinaryPow();
+    void binaryPow();
 
-    void BinaryAdd();
+    void binaryAdd();
 
-    void BinarySub();
+    void binarySub();
 
-    void BinaryLeftShift();
+    void binaryLeftShift();
 
-    void BinaryRightShift();
+    void binaryRightShift();
 
-    void CompareLess();
+    void compareLess();
 
-    void CompareLessEqual();
+    void compareLessEqual();
 
-    void CompareGreater();
+    void compareGreater();
 
-    void CompareGreaterEqual();
+    void compareGreaterEqual();
 
-    void BitwiseAnd();
+    void bitwiseAnd();
 
-    void BitwiseXor();
+    void bitwiseXor();
 
-    void BitwiseOr();
+    void bitwiseOr();
 
-    void Equal();
+    void equal();
 
-    void NotEqual();
+    void notEqual();
 
-    void Assign();
+    void assign();
 
-    void MulAssign();
+    void mulAssign();
 
-    void DivAssign();
+    void divAssign();
 
-    void ModAssign();
+    void modAssign();
 
-    void LeftShiftAssign();
+    void leftShiftAssign();
 
-    void RightShiftAssign();
+    void rightShiftAssign();
 
-    void BitAndAssign();
+    void bitAndAssign();
 
-    void BitXorAssign();
+    void bitXorAssign();
 
-    void BitOrAssign();
+    void bitOrAssign();
 
-    void Ternary();
+    void ternary();
 };

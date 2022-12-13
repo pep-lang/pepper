@@ -53,7 +53,7 @@ endif()
 find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_HOME}/install/lib/cmake/llvm)
 message(STATUS "Found LLVM at ${LLVM_DIR}")
-llvm_map_components_to_libnames(LLVM_LIBARIES Passes MCJIT Core Support)
+llvm_map_components_to_libnames(LLVM_LIBARIES passes mcjit core support option demangle x86 codegen)
 
 set(LLVM_INCLUDE_DIRS ${LLVM_HOME}/install/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_HOME}/install/lib CACHE STRING "LLVM Library Directories")
