@@ -4,3 +4,47 @@ IndentWidth: 4
 Language: Cpp
 DerivePointerAlignment: false
 PointerAlignment: Left
+BinPackArguments: false
+BinPackParameters: false
+BreakConstructorInitializers: BeforeComma
+BreakInheritanceList: BeforeComma
+CompactNamespaces: true
+Cpp11BracedListStyle: true
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+FixNamespaceComments: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:        '"^(llvm)/'
+    Priority:     2
+    SortPriority: 2
+  - Regex:        '.*'
+    Priority:     1
+    SortPriority: 0
+IndentAccessModifiers: false
+IndentCaseLabels: true
+IndentExternBlock: Indent
+IndentGotoLabels: false
+IndentPPDirectives: AfterHash
+IndentRequiresClause: true
+InsertTrailingCommas: Wrapped
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: All
+PPIndentWidth: 4
+PackConstructorInitializers: Never
+PenaltyReturnTypeOnItsOwnLine: 100
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakOpenParenthesis: 100
+SeparateDefinitionBlocks: Always
+SortUsingDeclarations: true
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: Never
+SpaceInEmptyParentheses: false
+SpacesInAngles: Never
+TabWidth: 4
+UseTab: Never
