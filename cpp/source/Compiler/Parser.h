@@ -5,14 +5,16 @@
 
 #include <memory>
 
+class Codegen;
+
 class Parser {
   private:
-    std::shared_ptr<class Codegen> Generator;
+    std::shared_ptr<Codegen> Generator;
 
   public:
     Parser(std::shared_ptr<Codegen> gen) : Generator(gen) {}
 
     ~Parser() = default;
 
-    void Parse(std::istream& stream);
+    void parse(std::istream& stream);
 };

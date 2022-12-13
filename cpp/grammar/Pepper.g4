@@ -305,11 +305,10 @@ forExpression
     :   assignmentExpression (',' assignmentExpression)*
     ;
 
-jumpStatement
-    : 
-    ( Continue
-    | Break   
-    | Return expression? ) ';'
+jumpStatement:
+	Continue ';'				# Continue
+	| Break ';'					# Break
+	| Return expression? ';'	# Return
     ;
 
 compilationUnit

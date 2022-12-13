@@ -67,7 +67,11 @@ include_directories(${PARSER_INCLUDE_DIRS})
 set(COMPILER_SRC
     source/Compiler/Codegen.cpp
     source/Compiler/Compiler.cpp
+    source/Compiler/Context.cpp
+    source/Compiler/Function.cpp
     source/Compiler/Parser.cpp
+    source/Compiler/Scope.cpp
+    source/Compiler/Type.cpp
     source/Compiler/Value.cpp)
 
 add_executable(Pepper

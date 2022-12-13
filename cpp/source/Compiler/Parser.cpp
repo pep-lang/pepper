@@ -2,6 +2,8 @@
 #include "Parser.h"
 
 #include "ANTLRInputStream.h"
+#include "Codegen.h"
+#include "Exceptions.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
@@ -21,6 +23,12 @@ class ParserListener : public PepperBaseListener {
     void exitVariableSpecifier(
         PepperParser::VariableSpecifierContext* context) override {
         Super::exitVariableSpecifier(context);
+        auto identifiers = context->Identifier();
+        if(identifiers.size() != 2) {
+            throw new CompileError("Expected <type> <identifier> in variable declaration");
+        }
+        auto typeName = identifiers[0];
+        auto identifier = identifiers[1];
     }
 
     void enterFunctionDefinition(
@@ -36,6 +44,8 @@ class ParserListener : public PepperBaseListener {
     void exitFunctionCall(PepperParser::FunctionCallContext* context) override {
         Super::exitFunctionCall(context);
     }
+
+    void exitReturn(PepperParser::ReturnContext* context) { Super::exitReturn(context); }
 
     void exitMul(PepperParser::MulContext* context) override {
         Super::exitMul(context);
@@ -172,7 +182,7 @@ class ParserListener : public PepperBaseListener {
     }
 };
 
-void Parser::Parse(std::istream& stream) {
+void Parser::parse(std::istream& stream) {
     antlr4::ANTLRInputStream inputStream(stream);
     PepperLexer lexer(&inputStream);
     antlr4::CommonTokenStream tokenStream(&lexer);
