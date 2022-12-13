@@ -14,7 +14,7 @@ endif()
 find_package(LLVM REQUIRED CONFIG
     PATHS ${PROJECT_SOURCE_DIR}/llvm-project/build/lib/cmake/llvm)
 message(STATUS "Found LLVM at ${LLVM_DIR}")
-llvm_map_components_to_libnames(llvm_libs Passes Core Support)
+llvm_map_components_to_libnames(llvm_libs Passes MCJIT Core Support)
 link_libraries(${llvm_libs})
 
 if("" STREQUAL "${LLVM_LIBRARY_DIRS}")
@@ -75,8 +75,6 @@ add_executable(Pepper
     ${COMPILER_SRC}
     source/main.cpp)
 add_dependencies(Pepper antlr4_shared)
-
-llvm_config(Pepper Passes Core jit Support)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
