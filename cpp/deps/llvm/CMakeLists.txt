@@ -53,7 +53,9 @@ endif()
 find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_HOME}/install/lib/cmake/llvm)
 message(STATUS "Found LLVM at ${LLVM_DIR}")
-llvm_map_components_to_libnames(LLVM_LIBARIES passes mcjit core support option demangle x86 codegen)
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
+explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
 
 set(LLVM_INCLUDE_DIRS ${LLVM_HOME}/install/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_HOME}/install/lib CACHE STRING "LLVM Library Directories")
@@ -61,3 +63,5 @@ set(LLVM_LIBRARIES ${LLVM_LIBRARIES} CACHE STRING "LLVM libraries selected for l
 
 message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM lib dirs: ${LLVM_LIBRARY_DIRS}")
+message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
+message(STATUS "LLVM defines: ${LLVM_DEFINITIONS_LIST}")
