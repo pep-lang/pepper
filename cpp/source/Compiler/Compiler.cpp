@@ -43,4 +43,5 @@ Ref<Compiler> Compiler::Compile(Ref<Options> opts) {
     for (auto sourceFile : opts->sourceFiles()) {
         compiler->compile(sourceFile);
     }
+    return compiler;
 }

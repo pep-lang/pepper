@@ -24,11 +24,15 @@ link_libraries(PepperParser)
 
 set(COMPILER_SRC
     source/main.cpp
+    source/AST/Nodes.h
     source/Core/RTTI.h
+    source/Core/Common.h
     source/Compiler/Codegen.h
     source/Compiler/Codegen.cpp
     source/Compiler/Compiler.h
     source/Compiler/Compiler.cpp
+    source/Compiler/Constant.h
+    source/Compiler/Constant.cpp
     source/Compiler/Context.h
     source/Compiler/Context.cpp
     source/Compiler/Function.h
