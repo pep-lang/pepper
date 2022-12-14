@@ -25,9 +25,9 @@ list(APPEND PARSER_SRC
     ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.h ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.cpp
 )
 add_library(PepperParser STATIC ${PARSER_SRC})
+add_dependencies(PepperParser antlr4_shared)
 
-# add_dependencies(PepperParser antlr4_shared)
 message(STATUS "PepperParser will use ANTLR4 includes at ${ANTLR4_INCLUDE_DIRS}")
 target_include_directories(PepperParser PUBLIC ${ANTLR4_INCLUDE_DIRS})
-target_link_libraries(PepperParser PUBLIC ${ANTLR4_SHARED_LIBRARIES})
+target_link_libraries(PepperParser PUBLIC antlr4_shared)
 set(PARSER_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/source/parser PARENT_SCOPE)

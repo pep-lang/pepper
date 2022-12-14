@@ -4,7 +4,19 @@ if(POLICY CMP0114)
     cmake_policy(SET CMP0114 NEW)
 endif()
 
+if(POLICY CMP0054)
+    cmake_policy(SET CMP0054 NEW)
+endif()
+
+if(POLICY CMP0045)
+    cmake_policy(SET CMP0045 NEW)
+endif()
+
 include(ExternalProject)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
 
 set(ANTLR4_ROOT ${CMAKE_CURRENT_BINARY_DIR}/src/antlr4_runtime)
 set(ANTLR4_INCLUDE_DIRS ${ANTLR4_ROOT}/runtime/Cpp/runtime/src)
@@ -85,47 +97,44 @@ if(NOT DEFINED ANTLR4_WITH_STATIC_CRT)
     set(ANTLR4_WITH_STATIC_CRT OFF)
 endif()
 
-if(BUILD_DEPS)
-    if(ANTLR4_ZIP_REPOSITORY)
-        ExternalProject_Add(
-            antlr4_runtime
-            PREFIX antlr4_runtime
-            URL ${ANTLR4_ZIP_REPOSITORY}
-            DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
-            BUILD_COMMAND ""
-            BUILD_IN_SOURCE 1
-            SOURCE_DIR ${ANTLR4_ROOT}
-            SOURCE_SUBDIR runtime/Cpp
-            CMAKE_CACHE_ARGS
-            -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-            -DWITH_STATIC_CRT:BOOL=${ANTLR4_WITH_STATIC_CRT}
-            -DDISABLE_WARNINGS:BOOL=ON
+if(ANTLR4_ZIP_REPOSITORY)
+    ExternalProject_Add(
+        antlr4_runtime
+        PREFIX antlr4_runtime
+        URL ${ANTLR4_ZIP_REPOSITORY}
+        DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+        BUILD_COMMAND ""
+        BUILD_IN_SOURCE 1
+        SOURCE_DIR ${ANTLR4_ROOT}
+        SOURCE_SUBDIR runtime/Cpp
+        CMAKE_CACHE_ARGS
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DWITH_STATIC_CRT:BOOL=${ANTLR4_WITH_STATIC_CRT}
+        -DDISABLE_WARNINGS:BOOL=ON
 
-            # -DCMAKE_CXX_STANDARD:STRING=17 # if desired, compile the runtime with a different C++ standard
-            # -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD} # alternatively, compile the runtime with the same C++ standard as the outer project
-            INSTALL_COMMAND ""
-            EXCLUDE_FROM_ALL 1)
-    else()
-        ExternalProject_Add(
-            antlr4_runtime
-            PREFIX antlr4_runtime
-            GIT_REPOSITORY ${ANTLR4_GIT_REPOSITORY}
-            GIT_TAG ${ANTLR4_TAG}
-            DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
-            BUILD_COMMAND ""
-            BUILD_IN_SOURCE 1
-            SOURCE_DIR ${ANTLR4_ROOT}
-            SOURCE_SUBDIR runtime/Cpp
-            CMAKE_CACHE_ARGS
-            -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-            -DWITH_STATIC_CRT:BOOL=${ANTLR4_WITH_STATIC_CRT}
-            -DDISABLE_WARNINGS:BOOL=ON
+        # -DCMAKE_CXX_STANDARD:STRING=17 # if desired, compile the runtime with a different C++ standard
+        # -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD} # alternatively, compile the runtime with the same C++ standard as the outer project
+        INSTALL_COMMAND ""
+        EXCLUDE_FROM_ALL 1)
+else()
+    ExternalProject_Add(
+        antlr4_runtime
+        PREFIX antlr4_runtime
+        GIT_REPOSITORY ${ANTLR4_GIT_REPOSITORY}
+        GIT_TAG ${ANTLR4_TAG}
+        DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+        BUILD_IN_SOURCE 1
+        SOURCE_DIR ${ANTLR4_ROOT}
+        SOURCE_SUBDIR runtime/Cpp
+        CMAKE_CACHE_ARGS
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DWITH_STATIC_CRT:BOOL=${ANTLR4_WITH_STATIC_CRT}
+        -DDISABLE_WARNINGS:BOOL=ON
 
-            # -DCMAKE_CXX_STANDARD:STRING=17 # if desired, compile the runtime with a different C++ standard
-            -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD} # alternatively, compile the runtime with the same C++ standard as the outer project
-            INSTALL_COMMAND ""
-            EXCLUDE_FROM_ALL 1)
-    endif()
+        # -DCMAKE_CXX_STANDARD:STRING=17 # if desired, compile the runtime with a different C++ standard
+        -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD} # alternatively, compile the runtime with the same C++ standard as the outer project
+        INSTALL_COMMAND ""
+        EXCLUDE_FROM_ALL 1)
 endif()
 
 # Separate build step as rarely people want both
@@ -136,22 +145,20 @@ if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.14.0")
     set(ANTLR4_BUILD_DIR ${ANTLR4_ROOT}/runtime/Cpp)
 endif()
 
-if(BUILD_DEPS)
-    ExternalProject_Add_Step(
-        antlr4_runtime
-        build_static
-        COMMAND ${ANTLR4_BUILD_COMMAND} antlr4_static
+ExternalProject_Add_Step(
+    antlr4_runtime
+    build_static
+    COMMAND ${ANTLR4_BUILD_COMMAND} antlr4_static
 
-        # Depend on target instead of step (a custom command)
-        # to avoid running dependent steps concurrently
-        DEPENDS antlr4_runtime
-        BYPRODUCTS ${ANTLR4_STATIC_LIBRARIES}
-        EXCLUDE_FROM_MAIN 1
-        WORKING_DIRECTORY ${ANTLR4_BUILD_DIR})
-    ExternalProject_Add_StepTargets(antlr4_runtime build_static)
-endif()
+    # Depend on target instead of step (a custom command)
+    # to avoid running dependent steps concurrently
+    DEPENDS antlr4_runtime
+    BYPRODUCTS ${ANTLR4_STATIC_LIBRARIES}
+    EXCLUDE_FROM_MAIN 1
+    WORKING_DIRECTORY ${ANTLR4_BUILD_DIR})
+ExternalProject_Add_StepTargets(antlr4_runtime build_static)
 
-add_library(antlr4_static STATIC IMPORTED)
+add_library(antlr4_static STATIC IMPORTED GLOBAL)
 add_dependencies(antlr4_static antlr4_runtime-build_static)
 set_target_properties(antlr4_static PROPERTIES
     IMPORTED_LOCATION ${ANTLR4_STATIC_LIBRARIES})
@@ -160,22 +167,20 @@ target_include_directories(antlr4_static
     ${ANTLR4_INCLUDE_DIRS}
 )
 
-if(BUILD_DEPS)
-    ExternalProject_Add_Step(
-        antlr4_runtime
-        build_shared
-        COMMAND ${ANTLR4_BUILD_COMMAND} antlr4_shared
+ExternalProject_Add_Step(
+    antlr4_runtime
+    build_shared
+    COMMAND ${ANTLR4_BUILD_COMMAND} antlr4_shared
 
-        # Depend on target instead of step (a custom command)
-        # to avoid running dependent steps concurrently
-        DEPENDS antlr4_runtime
-        BYPRODUCTS ${ANTLR4_SHARED_LIBRARIES} ${ANTLR4_RUNTIME_LIBRARIES}
-        EXCLUDE_FROM_MAIN 1
-        WORKING_DIRECTORY ${ANTLR4_BUILD_DIR})
-    ExternalProject_Add_StepTargets(antlr4_runtime build_shared)
-endif()
+    # Depend on target instead of step (a custom command)
+    # to avoid running dependent steps concurrently
+    DEPENDS antlr4_runtime
+    BYPRODUCTS ${ANTLR4_SHARED_LIBRARIES} ${ANTLR4_RUNTIME_LIBRARIES}
+    EXCLUDE_FROM_MAIN 1
+    WORKING_DIRECTORY ${ANTLR4_BUILD_DIR})
+ExternalProject_Add_StepTargets(antlr4_runtime build_shared)
 
-add_library(antlr4_shared SHARED IMPORTED)
+add_library(antlr4_shared SHARED IMPORTED GLOBAL)
 add_dependencies(antlr4_shared antlr4_runtime-build_shared)
 set_target_properties(antlr4_shared PROPERTIES
     IMPORTED_LOCATION ${ANTLR4_RUNTIME_LIBRARIES})
@@ -193,3 +198,8 @@ set(ANTLR4_INCLUDE_DIRS ${ANTLR4_INCLUDE_DIRS} CACHE STRING "ANTLR4 include dirs
 set(ANTLR4_LIBRARY_DIRS ${${ANTLR4_OUTPUT_DIR}} CACHE STRING "ANTLR4 library directory")
 set(ANTLR4_SHARED_LIBRARIES ${ANTLR4_SHARED_LIBRARIES} CACHE STRING "ANTLR4 shared library")
 set(ANTLR4_STATIC_LIBRARIES ${ANTLR4_STATIC_LIBRARIES} CACHE STRING "ANTLR4 static library")
+
+message(STATUS "ANTLR4 Include dirs: ${ANTLR4_INCLUDE_DIRS}")
+message(STATUS "ANTLR4 Library dirs: ${ANTLR4_LIBRARY_DIRS}")
+message(STATUS "ANTLR4 Shared libs:  ${ANTLR4_SHARED_LIBRARIES}")
+message(STATUS "ANTLR4 Static libs:  ${ANTLR4_STATIC_LIBRARIES}")
