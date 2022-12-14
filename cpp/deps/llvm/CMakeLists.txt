@@ -71,6 +71,7 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
 
+macro(copy_pdbs)
 if(MSVC)
     set(LLVM_BUILD_LIBRARY_DIR ${LLVM_BUILD_DIR}/${CMAKE_BUILD_TYPE}/lib)
 
@@ -86,6 +87,7 @@ if(MSVC)
         endif()
     endforeach()
 endif()
+endmacro()
 
 set(LLVM_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_INSTALL_DIR}/lib CACHE STRING "LLVM Library Directories")
@@ -93,4 +95,3 @@ set(LLVM_LIBRARIES ${LLVM_LIBRARIES} CACHE STRING "LLVM libraries selected for l
 
 message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
-message(STATUS "LLVM defines: ${LLVM_DEFINITIONS_LIST}")
