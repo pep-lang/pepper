@@ -33,22 +33,21 @@ else()
         --target)
 endif()
 
-if(BUILD_DEPS)
-    ExternalProject_Add(
-        llvm_runtime
-        GIT_REPOSITORY ${LLVM_GIT_REPO}
-        GIT_TAG ${LLVM_GIT_TAG}
-        DOWNLOAD_DIR ${LLVM_HOME}
-        BINARY_DIR ${LLVM_HOME}/build
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
-        SOURCE_DIR ${LLVM_HOME}
-        SOURCE_SUBDIR llvm
-        CMAKE_CACHE_ARGS
-        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-        -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
-        INSTALL_COMMAND ""
-        EXCLUDE_FROM_ALL 1)
-endif()
+ExternalProject_Add(
+    llvm_runtime
+    GIT_REPOSITORY ${LLVM_GIT_REPO}
+    GIT_TAG ${LLVM_GIT_TAG}
+    DOWNLOAD_DIR ${LLVM_HOME}
+    BINARY_DIR ${LLVM_HOME}/build
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
+    SOURCE_DIR ${LLVM_HOME}
+    SOURCE_SUBDIR llvm
+    CMAKE_CACHE_ARGS
+    -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+    -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL 1)
+
 
 find_package(LLVM REQUIRED CONFIG
     PATHS ${LLVM_HOME}/install/lib/cmake/llvm)
@@ -56,6 +55,16 @@ message(STATUS "Found LLVM at ${LLVM_DIR}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
+
+if(MSVC)
+    set(LLVM_BUILD_LIBRARY_DIR ${LLVM_HOME}/build/${CMAKE_BUILD_TYPE}/lib)
+
+    foreach(LLVM_LIB ${LLVM_LIBRARIES})
+        message(STATUS "Adding job to install ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb -> ${LLVM_HOME}/install/lib/${LLVM_LIB}.pdb")
+        install(FILES ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb
+            DESTINATION ${LLVM_HOME}/install/lib)
+    endforeach()
+endif()
 
 set(LLVM_INCLUDE_DIRS ${LLVM_HOME}/install/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_HOME}/install/lib CACHE STRING "LLVM Library Directories")

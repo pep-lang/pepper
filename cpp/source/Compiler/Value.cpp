@@ -4,6 +4,9 @@
 #include "Compiler/Context.h"
 #include "Compiler/Scope.h"
 #include "Compiler/Type.h"
+
+#pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
+                                // implicitly defined as deleted
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
