@@ -6,14 +6,15 @@
 			"label": "CMake: build",
 			"command": "build",
 			"targets": [
-				"ALL_BUILD"
+				"all"
 			],
+			"preset": "${command:cmake.activeBuildPresetName}",
 			"group": {
 				"kind": "build",
 				"isDefault": true
 			},
-			"problemMatcher": [],
-			"detail": "CMake template build task"
+			"problemMatcher": ["$msCompile", "$gcc"],
+			"detail": "CMake build"
 		}
 	]
 }
