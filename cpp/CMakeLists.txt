@@ -33,6 +33,8 @@ set(COMPILER_SRC
     source/Compiler/Context.cpp
     source/Compiler/Function.h
     source/Compiler/Function.cpp
+    source/Compiler/Options.h
+    source/Compiler/Options.cpp
     source/Compiler/Parser.h
     source/Compiler/Parser.cpp
     source/Compiler/Scope.h

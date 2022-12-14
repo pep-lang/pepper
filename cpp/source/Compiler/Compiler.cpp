@@ -2,7 +2,10 @@
 #include "Compiler/Compiler.h"
 
 #include "Compiler/Context.h"
+#include "Compiler/Options.h"
 #include "Compiler/Parser.h"
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 
 Compiler::Compiler(const std::string& moduleName) {
@@ -21,10 +24,23 @@ bool Compiler::parse(std::istream& inputStream) {
     return true;
 }
 
+bool Compiler::compile(const std::string& sourceFile) {
+    std::ifstream sourceStream(sourceFile, std::ios_base::in);
+    auto sourcePath = std::filesystem::path(sourceFile);
+    return parse(sourceStream);
+}
+
 Ref<Compiler> Compiler::Compile(const std::string& moduleName, std::istream& inputStream) {
     auto compiler = std::make_shared<Compiler>(moduleName);
     if (compiler->parse(inputStream)) {
         return compiler;
     }
     return nullptr;
+}
+
+Ref<Compiler> Compiler::Compile(Ref<Options> opts) {
+    Ref<Compiler> compiler = std::make_shared<Compiler>(opts->moduleName());
+    for (auto sourceFile : opts->sourceFiles()) {
+        compiler->compile(sourceFile);
+    }
 }
