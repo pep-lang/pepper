@@ -7,37 +7,39 @@
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
+#include <format>
 
 using namespace Pepper::Parser;
+
+std::string SourceLocation::toString() const {
+    return std::format("{}:({})", File, Line);
+}
 
 class ParserListener : public PepperBaseListener {
     using Super = PepperBaseListener;
 
-  private:
-    std::shared_ptr<Codegen> Generator;
-
   public:
-    ParserListener(std::shared_ptr<Codegen> gen)
-        : Generator(gen) {}
+    ParserListener() = default;
 
-    void exitVariableSpecifier(
-        PepperParser::VariableSpecifierContext* context) override {
+    static SourceLocation sourceLocation(const antlr4::ParserRuleContext* context) {
+        return SourceLocation(context->start->getInputStream()->getSourceName(), context->start->getLine());
+    }
+
+    void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
         Super::exitVariableSpecifier(context);
         auto identifiers = context->Identifier();
-        if(identifiers.size() != 2) {
-            throw new CompileError("Expected <type> <identifier> in variable declaration");
+        if (identifiers.size() != 2) {
+            throw new CompileError(sourceLocation(context), "Expected <type> <identifier> in variable declaration");
         }
         auto typeName = identifiers[0];
         auto identifier = identifiers[1];
     }
 
-    void enterFunctionDefinition(
-        PepperParser::FunctionDefinitionContext* context) override {
+    void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
         Super::enterFunctionDefinition(context);
     }
 
-    void exitFunctionDefinition(
-        PepperParser::FunctionDefinitionContext* context) override {
+    void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
         Super::exitFunctionDefinition(context);
     }
 
@@ -45,7 +47,9 @@ class ParserListener : public PepperBaseListener {
         Super::exitFunctionCall(context);
     }
 
-    void exitReturn(PepperParser::ReturnContext* context) { Super::exitReturn(context); }
+    void exitReturn(PepperParser::ReturnContext* context) {
+        Super::exitReturn(context);
+    }
 
     void exitMul(PepperParser::MulContext* context) override {
         Super::exitMul(context);
@@ -131,64 +135,55 @@ class ParserListener : public PepperBaseListener {
         Super::exitAssignment(context);
     }
 
-    void
-    exitMulAssignment(PepperParser::MulAssignmentContext* context) override {
+    void exitMulAssignment(PepperParser::MulAssignmentContext* context) override {
         Super::exitMulAssignment(context);
     }
 
-    void
-    exitDivAssignment(PepperParser::DivAssignmentContext* context) override {
+    void exitDivAssignment(PepperParser::DivAssignmentContext* context) override {
         Super::exitDivAssignment(context);
     }
 
-    void
-    exitModAssignment(PepperParser::ModAssignmentContext* context) override {
+    void exitModAssignment(PepperParser::ModAssignmentContext* context) override {
         Super::exitModAssignment(context);
     }
 
-    void
-    exitAddAssignment(PepperParser::AddAssignmentContext* context) override {
+    void exitAddAssignment(PepperParser::AddAssignmentContext* context) override {
         Super::exitAddAssignment(context);
     }
 
-    void
-    exitSubAssignment(PepperParser::SubAssignmentContext* context) override {
+    void exitSubAssignment(PepperParser::SubAssignmentContext* context) override {
         Super::exitSubAssignment(context);
     }
 
-    void exitLShiftAssignment(
-        PepperParser::LShiftAssignmentContext* context) override {
+    void exitLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
         Super::exitLShiftAssignment(context);
     }
 
-    void exitRShiftAssignment(
-        PepperParser::RShiftAssignmentContext* context) override {
+    void exitRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
         Super::exitRShiftAssignment(context);
     }
 
-    void exitBitAndAssignment(
-        PepperParser::BitAndAssignmentContext* context) override {
+    void exitBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
         Super::exitBitAndAssignment(context);
     }
 
-    void exitBitXorAssignment(
-        PepperParser::BitXorAssignmentContext* context) override {
+    void exitBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
         Super::exitBitXorAssignment(context);
     }
 
-    void exitBitOrAssignment(
-        PepperParser::BitOrAssignmentContext* context) override {
+    void exitBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
         Super::exitBitOrAssignment(context);
     }
 };
 
-void Parser::parse(std::istream& stream) {
+void Parser::parse(std::istream& stream, const std::string& name) {
     antlr4::ANTLRInputStream inputStream(stream);
+    inputStream.name = name;
     PepperLexer lexer(&inputStream);
     antlr4::CommonTokenStream tokenStream(&lexer);
     PepperParser parser(&tokenStream);
 
     antlr4::tree::ParseTree* tree = parser.compilationUnit();
-    ParserListener listener(Generator);
+    ParserListener listener;
     antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
 }

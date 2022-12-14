@@ -17,7 +17,7 @@ class Compiler {
     Compiler(const std::string& moduleName);
 
     bool compile(const std::string& sourceFile);
-    bool parse(std::istream& inputStream);
+    bool parse(std::istream& inputStream, const std::string& sourceFile = "");
 
     static Ref<Compiler> Compile(Ref<Options> opts);
     static Ref<Compiler> Compile(const std::string& moduleName, std::istream& inputStream);

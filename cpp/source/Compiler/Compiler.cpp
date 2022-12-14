@@ -10,12 +10,12 @@
 
 Compiler::Compiler(const std::string& moduleName) {
     Ctx = std::make_unique<Context>(moduleName);
-    ParserRef = std::make_unique<Parser>(nullptr);
+    ParserRef = std::make_unique<Parser>();
 }
 
-bool Compiler::parse(std::istream& inputStream) {
+bool Compiler::parse(std::istream& inputStream, const std::string& sourceFile) {
     try {
-        ParserRef->parse(inputStream);
+        ParserRef->parse(inputStream, sourceFile);
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         return false;
@@ -27,7 +27,7 @@ bool Compiler::parse(std::istream& inputStream) {
 bool Compiler::compile(const std::string& sourceFile) {
     std::ifstream sourceStream(sourceFile, std::ios_base::in);
     auto sourcePath = std::filesystem::path(sourceFile);
-    return parse(sourceStream);
+    return parse(sourceStream, sourceFile);
 }
 
 Ref<Compiler> Compiler::Compile(const std::string& moduleName, std::istream& inputStream) {
