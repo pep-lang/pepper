@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.24)
 project(Pepper VERSION 0.1.0)
 
 option(BUILD_DEPS "Build dependencies, should only need to be done once" OFF)
@@ -14,9 +14,22 @@ if(MSVC)
 endif()
 
 add_subdirectory(deps)
-include_directories(${LLVM_INCLUDE_DIRS})
-link_directories(${LLVM_LIBRARY_DIRS})
-link_libraries(${LLVM_LIBRARIES})
+
+if (MSVC)
+    set(ANTLR4_LIBRARIES antlr4_shared)
+    install(CODE [[
+        file(GET_RUNTIME_DEPENDENCIES
+            LIBRARIES antlr4_shared
+        )
+    ]])
+else()
+    set(ANTLR4_LIBRARIES antlr4_static)
+endif()
+
+find_package(LLVM REQUIRED CONFIG)
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+add_definitions(${LLVM_DEFINITIONS_LIST})
+explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
 
 add_subdirectory(grammar)
 include_directories(${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS})
@@ -56,7 +69,13 @@ add_executable(Pepper
     ${COMPILER_SRC}
     source/main.cpp)
 add_dependencies(Pepper PepperParser)
-target_include_directories(Pepper PUBLIC source)
+target_include_directories(Pepper 
+    PUBLIC source
+    PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(Pepper
+    PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
+target_compile_definitions(Pepper
+    PRIVATE ${LLVM_DEFINITIONS_LIST})
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

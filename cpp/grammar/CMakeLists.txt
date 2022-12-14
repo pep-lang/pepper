@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
 
-add_subdirectory(../deps/antlr4 ${CMAKE_BINARY_DIR}/antlr4_runtime)
-
 # ANTLR4 tool
 find_package(Java COMPONENTS Runtime REQUIRED)
 set(ANTLR_JAR "${CMAKE_BINARY_DIR}/antlr4.jar")

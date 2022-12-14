@@ -1,16 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
-
-if(POLICY CMP0114)
-    cmake_policy(SET CMP0114 NEW)
-endif()
-
-if(POLICY CMP0054)
-    cmake_policy(SET CMP0054 NEW)
-endif()
-
-if(POLICY CMP0045)
-    cmake_policy(SET CMP0045 NEW)
-endif()
+cmake_minimum_required(VERSION 3.24)
 
 include(FetchContent)
 
@@ -43,7 +31,7 @@ if(MSVC)
     set(ANTLR4_SHARED_LIBRARIES
         ${ANTLR4_INSTALL_DIR}/lib/antlr4-runtime.lib)
     set(ANTLR4_RUNTIME_LIBRARIES
-        ${ANTLR4_INSTALL_DIR}/lib/antlr4-runtime.dll)
+        ${ANTLR4_INSTALL_DIR}/bin/antlr4-runtime.dll)
 else()
     set(ANTLR4_STATIC_LIBRARIES
         ${ANTLR4_INSTALL_DIR}/lib/libantlr4-runtime.a)
@@ -104,7 +92,7 @@ if(NOT EXISTS ANTLR4_RUNTIME_LIBRARIES)
         COMMAND_ERROR_IS_FATAL ANY
     )
 
-    message(STATUS "Building ANTLR4 Runtime static lib...")
+    message(STATUS "Building ANTLR4 Runtime...")
     execute_process(
         WORKING_DIRECTORY ${ANTLR4_BUILD_DIR}
         COMMAND_ECHO STDOUT
@@ -128,7 +116,7 @@ if(ANTLR4_SHARED_LIBRARIES)
         IMPORTED_IMPLIB ${ANTLR4_SHARED_LIBRARIES})
 endif()
 
-add_library(antlr4_static SHARED IMPORTED GLOBAL)
+add_library(antlr4_static STATIC IMPORTED GLOBAL)
 set_target_properties(antlr4_static PROPERTIES
     IMPORTED_LOCATION ${ANTLR4_STATIC_LIBRARIES})
 target_include_directories(antlr4_static

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.24)
 
 include(FetchContent)
 
@@ -45,6 +45,12 @@ if(NOT LLVM_FOUND)
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
         -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
+        -DLLVM_OPTIMIZED_TABLEGEN=ON
+        "-DLLVM_TARGETS_TO_BUILD=X86;AArch64;WebAssembly"
+        -DLLVM_INCLUDE_TOOLS=OFF
+        -DLLVM_INCLUDE_TESTS=OFF
+        -DLLVM_INCLUDE_EXAMPLES=OFF
+        -DLLVM_INCLUDE_BENCHMARKS=OFF
         ${LLVM_RUNTIME_SOURCE_DIR}
     )
     message(STATUS "Building LLVM...")
