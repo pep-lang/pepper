@@ -13,13 +13,13 @@ namespace pepper {
         return *Instance;
     }
 
-    Context::Context(const std::string& moduleName) {
+    Context::Context(const std::string& moduleName)
+        : Runtime(Ref<Scope>::create())
+        , Globals(Ref<Scope>::create())
+        , Locals(Globals)
+        , Ast(Ref<AST>::create()) {
         assert(Instance == nullptr);
         Instance = this;
-
-        Globals = Ref<Scope>::create();
-        Locals = Globals;
-        Ast = Ref<AST>::create();
     }
 
     Context::~Context() {

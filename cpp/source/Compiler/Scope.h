@@ -23,6 +23,10 @@ namespace pepper {
         struct StackEntry {};
 
       public:
+        Scope(Scope* outer = nullptr)
+            : Outer(outer) {
+        }
+
         Scope* Outer = nullptr;
         std::shared_ptr<llvm::IRBuilderBase> Builder = nullptr;
         llvm::StringMap<Ref<Type>> Types;

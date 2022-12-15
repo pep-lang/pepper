@@ -11,10 +11,10 @@ namespace pepper::ast {
     FunctionNode::FunctionNode(Ref<Type> returnType,
                                const std::string& name,
                                const std::vector<Symbol>& params,
-                               bool varargs)
-        : Symbol(FunctionType::Create(returnType, params, varargs).as<Type>(), name)
+                               bool vararg)
+        : Symbol(FunctionType::Create(returnType, params, vararg).as<Type>(), name)
         , ReturnType(returnType)
         , Params(params)
-        , Varargs(varargs) {
+        , Vararg(vararg) {
     }
 } // namespace pepper::ast

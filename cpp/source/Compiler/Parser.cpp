@@ -68,8 +68,8 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
             auto type = builder->findType(typeName);
-            auto decl = std::make_shared<ast::VariableDef>(type, identifier);
-            builder->variable(Ref<ast::VariableDef>(decl));
+            auto decl = Ref<ast::VariableDef>::create(type, identifier);
+            builder->variable(decl);
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {

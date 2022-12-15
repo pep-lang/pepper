@@ -408,9 +408,43 @@ namespace pepper {
         throw new CompileError("Cannot create a pointer to a function");
     }
 
-    namespace Types {
-        Ref<Type> Void = nullptr;
-        Ref<Type> VoidPtr = nullptr;
-    } // namespace Types
+    Types::Types(llvm::LLVMContext* ctx)
+        : Ctx(ctx) {
+        Void = voidType();
+        Int8 = int8Type();
+        UInt8 = uint8Type();
+        Int32 = int32Type();
+        UInt32 = uint32Type();
+        Int64 = int64Type();
+        UInt64 = uint64Type();
+        Bool = boolType();
+        Double = doubleType();
+        Float = floatType();
+    }
+
+    Ref<Type> Types::getType(const std::string& name) {
+        auto it = KnownTypes.find(name);
+        if (it != KnownTypes.end()) {
+            return it->getValue();
+        }
+        return Ref<Type>(nullptr);
+    }
+
+    Ref<Type> Types::getOrCreate(const std::string& name, std::function<Ref<Type>()> createType) {
+        if (auto ty = getType(name)) {
+            return ty;
+        }
+        return KnownTypes[name] = createType();
+    }
+
+    Ref<Type> Types::voidType() {
+        return getOrCreate("void",
+                           [this]() { return Ref<VoidType>::create("void", llvm::Type::getVoidTy(*Ctx)).as<Type>(); });
+    }
+
+    Ref<Type> Types::int8Type() {
+        return getOrCreate("i8",
+                           [this]() { return Ref<IntegerType>::create("i8", llvm::Type::getInt8Ty(*Ctx)).as<Type>(); });
+    }
 
 } // namespace pepper

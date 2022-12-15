@@ -76,15 +76,24 @@ namespace pepper::ast {
 
         Ref<Type> ReturnType;
         const std::vector<Symbol> Params;
-        const bool Varargs;
+        const bool Vararg;
 
       public:
         FunctionNode(Ref<Type> returnType,
                      const std::string& name,
                      const std::vector<Symbol>& params,
-                     bool varargs = false);
+                     bool vararg = false);
 
         Ref<Type> returnType() const {
+            return ReturnType;
+        }
+
+        const std::vector<Symbol>& params() const {
+            return Params;
+        }
+
+        bool isVararg() const {
+            return Vararg;
         }
     };
 

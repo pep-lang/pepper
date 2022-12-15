@@ -17,9 +17,9 @@ namespace pepper {
 
     class Context {
         static Context* Instance;
-        static std::unique_ptr<Scope> Runtime;
 
         llvm::Module* Module;
+        Ref<Scope> Runtime;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
         Ref<AST> Ast;
@@ -44,6 +44,10 @@ namespace pepper {
 
         Ref<AST> ast() const {
             return Ast;
+        }
+
+        Ref<Scope> runtime() const {
+            return Runtime;
         }
 
         void injectRuntime();

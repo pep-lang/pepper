@@ -6,10 +6,34 @@
 
 namespace pepper {
     template <typename T> struct Ref : public std::shared_ptr<T> {
-        using std::shared_ptr<T>::operator=;
+        using base = std::shared_ptr<T>;
+        using std::shared_ptr<T>::shared_ptr;
 
         Ref(std::shared_ptr<T>&& ptr)
-            : std::shared_ptr<T>::shared_ptr(ptr) {
+            : base(ptr) {
+        }
+
+        /*Ref()
+            : base(nullptr) {
+        }
+
+        Ref(nullptr_t)
+            : base(nullptr) {
+        }
+
+
+
+        Ref(const Ref<T>& ptr)
+            : base(ptr) {
+        }
+
+        Ref(Ref<T>&& ptr)
+            : base(ptr) {
+        }*/
+
+        template <typename U>
+        Ref(Ref<U> ref)
+            : base(ref.as<T>()) {
         }
 
         template <typename U>
@@ -18,12 +42,13 @@ namespace pepper {
             return std::static_pointer_cast<U>(*this);
         }
 
-        template <typename... Args> static Ref<T> create(Args&&... args) {
-            return std::make_shared<T>(std::forward<decltype(args)>(args)...);
+        template <class... Args> static Ref<T> create(Args&&... args) {
+            return std::make_shared<T>(std::forward<Args>(args)...);
         }
     };
 
     template <typename T> struct WeakRef : public std::weak_ptr<T> {
+        using std::weak_ptr<T>::weak_ptr;
         using std::weak_ptr<T>::operator=;
 
         template <typename U>

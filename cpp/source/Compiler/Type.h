@@ -3,7 +3,9 @@
 
 #include "Core/Common.h"
 #include "Core/RTTI.h"
+#include "llvm/ADT/StringMap.h"
 #include <format>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +14,7 @@ namespace llvm {
     class Type;
     class Value;
     class IRBuilderBase;
+    class LLVMContext;
 } // namespace llvm
 
 namespace pepper {
@@ -127,38 +130,60 @@ namespace pepper {
                                      bool varargs = false);
     };
 
-    namespace Types {
-        void StaticInit();
+    class Types {
+        llvm::LLVMContext* Ctx;
+        llvm::StringMap<Ref<Type>> KnownTypes;
 
-        Ref<Type> Void;
-        Ref<Type> VoidPtr;
+        Ref<Type> getOrCreate(const std::string& name, std::function<Ref<Type>()> createType);
 
-        Ref<Type> Int8;
-        Ref<Type> Int8Ptr;
+      public:
+        Types(llvm::LLVMContext* ctx);
+        ~Types() = default;
 
-        Ref<Type> UInt8;
-        Ref<Type> UInt8Ptr;
+        Ref<Type> addType(const std::string& name, llvm::Type* type);
+        Ref<Type> getType(const std::string& name);
 
-        Ref<Type> Int32;
-        Ref<Type> Int32Ptr;
+        static Ref<Type> Void;
+        static Ref<Type> VoidPtr;
 
-        Ref<Type> UInt32;
-        Ref<Type> UInt32Ptr;
+        static Ref<Type> Int8;
+        static Ref<Type> Int8Ptr;
 
-        Ref<Type> Int64;
-        Ref<Type> Int64Ptr;
+        static Ref<Type> UInt8;
+        static Ref<Type> UInt8Ptr;
 
-        Ref<Type> UInt64;
-        Ref<Type> UInt64Ptr;
+        static Ref<Type> Int32;
+        static Ref<Type> Int32Ptr;
 
-        Ref<Type> Bool;
+        static Ref<Type> UInt32;
+        static Ref<Type> UInt32Ptr;
 
-        Ref<Type> Double;
-        Ref<Type> DoublePtr;
+        static Ref<Type> Int64;
+        static Ref<Type> Int64Ptr;
 
-        Ref<Type> Float;
-        Ref<Type> FloatPtr;
-    } // namespace Types
+        static Ref<Type> UInt64;
+        static Ref<Type> UInt64Ptr;
+
+        static Ref<Type> Bool;
+
+        static Ref<Type> Double;
+        static Ref<Type> DoublePtr;
+
+        static Ref<Type> Float;
+        static Ref<Type> FloatPtr;
+
+      public:
+        Ref<Type> voidType();
+        Ref<Type> int8Type();
+        Ref<Type> uint8Type();
+        Ref<Type> int32Type();
+        Ref<Type> uint32Type();
+        Ref<Type> int64Type();
+        Ref<Type> uint64Type();
+        Ref<Type> boolType();
+        Ref<Type> doubleType();
+        Ref<Type> floatType();
+    };
 
 } // namespace pepper
 

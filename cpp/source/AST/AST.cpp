@@ -50,10 +50,20 @@ namespace pepper {
 
         Ref<ast::Symbol> findSymbol(const std::string& name) const override {
             if (auto var = findVariable(name)) {
-                return var;
+                return var.as<ast::Symbol>();
             }
             if (auto func = findFunction(name)) {
-                return func;
+                return func.as<ast::Symbol>();
+            }
+            return nullptr;
+        }
+
+        Ref<Type> findType(const std::string& name) const override {
+            std::ranges::reverse_view stack(Stack);
+            for (const auto& scope : stack) {
+                if (auto ty = scope.Types.lookup(name)) {
+                    return ty;
+                }
             }
             return nullptr;
         }
@@ -141,9 +151,9 @@ namespace pepper {
             return active;
         }
 
-        auto active = std::make_shared<BuilderImpl>(*this);
+        auto active = Ref<BuilderImpl>::create(*this);
         ActiveBuilder = active;
-        return active;
+        return active.as<AST::Builder>();
     }
 
 } // namespace pepper

@@ -19,7 +19,7 @@ namespace pepper {
             }
         };
 
-        return std::make_shared<RValue>(type, value, name);
+        return Ref<RValue>::create(type, value, name);
     }
 
     Ref<Value> Value::New(Ref<Type> type, Ref<Value> value, const std::string& name) {
@@ -29,7 +29,7 @@ namespace pepper {
             }
         };
 
-        return std::make_shared<LValue>(type, value, name);
+        return Ref<LValue>::create(type, value, name);
     }
 
     Value::Value(Ref<Type> type, llvm::Value* value, const std::string& name)

@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-class Type;
-
 namespace pepper::ast {
     class Node;
     class FunctionDef;
@@ -18,6 +16,8 @@ namespace pepper::ast {
 } // namespace pepper::ast
 
 namespace pepper {
+    class Type;
+
     class AST {
       public:
         class Builder {
