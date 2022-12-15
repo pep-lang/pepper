@@ -3,4 +3,11 @@
 
 #include "Compiler/Value.h"
 
-class Function : public Value {};
+namespace pepper {
+    class Function : public Value {};
+
+    class ExternFunction : public Function {};
+
+    class UserFunction : public Function {};
+
+} // namespace pepper

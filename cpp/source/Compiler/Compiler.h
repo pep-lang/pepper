@@ -5,20 +5,22 @@
 #include <memory>
 #include <string>
 
-class Context;
-class Parser;
-class Options;
+namespace pepper {
+    class Context;
+    class Parser;
+    class Options;
 
-class Compiler {
-    std::unique_ptr<Context> Ctx;
-    std::unique_ptr<Parser> ParserRef;
+    class Compiler {
+        std::unique_ptr<Context> Ctx;
+        std::unique_ptr<Parser> ParserRef;
 
-  public:
-    Compiler(const std::string& moduleName);
+      public:
+        Compiler(const std::string& moduleName);
 
-    bool compile(const std::string& sourceFile);
-    bool parse(std::istream& inputStream, const std::string& sourceFile = "");
+        bool compile(const std::string& sourceFile);
+        bool parse(std::istream& inputStream, const std::string& sourceFile = "");
 
-    static Ref<Compiler> Compile(Ref<Options> opts);
-    static Ref<Compiler> Compile(const std::string& moduleName, std::istream& inputStream);
-};
+        static Ref<Compiler> Compile(Ref<Options> opts);
+        static Ref<Compiler> Compile(const std::string& moduleName, std::istream& inputStream);
+    };
+} // namespace pepper

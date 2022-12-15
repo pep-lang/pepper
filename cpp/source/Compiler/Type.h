@@ -8,145 +8,162 @@
 #include <string>
 #include <vector>
 
-class Value;
-class Type;
-class PointerType;
-class TypedValue;
-
 namespace llvm {
     class Type;
     class Value;
     class IRBuilderBase;
 } // namespace llvm
 
-class Type : public std::enable_shared_from_this<Type> {
-    DECLARE_RTTI(Type);
+namespace pepper {
+    class Value;
+    class Type;
+    class PointerType;
+    class Symbol;
 
-  protected:
-    std::string Name;
-    llvm::Type* TypeRef = nullptr;
-    uint32_t IsInt : 1;
-    uint32_t IsReal : 1;
-    uint32_t IsPointer : 1;
-    uint32_t IsConstant : 1;
-
-  public:
-    Type(const std::string name, llvm::Type* type)
-        : Name(name)
-        , TypeRef(type) {
+    namespace ast {
+        class Symbol;
     }
 
-    virtual ~Type() = default;
+    class Type : public std::enable_shared_from_this<Type> {
+        DECLARE_RTTI(Type);
 
-    Ref<Type> ref() const;
+      protected:
+        std::string Name;
+        llvm::Type* TypeRef = nullptr;
+        uint32_t IsInt : 1;
+        uint32_t IsReal : 1;
+        uint32_t IsPointer : 1;
+        uint32_t IsConstant : 1;
 
-    const std::string& name() const {
-        return Name;
-    }
+      public:
+        Type(const std::string name, llvm::Type* type)
+            : Name(name)
+            , TypeRef(type) {
+        }
 
-    operator llvm::Type*() const {
-        return TypeRef;
-    }
+        virtual ~Type() = default;
 
-    bool isInteger() const {
-        return IsInt;
-    }
+        Ref<Type> ref() const;
 
-    bool isFloat() const {
-        return IsReal;
-    }
+        const std::string& name() const {
+            return Name;
+        }
 
-    bool isPointer() const {
-        return IsPointer;
-    }
+        operator llvm::Type*() const {
+            return TypeRef;
+        }
 
-    bool isConstant() const {
-        return IsConstant;
-    }
+        bool isInteger() const {
+            return IsInt;
+        }
 
-    virtual Ref<Value> coerce(Ref<Value> value) const = 0;
-    virtual Ref<Type> pointer() const = 0;
-    virtual uint32_t bits() const = 0;
+        bool isFloat() const {
+            return IsReal;
+        }
 
-    llvm::Value* alloc(llvm::IRBuilderBase* builder) const;
+        bool isPointer() const {
+            return IsPointer;
+        }
 
-    virtual Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> sub(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> mul(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> div(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> mod(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> pow(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> less(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> lessEq(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> greater(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> greaterEq(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> lshift(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> rshift(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> bitAnd(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> bitXor(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> bitOr(Ref<Value> lhs, Ref<Value> rhs) const;
-    virtual Ref<Value> asBool(Ref<Value> value) const;
-};
+        bool isConstant() const {
+            return IsConstant;
+        }
 
-template <> struct std::formatter<Ref<Type>> : std::formatter<std::string> {
-    auto format(Ref<Type> t, format_context& ctx) {
+        virtual Ref<Value> coerce(Ref<Value> value) const = 0;
+        virtual Ref<Type> pointer() const = 0;
+
+        virtual uint32_t bits() const;
+
+        llvm::Value* alloc(llvm::IRBuilderBase* builder) const;
+
+        virtual Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> sub(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> mul(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> div(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> mod(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> pow(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> less(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> lessEq(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> greater(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> greaterEq(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> lshift(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> rshift(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> bitAnd(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> bitXor(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> bitOr(Ref<Value> lhs, Ref<Value> rhs) const;
+        virtual Ref<Value> asBool(Ref<Value> value) const;
+    };
+
+    class UserType : public Type {
+        DECLARE_RTTI(UserType, Type)
+      public:
+        UserType(const std::string& name, llvm::Type* type);
+        ~UserType() = default;
+    };
+
+    class FunctionType : public Type {
+        DECLARE_RTTI(FunctionType, Type)
+        Ref<Type> ReturnType;
+        std::vector<Symbol> Params;
+        bool Varargs = false;
+
+      public:
+        FunctionType(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
+        ~FunctionType() = default;
+
+        Ref<Value> coerce(Ref<Value> value) const override;
+        Ref<Type> pointer() const override;
+
+        static Ref<FunctionType> Create(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
+        static Ref<FunctionType> Create(Ref<Type> returnType,
+                                        const std::vector<ast::Symbol>& params,
+                                        bool varargs = false);
+        static std::string Signature(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
+        static std::string Signature(Ref<Type> returnType,
+                                     const std::vector<ast::Symbol>& params,
+                                     bool varargs = false);
+    };
+
+    namespace Types {
+        void StaticInit();
+
+        Ref<Type> Void;
+        Ref<Type> VoidPtr;
+
+        Ref<Type> Int8;
+        Ref<Type> Int8Ptr;
+
+        Ref<Type> UInt8;
+        Ref<Type> UInt8Ptr;
+
+        Ref<Type> Int32;
+        Ref<Type> Int32Ptr;
+
+        Ref<Type> UInt32;
+        Ref<Type> UInt32Ptr;
+
+        Ref<Type> Int64;
+        Ref<Type> Int64Ptr;
+
+        Ref<Type> UInt64;
+        Ref<Type> UInt64Ptr;
+
+        Ref<Type> Bool;
+
+        Ref<Type> Double;
+        Ref<Type> DoublePtr;
+
+        Ref<Type> Float;
+        Ref<Type> FloatPtr;
+    } // namespace Types
+
+} // namespace pepper
+
+template <> struct std::formatter<pepper::Ref<pepper::Type>> : std::formatter<std::string> {
+    auto format(pepper::Ref<pepper::Type> t, format_context& ctx) {
         return formatter<string>::format(std::format("{}", t->name()), ctx);
     }
 };
-
-class UserType : Type {
-    DECLARE_RTTI(UserType, Type)
-  public:
-    UserType(const std::string& name, llvm::Type* type);
-    ~UserType() = default;
-};
-
-class FunctionType : Type {
-    DECLARE_RTTI(FunctionType, Type)
-    Ref<Type> ReturnType;
-    std::vector<TypedValue> Params;
-    bool Varargs = false;
-
-  public:
-    FunctionType(Ref<Type> returnType, const std::vector<TypedValue>& params, bool varargs = false);
-    ~FunctionType() = default;
-
-    static FunctionType Create(Ref<Type> returnType, const std::vector<TypedValue>& params, bool varargs = false);
-    static std::string Signature(Ref<Type> returnType, const std::vector<TypedValue>& params, bool varargs = false);
-};
-
-namespace Types {
-    void StaticInit();
-
-    const Ref<Type> Void;
-    const Ref<Type> VoidPtr;
-
-    const Ref<Type> Int8;
-    const Ref<Type> Int8Ptr;
-
-    const Ref<Type> UInt8;
-    const Ref<Type> UInt8Ptr;
-
-    const Ref<Type> Int32;
-    const Ref<Type> Int32Ptr;
-
-    const Ref<Type> UInt32;
-    const Ref<Type> UInt32Ptr;
-
-    const Ref<Type> Int64;
-    const Ref<Type> Int64Ptr;
-
-    const Ref<Type> UInt64;
-    const Ref<Type> UInt64Ptr;
-
-    const Ref<Type> Bool;
-
-    const Ref<Type> Double;
-    const Ref<Type> DoublePtr;
-
-    const Ref<Type> Float;
-    const Ref<Type> FloatPtr;
-} // namespace Types

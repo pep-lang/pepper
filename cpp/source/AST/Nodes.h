@@ -5,12 +5,14 @@
 #include <string>
 #include <vector>
 
-class Type;
-class Value;
-class Function;
-class TypedValue;
+namespace pepper {
+    class Type;
+    class Value;
+    class Function;
+    class Symbol;
+} // namespace pepper
 
-namespace ast {
+namespace pepper::ast {
 
     class Node {
         DECLARE_RTTI(Node);
@@ -20,15 +22,35 @@ namespace ast {
         virtual ~Node() = default;
     };
 
-    class VariableDecl : public Node {
-        DECLARE_RTTI(VariableDecl, Node);
+    class Symbol : public Node {
+        DECLARE_RTTI(Symbol, Node);
 
       private:
-        Ref<Type> VarType;
-        std::string VarName;
+        Ref<Type> SymbolType;
+        std::string SymbolName;
 
       public:
-        VariableDecl(const std::string& type, const std::string& name);
+        Symbol(Ref<Type> type, const std::string& name)
+            : SymbolType(type)
+            , SymbolName(name) {
+        }
+
+        const Ref<Type> type() const {
+            return SymbolType;
+        }
+
+        const std::string& name() const {
+            return SymbolName;
+        }
+    };
+
+    class VariableDef : public Symbol {
+        DECLARE_RTTI(VariableDef, Symbol);
+
+      public:
+        VariableDef(Ref<Type> type, const std::string& name)
+            : Symbol(type, name) {
+        }
     };
 
     class Expression : public Node {
@@ -39,20 +61,31 @@ namespace ast {
         DECLARE_RTTI(VariableRef, Expression);
 
       private:
-        Ref<Value> Variable;
+        const std::string Identifier;
 
       public:
         VariableRef(const std::string& identifier);
+
+        const std::string& identfier() const {
+            return Identifier;
+        }
     };
 
-    class FunctionNode : public Node {
+    class FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
-      private:
-        Ref<Function> Func;
+        Ref<Type> ReturnType;
+        const std::vector<Symbol> Params;
+        const bool Varargs;
 
       public:
-        FunctionNode(const std::string& returnType, const std::vector<TypedValue>& params, bool varargs = false);
+        FunctionNode(Ref<Type> returnType,
+                     const std::string& name,
+                     const std::vector<Symbol>& params,
+                     bool varargs = false);
+
+        Ref<Type> returnType() const {
+        }
     };
 
     class FunctionDef : public FunctionNode {
@@ -62,21 +95,31 @@ namespace ast {
         std::vector<Ref<Node>> Body;
 
       public:
-        using FunctionNode::FunctionNode;
+        FunctionDef(Ref<Type> returnType,
+                    const std::string& name,
+                    const std::vector<Symbol>& params,
+                    bool varargs = false)
+            : FunctionNode(returnType, name, params, varargs) {
+        }
     };
 
     class ExternFunction : public FunctionNode {
         DECLARE_RTTI(ExternFunction, FunctionNode);
 
       public:
-        using FunctionNode::FunctionNode;
+        ExternFunction(Ref<Type> returnType,
+                       const std::string& name,
+                       const std::vector<Symbol>& params,
+                       bool varargs = false)
+            : FunctionNode(returnType, name, params, varargs) {
+        }
     };
 
-    class FunctionCall : public Node {
-        DECLARE_RTTI(FunctionCall, Node);
+    class FunctionCall : public Expression {
+        DECLARE_RTTI(FunctionCall, Expression);
 
       public:
-        FunctionCall(const std::string& name, const std::vector<Ref<Expression>>& args);
+        FunctionCall(Ref<FunctionDef> func, const std::vector<Ref<Expression>>& args);
     };
 
-}; // namespace ast
+}; // namespace pepper::ast

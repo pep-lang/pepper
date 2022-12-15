@@ -59,7 +59,7 @@ set(COMPILER_SRC
     source/Compiler/Type.h
     source/Compiler/Type.cpp
     source/Compiler/Value.h
-    source/Compiler/Value.cpp "source/AST/AST.h" "source/AST/AST.cpp")
+    source/Compiler/Value.cpp "source/AST/AST.h" "source/AST/AST.cpp" "source/AST/Nodes.cpp")
 
 source_group(
     TREE ${CMAKE_CURRENT_SOURCE_DIR}

@@ -4,24 +4,27 @@
 #include <memory>
 #include <string>
 
-class Codegen;
+namespace pepper {
+    class Codegen;
 
-struct SourceLocation {
-    const std::string File;
-    const int Line;
+    struct SourceLocation {
+        const std::string File;
+        const int Line;
 
-    SourceLocation(const std::string& file, int line)
-        : File(file)
-        , Line(line) {
-    }
+        SourceLocation(const std::string& file, int line)
+            : File(file)
+            , Line(line) {
+        }
 
-    std::string toString() const;
-};
+        std::string toString() const;
+    };
 
-class Parser {
-  public:
-    Parser() = default;
-    ~Parser() = default;
+    class Parser {
+      public:
+        Parser() = default;
+        ~Parser() = default;
 
-    void parse(std::istream& stream, const std::string& name = "");
-};
+        void parse(std::istream& stream, const std::string& name = "");
+    };
+
+} // namespace pepper

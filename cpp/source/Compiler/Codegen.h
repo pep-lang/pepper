@@ -1,71 +1,74 @@
 
 #pragma once
 
-class Codegen {
-  public:
-    void beginFunction();
+namespace pepper {
+    class Codegen {
+      public:
+        void beginFunction();
 
-    void endFunction();
+        void endFunction();
 
-    void functionCall();
+        void functionCall();
 
-    void stringLiteral();
+        void stringLiteral();
 
-    void identifier();
+        void identifier();
 
-    void variableDeclaration();
+        void variableDeclaration();
 
-    void binaryMul();
+        void binaryMul();
 
-    void binaryDiv();
+        void binaryDiv();
 
-    void binaryMod();
+        void binaryMod();
 
-    void binaryPow();
+        void binaryPow();
 
-    void binaryAdd();
+        void binaryAdd();
 
-    void binarySub();
+        void binarySub();
 
-    void binaryLeftShift();
+        void binaryLeftShift();
 
-    void binaryRightShift();
+        void binaryRightShift();
 
-    void compareLess();
+        void compareLess();
 
-    void compareLessEqual();
+        void compareLessEqual();
 
-    void compareGreater();
+        void compareGreater();
 
-    void compareGreaterEqual();
+        void compareGreaterEqual();
 
-    void bitwiseAnd();
+        void bitwiseAnd();
 
-    void bitwiseXor();
+        void bitwiseXor();
 
-    void bitwiseOr();
+        void bitwiseOr();
 
-    void equal();
+        void equal();
 
-    void notEqual();
+        void notEqual();
 
-    void assign();
+        void assign();
 
-    void mulAssign();
+        void mulAssign();
 
-    void divAssign();
+        void divAssign();
 
-    void modAssign();
+        void modAssign();
 
-    void leftShiftAssign();
+        void leftShiftAssign();
 
-    void rightShiftAssign();
+        void rightShiftAssign();
 
-    void bitAndAssign();
+        void bitAndAssign();
 
-    void bitXorAssign();
+        void bitXorAssign();
 
-    void bitOrAssign();
+        void bitOrAssign();
 
-    void ternary();
-};
+        void ternary();
+    };
+
+} // namespace pepper
