@@ -135,11 +135,19 @@ namespace pepper {
     class PointerType : public NativeType {
         DECLARE_RTTI(PointerType, NativeType)
       public:
-        PointerType(const std::string& name, llvm::Type* type);
+        PointerType(const std::string& name, llvm::Type* type)
+            : NativeType(name, type) {
+            IsPointer = true;
+        }
         ~PointerType() = default;
 
-        Ref<Type> pointer() const override;
-        Ref<Value> coerce(Ref<Value> value) const override;
+        Ref<Type> pointer() const override {
+            throw new CompileError("Pointer to pointer is not supported");
+        }
+
+        Ref<Value> coerce(Ref<Value> value) const override {
+            throw new CompileError("Coercion to pointer is not supported");
+        }
 
         Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const override {
             return Value::New(Types::Bool, builder()->CreateICmpEQ(*lhs, *rhs));
@@ -154,7 +162,11 @@ namespace pepper {
             return lhs;
         }
 
-        Ref<Value> asBool(Ref<Value> value) const override;
+        Ref<Value> asBool(Ref<Value> value) const override {
+            auto zero = llvm::ConstantInt::getFalse(*Types::Int64);
+            auto valAsInt = builder()->CreatePtrToInt(*value, *Types::Int64);
+            return Value::New(Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool"), "bool");
+        }
     };
 
     class VoidType : public NativeType {
@@ -167,7 +179,7 @@ namespace pepper {
         ~VoidType() = default;
 
         Ref<Type> pointer() const override {
-            return Types::Int8Ptr;
+            return Types::Int8->pointer();
         }
 
         Ref<Value> coerce(Ref<Value> value) const override {
@@ -298,10 +310,21 @@ namespace pepper {
     class FloatType : public NativeType {
         DECLARE_RTTI(FloatType, NativeType)
       public:
-        FloatType(const std::string& name, llvm::Type* type);
+        FloatType(const std::string& name, llvm::Type* type)
+            : NativeType(name, type) {
+            IsReal = true;
+        }
         ~FloatType() = default;
 
-        Ref<Value> coerce(Ref<Value> value) const override;
+        Ref<Value> coerce(Ref<Value> value) const override {
+            if (value->type().get() == this && !value->type()->isConstant()) {
+                return value;
+            }
+            if (value->type()->isInteger() || value->type()->isFloat()) {
+                return Value::New(ref(), builder()->CreateFPCast(*value, *this));
+            }
+            throw new CompileError("Cannot convert from {} to {}", value->type()->name(), name());
+        }
 
         Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const override {
             return Value::New(ref(), builder()->CreateFAdd(*lhs, *rhs, "fdd"), "fadd");
@@ -412,6 +435,17 @@ namespace pepper {
         throw new CompileError("Cannot create a pointer to a function");
     }
 
+    Ref<Type> Types::Bool;
+    Ref<Type> Types::Void;
+    Ref<Type> Types::Int8;
+    Ref<Type> Types::UInt8;
+    Ref<Type> Types::Int32;
+    Ref<Type> Types::UInt32;
+    Ref<Type> Types::Int64;
+    Ref<Type> Types::UInt64;
+    Ref<Type> Types::Double;
+    Ref<Type> Types::Float;
+
     Types::Types(llvm::LLVMContext* ctx)
         : Ctx(ctx) {
         Void = voidType();
@@ -424,8 +458,21 @@ namespace pepper {
         Bool = boolType();
         Double = doubleType();
         Float = floatType();
+        addType("int", Int32);
+        addType("uint", UInt32);
+        addType("long", Int64);
+        addType("ulong", UInt64);
+        addType("byte", UInt8);
+        addType("char", Int8);
     }
 
+    Ref<Type> Types::addType(const std::string& name, Ref<Type> type) {
+        if (auto ty = getType(name)) {
+            if (ty != type)
+                throw new InternalCompilerError("Types: type collision: {0}", ty->name());
+        }
+        return KnownTypes[name] = type;
+    }
     Ref<Type> Types::getType(const std::string& name) {
         auto it = KnownTypes.find(name);
         if (it != KnownTypes.end()) {
@@ -451,4 +498,50 @@ namespace pepper {
                            [this]() { return Ref<IntegerType>::create("i8", llvm::Type::getInt8Ty(*Ctx)).as<Type>(); });
     }
 
+    Ref<Type> Types::uint8Type() {
+        return getOrCreate("u8",
+                           [this]() { return Ref<IntegerType>::create("u8", llvm::Type::getInt8Ty(*Ctx)).as<Type>(); });
+    }
+
+    Ref<Type> Types::int32Type() {
+        return getOrCreate("i32", [this]() {
+            return Ref<IntegerType>::create("i32", llvm::Type::getInt32Ty(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::uint32Type() {
+        return getOrCreate("u32", [this]() {
+            return Ref<IntegerType>::create("u32", llvm::Type::getInt32Ty(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::int64Type() {
+        return getOrCreate("i64", [this]() {
+            return Ref<IntegerType>::create("i64", llvm::Type::getInt64Ty(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::uint64Type() {
+        return getOrCreate("u64", [this]() {
+            return Ref<IntegerType>::create("u64", llvm::Type::getInt64Ty(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::boolType() {
+        return getOrCreate("bool", [this]() {
+            return Ref<IntegerType>::create("bool", llvm::Type::getInt1Ty(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::doubleType() {
+        return getOrCreate("double", [this]() {
+            return Ref<FloatType>::create("double", llvm::Type::getDoubleTy(*Ctx)).as<Type>();
+        });
+    }
+
+    Ref<Type> Types::floatType() {
+        return getOrCreate("float", [this]() {
+            return Ref<FloatType>::create("float", llvm::Type::getFloatTy(*Ctx)).as<Type>();
+        });
+    }
 } // namespace pepper

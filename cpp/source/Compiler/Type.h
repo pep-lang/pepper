@@ -144,37 +144,32 @@ namespace pepper {
         Types(llvm::LLVMContext* ctx);
         ~Types() = default;
 
-        Ref<Type> addType(const std::string& name, llvm::Type* type);
+        template <typename T>
+        Ref<Type> addType(const std::string& name, llvm::Type* type) {
+            return addType(name, Ref<T>::create(name, type));
+        }
+        Ref<Type> addType(const std::string& name, Ref<Type> type);
         Ref<Type> getType(const std::string& name);
 
         static Ref<Type> Void;
-        static Ref<Type> VoidPtr;
 
         static Ref<Type> Int8;
-        static Ref<Type> Int8Ptr;
 
         static Ref<Type> UInt8;
-        static Ref<Type> UInt8Ptr;
 
         static Ref<Type> Int32;
-        static Ref<Type> Int32Ptr;
 
         static Ref<Type> UInt32;
-        static Ref<Type> UInt32Ptr;
 
         static Ref<Type> Int64;
-        static Ref<Type> Int64Ptr;
 
         static Ref<Type> UInt64;
-        static Ref<Type> UInt64Ptr;
 
         static Ref<Type> Bool;
 
         static Ref<Type> Double;
-        static Ref<Type> DoublePtr;
 
         static Ref<Type> Float;
-        static Ref<Type> FloatPtr;
 
       public:
         Ref<Type> voidType();
