@@ -105,13 +105,19 @@ ternaryExpression
 
 assignmentExpression
 	: ternaryExpression #assignmentDefault
-	| unaryExpression assignmentOperator assignmentExpression #Assignment
+	| unaryExpression '=' assignmentExpression #Assignment
+    | unaryExpression '*=' assignmentExpression #MulAssignment
+    | unaryExpression '/=' assignmentExpression #DivAssignment
+    | unaryExpression '%=' assignmentExpression #ModAssignment
+    | unaryExpression '+=' assignmentExpression #AddAssignment
+    | unaryExpression '-=' assignmentExpression #SubAssignment
+    | unaryExpression '<<=' assignmentExpression #LShiftAssignment
+    | unaryExpression '>>=' assignmentExpression #RShiftAssignment
+    | unaryExpression '&=' assignmentExpression #BitAndAssignment
+    | unaryExpression '^=' assignmentExpression #BitXorAssignment
+    | unaryExpression '|=' assignmentExpression #BitOrAssignment
 	| DigitSequence #AssignmentDigits
 	;
-
-assignmentOperator
-    :   '=' | '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|='
-    ;
 
 expression
     :   assignmentExpression (',' assignmentExpression)*
@@ -299,11 +305,10 @@ forExpression
     :   assignmentExpression (',' assignmentExpression)*
     ;
 
-jumpStatement
-    : 
-    ( Continue
-    | Break   
-    | Return expression? ) ';'
+jumpStatement:
+	Continue ';'				# Continue
+	| Break ';'					# Break
+	| Return expression? ';'	# Return
     ;
 
 compilationUnit

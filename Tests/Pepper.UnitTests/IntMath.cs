@@ -1,8 +1,6 @@
 ﻿using System;
-namespace Pepper.UnitTests
-{
-    public class IntMath
-    {
+namespace Pepper.UnitTests {
+    public class IntMath {
         [Test]
         public void Add() {
             var source = """
@@ -158,6 +156,19 @@ namespace Pepper.UnitTests
                 }
                 """;
             Utils.CompileAndRun("LogicalOr", source, 1);
+        }
+
+        [Test]
+        public void MulAssign() {
+            var source = """
+                int main() {
+                    int x = 1;
+                    int y = 4;
+                    x *= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("LogicalOr", source, 4);
         }
 
         [Test]

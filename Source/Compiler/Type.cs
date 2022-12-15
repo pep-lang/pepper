@@ -29,10 +29,10 @@ namespace Pepper {
 
         public virtual Value Add(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Sub(Value lhs, Value rhs) => throw new NotImplementedException();
-        public virtual Value Mul(Value lhs, Value rhs)=> throw new NotImplementedException();
-        public virtual Value Div(Value lhs, Value rhs)=> throw new NotImplementedException();
-        public virtual Value Mod(Value lhs, Value rhs)=> throw new NotImplementedException();
-        public virtual Value Pow(Value lhs, Value rhs)=> throw new NotImplementedException();
+        public virtual Value Mul(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Div(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Mod(Value lhs, Value rhs) => throw new NotImplementedException();
+        public virtual Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Less(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Greater(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value LessEqual(Value lhs, Value rhs) => throw new NotImplementedException();
@@ -64,8 +64,8 @@ namespace Pepper {
 
         public override uint Bits => Ref.IntWidth;
 
-        public NativeType(string name, LLVMTypeRef typeRef) 
-            : base(name, typeRef) {            
+        public NativeType(string name, LLVMTypeRef typeRef)
+            : base(name, typeRef) {
         }
 
         public override PointerType Pointer() {
@@ -127,39 +127,47 @@ namespace Pepper {
                 return val;
             }
             bool signed = val.Type != Types.Bool && Signed;
-            if (val.Type.IsInt) {                
-                return new Value(this, LLVMValueRef.CreateConstIntCast(val, this, signed));
+            if (val.Type.IsInt) {
+                if (this.Bits > val.Type.Bits)
+                    return new Value(this, Builder.BuildZExtOrBitCast(val.Load(), this)).Store();
+                else
+                    return new Value(this, Builder.BuildTruncOrBitCast(val.Load(), this)).Store();
             }
-            Func<LLVMValueRef, LLVMTypeRef, LLVMValueRef> convert = signed ? LLVMValueRef.CreateConstFPToSI : LLVMValueRef.CreateConstFPToUI;
-            return new Value(this, convert(val, this));
+            Func<LLVMValueRef, LLVMTypeRef, string, LLVMValueRef> convert = signed ? Builder.BuildFPToSI : Builder.BuildFPToUI;
+            return new Value(this, convert(val.Load(), this, "")).Store();
         }
 
-        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs, rhs, "add"));
-        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildSub(lhs, rhs, "sub"));
-        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildMul(lhs, rhs, "mul"));
-        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildSDiv(lhs, rhs, "div"));
-        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildSRem(lhs, rhs, "mod"));
+        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs.Load(), rhs.Load(), "add"));
+        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildSub(lhs.Load(), rhs.Load(), "sub"));
+        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildMul(lhs.Load(), rhs.Load(), "mul"));
+        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildSDiv(lhs.Load(), rhs.Load(), "div"));
+        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildSRem(lhs.Load(), rhs.Load(), "mod"));
         public override Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
-        public override Value Less(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntULT, lhs, rhs, "lt"));
-        public override Value Greater(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntUGT, lhs, rhs, "gt"));
-        public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLE, lhs, rhs, "le"));
-        public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSGE, lhs, rhs, "ge"));
-        public override Value LShift(Value lhs, Value rhs) => new(this, Builder.BuildShl(lhs, rhs, "lshift"));
-        public override Value RShift(Value lhs, Value rhs) => new(this, Builder.BuildAShr(lhs, rhs, "rshift"));
-        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs, "eq"));
-        public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, lhs, rhs, "ne"));
+        public override Value Less(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntULT, lhs.Load(), rhs.Load(), "lt"));
+        public override Value Greater(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildICmp(LLVMIntPredicate.LLVMIntUGT, lhs.Load(), rhs.Load(), "gt"));
+        public override Value LessEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSLE, lhs.Load(), rhs.Load(), "le"));
+        public override Value GreaterEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntSGE, lhs.Load(), rhs.Load(), "ge"));
+        public override Value LShift(Value lhs, Value rhs) => new(this, Builder.BuildShl(lhs.Load(), rhs.Load(), "lshift"));
+        public override Value RShift(Value lhs, Value rhs) => new(this, Builder.BuildAShr(lhs.Load(), rhs.Load(), "rshift"));
+        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs.Load(), rhs.Load(), "eq"));
+        public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, lhs.Load(), rhs.Load(), "ne"));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
-        public override Value BitAnd(Value lhs, Value rhs) => new(this, Builder.BuildAnd(lhs, rhs, "and"));
-        public override Value BitOr(Value lhs, Value rhs) => new(this, Builder.BuildOr(lhs, rhs, "or"));
-        public override Value BitXor(Value lhs, Value rhs) => new(this, Builder.BuildXor(lhs, rhs, "xor"));
-        public override Value AsBool(Value val) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, val, new ConstantInt(0), "asbool"));
+        public override Value BitAnd(Value lhs, Value rhs) => new(this, Builder.BuildAnd(lhs.Load(), rhs.Load(), "and"));
+        public override Value BitOr(Value lhs, Value rhs) => new(this, Builder.BuildOr(lhs.Load(), rhs.Load(), "or"));
+        public override Value BitXor(Value lhs, Value rhs) => new(this, Builder.BuildXor(lhs.Load(), rhs.Load(), "xor"));
+        public override Value AsBool(Value val) {
+            var name = val.Name != "" ? $"{val.Name}.bool" : $"{val.ToString()[val.ToString().IndexOf(" ")..].Replace("%", null)}";
+            return new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, val.Load(), ConstantBool.False.As(this), name));
+        }
     }
 
     internal class FloatType : NativeType {
-        public FloatType(string name, LLVMTypeRef typeRef) 
+        public FloatType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsReal = true;
         }
+
+        public override uint Bits => Ref == LLVMTypeRef.Float ? 32u : 64u;
 
         public override Value Coerce(Value val) {
             if (val.Type.Equals(this) && val is not Constant) {
@@ -168,24 +176,31 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsInt) {
-                return new Value(Types.Double, LLVMValueRef.CreateConstSIToFP(val, Types.Double));
+                var intType = (type as IntegerType)!;
+                if (intType.Signed)
+                    return new Value(this, Builder.BuildSIToFP(val.Load(), this)).Store();
+                else
+                    return new Value(this, Builder.BuildUIToFP(val.Load(), this)).Store();
             } else {
-                return new Value(Types.Double, LLVMValueRef.CreateConstFPExt(val, Types.Double));
+                if (Bits > val.Type.Bits)
+                    return new Value(this, Builder.BuildFPExt(val.Load(), this)).Store();
+                else
+                    return new Value(this, Builder.BuildFPTrunc(val.Load(), this)).Store();
             }
         }
 
-        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildFAdd(lhs, rhs, "add"));
-        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildFSub(lhs, rhs, "sub"));
-        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildFMul(lhs, rhs, "mul"));
-        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildFDiv(lhs, rhs, "div"));
-        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildFRem(lhs, rhs, "mod"));
+        public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildFAdd(lhs.Load(), rhs.Load(), "add"));
+        public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildFSub(lhs.Load(), rhs.Load(), "sub"));
+        public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildFMul(lhs.Load(), rhs.Load(), "mul"));
+        public override Value Div(Value lhs, Value rhs) => new(this, Builder.BuildFDiv(lhs.Load(), rhs.Load(), "div"));
+        public override Value Mod(Value lhs, Value rhs) => new(this, Builder.BuildFRem(lhs.Load(), rhs.Load(), "mod"));
         public override Value Pow(Value lhs, Value rhs) => throw new NotImplementedException();
-        public override Value Less(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, lhs, rhs, "lt"));
-        public override Value Greater(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, lhs, rhs, "gt"));
-        public override Value LessEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs, rhs, "le"));
-        public override Value GreaterEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs, rhs, "ge"));
-        public override Value Equal(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs, rhs, "eq"));
-        public override Value NotEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs, rhs, "ne"));
+        public override Value Less(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULT, lhs.Load(), rhs.Load(), "lt"));
+        public override Value Greater(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGT, lhs.Load(), rhs.Load(), "gt"));
+        public override Value LessEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealULE, lhs.Load(), rhs.Load(), "le"));
+        public override Value GreaterEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs.Load(), rhs.Load(), "ge"));
+        public override Value Equal(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs.Load(), rhs.Load(), "eq"));
+        public override Value NotEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs.Load(), rhs.Load(), "ne"));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
@@ -267,7 +282,7 @@ namespace Pepper {
                 if (func != null)
                     return func;
             }
-            
+
             return new FunctionType(returnType, parameters, varargs);
         }
 

@@ -40,8 +40,7 @@ namespace Pepper {
             };
 
             var compiler = new Compiler(moduleName);
-            try
-            {
+            try {
                 var tree = parser.compilationUnit();
                 ParseTreeWalker.Default.Walk(compiler, tree);
             } catch (ParseCanceledException pcex) {
@@ -51,7 +50,7 @@ namespace Pepper {
                 }
                 Environment.Exit(-1);
             }
-            
+
 
             //Log.Info(FormatTree(tree.ToStringTree(parser)));
             Log.Info(Context.Module.PrintToString());
@@ -100,8 +99,7 @@ namespace Pepper {
             Context.Create(moduleName);
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             GC.SuppressFinalize(this);
             Context.Destroy();
         }
@@ -168,14 +166,10 @@ namespace Pepper {
             base.EnterDeclaration(context);
         }
 
-        public override void EnterJumpStatement([NotNull] PepperParser.JumpStatementContext context) {
-            base.EnterJumpStatement(context);
-        }
+        public override void ExitReturn([NotNull] PepperParser.ReturnContext context) {
+            base.ExitReturn(context);
 
-        public override void ExitJumpStatement([NotNull] PepperParser.JumpStatementContext context) {
-            base.ExitJumpStatement(context);
-
-            if (context.Return() != null && context.expression() != null) {
+            if (context.expression() != null) {
                 var returnValue = Locals.PopStack();
                 var func = Locals.ReturnTarget;
                 var returnType = func!.ReturnType;
@@ -434,6 +428,15 @@ namespace Pepper {
             if (constant != null) {
                 EvalConstant(constant);
             }
+        }
+
+        public override void ExitMulAssignment([NotNull] PepperParser.MulAssignmentContext context) {
+            base.ExitMulAssignment(context);
+            var rhs = Locals.PopStack<Value>();
+            var lhs = Locals.PopStack<Value>();
+            var mul = lhs.Type.Mul(lhs, rhs);
+            lhs.Type.Assign(lhs, mul);
+            Locals.PushStack(lhs);
         }
 
         public override void ExitTernary([NotNull] PepperParser.TernaryContext context) {

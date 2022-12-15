@@ -38,7 +38,7 @@ namespace Pepper {
         }
 
         // Copy/Store another value as Type
-        public Value(Type type, Value value, string name = "", LLVMBuilderRef? builder = null) 
+        public Value(Type type, Value value, string name = "", LLVMBuilderRef? builder = null)
             : base(type, name) {
             Store(value, builder);
         }
@@ -50,9 +50,17 @@ namespace Pepper {
             return Address;
         }
 
-        public virtual LLVMValueRef Store(Value value, LLVMBuilderRef? builder = null) {
+        public virtual Value Store(LLVMBuilderRef? builder = null) {
+            var val = Address;
+            AddressRef = null;
+            Store(val, builder);
+            return this;
+        }
+
+        public virtual Value Store(Value value, LLVMBuilderRef? builder = null) {
             builder ??= Context.Default.Locals.Builder;
-            return Store(value.Load(builder), builder);
+            Store(value.Address, builder);
+            return this;
         }
 
         public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder = null) {
@@ -60,15 +68,16 @@ namespace Pepper {
             return builder.Value.BuildStore(value, Address);
         }
 
-        public virtual LLVMValueRef Load(LLVMBuilderRef? builder = null) {
+        public virtual Value Load(LLVMBuilderRef? builder = null) {
             if (Address.IsAConstant != null || Address.IsAAllocaInst == null) {
-                return Address;
+                return this;
             }
             builder ??= Context.Default.Locals.Builder;
-            return builder.Value.BuildLoad2(Type, Address, Name);
+            return new Value(Type, builder.Value.BuildLoad2(Type, Address, Name));
         }
 
         public Value AsBool() => Type.AsBool(this);
+        public Value As(Type type) => (type == Types.Bool ? Type.AsBool(this) : type.Coerce(this)).Load();
 
         public override string ToString() {
             var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
@@ -85,20 +94,33 @@ namespace Pepper {
 
         public override LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) => throw new CompileException($"Cannot store to constant {this}");
 
-        public override LLVMValueRef Load(LLVMBuilderRef? builder) {
-            return Address;
-        }
-    }
-
-    internal class ConstantInt : Constant {
-        private readonly long Value;
-        public ConstantInt(long value, string name = "") 
-            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
-            Value = value;
+        public override Value Load(LLVMBuilderRef? builder) {
+            return this;
         }
 
         public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
             return this;
+        }
+    }
+
+    internal class ConstantBool : Constant {
+        private readonly bool Value;
+        public ConstantBool(bool value, string name = "")
+            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, value ? 1ul : 0ul), name) {
+            Value = value;
+        }
+
+        public override string ToString() => $"{Type} {Value}";
+
+        public static ConstantBool True => new(true, "true");
+        public static ConstantBool False => new(false, "false");
+    }
+
+    internal class ConstantInt : Constant {
+        private readonly long Value;
+        public ConstantInt(long value, string name = "")
+            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
+            Value = value;
         }
 
         public override string ToString() => $"{Type} {Value}";
@@ -111,12 +133,6 @@ namespace Pepper {
             Value = value;
         }
 
-        public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
-            return this;
-            //return builder.Value.BuildStore(LLVMValueRef.CreateConstReal(IntegralType.Double, Value), Address);
-            //return builder.BuildStore(LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, BitConverter.DoubleToUInt64Bits(Value)), Address);
-        }
-
         public override string ToString() => $"{Type} {Value}";
     }
 
@@ -125,10 +141,6 @@ namespace Pepper {
         public ConstantString(string value, string name = "")
             : base(Types.Int8Ptr, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
             Value = value;
-        }
-
-        public override LLVMValueRef Alloc(LLVMBuilderRef? builder) {
-            return this;
         }
 
         public override string ToString() => $"{Type} \"{Value}\"";
