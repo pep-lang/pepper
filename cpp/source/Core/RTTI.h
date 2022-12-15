@@ -62,6 +62,18 @@ namespace pepper {
         inline static RTTI* rtti = nullptr;
     };
 
+    template <typename T> class RttiBase {
+        template <typename Base> constexpr bool is() {
+            return std::is_base_of_v<Base, T> || std::is_base_of_v<T, Base>;
+        }
+
+        template <typename To> constexpr To as() {
+            if (this->is<To>())
+                return static_cast<To>(this);
+            return nullptr;
+        }
+    };
+
 } // namespace pepper
 
 #define DECLARE_RTTI(T, ...)                                                                                           \

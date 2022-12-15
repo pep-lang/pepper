@@ -17,4 +17,9 @@ namespace pepper::ast {
         , Params(params)
         , Vararg(vararg) {
     }
+
+    FunctionCall::FunctionCall(Ref<FunctionDef> target, const std::vector<Ref<Expression>>& args)
+        : Target(target)
+        , Args(args) {
+    }
 } // namespace pepper::ast

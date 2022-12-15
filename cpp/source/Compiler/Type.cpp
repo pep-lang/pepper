@@ -201,6 +201,7 @@ namespace pepper {
                 auto converted =
                     signedVal ? builder()->CreateFPToSI(*value, *this) : builder()->CreateFPToUI(*value, *this);
             }
+            throw new CompileError("Cannot convert from {} to {}", value->type()->name(), name());
         }
 
         Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const override {
