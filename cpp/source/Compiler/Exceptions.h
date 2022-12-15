@@ -1,8 +1,9 @@
 
 #pragma once
 
+#include "llvm/Support/FormatVariadic.h"
 #include <exception>
-#include <format>
+#include <memory>
 #include <string>
 
 namespace pepper {
@@ -22,13 +23,14 @@ namespace pepper {
 
         template <typename... Args>
         CompileError(std::string_view fmt, Args&&... args)
-            : Message(std::vformat(fmt, std::make_format_args(args...))) {
+            : Message(llvm::formatv(fmt.data(), std::forward<Args>(args)...)) {
         }
 
         template <typename Ctx, typename... Args>
             requires HasToString<Ctx>
         CompileError(const Ctx& ctx, std::string_view fmt, Args&&... args)
-            : Message(std::format("{}: ", ctx.toString()) + std::vformat(fmt, std::make_format_args(args...))) {
+            : Message(std::string(llvm::formatv("{0}: ", ctx.toString())) +
+                      std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {
         }
 
         const char* what() const noexcept override {
@@ -47,13 +49,14 @@ namespace pepper {
 
         template <typename... Args>
         InternalCompilerError(std::string_view fmt, Args&&... args)
-            : Message(std::vformat(fmt, std::make_format_args(args...))) {
+            : Message(llvm::formatv(fmt.data(), std::forward<Args>(args)...)) {
         }
 
         template <typename Ctx, typename... Args>
             requires HasToString<Ctx>
         InternalCompilerError(const Ctx& ctx, std::string_view fmt, Args&&... args)
-            : Message(std::format("{}: ", ctx.toString()) + std::vformat(fmt, std::make_format_args(args...))) {
+            : Message(std::string(llvm::formatv("%s: ", ctx.toString())) +
+                      std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {
         }
 
         const char* what() const noexcept override {

@@ -5,7 +5,7 @@
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
 #include "Compiler/Value.h"
-#include <ranges>
+#include "llvm/ADT/STLExtras.h"
 #include <vector>
 
 namespace pepper {
@@ -28,8 +28,7 @@ namespace pepper {
         }
 
         Ref<ast::VariableDef> findVariable(const std::string& name) const override {
-            std::ranges::reverse_view stack(Stack);
-            for (const auto& scope : stack) {
+            for (const auto& scope : llvm::reverse(Stack)) {
                 auto var = scope.Locals.lookup(name);
                 if (var) {
                     return var;
@@ -39,8 +38,7 @@ namespace pepper {
         }
 
         Ref<ast::FunctionDef> findFunction(const std::string& name) const override {
-            std::ranges::reverse_view stack(Stack);
-            for (const auto& scope : stack) {
+            for (const auto& scope : llvm::reverse(Stack)) {
                 if (auto var = scope.Functions.lookup(name)) {
                     return var;
                 }
@@ -59,8 +57,7 @@ namespace pepper {
         }
 
         Ref<Type> findType(const std::string& name) const override {
-            std::ranges::reverse_view stack(Stack);
-            for (const auto& scope : stack) {
+            for (const auto& scope : llvm::reverse(Stack)) {
                 if (auto ty = scope.Types.lookup(name)) {
                     return ty;
                 }
@@ -69,8 +66,7 @@ namespace pepper {
         }
 
         Ref<ast::FunctionDef> returnTarget() {
-            std::ranges::reverse_view stack(Stack);
-            for (const auto& scope : stack) {
+            for (const auto& scope : llvm::reverse(Stack)) {
                 if (scope.ReturnTarget) {
                     return scope.ReturnTarget;
                 }

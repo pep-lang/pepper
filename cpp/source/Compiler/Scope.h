@@ -22,11 +22,6 @@ namespace pepper {
     class Scope {
         struct StackEntry {};
 
-      public:
-        Scope(Scope* outer = nullptr)
-            : Outer(outer) {
-        }
-
         Scope* Outer = nullptr;
         std::shared_ptr<llvm::IRBuilderBase> Builder = nullptr;
         llvm::StringMap<Ref<Type>> Types;
@@ -34,6 +29,11 @@ namespace pepper {
         llvm::StringMap<Ref<Value>> Locals;
         std::stack<StackEntry> Stack;
         std::shared_ptr<UserFunction> ReturnTarget = nullptr;
+
+      public:
+        Scope(Scope* outer = nullptr)
+            : Outer(outer) {
+        }
 
         std::shared_ptr<llvm::IRBuilderBase> ir() const {
             return (Builder) ? Builder : Outer->Builder;

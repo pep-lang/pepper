@@ -33,7 +33,7 @@ namespace pepper {
 
         template <typename U>
         Ref(Ref<U> ref)
-            : base(ref.as<T>()) {
+            : base(ref.template as<T>()) {
         }
 
         template <typename U>

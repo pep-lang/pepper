@@ -17,6 +17,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
     llvm::Value* Type::alloc(llvm::IRBuilderBase* builder) const {
@@ -33,85 +34,87 @@ namespace pepper {
     }
 
     Ref<Value> Type::add(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support addition", ref());
+        throw new CompileError("Type {0} does not support addition", name());
     }
 
     Ref<Value> Type::sub(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support subtraction", ref());
+        throw new CompileError("Type {0} does not support subtraction", name());
     }
 
     Ref<Value> Type::mul(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support multiplication", ref());
+        throw new CompileError("Type {0} does not support multiplication", name());
     }
 
     Ref<Value> Type::div(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support division", ref());
+        throw new CompileError("Type {} does not support division", name());
     }
 
     Ref<Value> Type::mod(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support modulus", ref());
+        throw new CompileError("Type {} does not support modulus", name());
     }
 
     Ref<Value> Type::pow(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support pow", ref());
+        throw new CompileError("Type {} does not support pow", name());
     }
 
     Ref<Value> Type::less(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <", ref());
+        throw new CompileError("Type {} does not support <", name());
     }
 
     Ref<Value> Type::lessEq(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <=", ref());
+        throw new CompileError("Type {} does not support <=", name());
     }
 
     Ref<Value> Type::greater(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >", ref());
+        throw new CompileError("Type {} does not support >", name());
     }
 
     Ref<Value> Type::greaterEq(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >=", ref());
+        throw new CompileError("Type {} does not support >=", name());
     }
 
     Ref<Value> Type::lshift(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <<", ref());
+        throw new CompileError("Type {} does not support <<", name());
     }
 
     Ref<Value> Type::rshift(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >>", ref());
+        throw new CompileError("Type {} does not support >>", name());
     }
 
     Ref<Value> Type::equal(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support equality", ref());
+        throw new CompileError("Type {} does not support equality", name());
     }
 
     Ref<Value> Type::notEqual(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support non-equality", ref());
+        throw new CompileError("Type {} does not support non-equality", name());
     }
 
     Ref<Value> Type::assign(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support assignment", ref());
+        throw new CompileError("Type {} does not support assignment", name());
     }
 
     Ref<Value> Type::bitAnd(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise and", ref());
+        throw new CompileError("Type {} does not support bitwise and", name());
     }
 
     Ref<Value> Type::bitXor(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise xor", ref());
+        throw new CompileError("Type {} does not support bitwise xor", name());
     }
 
     Ref<Value> Type::bitOr(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise or", ref());
+        throw new CompileError("Type {} does not support bitwise or", name());
     }
 
     Ref<Value> Type::asBool(Ref<Value> value) const {
-        throw new CompileError("Type {} does not support conversion to bool", ref());
+        throw new CompileError("Type {} does not support conversion to bool", name());
     }
 
     class NativeType : public Type {
         DECLARE_RTTI(NativeType, Type)
       protected:
-        static llvm::IRBuilderBase* builder();
+        static llvm::IRBuilderBase* builder() {
+            return Context::get().locals()->ir().get();
+        }
 
       public:
         NativeType(const std::string& name, llvm::Type* type)
@@ -139,11 +142,11 @@ namespace pepper {
         Ref<Value> coerce(Ref<Value> value) const override;
 
         Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const override {
-            builder()->CreateICmpEQ(*lhs, *rhs);
+            return Value::New(Types::Bool, builder()->CreateICmpEQ(*lhs, *rhs));
         }
 
         Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const override {
-            builder()->CreateICmpNE(*lhs, *rhs);
+            return Value::New(Types::Bool, builder()->CreateICmpNE(*lhs, *rhs));
         }
 
         Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const override {
@@ -168,7 +171,7 @@ namespace pepper {
         }
 
         Ref<Value> coerce(Ref<Value> value) const override {
-            throw new CompileError("Cannot convert {} to void", value->type());
+            throw new CompileError("Cannot convert {} to void", value->type()->name());
             return nullptr;
         }
     };
@@ -390,7 +393,7 @@ namespace pepper {
         std::transform(params.begin(), params.end(), std::back_inserter(paramNames), [](auto p) { return p.name(); });
         std::string paramsString = llvm::join(paramNames.begin(), paramNames.end(), ", ");
         std::string ellipsis = varargs ? ", ..." : "";
-        return std::format("{}({}{})", returnType->name(), paramsString, ellipsis);
+        return llvm::formatv("{0}({1}{2})", returnType->name(), paramsString, ellipsis);
     }
 
     std::string FunctionType::Signature(Ref<Type> returnType, const std::vector<ast::Symbol>& params, bool varargs) {
@@ -398,7 +401,7 @@ namespace pepper {
         std::transform(params.begin(), params.end(), std::back_inserter(paramNames), [](auto p) { return p.name(); });
         std::string paramsString = llvm::join(paramNames.begin(), paramNames.end(), ", ");
         std::string ellipsis = varargs ? ", ..." : "";
-        return std::format("{}({}{})", returnType->name(), paramsString, ellipsis);
+        return llvm::formatv("{0}({1}{2})", returnType->name(), paramsString, ellipsis);
     }
 
     Ref<Value> FunctionType::coerce(Ref<Value> val) const {

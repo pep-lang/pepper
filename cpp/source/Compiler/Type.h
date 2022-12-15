@@ -46,6 +46,10 @@ namespace pepper {
 
         virtual ~Type() = default;
 
+        operator std::string() const {
+            return Name;
+        }
+
         Ref<Type> ref() const;
 
         const std::string& name() const {
@@ -187,8 +191,8 @@ namespace pepper {
 
 } // namespace pepper
 
-template <> struct std::formatter<pepper::Ref<pepper::Type>> : std::formatter<std::string> {
-    auto format(pepper::Ref<pepper::Type> t, format_context& ctx) {
-        return formatter<string>::format(std::format("{}", t->name()), ctx);
-    }
-};
+// template <> struct std::formatter<pepper::Ref<pepper::Type>> : std::formatter<std::string> {
+//     auto format(pepper::Ref<pepper::Type> t, format_context& ctx) {
+//         return formatter<string>::format(std::format("{}", t->name()), ctx);
+//     }
+// };

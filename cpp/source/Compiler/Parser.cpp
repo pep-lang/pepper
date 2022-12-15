@@ -10,13 +10,13 @@
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
-#include <format>
+#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
     using namespace Pepper::Parser;
 
     std::string SourceLocation::toString() const {
-        return std::format("{}:({})", File, Line);
+        return llvm::formatv("{0}:({1})", File, Line);
     }
 
     class ParserListener : public PepperBaseListener {
