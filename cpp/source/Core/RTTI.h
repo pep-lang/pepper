@@ -1,35 +1,29 @@
 #pragma once
 
 #include <concepts>
-#include <typeinfo>
+#include <type_traits>
 
 namespace pepper {
-    class RTTI;
-
-    template <typename T>
-    concept HasRtti = requires(T t) {
-                          { T::_rtti_tag } -> std::convertible_to<RTTI>;
-                      };
 
     class RTTI {
         const char* Name;
-        RTTI* Base;
+        const RTTI* Base;
 
       public:
-        RTTI(RTTI* base = nullptr, const char* name = nullptr)
+        constexpr RTTI(const RTTI* base = nullptr, const char* name = nullptr)
             : Base(base)
             , Name(name) {
         }
 
-        const char* name() const {
+        constexpr const char* name() const {
             return Name;
         }
 
-        const RTTI* base() const {
+        constexpr const RTTI* base() const {
             return Base;
         }
 
-        bool is(const RTTI* other) const {
+        constexpr bool is(const RTTI* other) const {
             if (this == other)
                 return true;
             if (Base)
@@ -37,59 +31,62 @@ namespace pepper {
             return false;
         }
 
-        struct None {};
+        struct None {
+            constexpr const RTTI* rtti() const {
+                return nullptr;
+            }
+        };
 
-        template <typename T>
-            requires HasRtti<T>
-        static const RTTI& of() {
-            return T::_rtti_tag;
+        template <typename T> static constexpr const RTTI* of() {
+            return static_cast<T*>(nullptr)->rtti();
         }
 
-        template <typename T>
-            requires HasRtti<T>
-        static const RTTI& of(const T t) {
-            return of<std::remove_cvref_t<T>>();
+        template <typename T> static const RTTI* of(const T t) {
+            return of<std::remove_cvref_t<std::remove_pointer_t<T>>>();
         }
     };
 
     template <typename T = RTTI::None> class RttiInstance : public RTTI {
-      public:
-        RttiInstance(RTTI* base = nullptr, const char* name = nullptr)
-            : RTTI(base, name) {
-            rtti = this;
-        }
+      private:
+        RttiInstance() = delete;
 
         inline static RTTI* rtti = nullptr;
+
+      public:
+        inline static const RTTI* get(const RTTI* base, const char* name) {
+            static std::aligned_storage_t<sizeof(RTTI)> _rtti;
+            if (!rtti)
+                rtti = new (&_rtti) RTTI(base, name);
+            return rtti;
+        }
     };
 
-    template <typename T> class RttiBase {
-        template <typename Base> constexpr bool is() {
-            return std::is_base_of_v<Base, T> || std::is_base_of_v<T, Base>;
-        }
-
-        template <typename To> constexpr To as() {
-            if (this->is<To>())
-                return static_cast<To>(this);
+    template <> class RttiInstance<RTTI::None> {
+      public:
+        inline static constexpr const RTTI* get(const RTTI* base, const char* name) {
             return nullptr;
         }
     };
+
+    template <typename T = RTTI::None> struct RttiType {
+        using type = T;
+    };
+
+    template <typename T = RTTI::None> using rtti_type_t = typename RttiType<T>::type;
 
 } // namespace pepper
 
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
-    static pepper::RttiInstance<T> _rtti_tag;                                                                          \
-    const pepper::RTTI* _rtti() const {                                                                                \
-        if (!_rtti_tag.rtti)                                                                                           \
-            new (&_rtti_tag) pepper::RttiInstance<T>(RttiInstance<>::rtti, "Type");                                    \
-        return &_rtti_tag;                                                                                             \
+    constexpr const pepper::RTTI* rtti() const {                                                                       \
+        return RttiInstance<T>::get(RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                                 \
     }                                                                                                                  \
-    template <typename Base> bool is() {                                                                               \
-        auto thisTy = _rtti();                                                                                         \
-        auto baseTy = pepper::RttiInstance<Base>::rtti;                                                                \
+    template <typename Base> constexpr bool is() {                                                                     \
+        auto thisTy = rtti();                                                                                          \
+        auto baseTy = RTTI::of<Base>();                                                                                \
         return thisTy->is(baseTy);                                                                                     \
     }                                                                                                                  \
-    template <typename To> To as() {                                                                                   \
+    template <typename To> constexpr To as() {                                                                         \
         if (this->is<To>()) {                                                                                          \
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \

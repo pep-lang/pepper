@@ -40,8 +40,8 @@ namespace pepper {
                 return std::static_pointer_cast<N>(val);
             }
             throw new InternalCompilerError("Attempted to pop {} from AST stack, found {} instead",
-                                            RTTI::of<N>().name(),
-                                            RTTI::of(*val).name());
+                                            RTTI::of<N>()->name(),
+                                            RTTI::of(*val)->name());
         }
 
         template <typename N> Ref<N> peekStack(unsigned int idx) {
@@ -50,9 +50,9 @@ namespace pepper {
                 return std::static_pointer_cast<N>(val);
             }
             throw new InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
-                                            RTTI::of<N>().name(),
+                                            RTTI::of<N>()->name(),
                                             idx,
-                                            RTTI::of(*val).name());
+                                            RTTI::of(*val)->name());
         }
 
         static SourceLocation sourceLocation(const antlr4::ParserRuleContext* context) {
@@ -105,7 +105,7 @@ namespace pepper {
             }
         }
 
-        void exitReturn(PepperParser::ReturnContext* context) {
+        void exitReturn(PepperParser::ReturnContext* context) override {
             Super::exitReturn(context);
         }
 
