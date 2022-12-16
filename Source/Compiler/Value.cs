@@ -7,17 +7,17 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Pepper {
-    internal class TypedValue {
+    public class Symbol {
         public Type Type;
         public string Name { get; private set; }
 
-        public TypedValue(Type type, string name) {
+        public Symbol(Type type, string name) {
             Type = type;
             Name = name;
         }
     }
 
-    internal class Value : TypedValue {
+    public class Value : Symbol {
         LLVMValueRef? AddressRef;
         public LLVMValueRef Address {
             get {
@@ -87,7 +87,7 @@ namespace Pepper {
         public static implicit operator LLVMValueRef(Value v) => v.Address;
     }
 
-    internal class Constant : Value {
+    public class Constant : Value {
         public Constant(Type type, LLVMValueRef value, string name)
             : base(type, value, name) {
         }
@@ -103,10 +103,10 @@ namespace Pepper {
         }
     }
 
-    internal class ConstantBool : Constant {
+    public class ConstantBool : Constant {
         private readonly bool Value;
         public ConstantBool(bool value, string name = "")
-            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, value ? 1ul : 0ul), name) {
+            : base(Types.ConstantBool, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, value ? 1ul : 0ul), name) {
             Value = value;
         }
 
@@ -116,33 +116,41 @@ namespace Pepper {
         public static ConstantBool False => new(false, "false");
     }
 
-    internal class ConstantInt : Constant {
+    public class ConstantInt : Constant {
         private readonly long Value;
         public ConstantInt(long value, string name = "")
-            : base(Types.Int64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
+            : base(Types.ConstantInt, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
             Value = value;
         }
 
         public override string ToString() => $"{Type} {Value}";
     }
 
-    internal class ConstantDouble : Constant {
+    public class ConstantFloat : Constant {
         private readonly double Value;
-        public ConstantDouble(double value, string name = "")
-            : base(Types.Double, LLVMValueRef.CreateConstReal(Types.Double, value), name) {
+        public ConstantFloat(double value, string name = "")
+            : base(Types.ConstantFloat, LLVMValueRef.CreateConstReal(Types.Double, value), name) {
             Value = value;
         }
 
         public override string ToString() => $"{Type} {Value}";
     }
 
-    internal class ConstantString : Constant {
+    public class ConstantString : Constant {
         private readonly string Value;
         public ConstantString(string value, string name = "")
-            : base(Types.Int8Ptr, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
+            : base(Types.ConstantString, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
             Value = value;
         }
 
         public override string ToString() => $"{Type} \"{Value}\"";
+    }
+
+    public class ConstantPointer : Constant {
+        private readonly IntPtr Value;
+        public ConstantPointer(IntPtr value, string name = "")
+            : base(Types.ConstantPointer, Types.Int8.Pointer().CreateConstant(value), name) {
+            Value = value;
+        }
     }
 }

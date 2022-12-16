@@ -10,12 +10,12 @@ namespace Pepper {
     internal abstract class Function : Value {
         public new FunctionType Type => (base.Type as FunctionType)!;
         public Type ReturnType => Type.ReturnType;
-        public IEnumerable<TypedValue> Parameters => Type.Parameters;
+        public IEnumerable<Symbol> Parameters => Type.Parameters;
         public bool Varargs => Type.Varargs;
 
-        public Function(string name, Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) 
+        public Function(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(
-                  FunctionType.Create(returnType, parameters, varargs), 
+                  FunctionType.Create(returnType, parameters, varargs),
                   Context.Default.Module.AddFunction(name, FunctionType.Create(returnType, parameters, varargs)),
                   name) {
             Context.Default.Locals.AddFunction(this);
@@ -52,7 +52,7 @@ namespace Pepper {
         public LLVMBasicBlockRef Body;
         public uint NumLocals = 0;
 
-        public UserFunction(string name, Type returnType, IEnumerable<Value> parameters) 
+        public UserFunction(string name, Type returnType, IEnumerable<Symbol> parameters)
             : base(name, returnType, parameters) {
             Context.Default.Locals.AddFunction(this);
             Body = Address.AppendBasicBlock("entry");
@@ -62,11 +62,11 @@ namespace Pepper {
     }
 
     internal class ExternFunction : Function {
-        public ExternFunction(string name, Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
+        public ExternFunction(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(name, FunctionType.Create(returnType, parameters, varargs)) {
         }
 
-        public ExternFunction(string name, Type returnType, params TypedValue[] parameters) 
+        public ExternFunction(string name, Type returnType, params Symbol[] parameters)
             : this(name, returnType, parameters, false) {
         }
 
@@ -83,10 +83,10 @@ namespace Pepper {
             Address = funcRef;
         }
 
-        public static readonly ExternFunction Puts = new("puts", Types.Int32, new TypedValue(Types.Int8Ptr, "str"));
+        public static readonly ExternFunction Puts = new("puts", Types.Int32, new Symbol(Types.Int8Ptr, "str"));
         public static readonly ExternFunction Print = Alias(Puts, "print");
-        public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new TypedValue(Types.UInt64, "size"));
-        public static readonly ExternFunction Free = new("free", Types.Void, new TypedValue(Types.Int8Ptr, "ptr"));
-        public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new TypedValue(Types.Int8Ptr, "ptr"), new TypedValue(Types.UInt64, "new_size"));
+        public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
+        public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
+        public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
     }
 }

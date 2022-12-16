@@ -2,21 +2,22 @@
 using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
 using LLVMSharp.Interop;
-using Pepper.Parser;
+using Pepper.AST;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
 namespace Pepper {
-    public class Compiler : PepperBaseListener, IDisposable {
+    public class Compiler : IDisposable {
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int IntMain0();
 
         static Context Context { get { return Context.Default; } }
 
-        internal Scope Globals { get { return Context.Globals; } }
-        internal Scope Locals { get { return Context.Locals; } }
+        public string SourcePath { get; private set; }
+        public ICharStream SourceStream { get; private set; }
 
         public static void CompileAndRun() {
             using var compiler = Compile(Options.Parse());
@@ -27,34 +28,12 @@ namespace Pepper {
 
         public static Compiler Compile(Options options) {
             var inputStream = CharStreams.fromPath(options.Inputs.First());
-            return Compile(options.ModuleName, inputStream);
+            return Compile(options.ModuleName, options.Inputs.First(), inputStream);
         }
 
-        public static Compiler Compile(string moduleName, ICharStream inputStream) {
-            var lexer = new PepperLexer(inputStream);
-            var tokens = new BufferedTokenStream(lexer);
-            var parser = new PepperParser(tokens) {
-                BuildParseTree = true,
-                //Trace = true,
-                ErrorHandler = new BailErrorStrategy(),
-            };
-
-            var compiler = new Compiler(moduleName);
-            try {
-                var tree = parser.compilationUnit();
-                ParseTreeWalker.Default.Walk(compiler, tree);
-            } catch (ParseCanceledException pcex) {
-                Log.Error(pcex.Message);
-                if (pcex.InnerException is InputMismatchException imex) {
-                    Log.Error($"Unexpected token \"{imex.OffendingToken.Text}\"");
-                }
-                Environment.Exit(-1);
-            }
-
-
-            //Log.Info(FormatTree(tree.ToStringTree(parser)));
-            Log.Info(Context.Module.PrintToString());
-            Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+        public static Compiler Compile(string moduleName, string path, ICharStream inputStream) {
+            var compiler = new Compiler(moduleName, path, inputStream);
+            compiler.Compile();
             return compiler;
         }
 
@@ -95,357 +74,31 @@ namespace Pepper {
             return result;
         }
 
-        private Compiler(string moduleName) {
+        private Compiler(string moduleName, string sourcePath, ICharStream? inputStream = null) {
             Context.Create(moduleName);
+            SourcePath = sourcePath;
+            SourceStream = inputStream ?? CharStreams.fromPath(sourcePath);
+        }
+
+        ParseTree Parse() {
+            var parser = new Parser(SourcePath, SourceStream);
+            var ast = parser.Parse();
+            return ast;
+        }
+
+        void Compile() {
+            var ast = Parse();
+            foreach (var globalSymbol in ast.TopLevelSymbols) {
+                globalSymbol.Codegen();
+            }
+
+            Log.Info(Context.Module.PrintToString());
+            Context.Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
         }
 
         public void Dispose() {
             GC.SuppressFinalize(this);
             Context.Destroy();
         }
-
-        Value EvalConstant(ITerminalNode constant) {
-            var value = constant.ToString();
-            if (long.TryParse(value, out var longVal)) {
-                return Locals.PushStack(new ConstantInt(longVal));
-            } else if (double.TryParse(value, out var doubleVal)) {
-                return Locals.PushStack(new ConstantDouble(doubleVal));
-            }
-            throw new CompileException($"Unable to parse numeric constant '{constant}'");
-        }
-
-        Value EvalStringLiteral(string value) {
-            return Locals.PushStack(new ConstantString(value));
-        }
-
-        public override void EnterFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
-            base.EnterFunctionDefinition(context);
-            var identifier = context.Identifier().ToString()!;
-            string returnTypeName = context.returnType()?.Identifier().ToString()! ?? Types.Void.Name;
-            var returnType = Locals.GetType(returnTypeName);
-            if (returnType == null) {
-                throw new CompileException($"Unknown return type {returnType}");
-            }
-            var paramList = context.initDeclaratorList();
-            var parameters = new List<Value>();
-            if (paramList != null) {
-                var paramDecls = paramList.initDeclarator();
-                //var params = paramDecls.Select(p => {
-                //    var specifiers = p.declarationSpecifiers().declarationSpecifier();
-                //    var decls = p.initDeclaratorList().initDeclarator();
-                //});
-            }
-            var func = new UserFunction(identifier, returnType, parameters);
-            Context.PushScope(func.Builder);
-        }
-
-        public override void ExitFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
-            base.ExitFunctionDefinition(context);
-            Context.PopScope();
-        }
-
-        public override void ExitFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
-            base.ExitFunctionCall(context);
-            var identifier = context.Identifier()?.ToString();
-            var func = identifier != null ? Locals.GetFunction(identifier) : Locals.PopStack<Function>();
-            if (func == null) {
-                throw new CompileException($"Unable to resolve function {identifier}");
-            }
-            var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
-            var args = new List<Value>();
-            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.Add(Locals.PopStack());
-            }
-            var result = func.Call(args);
-            if (func.ReturnType != Types.Void) {
-                Locals.PushStack(result);
-            }
-        }
-
-        public override void EnterDeclaration([NotNull] PepperParser.DeclarationContext context) {
-            base.EnterDeclaration(context);
-        }
-
-        public override void ExitReturn([NotNull] PepperParser.ReturnContext context) {
-            base.ExitReturn(context);
-
-            if (context.expression() != null) {
-                var returnValue = Locals.PopStack();
-                var func = Locals.ReturnTarget;
-                var returnType = func!.ReturnType;
-                var coercedReturnValue = returnType.Coerce(returnValue);
-                Locals.Builder.BuildRet(coercedReturnValue.Load());
-            }
-        }
-
-        public override void EnterPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
-            base.EnterPrimaryExpression(context);
-        }
-
-        public override void ExitPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
-            base.ExitPrimaryExpression(context);
-
-            var constant = context.Constant();
-            if (constant != null) {
-                EvalConstant(constant);
-                return;
-            }
-            var stringLiterals = context.StringLiteral();
-            if (stringLiterals.Length > 0) {
-                // Combine consecutive strings together like C
-                var stringLiteral = stringLiterals.Select(s => s.ToString()).Aggregate("", (contents, literal) => contents + literal?.Trim('"'));
-                EvalStringLiteral(stringLiteral);
-                return;
-            }
-            if (context.Identifier() != null) {
-                var identifier = context.Identifier().ToString()!;
-                var variable = Locals.GetVariable(identifier);
-                if (variable == null) {
-                    throw new CompileException($"Could not find variable {identifier}");
-                }
-                Locals.PushStack(variable);
-                return;
-            }
-        }
-
-        public override void EnterPostfixExpression([NotNull] PepperParser.PostfixExpressionContext context) {
-            base.EnterPostfixExpression(context);
-        }
-
-        public override void EnterFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
-            base.EnterFunctionCall(context);
-        }
-
-        public override void EnterInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
-            base.EnterInitDeclarator(context);
-        }
-
-        public override void ExitInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
-            base.ExitInitDeclarator(context);
-            if (context.Assign() != null) {
-                var type = context.declarator();
-                var identifier = context.declarator().Identifier();
-            }
-        }
-
-        public override void EnterVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
-            base.EnterVariableSpecifier(context);
-        }
-
-        public override void ExitVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
-            base.ExitVariableSpecifier(context);
-            if (context.Identifier().Length != 2) {
-                throw new CompileException("Expected <type> <name> while parsing variable declaration");
-            }
-            var identifiers = context.Identifier().Select(i => i.ToString()!).ToArray();
-            (var typeName, var varName) = (identifiers[0], identifiers[1]);
-            var type = Locals.GetType(typeName);
-            if (type == null) {
-                throw new CompileException($"Unknown type {typeName}");
-            }
-            var value = Locals.PopStack();
-            var coercedValue = type.Coerce(value);
-            var variable = new Value(type, coercedValue.Load(), varName);
-            Locals.AddVariable(variable);
-        }
-
-        Type BinaryOpResultType() {
-            var lhs = Locals.PeekStack<Value>(0)!;
-            var rhs = Locals.PeekStack<Value>(1)!;
-            return BinaryOpResultType(lhs.Type, rhs.Type);
-        }
-
-        static Type BinaryOpResultType(Type lhs, Type rhs) {
-            if (lhs.IsReal || rhs.IsReal)
-                return lhs.Bits > 32 ? Types.Double : Types.Float;
-            var resultType = (lhs.Bits > rhs.Bits) ? lhs : rhs;
-            return resultType;
-        }
-
-        void EmitBinaryOp(Func<Value, Value, Value> op) {
-            var rhs = Locals.PeekStack<Value>(0)!;
-            var lhs = Locals.PeekStack<Value>(1)!;
-            var resultType = BinaryOpResultType(lhs.Type, rhs.Type);
-            EmitBinaryOp(resultType, op);
-        }
-
-        void EmitBinaryOp(Type resultType, Func<Value, Value, Value> op) {
-            var rhs = Locals.PopStack<Value>();
-            var lhs = Locals.PopStack<Value>();
-            var result = op(resultType.Coerce(lhs), resultType.Coerce(rhs));
-            Locals.PushStack(result);
-        }
-
-        public override void ExitMul([NotNull] PepperParser.MulContext context) {
-            base.ExitMul(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.Mul);
-        }
-
-        public override void ExitDiv([NotNull] PepperParser.DivContext context) {
-            base.ExitDiv(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.Div);
-        }
-
-        public override void ExitMod([NotNull] PepperParser.ModContext context) {
-            base.ExitMod(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.Mod);
-        }
-
-        public override void ExitPow([NotNull] PepperParser.PowContext context) {
-            base.ExitPow(context);
-            var resultType = BinaryOpResultType();
-            throw new NotImplementedException();
-        }
-
-        public override void ExitAdd([NotNull] PepperParser.AddContext context) {
-            base.ExitAdd(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.Add);
-        }
-
-        public override void ExitSub([NotNull] PepperParser.SubContext context) {
-            base.ExitSub(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.Sub);
-        }
-
-        public override void ExitLShift([NotNull] PepperParser.LShiftContext context) {
-            base.ExitLShift(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.LShift);
-        }
-
-        public override void ExitRShift([NotNull] PepperParser.RShiftContext context) {
-            base.ExitRShift(context);
-            var resultType = BinaryOpResultType();
-            EmitBinaryOp(resultType, resultType.RShift);
-        }
-
-        Type ComparisonOperandType() {
-            var rhs = Locals.PeekStack<Value>(0)!;
-            var lhs = Locals.PeekStack<Value>(1)!;
-            bool isInt = lhs.Type.IsInt && rhs.Type.IsInt;
-            NativeType operandType = isInt ? Types.Int64 : Types.Double;
-            return operandType;
-        }
-
-        void EmitCompareOp(Type compareType, Func<Value, Value, Value> op) {
-            var rhs = Locals.PopStack<Value>();
-            var lhs = Locals.PopStack<Value>();
-            var result = op(compareType.Coerce(lhs), compareType.Coerce(rhs));
-            Locals.PushStack(result);
-        }
-
-        public override void ExitLess([NotNull] PepperParser.LessContext context) {
-            base.ExitLess(context);
-            var operandType = ComparisonOperandType();
-            EmitCompareOp(operandType, operandType.Less);
-        }
-
-        public override void ExitGreater([NotNull] PepperParser.GreaterContext context) {
-            base.ExitGreater(context);
-            var operandType = ComparisonOperandType();
-            EmitCompareOp(operandType, operandType.Greater);
-        }
-
-        public override void ExitLessEqual([NotNull] PepperParser.LessEqualContext context) {
-            base.ExitLessEqual(context);
-            var operandType = ComparisonOperandType();
-            EmitCompareOp(operandType, operandType.LessEqual);
-        }
-
-        public override void ExitGreaterEqual([NotNull] PepperParser.GreaterEqualContext context) {
-            base.ExitGreaterEqual(context);
-            var operandType = ComparisonOperandType();
-            EmitCompareOp(operandType, operandType.GreaterEqual);
-        }
-
-        Type BitwiseOperandType() {
-            return ComparisonOperandType();
-        }
-
-        public override void ExitBitwiseAnd([NotNull] PepperParser.BitwiseAndContext context) {
-            base.ExitBitwiseAnd(context);
-            var operandType = BitwiseOperandType();
-            EmitBinaryOp(operandType, operandType.BitAnd);
-        }
-
-        public override void ExitBitwiseOr([NotNull] PepperParser.BitwiseOrContext context) {
-            base.ExitBitwiseOr(context);
-            var operandType = BitwiseOperandType();
-            EmitBinaryOp(operandType, operandType.BitOr);
-        }
-
-        public override void ExitBitwiseXor([NotNull] PepperParser.BitwiseXorContext context) {
-            base.ExitBitwiseXor(context);
-            var operandType = BitwiseOperandType();
-            EmitBinaryOp(operandType, operandType.BitXor);
-        }
-
-        void EmitLogicalOp(Func<Value, Value, Value> op) {
-            var rhs = Locals.PopStack<Value>();
-            var lhs = Locals.PopStack<Value>();
-            var result = op(lhs.AsBool(), rhs.AsBool());
-            Locals.PushStack(result);
-        }
-
-        public override void ExitLogicalAnd([NotNull] PepperParser.LogicalAndContext context) {
-            base.ExitLogicalAnd(context);
-            EmitLogicalOp(Types.Bool.BitAnd);
-        }
-
-        public override void ExitLogicalOr([NotNull] PepperParser.LogicalOrContext context) {
-            base.ExitLogicalOr(context);
-            EmitLogicalOp(Types.Bool.BitOr);
-        }
-
-        public override void ExitEqual([NotNull] PepperParser.EqualContext context) {
-            base.ExitEqual(context);
-            var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.Equal);
-        }
-
-        public override void ExitNotEqual([NotNull] PepperParser.NotEqualContext context) {
-            base.ExitNotEqual(context);
-            var operandType = ComparisonOperandType();
-            EmitBinaryOp(Types.Bool, operandType.NotEqual);
-        }
-
-        public override void ExitAssignment([NotNull] PepperParser.AssignmentContext context) {
-            base.ExitAssignment(context);
-            var rhs = Locals.PopStack<Value>();
-            var lhs = Locals.PopStack<Value>();
-            var result = lhs.Type.Assign(lhs, rhs);
-            Locals.PushStack(result);
-        }
-
-        public override void ExitAssignmentDigits([NotNull] PepperParser.AssignmentDigitsContext context) {
-            base.ExitAssignmentDigits(context);
-            var constant = context.DigitSequence();
-            if (constant != null) {
-                EvalConstant(constant);
-            }
-        }
-
-        public override void ExitMulAssignment([NotNull] PepperParser.MulAssignmentContext context) {
-            base.ExitMulAssignment(context);
-            var rhs = Locals.PopStack<Value>();
-            var lhs = Locals.PopStack<Value>();
-            var mul = lhs.Type.Mul(lhs, rhs);
-            lhs.Type.Assign(lhs, mul);
-            Locals.PushStack(lhs);
-        }
-
-        public override void ExitTernary([NotNull] PepperParser.TernaryContext context) {
-            base.ExitTernary(context);
-        }
-
-        //public override void VisitTerminal([NotNull] ITerminalNode node) {
-        //    base.VisitTerminal(node);
-        //    Log.Info($"{node}");
-        //}
     }
 }

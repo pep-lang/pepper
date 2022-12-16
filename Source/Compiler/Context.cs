@@ -27,7 +27,7 @@ internal class Context {
         ExternFunction.StaticInit();
     }
 
-    public static Scope Runtime = new Scope();
+    public static Scope Runtime = new();
     public Scope Globals { get; private set; }
     public Scope Locals { get; private set; }
 

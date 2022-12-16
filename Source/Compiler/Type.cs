@@ -3,15 +3,15 @@ using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Xml.Linq;
 
 namespace Pepper {
-    internal abstract class Type {
+    public abstract class Type {
         public readonly string Name;
         public LLVMTypeRef Ref { get; protected set; }
         public bool IsInt { get; protected set; } = false;
         public bool IsReal { get; protected set; } = false;
         public bool IsPointer { get; protected set; } = false;
-        public virtual uint Bits => 0;
 
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
@@ -22,11 +22,13 @@ namespace Pepper {
         public abstract Value Coerce(Value val);
         public abstract PointerType Pointer();
 
-        internal LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
+        public LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
             builder ??= Context.Default.Locals.FunctionRegisters;
             return builder.Value.BuildAlloca(this, name);
         }
 
+        public virtual uint Bits => 0;
+        public virtual Value DefaultValue => throw new InternalCompilerException($"Type {Name} does not have a default value");
         public virtual Value Add(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Sub(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Mul(Value lhs, Value rhs) => throw new NotImplementedException();
@@ -55,7 +57,7 @@ namespace Pepper {
         public static implicit operator LLVMTypeRef(Type type) => type.Ref;
     }
 
-    internal abstract class NativeType : Type {
+    public abstract class NativeType : Type {
         protected static LLVMBuilderRef Builder {
             get {
                 return Context.Default.Locals.Builder;
@@ -71,9 +73,44 @@ namespace Pepper {
         public override PointerType Pointer() {
             return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
         }
+
+        public abstract Value CreateConstant<U>(U value);
     }
 
-    internal class PointerType : NativeType {
+    public abstract class DerivedFrom<T> : NativeType where T : NativeType {
+        readonly T Base;
+
+        public DerivedFrom(T baseType)
+            : base(baseType.Name, baseType) {
+            Base = baseType;
+        }
+
+        public override Value DefaultValue => Base.DefaultValue;
+        public override Value Coerce(Value val) => Base.Coerce(val);
+        public override PointerType Pointer() => Base.Pointer();
+        public override Value Add(Value lhs, Value rhs) => Base.Add(lhs, rhs);
+        public override Value Sub(Value lhs, Value rhs) => Base.Sub(lhs, rhs);
+        public override Value Mul(Value lhs, Value rhs) => Base.Mul(lhs, rhs);
+        public override Value Div(Value lhs, Value rhs) => Base.Div(lhs, rhs);
+        public override Value Mod(Value lhs, Value rhs) => Base.Mod(lhs, rhs);
+        public override Value Pow(Value lhs, Value rhs) => Base.Pow(lhs, rhs);
+        public override Value Less(Value lhs, Value rhs) => Base.Less(lhs, rhs);
+        public override Value Greater(Value lhs, Value rhs) => Base.Greater(lhs, rhs);
+        public override Value LessEqual(Value lhs, Value rhs) => Base.LessEqual(lhs, rhs);
+        public override Value GreaterEqual(Value lhs, Value rhs) => Base.GreaterEqual(lhs, rhs);
+        public override Value LShift(Value lhs, Value rhs) => Base.LShift(lhs, rhs);
+        public override Value RShift(Value lhs, Value rhs) => Base.RShift(lhs, rhs);
+        public override Value Equal(Value lhs, Value rhs) => Base.Equal(lhs, rhs);
+        public override Value NotEqual(Value lhs, Value rhs) => Base.NotEqual(lhs, rhs);
+        public override Value Assign(Value lhs, Value rhs) => Base.Assign(lhs, rhs);
+        public override Value BitAnd(Value lhs, Value rhs) => Base.BitAnd(lhs, rhs);
+        public override Value BitOr(Value lhs, Value rhs) => Base.BitOr(lhs, rhs);
+        public override Value BitXor(Value lhs, Value rhs) => Base.BitXor(lhs, rhs);
+        public override Value AsBool(Value val) => Base.AsBool(val);
+    }
+
+    public class PointerType : NativeType {
+        public override Value DefaultValue => new(Types.VoidPtr, LLVMValueRef.CreateConstPointerNull(Types.VoidPtr), "nullptr");
         public PointerType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsPointer = true;
@@ -95,11 +132,17 @@ namespace Pepper {
             throw new CompileException($"Cannot convert non-pointer type {type} to {this}");
         }
 
+        public override Value CreateConstant<U>(U value) {
+            return new ConstantPointer((IntPtr)Convert.ChangeType(value, typeof(IntPtr))!);
+        }
+
         public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
-    internal class VoidType : NativeType {
+    public class VoidType : NativeType {
+        public override Value DefaultValue => throw new InternalCompilerException("void should never be used as a default value");
+
         public VoidType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
         }
@@ -111,9 +154,11 @@ namespace Pepper {
         public override Value Coerce(Value val) {
             throw new CompileException($"Cannot convert {val.Type} to void");
         }
+
+        public override Value CreateConstant<U>(U value) => throw new InternalCompilerException("It is not possible to create a void constant");
     }
 
-    internal class IntegerType : NativeType {
+    public class IntegerType : NativeType {
         public readonly bool Signed = true;
 
         public IntegerType(string name, LLVMTypeRef typeRef, bool signed = true)
@@ -137,6 +182,11 @@ namespace Pepper {
             return new Value(this, convert(val.Load(), this, "")).Store();
         }
 
+        public override Value CreateConstant<U>(U value) {
+            return new ConstantInt((long)Convert.ChangeType(value, typeof(long))!);
+        }
+
+        public override Value DefaultValue => new(this, LLVMValueRef.CreateConstInt(this, 0, Signed), $"{Name}.zero");
         public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs.Load(), rhs.Load(), "add"));
         public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildSub(lhs.Load(), rhs.Load(), "sub"));
         public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildMul(lhs.Load(), rhs.Load(), "mul"));
@@ -161,13 +211,28 @@ namespace Pepper {
         }
     }
 
-    internal class FloatType : NativeType {
+    public class ConstantType<T, V, C> : DerivedFrom<T>
+        where T : NativeType
+        where C : Constant {
+        readonly Func<V, C> Create;
+
+        public ConstantType(T baseType, Func<V, C> create)
+            : base(baseType) {
+            Create = create;
+        }
+
+        public override Value DefaultValue => base.DefaultValue;
+
+        public override Value CreateConstant<U>(U value) {
+            return Create((V)Convert.ChangeType(value, typeof(V))!);
+        }
+    }
+
+    public class FloatType : NativeType {
         public FloatType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsReal = true;
         }
-
-        public override uint Bits => Ref == LLVMTypeRef.Float ? 32u : 64u;
 
         public override Value Coerce(Value val) {
             if (val.Type.Equals(this) && val is not Constant) {
@@ -189,6 +254,12 @@ namespace Pepper {
             }
         }
 
+        public override Value CreateConstant<U>(U value) {
+            return new ConstantFloat((double)Convert.ChangeType(value, typeof(double))!);
+        }
+
+        public override uint Bits => Ref == LLVMTypeRef.Float ? 32u : 64u;
+        public override Value DefaultValue => new ConstantFloat(0, $"{Name}.zero");
         public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildFAdd(lhs.Load(), rhs.Load(), "add"));
         public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildFSub(lhs.Load(), rhs.Load(), "sub"));
         public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildFMul(lhs.Load(), rhs.Load(), "mul"));
@@ -204,7 +275,7 @@ namespace Pepper {
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
     }
 
-    internal static class Types {
+    public static class Types {
         public static void StaticInit() {
             Context.Runtime.AliasType(Int8, "char");
             Context.Runtime.AliasType(UInt8, "byte");
@@ -245,20 +316,26 @@ namespace Pepper {
 
         public static readonly FloatType Float = new("f32", LLVMTypeRef.Float);
         public static readonly PointerType FloatPtr = Float.Pointer();
+
+        public static readonly ConstantType<IntegerType, long, ConstantInt> ConstantInt = new(Int64, v => new ConstantInt(v));
+        public static readonly ConstantType<FloatType, double, ConstantFloat> ConstantFloat = new(Double, f => new ConstantFloat(f));
+        public static readonly ConstantType<IntegerType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b));
+        public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s));
+        public static readonly ConstantType<PointerType, IntPtr, ConstantPointer> ConstantPointer = new(Int8Ptr, p => new ConstantPointer(p));
     }
 
-    //internal class UserType : Type {
+    //public class UserType : Type {
     //    public UserType(string name, LLVMTypeRef typeRef, Func<LLVMValueRef, Type, Value> coerce) : base(name) {
 
     //    }
     //}
 
-    internal class FunctionType : Type {
+    public class FunctionType : Type {
         public Type ReturnType { get; private set; }
-        public IEnumerable<TypedValue> Parameters { get; private set; }
+        public IEnumerable<Symbol> Parameters { get; private set; }
         public bool Varargs { get; private set; } = false;
 
-        private FunctionType(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false)
+        private FunctionType(Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(Signature(returnType, parameters, varargs), LLVMTypeRef.CreateFunction(returnType, parameters.Select(p => p.Type.Ref).ToArray(), varargs)) {
             ReturnType = returnType;
             Parameters = parameters;
@@ -271,7 +348,7 @@ namespace Pepper {
             throw new NotImplementedException();
         }
 
-        public static FunctionType Create(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) {
+        public static FunctionType Create(Type returnType, IEnumerable<Symbol> parameters, bool varargs = false) {
             string sig = Signature(returnType, parameters, varargs);
             try {
                 var func = Context.Default.Locals.GetType<FunctionType>(sig);
@@ -286,7 +363,7 @@ namespace Pepper {
             return new FunctionType(returnType, parameters, varargs);
         }
 
-        static string Signature(Type returnType, IEnumerable<TypedValue> parameters, bool varargs = false) {
+        static string Signature(Type returnType, IEnumerable<Symbol> parameters, bool varargs = false) {
             var paramsList = string.Join(", ", parameters.Select(p => $"{p.Type.Name} {p.Name}"));
             var ellipsis = varargs ? ", ..." : "";
             return $"{returnType.Name}({paramsList}{ellipsis})";
