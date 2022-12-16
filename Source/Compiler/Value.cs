@@ -153,4 +153,12 @@ namespace Pepper {
             Value = value;
         }
     }
+
+    public class Instruction : Value {
+        public Instruction(LLVMValueRef instr)
+            : base(Types.Instruction, instr) { }
+        public override Value Load(LLVMBuilderRef? builder) => throw new InternalCompilerException($"Attempted to load an instruction {this}");
+        public override Value Store(LLVMBuilderRef? builder = null) => throw new InternalCompilerException($"Attempted to store instruction {this}");
+        public override LLVMValueRef Alloc(LLVMBuilderRef? builder = null) => throw new InternalCompilerException($"Attempted to alloca instruction {this}");
+    }
 }

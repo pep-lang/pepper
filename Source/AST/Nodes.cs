@@ -353,7 +353,17 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
-            throw new NotImplementedException();
+            foreach (var variable in Variables) {
+                variable.Codegen();
+            }
+            var returnValue = Body.Last() as Return;
+            if (returnValue != null) {
+                Body.RemoveAt(Body.Count - 1);
+            }
+            foreach (var expr in Body) {
+                expr.Codegen();
+            }
+            return returnValue?.Codegen() ?? new Instruction(Context.Default.Locals.Builder.BuildRetVoid());
         }
     }
 
@@ -364,7 +374,8 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
-            throw new NotImplementedException();
+            var func = new Pepper.ExternFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)), Vararg);
+            return func;
         }
     }
 

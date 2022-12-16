@@ -19,8 +19,8 @@ namespace Pepper {
             Context.Runtime.AddType(this);
         }
 
-        public abstract Value Coerce(Value val);
-        public abstract PointerType Pointer();
+        public virtual Value Coerce(Value val) => throw new InternalCompilerException($"{Name} does not support type coercion");
+        public virtual PointerType Pointer() => throw new InternalCompilerException($"{Name} does not have a corresponding pointer type");
 
         public LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
             builder ??= Context.Default.Locals.FunctionRegisters;
@@ -74,7 +74,7 @@ namespace Pepper {
             return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
         }
 
-        public abstract Value CreateConstant<U>(U value);
+        public virtual Value CreateConstant<U>(U value) => throw new InternalCompilerException($"{Name} is not a valid type for a constant");
     }
 
     public abstract class DerivedFrom<T> : NativeType where T : NativeType {
@@ -107,6 +107,12 @@ namespace Pepper {
         public override Value BitOr(Value lhs, Value rhs) => Base.BitOr(lhs, rhs);
         public override Value BitXor(Value lhs, Value rhs) => Base.BitXor(lhs, rhs);
         public override Value AsBool(Value val) => Base.AsBool(val);
+    }
+
+    public class InstructionType : NativeType {
+        public InstructionType(string name)
+            : base(name, LLVMTypeRef.Void) {
+        }
     }
 
     public class PointerType : NativeType {
@@ -322,6 +328,8 @@ namespace Pepper {
         public static readonly ConstantType<IntegerType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b));
         public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s));
         public static readonly ConstantType<PointerType, IntPtr, ConstantPointer> ConstantPointer = new(Int8Ptr, p => new ConstantPointer(p));
+
+        public static readonly InstructionType Instruction = new("instruction");
     }
 
     //public class UserType : Type {
