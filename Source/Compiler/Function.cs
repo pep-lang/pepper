@@ -85,10 +85,10 @@ namespace Pepper {
 
         // These functions will end up in the runtime. All other externs declared by the user will go into
         // globals, as they will be created within a scope
-        //public static readonly ExternFunction Puts = new("puts", Types.Int32, new Symbol(Types.Int8Ptr, "str"));
-        //public static readonly ExternFunction Print = Alias(Puts, "print");
-        //public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
-        //public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
-        //public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
+        public static readonly ExternFunction Puts = new("puts", Types.Int32, new Symbol(Types.Int8Ptr, "str"));
+        public static readonly ExternFunction Print = Alias(Puts, "print");
+        public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
+        public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
+        public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
     }
 }

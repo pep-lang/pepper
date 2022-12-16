@@ -56,7 +56,7 @@ namespace Pepper {
 
             Log.Info(Module.PrintToString());
             Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
-            Module.WriteBitcodeToFile(Path.ChangeExtension(SourcePath, "bc"));
+            //Module.WriteBitcodeToFile(Path.ChangeExtension(SourcePath, "bc"));
         }
 
         public void Dispose() {

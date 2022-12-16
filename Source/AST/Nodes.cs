@@ -29,8 +29,9 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
-            Value value = InitialValue != null ? InitialValue.Codegen() : Type.DefaultValue;
-            return value;
+            Func<VariableDef, Value> codegen = val =>
+                Context.Locals.AddVariable(new(Type, InitialValue != null ? InitialValue.Codegen() : Type.DefaultValue, Name));
+            return codegen.Memoize().Invoke(this);
         }
     }
 
@@ -90,7 +91,7 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
-            return Variable.Codegen();
+            return Context.Locals.GetVariable(Identifier)!;
         }
     }
 
@@ -124,8 +125,11 @@ namespace Pepper.AST {
             return Type.Coerce(result);
         }
 
+        static Func<BinaryOp, Value> Memoize(Func<BinaryOp, Value> fn) => fn.Memoize();
+
+        private Func<BinaryOp, Value> codegen = Memoize(op => op.EmitBinaryOp(op.Op));
         public override Value Codegen() {
-            return EmitBinaryOp(Op);
+            return codegen(this);
         }
     }
 
