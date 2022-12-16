@@ -122,7 +122,7 @@ namespace Pepper.AST {
             Value lhs = LHS.Codegen();
             Value rhs = RHS.Codegen();
             var result = op(OperandType.Coerce(lhs), OperandType.Coerce(rhs));
-            return Type.Coerce(result);
+            return Type.Coerce(result).Store();
         }
 
         static Func<BinaryOp, Value> Memoize(Func<BinaryOp, Value> fn) => fn.Memoize();
@@ -358,28 +358,24 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
-            var function = new UserFunction(Name, ReturnType, Params.Select(p=>new Pepper.Symbol(p.Type, p.Name)));
+            var function = new UserFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)));
             Context.PushScope(function.Builder);
+
+            // TODO: get params and alloc/store them
 
             // Push all known variables at the top of the function block
             foreach (var variable in Variables) {
                 variable.Codegen();
             }
 
-            // Extract the return value if available
-            var returnInstr = Body.Last() as Return;
-            if (returnInstr != null) {
-                Body.RemoveAt(Body.Count - 1);
+            // Emit the body of the function
+            Value? returnValue;
+            foreach (var expr in Body) {
+                returnValue = expr.Codegen();
             }
 
-            // Emit the body of the function
-            foreach (var expr in Body) {
-                expr.Codegen();
-            }
-            
-            var returnValue = returnInstr?.Codegen() ?? new Instruction(Context.Locals.Builder.BuildRetVoid());
             Context.PopScope();
-            return returnValue;
+            return function;
         }
     }
 
