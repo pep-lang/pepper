@@ -10,20 +10,19 @@ namespace Pepper {
         public readonly string Name;
         public LLVMTypeRef Ref { get; protected set; }
         public bool IsInt { get; protected set; } = false;
-        public bool IsReal { get; protected set; } = false;
+        public bool IsFloat { get; protected set; } = false;
         public bool IsPointer { get; protected set; } = false;
 
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
             Ref = typeRef;
-            Context.Runtime.AddType(this);
         }
 
         public virtual Value Coerce(Value val) => throw new InternalCompilerException($"{Name} does not support type coercion");
         public virtual PointerType Pointer() => throw new InternalCompilerException($"{Name} does not have a corresponding pointer type");
 
         public LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
-            builder ??= Context.Default.Locals.FunctionRegisters;
+            builder ??= Context.Locals.FunctionRegisters;
             return builder.Value.BuildAlloca(this, name);
         }
 
@@ -60,7 +59,7 @@ namespace Pepper {
     public abstract class NativeType : Type {
         protected static LLVMBuilderRef Builder {
             get {
-                return Context.Default.Locals.Builder;
+                return Context.Locals.Builder;
             }
         }
 
@@ -68,6 +67,7 @@ namespace Pepper {
 
         public NativeType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
+            Context.Runtime.AddType(this);
         }
 
         public override PointerType Pointer() {
@@ -237,7 +237,7 @@ namespace Pepper {
     public class FloatType : NativeType {
         public FloatType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
-            IsReal = true;
+            IsFloat = true;
         }
 
         public override Value Coerce(Value val) {
@@ -359,7 +359,7 @@ namespace Pepper {
         public static FunctionType Create(Type returnType, IEnumerable<Symbol> parameters, bool varargs = false) {
             string sig = Signature(returnType, parameters, varargs);
             try {
-                var func = Context.Default.Locals.GetType<FunctionType>(sig);
+                var func = Context.Locals.GetType<FunctionType>(sig);
                 if (func != null)
                     return func;
             } catch {

@@ -12,9 +12,9 @@ namespace Pepper {
     public class Compiler : IDisposable {
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate int IntMain0();
+        private delegate Int32 IntMain0();
 
-        static Context Context { get { return Context.Default; } }
+        static Context Context { get { return Context; } }
 
         public string SourcePath { get; private set; }
         public ICharStream SourceStream { get; private set; }
@@ -38,14 +38,26 @@ namespace Pepper {
         }
 
         public int JIT(string entryFunction) {
-            _ = LLVM.InitializeNativeTarget();
-            _ = LLVM.InitializeNativeAsmParser();
-            _ = LLVM.InitializeNativeAsmPrinter();
+            LLVM.LinkInMCJIT();
+            LLVM.InitializeNativeTarget();
+            LLVM.InitializeNativeAsmParser();
+            LLVM.InitializeNativeAsmPrinter();
+            LLVM.InitializeX86TargetMC();
 
             try {
-                using var engine = Context.Module.CreateMCJITCompiler();
-                var entryAddress = Context.Globals.GetFunction(entryFunction)!.Address;
-                var entry = engine.GetPointerToGlobal<IntMain0>(entryAddress);
+                //LLVMMCJITCompilerOptions options = LLVMMCJITCompilerOptions.Create();
+                //options.NoFramePointerElim = 1;
+                //nuint optionsSize = (nuint)Marshal.SizeOf<LLVMMCJITCompilerOptions>();
+                //LLVM.InitializeMCJITCompilerOptions(&options, optionsSize);
+                //LLVMExecutionEngineRef engine;
+                //if (LLVM.CreateMCJITCompilerForModule(engine, Context.Module, &options, optionsSize, out var errorMessage).Value == 1)
+                //    throw new InternalCompilerException($"Failed to initialize JIT engine: {errorMessage}");
+                //var entry = (Add)Marshal.GetDelegateForFunctionPointer(LLVM.GetPointerToGlobal(engine, entryAddress), typeof(IntMain0));
+
+                var engine = Context.Module.CreateMCJITCompiler();
+                var entryRef = Context.Module.GetNamedFunction(entryFunction);
+                var entry = engine.GetPointerToGlobal<IntMain0>(entryRef);
+
                 if (entry == null) {
                     throw new CompileException($"Entry function {entryFunction} not found");
                 }

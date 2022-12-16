@@ -44,7 +44,7 @@ namespace Pepper.AST {
                 if (scope.Types.TryGetValue(name, out var type))
                     return type;
             }
-            return Context.Default.Locals.GetType(name);
+            return Context.Locals.GetType(name);
         }
 
         public FunctionDef? FindFunction(string name) {
@@ -52,7 +52,7 @@ namespace Pepper.AST {
                 if (scope.Functions.TryGetValue(name, out var localFunc))
                     return localFunc;
             }
-            var globalFunc = Context.Default.Locals.GetFunction(name);
+            var globalFunc = Context.Locals.GetFunction(name);
             if (globalFunc != null) {
                 var globalDef = new FunctionDef(globalFunc.ReturnType, name, globalFunc.Parameters.Select(p => new Symbol(p.Type, p.Name)), globalFunc.Varargs);
                 Globals.Functions.Add(name, globalDef);

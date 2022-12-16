@@ -90,7 +90,6 @@ namespace Pepper {
                 //    var decls = p.initDeclaratorList().initDeclarator();
                 //});
             }
-            var func = new UserFunction(identifier, returnType, parameters.Select(p => (Symbol)p));
             Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
         }
 

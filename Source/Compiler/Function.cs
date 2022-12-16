@@ -16,22 +16,21 @@ namespace Pepper {
         public Function(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(
                   FunctionType.Create(returnType, parameters, varargs),
-                  Context.Default.Module.AddFunction(name, FunctionType.Create(returnType, parameters, varargs)),
+                  Context.Module.AddFunction(name, FunctionType.Create(returnType, parameters, varargs)),
                   name) {
-            Context.Default.Locals.AddFunction(this);
         }
 
         protected Function(string name, Type type)
             : base(type, LLVMValueRef.CreateConstNull(Types.Int8Ptr), name) {
-            Context.Runtime.AddFunction(this);
+            // function reference is empty, will be re-bound per-module, see Context.InjectRuntime
         }
 
         public Value Call(IEnumerable<Value> args) {
             var coercedArgs = args.Select((arg, idx) => {
                 var argType = Parameters.ElementAt(idx).Type;
-                return argType.Coerce(arg);
+                return argType.Coerce(arg.Load());
             });
-            var returnValue = Context.Default.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Address).ToArray(), Name);
+            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Address).ToArray(), Name);
             return new Value(ReturnType, returnValue, $"return {Name}");
         }
 
@@ -54,9 +53,9 @@ namespace Pepper {
 
         public UserFunction(string name, Type returnType, IEnumerable<Symbol> parameters)
             : base(name, returnType, parameters) {
-            Context.Default.Locals.AddFunction(this);
+            Context.Locals.AddFunction(this);
             Body = Address.AppendBasicBlock("entry");
-            Builder = Context.Default.Module.Context.CreateBuilder();
+            Builder = Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
         }
     }
@@ -64,6 +63,7 @@ namespace Pepper {
     internal class ExternFunction : Function {
         public ExternFunction(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(name, FunctionType.Create(returnType, parameters, varargs)) {
+            Context.Globals.AddFunction(this);
         }
 
         public ExternFunction(string name, Type returnType, params Symbol[] parameters)
@@ -71,11 +71,11 @@ namespace Pepper {
         }
 
         public static void StaticInit() {
-            _ = Puts;
+            //_ = Puts;
         }
 
         private static ExternFunction Alias(ExternFunction sourceFunction, string name) {
-            Context.Runtime.AliasFunction(sourceFunction, name);
+            Context.Globals.AliasFunction(sourceFunction, name);
             return sourceFunction;
         }
 
@@ -83,10 +83,12 @@ namespace Pepper {
             Address = funcRef;
         }
 
-        public static readonly ExternFunction Puts = new("puts", Types.Int32, new Symbol(Types.Int8Ptr, "str"));
-        public static readonly ExternFunction Print = Alias(Puts, "print");
-        public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
-        public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
-        public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
+        // These functions will end up in the runtime. All other externs declared by the user will go into
+        // globals, as they will be created within a scope
+        //public static readonly ExternFunction Puts = new("puts", Types.Int32, new Symbol(Types.Int8Ptr, "str"));
+        //public static readonly ExternFunction Print = Alias(Puts, "print");
+        //public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
+        //public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
+        //public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
     }
 }

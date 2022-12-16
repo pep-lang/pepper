@@ -24,7 +24,7 @@ namespace Pepper {
                 if (AddressRef.HasValue) {
                     return AddressRef.Value;
                 }
-                return Alloc(Context.Default.Locals.FunctionRegisters);
+                return Alloc(Context.Locals.FunctionRegisters);
             }
             protected set {
                 AddressRef = value;
@@ -45,7 +45,7 @@ namespace Pepper {
 
         public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
             Debug.Assert(!AddressRef.HasValue);
-            builder ??= Context.Default.Locals.FunctionRegisters;
+            builder ??= Context.Locals.FunctionRegisters;
             Address = Type.Alloc(builder, Name);
             return Address;
         }
@@ -58,13 +58,13 @@ namespace Pepper {
         }
 
         public virtual Value Store(Value value, LLVMBuilderRef? builder = null) {
-            builder ??= Context.Default.Locals.Builder;
+            builder ??= Context.Locals.Builder;
             Store(value.Address, builder);
             return this;
         }
 
         public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder = null) {
-            builder ??= Context.Default.Locals.Builder;
+            builder ??= Context.Locals.Builder;
             return builder.Value.BuildStore(value, Address);
         }
 
@@ -72,7 +72,7 @@ namespace Pepper {
             if (Address.IsAConstant != null || Address.IsAAllocaInst == null) {
                 return this;
             }
-            builder ??= Context.Default.Locals.Builder;
+            builder ??= Context.Locals.Builder;
             return new Value(Type, builder.Value.BuildLoad2(Type, Address, Name));
         }
 
@@ -139,7 +139,7 @@ namespace Pepper {
     public class ConstantString : Constant {
         private readonly string Value;
         public ConstantString(string value, string name = "")
-            : base(Types.ConstantString, Context.Default.Locals.Builder.BuildGlobalString(value, name), name) {
+            : base(Types.ConstantString, Context.Locals.Builder.BuildGlobalString(value, name), name) {
             Value = value;
         }
 

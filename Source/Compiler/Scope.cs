@@ -84,7 +84,7 @@ namespace Pepper {
                     // skip past existing locals
                     for (int localIdx = 0; localIdx < func.NumLocals; ++localIdx)
                         funcStart = funcStart.NextInstruction;
-                    builder = Context.Default.Module.Context.CreateBuilder();
+                    builder = Context.Module.Context.CreateBuilder();
                     builder.PositionBefore(funcStart);
                 }
                 ++func.NumLocals;

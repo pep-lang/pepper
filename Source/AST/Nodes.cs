@@ -22,14 +22,15 @@ namespace Pepper.AST {
     }
 
     public class VariableDef : Symbol {
-        public Value Value { get; private set; }
+        readonly Expression? InitialValue;
         public VariableDef(Type type, string name = "", Expression? initialValue = null)
             : base(type, name) {
-            Value = initialValue != null ? initialValue.Codegen() : type.DefaultValue;
+            InitialValue = initialValue;
         }
 
         public override Value Codegen() {
-            return Value;
+            Value value = InitialValue != null ? InitialValue.Codegen() : Type.DefaultValue;
+            return value;
         }
     }
 
@@ -99,7 +100,7 @@ namespace Pepper.AST {
             get {
                 var lhs = LHS.Type;
                 var rhs = RHS.Type;
-                if (lhs.IsReal || rhs.IsReal)
+                if (lhs.IsFloat || rhs.IsFloat)
                     return lhs.Bits > 32 ? Types.Double : Types.Float;
                 var resultType = (lhs.Bits > rhs.Bits) ? lhs : rhs;
                 return resultType;
@@ -353,17 +354,28 @@ namespace Pepper.AST {
         }
 
         public override Value Codegen() {
+            var function = new UserFunction(Name, ReturnType, Params.Select(p=>new Pepper.Symbol(p.Type, p.Name)));
+            Context.PushScope(function.Builder);
+
+            // Push all known variables at the top of the function block
             foreach (var variable in Variables) {
                 variable.Codegen();
             }
-            var returnValue = Body.Last() as Return;
-            if (returnValue != null) {
+
+            // Extract the return value if available
+            var returnInstr = Body.Last() as Return;
+            if (returnInstr != null) {
                 Body.RemoveAt(Body.Count - 1);
             }
+
+            // Emit the body of the function
             foreach (var expr in Body) {
                 expr.Codegen();
             }
-            return returnValue?.Codegen() ?? new Instruction(Context.Default.Locals.Builder.BuildRetVoid());
+            
+            var returnValue = returnInstr?.Codegen() ?? new Instruction(Context.Locals.Builder.BuildRetVoid());
+            Context.PopScope();
+            return returnValue;
         }
     }
 
@@ -406,9 +418,9 @@ namespace Pepper.AST {
         public override Value Codegen() {
             var returnValue = Value != null ? new Value(Type, Value.Codegen()) : null;
             if (returnValue != null) {
-                return new Value(Type, Context.Default.Locals.Builder.BuildRet(returnValue));
+                return new Value(Type, Context.Locals.Builder.BuildRet(returnValue.Load()));
             }
-            return new Value(Types.Void, Context.Default.Locals.Builder.BuildRetVoid());
+            return new Instruction(Context.Locals.Builder.BuildRetVoid());
         }
     }
 }
