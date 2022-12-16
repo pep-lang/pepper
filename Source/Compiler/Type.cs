@@ -7,11 +7,11 @@ using System.Xml.Linq;
 
 namespace Pepper {
     public abstract class Type {
-        public readonly string Name;
-        public LLVMTypeRef Ref { get; protected set; }
-        public bool IsInt { get; protected set; } = false;
-        public bool IsFloat { get; protected set; } = false;
-        public bool IsPointer { get; protected set; } = false;
+        public virtual string Name { get; protected set; }
+        public virtual LLVMTypeRef Ref { get; protected set; }
+        public virtual bool IsInt { get; protected set; } = false;
+        public virtual bool IsFloat { get; protected set; } = false;
+        public virtual bool IsPointer { get; protected set; } = false;
 
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
@@ -80,11 +80,14 @@ namespace Pepper {
     public abstract class DerivedFrom<T> : NativeType where T : NativeType {
         readonly T Base;
 
-        public DerivedFrom(T baseType)
-            : base(baseType.Name, baseType) {
+        public DerivedFrom(string name, T baseType)
+            : base(name, baseType) {
             Base = baseType;
         }
 
+        public override bool IsInt => Base.IsInt;
+        public override bool IsFloat => Base.IsFloat;
+        public override bool IsPointer => Base.IsPointer;
         public override Value DefaultValue => Base.DefaultValue;
         public override Value Coerce(Value val) => Base.Coerce(val);
         public override PointerType Pointer() => Base.Pointer();
@@ -207,14 +210,30 @@ namespace Pepper {
         public override Value RShift(Value lhs, Value rhs) => new(this, Builder.BuildAShr(lhs.Load(), rhs.Load(), "rshift"));
         public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs.Load(), rhs.Load(), "eq"));
         public override Value NotEqual(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, lhs.Load(), rhs.Load(), "ne"));
-        public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
+        public override Value Assign(Value lhs, Value rhs) { lhs.Store(Coerce(rhs)); return lhs; }
         public override Value BitAnd(Value lhs, Value rhs) => new(this, Builder.BuildAnd(lhs.Load(), rhs.Load(), "and"));
         public override Value BitOr(Value lhs, Value rhs) => new(this, Builder.BuildOr(lhs.Load(), rhs.Load(), "or"));
         public override Value BitXor(Value lhs, Value rhs) => new(this, Builder.BuildXor(lhs.Load(), rhs.Load(), "xor"));
         public override Value AsBool(Value val) {
-            var name = val.Name != "" ? $"{val.Name}.bool" : $"{val.ToString()[val.ToString().IndexOf(" ")..].Replace("%", null)}";
+            var name = val.RegisterName;
             return new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntNE, val.Load(), ConstantBool.False.As(this), name));
         }
+    }
+
+    public class BoolType : IntegerType {
+        public BoolType()
+            : base("bool", LLVMTypeRef.Int1, false) { }
+
+        public override Value Coerce(Value val) {
+            return val.AsBool();
+        }
+
+        public override Value CreateConstant<U>(U value) {
+            return new ConstantBool((bool)Convert.ChangeType(value, typeof(bool))!);
+        }
+
+        public override Value DefaultValue => new(this, LLVMValueRef.CreateConstInt(this, 0, false), $"{Name}.false");
+        public override Value AsBool(Value val) => val;
     }
 
     public class ConstantType<T, V, C> : DerivedFrom<T>
@@ -223,7 +242,7 @@ namespace Pepper {
         readonly Func<V, C> Create;
 
         public ConstantType(T baseType, Func<V, C> create)
-            : base(baseType) {
+            : base($"const {baseType.Name}", baseType) {
             Create = create;
         }
 
@@ -278,7 +297,7 @@ namespace Pepper {
         public override Value GreaterEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUGE, lhs.Load(), rhs.Load(), "ge"));
         public override Value Equal(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUEQ, lhs.Load(), rhs.Load(), "eq"));
         public override Value NotEqual(Value lhs, Value rhs) => new(Types.Bool, Builder.BuildFCmp(LLVMRealPredicate.LLVMRealUNE, lhs.Load(), rhs.Load(), "ne"));
-        public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
+        public override Value Assign(Value lhs, Value rhs) { lhs.Store(Coerce(rhs)); return lhs; }
     }
 
     public static class Types {
@@ -315,7 +334,7 @@ namespace Pepper {
         public static readonly IntegerType UInt64 = new("u64", LLVMTypeRef.Int64, false);
         public static readonly PointerType UInt64Ptr = UInt64.Pointer();
 
-        public static readonly IntegerType Bool = new("bool", LLVMTypeRef.Int1, false);
+        public static readonly BoolType Bool = new();
 
         public static readonly FloatType Double = new("f64", LLVMTypeRef.Double);
         public static readonly PointerType DoublePtr = Double.Pointer();
@@ -325,7 +344,7 @@ namespace Pepper {
 
         public static readonly ConstantType<IntegerType, long, ConstantInt> ConstantInt = new(Int64, v => new ConstantInt(v));
         public static readonly ConstantType<FloatType, double, ConstantFloat> ConstantFloat = new(Double, f => new ConstantFloat(f));
-        public static readonly ConstantType<IntegerType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b));
+        public static readonly ConstantType<BoolType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b));
         public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s));
         public static readonly ConstantType<PointerType, IntPtr, ConstantPointer> ConstantPointer = new(Int8Ptr, p => new ConstantPointer(p));
 

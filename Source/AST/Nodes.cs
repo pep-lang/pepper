@@ -4,7 +4,12 @@ using System;
 
 namespace Pepper.AST {
     public abstract class Node {
-        public abstract Value Codegen();
+        // Each node should only every be codegen'ed once
+        private Func<Node, Value> CachedCodegen = Memoizer.Memoize<Node, Value>(node => node.Codegen());
+        // This is the implementation that gets overridden by nodes
+        protected abstract Value Codegen();
+        // This is the public interface. The parameter is a dummy to differentiate the signatures
+        public Value Codegen(object? dummy = null) => CachedCodegen(this);
     }
 
     public class Symbol : Node {
@@ -15,7 +20,7 @@ namespace Pepper.AST {
             Name = name;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             throw new NotImplementedException();
         }
         public static implicit operator Pepper.Symbol(Symbol sym) => new Pepper.Symbol(sym.Type, sym.Name);
@@ -28,7 +33,7 @@ namespace Pepper.AST {
             InitialValue = initialValue;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             Func<VariableDef, Value> codegen = val =>
                 Context.Locals.AddVariable(new(Type, InitialValue != null ? InitialValue.Codegen() : Type.DefaultValue, Name));
             return codegen.Memoize().Invoke(this);
@@ -52,7 +57,7 @@ namespace Pepper.AST {
             Value = value;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             return new ConstantInt(Value);
         }
     }
@@ -64,7 +69,7 @@ namespace Pepper.AST {
             Value = value;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             return new ConstantFloat(Value);
         }
     }
@@ -76,7 +81,7 @@ namespace Pepper.AST {
             Value = value;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             return new ConstantString(Value);
         }
     }
@@ -90,7 +95,7 @@ namespace Pepper.AST {
             Variable = variable;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             return Context.Locals.GetVariable(Identifier)!;
         }
     }
@@ -122,15 +127,10 @@ namespace Pepper.AST {
             Value lhs = LHS.Codegen();
             Value rhs = RHS.Codegen();
             var result = op(OperandType.Coerce(lhs), OperandType.Coerce(rhs));
-            return Type.Coerce(result).Store();
+            return Type.Coerce(result);
         }
 
-        static Func<BinaryOp, Value> Memoize(Func<BinaryOp, Value> fn) => fn.Memoize();
-
-        private Func<BinaryOp, Value> codegen = Memoize(op => op.EmitBinaryOp(op.Op));
-        public override Value Codegen() {
-            return codegen(this);
-        }
+        protected override Value Codegen() => EmitBinaryOp(Op);
     }
 
     public class Add : BinaryOp {
@@ -269,6 +269,7 @@ namespace Pepper.AST {
         public LogicalAnd(Expression lhs, Expression rhs)
             : base(lhs, rhs) {
         }
+        public override Type OperandType => Types.Bool;
         public override Type Type => Types.Bool;
         public override Func<Value, Value, Value> Op => OperandType.BitAnd;
     }
@@ -277,6 +278,7 @@ namespace Pepper.AST {
         public LogicalOr(Expression lhs, Expression rhs)
             : base(lhs, rhs) {
         }
+        public override Type OperandType => Types.Bool;
         public override Type Type => Types.Bool;
         public override Func<Value, Value, Value> Op => OperandType.BitOr;
     }
@@ -357,7 +359,7 @@ namespace Pepper.AST {
 
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             var function = new UserFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)));
             Context.PushScope(function.Builder);
 
@@ -369,9 +371,8 @@ namespace Pepper.AST {
             }
 
             // Emit the body of the function
-            Value? returnValue;
             foreach (var expr in Body) {
-                returnValue = expr.Codegen();
+                expr.Codegen();
             }
 
             Context.PopScope();
@@ -385,7 +386,7 @@ namespace Pepper.AST {
 
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             var func = new Pepper.ExternFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)), Vararg);
             return func;
         }
@@ -400,7 +401,7 @@ namespace Pepper.AST {
             Args = args;
         }
 
-        public override Value Codegen() {
+        protected override Value Codegen() {
             throw new NotImplementedException();
         }
     }
@@ -415,10 +416,10 @@ namespace Pepper.AST {
             Value = value;
         }
 
-        public override Value Codegen() {
-            var returnValue = Value != null ? new Value(Type, Value.Codegen()) : null;
+        protected override Value Codegen() {
+            var returnValue = Value?.Codegen();
             if (returnValue != null) {
-                return new Value(Type, Context.Locals.Builder.BuildRet(returnValue.Load()));
+                return new Value(Type, Context.Locals.Builder.BuildRet(Type.Coerce(returnValue).Load()));
             }
             return new Instruction(Context.Locals.Builder.BuildRetVoid());
         }

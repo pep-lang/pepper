@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,7 +24,7 @@ namespace Pepper {
         }
 
         public JIT() {
-            
+
         }
 
         public int Execute(LLVMModuleRef module, string entrySymbol) {
@@ -31,10 +32,16 @@ namespace Pepper {
                 using var engine = module.CreateInterpreter();
 
                 var entryRef = module.GetNamedFunction(entrySymbol);
-               
-                var args = new string[] { };
+
+                var args = new LLVMGenericValueRef[] { };
                 var env = new string[] { };
-                var returnVal = engine.RunFunctionAsMain(entryRef, 0, args, env);
+                var returnGV = engine.RunFunction(entryRef, args);
+                sbyte* errorPtr;
+                LLVM.ExecutionEngineGetErrMsg(engine, &errorPtr);
+                var error = new string((char*)errorPtr);
+                LLVM.DisposeErrorMessage(errorPtr);
+                var returnVal = (int)LLVM.GenericValueToInt(returnGV, 1);
+                //var error = LLVM.ExecutionEngineGetErrMsg
                 return returnVal;
             } catch (Exception ex) {
                 Log.Error($"JIT execution error: {ex}");

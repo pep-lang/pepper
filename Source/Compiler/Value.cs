@@ -1,10 +1,6 @@
-﻿using LLVMSharp.Interop;
-using System;
-using System.Collections.Generic;
+﻿using LLVMSharp;
+using LLVMSharp.Interop;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Pepper {
     public class Symbol {
@@ -30,6 +26,8 @@ namespace Pepper {
                 AddressRef = value;
             }
         }
+
+        public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName() : "null";
 
         // Take ownership of an already constructed value directly
         public Value(Type type, LLVMValueRef value, string name = "")
@@ -77,7 +75,7 @@ namespace Pepper {
         }
 
         public Value AsBool() => Type.AsBool(this);
-        public Value As(Type type) => (type == Types.Bool ? Type.AsBool(this) : type.Coerce(this)).Load();
+        public virtual Value As(Type type) => (type == Types.Bool ? Type.AsBool(this) : type.Coerce(this)).Load();
 
         public override string ToString() {
             var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
@@ -111,6 +109,11 @@ namespace Pepper {
         }
 
         public override string ToString() => $"{Type} {Value}";
+        public override Value As(Type type) {
+            if (type is IntegerType intType)
+                return new Value(intType, LLVMValueRef.CreateConstInt(type, Value ? 1ul : 0ul, false));
+            return base.As(type);
+        }
 
         public static ConstantBool True => new(true, "true");
         public static ConstantBool False => new(false, "false");

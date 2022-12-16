@@ -5,15 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Pepper {
-    public class Memoized<TInput, TResult> {
-        Func<TInput, TResult> func;
-        public Memoized(Func<TInput, TResult> func) {
-            this.func = func.Memoize();
-        }
-
-
-    }
-
     public static class Memoizer {
         public static Func<TInput, TResult> Memoized<TInput, TResult>(Func<TInput, TResult> fn) where TInput : notnull => fn.Memoize();
         public static Func<TInput, TResult> Memoize<TInput, TResult>(this Func<TInput, TResult> func) where TInput : notnull {

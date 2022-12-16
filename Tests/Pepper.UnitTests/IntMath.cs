@@ -135,6 +135,16 @@ namespace Pepper.UnitTests {
         }
 
         [Test]
+        public void LogicalAndBool() {
+            var source = """
+                int main() {
+                    return 1 && 0;
+                }
+                """;
+            Utils.CompileAndRun("LogicalAnd", source);
+        }
+
+        [Test]
         public void LogicalAnd() {
             var source = """
                 int main() {
