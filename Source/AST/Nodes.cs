@@ -316,6 +316,18 @@ namespace Pepper.AST {
         }
     }
 
+    public class LShiftAssign : CompoundAssign {
+        public LShiftAssign(Expression lhs, Expression rhs)
+            : base(lhs, new LShift(lhs, rhs)) {
+        }
+    }
+
+    public class RShiftAssign : CompoundAssign {
+        public RShiftAssign(Expression lhs, Expression rhs)
+            : base(lhs, new RShift(lhs, rhs)) {
+        }
+    }
+
     public class BitAndAssign : CompoundAssign {
         public BitAndAssign(Expression lhs, Expression rhs)
             : base(lhs, new BitAnd(lhs, rhs)) {

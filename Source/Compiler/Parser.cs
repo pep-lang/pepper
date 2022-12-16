@@ -356,6 +356,55 @@ namespace Pepper {
             Builder.NewExpression(new MulAssign(lhs, rhs));
         }
 
+        public override void ExitDivAssignment([NotNull] PepperParser.DivAssignmentContext context) {
+            base.ExitDivAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new DivAssign(lhs, rhs));
+        }
+
+        public override void ExitModAssignment([NotNull] PepperParser.ModAssignmentContext context) {
+            base.ExitModAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new ModAssign(lhs, rhs));
+        }
+
+        public override void ExitLShiftAssignment([NotNull] PepperParser.LShiftAssignmentContext context) {
+            base.ExitLShiftAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new LShiftAssign(lhs, rhs));
+        }
+
+        public override void ExitRShiftAssignment([NotNull] PepperParser.RShiftAssignmentContext context) {
+            base.ExitRShiftAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new RShiftAssign(lhs, rhs));
+        }
+
+        public override void ExitBitAndAssignment([NotNull] PepperParser.BitAndAssignmentContext context) {
+            base.ExitBitAndAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new BitAndAssign(lhs, rhs));
+        }
+
+        public override void ExitBitOrAssignment([NotNull] PepperParser.BitOrAssignmentContext context) {
+            base.ExitBitOrAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new BitOrAssign(lhs, rhs));
+        }
+
+        public override void ExitBitXorAssignment([NotNull] PepperParser.BitXorAssignmentContext context) {
+            base.ExitBitXorAssignment(context);
+            var rhs = Builder.PopStack<Expression>();
+            var lhs = Builder.PopStack<Expression>();
+            Builder.NewExpression(new BitXorAssign(lhs, rhs));
+        }
+
         public override void ExitTernary([NotNull] PepperParser.TernaryContext context) {
             base.ExitTernary(context);
         }

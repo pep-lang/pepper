@@ -178,7 +178,98 @@ namespace Pepper.UnitTests {
                     return x;
                 }
                 """;
-            Utils.CompileAndRun("LogicalOr", source, 4);
+            Utils.CompileAndRun("MulAssign", source, 4);
+        }
+
+        [Test]
+        public void DivAssign() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 4;
+                    x /= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("DivAssign", source, 3);
+        }
+
+        [Test]
+        public void ModAssign() {
+            var source = """
+                int main() {
+                    int x = 5;
+                    int y = 4;
+                    x %= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("ModAssign", source, 1);
+        }
+
+        [Test]
+        public void LShiftAssign() {
+            var source = """
+                int main() {
+                    int x = 1;
+                    int y = 4;
+                    x <<= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("LShiftAssign", source, 16);
+        }
+
+        [Test]
+        public void RShiftAssign() {
+            var source = """
+                int main() {
+                    int x = 32;
+                    int y = 4;
+                    x >>= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("RShiftAssign", source, 2);
+        }
+
+        [Test]
+        public void BitAndAssign() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 4;
+                    x &= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("BitAndAssign", source, 4);
+        }
+
+        [Test]
+        public void BitOrAssign() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 3;
+                    x |= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("BitOrAssign", source, 15);
+        }
+
+        [Test]
+        public void BitXorAssign() {
+            var source = """
+                int main() {
+                    int x = 12;
+                    int y = 5;
+                    x ^= y;
+                    return x;
+                }
+                """;
+            Utils.CompileAndRun("BitXorAssign", source, 9);
         }
 
         [Test]
