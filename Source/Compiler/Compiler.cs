@@ -57,23 +57,6 @@ namespace Pepper {
             return -1;
         }
 
-        public static string FormatTree(string tree) {
-            string result = "";
-            int depth = 0;
-            foreach (var c in tree) {
-                if (c == '(') {
-                    depth++;
-                    result += c + Environment.NewLine + new string(' ', depth * 2);
-                } else if (c == ')') {
-                    depth--;
-                    result += Environment.NewLine + new string(' ', depth * 2) + c;
-                } else {
-                    result += c;
-                }
-            }
-            return result;
-        }
-
         private Compiler(string moduleName, string sourcePath, ICharStream? inputStream = null) {
             Context.Create(moduleName);
             SourcePath = sourcePath;

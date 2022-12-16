@@ -28,7 +28,7 @@ namespace Pepper {
             try {
                 var tree = parser.compilationUnit();
                 ParseTreeWalker.Default.Walk(this, tree);
-                //Log.Info(FormatTree(tree.ToStringTree(parser)));
+                //Log.Info(FormatAntlrTree(tree.ToStringTree(parser)));
             } catch (ParseCanceledException pcex) {
                 Log.Error(pcex.Message);
                 if (pcex.InnerException is InputMismatchException imex) {
@@ -39,6 +39,23 @@ namespace Pepper {
             }
 
             return AST;
+        }
+
+        public static string FormatAntlrTree(string tree) {
+            string result = "";
+            int depth = 0;
+            foreach (var c in tree) {
+                if (c == '(') {
+                    depth++;
+                    result += c + Environment.NewLine + new string(' ', depth);
+                } else if (c == ')') {
+                    depth--;
+                    result += Environment.NewLine + new string(' ', depth) + c;
+                } else {
+                    result += c;
+                }
+            }
+            return result;
         }
 
         Expression EvalConstant(ITerminalNode constant) {
