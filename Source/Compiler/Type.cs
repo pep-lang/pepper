@@ -12,6 +12,8 @@ namespace Pepper {
         public virtual bool IsInt { get; protected set; } = false;
         public virtual bool IsFloat { get; protected set; } = false;
         public virtual bool IsPointer { get; protected set; } = false;
+        public virtual bool IsSigned { get; protected set; } = false;
+        public virtual uint Bits => 0;
 
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
@@ -26,7 +28,6 @@ namespace Pepper {
             return builder.Value.BuildAlloca(this, name);
         }
 
-        public virtual uint Bits => 0;
         public virtual Value DefaultValue => throw new InternalCompilerException($"Type {Name} does not have a default value");
         public virtual Value Add(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Sub(Value lhs, Value rhs) => throw new NotImplementedException();
@@ -88,6 +89,8 @@ namespace Pepper {
         public override bool IsInt => Base.IsInt;
         public override bool IsFloat => Base.IsFloat;
         public override bool IsPointer => Base.IsPointer;
+        public override bool IsSigned => Base.IsSigned;
+        public override uint Bits => Base.Bits;
         public override Value DefaultValue => Base.DefaultValue;
         public override Value Coerce(Value val) => Base.Coerce(val);
         public override PointerType Pointer() => Base.Pointer();
@@ -136,7 +139,7 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsPointer) {
-                return new Value(this, LLVMValueRef.CreateConstPointerCast(val, this));
+                return new Value(this, LLVMValueRef.CreateConstPointerCast(val, this), $"{val.RegisterName}.ptr");
             }
             throw new CompileException($"Cannot convert non-pointer type {type} to {this}");
         }
@@ -168,34 +171,32 @@ namespace Pepper {
     }
 
     public class IntegerType : NativeType {
-        public readonly bool Signed = true;
-
         public IntegerType(string name, LLVMTypeRef typeRef, bool signed = true)
             : base(name, typeRef) {
-            Signed = signed;
             IsInt = true;
+            IsSigned = signed;
         }
 
         public override Value Coerce(Value val) {
             if (val.Type.Equals(this) && val is not Constant) {
                 return val;
             }
-            bool signed = val.Type != Types.Bool && Signed;
+            bool signed = val.Type != Types.Bool && IsSigned;
             if (val.Type.IsInt) {
                 if (this.Bits > val.Type.Bits)
-                    return new Value(this, Builder.BuildZExtOrBitCast(val.Load(), this)).Store();
+                    return new Value(this, Builder.BuildZExtOrBitCast(val.Load(), this), $"{val.RegisterName}.zext").Store();
                 else
-                    return new Value(this, Builder.BuildTruncOrBitCast(val.Load(), this)).Store();
+                    return new Value(this, Builder.BuildTruncOrBitCast(val.Load(), this), $"{val.RegisterName}.trunc").Store();
             }
             Func<LLVMValueRef, LLVMTypeRef, string, LLVMValueRef> convert = signed ? Builder.BuildFPToSI : Builder.BuildFPToUI;
-            return new Value(this, convert(val.Load(), this, "")).Store();
+            return new Value(this, convert(val.Load(), this, ""), $"{val.Name}.fptoi").Store();
         }
 
         public override Value CreateConstant<U>(U value) {
             return new ConstantInt((long)Convert.ChangeType(value, typeof(long))!);
         }
 
-        public override Value DefaultValue => new(this, LLVMValueRef.CreateConstInt(this, 0, Signed), $"{Name}.zero");
+        public override Value DefaultValue => new(this, LLVMValueRef.CreateConstInt(this, 0, IsSigned), $"{Name}.zero");
         public override Value Add(Value lhs, Value rhs) => new(this, Builder.BuildAdd(lhs.Load(), rhs.Load(), "add"));
         public override Value Sub(Value lhs, Value rhs) => new(this, Builder.BuildSub(lhs.Load(), rhs.Load(), "sub"));
         public override Value Mul(Value lhs, Value rhs) => new(this, Builder.BuildMul(lhs.Load(), rhs.Load(), "mul"));
@@ -257,6 +258,7 @@ namespace Pepper {
         public FloatType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsFloat = true;
+            IsSigned = true;
         }
 
         public override Value Coerce(Value val) {
@@ -266,8 +268,7 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsInt) {
-                var intType = (type as IntegerType)!;
-                if (intType.Signed)
+                if (type.IsSigned)
                     return new Value(this, Builder.BuildSIToFP(val.Load(), this)).Store();
                 else
                     return new Value(this, Builder.BuildUIToFP(val.Load(), this)).Store();
@@ -342,11 +343,11 @@ namespace Pepper {
         public static readonly FloatType Float = new("f32", LLVMTypeRef.Float);
         public static readonly PointerType FloatPtr = Float.Pointer();
 
-        public static readonly ConstantType<IntegerType, long, ConstantInt> ConstantInt = new(Int64, v => new ConstantInt(v));
-        public static readonly ConstantType<FloatType, double, ConstantFloat> ConstantFloat = new(Double, f => new ConstantFloat(f));
-        public static readonly ConstantType<BoolType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b));
-        public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s));
-        public static readonly ConstantType<PointerType, IntPtr, ConstantPointer> ConstantPointer = new(Int8Ptr, p => new ConstantPointer(p));
+        public static readonly ConstantType<IntegerType, long, ConstantInt> ConstantInt = new(Int64, v => new ConstantInt(v, $"cint.{v}"));
+        public static readonly ConstantType<FloatType, double, ConstantFloat> ConstantFloat = new(Double, f => new ConstantFloat(f, $"cfloat.{f}"));
+        public static readonly ConstantType<BoolType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b, $"cbool.{b}"));
+        public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s, "cstr"));
+        public static readonly ConstantType<PointerType, IntPtr, ConstantPointer> ConstantPointer = new(Int8Ptr, p => new ConstantPointer(p, "cptr"));
 
         public static readonly InstructionType Instruction = new("instruction");
     }

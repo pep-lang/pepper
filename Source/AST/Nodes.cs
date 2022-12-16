@@ -33,11 +33,8 @@ namespace Pepper.AST {
             InitialValue = initialValue;
         }
 
-        protected override Value Codegen() {
-            Func<VariableDef, Value> codegen = val =>
+        protected override Value Codegen() =>
                 Context.Locals.AddVariable(new(Type, InitialValue != null ? InitialValue.Codegen() : Type.DefaultValue, Name));
-            return codegen.Memoize().Invoke(this);
-        }
     }
 
     public class ConstantDef : VariableDef {
@@ -419,7 +416,7 @@ namespace Pepper.AST {
         protected override Value Codegen() {
             var returnValue = Value?.Codegen();
             if (returnValue != null) {
-                return new Value(Type, Context.Locals.Builder.BuildRet(Type.Coerce(returnValue).Load()));
+                return new Value(Type, Context.Locals.Builder.BuildRet(Type.Coerce(returnValue).Load()), "ret");
             }
             return new Instruction(Context.Locals.Builder.BuildRetVoid());
         }

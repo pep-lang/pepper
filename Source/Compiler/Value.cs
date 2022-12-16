@@ -57,12 +57,17 @@ namespace Pepper {
 
         public virtual Value Store(Value value, LLVMBuilderRef? builder = null) {
             builder ??= Context.Locals.Builder;
-            Store(value.Address, builder);
+            Store(Type.Coerce(value).Load().Address, builder);
             return this;
         }
 
         public virtual LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder = null) {
             builder ??= Context.Locals.Builder;
+            // It would be better if exact types could be matched, but alloc and instructions dont have
+            // types that can be extracted, so just make sure they're at least the same size/alignment
+            //if (value.TypeOf.SizeOf != Type.Ref.SizeOf || value.TypeOf.AlignOf != Type.Ref.AlignOf) {
+            //    throw new InternalCompilerException($"Attempted to store a value of type {value.TypeOf} to a value of type {Type}");
+            //}
             return builder.Value.BuildStore(value, Address);
         }
 
