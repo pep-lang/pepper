@@ -13,9 +13,14 @@ if(NOT DEFINED CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+file(TIMESTAMP ${LLVM_BUILD_DIR}/CMakeCache.txt CACHE_MODTIME)
+file(TIMESTAMP ${CMAKE_CURRENT_LIST_FILE} LISTS_MODTIME)
+message(STATUS "CMakeLists.txt: ${LISTS_MODTIME} CMakeCache.txt: ${CACHE_MODTIME}")
+string(COMPARE LESS "${CACHE_MODTIME}" "${LISTS_MODTIME}" LISTS_NEWER)
+message(STATUS "CMakeLists.txt is newer than cache")
 find_package(LLVM CONFIG QUIET NO_DEFAULT_PATH HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 
-if(NOT LLVM_FOUND)
+if(LISTS_NEWER OR NOT LLVM_FOUND)
     message(STATUS "Syncing LLVM source...")
     FetchContent_Declare(
         llvm_source
@@ -46,6 +51,7 @@ if(NOT LLVM_FOUND)
         -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
         -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
         -DLLVM_OPTIMIZED_TABLEGEN=ON
+        -DLLVM_ENABLE_RTTI=ON
         "-DLLVM_TARGETS_TO_BUILD=X86;AArch64;WebAssembly"
         -DLLVM_INCLUDE_TOOLS=OFF
         -DLLVM_INCLUDE_TESTS=OFF
