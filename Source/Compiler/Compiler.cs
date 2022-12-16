@@ -19,7 +19,7 @@ namespace Pepper {
 
         public static void CompileAndRun() {
             using var compiler = Compile(Options.Parse());
-            var jit = new JIT();
+            var jit = new Executor();
             var exitCode = jit.Execute(Context.Module, "main");
             Log.Info($"main returned {exitCode}");
             Environment.Exit(exitCode);

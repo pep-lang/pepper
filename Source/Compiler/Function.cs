@@ -71,7 +71,7 @@ namespace Pepper {
         }
 
         public static void StaticInit() {
-            //_ = Puts;
+            _ = Puts;
         }
 
         private static ExternFunction Alias(ExternFunction sourceFunction, string name) {

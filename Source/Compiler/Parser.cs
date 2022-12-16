@@ -111,6 +111,7 @@ namespace Pepper {
                 args.Add(Builder.PopStack<Expression>());
             }
             var result = new FunctionCall(func, args);
+            Builder.NewExpression(result);
             if (func.ReturnType != Types.Void) {
                 Builder.PushStack(result);
             }

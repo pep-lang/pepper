@@ -399,7 +399,11 @@ namespace Pepper.AST {
         }
 
         protected override Value Codegen() {
-            throw new NotImplementedException();
+            var func = Context.Locals.GetFunction(Target.Name);
+            if (func == null) {
+                throw new CompileException("Function {Target.Name} not found");
+            }
+            return func.Call(Args.Select(a => a.Codegen()));
         }
     }
 
