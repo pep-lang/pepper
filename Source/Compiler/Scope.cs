@@ -176,7 +176,7 @@ namespace Pepper {
 
         public T PopStack<T>() where T: class {
             var top = PopStack();
-            return top.As<T>() ?? throw new InternalCompilerException($"Tried to pop {typeof(T)} from stack, found {top}");
+            return top.As<T>() ?? throw new InternalCompilerError($"Tried to pop {typeof(T)} from stack, found {top}");
         }
 
         public StackEntry StackTop() {

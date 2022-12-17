@@ -233,7 +233,7 @@ parameterList
     ;
 
 parameterDeclaration
-	: declarationSpecifiers declarator
+	: Identifier Identifier (Assign assignmentExpression)?
 	;
 
 identifierList
@@ -325,7 +325,7 @@ externalDeclaration
     ;
 
 functionDefinition
-    :   returnType? Identifier '(' initDeclaratorList? ')' compoundStatement
+    :   returnType? Identifier '(' parameterList? ')' compoundStatement
     ;
 
 returnType

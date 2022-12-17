@@ -5,7 +5,7 @@ using Antlr4.Runtime;
 using Pepper.ANTLR;
 
 namespace Pepper {
-    internal class Parser : ANTLR.PepperBaseListener {
+    internal class Parser : PepperBaseListener {
         private readonly ParseTree AST = new();
         private readonly Builder Builder;
         private readonly ICharStream SourceStream;
@@ -30,12 +30,11 @@ namespace Pepper {
                 ParseTreeWalker.Default.Walk(this, tree);
                 //Log.Info(FormatAntlrTree(tree.ToStringTree(parser)));
             } catch (ParseCanceledException pcex) {
-                Log.Error(pcex.Message);
                 if (pcex.InnerException is InputMismatchException imex) {
-                    Log.Error($"Unexpected token \"{imex.OffendingToken.Text}\"");
+                    var sourceLocation = new SourceLocation(imex.OffendingToken.TokenSource.SourceName, imex.OffendingToken.Line, imex.OffendingToken.Column);
+                    throw new CompileError($"Unexpected token \"{imex.OffendingToken.Text}\"", sourceLocation);
                 }
-                Log.Error("Stopping compilation");
-                throw new CompileException("Stopping compilation");
+                throw new CompileError($"Parse error: {pcex.Message}", SourceLocation.Current);
             }
 
             return AST;
@@ -65,7 +64,7 @@ namespace Pepper {
             } else if (double.TryParse(value, out var doubleVal)) {
                 return new FloatLiteral(doubleVal);
             }
-            throw new CompileException($"Unable to parse numeric constant '{constant}'");
+            throw new CompileError($"Unable to parse numeric constant '{constant}'", SourceLocation.Current);
         }
 
         Expression EvalStringLiteral(string value) {
@@ -78,17 +77,25 @@ namespace Pepper {
             string returnTypeName = context.returnType()?.Identifier().ToString() ?? Types.Void.Name;
             var returnType = Builder.FindType(returnTypeName);
             if (returnType == null) {
-                throw new CompileException($"Unknown return type {returnType}");
+                throw new CompileError($"Unknown return type {returnType}", SourceLocation.Current);
             }
-            var paramList = context.initDeclaratorList();
-            var parameters = new List<AST.Symbol>();
+            var paramList = context.parameterList();
+            IEnumerable<FunctionDef.Parameter> parameters = new List<FunctionDef.Parameter>();
             if (paramList != null) {
-                var paramDecls = paramList.initDeclarator();
-                // TODO
-                //var params = paramDecls.Select(p => {
-                //    var specifiers = p.declarationSpecifiers().declarationSpecifier();
-                //    var decls = p.initDeclaratorList().initDeclarator();
-                //});
+                var paramDecls = paramList.parameterDeclaration();
+                parameters = paramDecls.Select(p => {
+                    var identifiers = p.Identifier().Select(i => i.ToString()!).ToArray();
+                    (var typeName, var paramName) = (identifiers[0], identifiers[1]);
+                    Expression? defaultValue = null;
+                    if (p.Assign() != null) {
+                        defaultValue = Builder.PopStack<Expression>();
+                    }
+                    var type = Context.Locals.GetType(typeName);
+                    if (type == null) {
+                        throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
+                    }
+                    return new FunctionDef.Parameter(type, paramName);
+                });
             }
             Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
         }
@@ -103,7 +110,7 @@ namespace Pepper {
             var identifier = context.Identifier()?.ToString()!;
             var func = identifier != null ? Builder.FindFunction(identifier) : Builder.PopStack<FunctionDef>();
             if (func == null) {
-                throw new CompileException($"Unable to resolve function {identifier}");
+                throw new CompileError($"Unable to resolve function {identifier}", SourceLocation.Current);
             }
             var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
             var args = new List<Expression>();
@@ -117,10 +124,6 @@ namespace Pepper {
             }
         }
 
-        public override void EnterDeclaration([NotNull] PepperParser.DeclarationContext context) {
-            base.EnterDeclaration(context);
-        }
-
         public override void ExitReturn([NotNull] PepperParser.ReturnContext context) {
             base.ExitReturn(context);
 
@@ -129,10 +132,6 @@ namespace Pepper {
                 var func = Builder.ReturnTarget;
                 Builder.NewExpression(new Return(func, returnValue));
             }
-        }
-
-        public override void EnterPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
-            base.EnterPrimaryExpression(context);
         }
 
         public override void ExitPrimaryExpression([NotNull] PepperParser.PrimaryExpressionContext context) {
@@ -154,7 +153,7 @@ namespace Pepper {
                 var identifier = context.Identifier().ToString()!;
                 var variableRef = Builder.FindVariable(identifier);
                 if (variableRef == null) {
-                    throw new CompileException($"Unable to find symbol {identifier}");
+                    throw new CompileError($"Unable to find symbol {identifier}", SourceLocation.Current);
                 }
                 var variable = new VariableRef(identifier, variableRef);
                 Builder.PushStack(variable);
@@ -162,40 +161,16 @@ namespace Pepper {
             }
         }
 
-        public override void EnterPostfixExpression([NotNull] PepperParser.PostfixExpressionContext context) {
-            base.EnterPostfixExpression(context);
-        }
-
-        public override void EnterFunctionCall([NotNull] PepperParser.FunctionCallContext context) {
-            base.EnterFunctionCall(context);
-        }
-
-        public override void EnterInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
-            base.EnterInitDeclarator(context);
-        }
-
-        public override void ExitInitDeclarator([NotNull] PepperParser.InitDeclaratorContext context) {
-            base.ExitInitDeclarator(context);
-            if (context.Assign() != null) {
-                var type = context.declarator();
-                var identifier = context.declarator().Identifier();
-            }
-        }
-
-        public override void EnterVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
-            base.EnterVariableSpecifier(context);
-        }
-
         public override void ExitVariableSpecifier([NotNull] PepperParser.VariableSpecifierContext context) {
             base.ExitVariableSpecifier(context);
             if (context.Identifier().Length != 2) {
-                throw new CompileException("Expected <type> <name> while parsing variable declaration");
+                throw new CompileError("Expected <type> <name> while parsing variable declaration", SourceLocation.Current);
             }
             var identifiers = context.Identifier().Select(i => i.ToString()!).ToArray();
             (var typeName, var varName) = (identifiers[0], identifiers[1]);
             var type = Builder.FindType(typeName);
             if (type == null) {
-                throw new CompileException($"Unknown type {typeName}");
+                throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
             }
             var initialValue = Builder.PopStack<Expression>();
             Builder.NewVariable(new VariableDef(type, varName, initialValue));
@@ -409,9 +384,9 @@ namespace Pepper {
             base.ExitTernary(context);
         }
 
-        //public override void VisitTerminal([NotNull] ITerminalNode node) {
-        //    base.VisitTerminal(node);
-        //    Log.Info($"{node}");
-        //}
+        public override void VisitTerminal([NotNull] ITerminalNode node) {
+            base.VisitTerminal(node);
+            SourceLocation.Current = new SourceLocation(node.Symbol.TokenSource.SourceName, node.Symbol.Line, node.Symbol.Column);
+        }
     }
 }

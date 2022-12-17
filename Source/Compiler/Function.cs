@@ -47,16 +47,30 @@ namespace Pepper {
     }
 
     internal class UserFunction : Function {
+        internal class Parameter : Symbol {
+            public Value? Default;
+
+            public Parameter(Symbol param)
+                : this(param.Type, param.Name) {
+            }
+
+            public Parameter(Type type, string name, Value? defaultValue = null)
+                : base(type, name) {
+                Default = defaultValue;
+            }
+        }
+
         public LLVMBuilderRef Builder;
         public LLVMBasicBlockRef Body;
         public uint NumLocals = 0;
 
-        public UserFunction(string name, Type returnType, IEnumerable<Symbol> parameters)
+        public UserFunction(string name, Type returnType, IEnumerable<Parameter> parameters)
             : base(name, returnType, parameters) {
             Context.Locals.AddFunction(this);
             Body = Address.AppendBasicBlock("entry");
             Builder = Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
+            // TODO: insert default values for params
         }
     }
 

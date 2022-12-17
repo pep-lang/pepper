@@ -20,6 +20,7 @@ namespace Pepper {
         }
 
         public int Interpret(LLVMModuleRef module, string entrySymbol) {
+            SourceLocation.Context = "Interpreting";
             try {
                 using var engine = module.CreateInterpreter();
 
@@ -43,12 +44,13 @@ namespace Pepper {
         }
 
         public int Execute(LLVMModuleRef module, string entrySymbol) {
+            SourceLocation.Context = "Execution";
             try {
                 using var engine = module.CreateMCJITCompiler();
                 var entryRef = module.GetNamedFunction(entrySymbol);
                 var entry = engine.GetPointerToGlobal<IntMain0>(entryRef);
                 if (entry == null) {
-                    throw new CompileException($"Entry function {entrySymbol} not found");
+                    throw new CompileError($"Entry function {entrySymbol} not found");
                 }
                 var result = entry();
                 return result;

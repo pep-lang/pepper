@@ -29,7 +29,7 @@ namespace Pepper.AST {
                     if (scope.ReturnTarget != null)
                         return scope.ReturnTarget;
                 }
-                throw new InternalCompilerException("No return target available during AST build");
+                throw new InternalCompilerError("No return target available during AST build");
             }
         }
 
@@ -54,7 +54,7 @@ namespace Pepper.AST {
             }
             var globalFunc = Context.Locals.GetFunction(name);
             if (globalFunc != null) {
-                var globalDef = new FunctionDef(globalFunc.ReturnType, name, globalFunc.Parameters.Select(p => new Symbol(p.Type, p.Name)), globalFunc.Varargs);
+                var globalDef = new FunctionDef(globalFunc.ReturnType, name, globalFunc.Parameters.Select(p => new FunctionDef.Parameter(p.Type, p.Name)), globalFunc.Varargs);
                 Globals.Functions.Add(name, globalDef);
                 Globals.FunctionOrder.Add(globalDef);
                 return globalDef;
@@ -123,7 +123,7 @@ namespace Pepper.AST {
 
         public T PopStack<T>() where T : class {
             var top = PopStack();
-            return top as T ?? throw new CompileException($"Tried to pop {typeof(T)}, found {top}");
+            return top as T ?? throw new CompileError($"Tried to pop {typeof(T)}, found {top}");
         }
 
         public Node PeekStack(uint idx = 0) {

@@ -95,7 +95,7 @@ namespace Pepper {
             : base(type, value, name) {
         }
 
-        public override LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) => throw new CompileException($"Cannot store to constant {this}");
+        public override LLVMValueRef Store(LLVMValueRef value, LLVMBuilderRef? builder) => throw new CompileError($"Cannot store to constant {this}");
 
         public override Value Load(LLVMBuilderRef? builder) {
             return this;
@@ -165,8 +165,8 @@ namespace Pepper {
     public class Instruction : Value {
         public Instruction(LLVMValueRef instr)
             : base(Types.Instruction, instr) { }
-        public override Value Load(LLVMBuilderRef? builder) => throw new InternalCompilerException($"Attempted to load an instruction {this}");
-        public override Value Store(LLVMBuilderRef? builder = null) => throw new InternalCompilerException($"Attempted to store instruction {this}");
-        public override LLVMValueRef Alloc(LLVMBuilderRef? builder = null) => throw new InternalCompilerException($"Attempted to alloca instruction {this}");
+        public override Value Load(LLVMBuilderRef? builder) => throw new InternalCompilerError($"Attempted to load an instruction {this}");
+        public override Value Store(LLVMBuilderRef? builder = null) => throw new InternalCompilerError($"Attempted to store instruction {this}");
+        public override LLVMValueRef Alloc(LLVMBuilderRef? builder = null) => throw new InternalCompilerError($"Attempted to alloca instruction {this}");
     }
 }

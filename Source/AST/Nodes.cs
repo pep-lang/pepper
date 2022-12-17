@@ -4,6 +4,12 @@ using System;
 
 namespace Pepper.AST {
     public abstract class Node {
+        public SourceLocation Source { get; private set; }
+
+        public Node() {
+            Source = SourceLocation.Current;
+        }
+
         // Each node should only every be codegen'ed once
         private Func<Node, Value> CachedCodegen = Memoizer.Memoize<Node, Value>(node => node.Codegen());
         // This is the implementation that gets overridden by nodes
@@ -347,12 +353,20 @@ namespace Pepper.AST {
     }
 
     public abstract class FunctionNode : Symbol {
+        public class Parameter : Pepper.Symbol {
+            public Expression? Default { get; private set; }
+            public Parameter(Type type, string name, Expression? defaultValue = null)
+                : base(type, name) {
+                Default = defaultValue;
+            }
+        }
+
         public Type ReturnType { get; private set; }
-        public IEnumerable<Symbol> Params { get; private set; }
+        public IEnumerable<Parameter> Params { get; private set; }
         public bool Vararg { get; private set; } = false;
 
-        public FunctionNode(Type returnType, string name, IEnumerable<Symbol> parameters, bool vararg = false)
-            : base(FunctionType.Create(returnType, parameters.Select(p => (Pepper.Symbol)p), vararg), name) {
+        public FunctionNode(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
+            : base(FunctionType.Create(returnType, parameters, vararg), name) {
             ReturnType = returnType;
             Params = parameters;
             Vararg = vararg;
@@ -363,13 +377,13 @@ namespace Pepper.AST {
         public List<VariableDef> Variables { get; set; } = new();
         public List<Expression> Body { get; set; } = new();
 
-        public FunctionDef(Type returnType, string name, IEnumerable<Symbol> parameters, bool vararg = false)
+        public FunctionDef(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters, vararg) {
 
         }
 
         protected override Value Codegen() {
-            var function = new UserFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)));
+            var function = new UserFunction(Name, ReturnType, Params.Select(p => new UserFunction.Parameter(p.Type, p.Name, p.Default?.Codegen())));
             Context.PushScope(function.Builder);
 
             // TODO: get params and alloc/store them
@@ -390,7 +404,7 @@ namespace Pepper.AST {
     }
 
     public class ExternFunction : FunctionNode {
-        public ExternFunction(Type returnType, string name, List<Symbol> parameters, bool vararg = false)
+        public ExternFunction(Type returnType, string name, List<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters, vararg) {
 
         }
@@ -413,7 +427,7 @@ namespace Pepper.AST {
         protected override Value Codegen() {
             var func = Context.Locals.GetFunction(Target.Name);
             if (func == null) {
-                throw new CompileException("Function {Target.Name} not found");
+                throw new CompileError("Function {Target.Name} not found", Source);
             }
             return func.Call(Args.Select(a => a.Codegen()));
         }

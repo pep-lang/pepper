@@ -31,9 +31,20 @@ namespace Pepper {
         }
 
         public static Compiler Compile(string moduleName, string path, ICharStream inputStream) {
-            var compiler = new Compiler(moduleName, path, inputStream);
-            compiler.Compile();
-            return compiler;
+            Action<Exception, SourceLocation?> reportException = (ex, source) => {
+                source ??= SourceLocation.Current;
+                Log.Error($"{source.ToString()}: {ex.Message}\n    during {SourceLocation.Context}");
+            };
+            try {
+                var compiler = new Compiler(moduleName, path, inputStream);
+                compiler.Compile();
+                return compiler;
+            } catch (Error err) {
+                var source = err.SourceLocation ?? SourceLocation.Current;
+                Log.Error($"{source}: {err.Message}\n    during {SourceLocation.Context}");
+                Environment.Exit(-1);
+            }
+            return null;
         }
 
         private Compiler(string moduleName, string sourcePath, ICharStream? inputStream = null) {
@@ -43,6 +54,7 @@ namespace Pepper {
         }
 
         ParseTree Parse() {
+            SourceLocation.Context = "Parsing";
             var parser = new Parser(SourcePath, SourceStream);
             var ast = parser.Parse();
             return ast;
@@ -50,11 +62,13 @@ namespace Pepper {
 
         void Compile() {
             var ast = Parse();
+            SourceLocation.Context = "Code generation";
             foreach (var globalSymbol in ast.TopLevelSymbols) {
                 globalSymbol.Codegen();
             }
 
             Log.Info(Module.PrintToString());
+            SourceLocation.Context = "Validation";
             Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
             //Module.WriteBitcodeToFile(Path.ChangeExtension(SourcePath, "bc"));
         }

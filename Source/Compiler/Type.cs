@@ -20,15 +20,15 @@ namespace Pepper {
             Ref = typeRef;
         }
 
-        public virtual Value Coerce(Value val) => throw new InternalCompilerException($"{Name} does not support type coercion");
-        public virtual PointerType Pointer() => throw new InternalCompilerException($"{Name} does not have a corresponding pointer type");
+        public virtual Value Coerce(Value val) => throw new InternalCompilerError($"{Name} does not support type coercion");
+        public virtual PointerType Pointer() => throw new InternalCompilerError($"{Name} does not have a corresponding pointer type");
 
         public LLVMValueRef Alloc(LLVMBuilderRef? builder, string name = "") {
             builder ??= Context.Locals.FunctionRegisters;
             return builder.Value.BuildAlloca(this, name);
         }
 
-        public virtual Value DefaultValue => throw new InternalCompilerException($"Type {Name} does not have a default value");
+        public virtual Value DefaultValue => throw new InternalCompilerError($"Type {Name} does not have a default value");
         public virtual Value Add(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Sub(Value lhs, Value rhs) => throw new NotImplementedException();
         public virtual Value Mul(Value lhs, Value rhs) => throw new NotImplementedException();
@@ -75,7 +75,7 @@ namespace Pepper {
             return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
         }
 
-        public virtual Value CreateConstant<U>(U value) => throw new InternalCompilerException($"{Name} is not a valid type for a constant");
+        public virtual Value CreateConstant<U>(U value) => throw new InternalCompilerError($"{Name} is not a valid type for a constant");
     }
 
     public abstract class DerivedFrom<T> : NativeType where T : NativeType {
@@ -129,7 +129,7 @@ namespace Pepper {
         }
 
         public override PointerType Pointer() {
-            throw new CompileException($"Pointer to {this} is disallowed");
+            throw new CompileError($"Pointer to {this} is disallowed");
         }
 
         public override Value Coerce(Value val) {
@@ -141,7 +141,7 @@ namespace Pepper {
             if (type.IsPointer) {
                 return new Value(this, LLVMValueRef.CreateConstPointerCast(val, this), $"{val.RegisterName}.ptr");
             }
-            throw new CompileException($"Cannot convert non-pointer type {type} to {this}");
+            throw new CompileError($"Cannot convert non-pointer type {type} to {this}");
         }
 
         public override Value CreateConstant<U>(U value) {
@@ -153,7 +153,7 @@ namespace Pepper {
     }
 
     public class VoidType : NativeType {
-        public override Value DefaultValue => throw new InternalCompilerException("void should never be used as a default value");
+        public override Value DefaultValue => throw new InternalCompilerError("void should never be used as a default value");
 
         public VoidType(string name, LLVMTypeRef typeRef)
             : base(name, typeRef) {
@@ -164,10 +164,10 @@ namespace Pepper {
         }
 
         public override Value Coerce(Value val) {
-            throw new CompileException($"Cannot convert {val.Type} to void");
+            throw new CompileError($"Cannot convert {val.Type} to void");
         }
 
-        public override Value CreateConstant<U>(U value) => throw new InternalCompilerException("It is not possible to create a void constant");
+        public override Value CreateConstant<U>(U value) => throw new InternalCompilerError("It is not possible to create a void constant");
     }
 
     public class IntegerType : NativeType {
