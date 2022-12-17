@@ -3,6 +3,7 @@ using Antlr4.Runtime.Tree;
 using Antlr4.Runtime.Misc;
 using Antlr4.Runtime;
 using Pepper.ANTLR;
+using Pepper.Codegen;
 
 namespace Pepper {
     internal class Parser : PepperBaseListener {

@@ -1,23 +1,14 @@
 ﻿
 using LLVMSharp.Interop;
-namespace Pepper;
+
+namespace Pepper.Codegen;
 
 internal class Context {
     private static Context? Current = null;
 
-    static Context() {
-        Types.StaticInit();
-        ExternFunction.StaticInit();
-    }
-
-    // Runtime receives all static initialization of global functions and types, it is
-    // never torn down or re-initialized. It it assumed that it will not change after
-    // initialization
-    public static readonly Scope Runtime = new();
-
     // Access to the scopes available globally
-    public static Scope Globals => Current != null ? Current._Globals : Runtime;
-    public static Scope Locals { 
+    public static Scope Globals => Current != null ? Current._Globals : Runtime.Environment;
+    public static Scope Locals {
         get { return Current!._Locals; }
         private set { Current!._Locals = value; }
     }
@@ -51,13 +42,13 @@ internal class Context {
     private Context(string moduleName) {
         Current = this;
         _Module = LLVMModuleRef.CreateWithName(moduleName);
-        _Globals = new(Runtime);
+        _Globals = new(Runtime.Environment);
         _Locals = Globals;
         InjectRuntime();
     }
 
     private static void InjectRuntime() {
-        foreach (var pair in Runtime.GetFunctions().Where(f => f.Value is ExternFunction)) {
+        foreach (var pair in Runtime.Environment.GetFunctions().Where(f => f.Value is ExternFunction)) {
             string name = pair.Key;
             var function = (pair.Value as ExternFunction)!;
             if (name == function.Name) // no aliases

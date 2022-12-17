@@ -1,14 +1,8 @@
-﻿using LLVMSharp;
+﻿
 using LLVMSharp.Interop;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Pepper {
-    internal abstract class Function : Value {
+namespace Pepper.Codegen {
+    public abstract class Function : Value {
         public new FunctionType Type => (base.Type as FunctionType)!;
         public Type ReturnType => Type.ReturnType;
         public IEnumerable<Symbol> Parameters => Type.Parameters;
@@ -47,8 +41,8 @@ namespace Pepper {
         public static implicit operator LLVMValueRef(Function func) => func.Address;
     }
 
-    internal class UserFunction : Function {
-        internal class Parameter : Symbol {
+    public class UserFunction : Function {
+        public class Parameter : Symbol {
             public Value? Default;
 
             public Parameter(Symbol param)
@@ -75,10 +69,10 @@ namespace Pepper {
         }
     }
 
-    internal class ExternFunction : Function {
+    public class ExternFunction : Function {
         public ExternFunction(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(name, FunctionType.Create(returnType, parameters, varargs)) {
-            Context.Globals.AddFunction(this);
+            Runtime.Environment.AddFunction(this);
         }
 
         public ExternFunction(string name, Type returnType, params Symbol[] parameters)
@@ -90,7 +84,7 @@ namespace Pepper {
         }
 
         private static ExternFunction Alias(ExternFunction sourceFunction, string name) {
-            Context.Globals.AliasFunction(sourceFunction, name);
+            Runtime.Environment.AliasFunction(sourceFunction, name);
             return sourceFunction;
         }
 

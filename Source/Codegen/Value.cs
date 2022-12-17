@@ -2,7 +2,7 @@
 using LLVMSharp.Interop;
 using System.Diagnostics;
 
-namespace Pepper {
+namespace Pepper.Codegen {
     public class Symbol {
         public Type Type;
         public string Name { get; private set; }
@@ -27,7 +27,7 @@ namespace Pepper {
             }
         }
 
-        public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName(this.ToString()) : "null";
+        public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName(ToString()) : "null";
 
         // Take ownership of an already constructed value directly
         public Value(Type type, LLVMValueRef value, string name = "")
@@ -83,7 +83,7 @@ namespace Pepper {
         public virtual Value As(Type type) => (type == Types.Bool ? Type.AsBool(this) : type.Coerce(this)).Load();
 
         public override string ToString() {
-            var addr = (AddressRef.HasValue ? AddressRef.ToString()! : "undefined");
+            var addr = AddressRef.HasValue ? AddressRef.ToString()! : "undefined";
             var name = Name != "" && !addr.Contains($"%{Name}") ? $"{Name} " : "";
             return $"{name}{addr}";
         }
