@@ -64,9 +64,11 @@ namespace Pepper {
         void Compile() {
             var ast = Parse();
             SourceLocation.Context = "Code generation";
-            foreach (var globalSymbol in ast.TopLevelSymbols) {
-                globalSymbol.Codegen();
-            }
+            var codegen = new IRCodegen(ast);
+            codegen.Emit();
+            //foreach (var globalSymbol in ast.TopLevelSymbols) {
+            //    globalSymbol.Codegen();
+            //}
 
             Log.Info(Module.PrintToString());
             SourceLocation.Context = "Validation";

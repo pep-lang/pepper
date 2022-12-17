@@ -6,7 +6,9 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Pepper.AST {
-    public class IntegerLiteral : Expression {
+    public abstract class Literal : Expression { }
+
+    public class IntegerLiteral : Literal {
         public override Type Type => Types.Int64;
         public long Value { get; private set; }
         public IntegerLiteral(long value) {
@@ -18,7 +20,7 @@ namespace Pepper.AST {
         }
     }
 
-    public class FloatLiteral : Expression {
+    public class FloatLiteral : Literal {
         public override Type Type => Types.Double;
         public double Value { get; private set; }
         public FloatLiteral(double value) {
@@ -30,7 +32,7 @@ namespace Pepper.AST {
         }
     }
 
-    public class StringLiteral : Expression {
+    public class StringLiteral : Literal {
         public override Type Type => Types.ConstantString;
         public string Value { get; private set; }
         public StringLiteral(string value) {
