@@ -94,8 +94,10 @@ namespace Pepper {
                     if (type == null) {
                         throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
                     }
+                    var param = new FunctionDef.Parameter(type, paramName);
+                    Builder.NewVariable(param);
                     return new FunctionDef.Parameter(type, paramName);
-                });
+                }).ToList();
             }
             Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
         }
@@ -151,11 +153,11 @@ namespace Pepper {
             }
             if (context.Identifier() != null) {
                 var identifier = context.Identifier().ToString()!;
-                var variableRef = Builder.FindVariable(identifier);
-                if (variableRef == null) {
+                var symbol = Builder.FindVariable(identifier);
+                if (symbol == null) {
                     throw new CompileError($"Unable to find symbol {identifier}", SourceLocation.Current);
                 }
-                var variable = new VariableRef(identifier, variableRef);
+                var variable = new VariableRef(identifier, symbol);
                 Builder.PushStack(variable);
                 return;
             }

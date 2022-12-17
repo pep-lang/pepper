@@ -10,8 +10,8 @@ namespace Pepper.AST {
     public class Builder {
         class Scope {
             public Dictionary<string, Type> Types = new();
-            public Dictionary<string, VariableDef> Variables = new();
-            public List<VariableDef> VariableOrder = new();
+            public Dictionary<string, Symbol> Variables = new();
+            public List<Symbol> VariableOrder = new();
             public Dictionary<string, FunctionDef> Functions = new();
             public List<FunctionDef> FunctionOrder = new();
             public List<Expression> Expressions = new();
@@ -62,7 +62,7 @@ namespace Pepper.AST {
             return null;
         }
 
-        public VariableDef? FindVariable(string name) {
+        public Symbol? FindVariable(string name) {
             foreach (var scope in Scopes) {
                 if (scope.Variables.TryGetValue(name, out var variable))
                     return variable;
@@ -88,7 +88,7 @@ namespace Pepper.AST {
         public Builder EndFunction() {
             var scope = Scopes.Peek();
             var func = ReturnTarget;
-            func.Variables = scope.VariableOrder;
+            func.Variables = scope.VariableOrder.Where(v => v is VariableDef).Select(v => (v as VariableDef)!).ToList();
             func.Body = scope.Expressions;
             EndScope();
             return this;
@@ -141,7 +141,7 @@ namespace Pepper.AST {
             return this;
         }
 
-        public Builder NewVariable(VariableDef variable) {
+        public Builder NewVariable(Symbol variable) {
             var scope = Scopes.Peek();
             scope.Variables.Add(variable.Name, variable);
             scope.VariableOrder.Add(variable);

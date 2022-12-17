@@ -3,6 +3,7 @@ using LLVMSharp.Interop;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -30,7 +31,7 @@ namespace Pepper {
                 var argType = Parameters.ElementAt(idx).Type;
                 return argType.Coerce(arg.Load());
             });
-            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Address).ToArray(), Name);
+            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Load().Address).ToArray(), Name);
             return new Value(ReturnType, returnValue, $"return {Name}");
         }
 
@@ -104,5 +105,11 @@ namespace Pepper {
         public static readonly ExternFunction Malloc = new("malloc", Types.VoidPtr, new Symbol(Types.UInt64, "size"));
         public static readonly ExternFunction Free = new("free", Types.Void, new Symbol(Types.Int8Ptr, "ptr"));
         public static readonly ExternFunction Realloc = new("realloc", Types.VoidPtr, new Symbol(Types.Int8Ptr, "ptr"), new Symbol(Types.UInt64, "new_size"));
+    }
+
+    public static class SymbolExtension {
+        public static IEnumerable<Symbol> ToSymbols(this IEnumerable<AST.Symbol> symbols) {
+            return symbols.Select(s => new Symbol(s.Type, s.Name));
+        }
     }
 }

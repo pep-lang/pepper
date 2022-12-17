@@ -1,5 +1,6 @@
 ﻿
 using LLVMSharp;
+using LLVMSharp.Interop;
 using System;
 
 namespace Pepper.AST {
@@ -90,12 +91,12 @@ namespace Pepper.AST {
     }
 
     public class VariableRef : Expression {
-        public override Type Type => Variable.Type;
+        public override Type Type => Symbol.Type;
         public string Identifier { get; private set; }
-        public VariableDef Variable { get; private set; }
-        public VariableRef(string identifier, VariableDef variable) {
+        public Symbol Symbol { get; private set; }
+        public VariableRef(string identifier, Symbol symbol) {
             Identifier = identifier;
-            Variable = variable;
+            Symbol = symbol;
         }
 
         protected override Value Codegen() {
@@ -353,7 +354,7 @@ namespace Pepper.AST {
     }
 
     public abstract class FunctionNode : Symbol {
-        public class Parameter : Pepper.Symbol {
+        public class Parameter : Symbol {
             public Expression? Default { get; private set; }
             public Parameter(Type type, string name, Expression? defaultValue = null)
                 : base(type, name) {
@@ -366,7 +367,7 @@ namespace Pepper.AST {
         public bool Vararg { get; private set; } = false;
 
         public FunctionNode(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
-            : base(FunctionType.Create(returnType, parameters, vararg), name) {
+            : base(FunctionType.Create(returnType, parameters.ToSymbols(), vararg), name) {
             ReturnType = returnType;
             Params = parameters;
             Vararg = vararg;
@@ -386,17 +387,21 @@ namespace Pepper.AST {
             var function = new UserFunction(Name, ReturnType, Params.Select(p => new UserFunction.Parameter(p.Type, p.Name, p.Default?.Codegen())));
             Context.PushScope(function.Builder);
 
-            // TODO: get params and alloc/store them
+            // Allocate parameters
+            var llvmFunction = function.Address.IsAFunction;
+            var llvmParams = llvmFunction.Params;
+            var args = new List<Value>();
+            for (int paramIdx = 0; paramIdx < llvmFunction.ParamsCount; ++paramIdx) {
+                var param = function.Parameters.ElementAt(paramIdx);
+                var arg = llvmParams[paramIdx];
+                args.Add(Context.Locals.AddVariable(new Value(param.Type, arg, param.Name)));
+            }
 
             // Push all known variables at the top of the function block
-            foreach (var variable in Variables) {
-                variable.Codegen();
-            }
+            var locals = Variables.Select(v => v.Codegen()).ToList();
 
             // Emit the body of the function
-            foreach (var expr in Body) {
-                expr.Codegen();
-            }
+            var body = Body.Select(expr => expr.Codegen()).ToList();
 
             Context.PopScope();
             return function;
@@ -410,7 +415,7 @@ namespace Pepper.AST {
         }
 
         protected override Value Codegen() {
-            var func = new Pepper.ExternFunction(Name, ReturnType, Params.Select(p => new Pepper.Symbol(p.Type, p.Name)), Vararg);
+            var func = new Pepper.ExternFunction(Name, ReturnType, Params.ToSymbols(), Vararg);
             return func;
         }
     }
