@@ -1,21 +1,21 @@
 ﻿
 namespace Pepper {
-    internal abstract class Error : Exception {
+    internal abstract class CompilerException : Exception {
         public SourceLocation? SourceLocation { get; private set; }
 
-        public Error(string message, SourceLocation? sourceLocation = null)
+        public CompilerException(string message, SourceLocation? sourceLocation = null)
             : base(message) {
             SourceLocation = sourceLocation;
         }
     }
 
-    internal class CompileError : Error {
+    internal class CompileError : CompilerException {
         public CompileError(string message, SourceLocation? sourceLocation = null)
             : base(message, sourceLocation) {
         }
     }
 
-    internal class InternalCompilerError : Error {
+    internal class InternalCompilerError : CompilerException {
         public InternalCompilerError(string message, SourceLocation? sourceLocation = null)
             : base(message, sourceLocation) {
         }

@@ -31,7 +31,13 @@ namespace Pepper.AST {
             : base(returnType, name, parameters.ToList(), vararg) {
         }
 
-        public override IEnumerable<Node> Children => Variables.As<Node>().Mix(Body.As());
+        public override IEnumerable<Node> Children {
+            get {
+                var children = Variables.As<Node>().ToList();
+                children.AddRange(Body.As());
+                return children;
+            }
+        }
     }
 
     public class ExternFunction : FunctionNode {
@@ -49,8 +55,10 @@ namespace Pepper.AST {
             Args = args;
         }
 
-        public override IEnumerable<Node> Children => new List<Node> { Target }.Mix(Args);
+        public override IEnumerable<Node> Children => Args;
     }
+
+    public class FunctionEnd : Node {}
 
     public class Return : Expression {
         public override Type Type => Target.ReturnType;
@@ -62,6 +70,6 @@ namespace Pepper.AST {
             Value = value;
         }
 
-        public override IEnumerable<Node> Children => new List<Node?> { Target }.Append(Value).NonNull();
+        public override IEnumerable<Node> Children => new List<Node?> { Value, new FunctionEnd() }.NonNull();
     }
 }

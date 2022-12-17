@@ -14,9 +14,11 @@ using System.Xml.Linq;
 namespace Pepper.Codegen {
     internal class IRCodegen {
         private readonly ParseTree Tree;
+        protected readonly Compiler Compiler;
 
-        public IRCodegen(ParseTree ast) {
-            this.Tree = ast;
+        public IRCodegen(Compiler compiler, ParseTree ast) {
+            Compiler = compiler;
+            Tree = ast;
 
             MemoizeEmit<FunctionDef>(Emit);
             MemoizeEmit<VariableDef>(Emit);

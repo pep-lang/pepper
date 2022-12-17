@@ -1,11 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace Pepper.AST.Validation {
+    using Error = Compiler.Error;
+    using Warning = Compiler.Warning;
+    using Message = Compiler.Message;
+
     public abstract class Validator : Pass {
         public int Priority { get; protected set; } = 0;
 
@@ -16,9 +17,9 @@ namespace Pepper.AST.Validation {
 
         private static readonly List<Validator> Validators = new();
 
-        public static void ValidationPass(ParseTree ast) {
+        public static void ValidationPass(Compiler compiler, ParseTree ast) {
             foreach (var Validator in Validators) {
-                Validator.Evaluate(ast);
+                Validator.Evaluate(compiler, ast);
             }
         }
     }

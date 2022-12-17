@@ -1,48 +1,59 @@
 ﻿using Antlr4.Runtime;
-using Antlr4.Runtime.Misc;
-using Antlr4.Runtime.Tree;
 using LLVMSharp.Interop;
 using Pepper.AST;
 using Pepper.AST.Transforms;
 using Pepper.AST.Validation;
 using Pepper.Codegen;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Xml.Linq;
 
 namespace Pepper {
-    public class Compiler : IDisposable {
+    public class Compiler {
 
-        static Context Context { get { return Context; } }
+        public class Message {
+            public String What { get; private set; }
+            public SourceLocation Where { get; private set; }
+
+            public Message(string what, SourceLocation where) {
+                What = what;
+                Where = where;
+            }
+        }
+
+        public class Warning : Message {
+            public Warning(string what, SourceLocation where) : base(what, where) { }
+        }
+
+        public class Error : Message {
+            public Error(string what, SourceLocation where) : base(what, where) { }
+        }
 
         public string SourcePath { get; private set; }
         public ICharStream SourceStream { get; private set; }
-        public LLVMModuleRef Module => Context.Module;
+        public List<Message> AllMessages { get; private set; } = new();
+        public List<Error> Errors { get; private set; } = new();
+        public List<Warning> Warnings { get; private set; } = new();
 
         public static void CompileAndRun() {
-            using var compiler = Compile(Options.Parse());
+            var compiler = Compile(Options.Parse());
             var jit = new Executor();
             var exitCode = jit.Execute(Context.Module, "main");
             Log.Info($"main returned {exitCode}");
             Environment.Exit(exitCode);
         }
 
-        public static Compiler Compile(Options options) {
+        public static LLVMModuleRef Compile(Options options) {
             var inputStream = CharStreams.fromPath(options.Inputs.First());
             return Compile(options.ModuleName, options.Inputs.First(), inputStream);
         }
 
-        public static Compiler Compile(string moduleName, string path, ICharStream inputStream) {
+        public static LLVMModuleRef Compile(string moduleName, string path, ICharStream inputStream) {
             Action<Exception, SourceLocation?> reportException = (ex, source) => {
                 source ??= SourceLocation.Current;
                 Log.Error($"{source.ToString()}: {ex.Message}\n    during {SourceLocation.Context}");
             };
             try {
                 var compiler = new Compiler(moduleName, path, inputStream);
-                compiler.Compile();
-                return compiler;
-            } catch (Error err) {
+                return compiler.Compile();
+            } catch (Pepper.CompilerException err) {
                 var source = err.SourceLocation ?? SourceLocation.Current;
                 Log.Error($"{source}: {err.Message}\n    during {SourceLocation.Context}");
                 Environment.Exit(-1);
@@ -63,29 +74,41 @@ namespace Pepper {
             return ast;
         }
 
-        void Compile() {
+        LLVMModuleRef Compile() {
             SourceLocation.Context = "Parsing";
             var ast = Parse();
 
             SourceLocation.Context = "Validation";
-            Validator.ValidationPass(ast);
+            Validator.ValidationPass(this, ast);
 
             SourceLocation.Context = "Transform";
-            Transform.TransformPass(ast);
+            Transform.TransformPass(this, ast);
 
             SourceLocation.Context = "Code generation";
-            var codegen = new IRCodegen(ast);
-            codegen.Emit();
+            var codegen = new IRCodegen(this, ast);
+            var module = codegen.Emit();
 
-            Log.Info(Module.PrintToString());
+            Log.Info(module.PrintToString());
             SourceLocation.Context = "Validation";
-            Module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
+            module.Verify(LLVMVerifierFailureAction.LLVMPrintMessageAction);
             //Module.WriteBitcodeToFile(Path.ChangeExtension(SourcePath, "bc"));
+            return module;
         }
 
-        public void Dispose() {
-            GC.SuppressFinalize(this);
-            Context.Destroy();
+        public void Report<M>(string what, SourceLocation where) where M : Message {
+            var m = (M)Activator.CreateInstance(typeof(M), what, where)!;
+            Report(m);
+        }
+
+        public void Report(Message msg) => AllMessages.Add(msg);
+        public void Report(Warning warning) {
+            AllMessages.Add(warning); 
+            Warnings.Add(warning); 
+        }
+
+        public void Report(Error error) {
+            AllMessages.Add(error);
+            Errors.Add(error);
         }
     }
 }

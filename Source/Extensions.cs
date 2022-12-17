@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,9 +24,11 @@ namespace Pepper {
             bool flag = true;
 
             while (flag) {
-                foreach (var seq in seqs)
-                    for (int i = 0; i < seq.Count && (flag |= seq.Etor.MoveNext()); i++)
+                foreach (var seq in seqs) { 
+                    while (seq.Etor.MoveNext()) {
                         yield return seq.Etor.Current;
+                    } 
+                }
             }
         }
 
@@ -35,6 +38,16 @@ namespace Pepper {
 
         public static IEnumerable<T> As<T>(this IEnumerable<T> seq) {
             return seq.Select(t => t);
+        }
+
+        public static IEnumerable<T> OfType<T, U>(this IEnumerable<U> seq) where U : T {
+            return seq.Where(i => i is T).Select(i => (T)i);
+        }
+
+        public static void ForAll<T>(this IEnumerable<T> seq, Action<T> action) {
+            foreach (var i in seq) {
+                action(i);
+            }
         }
     }
 }
