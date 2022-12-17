@@ -3,6 +3,8 @@ using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
 using LLVMSharp.Interop;
 using Pepper.AST;
+using Pepper.AST.Transforms;
+using Pepper.AST.Validation;
 using Pepper.Codegen;
 using System.Diagnostics;
 using System.IO;
@@ -63,6 +65,10 @@ namespace Pepper {
 
         void Compile() {
             var ast = Parse();
+            SourceLocation.Context = "Validation";
+            Validator.ValidationPass(ast);
+            SourceLocation.Context = "Transform";
+            Transform.TransformPass(ast);
             SourceLocation.Context = "Code generation";
             var codegen = new IRCodegen(ast);
             codegen.Emit();
