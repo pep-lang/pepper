@@ -1,10 +1,4 @@
-﻿using Pepper.Codegen;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
+﻿
 namespace Pepper.AST {
     public abstract class Literal : Expression { }
 
@@ -14,10 +8,6 @@ namespace Pepper.AST {
         public IntegerLiteral(long value) {
             Value = value;
         }
-
-        protected override Value Codegen() {
-            return new ConstantInt(Value);
-        }
     }
 
     public class FloatLiteral : Literal {
@@ -26,10 +16,6 @@ namespace Pepper.AST {
         public FloatLiteral(double value) {
             Value = value;
         }
-
-        protected override Value Codegen() {
-            return new ConstantFloat(Value);
-        }
     }
 
     public class StringLiteral : Literal {
@@ -37,10 +23,6 @@ namespace Pepper.AST {
         public string Value { get; private set; }
         public StringLiteral(string value) {
             Value = value;
-        }
-
-        protected override Value Codegen() {
-            return new ConstantString(Value);
         }
     }
 }

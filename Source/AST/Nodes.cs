@@ -9,13 +9,6 @@ namespace Pepper.AST {
             Source = SourceLocation.Current;
         }
 
-        // Each node should only every be codegen'ed once
-        private Func<Node, Value> CachedCodegen = Memoizer.Memoize<Node, Value>(node => node.Codegen());
-        // This is the implementation that gets overridden by nodes
-        protected abstract Value Codegen();
-        // This is the public interface. The parameter is a dummy to differentiate the signatures
-        public Value Codegen(object? dummy = null) => CachedCodegen(this);
-
         public N Cast<N>() where N : Node {
             return (N)this;
         }
@@ -30,9 +23,6 @@ namespace Pepper.AST {
             Name = name;
         }
 
-        protected override Value Codegen() {
-            throw new NotImplementedException();
-        }
         public static implicit operator Codegen.Symbol(Symbol sym) => new Codegen.Symbol(sym.Type, sym.Name);
     }
 

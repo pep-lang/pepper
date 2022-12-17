@@ -23,15 +23,6 @@ namespace Pepper.AST {
             LHS = lhs;
             RHS = rhs;
         }
-
-        protected Value EmitBinaryOp(Func<Value, Value, Value> op) {
-            Value lhs = LHS.Codegen();
-            Value rhs = RHS.Codegen();
-            var result = op(OperandType.Coerce(lhs), OperandType.Coerce(rhs));
-            return Type.Coerce(result);
-        }
-
-        protected override Value Codegen() => EmitBinaryOp(Op);
     }
 
     public class Add : BinaryOp {
