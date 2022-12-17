@@ -1,7 +1,7 @@
 ﻿using System;
 namespace Pepper.UnitTests
 {
-    public class FloatMath
+    public class FloatMathTest
     {
         [Test]
         public void Add() {

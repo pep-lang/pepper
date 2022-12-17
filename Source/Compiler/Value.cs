@@ -27,7 +27,7 @@ namespace Pepper {
             }
         }
 
-        public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName() : "null";
+        public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName(this.ToString()) : "null";
 
         // Take ownership of an already constructed value directly
         public Value(Type type, LLVMValueRef value, string name = "")

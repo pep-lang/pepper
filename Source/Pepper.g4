@@ -457,7 +457,7 @@ BinaryConstant
 
 fragment
 DecimalConstant
-    :   NonzeroDigit Digit*
+    :   Sign? NonzeroDigit Digit*
     ;
 
 fragment

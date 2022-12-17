@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 namespace Pepper.AST {
     public class Builder {
         class Scope {
+            public string Name { get; set; } = "Anonymous";
             public Dictionary<string, Type> Types = new();
             public Dictionary<string, Symbol> Variables = new();
             public List<Symbol> VariableOrder = new();
@@ -36,7 +37,7 @@ namespace Pepper.AST {
         readonly ParseTree AST;
         public Builder(ParseTree ast) {
             AST = ast;
-            Scopes.Push(new Scope()); // globals/top level
+            BeginScope("Global"); // globals/top level
         }
 
         public Type? FindType(string name) {
@@ -79,7 +80,7 @@ namespace Pepper.AST {
             scope.Functions[func.Name] = func;
             scope.FunctionOrder.Add(func);
             AST.TopLevelSymbols.Add(func);
-            BeginScope();
+            BeginScope(func.Name);
             var funcScope = Scopes.Peek();
             funcScope.ReturnTarget = func;
             return this;
@@ -94,8 +95,8 @@ namespace Pepper.AST {
             return this;
         }
 
-        public Builder BeginScope() {
-            Scopes.Push(new Scope());
+        public Builder BeginScope(string name = "") {
+            Scopes.Push(new Scope() { Name = name });
             return this;
         }
         public Builder EndScope() {

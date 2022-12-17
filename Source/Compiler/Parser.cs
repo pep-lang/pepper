@@ -21,7 +21,7 @@ namespace Pepper {
             var tokens = new BufferedTokenStream(lexer);
             var parser = new ANTLR.PepperParser(tokens) {
                 BuildParseTree = true,
-                //Trace = true,
+                Trace = true,
                 ErrorHandler = new BailErrorStrategy(),
             };
 
@@ -33,6 +33,10 @@ namespace Pepper {
                 if (pcex.InnerException is InputMismatchException imex) {
                     var sourceLocation = new SourceLocation(imex.OffendingToken.TokenSource.SourceName, imex.OffendingToken.Line, imex.OffendingToken.Column);
                     throw new CompileError($"Unexpected token \"{imex.OffendingToken.Text}\"", sourceLocation);
+                }
+                if (pcex.InnerException is NoViableAltException nva) {
+                    var sourceLocation = new SourceLocation(nva.OffendingToken.TokenSource.SourceName, nva.OffendingToken.Line, nva.OffendingToken.Column);
+                    throw new CompileError($"Parse failure at \"{nva.OffendingToken.Text}\"", sourceLocation);
                 }
                 throw new CompileError($"Parse error: {pcex.Message}", SourceLocation.Current);
             }
@@ -95,11 +99,15 @@ namespace Pepper {
                         throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
                     }
                     var param = new FunctionDef.Parameter(type, paramName);
-                    Builder.NewVariable(param);
-                    return new FunctionDef.Parameter(type, paramName);
+                    return new FunctionDef.Parameter(type, paramName, defaultValue);
                 }).ToList();
             }
+            // Start new function scope
             Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
+            // Add all params
+            foreach (var param in parameters) {
+                Builder.NewVariable(param);
+            }
         }
 
         public override void ExitFunctionDefinition([NotNull] PepperParser.FunctionDefinitionContext context) {
@@ -121,9 +129,6 @@ namespace Pepper {
             }
             var result = new FunctionCall(func, args);
             Builder.NewExpression(result);
-            if (func.ReturnType != Types.Void) {
-                Builder.PushStack(result);
-            }
         }
 
         public override void ExitReturn([NotNull] PepperParser.ReturnContext context) {

@@ -379,7 +379,7 @@ namespace Pepper.AST {
         public List<Expression> Body { get; set; } = new();
 
         public FunctionDef(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
-            : base(returnType, name, parameters, vararg) {
+            : base(returnType, name, parameters.ToList(), vararg) {
 
         }
 

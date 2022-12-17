@@ -1,6 +1,6 @@
 ﻿using System;
 namespace Pepper.UnitTests {
-    public class IntMath {
+    public class IntMathTest {
         [Test]
         public void Add() {
             var source = """
