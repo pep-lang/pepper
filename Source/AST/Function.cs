@@ -1,4 +1,5 @@
-﻿using Pepper.Codegen;
+﻿using Antlr4.Runtime.Misc;
+using Pepper.Codegen;
 
 namespace Pepper.AST {
     public abstract class FunctionNode : Symbol {
@@ -28,14 +29,14 @@ namespace Pepper.AST {
 
         public FunctionDef(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters.ToList(), vararg) {
-
         }
+
+        public override IEnumerable<Node> Children => Variables.As<Node>().Mix(Body.As());
     }
 
     public class ExternFunction : FunctionNode {
         public ExternFunction(Type returnType, string name, List<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters, vararg) {
-
         }
     }
 
@@ -47,6 +48,8 @@ namespace Pepper.AST {
             Target = target;
             Args = args;
         }
+
+        public override IEnumerable<Node> Children => new List<Node> { Target }.Mix(Args);
     }
 
     public class Return : Expression {
@@ -58,5 +61,7 @@ namespace Pepper.AST {
             Target = target;
             Value = value;
         }
+
+        public override IEnumerable<Node> Children => new List<Node?> { Target }.Append(Value).NonNull();
     }
 }

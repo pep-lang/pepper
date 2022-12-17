@@ -12,6 +12,8 @@ namespace Pepper.AST {
         public N Cast<N>() where N : Node {
             return (N)this;
         }
+
+        public virtual IEnumerable<Node> Children { get; private set; } = Enumerable.Empty<Node>();
     }
 
     // A symbol is anything with a type and a name (variable, function, parameter, etc)

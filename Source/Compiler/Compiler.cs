@@ -57,24 +57,25 @@ namespace Pepper {
         }
 
         ParseTree Parse() {
-            SourceLocation.Context = "Parsing";
+
             var parser = new Parser(SourcePath, SourceStream);
             var ast = parser.Parse();
             return ast;
         }
 
         void Compile() {
+            SourceLocation.Context = "Parsing";
             var ast = Parse();
+
             SourceLocation.Context = "Validation";
             Validator.ValidationPass(ast);
+
             SourceLocation.Context = "Transform";
             Transform.TransformPass(ast);
+
             SourceLocation.Context = "Code generation";
             var codegen = new IRCodegen(ast);
             codegen.Emit();
-            //foreach (var globalSymbol in ast.TopLevelSymbols) {
-            //    globalSymbol.Codegen();
-            //}
 
             Log.Info(Module.PrintToString());
             SourceLocation.Context = "Validation";

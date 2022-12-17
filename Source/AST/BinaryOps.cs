@@ -23,6 +23,8 @@ namespace Pepper.AST {
             LHS = lhs;
             RHS = rhs;
         }
+
+        public override IEnumerable<Node> Children => new Node[] { LHS, RHS };
     }
 
     public class Add : BinaryOp {
