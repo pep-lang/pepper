@@ -20,6 +20,7 @@ namespace Pepper.Codegen {
             Compiler = compiler;
             Tree = ast;
 
+            MemoizeEmit<StructDef>(Emit);
             MemoizeEmit<FunctionDef>(Emit);
             MemoizeEmit<VariableDef>(Emit);
             MemoizeEmit<Expression>(Emit);
@@ -60,7 +61,17 @@ namespace Pepper.Codegen {
             return MemoizedEmit(typeof(N))(node);
         }
 
-        private Value Emit(FunctionDef funcDef) {
+        private Value Emit(StructDef structDef) {
+            var fields = structDef.Fields.Select(f => Emit(f)).ToList(); ;
+            var methods = structDef.Methods.Select(m => Emit(m)).ToList();
+            var st = new Struct(structDef.Name, fields, methods);
+            Context.PushScope(null);
+
+            Context.PopScope();
+            return st;
+        }
+
+        private Function Emit(FunctionDef funcDef) {
             var function = new UserFunction(
                 funcDef.Name,
                 funcDef.ReturnType,

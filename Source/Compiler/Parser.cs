@@ -107,7 +107,7 @@ namespace Pepper {
             Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
             // Add all params
             foreach (var param in parameters) {
-                Builder.NewVariable(param);
+                Builder.NewSymbol(param);
             }
         }
 
@@ -181,7 +181,19 @@ namespace Pepper {
                 throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
             }
             var initialValue = Builder.PopStack<Expression>();
-            Builder.NewVariable(new VariableDef(type, varName, initialValue));
+            Builder.NewSymbol(new VariableDef(type, varName, initialValue));
+        }
+
+        public override void EnterStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {
+            base.EnterStructSpecifier(context);
+            var name = context.Identifier().ToString()!;
+            var structDef = new StructDef(name);
+            Builder.NewStruct(structDef);
+        }
+
+        public override void ExitStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {
+            base.ExitStructSpecifier(context);
+            Builder.EndStruct();
         }
 
         public override void ExitMul([NotNull] PepperParser.MulContext context) {

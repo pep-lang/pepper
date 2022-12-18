@@ -81,14 +81,6 @@ namespace Pepper {
             : base(name, LLVMTypeRef.Void) {
         }
     }
-
-    //public class UserType : Type {
-    //    public UserType(string name, LLVMTypeRef typeRef, Func<LLVMValueRef, Type, Value> coerce) : base(name) {
-
-    //    }
-    //}
-
-
 }
 
 
