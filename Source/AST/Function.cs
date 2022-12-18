@@ -27,16 +27,24 @@ namespace Pepper.AST {
         public List<VariableDef> Variables { get; set; } = new();
         public List<Expression> Body { get; set; } = new();
 
-        public FunctionDef(Type returnType, string name, IEnumerable<Parameter> parameters, bool vararg = false)
+        public FunctionDef(string name, Type returnType, IEnumerable<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters.ToList(), vararg) {
         }
 
         public override IEnumerable<Node> Children {
             get {
-                var children = Variables.As<Node>().ToList();
-                children.AddRange(Body.As());
+                var children = Variables.Cast<Node>().ToList();
+                children.AddRange(Body.Cast<Node>());
                 return children;
             }
+        }
+    }
+
+    public class MethodDef : FunctionDef {
+        public StructDef Struct { get; private set; }
+        public MethodDef(StructDef st, string name, Type returnType, IEnumerable<Parameter> parameters, bool vararg = false)
+            : base(name, returnType, parameters.ToList(), vararg) {
+            Struct = st;
         }
     }
 
@@ -58,7 +66,7 @@ namespace Pepper.AST {
         public override IEnumerable<Node> Children => Args;
     }
 
-    public class FunctionEnd : Node {}
+    public class FunctionEnd : Node { }
 
     public class Return : Expression {
         public override Type Type => Target.ReturnType;

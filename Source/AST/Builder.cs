@@ -11,9 +11,9 @@ namespace Pepper.AST {
             public string Name { get; set; } = "Anonymous";
             public Dictionary<string, StructDef> Structs = new();
             public Dictionary<string, Symbol> Symbols = new();
-            public List<Symbol> SymbolOrder = new();
+            public List<Symbol> OrderedSymbols = new();
             public Dictionary<string, FunctionDef> Functions = new();
-            public List<FunctionDef> FunctionOrder = new();
+            public List<FunctionDef> OrderedFunctions = new();
             public List<Expression> Expressions = new();
             public Stack<Node> Stack = new();
             public FunctionDef? ReturnTarget = null;
@@ -65,9 +65,9 @@ namespace Pepper.AST {
             }
             var globalFunc = Context.Locals.GetFunction(name);
             if (globalFunc != null) {
-                var globalDef = new FunctionDef(globalFunc.ReturnType, name, globalFunc.Parameters.Select(p => new FunctionDef.Parameter(p.Type, p.Name)), globalFunc.Varargs);
+                var globalDef = new FunctionDef(name, globalFunc.ReturnType, globalFunc.Parameters.Select(p => new FunctionDef.Parameter(p.Type, p.Name)), globalFunc.Varargs);
                 Globals.Functions.Add(name, globalDef);
-                Globals.FunctionOrder.Add(globalDef);
+                Globals.OrderedFunctions.Add(globalDef);
                 return globalDef;
             }
             return null;
@@ -84,7 +84,7 @@ namespace Pepper.AST {
         public Builder BeginFunction(FunctionDef func) {
             var scope = Scopes.Peek();
             scope.Functions[func.Name] = func;
-            scope.FunctionOrder.Add(func);
+            scope.OrderedFunctions.Add(func);
             NewSymbol(func);
 
             if (StructTarget == null) {
@@ -100,7 +100,7 @@ namespace Pepper.AST {
         public Builder EndFunction() {
             var scope = Scopes.Peek();
             var func = FunctionTarget!;
-            func.Variables = scope.SymbolOrder.Where(v => v is VariableDef).Select(v => (v as VariableDef)!).ToList();
+            func.Variables = scope.OrderedSymbols.Where(v => v is VariableDef).Select(v => (v as VariableDef)!).ToList();
             func.Body = scope.Expressions;
             EndScope();
             return this;
@@ -124,8 +124,8 @@ namespace Pepper.AST {
         public Builder EndStruct() {
             var scope = Scopes.Peek();
             var structDef = scope.Struct!;
-            structDef.Fields = scope.SymbolOrder.OfType<VariableDef>().ToList();
-            structDef.Methods = scope.FunctionOrder.OfType<FunctionDef>().ToList();
+            structDef.Fields = scope.OrderedSymbols.OfType<VariableDef>().ToList();
+            structDef.Methods = scope.OrderedFunctions.Cast<MethodDef>().ToList();
             EndScope();
             return this;
         }
@@ -174,7 +174,7 @@ namespace Pepper.AST {
         public Builder NewSymbol(Symbol symbol) {
             var scope = Scopes.Peek();
             scope.Symbols.Add(symbol.Name, symbol);
-            scope.SymbolOrder.Add(symbol);
+            scope.OrderedSymbols.Add(symbol);
             return this;
         }
 

@@ -41,6 +41,10 @@ namespace Pepper.Codegen {
             Store(value, builder);
         }
 
+        public void Replace(LLVMValueRef newValue) {
+            AddressRef = newValue;
+        }
+
         public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
             Debug.Assert(!AddressRef.HasValue);
             builder ??= Context.Locals.FunctionRegisters;

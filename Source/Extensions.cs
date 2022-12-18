@@ -24,10 +24,10 @@ namespace Pepper {
             bool flag = true;
 
             while (flag) {
-                foreach (var seq in seqs) { 
+                foreach (var seq in seqs) {
                     while (seq.Etor.MoveNext()) {
                         yield return seq.Etor.Current;
-                    } 
+                    }
                 }
             }
         }
@@ -36,9 +36,9 @@ namespace Pepper {
             return seq.Where(t => t != null).Select(t => t!);
         }
 
-        public static IEnumerable<T> As<T>(this IEnumerable<T> seq) {
-            return seq.Select(t => t);
-        }
+        //public static IEnumerable<T> As<T>(this System.Collections.IEnumerable seq) {
+        //    return seq.Cast<T>();
+        //}
 
         public static IEnumerable<T> OfType<T, U>(this IEnumerable<U> seq) where U : T {
             return seq.Where(i => i is T).Select(i => (T)i);

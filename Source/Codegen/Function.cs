@@ -8,6 +8,19 @@ namespace Pepper.Codegen {
         public IEnumerable<Symbol> Parameters => Type.Parameters;
         public bool Varargs => Type.Varargs;
 
+        public class Parameter : Symbol {
+            public Value? Default;
+
+            public Parameter(Symbol param)
+                : this(param.Type, param.Name) {
+            }
+
+            public Parameter(Type type, string name, Value? defaultValue = null)
+                : base(type, name) {
+                Default = defaultValue;
+            }
+        }
+
         public Function(string name, Type returnType, IEnumerable<Symbol> parameters, bool varargs = false)
             : base(
                   FunctionType.Create(returnType, parameters, varargs),
@@ -41,20 +54,7 @@ namespace Pepper.Codegen {
         public static implicit operator LLVMValueRef(Function func) => func.Address;
     }
 
-    public class UserFunction : Function {
-        public class Parameter : Symbol {
-            public Value? Default;
-
-            public Parameter(Symbol param)
-                : this(param.Type, param.Name) {
-            }
-
-            public Parameter(Type type, string name, Value? defaultValue = null)
-                : base(type, name) {
-                Default = defaultValue;
-            }
-        }
-
+    public abstract class UserFunction : Function {
         public LLVMBuilderRef Builder;
         public LLVMBasicBlockRef Body;
         public uint NumLocals = 0;
@@ -66,6 +66,18 @@ namespace Pepper.Codegen {
             Builder = Context.CreateBuilder();
             Builder.PositionAtEnd(Body);
             // TODO: insert default values for params
+        }
+    }
+
+    public class FreeFunction : UserFunction {
+        public FreeFunction(string name, Type returnType, IEnumerable<Parameter> parameters)
+            : base(name, returnType, parameters) { }
+    }
+
+    public class Method : UserFunction {
+        //public Struct Struct { get; private set; }
+        public Method(string name, Type returnType, IEnumerable<Parameter> parameters)
+            : base(name, returnType, parameters) {
         }
     }
 

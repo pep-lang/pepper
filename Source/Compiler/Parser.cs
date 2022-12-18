@@ -104,7 +104,8 @@ namespace Pepper {
                 }).ToList();
             }
             // Start new function scope
-            Builder.BeginFunction(new FunctionDef(returnType, identifier, parameters));
+            var func = Builder.StructTarget != null ? new MethodDef(Builder.StructTarget, identifier, returnType, parameters) : new FunctionDef(identifier, returnType, parameters);
+            Builder.BeginFunction(func);
             // Add all params
             foreach (var param in parameters) {
                 Builder.NewSymbol(param);
@@ -181,7 +182,11 @@ namespace Pepper {
                 throw new CompileError($"Unknown type {typeName}", SourceLocation.Current);
             }
             var initialValue = Builder.PopStack<Expression>();
-            Builder.NewSymbol(new VariableDef(type, varName, initialValue));
+            if (Builder.StructTarget != null) {
+                Builder.NewSymbol(new FieldDef(Builder.StructTarget, type, varName, initialValue));
+            } else {
+                Builder.NewSymbol(new VariableDef(type, varName, initialValue));
+            }
         }
 
         public override void EnterStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {

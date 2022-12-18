@@ -8,6 +8,14 @@ namespace Pepper.AST {
         }
     }
 
+    public class FieldDef : VariableDef {
+        public readonly StructDef Struct;
+        public FieldDef(StructDef st, Type type, string name, Expression? initialValue = null)
+            : base(type, name, initialValue) {
+            Struct = st;
+        }
+    }
+
     public class ConstantDef : VariableDef {
         public ConstantDef(NativeType type, string name, Expression initialValue)
             : base(type, name, initialValue) {

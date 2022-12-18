@@ -67,26 +67,34 @@ namespace Pepper.Codegen {
             return (Value)MemoizedEmit(typeof(N))(node);
         }
 
-        public Struct Codegen(StructDef def) {
-            return (Struct)MemoizedEmit(typeof(StructDef))(def);
-        }
-
         private Struct Emit(StructDef structDef) {
-            var fields = structDef.Fields.Select(f => Emit(f)).Select(v => new Symbol(v.Type, v.Name)).ToList();
-            var methods = structDef.Methods.Select(m => Emit(m)).ToList();
+            var fields = structDef.Fields.Select(f => new Symbol(f.Type, f.Name)).ToList();
+            var methods = structDef.Methods
+                .Select(m => new Method(m.Name,
+                    m.ReturnType,
+                    m.Params.Select(p => new Function.Parameter(p.Type, p.Name, MaybeCodegen(p.Default)))))
+                .Cast<Function>().ToList();
+            // Create the initializer to init fields
+            var initializerDef = new FunctionDef(
+                Struct.Mangle(structDef.Name, "__init"),
+                Types.Void,
+                new List<FunctionDef.Parameter>() { new(structDef.Type, "this") }) {
+                Variables = structDef.Fields.Select(f => new VariableDef(f.Type, f.Name, f.InitialValue)).ToList()
+            };
+            var initializer = Emit(initializerDef);
+            methods.Insert(0, initializer);
+
             var st = new Struct(structDef.Name, fields, methods);
             // Emit struct ctor (including field defaults), dtor, typeinfo
-            Context.PushScope(null);
             // Emit fields and methods
-            Context.PopScope();
             return st;
         }
 
         private Function Emit(FunctionDef funcDef) {
-            var function = new UserFunction(
+            var function = new FreeFunction(
                 funcDef.Name,
                 funcDef.ReturnType,
-                funcDef.Params.Select(p => new UserFunction.Parameter(p.Type, p.Name, MaybeCodegen(p.Default))));
+                funcDef.Params.Select(p => new Function.Parameter(p.Type, p.Name, MaybeCodegen(p.Default))));
             Context.PushScope(function.Builder);
 
             // Allocate parameters
@@ -137,7 +145,7 @@ namespace Pepper.Codegen {
 
         public Value? MaybeCodegen(Expression? expr) {
             if (expr != null) {
-                return Emit(expr!);
+                return Emit(expr);
             }
             return null;
         }
