@@ -46,27 +46,38 @@ namespace Pepper.Codegen {
         }
 
         // Create one memoized emitter per type
-        private Dictionary<System.Type, Func<Node, Value>> MemoizedEmitters = new();
+        private Dictionary<System.Type, Func<Node, object>> MemoizedEmitters = new();
         private void MemoizeEmit<N>(Func<N, Value> emit) {
             var type = typeof(N);
             Func<Node, Value> downcastEmit = (n) => emit(n.Cast<N>());
             MemoizedEmitters[type] = Memoizer.Memoize(downcastEmit);
         }
 
-        private Func<Node, Value> MemoizedEmit(System.Type type) {
+        private void MemoizeEmit<N>(Func<N, Struct> emit) {
+            var type = typeof(N);
+            Func<Node, Struct> downcastEmit = (n) => emit(n.Cast<N>());
+            MemoizedEmitters[type] = Memoizer.Memoize(downcastEmit);
+        }
+
+        private Func<Node, object> MemoizedEmit(System.Type type) {
             return MemoizedEmitters[type];
         }
 
         public Value Codegen<N>(N node) where N : Node {
-            return MemoizedEmit(typeof(N))(node);
+            return (Value)MemoizedEmit(typeof(N))(node);
         }
 
-        private Value Emit(StructDef structDef) {
-            var fields = structDef.Fields.Select(f => Emit(f)).ToList(); ;
+        public Struct Codegen(StructDef def) {
+            return (Struct)MemoizedEmit(typeof(StructDef))(def);
+        }
+
+        private Struct Emit(StructDef structDef) {
+            var fields = structDef.Fields.Select(f => Emit(f)).Select(v => new Symbol(v.Type, v.Name)).ToList();
             var methods = structDef.Methods.Select(m => Emit(m)).ToList();
             var st = new Struct(structDef.Name, fields, methods);
+            // Emit struct ctor (including field defaults), dtor, typeinfo
             Context.PushScope(null);
-
+            // Emit fields and methods
             Context.PopScope();
             return st;
         }

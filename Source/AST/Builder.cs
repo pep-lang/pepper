@@ -24,13 +24,23 @@ namespace Pepper.AST {
 
         Scope Globals => Scopes.Last();
 
-        public FunctionDef ReturnTarget {
+        public FunctionDef? FunctionTarget {
             get {
                 foreach (var scope in Scopes) {
                     if (scope.ReturnTarget != null)
                         return scope.ReturnTarget;
                 }
-                throw new InternalCompilerError("No return target available during AST build");
+                return null;
+            }
+        }
+
+        public StructDef? StructTarget {
+            get {
+                foreach (var scope in Scopes) {
+                    if (scope.Struct != null)
+                        return scope.Struct;
+                }
+                return null;
             }
         }
 
@@ -63,7 +73,7 @@ namespace Pepper.AST {
             return null;
         }
 
-        public Symbol? FindVariable(string name) {
+        public Symbol? FindSymbol(string name) {
             foreach (var scope in Scopes) {
                 if (scope.Symbols.TryGetValue(name, out var variable))
                     return variable;
@@ -71,15 +81,16 @@ namespace Pepper.AST {
             return null;
         }
 
-        public Symbol? FindSymbol(string name) {
-            return FindVariable(name) as Symbol ?? FindFunction(name) as Symbol;
-        }
-
         public Builder BeginFunction(FunctionDef func) {
             var scope = Scopes.Peek();
             scope.Functions[func.Name] = func;
             scope.FunctionOrder.Add(func);
-            AST.TopLevelSymbols.Add(func);
+            NewSymbol(func);
+
+            if (StructTarget == null) {
+                AST.TopLevelSymbols.Add(func);
+            }
+
             BeginScope(func.Name);
             var funcScope = Scopes.Peek();
             funcScope.ReturnTarget = func;
@@ -88,7 +99,7 @@ namespace Pepper.AST {
 
         public Builder EndFunction() {
             var scope = Scopes.Peek();
-            var func = ReturnTarget;
+            var func = FunctionTarget!;
             func.Variables = scope.SymbolOrder.Where(v => v is VariableDef).Select(v => (v as VariableDef)!).ToList();
             func.Body = scope.Expressions;
             EndScope();
@@ -98,7 +109,12 @@ namespace Pepper.AST {
         public Builder BeginStruct(StructDef structDef) {
             var scope = Scopes.Peek();
             scope.Structs.Add(structDef.Name, structDef);
-            AST.TopLevelSymbols.Add(structDef);
+            NewSymbol(structDef);
+
+            if (StructTarget == null && FunctionTarget == null) {
+                AST.TopLevelSymbols.Add(structDef);
+            }
+
             BeginScope(structDef.Name);
             var structScope = Scopes.Peek();
             structScope.Struct = structDef;
@@ -153,13 +169,6 @@ namespace Pepper.AST {
 
         public T? PeekStack<T>(uint idx = 0) where T : class {
             return PeekStack(idx) as T;
-        }
-
-        public Builder NewStruct(StructDef structDef) {
-            var scope = Scopes.Peek();
-            scope.Structs.Add(structDef.Name, structDef);
-            NewSymbol(structDef);
-            return this;
         }
 
         public Builder NewSymbol(Symbol symbol) {

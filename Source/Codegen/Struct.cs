@@ -2,17 +2,26 @@
 using LLVMSharp.Interop;
 
 namespace Pepper.Codegen {
-    public class Struct : Value {
-        public List<Value> Fields;
+    public class Struct : Type {
+        public List<Symbol> Fields;
         public List<Function> Methods;
 
-        static StructType Create(string name, List<Value> fields) {
+        static StructType Create(string name, List<Symbol> fields) {
+            try {
+                var st = Context.Locals.GetType<StructType>(name);
+                if (st != null)
+                    return st;
+            } catch {
+                var st = Runtime.Environment.GetType<StructType>(name);
+                if (st != null)
+                    return st;
+            }
             var elements = fields.Select(f => f.Type.Ref).ToArray();
             return new StructType(name, LLVMTypeRef.CreateStruct(elements, false));
         }
 
-        public Struct(string name, List<Value> fields, List<Function> methods)
-            : base(Create(name, fields), LLVMValueRef.CreateConstPointerNull(Types.VoidPtr), name) {
+        public Struct(string name, List<Symbol> fields, List<Function> methods)
+            : base(name, Create(name, fields)) {
             Fields = fields;
             Methods = methods;
         }
@@ -20,8 +29,5 @@ namespace Pepper.Codegen {
         public override string ToString() {
             return Name;
         }
-
-        public static implicit operator LLVMTypeRef(Struct st) => st.Type;
-        public static implicit operator LLVMValueRef(Struct st) => st.Address;
     }
 }

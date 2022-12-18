@@ -137,7 +137,7 @@ namespace Pepper {
 
             if (context.expression() != null) {
                 var returnValue = Builder.PopStack<Expression>();
-                var func = Builder.ReturnTarget;
+                var func = Builder.FunctionTarget!;
                 Builder.NewExpression(new Return(func, returnValue));
             }
         }
@@ -159,7 +159,7 @@ namespace Pepper {
             }
             if (context.Identifier() != null) {
                 var identifier = context.Identifier().ToString()!;
-                var symbol = Builder.FindVariable(identifier);
+                var symbol = Builder.FindSymbol(identifier);
                 if (symbol == null) {
                     throw new CompileError($"Unable to find symbol {identifier}", SourceLocation.Current);
                 }
@@ -188,7 +188,7 @@ namespace Pepper {
             base.EnterStructSpecifier(context);
             var name = context.Identifier().ToString()!;
             var structDef = new StructDef(name);
-            Builder.NewStruct(structDef);
+            Builder.BeginStruct(structDef);
         }
 
         public override void ExitStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {
