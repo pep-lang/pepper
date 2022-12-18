@@ -29,6 +29,31 @@ namespace Pepper.AST {
                 }
                 set { Symbols[name] = value!; }
             }
+
+            public class NodeEnumerator : IDisposable {
+                private Scope Scope;
+                private Dictionary<System.Type, Action<Scope, Node>> Types = new();
+                public NodeEnumerator(Scope scope) {
+                    Scope = scope;
+                }
+                public NodeEnumerator On<N>(Action<Scope, N> action) where N : Node {
+                    Types[typeof(N)] = (scope, node) => {
+                        action(scope, (N)node);
+                    };
+                    return this;
+                }
+                public void Dispose() {
+                    Scope.Nodes.ForAll(n => {
+                        if (Types.TryGetValue(n.GetType(), out var action))
+                            action(Scope, n);
+                    });
+                }
+            };
+
+            public NodeEnumerator On<N>(Action<Scope, N> action) where N : Node {
+                var etor = new NodeEnumerator(this);
+                return etor.On<N>(action);
+            }
         }
 
         public Scope Root { get; protected set; }
