@@ -159,7 +159,7 @@ storageClassSpecifier
 
 typeSpecifier
 	: variableSpecifier
-	| structSpecifier
+	| structDeclaration
 	| enumSpecifier
 	;
 
@@ -167,29 +167,16 @@ variableSpecifier
     : Identifier Identifier Assign assignmentExpression
     ;
 
-structSpecifier
-	: Struct Identifier? '{' structDeclarationList '}'
-	;
-
-structDeclarationList
-	: structDeclaration*
-	;
-
 structDeclaration
-	: specifierQualifierList structDeclaratorList ';'
-	| specifierQualifierList ';'
+	: Struct Identifier? '{' fieldDeclarationList '}'
 	;
 
-specifierQualifierList
-	: (typeSpecifier|typeQualifier) specifierQualifierList?
+fieldDeclarationList
+	: fieldDeclaration*
 	;
 
-structDeclaratorList
-	: structDeclarator (',' structDeclarator)*
-	;
-
-structDeclarator
-	: declarator
+fieldDeclaration
+	: typeQualifier* variableSpecifier ';'
 	;
 
 enumSpecifier
@@ -320,7 +307,8 @@ translationUnit
 	;
 
 externalDeclaration
-    :   functionDefinition
+    : functionDefinition
+    | structDeclaration  
     |   ';' // stray ;
     ;
 

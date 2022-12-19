@@ -189,15 +189,17 @@ namespace Pepper {
             }
         }
 
-        public override void EnterStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {
-            base.EnterStructSpecifier(context);
+        public override void EnterStructDeclaration([NotNull] PepperParser.StructDeclarationContext context) {
+            base.EnterStructDeclaration(context);
+
             var name = context.Identifier().ToString()!;
             var structDef = new StructDef(name);
             Builder.BeginStruct(structDef);
         }
 
-        public override void ExitStructSpecifier([NotNull] PepperParser.StructSpecifierContext context) {
-            base.ExitStructSpecifier(context);
+        public override void ExitStructDeclaration([NotNull] PepperParser.StructDeclarationContext context) {
+            base.ExitStructDeclaration(context);
+
             Builder.EndStruct();
         }
 

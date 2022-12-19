@@ -110,6 +110,11 @@ namespace Pepper.AST {
             var scope = Scopes.Peek();
             scope.Structs.Add(structDef.Name, structDef);
             NewSymbol(structDef);
+            var ctor = new FunctionDef(structDef.Name, structDef.Type, Enumerable.Empty<FunctionDef.Parameter>())
+            BeginFunction(ctor);
+            var ctorCall = new FunctionCall(structDef.Constructor, new List<Expression>());
+            NewExpression(ctorCall);
+            EndFunction();
 
             if (StructTarget == null && FunctionTarget == null) {
                 AST.TopLevelSymbols.Add(structDef);

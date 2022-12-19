@@ -13,13 +13,14 @@ namespace Pepper {
                 LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0), // name
             }, true));
 
+        // Placeholder type, used during AST parsing
         public StructType(string name)
             : base(name, StructTypeInfo) {
         }
 
+        // Real struct type, during codegen
         public StructType(string name, LLVMTypeRef type)
             : base(name, type) {
-
         }
     }
 }

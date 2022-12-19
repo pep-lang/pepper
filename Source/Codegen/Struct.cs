@@ -43,13 +43,7 @@ namespace Pepper.Codegen {
             }
         }
 
-        public static string Mangle(string structName, Function func) {
-            return Mangle(structName, func.Name);
-        }
 
-        public static string Mangle(string structName, string funcName) {
-            return $"{structName}__{funcName}";
-        }
 
         static LLVMValueRef StructTypeInfo(Struct st) {
             return LLVMValueRef.CreateConstStruct(TypeInfo.New(StructVTable(st), st.Name), true);
@@ -65,14 +59,14 @@ namespace Pepper.Codegen {
             : base(Create(name, fields), new ConstantPointer(0), name) {
             Fields = fields;
 
-            Methods.Add("__ctor", new FreeFunction(Mangle(name, "__ctor"), Type, Enumerable.Empty<Function.Parameter>()));
-            Methods.Add("__dtor", new FreeFunction(Mangle(name, "__dtor"), Type, new Function.Parameter[] { new(Type.Pointer(), "p") }));
+            Methods.Add("__ctor", new FreeFunction(Mangle.Method(name, "__ctor"), Type, Enumerable.Empty<Function.Parameter>()));
+            Methods.Add("__dtor", new FreeFunction(Mangle.Method(name, "__dtor"), Type, new Function.Parameter[] { new(Type.Pointer(), "p") }));
             // Map names to mangled free functions
             methods.Cast<Method>()
                 .Select(m => new Method(m.Name, m.ReturnType, m.Parameters.Cast<Function.Parameter>()))
                 .ForAll(method => {
                     var func = new FreeFunction(
-                        Mangle(Name, method.Name),
+                        Mangle.Method(Name, method.Name),
                         method.ReturnType,
                         method.Parameters.Cast<Function.Parameter>().Prepend(new Function.Parameter(Type, "this"))) {
                         Body = method.Body

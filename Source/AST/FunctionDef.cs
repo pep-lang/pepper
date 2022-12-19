@@ -27,7 +27,7 @@ namespace Pepper.AST {
         public List<VariableDef> Variables { get; set; } = new();
         public List<Expression> Body { get; set; } = new();
 
-        public FunctionDef(string name, Type returnType, IEnumerable<Parameter> parameters, bool vararg = false)
+        public FunctionDef(string name, Type returnType, IEnumerable<Parameter> parameters = Enumerable.Empty<Parameter>(), bool vararg = false)
             : base(returnType, name, parameters.ToList(), vararg) {
         }
 

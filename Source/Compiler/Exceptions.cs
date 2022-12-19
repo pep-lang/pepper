@@ -4,7 +4,7 @@ namespace Pepper {
         public SourceLocation? SourceLocation { get; private set; }
 
         public CompilerException(string message, SourceLocation? sourceLocation = null)
-            : base(message) {
+            : base($"{sourceLocation}: {message}") {
             SourceLocation = sourceLocation;
         }
     }
