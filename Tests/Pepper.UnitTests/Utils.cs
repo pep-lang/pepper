@@ -13,7 +13,7 @@ namespace Pepper.UnitTests {
             };
             var module = Compiler.Compile(moduleName, $"{sourcePath}:{testName}", stream);
             var jit = new Executor();
-            int result = jit.Interpret(module, "main");
+            int result = jit.Execute(module, "main");
             try {
                 Log.Info($"main returned {result}");
                 Assert.That(result, Is.EqualTo(expectedResult));

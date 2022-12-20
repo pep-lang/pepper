@@ -17,7 +17,7 @@ namespace Pepper {
         }
 
         public static string Method(string structName, string funcName) {
-            var sep = (funcName.StartsWith("__")) ? "/" : "__";
+            var sep = ".";
             return $"${structName}{sep}{funcName}";
         }
     }

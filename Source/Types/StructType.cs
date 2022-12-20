@@ -7,43 +7,43 @@ namespace Pepper {
        
 
         // this is the type info that is stored per struct globally
-        public static class StaticTypeInfo {
-            public static LLVMValueRef TypeInfo(string name, LLVMValueRef vtable) {
-                var values = new LLVMValueRef[] {
-                    vtable,
-                    new ConstantString(name),
-                };
-                var types = values.Select(e => e.TypeOf).ToArray();
-                var fields = new[] {
-                    new Symbol(vtable.TypeOf, "__vtable"),
-                    new Symbol(Types.ConstantString, "__name"),
-                };
+        //public static class StaticTypeInfo {
+        //    public static LLVMValueRef TypeInfo(string name, LLVMValueRef vtable) {
+        //        var values = new LLVMValueRef[] {
+        //            vtable,
+        //            new ConstantString(name),
+        //        };
+        //        var types = values.Select(e => e.TypeOf).ToArray();
+        //        var fields = new[] {
+        //            new Symbol(vtable.TypeOf, "__vtable"),
+        //            new Symbol(Types.ConstantString, "__name"),
+        //        };
 
-                var typeInfo = Create($"{name}.__typeinfo", fields);
-                var global = Context.Module.AddGlobal(typeInfo, $"{name}.typeinfo");
-                global.Initializer = LLVMValueRef.CreateConstStruct(values, true);
-                return global;
-            }
+        //        var typeInfo = Create($"{name}.__typeinfo", fields);
+        //        var global = Context.Module.AddGlobal(typeInfo, $"{name}.typeinfo");
+        //        global.Initializer = LLVMValueRef.CreateConstStruct(values, true);
+        //        return global;
+        //    }
 
-            public static LLVMValueRef VTable(string name, IEnumerable<Function> methods) {
-                var values = methods.Select(m => m.Address).ToArray();
-                var fields = methods.Select(m => new Symbol(m.Type, m.Name));
+        //    public static LLVMValueRef VTable(string name, IEnumerable<Function> methods) {
+        //        var values = methods.Select(m => m.Address).ToArray();
+        //        var fields = methods.Select(m => new Symbol(m.Type, m.Name));
 
-                var vtableType = Create($"{name}.__vtable", fields);
-                var global = Context.Module.AddGlobal(vtableType, $"{name}.vtable");
-                global.Initializer = LLVMValueRef.CreateConstStruct(values, true); ;
-                return global;
-            }
-        }
+        //        var vtableType = Create($"{name}.__vtable", fields);
+        //        var global = Context.Module.AddGlobal(vtableType, $"{name}.vtable");
+        //        global.Initializer = LLVMValueRef.CreateConstStruct(values, true); ;
+        //        return global;
+        //    }
+        //}
 
-        public static class Header {
-            public static Symbol[] Insert(IEnumerable<Symbol> fields, LLVMValueRef typeInfo) {
-                return new[] {
-                    new Symbol(typeInfo.TypeOf, "__typeinfo"),
-                    new Symbol(Types.UInt32, "__refcount"),
-                }.Concat(fields).ToArray();
-            }
-        }
+        //public static class Header {
+        //    public static Symbol[] Insert(IEnumerable<Symbol> fields, LLVMValueRef typeInfo) {
+        //        return new[] {
+        //            new Symbol(typeInfo.TypeOf, "__typeinfo"),
+        //            new Symbol(Types.UInt32, "__refcount"),
+        //        }.Concat(fields).ToArray();
+        //    }
+        //}
 
         public static StructType Create(string name, IEnumerable<Symbol>? fields = null, OrderedMap<string, FreeFunction>? methods = null, bool packed = true) {
             try {
@@ -57,18 +57,18 @@ namespace Pepper {
 
             // Figure out the vtable type as early as possible. TypeInfo and per-object headers
             // depend on knowing this type, and it's different for every struct
-            var vtable = methods.Any() ? StaticTypeInfo.VTable(name, methods.Values) : null;
-            var typeInfo = methods.Any() ? StaticTypeInfo.TypeInfo(name, vtable) : null;
+            //var vtable = methods.Any() ? StaticTypeInfo.VTable(name, methods.Values) : null;
+            //var typeInfo = methods.Any() ? StaticTypeInfo.TypeInfo(name, vtable) : null;
 
-            if (vtable != null) {
-                // Prepend the header fields to the fields list before type gen
-                fields = Header.Insert(fields, typeInfo);
-            }
+            //if (vtable != null) {
+            //    // Prepend the header fields to the fields list before type gen
+            //    fields = Header.Insert(fields, typeInfo);
+            //}
 
             var elements = fields.Select(f => f.Type.Ref).ToArray();
             var namedType = Context.Module.Context.CreateNamedStruct($"struct.{name}");
             namedType.StructSetBody(elements, packed);
-            var structType = vtable != null ? new ObjectType(name, namedType, fields.ToList(), methods, vtable: vtable, typeInfo: typeInfo) : new StructType(name, namedType, fields.ToList());
+            var structType = methods.Any() ? new ObjectType(name, namedType, fields.ToList(), methods) : new StructType(name, namedType, fields.ToList());
             Context.Locals.AddType(structType);
             Context.Locals.AddType(structType.Pointer());
             return structType;
@@ -120,18 +120,14 @@ namespace Pepper {
 
     public class ObjectType : StructType {
         public OrderedMap<string, FreeFunction> Methods = new();
-        public Value VTable { get; private set; }
-        public Value TypeInfo { get; private set; }
 
-        public static new ObjectType Create(string name, IEnumerable<Symbol>? fields = null, OrderedMap<string, FreeFunction> methods = null, bool packed = true) {
+        public static new ObjectType Create(string name, IEnumerable<Symbol> fields, OrderedMap<string, FreeFunction> methods, bool packed = true) {
             return Create<ObjectType>(name, fields, methods, packed);
         }
 
-        public ObjectType(string name, LLVMTypeRef type, List<Symbol> fields, OrderedMap<string, FreeFunction>? methods, LLVMValueRef vtable, LLVMValueRef typeInfo)
+        public ObjectType(string name, LLVMTypeRef type, List<Symbol> fields, OrderedMap<string, FreeFunction> methods)
             : base(name, type, fields) {
             Methods = methods;
-            VTable = vtable;
-            TypeInfo = typeInfo;
         }
 
         public override Value GetMember(string name, Value instance) {

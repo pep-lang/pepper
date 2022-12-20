@@ -7,10 +7,9 @@ using System.Xml.Linq;
 
 namespace Pepper.Codegen {
     // A struct's value is its TypeInfo*
+    // TODO: should Struct just be the constructor function?
     public class Struct : Value {
-        public ObjectType StructType => (ObjectType)((PointerType)base.Type).Pointee;
-        public LLVMValueRef TypeInfo => StructType.TypeInfo;
-        public LLVMValueRef VTable => StructType.VTable;
+        public ObjectType StructType { get; private set; }
         public LLVMValueRef Size => StructType.Ref.SizeOf;
         public FreeFunction Initializer => Methods["__init"];
         public FreeFunction Constructor => Methods["__ctor"];
@@ -19,10 +18,10 @@ namespace Pepper.Codegen {
         public OrderedMap<string, FreeFunction> Methods => StructType.Methods.Select(m => new KeyValuePair<string, FreeFunction>(m.Key, (FreeFunction)m.Value)).ToOrderedMap();
 
         public Struct(ObjectType type, string name)
-            : base(type.Pointer(), (LLVMValueRef)type.TypeInfo, name) {
-
+            : base(type.Pointer(), PointerType.Null, name) {
+            StructType = type;
             // update the value to point to the type info for this struct
-            Replace(TypeInfo);
+            //Replace(TypeInfo);
         }
 
         public override string ToString() {

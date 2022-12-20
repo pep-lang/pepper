@@ -123,7 +123,6 @@ namespace Pepper.Codegen {
             Context.PushScope(structDesc.Initializer.Builder);
             {
                 var self = structDesc.Initializer.Address.IsAFunction.Params[0];
-                //Context.Locals.AddVariable(Value.New(structType, self, "this"));
                 CodegenFunction(structDesc.Initializer, structDef.Initializer);
             }
             Context.PopScope();
@@ -131,25 +130,21 @@ namespace Pepper.Codegen {
             // Insert initializer into st.Constructor
             Context.PushScope(structDesc.Constructor.Builder);
             {
-                // push this into scope
                 // TODO: deal with ctor params
-                //var self = structTypeInfo.Constructor.Address.IsAFunction.Params[0];
-                //Context.Locals.AddVariable(Value.New(structType, self, "this"));
                 // inject the header values, then call init, then call constructor
                 //var typeinfo = structType.GetMember("__typeinfo", self);
                 //var refcount = structType.GetMember("__refcount", self);
                 //structTypeInfo.Constructor.Builder.BuildStore(structTypeInfo.TypeInfo, typeinfo);
                 //structTypeInfo.Constructor.Builder.BuildStore(new ConstantInt32(0), refcount);
                 //structTypeInfo.Constructor.Builder.Insert(structTypeInfo.Initializer.Call(self));
-                //CodegenFunction(structTypeInfo.Constructor, structDef.Constructor);
+                CodegenFunction(structDesc.Constructor, structDef.Constructor);
                 structDesc.Constructor.Builder.BuildRetVoid();
-            }            
+            }
             Context.PopScope();
             
             Context.PushScope(structDesc.Destructor.Builder);
             {
                 var self = structDesc.Destructor.Address.IsAFunction.Params[0];
-                //Context.Locals.AddVariable(Value.New(structType, self, "this"));
                 CodegenFunction(structDesc.Destructor, structDef.Destructor);
                 // Ensure destructor ends with free
                 if (structDesc.Destructor.Body.LastInstruction.IsAReturnInst == null) {
