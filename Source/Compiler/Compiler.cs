@@ -57,7 +57,7 @@ namespace Pepper {
                 return compiler.Compile();
             } catch (Pepper.CompilerException err) {
                 var source = err.SourceLocation ?? SourceLocation.Current;
-                Log.Error($"{source}: {err.Message} during {SourceLocation.Context}");
+                Log.Error($"{err.Message} during {SourceLocation.Context}");
                 Environment.Exit(-1);
             }
             return null;
