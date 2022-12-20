@@ -11,11 +11,11 @@ namespace Pepper.AST.Validation {
             tree.WalkDepthFirst(scope => {
                 using var checks = scope.On<VariableRef>((scope, vr) => {
                     if (scope[vr.Identifier] == null) {
-                        compiler.Report<Compiler.Error>($"Unable to resolve variable {vr.Identifier}", vr.Source);
+                        compiler.Report<Error>($"Unable to resolve variable {vr.Identifier}", vr.Source);
                     }
                 }).On<FunctionCall>((scope, call) => {
                     if (scope[call.Target.Name] == null) {
-                        compiler.Report<Compiler.Error>($"Unable to find function {call.Target.Name}", call.Source);
+                        compiler.Report<Error>($"Unable to find function {call.Target.Name}", call.Source);
                     }
                 });
             });

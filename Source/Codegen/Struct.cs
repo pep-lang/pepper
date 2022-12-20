@@ -1,18 +1,66 @@
 
 using LLVMSharp.Interop;
 using System;
+using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 
 namespace Pepper.Codegen {
     // A struct's value is its TypeInfo*
     public class Struct : Value {
-        public List<Symbol> Fields;
+        public LLVMValueRef TypeInfo { get; private set; }
+        public LLVMValueRef VTable { get; private set; }
+        public LLVMValueRef Size => Type.Ref.SizeOf;
+        public OrderedMap<string, Symbol> Fields;
         public FreeFunction Initializer => Methods["__init"];
         public FreeFunction Constructor => Methods["__ctor"];
         public FreeFunction Destructor => Methods["__dtor"];
-        public Dictionary<string, FreeFunction> Methods = new();
+        public OrderedMap<string, FreeFunction> Methods = new();
 
-        static StructType Create(string name, List<Symbol> fields) {
+        // this is the type info that is stored per struct globally
+        public static class StaticTypeInfo {
+            public static readonly Symbol[] TemplateFields = new Symbol[]{
+                new Symbol(Types.VoidPtr, "__vtable"),
+                new Symbol(Types.ConstantString, "__name"),
+            };
+
+            public static LLVMValueRef New(Struct st) {
+                var elements = new LLVMValueRef[] {
+                    st.VTable,
+                    new ConstantString(st.Name),
+                };
+                var types = elements.Select(e => e.TypeOf).ToArray();
+
+                var typeInfo = Context.Module.Context.CreateNamedStruct($"${st.Name}$typeinfo");
+                typeInfo.StructSetBody(types, true);
+                var global = Context.Module.AddGlobal(typeInfo, $"{st.Name}.typeinfo");
+                global.Initializer = LLVMValueRef.CreateConstStruct(elements, true);
+                return global;
+            }
+
+            public static LLVMTypeRef Type(LLVMTypeRef vtableType) {
+                var elements = TemplateFields
+                    .Where(f => f.Name != "__vtable") // replace vtable with its real type
+                    .Select(f => f.Type.Ref)
+                    .Prepend(vtableType).ToArray();
+                return LLVMTypeRef.CreateStruct(elements, true);
+            }
+        }
+
+        public static class Header {
+            static readonly Symbol[] TemplateFields = new[] {
+                new Symbol(LLVMTypeRef.CreatePointer(Types.VoidPtr, 0), "__typeinfo"),
+                new Symbol(Types.UInt32, "__refcount"),
+            };
+
+            public static Symbol[] Fields(LLVMTypeRef vtableType) {
+                return TemplateFields
+                    .Where(f => f.Name != "__typeinfo") // replace typeinfo with its real type
+                    .Prepend(new Symbol(StaticTypeInfo.Type(vtableType), "__typeinfo"))
+                    .ToArray();
+            }
+        }
+
+        public static StructType ToType(string name, IEnumerable<Symbol> fields, IEnumerable<Function> methods) {
             try {
                 var st = Context.Locals.GetType<StructType>(name);
                 if (st != null)
@@ -22,60 +70,45 @@ namespace Pepper.Codegen {
                 if (st != null)
                     return st;
             }
+            
             var elements = fields.Select(f => f.Type.Ref).ToArray();
-            return new StructType(name, LLVMTypeRef.CreateStruct(elements, false));
+            var namedType = Context.Module.Context.CreateNamedStruct($"${name}");
+            namedType.StructSetBody(elements, false);
+            var structType = new StructType(name, namedType, fields.ToList(), methods.ToList());
+            Context.Locals.AddType(structType);
+            Context.Locals.AddType(structType.Pointer());
+            return structType;
         }
 
-        // this is the type info that is stored per struct globally
-        public static class TypeInfo {
-            public static readonly Symbol[] Fields = new Symbol[]{
-                new Symbol(Types.VoidPtr, "__vtable"),
-                new Symbol(Types.UInt32, "__refcount"),
-                new Symbol(Types.ConstantString, "__name"),
-            };
-
-            public static LLVMValueRef[] New(LLVMValueRef vtable, string name) {
-                return new LLVMValueRef[] {
-                    vtable,
-                    new ConstantInt(0),
-                    new ConstantString(name),
-                };
-            }
-        }
-
-
-
-        static LLVMValueRef StructTypeInfo(Struct st) {
-            return LLVMValueRef.CreateConstStruct(TypeInfo.New(StructVTable(st), st.Name), true);
-        }
-
-        static LLVMValueRef StructVTable(Struct st) {
-            var type = Create(st.Name, st.Fields);
+        public static LLVMValueRef StructVTable(Struct st) {
             var entries = st.Methods.Values.Select(m => m.Address).ToArray();
-            return LLVMValueRef.CreateConstStruct(entries, true);
+            var types = entries.Select(e => e.TypeOf).ToArray();
+            var vtableType = Context.Module.Context.CreateNamedStruct($"${st.Name}$vtable");
+            vtableType.StructSetBody(types, true);
+            var vtable = LLVMValueRef.CreateConstStruct(entries, true);
+            var global = Context.Module.AddGlobal(vtableType, $"{st.Name}.vtable");
+            global.Initializer = vtable;
+            return global;
         }
 
-        public Struct(string name, List<Symbol> fields, List<Function> methods)
-            : base(Create(name, fields), new ConstantPointer(0), name) {
-            Fields = fields;
+        public static LLVMTypeRef VTableType(IEnumerable<FreeFunction> methods) {
+            var entries = methods.Select(m => m.Address.TypeOf).ToArray();
+            return LLVMTypeRef.CreateStruct(entries, true);
+        }
 
-            Methods.Add("__ctor", new FreeFunction(Mangle.Method(name, "__ctor"), Type, Enumerable.Empty<Function.Parameter>()));
-            Methods.Add("__dtor", new FreeFunction(Mangle.Method(name, "__dtor"), Type, new Function.Parameter[] { new(Type.Pointer(), "p") }));
-            // Map names to mangled free functions
-            methods.Cast<Method>()
-                .Select(m => new Method(m.Name, m.ReturnType, m.Parameters.Cast<Function.Parameter>()))
-                .ForAll(method => {
-                    var func = new FreeFunction(
-                        Mangle.Method(Name, method.Name),
-                        method.ReturnType,
-                        method.Parameters.Cast<Function.Parameter>().Prepend(new Function.Parameter(Type, "this"))) {
-                        Body = method.Body
-                    };
-                    Methods.Add(method.Name, func);
-                }
-            );
+        public Struct(PointerType type, string name, List<Symbol> fields, OrderedMap<string, FreeFunction> methods)
+            : base(type, PointerType.Null, name) {
+            Fields = fields.ToOrderedMap(f => f.Name);
+            Methods = methods;
+
+            // build vtable
+            VTable = StructVTable(this);
+
+            // build typeinfo
+            TypeInfo = StaticTypeInfo.New(this);
+
             // update the value to point to the type info for this struct
-            Replace(StructTypeInfo(this));
+            Replace(TypeInfo);
         }
 
         public override string ToString() {

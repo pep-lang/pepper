@@ -10,7 +10,7 @@ namespace Pepper {
         }
 
         public override PointerType Pointer() {
-            return new PointerType("void*", this);
+            return new PointerType("void*", this, LLVMTypeRef.CreatePointer(LLVMTypeRef.Int8, 0));
         }
 
         public override Value Coerce(Value val) {

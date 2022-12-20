@@ -3,10 +3,6 @@ using System.Reflection;
 
 
 namespace Pepper.AST.Validation {
-    using Error = Compiler.Error;
-    using Warning = Compiler.Warning;
-    using Message = Compiler.Message;
-
     public abstract class Validator : Pass {
         public int Priority { get; protected set; } = 0;
 

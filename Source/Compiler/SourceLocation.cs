@@ -14,8 +14,11 @@ namespace Pepper {
         }
 
         public override string ToString() {
+            var line = Line > 0 ? $"{Line}" : "";
             var column = Column >= 0 ? $",{Column}" : "";
             return $"{Path}({Line}{column})";
         }
+
+        public static readonly SourceLocation Unknown = new SourceLocation("", -1);
     }
 }

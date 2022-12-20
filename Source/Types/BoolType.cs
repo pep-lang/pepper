@@ -14,7 +14,7 @@ namespace Pepper {
             return new ConstantBool((bool)Convert.ChangeType(value, typeof(bool))!);
         }
 
-        public override Value DefaultValue => new(this, LLVMValueRef.CreateConstInt(this, 0, false), $"{Name}.false");
+        public override Value DefaultValue => Value.New(this, LLVMValueRef.CreateConstInt(this, 0, false), $"{Name}.false");
         public override Value AsBool(Value val) => val;
     }
 }

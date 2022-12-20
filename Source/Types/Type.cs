@@ -4,9 +4,10 @@ using System.Data;
 
 
 namespace Pepper {
-    public abstract class Type {
+    public abstract class Type : IEquatable<Type> {
         public virtual string Name { get; protected set; }
         public virtual LLVMTypeRef Ref { get; protected set; }
+        public virtual LLVMValueRef SizeOf => Ref.SizeOf;
         public virtual bool IsInt { get; protected set; } = false;
         public virtual bool IsFloat { get; protected set; } = false;
         public virtual bool IsPointer { get; protected set; } = false;
@@ -16,6 +17,7 @@ namespace Pepper {
         public Type(string name, LLVMTypeRef typeRef) {
             Name = name;
             Ref = typeRef;
+            Types.Record(this);
         }
 
         public virtual Value Coerce(Value val) => throw new InternalCompilerError($"{Name} does not support type coercion");
@@ -48,11 +50,13 @@ namespace Pepper {
         public virtual Value AsBool(Value val) => throw new NotImplementedException();
 
         public override bool Equals(object? other) => (other is Type rhs) && Ref == rhs.Ref;
+        public bool Equals(Type? other) => other != null ? Ref == other.Ref : false; 
 
         public override int GetHashCode() => Ref.GetHashCode();
 
         public override string ToString() => Name;
         public static implicit operator LLVMTypeRef(Type type) => type.Ref;
+        public static implicit operator Type(LLVMTypeRef type) => Types.From(type);
     }
 
     public abstract class NativeType : Type {
@@ -70,7 +74,7 @@ namespace Pepper {
         }
 
         public override PointerType Pointer() {
-            return new PointerType($"{Name}*", LLVMTypeRef.CreatePointer(this, 0));
+            return new PointerType($"{Name}*", this, LLVMTypeRef.CreatePointer(this, 0));
         }
 
         public virtual Value CreateConstant<U>(U value) => throw new InternalCompilerError($"{Name} is not a valid type for a constant");

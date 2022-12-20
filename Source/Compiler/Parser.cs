@@ -124,7 +124,7 @@ namespace Pepper {
             if (func == null) {
                 throw new CompileError($"Unable to resolve function {identifier}", SourceLocation.Current);
             }
-            var providedArgsCount = context.argumentExpressionList().assignmentExpression().Length;
+            var providedArgsCount = context.argumentExpressionList()?.assignmentExpression().Length ?? 0;
             var args = new List<Expression>();
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.Add(Builder.PopStack<Expression>());
@@ -201,6 +201,16 @@ namespace Pepper {
             base.ExitStructDeclaration(context);
 
             Builder.EndStruct();
+        }
+
+        public override void ExitMemberAccess([NotNull] PepperParser.MemberAccessContext context) {
+            base.ExitMemberAccess(context);
+            var lhs = Builder.PopStack<Expression>();
+            var rhs = context.Identifier()!.ToString()!;
+            var structType = ((PointerType)lhs.Type).Pointee;
+            var structDef = Builder.FindSymbol(structType.Name)!.Cast<StructDef>();
+            var type = structDef.Fields.Find(f => f.Name == rhs)!.Type;
+            Builder.NewExpression(new MemberRef(type, lhs, rhs));
         }
 
         public override void ExitMul([NotNull] PepperParser.MulContext context) {

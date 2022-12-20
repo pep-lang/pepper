@@ -3,9 +3,10 @@ using LLVMSharp.Interop;
 using System.Diagnostics;
 
 namespace Pepper.Codegen {
+
     public class Symbol {
         public Type Type;
-        public string Name { get; private set; }
+        public string Name { get; protected set; }
 
         public Symbol(Type type, string name) {
             Type = type;
@@ -28,25 +29,59 @@ namespace Pepper.Codegen {
         }
 
         public string RegisterName => AddressRef.HasValue ? AddressRef.Value.RegisterName(ToString()) : "null";
+        public SourceLocation Source { get; protected set; } = SourceLocation.Unknown;
 
+        static Dictionary<Type, System.Type> ByType = new();
         // Take ownership of an already constructed value directly
-        public Value(Type type, LLVMValueRef value, string name = "")
-            : base(type, name) {
-            Address = value;
+        public static Value New(Type type, LLVMValueRef value, string name = "", SourceLocation? source = null) {
+            if (ByType.TryGetValue(type, out var valType)) {
+                return (Value)Activator.CreateInstance(valType, type, value, name, source)!;
+            }
+            return new Value(type, value, name, source);
         }
 
         // Copy/Store another value as Type
-        public Value(Type type, Value value, string name = "", LLVMBuilderRef? builder = null)
+        public static Value New(Type type, Value value, string name = "", SourceLocation? source = null) {
+            if (ByType.TryGetValue(type, out var valType)) {
+                return (Value)Activator.CreateInstance(valType, type, value, name, source)!;
+            }
+            return new Value(type, value, name, source);
+        }
+
+        // Take ownership of an already constructed value directly
+        public static Value New<V>(Type type, LLVMValueRef value, string name = "", SourceLocation? source = null) where V : Value {
+            ByType.TryAdd(type, typeof(V));
+            return (V)Activator.CreateInstance(typeof(V), type, value, name, source)!;
+        }
+
+        // Copy/Store another value as Type
+        public static Value New<V>(Type type, Value value, string name = "", SourceLocation? source = null) where V : Value {
+            ByType.TryAdd(type, typeof(V));
+            return (V)Activator.CreateInstance(typeof(V), type, value, name, source)!;
+        }
+
+        // Take ownership of an already constructed value directly
+        protected Value(Type type, LLVMValueRef value, string name = "", SourceLocation? source = null)
             : base(type, name) {
+            Address = value;
+            Source = source ?? Source;
+        }
+
+        // Copy/Store another value as Type
+        protected Value(Type type, Value value, string name = "", SourceLocation? source = null, LLVMBuilderRef? builder = null)
+            : base(type, name) {
+            Source = source ?? Source;
             Store(value, builder);
         }
 
         public void Replace(LLVMValueRef newValue) {
+            if (AddressRef.HasValue && AddressRef.Value.TypeOf != newValue.TypeOf) {
+                Compiler.Report<Warning>($"Replacing {this} with mismatched type: expected {AddressRef.Value}, got {newValue.TypeOf}", Source);
+            }
             AddressRef = newValue;
         }
 
         public virtual LLVMValueRef Alloc(LLVMBuilderRef? builder = null) {
-            Debug.Assert(!AddressRef.HasValue);
             builder ??= Context.Locals.FunctionRegisters;
             Address = Type.Alloc(builder, Name);
             return Address;
@@ -54,12 +89,13 @@ namespace Pepper.Codegen {
 
         public virtual Value Store(LLVMBuilderRef? builder = null) {
             var val = Address;
-            AddressRef = null;
+            AddressRef = Alloc(builder);
             Store(val, builder);
             return this;
         }
 
         public virtual Value Store(Value value, LLVMBuilderRef? builder = null) {
+            Source = value.Source != SourceLocation.Unknown ? value.Source : Source;
             builder ??= Context.Locals.Builder;
             Store(Type.Coerce(value).Load().Address, builder);
             return this;
@@ -80,7 +116,7 @@ namespace Pepper.Codegen {
                 return this;
             }
             builder ??= Context.Locals.Builder;
-            return new Value(Type, builder.Value.BuildLoad2(Type, Address, Name));
+            return new Value(Type, builder.Value.BuildLoad2(Type, Address, Name), source: Source);
         }
 
         public Value AsBool() => Type.AsBool(this);
@@ -92,6 +128,7 @@ namespace Pepper.Codegen {
             return $"{name}{addr}";
         }
         public static implicit operator LLVMValueRef(Value v) => v.Address;
+        public static implicit operator Value(LLVMValueRef v) => new Value(Types.From(v.TypeOf), v, v.Name);
     }
 
     public class Constant : Value {
@@ -120,7 +157,7 @@ namespace Pepper.Codegen {
         public override string ToString() => $"{Type} {Value}";
         public override Value As(Type type) {
             if (type is IntegerType intType)
-                return new Value(intType, LLVMValueRef.CreateConstInt(type, Value ? 1ul : 0ul, false));
+                return New(intType, LLVMValueRef.CreateConstInt(type, Value ? 1ul : 0ul, false));
             return base.As(type);
         }
 
@@ -128,10 +165,20 @@ namespace Pepper.Codegen {
         public static ConstantBool False => new(false, "false");
     }
 
-    public class ConstantInt : Constant {
+    public class ConstantInt32 : Constant {
         private readonly long Value;
-        public ConstantInt(long value, string name = "")
-            : base(Types.ConstantInt, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
+        public ConstantInt32(int value, string name = "")
+            : base(Types.ConstantInt32, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int32, (ulong)value), name) {
+            Value = value;
+        }
+
+        public override string ToString() => $"{Type} {Value}";
+    }
+
+    public class ConstantInt64 : Constant {
+        private readonly long Value;
+        public ConstantInt64(long value, string name = "")
+            : base(Types.ConstantInt64, LLVMValueRef.CreateConstInt(LLVMTypeRef.Int64, (ulong)value), name) {
             Value = value;
         }
 
@@ -151,7 +198,7 @@ namespace Pepper.Codegen {
     public class ConstantString : Constant {
         private readonly string Value;
         public ConstantString(string value, string name = "")
-            : base(Types.ConstantString, Context.Locals.Builder.BuildGlobalString(value, name), name) {
+            : base(Types.ConstantString, Context.Module.Context.GetConstString(name, false), name) {
             Value = value;
         }
 
@@ -161,7 +208,7 @@ namespace Pepper.Codegen {
     public class ConstantPointer : Constant {
         private readonly IntPtr Value;
         public ConstantPointer(IntPtr value, string name = "")
-            : base(Types.ConstantPointer, Types.Int8.Pointer().CreateConstant(value), name) {
+            : base(Types.ConstantPointer, new ConstantInt64(value), name) {
             Value = value;
         }
     }

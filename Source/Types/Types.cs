@@ -15,6 +15,22 @@ namespace Pepper {
             Runtime.Environment.AliasType(Float, "float");
         }
 
+        static readonly Dictionary<string, Type> ByName = new();
+        static readonly Dictionary<LLVMTypeRef, Type> ByType = new();
+
+        public static void Record(Type t) {
+            ByName[t.Name] = t;
+            ByType[t.Ref] = t;
+        }
+
+        public static Type From(string name) {
+            return ByName[name];
+        }
+
+        public static Type From(LLVMTypeRef t) {
+            return ByType[t];
+        }
+
         public static readonly VoidType Void = new("void", LLVMTypeRef.Void);
         public static readonly PointerType VoidPtr = Void.Pointer();
 
@@ -44,7 +60,8 @@ namespace Pepper {
         public static readonly FloatType Float = new("f32", LLVMTypeRef.Float);
         public static readonly PointerType FloatPtr = Float.Pointer();
 
-        public static readonly ConstantType<IntegerType, long, ConstantInt> ConstantInt = new(Int64, v => new ConstantInt(v, $"cint.{v}"));
+        public static readonly ConstantType<IntegerType, int, ConstantInt32> ConstantInt32 = new(Int32, v => new ConstantInt32(v, $"cint32.{v}"));
+        public static readonly ConstantType<IntegerType, long, ConstantInt64> ConstantInt64 = new(Int64, v => new ConstantInt64(v, $"cint64.{v}"));
         public static readonly ConstantType<FloatType, double, ConstantFloat> ConstantFloat = new(Double, f => new ConstantFloat(f, $"cfloat.{f}"));
         public static readonly ConstantType<BoolType, bool, ConstantBool> ConstantBool = new(Bool, b => new ConstantBool(b, $"cbool.{b}"));
         public static readonly ConstantType<PointerType, string, ConstantString> ConstantString = new(Int8Ptr, s => new ConstantString(s, "cstr"));

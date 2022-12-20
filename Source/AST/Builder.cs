@@ -53,16 +53,18 @@ namespace Pepper.AST {
         public Type? FindType(string name) {
             foreach (var scope in Scopes) {
                 if (scope.Structs.TryGetValue(name, out var type))
-                    return type.Type;
+                    return type.Type.Pointer();
             }
             return Context.Locals.GetType(name);
         }
 
         public FunctionDef? FindFunction(string name) {
+            // first check for user functions
             foreach (var scope in Scopes) {
                 if (scope.Functions.TryGetValue(name, out var localFunc))
                     return localFunc;
             }
+            // No user function found, check the globals
             var globalFunc = Context.Locals.GetFunction(name);
             if (globalFunc != null) {
                 var globalDef = new FunctionDef(name, globalFunc.ReturnType, globalFunc.Parameters.Select(p => new FunctionDef.Parameter(p.Type, p.Name)), globalFunc.Varargs);
@@ -109,12 +111,8 @@ namespace Pepper.AST {
         public Builder BeginStruct(StructDef structDef) {
             var scope = Scopes.Peek();
             scope.Structs.Add(structDef.Name, structDef);
-            NewSymbol(structDef);
-            var ctor = new FunctionDef(structDef.Name, structDef.Type, Enumerable.Empty<FunctionDef.Parameter>())
-            BeginFunction(ctor);
-            var ctorCall = new FunctionCall(structDef.Constructor, new List<Expression>());
-            NewExpression(ctorCall);
-            EndFunction();
+            scope.Functions.Add(structDef.Name, structDef.New);
+            NewSymbol(structDef);            
 
             if (StructTarget == null && FunctionTarget == null) {
                 AST.TopLevelSymbols.Add(structDef);
@@ -129,8 +127,9 @@ namespace Pepper.AST {
         public Builder EndStruct() {
             var scope = Scopes.Peek();
             var structDef = scope.Struct!;
-            structDef.Fields = scope.OrderedSymbols.OfType<VariableDef>().ToList();
-            structDef.Methods = scope.OrderedFunctions.Cast<MethodDef>().ToList();
+            structDef.Fields.AddRange(scope.OrderedSymbols.OfType<FieldDef>());
+            structDef.Methods.AddRange(scope.OrderedFunctions.Cast<MethodDef>());
+            structDef.Finish();
             EndScope();
             return this;
         }

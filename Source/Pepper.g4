@@ -168,7 +168,7 @@ variableSpecifier
     ;
 
 structDeclaration
-	: Struct Identifier? '{' fieldDeclarationList '}'
+	: Struct Identifier '{' fieldDeclarationList '}'
 	;
 
 fieldDeclarationList

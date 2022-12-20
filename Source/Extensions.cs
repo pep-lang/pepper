@@ -1,6 +1,9 @@
 ﻿using Pepper.AST;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -48,6 +51,94 @@ namespace Pepper {
             foreach (var i in seq) {
                 action(i);
             }
+        }
+
+        public static int IndexOf<T>(this IEnumerable<T> seq, T item) where T : notnull {
+            int idx = 0;
+            seq.First(t => {
+                if (t.Equals(item)) return true;
+                ++idx;
+                return false;
+            });
+            return idx;
+        }
+
+        public static OrderedMap<TKey, TValue> ToOrderedMap<TKey, TValue>(this IEnumerable<KeyValuePair<TKey, TValue>> source)
+            where TKey : notnull {
+            return new OrderedMap<TKey, TValue>(source);
+        }
+
+        public static OrderedMap<TKey, TValue> ToOrderedMap<TKey, TValue>(this IEnumerable<TValue> source, Func<TValue, TKey> keySelector) 
+            where TKey : notnull {
+            return new OrderedMap<TKey, TValue>(source.Select(v => new KeyValuePair<TKey, TValue>(keySelector(v), v)));
+        }
+
+        public static OrderedMap<TKey, TValue> ToOrderedMap<TKey, TValue, TSource>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector, Func<TSource, TValue> valueSelector) 
+            where TKey : notnull {
+            return new OrderedMap<TKey, TValue>(source.Select(s => new KeyValuePair<TKey, TValue>(keySelector(s), valueSelector(s))));
+        }
+    }
+
+    public class OrderedMap<TKey, TValue> : OrderedDictionary, IEnumerable<KeyValuePair<TKey, TValue>> where TKey : notnull {
+        public OrderedMap() : base() { }
+        public OrderedMap(IEnumerable<KeyValuePair<TKey, TValue>> pairs) : base() {
+            pairs.ForAll(pair => {
+                this[pair.Key] = pair.Value;
+            });
+        }
+
+        public TValue this[TKey key] {
+            get {
+                return (TValue)base[key]!;
+            }
+            set {
+                base[key] = value;
+            }
+        }
+
+        public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value) {
+            var objVal = base[key];
+            if (objVal != null) {
+                value = (TValue)objVal;
+                return true;
+            }
+            value = default;
+            return false;
+        }
+
+        public void Add(TKey key, TValue value) {
+            base.Add(key, value);
+        }
+
+        public int IndexOf(TKey key) => base.Keys.Cast<TKey>().IndexOf(key);
+
+        public new IEnumerable<TKey> Keys => base.Keys.Cast<TKey>();
+        public new IEnumerable<TValue> Values => base.Values.Cast<TValue>();
+
+        public new IEnumerator GetEnumerator() => new Enumerator(this, base.GetEnumerator());
+
+        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() =>
+            new Enumerator(this, base.GetEnumerator());
+
+        public struct Enumerator : IEnumerator<KeyValuePair<TKey, TValue>>, IDictionaryEnumerator {
+            IEnumerator Etor;
+
+            public Enumerator(OrderedMap<TKey, TValue> map, IEnumerator etor) {
+                Etor = etor;
+            }
+
+            public void Dispose() {
+
+            }
+
+            public KeyValuePair<TKey, TValue> Current => (KeyValuePair <TKey, TValue>)Etor.Current;
+            public bool MoveNext() => Etor.MoveNext();
+            public void Reset() => Etor.Reset();
+
+            object? IEnumerator.Current => Etor.Current;
+            DictionaryEntry IDictionaryEnumerator.Entry => new DictionaryEntry(Current.Key, Current.Value);
+            object IDictionaryEnumerator.Key => Current.Key;
+            object? IDictionaryEnumerator.Value => Current.Value;
         }
     }
 }

@@ -6,28 +6,30 @@ using Pepper.AST.Validation;
 using Pepper.Codegen;
 
 namespace Pepper {
+    public class Message {
+        public String What { get; private set; }
+        public SourceLocation Where { get; private set; }
+
+        public Message(string what, SourceLocation where) {
+            What = what;
+            Where = where;
+        }
+    }
+
+    public class Warning : Message {
+        public Warning(string what, SourceLocation where) : base(what, where) { }
+    }
+
+    public class Error : Message {
+        public Error(string what, SourceLocation where) : base(what, where) { }
+    }
+
     public class Compiler {
-
-        public class Message {
-            public String What { get; private set; }
-            public SourceLocation Where { get; private set; }
-
-            public Message(string what, SourceLocation where) {
-                What = what;
-                Where = where;
-            }
-        }
-
-        public class Warning : Message {
-            public Warning(string what, SourceLocation where) : base(what, where) { }
-        }
-
-        public class Error : Message {
-            public Error(string what, SourceLocation where) : base(what, where) { }
-        }
 
         public string SourcePath { get; private set; }
         public ICharStream SourceStream { get; private set; }
+
+        static Compiler? Current;
         public List<Message> AllMessages { get; private set; } = new();
         public List<Error> Errors { get; private set; } = new();
         public List<Warning> Warnings { get; private set; } = new();
@@ -55,13 +57,14 @@ namespace Pepper {
                 return compiler.Compile();
             } catch (Pepper.CompilerException err) {
                 var source = err.SourceLocation ?? SourceLocation.Current;
-                Log.Error($"{source}: {err.Message}\n    during {SourceLocation.Context}");
+                Log.Error($"{source}: {err.Message} during {SourceLocation.Context}");
                 Environment.Exit(-1);
             }
             return null;
         }
 
         private Compiler(string moduleName, string sourcePath, ICharStream? inputStream = null) {
+            Current = this;
             Context.Create(moduleName);
             SourcePath = sourcePath;
             SourceStream = inputStream ?? CharStreams.fromPath(sourcePath);
@@ -95,9 +98,13 @@ namespace Pepper {
             return module;
         }
 
-        public void Report<M>(string what, SourceLocation where) where M : Message {
+        public static void Report<M>(string what, SourceLocation? where = null, object? _ = null) where M : Message {
+            Current!.Report<M>(what, where);
+        }
+
+        public void Report<M>(string what, SourceLocation? where = null) where M : Message {
             var m = (M)Activator.CreateInstance(typeof(M), what, where)!;
-            Report(m);
+            Current!.Report(m);
         }
 
         public void Report(Message msg) => AllMessages.Add(msg);

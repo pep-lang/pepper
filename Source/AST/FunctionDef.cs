@@ -27,8 +27,8 @@ namespace Pepper.AST {
         public List<VariableDef> Variables { get; set; } = new();
         public List<Expression> Body { get; set; } = new();
 
-        public FunctionDef(string name, Type returnType, IEnumerable<Parameter> parameters = Enumerable.Empty<Parameter>(), bool vararg = false)
-            : base(returnType, name, parameters.ToList(), vararg) {
+        public FunctionDef(string name, Type returnType, IEnumerable<Parameter>? parameters = null, bool vararg = false)
+            : base(returnType, name, parameters?.ToList() ?? Enumerable.Empty<Parameter>(), vararg) {
         }
 
         public override IEnumerable<Node> Children {
@@ -42,8 +42,8 @@ namespace Pepper.AST {
 
     public class MethodDef : FunctionDef {
         public StructDef Struct { get; private set; }
-        public MethodDef(StructDef st, string name, Type returnType, IEnumerable<Parameter> parameters, bool vararg = false)
-            : base(name, returnType, parameters.ToList(), vararg) {
+        public MethodDef(StructDef st, string name, Type returnType, IEnumerable<Parameter>? parameters = null, bool vararg = false)
+            : base(name, returnType, parameters?.ToList() ?? Enumerable.Empty<Parameter>(), vararg) {
             Struct = st;
         }
     }
@@ -52,11 +52,14 @@ namespace Pepper.AST {
         public ExternFunction(Type returnType, string name, List<Parameter> parameters, bool vararg = false)
             : base(returnType, name, parameters, vararg) {
         }
+
+        public static readonly ExternFunction Malloc = new(Types.VoidPtr, "malloc", new List<Parameter> { new Parameter(Types.UInt64, "size") });
+        public static readonly ExternFunction Free = new(Types.Void, "free", new List<Parameter> { new Parameter(Types.VoidPtr, "ptr") });
     }
 
     public class FunctionCall : Expression {
         public override Type Type => Target.ReturnType;
-        public FunctionDef Target { get; private set; }
+        public FunctionNode Target { get; private set; }
         public List<Expression> Args { get; private set; }
         public FunctionCall(FunctionDef target, List<Expression> args) {
             Target = target;
@@ -73,7 +76,7 @@ namespace Pepper.AST {
         public FunctionDef Target { get; private set; }
         public Expression? Value { get; private set; }
 
-        public Return(FunctionDef target, Expression? value) {
+        public Return(FunctionDef target, Expression? value = null) {
             Target = target;
             Value = value;
         }

@@ -38,12 +38,12 @@ namespace Pepper.Codegen {
                 var argType = Parameters.ElementAt(idx).Type;
                 return argType.Coerce(arg.Load());
             });
-            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Load().Address).ToArray(), Name);
-            return new Value(ReturnType, returnValue, $"return {Name}");
+            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Load().Address).ToArray(), ReturnType != Types.Void ? Name : "");
+            return New(ReturnType, returnValue, $"return {Name}");
         }
 
         public Value Call(params Value[] args) {
-            return Call(args);
+            return Call(args.Cast<Value>());
         }
 
         public override string ToString() {
@@ -70,14 +70,14 @@ namespace Pepper.Codegen {
     }
 
     public class FreeFunction : UserFunction {
-        public FreeFunction(string name, Type returnType, IEnumerable<Parameter> parameters)
-            : base(name, returnType, parameters) { }
+        public FreeFunction(string name, Type returnType, IEnumerable<Parameter>? parameters = null)
+            : base(name, returnType, parameters?.ToList() ?? Enumerable.Empty<Parameter>()) { }
     }
 
     public class Method : UserFunction {
-        //public Struct Struct { get; private set; }
-        public Method(string name, Type returnType, IEnumerable<Parameter> parameters)
-            : base(name, returnType, parameters) {
+        public Method(string name, string mangledName, Type returnType, IEnumerable<Parameter> parameters)
+            : base(mangledName, returnType, parameters) {
+            Name = name;
         }
     }
 

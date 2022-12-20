@@ -3,10 +3,12 @@ using Pepper.Codegen;
 
 namespace Pepper {
     public class PointerType : NativeType {
-        public override Value DefaultValue => new(Types.VoidPtr, LLVMValueRef.CreateConstPointerNull(Types.VoidPtr), "nullptr");
-        public PointerType(string name, LLVMTypeRef typeRef)
+        public Type Pointee { get; private set; }
+        public override Value DefaultValue => Value.New(Types.VoidPtr, LLVMValueRef.CreateConstPointerNull(Types.VoidPtr), "nullptr");
+        public PointerType(string name, Type pointee, LLVMTypeRef typeRef)
             : base(name, typeRef) {
             IsPointer = true;
+            Pointee = pointee;
         }
 
         public override PointerType Pointer() {
@@ -20,7 +22,7 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsPointer) {
-                return new Value(this, LLVMValueRef.CreateConstPointerCast(val, this), $"{val.RegisterName}.ptr");
+                return Value.New(this, LLVMValueRef.CreateConstPointerCast(val, this), $"{val.RegisterName}.ptr");
             }
             throw new CompileError($"Cannot convert non-pointer type {type} to {this}");
         }
@@ -29,7 +31,9 @@ namespace Pepper {
             return new ConstantPointer((IntPtr)Convert.ChangeType(value, typeof(IntPtr))!);
         }
 
-        public override Value Equal(Value lhs, Value rhs) => new(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs));
+        public override Value Equal(Value lhs, Value rhs) => Value.New(this, Builder.BuildICmp(LLVMIntPredicate.LLVMIntEQ, lhs, rhs));
         public override Value Assign(Value lhs, Value rhs) { lhs.Store(rhs); return lhs; }
+
+        public static LLVMValueRef Null = LLVMValueRef.CreateConstPointerNull(Types.Int8Ptr);
     }
 }
