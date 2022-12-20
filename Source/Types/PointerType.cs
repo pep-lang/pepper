@@ -22,7 +22,7 @@ namespace Pepper {
 
             var type = val.Type;
             if (type.IsPointer) {
-                return Value.New(this, LLVMValueRef.CreateConstPointerCast(val, this), $"{val.RegisterName}.ptr");
+                return Value.New(this, val);
             }
             throw new CompileError($"Cannot convert non-pointer type {type} to {this}");
         }
