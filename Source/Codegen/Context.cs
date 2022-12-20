@@ -27,6 +27,10 @@ internal class Context {
         return builder;
     }
 
+    public static Scope PushScope(UserFunction function) {
+        return Locals = new Scope(Locals, function);
+    }
+
     public static Scope PushScope(LLVMBuilderRef? builder) {
         return Locals = new Scope(Locals, builder);
     }

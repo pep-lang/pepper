@@ -98,6 +98,11 @@ namespace Pepper.Codegen {
             ScopeBuilder = builder;
         }
 
+        public Scope(Scope outer, UserFunction function) 
+            : this(outer, function.Builder) {
+            ScopeReturnTarget = function;
+        }
+
         internal Type AddType(Type NewType) {
             Types[NewType.Name] = NewType;
             return NewType;
