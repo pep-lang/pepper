@@ -26,7 +26,6 @@ namespace Pepper.Codegen {
             MemoizeEmit<FieldDef>(Emit);
             MemoizeEmit<FunctionDef>(Emit);
             MemoizeEmit<VariableDef>(Emit);
-            MemoizeEmit<Expression>(Emit);
             MemoizeEmit<VariableRef>(Emit);
             MemoizeEmit<MemberRef>(Emit);
             MemoizeEmit<ThisRef>(Emit);
@@ -217,13 +216,13 @@ namespace Pepper.Codegen {
         private Value Emit(VariableDef variableDef) {
             return Context.Locals.AddVariable(
                 Value.New(variableDef.Type,
-                variableDef.InitialValue != null ? Emit(variableDef.InitialValue) : variableDef.Type.DefaultValue,
+                variableDef.InitialValue != null ? Codegen(variableDef.InitialValue) : variableDef.Type.DefaultValue,
                 variableDef.Name));
         }
 
         public Value? MaybeCodegen(Expression? expr) {
             if (expr != null) {
-                return Emit(expr);
+                return Codegen(expr);
             }
             return null;
         }
