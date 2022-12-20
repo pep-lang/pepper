@@ -76,7 +76,7 @@ namespace Pepper.Codegen {
             while (nodeType != typeof(Node)) {
                 try {
                     return (Value)MemoizedEmit(nodeType)(node);
-                } catch {
+                } catch (KeyNotFoundException) {
                     nodeType = nodeType.BaseType!;
                 }
             }
@@ -102,19 +102,12 @@ namespace Pepper.Codegen {
                 })
                 .ToOrderedMap();
 
-            // Figure out the vtable type as early as possible. TypeInfo and per-object headers
-            // depend on knowing this type, and it's different for every struct
-            var vtableType = new StructType($"${structDef.Name}.vtable", Struct.VTableType(methods.Values));
-            var typeInfoType = new StructType($"{structDef.Name}.typeinfo", Struct.StaticTypeInfo.Type(vtableType));
-
-            // Prepend the header fields to the fields list before type gen
-            var fields = Struct.Header.Fields(vtableType)
-                .Concat(structDef.Fields.Select(f => new Symbol(f.Type, f.Name)))
-                .ToList();
+            // Convert fields list to symbols before type gen
+            var fields = structDef.Fields.Select(f => new Symbol(f.Type, f.Name)).ToList();
 
             // Generate the new struct type
-            var structType = Struct.ToType(structDef.Name, fields, methods.Values);
-            var structDesc = new Struct(structType.Pointer(), structDef.Name, fields, methods);
+            var structType = ObjectType.Create(structDef.Name, fields, methods);
+            var structDesc = new Struct(structType, structDef.Name);
 
             // Create Struct()/new function
             var newFn = new FreeFunction(structDef.Name, structType.Pointer());

@@ -131,7 +131,16 @@ namespace Pepper {
 
             }
 
-            public KeyValuePair<TKey, TValue> Current => (KeyValuePair <TKey, TValue>)Etor.Current;
+            public KeyValuePair<TKey, TValue> Current {
+                get {
+                    if (Etor.Current is KeyValuePair<TKey, TValue> kvp)
+                        return kvp;
+                    if (Etor.Current is DictionaryEntry de) 
+                        return new KeyValuePair<TKey, TValue>((TKey)de.Key, (TValue)de.Value!);
+                    throw new NotImplementedException($"OrderedMap.Enumerator: Conversion from {Etor.Current.GetType()} is not supported");
+                }
+            } 
+                
             public bool MoveNext() => Etor.MoveNext();
             public void Reset() => Etor.Reset();
 
