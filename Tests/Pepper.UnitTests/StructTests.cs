@@ -11,10 +11,10 @@ namespace Pepper.UnitTests {
                 };
                 int main() {
                     Test t = Test();
-                    return t.x;
+                    return 0;
                 }
                 """;
-            Utils.CompileAndRun("HelloWorld", source);
+            Utils.CompileAndRun("Basic", source);
         }
     }
 }

@@ -38,8 +38,8 @@ namespace Pepper.Codegen {
                 var argType = Parameters.ElementAt(idx).Type;
                 return argType.Coerce(arg.Load());
             });
-            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Load().Address).ToArray(), ReturnType != Types.Void ? Name : "");
-            return New(ReturnType, returnValue, $"return {Name}");
+            var returnValue = Context.Locals.Builder.BuildCall2(this, this, coercedArgs.Select(a => a.Load().Address).ToArray(), ReturnType != Types.Void ? $"{Name}.ret" : "");
+            return New(ReturnType, returnValue);
         }
 
         public Value Call(params Value[] args) {

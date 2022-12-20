@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
@@ -110,38 +111,40 @@ namespace Pepper.Codegen {
 
             // Create Struct()/new function
             var newFn = new FreeFunction(structDef.Name, structType.Pointer());
-            var builder = newFn.Builder;
-            Context.PushScope(builder);
-            var addr = ExternFunction.Malloc.Call(structType.SizeOf);
-            structDesc.Constructor.Call(addr);
-            newFn.Builder.BuildRet(addr);
+            Context.PushScope(newFn);
+            {
+                var size = Value.New(Types.UInt64, structType.SizeOf, "size");
+                var addr = ExternFunction.Malloc.Call(new ConstantInt64(4));
+                structDesc.Constructor.Call(addr);
+                newFn.Builder.BuildRet(addr);
+            }            
             Context.PopScope();
             // Export new to the enclosing scope
             Context.Locals.AddFunction(newFn);
 
-            Context.PushScope(structDesc.Initializer.Builder);
-            {
-                var self = structDesc.Initializer.Address.IsAFunction.Params[0];
-                CodegenFunction(structDesc.Initializer, structDef.Initializer);
-            }
-            Context.PopScope();
+            //var ret = structDef.Initializer.Body.Count - 1;
+            //structDef.Initializer.Body.Insert(ret, new FunctionCall(AST.ExternFunction.Print, new() { new StringLiteral("INIT") }));
+            CodegenFunction(structDesc.Initializer, structDef.Initializer);
+            //Context.Locals.AliasFunction(structDesc.Initializer, "__init");
 
             // Insert initializer into st.Constructor
-            Context.PushScope(structDesc.Constructor.Builder);
-            {
-                // TODO: deal with ctor params
-                // inject the header values, then call init, then call constructor
-                //var typeinfo = structType.GetMember("__typeinfo", self);
-                //var refcount = structType.GetMember("__refcount", self);
-                //structTypeInfo.Constructor.Builder.BuildStore(structTypeInfo.TypeInfo, typeinfo);
-                //structTypeInfo.Constructor.Builder.BuildStore(new ConstantInt32(0), refcount);
-                //structTypeInfo.Constructor.Builder.Insert(structTypeInfo.Initializer.Call(self));
-                CodegenFunction(structDesc.Constructor, structDef.Constructor);
-                structDesc.Constructor.Builder.BuildRetVoid();
-            }
-            Context.PopScope();
+            //structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new() { new ThisRef(structDef) }));
+            CodegenFunction(structDesc.Constructor, structDef.Constructor);
+            //Context.PushScope(structDesc.Constructor.Builder);
+            //{
+            //    // TODO: deal with ctor params
+            //    // inject the header values, then call init, then call constructor
+            //    //var typeinfo = structType.GetMember("__typeinfo", self);
+            //    //var refcount = structType.GetMember("__refcount", self);
+            //    //structTypeInfo.Constructor.Builder.BuildStore(structTypeInfo.TypeInfo, typeinfo);
+            //    //structTypeInfo.Constructor.Builder.BuildStore(new ConstantInt32(0), refcount);
+            //    //structTypeInfo.Constructor.Builder.Insert(structTypeInfo.Initializer.Call(self));
+            //    structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new()));
+            //    CodegenFunction(structDesc.Constructor, structDef.Constructor);
+            //}
+            //Context.PopScope();
             
-            Context.PushScope(structDesc.Destructor.Builder);
+            Context.PushScope(structDesc.Destructor);
             {
                 var self = structDesc.Destructor.Address.IsAFunction.Params[0];
                 CodegenFunction(structDesc.Destructor, structDef.Destructor);
@@ -195,10 +198,10 @@ namespace Pepper.Codegen {
             var locals = funcDef.Variables.Select(Codegen).ToList();
 
             // Emit the body of the function
-            //var lastExpr = funcDef.Body.LastOrDefault();
-            //if (lastExpr is not Return) {
-            //    funcDef.Body.Add(new Return(funcDef));
-            //}
+            var lastExpr = funcDef.Body.LastOrDefault();
+            if (lastExpr is not Return) {
+                funcDef.Body.Add(new Return(funcDef));
+            }
             var body = funcDef.Body.Select(Codegen).ToList();
             
             Context.PopScope();
