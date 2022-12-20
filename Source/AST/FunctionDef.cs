@@ -48,11 +48,12 @@ namespace Pepper.AST {
         }
     }
 
-    public class ExternFunction : FunctionNode {
+    public class ExternFunction : FunctionDef {
         public ExternFunction(Type returnType, string name, List<Parameter> parameters, bool vararg = false)
-            : base(returnType, name, parameters, vararg) {
+            : base(name, returnType, parameters, vararg) {
         }
 
+        public static readonly ExternFunction Print = new(Types.Int32, "puts", new() { new(Types.Int8Ptr, "str") });
         public static readonly ExternFunction Malloc = new(Types.VoidPtr, "malloc", new List<Parameter> { new Parameter(Types.UInt64, "size") });
         public static readonly ExternFunction Free = new(Types.Void, "free", new List<Parameter> { new Parameter(Types.VoidPtr, "ptr") });
     }
