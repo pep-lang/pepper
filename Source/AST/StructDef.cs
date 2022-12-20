@@ -44,4 +44,12 @@ namespace Pepper.AST {
             Name = fieldName;
         }
     }
+
+    public class ThisRef : Expression {
+        public override Type Type => ThisDef.Type;
+        public StructDef ThisDef { get; private set; }
+        public ThisRef(StructDef thisType) {
+            ThisDef = thisType;
+        }
+    }
 }

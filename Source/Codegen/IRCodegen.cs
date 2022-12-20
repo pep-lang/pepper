@@ -176,6 +176,10 @@ namespace Pepper.Codegen {
             return member.Store();
         }
 
+        private Value Emit(ThisRef thisRef) {
+            return Context.Locals.GetVariable("this")!;
+        }
+
         private void CodegenFunction(UserFunction function, FunctionDef funcDef) {
             Context.PushScope(function.Builder);
             // Allocate parameters
