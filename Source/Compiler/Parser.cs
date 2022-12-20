@@ -22,7 +22,7 @@ namespace Pepper {
             var tokens = new BufferedTokenStream(lexer);
             var parser = new ANTLR.PepperParser(tokens) {
                 BuildParseTree = true,
-                Trace = true,
+                //Trace = true,
                 ErrorHandler = new BailErrorStrategy(),
             };
 
