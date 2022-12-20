@@ -29,7 +29,7 @@ namespace Pepper.Codegen {
             MemoizeEmit<Expression>(Emit);
             MemoizeEmit<VariableRef>(Emit);
             MemoizeEmit<MemberRef>(Emit);
-            MemoizeEmit<Literal>(Emit);
+            MemoizeEmit<ThisRef>(Emit);
             MemoizeEmit<StringLiteral>(Emit);
             MemoizeEmit<IntegerLiteral>(Emit);
             MemoizeEmit<FloatLiteral>(Emit);
@@ -181,7 +181,7 @@ namespace Pepper.Codegen {
         }
 
         private void CodegenFunction(UserFunction function, FunctionDef funcDef) {
-            Context.PushScope(function.Builder);
+            Context.PushScope(function);
             // Allocate parameters
             var llvmFunction = function.Address.IsAFunction;
             var llvmParams = llvmFunction.Params;
@@ -196,6 +196,10 @@ namespace Pepper.Codegen {
             var locals = funcDef.Variables.Select(Codegen).ToList();
 
             // Emit the body of the function
+            //var lastExpr = funcDef.Body.LastOrDefault();
+            //if (lastExpr is not Return) {
+            //    funcDef.Body.Add(new Return(funcDef));
+            //}
             var body = funcDef.Body.Select(Codegen).ToList();
             
             Context.PopScope();
@@ -217,28 +221,6 @@ namespace Pepper.Codegen {
                 variableDef.Name));
         }
 
-        private Value Emit(Expression expr) {
-            if (expr is BinaryOp op) {
-                return Codegen(op);
-            }
-            if (expr is FunctionCall call) {
-                return Codegen(call);
-            }
-            if (expr is Return ret) {
-                return Codegen(ret);
-            }
-            if (expr is MemberRef fieldRef) {
-                return Codegen(fieldRef);
-            }
-            if (expr is VariableRef varRef) {
-                return Codegen(varRef);
-            }
-            if (expr is Literal lit) {
-                return Codegen(lit);
-            }
-            throw new InternalCompilerError($"Unexpected expression encountered during codegen: {expr}");
-        }
-
         public Value? MaybeCodegen(Expression? expr) {
             if (expr != null) {
                 return Emit(expr);
@@ -248,19 +230,6 @@ namespace Pepper.Codegen {
 
         private Value Emit(VariableRef variableRef) {
             return Context.Locals.GetVariable(variableRef.Identifier)!;
-        }
-
-        private Value Emit(Literal lit) {
-            if (lit is StringLiteral str) {
-                return Codegen(str);
-            }
-            if (lit is IntegerLiteral intLit) {
-                return Codegen(intLit);
-            }
-            if (lit is FloatLiteral floatLit) {
-                return Codegen(floatLit);
-            }
-            throw new InternalCompilerError($"unexpected literal encountered during codegen: {lit}");
         }
 
         private Value Emit(StringLiteral lit) {
@@ -288,7 +257,7 @@ namespace Pepper.Codegen {
             if (func == null) {
                 throw new CompileError($"Function {call.Target.Name} not found", call.Source);
             }
-            return func.Call(call.Args.Select(Emit));
+            return func.Call(call.Args.Select(Codegen)).Store();
         }
 
         private Value Emit(Return ret) {
