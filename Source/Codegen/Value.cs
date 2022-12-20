@@ -41,7 +41,7 @@ namespace Pepper.Codegen {
         }
 
         // Copy/Store another value as Type
-        public static Value Copy(Type type, Value value, string name = "", SourceLocation? source = null) {
+        public static Value New(Type type, Value value, string name = "", SourceLocation? source = null) {
             if (ByType.TryGetValue(type, out var valType)) {
                 return (Value)Activator.CreateInstance(valType, type, value, name, source)!;
             }
@@ -55,7 +55,7 @@ namespace Pepper.Codegen {
         }
 
         // Copy/Store another value as Type
-        public static Value Copy<V>(Type type, Value value, string name = "", SourceLocation? source = null) where V : Value {
+        public static Value New<V>(Type type, Value value, string name = "", SourceLocation? source = null) where V : Value {
             ByType.TryAdd(type, typeof(V));
             return (V)Activator.CreateInstance(typeof(V), type, value, name, source)!;
         }
