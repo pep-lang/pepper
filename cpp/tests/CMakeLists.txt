@@ -17,7 +17,8 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(PepperTests
-	RTTI.cpp
+  IntMath.cpp
+  RTTI.cpp
 )
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS})
 target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES})
