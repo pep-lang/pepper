@@ -1,3 +1,4 @@
+#pragma once
 
 #include "Core/Common.h"
 #include <string>
@@ -18,7 +19,7 @@ namespace pepper {
 
         virtual llvm::Module* createModule(const std::string& name) = 0;
 
-        virtual int Execute(const std::string& entry = "main") = 0;
+        virtual int execute(const std::string& entry = "main") = 0;
         // virtual int Interpret(llvm::Module* module, const std::string& entry = "main") = 0;
     };
 } // namespace pepper

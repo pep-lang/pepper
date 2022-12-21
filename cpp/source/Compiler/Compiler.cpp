@@ -2,49 +2,61 @@
 #include "Compiler/Compiler.h"
 
 #include "Compiler/Context.h"
+#include "Compiler/Exceptions.h"
 #include "Compiler/Options.h"
 #include "Compiler/Parser.h"
+#include "llvm/Support/TargetSelect.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
 namespace pepper {
-    Compiler::Compiler(const std::string& moduleName) {
-        Ctx = std::make_unique<Context>(moduleName);
-        ParserRef = std::make_unique<Parser>();
-    }
+    class PepperCompiler : public Compiler {
+      private:
+        std::unique_ptr<Context> Ctx;
+        std::unique_ptr<Parser> ParserRef;
 
-    bool Compiler::parse(std::istream& inputStream, const std::string& sourceFile) {
-        try {
-            ParserRef->parse(inputStream, sourceFile);
-        } catch (const std::exception& e) {
-            std::cerr << e.what() << '\n';
-            return false;
+      public:
+        PepperCompiler(const std::string& moduleName) {
+            llvm::InitializeNativeTarget();
+            llvm::InitializeNativeTargetAsmPrinter();
+            llvm::InitializeNativeTargetAsmParser();
+
+            Ctx = std::make_unique<Context>(moduleName);
+            ParserRef = std::make_unique<Parser>();
         }
 
-        return true;
-    }
-
-    bool Compiler::compile(const std::string& sourceFile) {
-        std::ifstream sourceStream(sourceFile, std::ios_base::in);
-        auto sourcePath = std::filesystem::path(sourceFile);
-        return parse(sourceStream, sourceFile);
-    }
-
-    Ref<Compiler> Compiler::Compile(const std::string& moduleName, std::istream& inputStream) {
-        auto compiler = std::make_shared<Compiler>(moduleName);
-        if (compiler->parse(inputStream)) {
-            return compiler;
+        Context& context() const override {
+            return *Ctx.get();
         }
-        return nullptr;
-    }
 
-    Ref<Compiler> Compiler::Compile(Ref<Options> opts) {
-        Ref<Compiler> compiler = std::make_shared<Compiler>(opts->moduleName());
-        for (auto sourceFile : opts->sourceFiles()) {
-            compiler->compile(sourceFile);
+        bool parse(std::istream& inputStream, const std::string& sourceFile) {
+            try {
+                ParserRef->parse(inputStream, sourceFile);
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << '\n';
+                return false;
+            }
+
+            return true;
         }
-        return compiler;
+
+        llvm::Module* compile(const std::string& sourceFile) override {
+            std::ifstream sourceStream(sourceFile, std::ios_base::in);
+            auto sourcePath = std::filesystem::path(sourceFile);
+            return compile(sourceStream, sourcePath);
+        }
+
+        llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile) override {
+            if (!parse(sourceStream, sourceFile)) {
+                throw new CompileError("Failed to parse {0}", sourceFile);
+            }
+            return Context::get().module();
+        }
+    };
+
+    Ref<Compiler> Compiler::Create(const std::string& moduleName) {
+        return Ref<PepperCompiler>::create(moduleName);
     }
 
 } // namespace pepper

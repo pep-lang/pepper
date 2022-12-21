@@ -34,6 +34,10 @@ namespace pepper {
 
         llvm::Module* module() const;
 
+        Ref<Executor> executor() const {
+            return Exec;
+        }
+
         Scope* globals() const {
             return Globals.get();
         }

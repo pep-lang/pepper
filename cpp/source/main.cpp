@@ -7,7 +7,8 @@ int main(int argc, char** argv) {
         const char* sourceFile = argv[1];
         std::ifstream sourceStream(sourceFile, std::ios_base::in);
         auto sourcePath = std::filesystem::path(sourceFile);
-        pepper::Compiler::Compile(sourcePath.filename().string(), sourceStream);
+        auto compiler = pepper::Compiler::Create(sourcePath.filename().string());
+        return compiler->compile(sourceStream, sourcePath) != nullptr;
     }
 
     return 0;

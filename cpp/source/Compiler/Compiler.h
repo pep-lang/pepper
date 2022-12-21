@@ -5,22 +5,19 @@
 #include <memory>
 #include <string>
 
+namespace llvm {
+    class Module;
+}
+
 namespace pepper {
     class Context;
-    class Parser;
-    class Options;
 
     class Compiler {
-        std::unique_ptr<Context> Ctx;
-        std::unique_ptr<Parser> ParserRef;
-
       public:
-        Compiler(const std::string& moduleName);
+        static Ref<Compiler> Create(const std::string& moduleName);
 
-        bool compile(const std::string& sourceFile);
-        bool parse(std::istream& inputStream, const std::string& sourceFile = "");
-
-        static Ref<Compiler> Compile(Ref<Options> opts);
-        static Ref<Compiler> Compile(const std::string& moduleName, std::istream& inputStream);
+        virtual Context& context() const = 0;
+        virtual llvm::Module* compile(const std::string& sourceFile) = 0;
+        virtual llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile = "<stream>") = 0;
     };
 } // namespace pepper

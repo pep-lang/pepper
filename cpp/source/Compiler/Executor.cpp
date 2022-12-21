@@ -15,6 +15,7 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/Host.h"
 
 namespace pepper {
     using namespace llvm;
@@ -87,13 +88,15 @@ namespace pepper {
         llvm::Module* createModule(const std::string& name) {
             auto context = std::make_unique<llvm::LLVMContext>();
             auto module = std::make_unique<llvm::Module>(name, *context);
+            auto targetTriple = llvm::sys::getDefaultTargetTriple();
+            module->setTargetTriple(targetTriple);
             module->setDataLayout(getDataLayout());
             auto result = module.get();
             HandleError(addModule(std::move(ThreadSafeModule(std::move(module), std::move(context)))));
             return result;
         }
 
-        int Execute(const std::string& entry) {
+        int execute(const std::string& entry) {
             auto entryFn = lookup(entry);
             int (*fn)() = (int (*)())(intptr_t)entryFn->getAddress();
             return fn();
