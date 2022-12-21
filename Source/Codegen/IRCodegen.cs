@@ -125,10 +125,10 @@ namespace Pepper.Codegen {
             //var ret = structDef.Initializer.Body.Count - 1;
             //structDef.Initializer.Body.Insert(ret, new FunctionCall(AST.ExternFunction.Print, new() { new StringLiteral("INIT") }));
             CodegenFunction(structDesc.Initializer, structDef.Initializer);
-            //Context.Locals.AliasFunction(structDesc.Initializer, "__init");
+            Context.Locals.AliasFunction(structDesc.Initializer, "__init");
 
             // Insert initializer into st.Constructor
-            //structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new() { new ThisRef(structDef) }));
+            structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new() { new ThisRef(structDef) }));
             CodegenFunction(structDesc.Constructor, structDef.Constructor);
             //Context.PushScope(structDesc.Constructor.Builder);
             //{
@@ -167,7 +167,7 @@ namespace Pepper.Codegen {
             var structType = Context.Locals.GetType<StructType>(((PointerType)self.Type).Pointee.Name);
             var lhs = structType.GetMember(fieldDef.Name, self);
             var value = MaybeCodegen(fieldDef.InitialValue) ?? lhs.Type.DefaultValue;
-            return lhs.Type.Assign(lhs, value);
+            return lhs.Type.Assign(lhs.Load(), value);
         }
 
         private Value Emit(MemberRef memberRef) {
@@ -175,7 +175,7 @@ namespace Pepper.Codegen {
             var type = memberRef.LHS.Type;
             var structType = (StructType)(type.IsPointer ? ((PointerType)type).Pointee : type);
             var member = structType.GetMember(memberRef.Name, lhs);
-            return member.Store();
+            return member.Load();
         }
 
         private Value Emit(ThisRef thisRef) {
@@ -259,7 +259,7 @@ namespace Pepper.Codegen {
             if (func == null) {
                 throw new CompileError($"Function {call.Target.Name} not found", call.Source);
             }
-            return func.Call(call.Args.Select(Codegen)).Store();
+            return func.Call(call.Args.Select(Codegen));
         }
 
         private Value Emit(Return ret) {
