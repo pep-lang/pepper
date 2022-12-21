@@ -14,10 +14,12 @@ namespace llvm {
 namespace pepper {
     class AST;
     class Scope;
+    class Executor;
 
     class Context {
         static Context* Instance;
 
+        Ref<Executor> Exec;
         llvm::Module* Module;
         Ref<Scope> Runtime;
         Ref<Scope> Globals;
@@ -30,9 +32,7 @@ namespace pepper {
         Context(const std::string& moduleName);
         ~Context();
 
-        llvm::Module* module() const {
-            return Module;
-        }
+        llvm::Module* module() const;
 
         Scope* globals() const {
             return Globals.get();

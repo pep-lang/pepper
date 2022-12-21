@@ -29,7 +29,7 @@ endif()
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
+explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks orcjit option support core)
 
 add_subdirectory(grammar)
 

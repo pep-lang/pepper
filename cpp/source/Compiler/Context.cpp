@@ -2,7 +2,11 @@
 #include "Compiler/Context.h"
 
 #include "AST/AST.h"
+#include "Compiler/Executor.h"
 #include "Compiler/Scope.h"
+#include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include <cassert>
 
 namespace pepper {
@@ -20,10 +24,17 @@ namespace pepper {
         , Ast(Ref<AST>::create()) {
         assert(Instance == nullptr);
         Instance = this;
+
+        Exec = Executor::Create();
+        Module = Exec->createModule(moduleName);
     }
 
     Context::~Context() {
         Instance = nullptr;
+    }
+
+    llvm::Module* Context::module() const {
+        return Module;
     }
 
 } // namespace pepper
