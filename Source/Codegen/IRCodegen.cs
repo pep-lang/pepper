@@ -97,7 +97,8 @@ namespace Pepper.Codegen {
                         Mangle.Method(structDef.Name, name),
                         m.ReturnType,
                         parameters.Cast<Function.Parameter>());
-                    //CodegenFunction(func, m);
+                    if (!name.StartsWith("__"))
+                        CodegenFunction(func, m);
                     return new KeyValuePair<string, FreeFunction>(name, func);
                 })
                 .ToOrderedMap();
@@ -122,42 +123,10 @@ namespace Pepper.Codegen {
             // Export new to the enclosing scope
             Context.Locals.AddFunction(newFn);
 
-            //var ret = structDef.Initializer.Body.Count - 1;
-            //structDef.Initializer.Body.Insert(ret, new FunctionCall(AST.ExternFunction.Print, new() { new StringLiteral("INIT") }));
             CodegenFunction(structDesc.Initializer, structDef.Initializer);
             Context.Locals.AliasFunction(structDesc.Initializer, "__init");
-
-            // Insert initializer into st.Constructor
-            structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new() { new ThisRef(structDef) }));
             CodegenFunction(structDesc.Constructor, structDef.Constructor);
-            //Context.PushScope(structDesc.Constructor.Builder);
-            //{
-            //    // TODO: deal with ctor params
-            //    // inject the header values, then call init, then call constructor
-            //    //var typeinfo = structType.GetMember("__typeinfo", self);
-            //    //var refcount = structType.GetMember("__refcount", self);
-            //    //structTypeInfo.Constructor.Builder.BuildStore(structTypeInfo.TypeInfo, typeinfo);
-            //    //structTypeInfo.Constructor.Builder.BuildStore(new ConstantInt32(0), refcount);
-            //    //structTypeInfo.Constructor.Builder.Insert(structTypeInfo.Initializer.Call(self));
-            //    structDef.Constructor.Body.Insert(0, new FunctionCall(structDef.Initializer, new()));
-            //    CodegenFunction(structDesc.Constructor, structDef.Constructor);
-            //}
-            //Context.PopScope();
-            
-            Context.PushScope(structDesc.Destructor);
-            {
-                var self = structDesc.Destructor.Address.IsAFunction.Params[0];
-                CodegenFunction(structDesc.Destructor, structDef.Destructor);
-                // Ensure destructor ends with free
-                if (structDesc.Destructor.Body.LastInstruction.IsAReturnInst == null) {
-                    structDesc.Destructor.Builder.PositionAtEnd(structDesc.Destructor.Body);
-                    structDesc.Destructor.Builder.BuildRetVoid();
-                }
-                structDesc.Destructor.Builder.PositionBefore(structDesc.Destructor.Body.LastInstruction);
-                self = structDesc.Destructor.Address.IsAFunction.Params[0];
-                ExternFunction.Free.Call(self);
-            }            
-            Context.PopScope();
+            CodegenFunction(structDesc.Destructor, structDef.Destructor);
 
             return structDesc;
         }

@@ -27,8 +27,21 @@ namespace Pepper.AST {
         }
 
         public void Finish() {
+            // Fill in initializer
             Initializer.Variables = Fields.Select(f => new FieldDef(this, f.Type, f.Name, f.InitialValue)).Cast<VariableDef>().ToList();
             Initializer.Body.Add(new Return(Initializer, null));
+
+            // Insert initializer as the first instruction in Constructor
+            Constructor.Body.Insert(0, new FunctionCall(Initializer, new() { new ThisRef(this) }));
+
+            // Insert free as the last instruction before return in Destructor
+            var lastExpr = Destructor.Body.LastOrDefault();
+            if (lastExpr is Return) {
+                Destructor.Body.RemoveAt(Destructor.Body.Count - 1);
+            }
+
+            Destructor.Body.Add(new FunctionCall(ExternFunction.Free, new() { new ThisRef(this) }));
+            Destructor.Body.Add(new Return(Destructor));
         }
     }
 
