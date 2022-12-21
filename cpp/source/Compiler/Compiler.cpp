@@ -44,7 +44,7 @@ namespace pepper {
         llvm::Module* compile(const std::string& sourceFile) override {
             std::ifstream sourceStream(sourceFile, std::ios_base::in);
             auto sourcePath = std::filesystem::path(sourceFile);
-            return compile(sourceStream, sourcePath);
+            return compile(sourceStream, sourcePath.string());
         }
 
         llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile) override {
