@@ -16,12 +16,15 @@ namespace Pepper {
             bool signed = val.Type != Types.Bool && IsSigned;
             if (val.Type.IsInt) {
                 if (this.Bits > val.Type.Bits)
-                    return Value.New(this, Builder.BuildZExtOrBitCast(val.Load(), this), $"{val.RegisterName}.zext").Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildZExtOrBitCast(val.Load(), this), $"{val.RegisterName}.zext"));
                 else
-                    return Value.New(this, Builder.BuildTruncOrBitCast(val.Load(), this), $"{val.RegisterName}.trunc").Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildTruncOrBitCast(val.Load(), this), $"{val.RegisterName}.trunc"));
             }
-            Func<LLVMValueRef, LLVMTypeRef, string, LLVMValueRef> convert = signed ? Builder.BuildFPToSI : Builder.BuildFPToUI;
-            return Value.New(this, convert(val.Load(), this, ""), $"{val.Name}.fptoi").Store();
+            if (val.Type.IsFloat) {
+                Func<LLVMValueRef, LLVMTypeRef, string, LLVMValueRef> convert = signed ? Builder.BuildFPToSI : Builder.BuildFPToUI;
+                return Value.New(this, Value.New<Instruction>(this, convert(val.Load(), this, ""), $"{val.Name}.fptoi"));
+            }
+            throw new InternalCompilerError("Attempted to cast from {val.Type} to {this}");
         }
 
         public override Value CreateConstant<U>(U value) {

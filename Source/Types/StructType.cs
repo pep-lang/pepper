@@ -102,7 +102,7 @@ namespace Pepper {
         Value GetField(Symbol field, Value instance) {
             uint idx = (uint)Fields.IndexOf(field.Name);
             var addr = Context.Locals.Builder.BuildStructGEP2(this, instance, idx, field.Name);
-            var value = Value.New(field.Type, addr).Load();
+            var value = Value.New(field.Type, addr);
             return value;
         }
         

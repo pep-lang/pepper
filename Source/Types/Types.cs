@@ -31,6 +31,13 @@ namespace Pepper {
             return ByType[t];
         }
 
+        public static Type From(LLVMValueRef v) {
+            if (v.IsAInstruction != null) {
+                return Instruction;
+            }
+            return From(v.TypeOf);
+        }
+
         public static readonly VoidType Void = new("void", LLVMTypeRef.Void);
         public static readonly PointerType VoidPtr = Void.Pointer();
 

@@ -22,14 +22,14 @@ namespace Pepper {
             var type = val.Type;
             if (type.IsInt) {
                 if (type.IsSigned)
-                    return Value.New(this, Builder.BuildSIToFP(val.Load(), this)).Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildSIToFP(val.Load(), this)));
                 else
-                    return Value.New(this, Builder.BuildUIToFP(val.Load(), this)).Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildUIToFP(val.Load(), this)));
             } else {
                 if (Bits > val.Type.Bits)
-                    return Value.New(this, Builder.BuildFPExt(val.Load(), this)).Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildFPExt(val.Load(), this)));
                 else
-                    return Value.New(this, Builder.BuildFPTrunc(val.Load(), this)).Store();
+                    return Value.New(this, Value.New<Instruction>(this, Builder.BuildFPTrunc(val.Load(), this)));
             }
         }
 

@@ -136,7 +136,7 @@ namespace Pepper.Codegen {
             var structType = Context.Locals.GetType<StructType>(((PointerType)self.Type).Pointee.Name);
             var lhs = structType.GetMember(fieldDef.Name, self);
             var value = MaybeCodegen(fieldDef.InitialValue) ?? lhs.Type.DefaultValue;
-            return lhs.Type.Assign(lhs.Load(), value);
+            return lhs.Type.Assign(lhs, value);
         }
 
         private Value Emit(MemberRef memberRef) {
@@ -144,7 +144,7 @@ namespace Pepper.Codegen {
             var type = memberRef.LHS.Type;
             var structType = (StructType)(type.IsPointer ? ((PointerType)type).Pointee : type);
             var member = structType.GetMember(memberRef.Name, lhs);
-            return member.Load();
+            return member;
         }
 
         private Value Emit(ThisRef thisRef) {
