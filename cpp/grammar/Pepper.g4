@@ -159,7 +159,7 @@ storageClassSpecifier
 
 typeSpecifier
 	: variableSpecifier
-	| structSpecifier
+	| structDeclaration
 	| enumSpecifier
 	;
 
@@ -167,29 +167,16 @@ variableSpecifier
     : Identifier Identifier Assign assignmentExpression
     ;
 
-structSpecifier
-	: Struct Identifier? '{' structDeclarationList '}'
-	;
-
-structDeclarationList
-	: structDeclaration*
-	;
-
 structDeclaration
-	: specifierQualifierList structDeclaratorList ';'
-	| specifierQualifierList ';'
+	: Struct Identifier '{' fieldDeclarationList '}'
 	;
 
-specifierQualifierList
-	: (typeSpecifier|typeQualifier) specifierQualifierList?
+fieldDeclarationList
+	: fieldDeclaration*
 	;
 
-structDeclaratorList
-	: structDeclarator (',' structDeclarator)*
-	;
-
-structDeclarator
-	: declarator
+fieldDeclaration
+	: typeQualifier* variableSpecifier ';'
 	;
 
 enumSpecifier
@@ -233,7 +220,7 @@ parameterList
     ;
 
 parameterDeclaration
-	: declarationSpecifiers declarator
+	: Identifier Identifier (Assign assignmentExpression)?
 	;
 
 identifierList
@@ -320,12 +307,13 @@ translationUnit
 	;
 
 externalDeclaration
-    :   functionDefinition
+    : functionDefinition
+    | structDeclaration  
     |   ';' // stray ;
     ;
 
 functionDefinition
-    :   returnType? Identifier '(' initDeclaratorList? ')' compoundStatement
+    :   returnType? Identifier '(' parameterList? ')' compoundStatement
     ;
 
 returnType
@@ -457,7 +445,7 @@ BinaryConstant
 
 fragment
 DecimalConstant
-    :   NonzeroDigit Digit*
+    :   Sign? NonzeroDigit Digit*
     ;
 
 fragment

@@ -152,23 +152,14 @@ namespace pepper {
         Ref<Type> getType(const std::string& name);
 
         static Ref<Type> Void;
-
         static Ref<Type> Int8;
-
         static Ref<Type> UInt8;
-
         static Ref<Type> Int32;
-
         static Ref<Type> UInt32;
-
         static Ref<Type> Int64;
-
         static Ref<Type> UInt64;
-
         static Ref<Type> Bool;
-
         static Ref<Type> Double;
-
         static Ref<Type> Float;
 
       public:

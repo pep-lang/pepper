@@ -52,8 +52,8 @@ namespace pepper {
 
         void injectRuntime();
 
-        Scope* PushScope(llvm::IRBuilderBase* builder = nullptr);
-        Scope* PopScope();
+        Scope* pushScope(llvm::IRBuilderBase* builder = nullptr);
+        Scope* popScope();
     };
 
 } // namespace pepper

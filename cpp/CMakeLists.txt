@@ -6,11 +6,10 @@ option(BUILD_DEPS "Build dependencies, should only need to be done once" OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(GLOBAL PROPERTY USE_FOLDERS ON)
 
-include(CTest)
 enable_testing()
 
 if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /wd4624")
 else()
     
 endif()
@@ -30,15 +29,11 @@ endif()
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-add_definitions(${LLVM_DEFINITIONS_LIST})
 explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
 
 add_subdirectory(grammar)
-include_directories(${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS})
-link_libraries(PepperParser)
 
-set(COMPILER_SRC
-    source/main.cpp
+add_library(PepperCore STATIC
     source/AST/Nodes.h
     source/Core/RTTI.h
     source/Core/Common.h
@@ -61,24 +56,28 @@ set(COMPILER_SRC
     source/Compiler/Type.h
     source/Compiler/Type.cpp
     source/Compiler/Value.h
-    source/Compiler/Value.cpp "source/AST/AST.h" "source/AST/AST.cpp" "source/AST/Nodes.cpp")
+    source/Compiler/Value.cpp "source/AST/AST.h" "source/AST/AST.cpp" "source/AST/Nodes.cpp"
+)
+add_dependencies(PepperCore PepperParser)
+target_compile_definitions(PepperCore
+    PRIVATE ${LLVM_DEFINITIONS_LIST})
+target_include_directories(PepperCore 
+    PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS}
+)
 
 source_group(
     TREE ${CMAKE_CURRENT_SOURCE_DIR}
     FILES ${COMPILER_SRC})
 
 add_executable(Pepper
-    ${COMPILER_SRC}
     source/main.cpp)
-add_dependencies(Pepper PepperParser)
-target_include_directories(Pepper 
-    PUBLIC source
-    PRIVATE ${LLVM_INCLUDE_DIRS})
+add_dependencies(Pepper PepperParser PepperCore)
 target_link_libraries(Pepper
-    PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
+    PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
 target_compile_definitions(Pepper
     PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)
+set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+set(PEPPER_LIBRARIES PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
+
+add_subdirectory(tests)

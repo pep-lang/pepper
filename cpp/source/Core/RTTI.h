@@ -53,7 +53,7 @@ namespace pepper {
         inline static RTTI* rtti = nullptr;
 
       public:
-        inline static const RTTI* get(const RTTI* base, const char* name) {
+        inline static constexpr const RTTI* get(const RTTI* base, const char* name) {
             static std::aligned_storage_t<sizeof(RTTI)> _rtti;
             if (!rtti)
                 rtti = new (&_rtti) RTTI(base, name);
@@ -79,11 +79,11 @@ namespace pepper {
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
     constexpr const pepper::RTTI* rtti() const {                                                                       \
-        return RttiInstance<T>::get(RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                                 \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                                 \
     }                                                                                                                  \
     template <typename Base> constexpr bool is() {                                                                     \
         auto thisTy = rtti();                                                                                          \
-        auto baseTy = RTTI::of<Base>();                                                                                \
+        auto baseTy = pepper::RTTI::of<Base>();                                                                                \
         return thisTy->is(baseTy);                                                                                     \
     }                                                                                                                  \
     template <typename To> constexpr To as() {                                                                         \
