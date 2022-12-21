@@ -45,6 +45,8 @@ add_library(PepperCore STATIC
     source/Compiler/Constant.cpp
     source/Compiler/Context.h
     source/Compiler/Context.cpp
+    source/Compiler/Executor.h
+    source/Compiler/Executor.cpp
     source/Compiler/Function.h
     source/Compiler/Function.cpp
     source/Compiler/Options.h

@@ -53,7 +53,7 @@ namespace pepper {
         inline static RTTI* rtti = nullptr;
 
       public:
-        inline static constexpr const RTTI* get(const RTTI* base, const char* name) {
+        inline static const RTTI* get(const RTTI* base, const char* name) {
             static std::aligned_storage_t<sizeof(RTTI)> _rtti;
             if (!rtti)
                 rtti = new (&_rtti) RTTI(base, name);
@@ -78,15 +78,15 @@ namespace pepper {
 
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
-    constexpr const pepper::RTTI* rtti() const {                                                                       \
+    const pepper::RTTI* rtti() const {                                                                       \
         return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                                 \
     }                                                                                                                  \
-    template <typename Base> constexpr bool is() {                                                                     \
+    template <typename Base> bool is() {                                                                     \
         auto thisTy = rtti();                                                                                          \
         auto baseTy = pepper::RTTI::of<Base>();                                                                                \
         return thisTy->is(baseTy);                                                                                     \
     }                                                                                                                  \
-    template <typename To> constexpr To as() {                                                                         \
+    template <typename To> To as() {                                                                         \
         if (this->is<To>()) {                                                                                          \
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \

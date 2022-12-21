@@ -13,24 +13,6 @@ namespace pepper {
             : base(ptr) {
         }
 
-        /*Ref()
-            : base(nullptr) {
-        }
-
-        Ref(nullptr_t)
-            : base(nullptr) {
-        }
-
-
-
-        Ref(const Ref<T>& ptr)
-            : base(ptr) {
-        }
-
-        Ref(Ref<T>&& ptr)
-            : base(ptr) {
-        }*/
-
         template <typename U>
         Ref(Ref<U> ref)
             : base(ref.template as<T>()) {

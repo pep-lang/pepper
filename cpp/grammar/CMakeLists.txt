@@ -22,10 +22,22 @@ list(APPEND PARSER_SRC
     ${CMAKE_BINARY_DIR}/source/parser/PepperListener.h ${CMAKE_BINARY_DIR}/source/parser/PepperListener.cpp
     ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.h ${CMAKE_BINARY_DIR}/source/parser/PepperBaseListener.cpp
 )
+
+if(MSVC)
+    set(ANTLR4_LIBRARIES antlr4_shared PARENT_SCOPE)
+    install(CODE [[
+        file(GET_RUNTIME_DEPENDENCIES
+            LIBRARIES antlr4_shared
+        )
+    ]])
+else()
+    set(ANTLR4_LIBRARIES antlr4_static PARENT_SCOPE)
+endif()
+
 add_library(PepperParser STATIC ${PARSER_SRC})
-add_dependencies(PepperParser antlr4_shared)
+add_dependencies(PepperParser ${ANTLR4_LIBRARIES})
 
 message(STATUS "PepperParser will use ANTLR4 includes at ${ANTLR4_INCLUDE_DIRS}")
 target_include_directories(PepperParser PUBLIC ${ANTLR4_INCLUDE_DIRS})
-target_link_libraries(PepperParser PUBLIC antlr4_shared)
+target_link_libraries(PepperParser PUBLIC ${ANTLR4_LIBRARIES})
 set(PARSER_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/source/parser PARENT_SCOPE)
