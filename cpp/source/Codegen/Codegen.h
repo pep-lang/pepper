@@ -6,9 +6,18 @@
 namespace pepper::ast {
     class AST;
     class FieldDef;
+    class FunctionCall;
     class FunctionDef;
     class MemberRef;
     class StructDef;
+    class ThisRef;
+    class VariableRef;
+    class VariableDef;
+    class StringLiteral;
+    class FloatLiteral;
+    class IntegerLiteral;
+    class BinaryOp;
+    class Return;
 } // namespace pepper::ast
 
 namespace pepper {
@@ -24,18 +33,19 @@ namespace pepper {
         void emit();
 
       protected:
-        void emit(Ref<StructDef> structDef);
-        void emit(Ref<FieldDef> fieldDef);
-        void emit(Ref<MemberRef> memberRef);
-        void emit(Ref<ThisRef> thisRef);
-        void emit(Ref<FunctionDef> functionDef);
-        void emit(Ref<VariableRef> variableRef);
-        void emit(Ref<StringLiteral> stringLiteral);
-        void emit(Ref<IntegerLiteral> intLiteral);
-        void emit(Ref<FloatLiteral> floatLiteral);
-        void emit(Ref<BinaryOp> op);
-        void emit(Ref<FunctionCall> call);
-        void emit(Ref<Return> ret);
+        void emit(Ref<ast::StructDef> structDef);
+        void emit(Ref<ast::FieldDef> fieldDef);
+        void emit(Ref<ast::MemberRef> memberRef);
+        void emit(Ref<ast::ThisRef> thisRef);
+        void emit(Ref<ast::FunctionDef> functionDef);
+        void emit(Ref<ast::VariableRef> variableRef);
+        void emit(Ref<ast::VariableDef> variableDef);
+        void emit(Ref<ast::StringLiteral> stringLiteral);
+        void emit(Ref<ast::IntegerLiteral> intLiteral);
+        void emit(Ref<ast::FloatLiteral> floatLiteral);
+        void emit(Ref<ast::BinaryOp> op);
+        void emit(Ref<ast::FunctionCall> call);
+        void emit(Ref<ast::Return> ret);
     };
 
 } // namespace pepper

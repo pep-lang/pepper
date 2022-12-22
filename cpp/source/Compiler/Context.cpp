@@ -57,4 +57,8 @@ namespace pepper {
         return Module.get();
     }
 
+    llvm::LLVMContext& Context::llvmContext() const {
+        return module()->getContext();
+    }
+
 } // namespace pepper

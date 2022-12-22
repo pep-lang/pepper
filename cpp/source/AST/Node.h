@@ -1,5 +1,8 @@
 
+#pragma once
+
 #include "Core/Common.h"
+#include <string>
 
 namespace llvm {
     class Type;
@@ -41,6 +44,6 @@ namespace pepper::ast {
         DECLARE_RTTI(Expression, Node);
 
       public:
-        virtual llvm::Type* type() const = 0;
+        [[nodiscard]] virtual llvm::Type* type() const = 0;
     };
 } // namespace pepper::ast

@@ -52,7 +52,7 @@ namespace pepper::ast {
             , Identifier(identifier) {
         }
 
-        llvm::Type* type() override const {
+        llvm::Type* type() const override {
             return Type;
         }
 

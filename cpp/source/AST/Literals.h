@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "Compiler/Types.h"
+#include "AST/Node.h"
 #include <cstdint>
 
 namespace pepper::ast {
@@ -16,13 +16,11 @@ namespace pepper::ast {
         const int64_t Value;
 
       public:
-        IntegerLiteral(int64_t value)
+        explicit IntegerLiteral(int64_t value)
             : Value(value) {
         }
 
-        llvm::Type* type() override const {
-            return *Types::Int64;
-        }
+        [[nodiscard]] llvm::Type* type() const override;
     };
 
     class FloatLiteral : Literal {
@@ -36,9 +34,7 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        llvm::Type* type() override const {
-            return *Types::Double;
-        }
+        llvm::Type* type() const override;
     };
 
     class StringLiteral : Literal {
@@ -52,8 +48,6 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        llvm::Type* type() override const {
-            return *Types::Int8->pointer();
-        }
+        llvm::Type* type() const override;
     };
 } // namespace pepper::ast

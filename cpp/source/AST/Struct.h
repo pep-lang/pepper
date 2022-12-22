@@ -14,6 +14,8 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper::ast {
+    class FieldDef;
+
     class StructDef : public Symbol {
         DECLARE_RTTI(StructDef, Symbol);
 

@@ -6,7 +6,7 @@
 
 #include "Core/Common.h"
 
-namespace pepper {
+namespace llvm {
     class Type;
 }
 
@@ -23,7 +23,7 @@ namespace pepper::ast {
             return Ref<N>::create(std::forward<decltype(args)>(args)...);
         }
 
-        [[nodiscard]] virtual Ref<Type> findType(const std::string& name) const = 0;
+        [[nodiscard]] virtual llvm::Type* findType(const std::string& name) const = 0;
         [[nodiscard]] virtual Ref<ast::FunctionDef> findFunction(const std::string& name) const = 0;
         [[nodiscard]] virtual Ref<ast::VariableDef> findVariable(const std::string& name) const = 0;
         [[nodiscard]] virtual Ref<ast::Symbol> findSymbol(const std::string& name) const = 0;
@@ -35,8 +35,8 @@ namespace pepper::ast {
         virtual void pushStack(Ref<ast::Node> value) = 0;
         virtual Ref<ast::Node> popStack() = 0;
         virtual Ref<ast::Node> peekStack(unsigned int idx) = 0;
-        virtual Builder* type(Ref<Type> newType) = 0;
+        virtual Builder* type(llvm::Type* newType) = 0;
         virtual Builder* variable(Ref<ast::VariableDef> var) = 0;
         virtual Builder* expression(Ref<ast::Expression> expr) = 0;
     };
-}
+} // namespace pepper::ast

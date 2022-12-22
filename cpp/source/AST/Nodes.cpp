@@ -1,35 +1,38 @@
 
 #include "AST/Nodes.h"
 
+#include "Codegen/Scope.h"
+#include "Compiler/Context.h"
 #include "Compiler/Type.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
+#include <algorithm>
 
 namespace pepper::ast {
-    VariableRef::VariableRef(const std::string& name)
-        : Identifier(name) {
-    }
 
-    static llvm::FunctionType* functionTy(llvm::Type* returnType, std::vector<Symbol> args, bool vararg = false) {
+    static llvm::FunctionType* functionTy(llvm::Type* returnType, const Params& args, bool vararg = false) {
         std::vector<llvm::Type*> argTypes;
-        std::for_each(args.begin(), args.end(), [&](auto s) {
-            argTypes.push_back(s.type());
-        });
+        std::for_each(args.begin(), args.end(), [&](auto s) { argTypes.push_back(s.Type); });
         return llvm::FunctionType::get(returnType, argTypes, vararg);
     }
 
-    FunctionNode::FunctionNode(Ref<Type> returnType,
-                               const std::string& name,
-                               const std::vector<Symbol>& params,
-                               bool vararg)
-        : Symbol(functionTy(*returnType, params, vararg), name)
+    FunctionNode::FunctionNode(llvm::Type* returnType, const std::string& name, const Params& params, bool vararg)
+        : Symbol(functionTy(returnType, params, vararg), name)
         , ReturnType(returnType)
-        , Params(params)
+        , Parameters(params)
         , Vararg(vararg) {
     }
 
-    FunctionCall::FunctionCall(Ref<FunctionDef> target, const std::vector<Ref<Expression>>& args)
-        : Target(target)
-        , Args(args) {
+    llvm::Type* IntegerLiteral::type() const {
+        return Types::Int64;
+    }
+
+    llvm::Type* FloatLiteral::type() const {
+        return Types::Double;
+    }
+
+    llvm::Type* StringLiteral::type() const {
+        return Types::Int8->getPointerTo(0);
     }
 } // namespace pepper::ast

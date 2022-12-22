@@ -3,13 +3,14 @@
 //
 
 #include "AST/Builder.h"
+
 #include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
-#include "Codegen/Value.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/Type.h"
 #include <vector>
 
 namespace pepper::ast {
@@ -17,7 +18,7 @@ namespace pepper::ast {
         struct Scope {
             std::string Name = "Anonymous";
 
-            llvm::StringMap<Ref<Type>> Types;
+            llvm::StringMap<llvm::Type*> Types;
             llvm::StringMap<Ref<ast::VariableDef>> Locals;
             llvm::StringMap<Ref<Symbol>> Symbols;
             std::vector<Ref<Symbol>> OrderedSymbols;
@@ -71,7 +72,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<Type> findType(const std::string& name) const override {
+        [[nodiscard]] llvm::Type* findType(const std::string& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
                 if (auto ty = scope.Types.lookup(name)) {
                     return ty;
@@ -137,9 +138,9 @@ namespace pepper::ast {
             return this;
         }
 
-        Builder* type(Ref<Type> newType) override {
+        Builder* type(llvm::Type* newType) override {
             auto& scope = Stack.back();
-            scope.Types[newType->name()] = newType;
+            scope.Types[Types::toString(newType)] = newType;
             return this;
         }
 
@@ -163,4 +164,4 @@ namespace pepper::ast {
         ActiveBuilder = active;
         return active.as<Builder>();
     }
-}
+} // namespace pepper::ast

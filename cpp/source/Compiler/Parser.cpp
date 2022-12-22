@@ -5,6 +5,7 @@
 #include "AST/AST.h"
 #include "AST/Builder.h"
 #include "AST/Nodes.h"
+#include "AST/Param.h"
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
 #include "PepperBaseListener.h"
@@ -69,18 +70,18 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
             auto type = builder->findType(typeName);
-            auto decl = Ref<ast::VariableDef>::create(*type, identifier);
+            auto decl = Ref<ast::VariableDef>::create(type, identifier);
             builder->variable(decl);
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             Super::enterFunctionDefinition(context);
             auto identifier = context->Identifier()->toString();
-            auto returnTypeName = context->returnType()->Identifier() ? context->returnType()->Identifier()->toString()
-                                                                      : Types::Void->name();
+            auto returnTypeName =
+                context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
             auto returnType = builder->findType(returnTypeName);
             // TODO: args, pass to FunctionDef
-            std::vector<ast::Symbol> params;
+            ast::Params params;
             auto function = builder->create<ast::FunctionDef>(returnType, identifier, params);
             builder->beginFunction(function);
         }

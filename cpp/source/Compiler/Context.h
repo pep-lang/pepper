@@ -41,6 +41,7 @@ namespace pepper {
         ~Context();
 
         [[nodiscard]] llvm::Module* module() const;
+        [[nodiscard]] llvm::LLVMContext& llvmContext() const;
 
         std::unique_ptr<llvm::Module>&& takeModule() {
             return std::move(Module);

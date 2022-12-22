@@ -18,13 +18,14 @@ namespace pepper::ast {
     class AST {
       private:
         std::vector<Ref<ast::Node>> Roots;
+        WeakRef<Builder> ActiveBuilder;
 
       public:
         AST();
 
         Ref<Builder> builder();
 
-        const std::vector<Ref<ast::Node>> roots() const {
+        [[nodiscard]] const std::vector<Ref<ast::Node>>& roots() const {
             return Roots;
         }
     };

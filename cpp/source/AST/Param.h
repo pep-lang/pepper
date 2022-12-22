@@ -6,12 +6,13 @@
 
 namespace llvm {
     class Type;
-}
+    class Value;
+} // namespace llvm
 
 namespace pepper::ast {
     struct Param {
         llvm::Type* Type;
-        const std::string Name;
+        std::string Name;
         llvm::Value* Default;
 
         Param(std::string name, llvm::Type* type, llvm::Value* defaultValue = nullptr)

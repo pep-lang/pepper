@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "AST/Node.h"
 #include "Core/Common.h"
 
 namespace llvm {
@@ -16,7 +17,7 @@ namespace pepper::ast {
         Ref<Expression> LHS;
         Ref<Expression> RHS;
 
-        llvm::Type* type() override const {
+        llvm::Type* type() const override {
             return operandType();
         }
 

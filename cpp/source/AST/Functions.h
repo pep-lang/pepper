@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include "AST/Node.h"
 #include "AST/Param.h"
 #include "Core/Common.h"
+#include <utility>
 #include <vector>
 
 namespace llvm {
@@ -14,22 +16,19 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper::ast {
+    class StructDef;
+
     class FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
-        Ref<Type> ReturnType;
+        llvm::Type* ReturnType;
         const Params Parameters;
         const bool Vararg;
 
       public:
-        FunctionNode(Ref<Type> returnType, const std::string& name, const Params& params, bool vararg = false)
-            : Symbol(name, TODO)
-            , ReturnType(returnType)
-            , Parameters(params)
-            , Vararg(vararg) {
-        }
+        FunctionNode(llvm::Type* returnType, const std::string& name, const Params& params, bool vararg = false);
 
-        [[nodiscard]] Ref<Type> returnType() const {
+        [[nodiscard]] llvm::Type* returnType() const {
             return ReturnType;
         }
 
@@ -49,15 +48,15 @@ namespace pepper::ast {
         std::vector<Ref<Node>> Body;
 
       public:
-        FunctionDef(Ref<Type> returnType, const std::string& name, const Params& params, bool varargs = false)
-            : FunctionNode(std::move(returnType), name, params, varargs) {
+        FunctionDef(llvm::Type* returnType, const std::string& name, const Params& params, bool varargs = false)
+            : FunctionNode(returnType, name, params, varargs) {
         }
 
         std::vector<Ref<Node>>& body() {
             return Body;
         }
 
-        const std::vector<Ref<Node>>& body() const {
+        [[nodiscard]] const std::vector<Ref<Node>>& body() const {
             return Body;
         }
     };
@@ -70,25 +69,25 @@ namespace pepper::ast {
 
       public:
         MethodDef(Ref<StructDef> strct,
-                  Ref<Type> returnType,
+                  llvm::Type* returnType,
                   const std::string& name,
                   const Params& params,
                   bool varargs = false)
             : FunctionDef(returnType, name, params, varargs)
-            , Struct(strct) {
+            , Struct(std::move(strct)) {
         }
 
-        Ref<StructDef> structDef() const {
+        [[nodiscard]] Ref<StructDef> structDef() const {
             return Struct;
         }
     };
 
-    class ExternFunction : public FunctionDef {
-        DECLARE_RTTI(ExternFunction, FunctionNode);
+    class ExternFunctionDef : public FunctionDef {
+        DECLARE_RTTI(ExternFunctionDef, FunctionNode);
 
       public:
-        ExternFunction(Ref<Type> returnType, const std::string& name, const Params& params, bool varargs = false)
-            : FunctionNode(std::move(returnType), name, params, varargs) {
+        ExternFunctionDef(llvm::Type* returnType, const std::string& name, const Params& params, bool varargs = false)
+            : FunctionDef(returnType, name, params, varargs) {
         }
     };
 
@@ -109,6 +108,10 @@ namespace pepper::ast {
 
         const std::vector<Ref<Expression>>& args() const {
             return Args;
+        }
+
+        llvm::Type* type() const override {
+            return Target->returnType();
         }
     };
 
