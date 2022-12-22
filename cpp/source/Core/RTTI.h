@@ -9,12 +9,13 @@ namespace pepper {
         const char* Name;
         const RTTI* Base;
 
-      public:
+      protected:
         constexpr RTTI(const RTTI* base = nullptr, const char* name = nullptr)
             : Base(base)
             , Name(name) {
         }
 
+      public:
         constexpr const char* name() const {
             return Name;
         }
@@ -49,15 +50,24 @@ namespace pepper {
     template <typename T = RTTI::None> class RttiInstance : public RTTI {
       private:
         RttiInstance() = delete;
+        using RTTI::RTTI;
 
-        inline static RTTI* rtti = nullptr;
+        inline static RttiInstance<T>* rtti = nullptr;
 
       public:
-        inline static const RTTI* get(const RTTI* base, const char* name) {
-            static std::aligned_storage_t<sizeof(RTTI)> _rtti;
+        inline static const RttiInstance<T>* get(const RTTI* base, const char* name) {
+            static std::aligned_storage_t<sizeof(RttiInstance<T>)> _rtti;
             if (!rtti)
-                rtti = new (&_rtti) RTTI(base, name);
+                rtti = new (&_rtti) RttiInstance<T>(base, name);
             return rtti;
+        }
+
+        template <typename U> inline T* downcast(U* u) const {
+            return static_cast<T*>(u);
+        }
+
+        template <typename U> inline const T* downcast(const U* u) const {
+            return static_cast<const T*>(u);
         }
     };
 
@@ -78,7 +88,7 @@ namespace pepper {
 
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
-    const pepper::RTTI* rtti() const {                                                                                 \
+    const pepper::RttiInstance<T>* rtti() const {                                                                      \
         return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
     }                                                                                                                  \
     template <typename Base> bool is() {                                                                               \
@@ -91,4 +101,10 @@ namespace pepper {
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \
         return nullptr;                                                                                                \
+    }                                                                                                                  \
+    T* downcast() {                                                                                                    \
+        return rtti()->downcast(this);                                                                                 \
+    }                                                                                                                  \
+    const T* downcast() const {                                                                                        \
+        return rtti()->downcast(this);                                                                                 \
     }

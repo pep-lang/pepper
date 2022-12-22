@@ -35,7 +35,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Sub : public BinaryOp {
@@ -43,7 +42,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Mul : public BinaryOp {
@@ -51,7 +49,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Div : public BinaryOp {
@@ -59,7 +56,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Mod : public BinaryOp {
@@ -67,7 +63,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Pow : public BinaryOp {
@@ -75,7 +70,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Equal : public BinaryOp {
@@ -83,7 +77,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class NotEqual : public BinaryOp {
@@ -91,7 +84,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Less : public BinaryOp {
@@ -99,7 +91,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class LessEqual : public BinaryOp {
@@ -107,7 +98,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Greater : public BinaryOp {
@@ -115,7 +105,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class GreaterEqual : public BinaryOp {
@@ -123,7 +112,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class Assign : public BinaryOp {
@@ -131,7 +119,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class LShift : public BinaryOp {
@@ -139,7 +126,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class RShift : public BinaryOp {
@@ -147,7 +133,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitAnd : public BinaryOp {
@@ -155,7 +140,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitOr : public BinaryOp {
@@ -163,7 +147,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitXor : public BinaryOp {
@@ -171,7 +154,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class LogicalAnd : public BinaryOp {
@@ -179,7 +161,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class LogicalOr : public BinaryOp {
@@ -187,7 +168,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class CompoundAssign : public BinaryOp {
@@ -195,7 +175,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class AddAssign : public BinaryOp {
@@ -203,7 +182,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class SubAssign : public BinaryOp {
@@ -211,7 +189,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class MulAssign : public BinaryOp {
@@ -219,7 +196,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class DivAssign : public BinaryOp {
@@ -227,7 +203,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class ModAssign : public BinaryOp {
@@ -235,7 +210,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class LShiftAssign : public BinaryOp {
@@ -243,7 +217,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class RShiftAssign : public BinaryOp {
@@ -251,7 +224,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitAndAssign : public BinaryOp {
@@ -259,7 +231,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitOrAssign : public BinaryOp {
@@ -267,7 +238,6 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 
     class BitXorAssign : public BinaryOp {
@@ -275,6 +245,5 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
-        llvm::Value* op(llvm::Value* lhs, llvm::Value* rhs) const;
     };
 } // namespace pepper::ast
