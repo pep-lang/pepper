@@ -11,12 +11,13 @@ namespace TestUtils {
     inline int CompileAndRun(const std::string& name, const std::string& source) {
         auto compiler = pepper::Compiler::Create(name);
         auto sourceStream = std::istringstream(source);
-        llvm::Module* module = compiler->compile(sourceStream, name);
-        if (!module)
+        if (!compiler->compile(sourceStream, name))
             return -1;
-        auto context = compiler->context();
+        auto& context = compiler->context();
         auto executor = context.executor();
-        return executor->execute("main");
+        auto ctx = context.takeContext();
+        auto module = context.takeModule();
+        return executor->execute(std::move(ctx), std::move(module), "main");
         return 0;
     }
 } // namespace TestUtils

@@ -25,7 +25,10 @@ namespace pepper {
         Instance = this;
 
         Exec = Executor::Create();
-        Module = Exec->createModule(moduleName);
+        Ctx = std::make_unique<llvm::LLVMContext>();
+        Module = std::make_unique<llvm::Module>(*Ctx);
+        Exec->configureModule(Module.get());
+        TypeMap = Ref<Types>::create(Ctx.get());
     }
 
     Context::~Context() {
@@ -33,7 +36,7 @@ namespace pepper {
     }
 
     llvm::Module* Context::module() const {
-        return Module;
+        return Module.get();
     }
 
 } // namespace pepper

@@ -139,6 +139,7 @@ namespace pepper {
             : NativeType(name, type) {
             IsPointer = true;
         }
+
         ~PointerType() = default;
 
         Ref<Type> pointer() const override {
@@ -314,6 +315,7 @@ namespace pepper {
             : NativeType(name, type) {
             IsReal = true;
         }
+
         ~FloatType() = default;
 
         Ref<Value> coerce(Ref<Value> value) const override {
@@ -446,7 +448,7 @@ namespace pepper {
     Ref<Type> Types::Double;
     Ref<Type> Types::Float;
 
-    Types::Types(llvm::LLVMContext* ctx)
+    Types::Types(llvm::LLVMContext& ctx)
         : Ctx(ctx) {
         Void = voidType();
         Int8 = int8Type();
@@ -473,6 +475,7 @@ namespace pepper {
         }
         return KnownTypes[name] = type;
     }
+
     Ref<Type> Types::getType(const std::string& name) {
         auto it = KnownTypes.find(name);
         if (it != KnownTypes.end()) {
@@ -490,58 +493,58 @@ namespace pepper {
 
     Ref<Type> Types::voidType() {
         return getOrCreate("void",
-                           [this]() { return Ref<VoidType>::create("void", llvm::Type::getVoidTy(*Ctx)).as<Type>(); });
+                           [this]() { return Ref<VoidType>::create("void", llvm::Type::getVoidTy(Ctx)).as<Type>(); });
     }
 
     Ref<Type> Types::int8Type() {
         return getOrCreate("i8",
-                           [this]() { return Ref<IntegerType>::create("i8", llvm::Type::getInt8Ty(*Ctx)).as<Type>(); });
+                           [this]() { return Ref<IntegerType>::create("i8", llvm::Type::getInt8Ty(Ctx)).as<Type>(); });
     }
 
     Ref<Type> Types::uint8Type() {
         return getOrCreate("u8",
-                           [this]() { return Ref<IntegerType>::create("u8", llvm::Type::getInt8Ty(*Ctx)).as<Type>(); });
+                           [this]() { return Ref<IntegerType>::create("u8", llvm::Type::getInt8Ty(Ctx)).as<Type>(); });
     }
 
     Ref<Type> Types::int32Type() {
         return getOrCreate("i32", [this]() {
-            return Ref<IntegerType>::create("i32", llvm::Type::getInt32Ty(*Ctx)).as<Type>();
+            return Ref<IntegerType>::create("i32", llvm::Type::getInt32Ty(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::uint32Type() {
         return getOrCreate("u32", [this]() {
-            return Ref<IntegerType>::create("u32", llvm::Type::getInt32Ty(*Ctx)).as<Type>();
+            return Ref<IntegerType>::create("u32", llvm::Type::getInt32Ty(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::int64Type() {
         return getOrCreate("i64", [this]() {
-            return Ref<IntegerType>::create("i64", llvm::Type::getInt64Ty(*Ctx)).as<Type>();
+            return Ref<IntegerType>::create("i64", llvm::Type::getInt64Ty(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::uint64Type() {
         return getOrCreate("u64", [this]() {
-            return Ref<IntegerType>::create("u64", llvm::Type::getInt64Ty(*Ctx)).as<Type>();
+            return Ref<IntegerType>::create("u64", llvm::Type::getInt64Ty(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::boolType() {
         return getOrCreate("bool", [this]() {
-            return Ref<IntegerType>::create("bool", llvm::Type::getInt1Ty(*Ctx)).as<Type>();
+            return Ref<IntegerType>::create("bool", llvm::Type::getInt1Ty(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::doubleType() {
         return getOrCreate("double", [this]() {
-            return Ref<FloatType>::create("double", llvm::Type::getDoubleTy(*Ctx)).as<Type>();
+            return Ref<FloatType>::create("double", llvm::Type::getDoubleTy(Ctx)).as<Type>();
         });
     }
 
     Ref<Type> Types::floatType() {
         return getOrCreate("float", [this]() {
-            return Ref<FloatType>::create("float", llvm::Type::getFloatTy(*Ctx)).as<Type>();
+            return Ref<FloatType>::create("float", llvm::Type::getFloatTy(Ctx)).as<Type>();
         });
     }
 } // namespace pepper

@@ -135,19 +135,19 @@ namespace pepper {
     };
 
     class Types {
-        llvm::LLVMContext* Ctx;
+        llvm::LLVMContext& Ctx;
         llvm::StringMap<Ref<Type>> KnownTypes;
 
         Ref<Type> getOrCreate(const std::string& name, std::function<Ref<Type>()> createType);
 
       public:
-        Types(llvm::LLVMContext* ctx);
+        Types(llvm::LLVMContext& ctx);
         ~Types() = default;
 
-        template <typename T>
-        Ref<Type> addType(const std::string& name, llvm::Type* type) {
+        template <typename T> Ref<Type> addType(const std::string& name, llvm::Type* type) {
             return addType(name, Ref<T>::create(name, type));
         }
+
         Ref<Type> addType(const std::string& name, Ref<Type> type);
         Ref<Type> getType(const std::string& name);
 

@@ -7,6 +7,7 @@
 #include <string>
 
 namespace llvm {
+    class LLVMContext;
     class Module;
     class IRBuilderBase;
 } // namespace llvm
@@ -15,12 +16,15 @@ namespace pepper {
     class AST;
     class Scope;
     class Executor;
+    class Types;
 
     class Context {
         static Context* Instance;
 
         Ref<Executor> Exec;
-        llvm::Module* Module;
+        std::unique_ptr<llvm::LLVMContext> Ctx;
+        std::unique_ptr<llvm::Module> Module;
+        Ref<Types> TypeMap;
         Ref<Scope> Runtime;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
@@ -34,8 +38,20 @@ namespace pepper {
 
         llvm::Module* module() const;
 
+        std::unique_ptr<llvm::Module>&& takeModule() {
+            return std::move(Module);
+        }
+
+        std::unique_ptr<llvm::LLVMContext>&& takeContext() {
+            return std::move(Ctx);
+        }
+
         Ref<Executor> executor() const {
             return Exec;
+        }
+
+        Ref<Types> types() const {
+            return TypeMap;
         }
 
         Scope* globals() const {

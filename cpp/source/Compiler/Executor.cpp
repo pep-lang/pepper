@@ -91,21 +91,20 @@ namespace pepper {
             return ES->lookup({&Dylib}, Mangle(Name.str()));
         }
 
-        llvm::Module* createModule(const std::string& name) {
-            auto context = std::make_unique<llvm::LLVMContext>();
-            auto module = std::make_unique<llvm::Module>(name, *context);
+        void configureModule(llvm::Module* module) {
             auto targetTriple = llvm::sys::getDefaultTargetTriple();
             module->setTargetTriple(targetTriple);
             module->setDataLayout(getDataLayout());
-            auto result = module.get();
-            auto added = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))));
-            if (!added) {
-                throw new InternalCompilerError("Unable to initialize module: {}", llvm::toString(std::move(added)));
-            }
-            return result;
         }
 
-        int execute(const std::string& entry) {
+        int execute(std::unique_ptr<llvm::LLVMContext> context,
+                    std::unique_ptr<llvm::Module> module,
+                    const std::string& entry) {
+            auto err = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))));
+            if (err) {
+                throw new InternalCompilerError("Unable to initialize module: {}", llvm::toString(std::move(err)));
+            }
+
             auto entryFn = lookup(entry);
             int (*fn)() = (int (*)())(intptr_t)entryFn->getAddress();
             return fn();
