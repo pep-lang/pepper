@@ -57,8 +57,8 @@ namespace pepper {
 
         [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
         [[nodiscard]] llvm::Value* findSymbol(const std::string& name) const;
-        llvm::IRBuilderBase* builder() const;
-        llvm::IRBuilderBase* registers() const;
+        Ref<llvm::IRBuilderBase> builder() const;
+        Ref<llvm::IRBuilderBase> registers() const;
         Ref<Function> returnTarget() const;
     };
 } // namespace pepper

@@ -1,5 +1,5 @@
 
-#include "Compiler/Executor.h"
+#include "JIT/Executor.h"
 
 #include "Compiler/Exceptions.h"
 #include "llvm/ADT/StringRef.h"
@@ -59,7 +59,7 @@ namespace pepper {
             auto EPC = SelfExecutorProcessControl::Create();
             if (!EPC) {
                 throw InternalCompilerError("Failed to initialize process control: {}",
-                                                llvm::toString(EPC.takeError()));
+                                            llvm::toString(EPC.takeError()));
             }
             auto ES = Ref<ExecutionSession>::create(std::move(EPC.get()));
 
@@ -67,7 +67,7 @@ namespace pepper {
             auto DL = JTMB.getDefaultDataLayoutForTarget();
             if (!DL) {
                 throw InternalCompilerError("Unable to get default layout for target: {}",
-                                                llvm::toString(DL.takeError()));
+                                            llvm::toString(DL.takeError()));
             }
 
             return Ref<OrcExecutor>::create(std::move(ES), std::move(JTMB), std::move(DL.get()));
@@ -100,14 +100,14 @@ namespace pepper {
         int execute(std::unique_ptr<llvm::LLVMContext> context,
                     std::unique_ptr<llvm::Module> module,
                     const std::string& entry) override {
-
             if (auto err = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))))) {
                 throw InternalCompilerError("Unable to initialize module: {0}", llvm::toString(std::move(err)));
             }
 
             auto entryFn = lookup(entry);
             if (auto err = entryFn.takeError()) {
-                throw InternalCompilerError("Unable to resolve JIT entry function: {0}", llvm::toString(std::move(err)));
+                throw InternalCompilerError("Unable to resolve JIT entry function: {0}",
+                                            llvm::toString(std::move(err)));
             }
 
             auto fn = (int (*)())(intptr_t)entryFn->getAddress();

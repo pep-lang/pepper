@@ -6,6 +6,10 @@
 #include <utility>
 #include <vector>
 
+namespace llvm {
+    class Type;
+}
+
 namespace pepper {
     class Type;
     class Value;
@@ -26,16 +30,16 @@ namespace pepper::ast {
         DECLARE_RTTI(Symbol, Node);
 
       private:
-        Ref<Type> SymbolType;
+        llvm::Type* SymbolType;
         std::string SymbolName;
 
       public:
-        Symbol(Ref<Type> type, std::string name)
-            : SymbolType(std::move(type))
+        Symbol(llvm::Type* type, std::string name)
+            : SymbolType(type)
             , SymbolName(std::move(name)) {
         }
 
-        [[nodiscard]] Ref<Type> type() const {
+        llvm::Type* type() const {
             return SymbolType;
         }
 
@@ -48,8 +52,8 @@ namespace pepper::ast {
         DECLARE_RTTI(VariableDef, Symbol);
 
       public:
-        VariableDef(Ref<Type> type, const std::string& name)
-            : Symbol(std::move(type), name) {
+        VariableDef(llvm::Type* type, const std::string& name)
+            : Symbol(type, name) {
         }
     };
 

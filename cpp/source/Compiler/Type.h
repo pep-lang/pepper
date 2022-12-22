@@ -95,21 +95,21 @@ namespace pepper {
 
     class FunctionType : public Type {
         DECLARE_RTTI(FunctionType, Type)
-        Ref<Type> ReturnType;
-        std::vector<Symbol> Params;
-        bool Vararg = false;
-
-      public:
-        FunctionType(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
-        ~FunctionType() = default;
-
-        llvm::Value* coerce(llvm::Value* value) const override;
-        Ref<Type> pointer() const override;
-
-        static Ref<FunctionType> Create(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
-        static Ref<FunctionType> Create(Ref<Type> returnType,
-                                        const std::vector<ast::Symbol>& params,
-                                        bool varargs = false);
+        //        Ref<Type> ReturnType;
+        //        std::vector<Symbol> Params;
+        //        bool Vararg = false;
+        //
+        //      public:
+        //        FunctionType(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
+        //        ~FunctionType() = default;
+        //
+        //        llvm::Value* coerce(llvm::Value* value) const override;
+        //        Ref<Type> pointer() const override;
+        //
+        //        static Ref<FunctionType> Create(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs
+        //        = false); static Ref<FunctionType> Create(Ref<Type> returnType,
+        //                                        const std::vector<ast::Symbol>& params,
+        //                                        bool varargs = false);
         static std::string Signature(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
         static std::string Signature(Ref<Type> returnType,
                                      const std::vector<ast::Symbol>& params,

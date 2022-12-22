@@ -6,6 +6,8 @@
 
 #include "Function.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
     Ref<Function> Scope::findFunction(const std::string& name) const {
@@ -27,22 +29,22 @@ namespace pepper {
         return ReturnTarget ? ReturnTarget : (Outer ? Outer->returnTarget() : nullptr);
     }
 
-    llvm::IRBuilderBase* Scope::builder() const {
-        return Builder ? Builder.get() : (Outer ? Outer->builder() : nullptr);
+    Ref<llvm::IRBuilderBase> Scope::builder() const {
+        return Builder ? Builder : (Outer ? Outer->builder() : nullptr);
     }
 
-    llvm::IRBuilderBase* Scope::registers() const {
+    Ref<llvm::IRBuilderBase> Scope::registers() const {
         auto func = returnTarget().as<UserFunction>();
-        var funcStart = func.Body.FirstInstruction;
-        var builder = func.Builder;
-        if (funcStart.Handle != 0) {
+        auto funcStart = func->Body->getFirstInsertionPt();
+        auto builder = func->Builder;
+        if (funcStart != func->Body->getInstList().begin()) {
             // skip past existing locals
-            for (int localIdx = 0; localIdx < func.NumLocals; ++localIdx)
-                funcStart = funcStart.NextInstruction;
-            builder = Context.Module.Context.CreateBuilder();
-            builder.PositionBefore(funcStart);
+            for (int localIdx = 0; localIdx < func->NumLocals; ++localIdx)
+                ++funcStart;
+            builder = Ref<llvm::IRBuilder<>>::create(func->Body);
+            builder->SetInsertPoint(func->Body, funcStart);
         }
-        ++func.NumLocals;
+        ++func->NumLocals;
         return builder;
     }
-}
+} // namespace pepper

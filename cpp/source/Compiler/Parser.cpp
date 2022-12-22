@@ -69,7 +69,7 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
             auto type = builder->findType(typeName);
-            auto decl = Ref<ast::VariableDef>::create(type, identifier);
+            auto decl = Ref<ast::VariableDef>::create(*type, identifier);
             builder->variable(decl);
         }
 

@@ -2,8 +2,8 @@
 
 #include "Compiler/Compiler.h"
 #include "Compiler/Context.h"
-#include "Compiler/Executor.h"
 #include "Core/Common.h"
+#include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <sstream>

@@ -1,8 +1,8 @@
 
-#include "Compiler/Value.h"
+#include "Codegen/Value.h"
 
+#include "Codegen/Scope.h"
 #include "Compiler/Context.h"
-#include "Compiler/Scope.h"
 #include "Compiler/Type.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
@@ -43,12 +43,12 @@ namespace pepper {
     }
 
     llvm::Value* Value::store(Ref<Value> value, llvm::IRBuilderBase* builder) {
-        builder = builder ? builder : Context::get().locals()->localRegisters().get();
+        builder = builder ? builder : Context::get().locals()->registers().get();
         return builder->CreateAlloca(*this->type(), nullptr, Name.c_str());
     }
 
     llvm::Value* Value::load(llvm::IRBuilderBase* builder) {
-        builder = builder ? builder : Context::get().locals()->localRegisters().get();
+        builder = builder ? builder : Context::get().locals()->registers().get();
         return builder->CreateAlloca(*this->type(), nullptr, Name.c_str());
     }
 

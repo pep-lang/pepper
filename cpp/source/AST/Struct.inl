@@ -4,14 +4,11 @@
 
 #pragma once
 
-
-
 namespace pepper::ast {
     class StructDef : public Symbol {
       public:
-        StructDef(Ref<Type> type, std::string name)
-            : Symbol(std::move(type),std::move(name)) {
-
+        StructDef(llvm::Type* type, std::string name)
+            : Symbol(type, std::move(name)) {
         }
     };
-}
+} // namespace pepper::ast
