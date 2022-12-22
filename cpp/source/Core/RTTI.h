@@ -78,15 +78,15 @@ namespace pepper {
 
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
-    const pepper::RTTI* rtti() const {                                                                       \
-        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                                 \
+    const pepper::RTTI* rtti() const {                                                                                 \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
     }                                                                                                                  \
-    template <typename Base> bool is() {                                                                     \
+    template <typename Base> bool is() {                                                                               \
         auto thisTy = rtti();                                                                                          \
-        auto baseTy = pepper::RTTI::of<Base>();                                                                                \
+        auto baseTy = pepper::RTTI::of<Base>();                                                                        \
         return thisTy->is(baseTy);                                                                                     \
     }                                                                                                                  \
-    template <typename To> To as() {                                                                         \
+    template <typename To> To as() {                                                                                   \
         if (this->is<To>()) {                                                                                          \
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \

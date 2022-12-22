@@ -13,9 +13,7 @@ namespace pepper {
         , Parameters(params) {
         Context::get().locals()->Functions[name] = ref();
         std::vector<llvm::Type*> paramTypes;
-        std::for_each(params.begin(), params.end(), [&](auto p) {
-            paramTypes.push_back(p.Type);
-        });
+        std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(p.Type); });
         FuncType = llvm::FunctionType::get(returnType, paramTypes, false);
         Func = llvm::Function::Create(FuncType, llvm::GlobalValue::ExternalLinkage, Name, Context::get().module());
     }

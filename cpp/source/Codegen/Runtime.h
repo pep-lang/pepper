@@ -11,4 +11,4 @@ namespace pepper {
       public:
         Runtime();
     };
-}
+} // namespace pepper

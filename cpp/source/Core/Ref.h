@@ -41,4 +41,4 @@ namespace pepper {
             return std::static_pointer_cast<U>(*this);
         }
     };
-}
+} // namespace pepper
