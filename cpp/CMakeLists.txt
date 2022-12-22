@@ -18,11 +18,6 @@ add_subdirectory(deps)
 
 if (MSVC)
     set(ANTLR4_LIBRARIES antlr4_shared)
-    install(CODE [[
-        file(GET_RUNTIME_DEPENDENCIES
-            LIBRARIES antlr4_shared
-        )
-    ]])
 else()
     set(ANTLR4_LIBRARIES antlr4_static)
 endif()
@@ -71,13 +66,17 @@ source_group(
     TREE ${CMAKE_CURRENT_SOURCE_DIR}
     FILES ${COMPILER_SRC})
 
-add_executable(Pepper
-    source/main.cpp)
-add_dependencies(Pepper PepperParser PepperCore)
-target_link_libraries(Pepper
-    PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
-target_compile_definitions(Pepper
+add_executable(pepper source/main.cpp)
+add_dependencies(pepper PepperParser PepperCore)
+target_link_libraries(pepper
+    PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR4_LIBRARIES})
+target_compile_definitions(pepper
     PRIVATE ${LLVM_DEFINITIONS_LIST})
+
+if (MSVC)
+    add_custom_command(TARGET pepper POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:pepper>)
+endif()
 
 set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 set(PEPPER_LIBRARIES PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})

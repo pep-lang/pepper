@@ -22,6 +22,13 @@ add_executable(PepperTests
 )
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS})
 target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES})
+set_target_properties(PepperTests PROPERTIES LINKER_LANGUAGE CXX)
+
+if (MSVC)
+    add_custom_command(TARGET PepperTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:PepperTests>
+        COMMAND_EXPAND_LISTS)
+endif()
 
 include(GoogleTest)
 gtest_discover_tests(PepperTests)
