@@ -48,12 +48,8 @@ add_library(PepperCore STATIC
         source/AST/Functions.inl
         source/Codegen/Codegen.cpp
         source/Codegen/Codegen.h
-        source/Codegen/Constant.cpp
-        source/Codegen/Constant.h
         source/Codegen/Function.cpp
         source/Codegen/Function.h
-        source/Codegen/Value.cpp
-        source/Codegen/Value.h
         source/JIT/Executor.cpp
         source/JIT/Executor.h source/AST/Struct.inl source/AST/Struct.inl source/AST/Builder.cpp source/AST/Builder.cpp source/AST/Builder.h source/Core/Ref.h source/Codegen/Runtime.h source/Codegen/Scope.h source/Codegen/Runtime.cpp source/Codegen/Runtime.cpp source/Codegen/Scope.cpp)
 
