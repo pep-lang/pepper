@@ -1,74 +1,41 @@
 
 #pragma once
 
+#include "Core/Common.h"
+
+namespace pepper::ast {
+    class AST;
+    class FieldDef;
+    class FunctionDef;
+    class MemberRef;
+    class StructDef;
+} // namespace pepper::ast
+
 namespace pepper {
     class Codegen {
+      protected:
+        Ref<ast::AST> Tree;
+
       public:
-        void beginFunction();
+        Codegen(const Ref<ast::AST> tree)
+            : Tree(tree) {
+        }
 
-        void endFunction();
+        void emit();
 
-        void functionCall();
-
-        void stringLiteral();
-
-        void identifier();
-
-        void variableDeclaration();
-
-        void binaryMul();
-
-        void binaryDiv();
-
-        void binaryMod();
-
-        void binaryPow();
-
-        void binaryAdd();
-
-        void binarySub();
-
-        void binaryLeftShift();
-
-        void binaryRightShift();
-
-        void compareLess();
-
-        void compareLessEqual();
-
-        void compareGreater();
-
-        void compareGreaterEqual();
-
-        void bitwiseAnd();
-
-        void bitwiseXor();
-
-        void bitwiseOr();
-
-        void equal();
-
-        void notEqual();
-
-        void assign();
-
-        void mulAssign();
-
-        void divAssign();
-
-        void modAssign();
-
-        void leftShiftAssign();
-
-        void rightShiftAssign();
-
-        void bitAndAssign();
-
-        void bitXorAssign();
-
-        void bitOrAssign();
-
-        void ternary();
+      protected:
+        void emit(Ref<StructDef> structDef);
+        void emit(Ref<FieldDef> fieldDef);
+        void emit(Ref<MemberRef> memberRef);
+        void emit(Ref<ThisRef> thisRef);
+        void emit(Ref<FunctionDef> functionDef);
+        void emit(Ref<VariableRef> variableRef);
+        void emit(Ref<StringLiteral> stringLiteral);
+        void emit(Ref<IntegerLiteral> intLiteral);
+        void emit(Ref<FloatLiteral> floatLiteral);
+        void emit(Ref<BinaryOp> op);
+        void emit(Ref<FunctionCall> call);
+        void emit(Ref<Return> ret);
     };
 
 } // namespace pepper
