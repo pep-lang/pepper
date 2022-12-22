@@ -21,8 +21,6 @@ namespace pepper {
     using namespace llvm;
     using namespace llvm::orc;
 
-    static ExitOnError HandleError;
-
     class OrcExecutor : public Executor {
       private:
         Ref<ExecutionSession> ES;
@@ -58,13 +56,21 @@ namespace pepper {
         }
 
         static Ref<OrcExecutor> Create() {
-            auto EPC = HandleError(SelfExecutorProcessControl::Create());
-            auto ES = Ref<ExecutionSession>::create(std::move(EPC));
+            auto EPC = SelfExecutorProcessControl::Create();
+            if (!EPC) {
+                throw new InternalCompilerError("Failed to initialize process control: {}",
+                                                llvm::toString(EPC.takeError()));
+            }
+            auto ES = Ref<ExecutionSession>::create(std::move(EPC.get()));
 
             JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
-            auto DL = HandleError(JTMB.getDefaultDataLayoutForTarget());
+            auto DL = JTMB.getDefaultDataLayoutForTarget();
+            if (!DL) {
+                throw new InternalCompilerError("Unable to get default layout for target: {}",
+                                                llvm::toString(DL.takeError()));
+            }
 
-            return Ref<OrcExecutor>::create(std::move(ES), std::move(JTMB), std::move(DL));
+            return Ref<OrcExecutor>::create(std::move(ES), std::move(JTMB), std::move(DL.get()));
         }
 
         const DataLayout& getDataLayout() const {
@@ -92,7 +98,10 @@ namespace pepper {
             module->setTargetTriple(targetTriple);
             module->setDataLayout(getDataLayout());
             auto result = module.get();
-            HandleError(addModule(std::move(ThreadSafeModule(std::move(module), std::move(context)))));
+            auto added = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))));
+            if (!added) {
+                throw new InternalCompilerError("Unable to initialize module: {}", llvm::toString(std::move(added)));
+            }
             return result;
         }
 

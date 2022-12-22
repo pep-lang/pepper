@@ -1,7 +1,6 @@
 
-#include "gtest/gtest.h"
-
 #include "TestUtils.h"
+#include "gtest/gtest.h"
 
 TEST(IntMath, Let) {
     const char* source = R"SOURCE(
@@ -10,5 +9,5 @@ TEST(IntMath, Let) {
             return x;
         }
     )SOURCE";
-    EXPECT_EQ(1, CompileAndRun("Let", source));
+    EXPECT_EQ(1, TestUtils::CompileAndRun("Let", source));
 }

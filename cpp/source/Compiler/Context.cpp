@@ -4,7 +4,6 @@
 #include "AST/AST.h"
 #include "Compiler/Executor.h"
 #include "Compiler/Scope.h"
-#include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <cassert>
