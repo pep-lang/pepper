@@ -26,9 +26,9 @@ namespace pepper {
 
         Exec = Executor::Create();
         Ctx = std::make_unique<llvm::LLVMContext>();
-        Module = std::make_unique<llvm::Module>(*Ctx);
+        Module = std::make_unique<llvm::Module>(moduleName, *Ctx.get());
         Exec->configureModule(Module.get());
-        TypeMap = Ref<Types>::create(Ctx.get());
+        TypeMap = Ref<Types>::create(*Ctx.get());
     }
 
     Context::~Context() {

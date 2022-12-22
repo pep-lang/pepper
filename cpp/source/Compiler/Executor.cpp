@@ -36,9 +36,9 @@ namespace pepper {
         ThreadSafeModule Module;
 
       public:
-        OrcExecutor(Ref<ExecutionSession> ES, JITTargetMachineBuilder JTMB, DataLayout DL)
+        OrcExecutor(Ref<ExecutionSession> ES, JITTargetMachineBuilder JTMB, DataLayout layout)
             : ES(std::move(ES))
-            , DL(std::move(DL))
+            , DL(std::move(layout))
             , Mangle(*this->ES, this->DL)
             , ObjectLayer(*this->ES, []() { return std::make_unique<SectionMemoryManager>(); })
             , CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB)))
@@ -58,7 +58,7 @@ namespace pepper {
         static Ref<OrcExecutor> Create() {
             auto EPC = SelfExecutorProcessControl::Create();
             if (!EPC) {
-                throw new InternalCompilerError("Failed to initialize process control: {}",
+                throw InternalCompilerError("Failed to initialize process control: {}",
                                                 llvm::toString(EPC.takeError()));
             }
             auto ES = Ref<ExecutionSession>::create(std::move(EPC.get()));
@@ -66,7 +66,7 @@ namespace pepper {
             JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
             auto DL = JTMB.getDefaultDataLayoutForTarget();
             if (!DL) {
-                throw new InternalCompilerError("Unable to get default layout for target: {}",
+                throw InternalCompilerError("Unable to get default layout for target: {}",
                                                 llvm::toString(DL.takeError()));
             }
 
@@ -91,7 +91,7 @@ namespace pepper {
             return ES->lookup({&Dylib}, Mangle(Name.str()));
         }
 
-        void configureModule(llvm::Module* module) {
+        void configureModule(llvm::Module* module) override {
             auto targetTriple = llvm::sys::getDefaultTargetTriple();
             module->setTargetTriple(targetTriple);
             module->setDataLayout(getDataLayout());
@@ -99,14 +99,18 @@ namespace pepper {
 
         int execute(std::unique_ptr<llvm::LLVMContext> context,
                     std::unique_ptr<llvm::Module> module,
-                    const std::string& entry) {
-            auto err = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))));
-            if (err) {
-                throw new InternalCompilerError("Unable to initialize module: {}", llvm::toString(std::move(err)));
+                    const std::string& entry) override {
+
+            if (auto err = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))))) {
+                throw InternalCompilerError("Unable to initialize module: {0}", llvm::toString(std::move(err)));
             }
 
             auto entryFn = lookup(entry);
-            int (*fn)() = (int (*)())(intptr_t)entryFn->getAddress();
+            if (auto err = entryFn.takeError()) {
+                throw InternalCompilerError("Unable to resolve JIT entry function: {0}", llvm::toString(std::move(err)));
+            }
+
+            auto fn = (int (*)())(intptr_t)entryFn->getAddress();
             return fn();
         }
     };

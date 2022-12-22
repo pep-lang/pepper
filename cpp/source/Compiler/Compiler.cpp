@@ -5,6 +5,7 @@
 #include "Compiler/Exceptions.h"
 #include "Compiler/Options.h"
 #include "Compiler/Parser.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetSelect.h"
 #include <filesystem>
 #include <fstream>
@@ -17,7 +18,7 @@ namespace pepper {
         std::unique_ptr<Parser> ParserRef;
 
       public:
-        PepperCompiler(const std::string& moduleName) {
+        explicit PepperCompiler(const std::string& moduleName) {
             llvm::InitializeNativeTarget();
             llvm::InitializeNativeTargetAsmPrinter();
             llvm::InitializeNativeTargetAsmParser();
@@ -26,8 +27,8 @@ namespace pepper {
             ParserRef = std::make_unique<Parser>();
         }
 
-        Context& context() const override {
-            return *Ctx.get();
+        [[nodiscard]] Context& context() const override {
+            return *Ctx;
         }
 
         bool parse(std::istream& inputStream, const std::string& sourceFile) {
@@ -49,8 +50,9 @@ namespace pepper {
 
         llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile) override {
             if (!parse(sourceStream, sourceFile)) {
-                throw new CompileError("Failed to parse {0}", sourceFile);
+                throw CompileError("Failed to parse {0}", sourceFile);
             }
+            Ctx->module()->dump();
             return Context::get().module();
         }
     };

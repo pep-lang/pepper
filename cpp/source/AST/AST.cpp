@@ -2,6 +2,7 @@
 #include "AST/AST.h"
 
 #include "AST/Nodes.h"
+#include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
 #include "Compiler/Value.h"
@@ -62,7 +63,7 @@ namespace pepper {
                     return ty;
                 }
             }
-            return nullptr;
+            return Context::get().types()->getType(name);
         }
 
         Ref<ast::FunctionDef> returnTarget() {

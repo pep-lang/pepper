@@ -4,7 +4,7 @@
 
 TEST(IntMath, Let) {
     const char* source = R"SOURCE(
-        int main() {
+        int _test() {
             let x = 1;
             return x;
         }
