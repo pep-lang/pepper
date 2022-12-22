@@ -8,19 +8,19 @@ set(GLOBAL PROPERTY USE_FOLDERS ON)
 
 enable_testing()
 
-if(MSVC)
+if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /wd4624")
-else()
-    
-endif()
+else ()
+
+endif ()
 
 add_subdirectory(deps)
 
 if (MSVC)
     set(ANTLR4_LIBRARIES antlr4_shared)
-else()
+else ()
     set(ANTLR4_LIBRARIES antlr4_static)
-endif()
+endif ()
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
@@ -29,54 +29,56 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat
 add_subdirectory(grammar)
 
 add_library(PepperCore STATIC
-    source/AST/Nodes.h
-    source/Core/RTTI.h
-    source/Core/Common.h
-    source/Compiler/Codegen.h
-    source/Compiler/Codegen.cpp
-    source/Compiler/Compiler.h
-    source/Compiler/Compiler.cpp
-    source/Compiler/Constant.h
-    source/Compiler/Constant.cpp
-    source/Compiler/Context.h
-    source/Compiler/Context.cpp
-    source/Compiler/Executor.h
-    source/Compiler/Executor.cpp
-    source/Compiler/Function.h
-    source/Compiler/Function.cpp
-    source/Compiler/Options.h
-    source/Compiler/Options.cpp
-    source/Compiler/Parser.h
-    source/Compiler/Parser.cpp
-    source/Compiler/Scope.h
-    source/Compiler/Scope.cpp
-    source/Compiler/Type.h
-    source/Compiler/Type.cpp
-    source/Compiler/Value.h
-    source/Compiler/Value.cpp "source/AST/AST.h" "source/AST/AST.cpp" "source/AST/Nodes.cpp"
-)
+        source/AST/Nodes.h
+        source/Core/RTTI.h
+        source/Core/Common.h
+        source/Compiler/Compiler.h
+        source/Compiler/Compiler.cpp
+        source/Compiler/Context.h
+        source/Compiler/Context.cpp
+        source/Compiler/Options.h
+        source/Compiler/Options.cpp
+        source/Compiler/Parser.h
+        source/Compiler/Parser.cpp
+        source/Compiler/Type.h
+        source/Compiler/Type.cpp
+        source/AST/AST.h
+        source/AST/AST.cpp
+        source/AST/Nodes.cpp
+        source/AST/Functions.inl
+        source/Codegen/Codegen.cpp
+        source/Codegen/Codegen.h
+        source/Codegen/Constant.cpp
+        source/Codegen/Constant.h
+        source/Codegen/Function.cpp
+        source/Codegen/Function.h
+        source/Codegen/Value.cpp
+        source/Codegen/Value.h
+        source/JIT/Executor.cpp
+        source/JIT/Executor.h source/AST/Struct.inl source/AST/Struct.inl source/AST/Builder.cpp source/AST/Builder.cpp source/AST/Builder.h source/Core/Ref.h source/Codegen/Runtime.h source/Codegen/Scope.h source/Codegen/Runtime.cpp source/Codegen/Runtime.cpp source/Codegen/Scope.cpp)
+
 add_dependencies(PepperCore PepperParser)
 target_compile_definitions(PepperCore
-    PRIVATE ${LLVM_DEFINITIONS_LIST})
-target_include_directories(PepperCore 
-    PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS}
-)
+        PRIVATE ${LLVM_DEFINITIONS_LIST})
+target_include_directories(PepperCore
+        PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS}
+        )
 
 source_group(
-    TREE ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES ${COMPILER_SRC})
+        TREE ${CMAKE_CURRENT_SOURCE_DIR}
+        FILES ${COMPILER_SRC})
 
 add_executable(pepper source/main.cpp)
 add_dependencies(pepper PepperParser PepperCore)
 target_link_libraries(pepper
-    PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR4_LIBRARIES})
+        PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR4_LIBRARIES})
 target_compile_definitions(pepper
-    PRIVATE ${LLVM_DEFINITIONS_LIST})
+        PRIVATE ${LLVM_DEFINITIONS_LIST})
 
 if (MSVC)
     add_custom_command(TARGET pepper POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:pepper>)
-endif()
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:pepper>)
+endif ()
 
 set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 set(PEPPER_LIBRARIES PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})

@@ -3,10 +3,13 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
+#include "Codegen/Scope.h"
+#include "Codegen/Value.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
-#include "Compiler/Scope.h"
-#include "Compiler/Value.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/raw_ostream.h"
+#include <sstream>
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted
@@ -20,100 +23,115 @@
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
-    llvm::Value* Type::alloc(llvm::IRBuilderBase* builder) const {
-        builder = builder ? builder : Context::get().locals()->localRegisters().get();
-        return builder->CreateAlloca(*this, nullptr, Name.c_str());
+
+    static std::string toString(llvm::Type* ty) {
+        std::string str;
+        llvm::raw_string_ostream stream(str);
+        ty->print(stream, true, true);
+        return str;
     }
 
     uint32_t Type::bits() const {
         return TypeRef->getIntegerBitWidth();
     }
 
+    bool Type::isInteger() const {
+        return TypeRef->isIntegerTy();
+    }
+
+    bool Type::isFloat() const {
+        return TypeRef->isFloatingPointTy();
+    }
+
+    bool Type::isPointer() const {
+        return TypeRef->isPointerTy();
+    }
+
     Ref<Type> Type::ref() const {
         return const_cast<Type*>(this)->shared_from_this();
     }
 
-    Ref<Value> Type::add(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {0} does not support addition", name());
+    llvm::Value* Type::add(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support addition", name());
     }
 
-    Ref<Value> Type::sub(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {0} does not support subtraction", name());
+    llvm::Value* Type::sub(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support subtraction", name());
     }
 
-    Ref<Value> Type::mul(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {0} does not support multiplication", name());
+    llvm::Value* Type::mul(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support multiplication", name());
     }
 
-    Ref<Value> Type::div(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support division", name());
+    llvm::Value* Type::div(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support division", name());
     }
 
-    Ref<Value> Type::mod(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support modulus", name());
+    llvm::Value* Type::mod(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support modulus", name());
     }
 
-    Ref<Value> Type::pow(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support pow", name());
+    llvm::Value* Type::pow(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support pow", name());
     }
 
-    Ref<Value> Type::less(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <", name());
+    llvm::Value* Type::less(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support <", name());
     }
 
-    Ref<Value> Type::lessEq(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <=", name());
+    llvm::Value* Type::lessEq(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support <=", name());
     }
 
-    Ref<Value> Type::greater(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >", name());
+    llvm::Value* Type::greater(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support >", name());
     }
 
-    Ref<Value> Type::greaterEq(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >=", name());
+    llvm::Value* Type::greaterEq(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support >=", name());
     }
 
-    Ref<Value> Type::lshift(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support <<", name());
+    llvm::Value* Type::lshift(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support <<", name());
     }
 
-    Ref<Value> Type::rshift(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support >>", name());
+    llvm::Value* Type::rshift(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support >>", name());
     }
 
-    Ref<Value> Type::equal(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support equality", name());
+    llvm::Value* Type::equal(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support equality", name());
     }
 
-    Ref<Value> Type::notEqual(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support non-equality", name());
+    llvm::Value* Type::notEqual(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support non-equality", name());
     }
 
-    Ref<Value> Type::assign(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support assignment", name());
+    llvm::Value* Type::assign(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support assignment", name());
     }
 
-    Ref<Value> Type::bitAnd(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise and", name());
+    llvm::Value* Type::bitAnd(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support bitwise and", name());
     }
 
-    Ref<Value> Type::bitXor(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise xor", name());
+    llvm::Value* Type::bitXor(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support bitwise xor", name());
     }
 
-    Ref<Value> Type::bitOr(Ref<Value> lhs, Ref<Value> rhs) const {
-        throw new CompileError("Type {} does not support bitwise or", name());
+    llvm::Value* Type::bitOr(llvm::Value* lhs, llvm::Value* rhs) const {
+        throw CompileError("Type {0} does not support bitwise or", name());
     }
 
-    Ref<Value> Type::asBool(Ref<Value> value) const {
-        throw new CompileError("Type {} does not support conversion to bool", name());
+    llvm::Value* Type::asBool(llvm::Value* value) const {
+        throw CompileError("Type {0} does not support conversion to bool", name());
     }
 
     class NativeType : public Type {
         DECLARE_RTTI(NativeType, Type)
       protected:
         static llvm::IRBuilderBase* builder() {
-            return Context::get().locals()->ir().get();
+            return Context::get().locals()->builder();
         }
 
       public:
@@ -143,30 +161,30 @@ namespace pepper {
         ~PointerType() = default;
 
         Ref<Type> pointer() const override {
-            throw new CompileError("Pointer to pointer is not supported");
+            throw CompileError("Pointer to pointer is not supported");
         }
 
-        Ref<Value> coerce(Ref<Value> value) const override {
-            throw new CompileError("Coercion to pointer is not supported");
+        llvm::Value* coerce(llvm::Value* value) const override {
+            throw CompileError("Coercion to pointer is not supported");
         }
 
-        Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(Types::Bool, builder()->CreateICmpEQ(*lhs, *rhs));
+        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return builder()->CreateICmpEQ(lhs, rhs);
         }
 
-        Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(Types::Bool, builder()->CreateICmpNE(*lhs, *rhs));
+        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return builder()->CreateICmpNE(lhs, rhs);
         }
 
-        Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const override {
-            lhs->store(rhs);
+        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+            builder()->CreateStore(rhs, lhs);
             return lhs;
         }
 
-        Ref<Value> asBool(Ref<Value> value) const override {
+        llvm::Value* asBool(llvm::Value* value) const override {
             auto zero = llvm::ConstantInt::getFalse(*Types::Int64);
-            auto valAsInt = builder()->CreatePtrToInt(*value, *Types::Int64);
-            return Value::New(Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool"), "bool");
+            auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
+            return builder()->CreateICmpNE(zero, valAsInt, "bool");
         }
     };
 
@@ -183,8 +201,8 @@ namespace pepper {
             return Types::Int8->pointer();
         }
 
-        Ref<Value> coerce(Ref<Value> value) const override {
-            throw new CompileError("Cannot convert {} to void", value->type()->name());
+        llvm::Value* coerce(llvm::Value* value) const override {
+            throw CompileError("Cannot convert {0} to void", toString(value->getType()));
             return nullptr;
         }
     };
@@ -196,7 +214,6 @@ namespace pepper {
       public:
         IntegerType(const std::string& name, llvm::Type* type)
             : NativeType(name, type) {
-            IsInt = true;
         }
 
         ~IntegerType() = default;
@@ -205,106 +222,103 @@ namespace pepper {
             return Signed;
         }
 
-        Ref<Value> coerce(Ref<Value> value) const override {
-            if (value->type().get() == this && !value->type()->isConstant()) {
+        llvm::Value* coerce(llvm::Value* value) const override {
+            if (value->getType() == *this) {
                 return value;
             }
-            bool signedVal = value->type() != Types::Bool && isSigned();
-            if (value->type()->isInteger()) {
-                return Value::New(ref(), builder()->CreateIntCast(*value, *this, signedVal));
+            auto type = value->getType();
+            bool signedVal = !type->isIntegerTy(1) && isSigned();
+            if (type->isIntegerTy()) {
+                return builder()->CreateIntCast(value, *this, signedVal);
             }
-            if (value->type()->isFloat()) {
+            if (type->isFloatingPointTy()) {
                 auto converted =
-                    signedVal ? builder()->CreateFPToSI(*value, *this) : builder()->CreateFPToUI(*value, *this);
+                    signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this);
             }
-            throw new CompileError("Cannot convert from {} to {}", value->type()->name(), name());
+            throw CompileError("Cannot convert from {0} to {0}", toString(type), name());
         }
 
-        Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateNSWAdd(*lhs, *rhs, "add"), "add");
+        llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return builder()->CreateNSWAdd(lhs, rhs, "add");
         }
 
-        Ref<Value> sub(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateNSWSub(*lhs, *rhs, "sub"), "sub");
+        llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return builder()->CreateNSWSub(lhs, rhs, "sub");
         }
 
-        Ref<Value> mul(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateNSWMul(*lhs, *rhs, "mul"), "mul");
+        llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return builder()->CreateNSWMul(lhs, rhs, "mul");
         }
 
-        Ref<Value> div(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateSDiv(*lhs, *rhs, "sdiv"), "sdiv")
-                              : Value::New(ref(), builder()->CreateUDiv(*lhs, *rhs, "udiv"), "udiv");
+        llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return isSigned() ? builder()->CreateSDiv(lhs, rhs, "sdiv") : builder()->CreateUDiv(lhs, rhs, "udiv");
         }
 
-        Ref<Value> mod(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateSRem(*lhs, *rhs, "srem"), "srem")
-                              : Value::New(ref(), builder()->CreateURem(*lhs, *rhs, "urem"), "urem");
+        llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return isSigned() ? builder()->CreateSRem(lhs, rhs, "srem") : builder()->CreateURem(lhs, rhs, "urem");
         }
 
-        Ref<Value> pow(Ref<Value> lhs, Ref<Value> rhs) const override {
+        llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
             // auto pow = builder()->
             // Value::New(
             //     ref(), builder()->CreateCall())
             return nullptr;
         }
 
-        Ref<Value> less(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateICmpSLT(*lhs, *rhs, "slt"), "slt")
-                              : Value::New(ref(), builder()->CreateICmpULT(*lhs, *rhs, "ult"), "ult");
+        llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return isSigned() ? builder()->CreateICmpSLT(lhs, rhs, "slt") : builder()->CreateICmpULT(lhs, rhs, "ult");
         }
 
-        Ref<Value> lessEq(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateICmpSLE(*lhs, *rhs, "sle"), "sle")
-                              : Value::New(ref(), builder()->CreateICmpULE(*lhs, *rhs, "ule"), "ule");
+        llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return isSigned() ? builder()->CreateICmpSLE(lhs, rhs, "sle") : builder()->CreateICmpULE(lhs, rhs, "ule");
         }
 
-        Ref<Value> greater(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateICmpSGT(*lhs, *rhs, "sgt"), "sgt")
-                              : Value::New(ref(), builder()->CreateICmpUGT(*lhs, *rhs, "ugt"), "ugt");
+        llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
+            return isSigned() ? builder()->CreateICmpSGT(lhs, rhs, "sgt");
+                              : builder()->CreateICmpUGT(lhs, rhs, "ugt");
         }
 
-        Ref<Value> greaterEq(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return isSigned() ? Value::New(ref(), builder()->CreateICmpSGE(*lhs, *rhs, "sge"), "sge")
-                              : Value::New(ref(), builder()->CreateICmpUGE(*lhs, *rhs, "uge"), "uge");
+        llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return isSigned() ? builder()->CreateICmpSGE(lhs, rhs, "sge");
+                              : builder()->CreateICmpUGE(lhs, rhs, "uge");
         }
 
-        Ref<Value> lshift(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateLShr(*lhs, *rhs, "lshr"), "lshr");
+        llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateLShr(lhs, rhs, "lshr");
         }
 
-        Ref<Value> rshift(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateAShr(*lhs, *rhs, "ashr"), "ashr");
+        llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateAShr(lhs, rhs, "ashr");
         }
 
-        Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateICmpEQ(*lhs, *rhs, "eq"), "eq");
+        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateICmpEQ(lhs, rhs, "eq");
         }
 
-        Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateICmpNE(*lhs, *rhs, "ne"), "ne");
+        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateICmpNE(lhs, rhs, "ne");
         }
 
-        Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const override {
-            lhs->store(rhs);
-            return lhs;
+        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              builder()->CreateStore(rhs, lhs);
+                              return lhs;
         }
 
-        Ref<Value> bitAnd(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateAnd(*lhs, *rhs, "and"), "and");
+        llvm::Value* bitAnd(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateAnd(lhs, rhs, "and");
         }
 
-        Ref<Value> bitXor(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateXor(*lhs, *rhs, "xor"), "xor");
+        llvm::Value* bitXor(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateXor(lhs, rhs, "xor");
         }
 
-        Ref<Value> bitOr(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateOr(*lhs, *rhs, "or"), "or");
+        llvm::Value* bitOr(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateOr(lhs, rhs, "or");
         }
 
-        Ref<Value> asBool(Ref<Value> value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*ref());
-            return Value::New(ref(), builder()->CreateICmpNE(*value, zero, "bool"), "bool");
+        llvm::Value* asBool(llvm::Value* value) const override {
+                              auto zero = llvm::ConstantInt::getFalse(*ref());
+                              return builder()->CreateICmpNE(value, zero, "bool");
         }
     };
 
@@ -313,83 +327,84 @@ namespace pepper {
       public:
         FloatType(const std::string& name, llvm::Type* type)
             : NativeType(name, type) {
-            IsReal = true;
+                              IsReal = true;
         }
 
         ~FloatType() = default;
 
-        Ref<Value> coerce(Ref<Value> value) const override {
-            if (value->type().get() == this && !value->type()->isConstant()) {
-                return value;
-            }
-            if (value->type()->isInteger() || value->type()->isFloat()) {
-                return Value::New(ref(), builder()->CreateFPCast(*value, *this));
-            }
-            throw new CompileError("Cannot convert from {} to {}", value->type()->name(), name());
+        llvm::Value* coerce(llvm::Value* value) const override {
+                              if (value->getType() == *this) {
+                                  return value;
+                              }
+                              if (value->getType()->isIntegerTy() || value->getType()->isFloatingPointTy()) {
+                                  return builder()->CreateFPCast(value, *this);
+                              }
+                              throw CompileError("Cannot convert from {0} to {0}", toString(value->getType()), name());
         }
 
-        Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFAdd(*lhs, *rhs, "fdd"), "fadd");
+        llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFAdd(lhs, rhs, "fdd");
         }
 
-        Ref<Value> sub(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFSub(*lhs, *rhs, "fsub"), "fsub");
+        llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFSub(lhs, rhs, "fsub");
         }
 
-        Ref<Value> mul(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFMul(*lhs, *rhs, "fmul"), "fmul");
+        llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFMul(lhs, rhs, "fmul");
         }
 
-        Ref<Value> div(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFDiv(*lhs, *rhs, "fdiv"), "fdiv");
+        llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFDiv(lhs, rhs, "fdiv");
         }
 
-        Ref<Value> mod(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFRem(*lhs, *rhs, "frem"), "frem");
+        llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFRem(lhs, rhs, "frem");
         }
 
-        Ref<Value> pow(Ref<Value> lhs, Ref<Value> rhs) const override {
-            // auto pow = builder()->
-            // Value::New(
-            //     ref(), builder()->CreateCall())
-            return nullptr;
+        llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              // auto pow = builder()->
+                              // Value::New(
+                              //     ref(), builder()->CreateCall())
+                              return nullptr;
         }
 
-        Ref<Value> less(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpOLT(*lhs, *rhs, "olt"), "olt");
+        llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpOLT(lhs, rhs, "olt");
         }
 
-        Ref<Value> lessEq(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpOLE(*lhs, *rhs, "ole"), "ole");
+        llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpOLE(lhs, rhs, "ole");
         }
 
-        Ref<Value> greater(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpOGT(*lhs, *rhs, "ogt"), "ogt");
+        llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpOGT(lhs, rhs, "ogt");
         }
 
-        Ref<Value> greaterEq(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpOGE(*lhs, *rhs, "oge"), "oge");
+        llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpOGE(lhs, rhs, "oge");
         }
 
-        Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpOEQ(*lhs, *rhs, "oeq"), "oeq");
+        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpOEQ(lhs, rhs, "oeq");
         }
 
-        Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const override {
-            return Value::New(ref(), builder()->CreateFCmpONE(*lhs, *rhs, "one"), "one");
+        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              return builder()->CreateFCmpONE(lhs, rhs, "one");
         }
 
-        Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const override {
-            lhs->store(rhs);
-            return lhs;
+        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+                              builder()->CreateStore(rhs, lhs);
+                              return lhs;
         }
 
-        Ref<Value> asBool(Ref<Value> value) const override {
-            auto intType = TypeRef->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(builder()->getContext())
-                                                              : llvm::Type::getInt32Ty(builder()->getContext());
-            auto zero = llvm::ConstantInt::getFalse(intType);
-            auto valAsInt = builder()->CreateFPToSI(*value, intType);
-            return Value::New(Types::Bool, builder()->CreateICmpNE(valAsInt, zero, "bool"), "bool");
+        llvm::Value* asBool(llvm::Value* value) const override {
+                              auto intType = TypeRef->getIntegerBitWidth() > 32
+                                                 ? llvm::Type::getInt64Ty(builder()->getContext())
+                                                 : llvm::Type::getInt32Ty(builder()->getContext());
+                              auto zero = llvm::ConstantInt::getFalse(intType);
+                              auto valAsInt = builder()->CreateFPToSI(value, intType);
+                              return builder()->CreateICmpNE(valAsInt, zero, "bool");
         }
     };
 
@@ -400,7 +415,7 @@ namespace pepper {
     Ref<FunctionType> FunctionType::Create(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs) {
         std::string sig = Signature(returnType, params, varargs);
         if (auto func = Context::get().ast()->builder()->findType(sig)) {
-            return func.as<FunctionType>();
+                              return func.as<FunctionType>();
         }
         return nullptr;
     }
@@ -408,7 +423,7 @@ namespace pepper {
     Ref<FunctionType> FunctionType::Create(Ref<Type> returnType, const std::vector<ast::Symbol>& params, bool varargs) {
         std::string sig = Signature(returnType, params, varargs);
         if (auto func = Context::get().ast()->builder()->findType(sig)) {
-            return func.as<FunctionType>();
+                              return func.as<FunctionType>();
         }
         return nullptr;
     }
@@ -429,12 +444,12 @@ namespace pepper {
         return llvm::formatv("{0}({1}{2})", returnType->name(), paramsString, ellipsis);
     }
 
-    Ref<Value> FunctionType::coerce(Ref<Value> val) const {
-        throw new CompileError("Cannot coerce to a function");
+    llvm::Value* FunctionType::coerce(llvm::Value* val) const {
+        throw CompileError("Cannot coerce to a function");
     }
 
     Ref<Type> FunctionType::pointer() const {
-        throw new CompileError("Cannot create a pointer to a function");
+        throw CompileError("Cannot create a pointer to a function");
     }
 
     Ref<Type> Types::Bool;
@@ -470,8 +485,8 @@ namespace pepper {
 
     Ref<Type> Types::addType(const std::string& name, Ref<Type> type) {
         if (auto ty = getType(name)) {
-            if (ty != type)
-                throw new InternalCompilerError("Types: type collision: {0}", ty->name());
+                              if (ty != type)
+                                  throw new InternalCompilerError("Types: type collision: {0}", ty->name());
         }
         return KnownTypes[name] = type;
     }
@@ -479,14 +494,14 @@ namespace pepper {
     Ref<Type> Types::getType(const std::string& name) {
         auto it = KnownTypes.find(name);
         if (it != KnownTypes.end()) {
-            return it->getValue();
+                              return it->getValue();
         }
         return Ref<Type>(nullptr);
     }
 
     Ref<Type> Types::getOrCreate(const std::string& name, std::function<Ref<Type>()> createType) {
         if (auto ty = getType(name)) {
-            return ty;
+                              return ty;
         }
         return KnownTypes[name] = createType();
     }

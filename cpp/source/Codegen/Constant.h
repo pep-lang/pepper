@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Compiler/Value.h"
+#include "Codegen/Value.h"
 
 namespace pepper {
     class Constant : public Value {};

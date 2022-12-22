@@ -13,10 +13,14 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class AST;
+    namespace ast {
+        class AST;
+    }
     class Scope;
     class Executor;
+    class Function;
     class Types;
+    class UserFunction;
 
     class Context {
         static Context* Instance;
@@ -25,18 +29,18 @@ namespace pepper {
         std::unique_ptr<llvm::LLVMContext> Ctx;
         std::unique_ptr<llvm::Module> Module;
         Ref<Types> TypeMap;
-        Ref<Scope> Runtime;
+        Ref<Scope> Builtins;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
-        Ref<AST> Ast;
+        Ref<ast::AST> Ast;
 
       public:
         static Context& get();
 
-        Context(const std::string& moduleName);
+        explicit Context(const std::string& moduleName);
         ~Context();
 
-        llvm::Module* module() const;
+        [[nodiscard]] llvm::Module* module() const;
 
         std::unique_ptr<llvm::Module>&& takeModule() {
             return std::move(Module);
@@ -46,34 +50,33 @@ namespace pepper {
             return std::move(Ctx);
         }
 
-        Ref<Executor> executor() const {
+        [[nodiscard]] Ref<Executor> executor() const {
             return Exec;
         }
 
-        Ref<Types> types() const {
+        [[nodiscard]] Ref<Types> types() const {
             return TypeMap;
         }
 
-        Scope* globals() const {
-            return Globals.get();
+        [[nodiscard]] Ref<Scope> globals() const {
+            return Globals;
         }
 
-        Scope* locals() const {
-            return Locals.get();
+        [[nodiscard]] Ref<Scope> locals() const {
+            return Locals;
         }
 
-        Ref<AST> ast() const {
+        [[nodiscard]] Ref<ast::AST> ast() const {
             return Ast;
         }
 
-        Ref<Scope> runtime() const {
-            return Runtime;
+        [[nodiscard]] Ref<Scope> runtime() const {
+            return Builtins;
         }
 
-        void injectRuntime();
-
-        Scope* pushScope(llvm::IRBuilderBase* builder = nullptr);
-        Scope* popScope();
+        void pushFunction(Ref<UserFunction> function);
+        void pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder = nullptr);
+        void popScope();
     };
 
 } // namespace pepper

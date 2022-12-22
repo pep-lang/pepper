@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace llvm {
@@ -18,7 +19,6 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class Value;
     class Type;
     class PointerType;
     class Symbol;
@@ -33,14 +33,10 @@ namespace pepper {
       protected:
         std::string Name;
         llvm::Type* TypeRef = nullptr;
-        uint32_t IsInt : 1;
-        uint32_t IsReal : 1;
-        uint32_t IsPointer : 1;
-        uint32_t IsConstant : 1;
 
       public:
-        Type(const std::string name, llvm::Type* type)
-            : Name(name)
+        Type(std::string name, llvm::Type* type)
+            : Name(std::move(name))
             , TypeRef(type) {
         }
 
@@ -60,48 +56,34 @@ namespace pepper {
             return TypeRef;
         }
 
-        bool isInteger() const {
-            return IsInt;
-        }
+        bool isInteger() const;
+        bool isFloat() const;
+        bool isPointer() const;
 
-        bool isFloat() const {
-            return IsReal;
-        }
-
-        bool isPointer() const {
-            return IsPointer;
-        }
-
-        bool isConstant() const {
-            return IsConstant;
-        }
-
-        virtual Ref<Value> coerce(Ref<Value> value) const = 0;
+        virtual llvm::Value* coerce(llvm::Value* value) const = 0;
         virtual Ref<Type> pointer() const = 0;
 
         virtual uint32_t bits() const;
 
-        llvm::Value* alloc(llvm::IRBuilderBase* builder) const;
-
-        virtual Ref<Value> add(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> sub(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> mul(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> div(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> mod(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> pow(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> less(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> lessEq(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> greater(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> greaterEq(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> lshift(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> rshift(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> equal(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> notEqual(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> assign(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> bitAnd(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> bitXor(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> bitOr(Ref<Value> lhs, Ref<Value> rhs) const;
-        virtual Ref<Value> asBool(Ref<Value> value) const;
+        virtual llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* bitAnd(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* bitXor(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* bitOr(llvm::Value* lhs, llvm::Value* rhs) const;
+        virtual llvm::Value* asBool(llvm::Value* value) const;
     };
 
     class UserType : public Type {
@@ -115,13 +97,13 @@ namespace pepper {
         DECLARE_RTTI(FunctionType, Type)
         Ref<Type> ReturnType;
         std::vector<Symbol> Params;
-        bool Varargs = false;
+        bool Vararg = false;
 
       public:
         FunctionType(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);
         ~FunctionType() = default;
 
-        Ref<Value> coerce(Ref<Value> value) const override;
+        llvm::Value* coerce(llvm::Value* value) const override;
         Ref<Type> pointer() const override;
 
         static Ref<FunctionType> Create(Ref<Type> returnType, const std::vector<Symbol>& params, bool varargs = false);

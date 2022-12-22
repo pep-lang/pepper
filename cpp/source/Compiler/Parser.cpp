@@ -3,14 +3,15 @@
 
 #include "ANTLRInputStream.h"
 #include "AST/AST.h"
+#include "AST/Builder.h"
 #include "AST/Nodes.h"
-#include "Compiler/Codegen.h"
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <utility>
 
 namespace pepper {
     using namespace Pepper::Parser;
@@ -22,8 +23,8 @@ namespace pepper {
     class ParserListener : public PepperBaseListener {
         using Super = PepperBaseListener;
 
-        AST ast;
-        Ref<AST::Builder> builder;
+        ast::AST ast;
+        Ref<ast::Builder> builder;
 
       public:
         ParserListener() {
@@ -31,7 +32,7 @@ namespace pepper {
         }
 
         void pushStack(Ref<ast::Node> val) {
-            builder->pushStack(val);
+            builder->pushStack(std::move(val));
         }
 
         template <typename N> Ref<N> popStack() {
@@ -39,9 +40,9 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw new InternalCompilerError("Attempted to pop {} from AST stack, found {} instead",
-                                            RTTI::of<N>()->name(),
-                                            RTTI::of(*val)->name());
+            throw InternalCompilerError("Attempted to pop {} from AST stack, found {} instead",
+                                        RTTI::of<N>()->name(),
+                                        RTTI::of(*val)->name());
         }
 
         template <typename N> Ref<N> peekStack(unsigned int idx) {
@@ -49,21 +50,21 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw new InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
-                                            RTTI::of<N>()->name(),
-                                            idx,
-                                            RTTI::of(*val)->name());
+            throw InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
+                                        RTTI::of<N>()->name(),
+                                        idx,
+                                        RTTI::of(*val)->name());
         }
 
         static SourceLocation sourceLocation(const antlr4::ParserRuleContext* context) {
-            return SourceLocation(context->start->getInputStream()->getSourceName(), context->start->getLine());
+            return {context->start->getInputStream()->getSourceName(), static_cast<int>(context->start->getLine())};
         }
 
         void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
             Super::exitVariableSpecifier(context);
             auto identifiers = context->Identifier();
             if (identifiers.size() != 2) {
-                throw new CompileError(sourceLocation(context), "Expected <type> <identifier> in variable declaration");
+                throw CompileError(sourceLocation(context), "Expected <type> <identifier> in variable declaration");
             }
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();

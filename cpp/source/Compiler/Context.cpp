@@ -2,8 +2,11 @@
 #include "Compiler/Context.h"
 
 #include "AST/AST.h"
-#include "Compiler/Executor.h"
-#include "Compiler/Scope.h"
+#include "Codegen/Function.h"
+#include "Codegen/Runtime.h"
+#include "Codegen/Scope.h"
+#include "Compiler/Type.h"
+#include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <cassert>
@@ -17,22 +20,37 @@ namespace pepper {
     }
 
     Context::Context(const std::string& moduleName)
-        : Runtime(Ref<Scope>::create())
-        , Globals(Ref<Scope>::create())
-        , Locals(Globals)
-        , Ast(Ref<AST>::create()) {
+        : Ast(Ref<ast::AST>::create()) {
         assert(Instance == nullptr);
         Instance = this;
 
+        Builtins = Ref<Runtime>::create();
+        Globals = Ref<Scope>::create("Globals", Builtins);
+        Locals = Globals;
+
         Exec = Executor::Create();
         Ctx = std::make_unique<llvm::LLVMContext>();
-        Module = std::make_unique<llvm::Module>(moduleName, *Ctx.get());
+        Module = std::make_unique<llvm::Module>(moduleName, *Ctx);
         Exec->configureModule(Module.get());
-        TypeMap = Ref<Types>::create(*Ctx.get());
+        TypeMap = Ref<Types>::create(*Ctx);
     }
 
     Context::~Context() {
         Instance = nullptr;
+    }
+
+    void Context::pushFunction(Ref<UserFunction> function) {
+        pushScope(function->name(), function->Builder);
+        Locals->ReturnTarget = function;
+    }
+
+    void Context::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
+        Locals = Ref<Scope>::create(name, Locals);
+        Locals->Builder = builder;
+    }
+
+    void Context::popScope() {
+        Locals = Locals->Outer == Globals ? Globals : Locals->Outer;
     }
 
     llvm::Module* Context::module() const {
