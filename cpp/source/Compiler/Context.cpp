@@ -6,7 +6,7 @@
 #include "Codegen/Runtime.h"
 #include "Codegen/Scope.h"
 #include "Compiler/Param.h"
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"

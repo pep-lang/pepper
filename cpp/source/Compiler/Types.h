@@ -57,9 +57,3 @@ namespace pepper {
     };
 
 } // namespace pepper
-
-// template <> struct std::formatter<pepper::Ref<pepper::Type>> : std::formatter<std::string> {
-//     auto format(pepper::Ref<pepper::Type> t, format_context& ctx) {
-//         return formatter<string>::format(std::format("{}", t->name()), ctx);
-//     }
-// };

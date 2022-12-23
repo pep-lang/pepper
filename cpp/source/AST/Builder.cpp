@@ -8,7 +8,7 @@
 #include "AST/Nodes.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Type.h"
 #include <vector>

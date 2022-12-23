@@ -13,10 +13,11 @@ namespace pepper::ast {
         DECLARE_RTTI(VariableDef, Symbol);
 
         Ref<Expression> Default;
+
       public:
         VariableDef(llvm::Type* type, const std::string& identifier, Ref<Expression> defaultValue = nullptr)
             : Symbol(type, identifier)
-            , Default(defaultValue){
+            , Default(defaultValue) {
         }
 
         Ref<Expression> defaultValue() const {

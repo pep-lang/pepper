@@ -4,7 +4,7 @@
 #include "Codegen/Scope.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"

@@ -40,8 +40,8 @@ add_library(PepperCore STATIC
         source/Compiler/Options.cpp
         source/Compiler/Parser.h
         source/Compiler/Parser.cpp
-        source/Compiler/Type.h
-        source/Compiler/Type.cpp
+        source/Compiler/Types.h
+        source/Compiler/Types.cpp
         source/AST/AST.h
         source/AST/AST.cpp
         source/AST/Nodes.cpp

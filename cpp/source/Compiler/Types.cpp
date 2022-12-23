@@ -1,5 +1,5 @@
 
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 
 #include "AST/Nodes.h"
 #include "Compiler/Context.h"

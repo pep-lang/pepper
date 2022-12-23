@@ -6,7 +6,7 @@
 
 #include "Codegen/Function.h"
 #include "Compiler/Param.h"
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"
 

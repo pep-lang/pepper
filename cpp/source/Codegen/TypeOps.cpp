@@ -7,7 +7,7 @@
 #include "Codegen/Scope.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
-#include "Compiler/Type.h"
+#include "Compiler/Types.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted
