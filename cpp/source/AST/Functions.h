@@ -66,6 +66,10 @@ namespace pepper::ast {
             Locals.push_back(local);
         }
 
+        void setLocals(const std::vector<Ref<VariableDef>>& vars) {
+            Locals = vars;
+        }
+
         const std::vector<Ref<VariableDef>>& locals() const {
             return Locals;
         }

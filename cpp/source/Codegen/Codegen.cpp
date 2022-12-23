@@ -25,13 +25,17 @@ namespace pepper {
         return Context::get().locals()->builder();
     }
 
+    static Ref<llvm::IRBuilderBase> registers() {
+        return Context::get().locals()->registers();
+    }
+
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
         return value;
     }
 
     static llvm::Value* emit(Ref<VariableDef> variableDef) {
-        auto value = ir()->CreateAlloca(variableDef->type(), nullptr, variableDef->identifier());
+        auto value = registers()->CreateAlloca(variableDef->type(), nullptr, variableDef->identifier());
         if (variableDef->defaultValue()) {
             auto defaultValue = codegen(variableDef->defaultValue());
             ir()->CreateStore(defaultValue, value);

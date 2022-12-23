@@ -23,7 +23,7 @@ namespace pepper {
     class Type;
 
     struct Scope {
-        std::string Name = "Anonymous";
+        std::string Name;
         Ref<Scope> Outer;
 
         llvm::StringMap<llvm::Type*> Types;
@@ -38,8 +38,9 @@ namespace pepper {
 
         Ref<llvm::IRBuilderBase> Builder;
 
-        explicit Scope(const std::string& name = "", Ref<Scope> outer = nullptr)
-            : Outer(std::move(outer)) {
+        explicit Scope(const std::string& name = "Anonymous", Ref<Scope> outer = nullptr)
+            : Name(name)
+            , Outer(std::move(outer)) {
         }
 
         void pushStack(llvm::Value* value) {

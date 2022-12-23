@@ -133,7 +133,11 @@ namespace pepper::ast {
 
         Builder* endFunction() override {
             auto& scope = Stack.back();
-            ast.newRoot(scope.ReturnTarget);
+            auto function = scope.ReturnTarget;
+            std::for_each(scope.Locals.begin(), scope.Locals.end(), [&function](auto& local) {
+                function->newLocal(local.second);
+            });
+            ast.newRoot(function);
             endScope();
             return this;
         }
