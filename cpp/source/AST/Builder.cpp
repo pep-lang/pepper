@@ -168,7 +168,7 @@ namespace pepper::ast {
             return active;
         }
 
-        auto active = Ref<BuilderImpl>::create(*this);
+        auto active = Ref<BuilderImpl>::New(*this);
         ActiveBuilder = active;
         return active.as<Builder>();
     }

@@ -20,7 +20,7 @@ namespace pepper::ast {
     class Builder {
       public:
         template <typename N, typename... Args> Ref<N> create(Args&&... args) {
-            return Ref<N>::create(std::forward<decltype(args)>(args)...);
+            return Ref<N>::New(std::forward<decltype(args)>(args)...);
         }
 
         [[nodiscard]] virtual llvm::Type* findType(const std::string& name) const = 0;

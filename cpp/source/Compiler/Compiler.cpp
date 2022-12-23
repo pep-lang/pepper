@@ -58,7 +58,7 @@ namespace pepper {
     };
 
     Ref<Compiler> Compiler::Create(const std::string& moduleName) {
-        return Ref<PepperCompiler>::create(moduleName);
+        return Ref<PepperCompiler>::New(moduleName);
     }
 
 } // namespace pepper

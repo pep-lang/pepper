@@ -51,7 +51,7 @@ namespace pepper {
             // skip past existing locals
             for (int localIdx = 0; localIdx < func->NumLocals; ++localIdx)
                 ++funcStart;
-            builder = Ref<llvm::IRBuilder<>>::create(func->Body);
+            builder = Ref<llvm::IRBuilder<>>::New(func->Body);
             builder->SetInsertPoint(func->Body, funcStart);
         }
         ++func->NumLocals;

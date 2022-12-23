@@ -26,7 +26,7 @@ namespace pepper {
             return std::static_pointer_cast<U>(*this);
         }
 
-        template <class... Args> static Ref<T> create(Args&&... args) {
+        template <class... Args> static Ref<T> New(Args&&... args) {
             return std::make_shared<T>(std::forward<Args>(args)...);
         }
     };

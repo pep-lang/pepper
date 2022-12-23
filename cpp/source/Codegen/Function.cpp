@@ -23,6 +23,6 @@ namespace pepper {
         Context::get().locals()->Functions[name] = ref();
         auto& context = Context::get().module()->getContext();
         Body = llvm::BasicBlock::Create(context, "entry");
-        Builder = Ref<llvm::IRBuilder<>>::create(Body);
+        Builder = Ref<llvm::IRBuilder<>>::New(Body);
     }
 } // namespace pepper

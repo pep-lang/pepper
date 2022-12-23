@@ -21,19 +21,19 @@ namespace pepper {
     }
 
     Context::Context(const std::string& moduleName)
-        : Ast(Ref<ast::AST>::create()) {
+        : Ast(Ref<ast::AST>::New()) {
         assert(Instance == nullptr);
         Instance = this;
 
-        Builtins = Ref<Runtime>::create();
-        Globals = Ref<Scope>::create("Globals", Builtins);
+        Builtins = Ref<Runtime>::New();
+        Globals = Ref<Scope>::New("Globals", Builtins);
         Locals = Globals;
 
         Exec = Executor::Create();
         Ctx = std::make_unique<llvm::LLVMContext>();
         Module = std::make_unique<llvm::Module>(moduleName, *Ctx);
         Exec->configureModule(Module.get());
-        TypeMap = Ref<Types>::create(*Ctx);
+        TypeMap = Ref<Types>::New(*Ctx);
     }
 
     Context::~Context() {
@@ -46,7 +46,7 @@ namespace pepper {
     }
 
     void Context::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
-        Locals = Ref<Scope>::create(name, Locals);
+        Locals = Ref<Scope>::New(name, Locals);
         Locals->Builder = builder;
     }
 

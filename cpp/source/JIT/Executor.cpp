@@ -61,7 +61,7 @@ namespace pepper {
                 throw InternalCompilerError("Failed to initialize process control: {}",
                                             llvm::toString(EPC.takeError()));
             }
-            auto ES = Ref<ExecutionSession>::create(std::move(EPC.get()));
+            auto ES = Ref<ExecutionSession>::New(std::move(EPC.get()));
 
             JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
             auto DL = JTMB.getDefaultDataLayoutForTarget();
@@ -70,7 +70,7 @@ namespace pepper {
                                             llvm::toString(DL.takeError()));
             }
 
-            return Ref<OrcExecutor>::create(std::move(ES), std::move(JTMB), std::move(DL.get()));
+            return Ref<OrcExecutor>::New(std::move(ES), std::move(JTMB), std::move(DL.get()));
         }
 
         const DataLayout& getDataLayout() const {

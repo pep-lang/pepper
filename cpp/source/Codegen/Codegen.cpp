@@ -92,7 +92,7 @@ namespace pepper {
         // Emit the body of the function, after ensuring there is a return instruction
         auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->body().push_back(Ref<Return>::create(funcDef));
+            funcDef->body().push_back(Ref<Return>::New(funcDef));
         }
         std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](const auto& expr) { codegen(expr); });
 
@@ -101,7 +101,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<FunctionDef> functionDef) {
         auto function =
-            Ref<UserFunction>::create(functionDef->identifier(), functionDef->returnType(), functionDef->params());
+            Ref<UserFunction>::New(functionDef->identifier(), functionDef->returnType(), functionDef->params());
         return function->function();
     }
 
