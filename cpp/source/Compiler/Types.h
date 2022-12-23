@@ -35,7 +35,8 @@ namespace pepper {
         Types(llvm::LLVMContext& ctx);
         ~Types() = default;
 
-        template <typename T> llvm::Type* addType(const std::string& name, llvm::Type* type) {
+        template <typename T>
+        llvm::Type* addType(const std::string& name, llvm::Type* type) {
             return addType(name, Ref<T>::New(name, type));
         }
 

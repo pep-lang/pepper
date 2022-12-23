@@ -19,7 +19,8 @@ namespace pepper::ast {
 
     class Builder {
       public:
-        template <typename N, typename... Args> Ref<N> create(Args&&... args) {
+        template <typename N, typename... Args>
+        Ref<N> create(Args&&... args) {
             return Ref<N>::New(std::forward<decltype(args)>(args)...);
         }
 

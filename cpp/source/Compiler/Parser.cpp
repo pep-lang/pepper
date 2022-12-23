@@ -37,7 +37,8 @@ namespace pepper {
             builder->pushStack(std::move(val));
         }
 
-        template <typename N> Ref<N> popStack() {
+        template <typename N>
+        Ref<N> popStack() {
             auto val = builder->popStack();
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
@@ -46,7 +47,8 @@ namespace pepper {
                 "Attempted to pop {} from AST stack, found {} instead", RTTI::of<N>()->name(), RTTI::of(*val)->name());
         }
 
-        template <typename N> Ref<N> peekStack(unsigned int idx) {
+        template <typename N>
+        Ref<N> peekStack(unsigned int idx) {
             auto val = builder->peekStack(idx);
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);

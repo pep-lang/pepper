@@ -38,16 +38,19 @@ namespace pepper {
             }
         };
 
-        template <typename T> static constexpr const RTTI* of() {
+        template <typename T>
+        static constexpr const RTTI* of() {
             return static_cast<T*>(nullptr)->rtti();
         }
 
-        template <typename T> static const RTTI* of(const T t) {
+        template <typename T>
+        static const RTTI* of(const T t) {
             return of<std::remove_cvref_t<std::remove_pointer_t<T>>>();
         }
     };
 
-    template <typename T = RTTI::None> class RttiInstance : public RTTI {
+    template <typename T = RTTI::None>
+    class RttiInstance : public RTTI {
       private:
         RttiInstance() = delete;
         using RTTI::RTTI;
@@ -62,27 +65,32 @@ namespace pepper {
             return rtti;
         }
 
-        template <typename U> inline T* downcast(U* u) const {
+        template <typename U>
+        inline T* downcast(U* u) const {
             return static_cast<T*>(u);
         }
 
-        template <typename U> inline const T* downcast(const U* u) const {
+        template <typename U>
+        inline const T* downcast(const U* u) const {
             return static_cast<const T*>(u);
         }
     };
 
-    template <> class RttiInstance<RTTI::None> {
+    template <>
+    class RttiInstance<RTTI::None> {
       public:
         inline static constexpr const RTTI* get(const RTTI* base, const char* name) {
             return nullptr;
         }
     };
 
-    template <typename T = RTTI::None> struct RttiType {
+    template <typename T = RTTI::None>
+    struct RttiType {
         using type = T;
     };
 
-    template <typename T = RTTI::None> using rtti_type_t = typename RttiType<T>::type;
+    template <typename T = RTTI::None>
+    using rtti_type_t = typename RttiType<T>::type;
 
     template <typename T>
     concept HasRtti = requires(T t) { t.rtti(); };
@@ -94,12 +102,14 @@ namespace pepper {
     const pepper::RttiInstance<T>* rtti() const {                                                                      \
         return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
     }                                                                                                                  \
-    template <typename Base> bool is() {                                                                               \
+    template <typename Base>                                                                                           \
+    bool is() {                                                                                                        \
         auto thisTy = rtti();                                                                                          \
         auto baseTy = pepper::RTTI::of<Base>();                                                                        \
         return thisTy->is(baseTy);                                                                                     \
     }                                                                                                                  \
-    template <typename To> To as() {                                                                                   \
+    template <typename To>                                                                                             \
+    To as() {                                                                                                          \
         if (this->is<To>()) {                                                                                          \
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \

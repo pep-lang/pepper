@@ -7,7 +7,8 @@
 #include <memory>
 
 namespace pepper {
-    template <typename T> struct Ref : public std::shared_ptr<T> {
+    template <typename T>
+    struct Ref : public std::shared_ptr<T> {
         using base = std::shared_ptr<T>;
         using std::shared_ptr<T>::shared_ptr;
 
@@ -26,12 +27,14 @@ namespace pepper {
             return std::static_pointer_cast<U>(*this);
         }
 
-        template <class... Args> static Ref<T> New(Args&&... args) {
+        template <class... Args>
+        static Ref<T> New(Args&&... args) {
             return std::make_shared<T>(std::forward<Args>(args)...);
         }
     };
 
-    template <typename T> struct WeakRef : public std::weak_ptr<T> {
+    template <typename T>
+    struct WeakRef : public std::weak_ptr<T> {
         using std::weak_ptr<T>::weak_ptr;
         using std::weak_ptr<T>::operator=;
 

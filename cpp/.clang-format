@@ -7,6 +7,7 @@ AllowShortBlocksOnASingleLine: false
 AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
 AllowShortLambdasOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
 DerivePointerAlignment: false
 PointerAlignment: Left
 BinPackArguments: false
@@ -20,11 +21,11 @@ EmptyLineBeforeAccessModifier: LogicalBlock
 FixNamespaceComments: true
 IncludeBlocks: Regroup
 IncludeCategories:
-  - Regex:        '"^(llvm)/'
-    Priority:     2
+  - Regex: '"^(llvm)/'
+    Priority: 2
     SortPriority: 2
-  - Regex:        '.*'
-    Priority:     1
+  - Regex: '.*'
+    Priority: 1
     SortPriority: 0
 IndentAccessModifiers: false
 IndentCaseLabels: true
@@ -39,7 +40,7 @@ NamespaceIndentation: All
 PPIndentWidth: 4
 PackConstructorInitializers: Never
 PenaltyReturnTypeOnItsOwnLine: 10000
-PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyBreakBeforeFirstCallParameter: 20
 PenaltyBreakOpenParenthesis: 10
 PenaltyBreakTemplateDeclaration: 0
 SeparateDefinitionBlocks: Always
