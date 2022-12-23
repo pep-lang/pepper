@@ -39,9 +39,9 @@ NamespaceIndentation: All
 PPIndentWidth: 4
 PackConstructorInitializers: Never
 PenaltyReturnTypeOnItsOwnLine: 10000
-PenaltyBreakBeforeFirstCallParameter: 100
-PenaltyBreakOpenParenthesis: 100
-PenaltyBreakTemplateDeclaration: 10000
+PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyBreakOpenParenthesis: 10
+PenaltyBreakTemplateDeclaration: 0
 SeparateDefinitionBlocks: Always
 SortUsingDeclarations: true
 SpaceAfterTemplateKeyword: true

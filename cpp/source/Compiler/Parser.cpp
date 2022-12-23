@@ -42,9 +42,8 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw InternalCompilerError("Attempted to pop {} from AST stack, found {} instead",
-                                        RTTI::of<N>()->name(),
-                                        RTTI::of(*val)->name());
+            throw InternalCompilerError(
+                "Attempted to pop {} from AST stack, found {} instead", RTTI::of<N>()->name(), RTTI::of(*val)->name());
         }
 
         template <typename N> Ref<N> peekStack(unsigned int idx) {

@@ -185,8 +185,7 @@ namespace pepper {
             if (type->isFloatingPointTy()) {
                 auto reg = builder()->CreateLoad(type, value);
                 auto converted = builder()->CreateAlloca(*this);
-                auto cast =
-                    signedVal ? builder()->CreateFPToSI(reg, *this) : builder()->CreateFPToUI(reg, *this);
+                auto cast = signedVal ? builder()->CreateFPToSI(reg, *this) : builder()->CreateFPToUI(reg, *this);
                 builder()->CreateStore(cast, converted);
                 return converted;
             }
@@ -296,7 +295,6 @@ namespace pepper {
             }
             auto type = value->getType();
 
-
             if (value->getType()->isIntegerTy() || value->getType()->isFloatingPointTy()) {
                 auto converted = builder()->CreateAlloca(*this);
                 auto reg = builder()->CreateLoad(value->getType(), value);
@@ -316,9 +314,8 @@ namespace pepper {
                 builder()->CreateStore(cast, converted);
                 return converted;
             }
-            throw CompileError("Cannot convert from {0} to {0}",
-                               Types::toString(value->getType()),
-                               Types::toString(Type));
+            throw CompileError(
+                "Cannot convert from {0} to {0}", Types::toString(value->getType()), Types::toString(Type));
         }
 
         llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {

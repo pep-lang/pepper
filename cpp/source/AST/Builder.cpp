@@ -116,9 +116,8 @@ namespace pepper::ast {
         Ref<ast::Node> peekStack(unsigned int idx) override {
             const auto& scope = Stack.back();
             if (idx > (scope.Stack.size() - 1)) {
-                throw InternalCompilerError("Attempted to peek AST stack slot {}, stack size: {}",
-                                            idx,
-                                            scope.Stack.size());
+                throw InternalCompilerError(
+                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope.Stack.size());
             }
             return scope.Stack[scope.Stack.size() - 1 - idx];
         }
