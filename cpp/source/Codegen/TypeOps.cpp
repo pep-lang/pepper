@@ -156,11 +156,13 @@ namespace pepper {
 
     class IntegerType : public NativeType {
         DECLARE_RTTI(IntegerType, NativeType)
+        uint32_t Bits;
         bool Signed = false;
 
       public:
         IntegerType(llvm::Type* type)
-            : NativeType(type) {
+            : NativeType(type)
+            , Bits(type->getIntegerBitWidth()) {
         }
 
         bool isSigned() const {
@@ -353,6 +355,18 @@ namespace pepper {
     };
 
     Ref<TypeOps> TypeOps::get(llvm::Type* type) {
-        return nullptr;
+        if (type->isIntegerTy()) {
+            return Ref<IntegerType>::New(type);
+        }
+        if (type->isFloatingPointTy()) {
+            return Ref<FloatType>::New(type);
+        }
+        if (type->isPointerTy()) {
+            return Ref<PointerType>::New(type);
+        }
+        if (type->isVoidTy()) {
+            return Ref<VoidType>::New();
+        }
+        throw InternalCompilerError("Unknown type {0} found while looking for TypeOps", Types::toString(type));
     }
 } // namespace pepper

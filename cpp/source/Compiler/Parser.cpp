@@ -25,15 +25,15 @@ namespace pepper {
     class ParserListener : public PepperBaseListener {
         using Super = PepperBaseListener;
 
-        ast::AST ast;
-        Ref<ast::Builder> builder;
+        AST ast;
+        Ref<Builder> builder;
 
       public:
         ParserListener() {
             builder = ast.builder();
         }
 
-        void pushStack(Ref<ast::Node> val) {
+        void pushStack(Ref<Node> val) {
             builder->pushStack(std::move(val));
         }
 
@@ -71,7 +71,7 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
             auto type = builder->findType(typeName);
-            auto decl = Ref<ast::VariableDef>::New(type, identifier);
+            auto decl = Ref<VariableDef>::New(type, identifier);
             builder->variable(decl);
         }
 
@@ -83,7 +83,7 @@ namespace pepper {
             auto returnType = builder->findType(returnTypeName);
             // TODO: args, pass to FunctionDef
             Params params;
-            auto function = builder->create<ast::FunctionDef>(returnType, identifier, params);
+            auto function = builder->create<FunctionDef>(returnType, identifier, params);
             builder->beginFunction(function);
         }
 
@@ -97,11 +97,11 @@ namespace pepper {
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
             auto providedArgsCount = context->argumentExpressionList()->assignmentExpression().size();
-            std::vector<Ref<ast::Expression>> args;
+            std::vector<Ref<Expression>> args;
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.push_back(popStack<ast::Expression>());
+                args.push_back(popStack<Expression>());
             }
-            auto call = builder->create<ast::FunctionCall>(func, args);
+            auto call = builder->create<FunctionCall>(func, args);
             builder->expression(call);
             if (func->returnType() != Types::Void) {
                 pushStack(call);
@@ -111,12 +111,12 @@ namespace pepper {
         void exitReturn(PepperParser::ReturnContext* context) override {
             Super::exitReturn(context);
 
-            Ref<ast::Expression> returnValue = nullptr;
+            Ref<Expression> returnValue = nullptr;
             if (context->expression()) {
-                returnValue = popStack<ast::Expression>();
+                returnValue = popStack<Expression>();
             }
             auto function = builder->returnTarget();
-            builder->expression(Ref<ast::Return>::New(function, returnValue));
+            builder->expression(Ref<Return>::New(function, returnValue));
         }
 
         void exitAdd(PepperParser::AddContext* context) override {
