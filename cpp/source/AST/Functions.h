@@ -5,7 +5,7 @@
 #pragma once
 
 #include "AST/Node.h"
-#include "AST/Param.h"
+#include "Compiler/Param.h"
 #include "Core/Common.h"
 #include <utility>
 #include <vector>
@@ -17,6 +17,7 @@ namespace llvm {
 
 namespace pepper::ast {
     class StructDef;
+    class VariableDef;
 
     class FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
@@ -45,6 +46,7 @@ namespace pepper::ast {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
       private:
+        std::vector<Ref<VariableDef>> Locals;
         std::vector<Ref<Node>> Body;
 
       public:
@@ -58,6 +60,14 @@ namespace pepper::ast {
 
         [[nodiscard]] const std::vector<Ref<Node>>& body() const {
             return Body;
+        }
+
+        void newLocal(Ref<VariableDef> local) {
+            Locals.push_back(local);
+        }
+
+        const std::vector<Ref<VariableDef>>& locals() const {
+            return Locals;
         }
     };
 

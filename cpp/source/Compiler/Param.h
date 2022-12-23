@@ -9,7 +9,7 @@ namespace llvm {
     class Value;
 } // namespace llvm
 
-namespace pepper::ast {
+namespace pepper {
     struct Param {
         llvm::Type* Type;
         std::string Name;
@@ -23,4 +23,4 @@ namespace pepper::ast {
     };
 
     using Params = llvm::SmallVector<Param>;
-} // namespace pepper::ast
+} // namespace pepper

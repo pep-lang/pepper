@@ -3,11 +3,13 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
+#include "Codegen/Function.h"
 #include "Codegen/Scope.h"
 #include "Codegen/TypeOps.h"
 #include "Compiler/Context.h"
 #include "Compiler/Exceptions.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -70,15 +72,44 @@ namespace pepper {
         return thisPtr;
     }
 
+    static void codegen(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
+        Context::get().pushFunction(function);
+
+        // Allocate parameters
+        auto llvmFunction = function->function();
+        auto args = llvm::SmallVector<llvm::Value*>();
+        for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
+            auto param = function->params()[paramIdx];
+            auto arg = llvmFunction->getArg(paramIdx);
+            auto local = ir()->CreateAlloca(param.Type, nullptr, param.Name);
+            Context::get().locals()->newSymbol(param.Name, local);
+            args.push_back(local);
+        }
+
+        // Push all known variables at the top of the function block
+        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](const auto& local) { codegen(local); });
+
+        // Emit the body of the function, after ensuring there is a return instruction
+        auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
+        if (!lastExpr || !lastExpr->is<Return>()) {
+            funcDef->body().push_back(Ref<Return>::create(funcDef));
+        }
+        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](const auto& expr) { codegen(expr); });
+
+        Context::get().popScope();
+    }
+
     static llvm::Value* emit(Ref<FunctionDef> functionDef) {
+        auto function =
+            Ref<UserFunction>::create(functionDef->identifier(), functionDef->returnType(), functionDef->params());
+        return function->function();
+    }
+
+    static llvm::Value* emit(Ref<Return> ret) {
         return nullptr;
     }
 
     static llvm::Value* emit(Ref<FunctionCall> call) {
-        return nullptr;
-    }
-
-    static llvm::Value* emit(Ref<Return> ret) {
         return nullptr;
     }
 

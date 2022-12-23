@@ -1,9 +1,9 @@
 
 #pragma once
 
-#include "AST/Param.h"
 #include "Core/Common.h"
 #include "Core/RTTI.h"
+#include "Param.h"
 #include "llvm/ADT/StringMap.h"
 #include <format>
 #include <functional>
@@ -22,7 +22,7 @@ namespace llvm {
 namespace pepper {
 
     class FunctionType {
-        static std::string Signature(llvm::Type* returnType, const ast::Params& params, bool varargs = false);
+        static std::string Signature(llvm::Type* returnType, const Params& params, bool varargs = false);
     };
 
     class Types {

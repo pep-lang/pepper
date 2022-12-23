@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "Compiler/Param.h"
 #include "Core/Common.h"
 #include "llvm/ADT/SmallVector.h"
 #include <memory>
@@ -18,20 +19,7 @@ namespace llvm {
 
 namespace pepper {
     class Function : public std::enable_shared_from_this<Function> {
-      public:
-        struct Param {
-            llvm::Type* Type;
-            std::string Name;
-            llvm::Value* Default;
-
-            Param(std::string name, llvm::Type* type, llvm::Value* defaultValue = nullptr)
-                : Name(std::move(name))
-                , Type(type)
-                , Default(defaultValue) {
-            }
-        };
-
-        using Params = llvm::SmallVector<Param>;
+        DECLARE_RTTI(Function);
 
       protected:
         const std::string Name;
@@ -58,14 +46,26 @@ namespace pepper {
         Ref<Function> ref() {
             return shared_from_this();
         }
+
+        llvm::Function* function() const {
+            return Func;
+        }
+
+        llvm::FunctionType* type() const {
+            return FuncType;
+        }
     };
 
     class ExternFunction : public Function {
+        DECLARE_RTTI(ExternFunction, Function);
+
       public:
         using Function::Function;
     };
 
     class UserFunction : public Function {
+        DECLARE_RTTI(UserFunction, Function);
+
       public:
         llvm::BasicBlock* Body = nullptr;
         Ref<llvm::IRBuilderBase> Builder = nullptr;

@@ -2,8 +2,8 @@
 #include "Compiler/Type.h"
 
 #include "AST/Nodes.h"
-#include "AST/Param.h"
 #include "Compiler/Context.h"
+#include "Param.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/raw_ostream.h"
 #include <sstream>
@@ -21,7 +21,7 @@
 
 namespace pepper {
 
-    std::string FunctionType::Signature(llvm::Type* returnType, const ast::Params& params, bool varargs) {
+    std::string FunctionType::Signature(llvm::Type* returnType, const Params& params, bool varargs) {
         std::vector<std::string> paramNames;
         std::transform(params.begin(), params.end(), std::back_inserter(paramNames), [](auto p) { return p.Name; });
         std::string paramsString = llvm::join(paramNames.begin(), paramNames.end(), ", ");

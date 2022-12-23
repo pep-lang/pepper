@@ -5,6 +5,7 @@
 #include "Codegen/Function.h"
 #include "Codegen/Runtime.h"
 #include "Codegen/Scope.h"
+#include "Compiler/Param.h"
 #include "Compiler/Type.h"
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"

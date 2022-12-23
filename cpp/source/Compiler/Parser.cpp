@@ -5,9 +5,9 @@
 #include "AST/AST.h"
 #include "AST/Builder.h"
 #include "AST/Nodes.h"
-#include "AST/Param.h"
 #include "Compiler/Exceptions.h"
 #include "Compiler/Type.h"
+#include "Param.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
@@ -81,7 +81,7 @@ namespace pepper {
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
             auto returnType = builder->findType(returnTypeName);
             // TODO: args, pass to FunctionDef
-            ast::Params params;
+            Params params;
             auto function = builder->create<ast::FunctionDef>(returnType, identifier, params);
             builder->beginFunction(function);
         }
