@@ -22,7 +22,6 @@ namespace pepper::ast {
         }
 
         virtual llvm::Type* operandType(llvm::Type* lhsType, llvm::Type* rhsType) const;
-        virtual llvm::Value* op(llvm::Value*, llvm::Value*) const = 0;
 
         BinaryOp(Ref<Expression> lhs, Ref<Expression> rhs)
             : LHS(lhs)
@@ -122,13 +121,6 @@ namespace pepper::ast {
         using BinaryOp::BinaryOp;
     };
 
-    class Assign : public BinaryOp {
-        DECLARE_RTTI(Assign, BinaryOp);
-
-      public:
-        using BinaryOp::BinaryOp;
-    };
-
     class LShift : public BinaryOp {
         DECLARE_RTTI(LShift, BinaryOp);
 
@@ -173,6 +165,13 @@ namespace pepper::ast {
 
     class LogicalOr : public BinaryOp {
         DECLARE_RTTI(LogicalOr, BinaryOp);
+
+      public:
+        using BinaryOp::BinaryOp;
+    };
+
+    class Assign : public BinaryOp {
+        DECLARE_RTTI(Assign, BinaryOp);
 
       public:
         using BinaryOp::BinaryOp;

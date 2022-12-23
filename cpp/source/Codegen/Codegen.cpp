@@ -114,6 +114,8 @@ namespace pepper {
     }
 
     static auto binaryOp(Ref<BinaryOp> op) {
+        if (op->is<Assign>())
+            return &TypeOps::assign;
         if (op->is<Add>())
             return &TypeOps::add;
         if (op->is<Sub>())
