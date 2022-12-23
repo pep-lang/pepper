@@ -18,15 +18,23 @@ namespace pepper::ast {
         Ref<Expression> RHS;
 
         llvm::Type* type() const override {
-            return operandType();
+            return operandType(LHS->type(), RHS->type());
         }
 
-        virtual llvm::Type* operandType() const;
+        virtual llvm::Type* operandType(llvm::Type* lhsType, llvm::Type* rhsType) const;
         virtual llvm::Value* op(llvm::Value*, llvm::Value*) const = 0;
 
         BinaryOp(Ref<Expression> lhs, Ref<Expression> rhs)
             : LHS(lhs)
             , RHS(rhs) {
+        }
+
+        Ref<Expression> lhs() const {
+            return LHS;
+        }
+
+        Ref<Expression> rhs() const {
+            return RHS;
         }
     };
 

@@ -9,7 +9,7 @@ namespace pepper::ast {
         DECLARE_RTTI(Literal, Expression);
     };
 
-    class IntegerLiteral : Literal {
+    class IntegerLiteral : public Literal {
         DECLARE_RTTI(IntegerLiteral, Literal);
 
       private:
@@ -21,9 +21,13 @@ namespace pepper::ast {
         }
 
         [[nodiscard]] llvm::Type* type() const override;
+
+        int64_t value() const {
+            return Value;
+        }
     };
 
-    class FloatLiteral : Literal {
+    class FloatLiteral : public Literal {
         DECLARE_RTTI(FloatLiteral, Literal);
 
       private:
@@ -35,9 +39,13 @@ namespace pepper::ast {
         }
 
         llvm::Type* type() const override;
+
+        double value() const {
+            return Value;
+        }
     };
 
-    class StringLiteral : Literal {
+    class StringLiteral : public Literal {
         DECLARE_RTTI(StringLiteral, Literal);
 
       private:
@@ -49,5 +57,9 @@ namespace pepper::ast {
         }
 
         llvm::Type* type() const override;
+
+        const std::string& value() const {
+            return Value;
+        }
     };
 } // namespace pepper::ast

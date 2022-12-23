@@ -22,21 +22,21 @@ namespace pepper::ast {
         DECLARE_RTTI(Symbol, Node);
 
       private:
-        llvm::Type* SymbolType;
-        std::string SymbolName;
+        llvm::Type* Type;
+        std::string Identifier;
 
       public:
         Symbol(llvm::Type* type, std::string name)
-            : SymbolType(type)
-            , SymbolName(std::move(name)) {
+            : Type(type)
+            , Identifier(std::move(name)) {
         }
 
         llvm::Type* type() const {
-            return SymbolType;
+            return Type;
         }
 
-        [[nodiscard]] const std::string& name() const {
-            return SymbolName;
+        [[nodiscard]] const std::string& identifier() const {
+            return Identifier;
         }
     };
 

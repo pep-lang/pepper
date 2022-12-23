@@ -117,7 +117,7 @@ namespace pepper::ast {
 
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = Stack.back();
-            scope.Functions[func->name()] = func;
+            scope.Functions[func->identifier()] = func;
             scope.ReturnTarget = func;
             beginScope();
             return this;
@@ -146,7 +146,7 @@ namespace pepper::ast {
 
         Builder* variable(Ref<ast::VariableDef> var) override {
             auto& scope = Stack.back();
-            scope.Locals[var->name()] = var;
+            scope.Locals[var->identifier()] = var;
             return this;
         }
 

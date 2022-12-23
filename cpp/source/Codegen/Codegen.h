@@ -31,21 +31,6 @@ namespace pepper {
         }
 
         void emit();
-
-      protected:
-        void emit(Ref<ast::StructDef> structDef);
-        void emit(Ref<ast::FieldDef> fieldDef);
-        void emit(Ref<ast::MemberRef> memberRef);
-        void emit(Ref<ast::ThisRef> thisRef);
-        void emit(Ref<ast::FunctionDef> functionDef);
-        void emit(Ref<ast::VariableRef> variableRef);
-        void emit(Ref<ast::VariableDef> variableDef);
-        void emit(Ref<ast::StringLiteral> stringLiteral);
-        void emit(Ref<ast::IntegerLiteral> intLiteral);
-        void emit(Ref<ast::FloatLiteral> floatLiteral);
-        void emit(Ref<ast::BinaryOp> op);
-        void emit(Ref<ast::FunctionCall> call);
-        void emit(Ref<ast::Return> ret);
     };
 
 } // namespace pepper

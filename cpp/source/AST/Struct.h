@@ -34,7 +34,7 @@ namespace pepper::ast {
         void finish();
     };
 
-    class MemberRef : Expression {
+    class MemberRef : public Expression {
         DECLARE_RTTI(MemberRef, Expression);
 
         llvm::Type* Type;
@@ -61,7 +61,7 @@ namespace pepper::ast {
         }
     };
 
-    class ThisRef : Expression {
+    class ThisRef : public Expression {
         DECLARE_RTTI(ThisRef, Expression);
 
       private:

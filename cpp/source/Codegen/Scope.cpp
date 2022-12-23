@@ -10,6 +10,11 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
+    void Scope::newFunction(Ref<Function> function, const std::string& name) {
+        auto functionName = name.empty() ? function->name() : name;
+        Functions[functionName] = function;
+    }
+
     Ref<Function> Scope::findFunction(const std::string& name) const {
         auto it = Functions.find(name);
         if (it != Functions.end()) {
@@ -18,11 +23,16 @@ namespace pepper {
         return Outer ? Outer->findFunction(name) : nullptr;
     }
 
-    llvm::Value* Scope::findSymbol(const std::string& name) const {
-        auto it = Symbols.find(name);
+    void Scope::newSymbol(const std::string& identifier, llvm::Value* value) {
+        Symbols[identifier] = value;
+        OrderedSymbols.push_back(identifier);
+    }
+
+    llvm::Value* Scope::findSymbol(const std::string& identifier) const {
+        auto it = Symbols.find(identifier);
         if (it != Symbols.end())
             return it->second;
-        return Outer ? Outer->findSymbol(name) : nullptr;
+        return Outer ? Outer->findSymbol(identifier) : nullptr;
     }
 
     Ref<Function> Scope::returnTarget() const {

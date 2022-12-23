@@ -84,6 +84,9 @@ namespace pepper {
 
     template <typename T = RTTI::None> using rtti_type_t = typename RttiType<T>::type;
 
+    template<typename T>
+    concept HasRtti = requires(T t) { t.rtti(); };
+
 } // namespace pepper
 
 #define DECLARE_RTTI(T, ...)                                                                                           \

@@ -12,9 +12,15 @@ namespace pepper::ast {
     class VariableDef : public Symbol {
         DECLARE_RTTI(VariableDef, Symbol);
 
+        Ref<Expression> Default;
       public:
-        VariableDef(llvm::Type* type, const std::string& name)
-            : Symbol(type, name) {
+        VariableDef(llvm::Type* type, const std::string& identifier, Ref<Expression> defaultValue = nullptr)
+            : Symbol(type, identifier)
+            , Default(defaultValue){
+        }
+
+        Ref<Expression> defaultValue() const {
+            return Default;
         }
     };
 
