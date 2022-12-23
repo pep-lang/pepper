@@ -109,6 +109,21 @@ namespace pepper {
 
         void exitReturn(PepperParser::ReturnContext* context) override {
             Super::exitReturn(context);
+
+            Ref<ast::Expression> returnValue = nullptr;
+            if (context->expression()) {
+                returnValue = popStack<ast::Expression>();
+            }
+            auto function = builder->returnTarget();
+            builder->expression(Ref<ast::Return>::create(function, returnValue));
+        }
+
+        void exitAdd(PepperParser::AddContext* context) override {
+            Super::exitAdd(context);
+        }
+
+        void exitSub(PepperParser::SubContext* context) override {
+            Super::exitSub(context);
         }
 
         void exitMul(PepperParser::MulContext* context) override {
@@ -125,14 +140,6 @@ namespace pepper {
 
         void exitPow(PepperParser::PowContext* context) override {
             Super::exitPow(context);
-        }
-
-        void exitAdd(PepperParser::AddContext* context) override {
-            Super::exitAdd(context);
-        }
-
-        void exitSub(PepperParser::SubContext* context) override {
-            Super::exitSub(context);
         }
 
         void exitLShift(PepperParser::LShiftContext* context) override {

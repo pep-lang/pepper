@@ -43,6 +43,14 @@ namespace pepper::ast {
             Stack.emplace_back(); // global scope
         }
 
+        Ref<ast::FunctionDef> returnTarget() const override {
+            for (const auto& scope : llvm::reverse(Stack)) {
+                if (scope.ReturnTarget)
+                    return scope.ReturnTarget;
+            }
+            return nullptr;
+        }
+
         [[nodiscard]] Ref<ast::VariableDef> findVariable(const std::string& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
                 auto var = scope.Locals.lookup(name);
