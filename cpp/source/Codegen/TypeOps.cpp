@@ -123,15 +123,15 @@ namespace pepper {
         }
 
         llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpEQ(lhs, rhs);
+            return builder()->CreateICmpEQ(coerce(lhs), coerce(rhs));
         }
 
         llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpNE(lhs, rhs);
+            return builder()->CreateICmpNE(coerce(lhs), coerce(rhs));
         }
 
         llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
-            builder()->CreateStore(rhs, lhs);
+            builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
@@ -176,34 +176,43 @@ namespace pepper {
             auto type = value->getType();
             bool signedVal = !type->isIntegerTy(1) && isSigned();
             if (type->isIntegerTy()) {
-                return builder()->CreateIntCast(value, *this, signedVal);
+                auto reg = builder()->CreateLoad(type, value);
+                auto converted = builder()->CreateAlloca(*this);
+                auto cast = builder()->CreateIntCast(reg, *this, signedVal);
+                builder()->CreateStore(cast, converted);
+                return converted;
             }
             if (type->isFloatingPointTy()) {
-                auto converted =
-                    signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this);
+                auto reg = builder()->CreateLoad(type, value);
+                auto converted = builder()->CreateAlloca(*this);
+                auto cast =
+                    signedVal ? builder()->CreateFPToSI(reg, *this) : builder()->CreateFPToUI(reg, *this);
+                builder()->CreateStore(cast, converted);
                 return converted;
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
         }
 
         llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWAdd(lhs, rhs, "add");
+            return builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add");
         }
 
         llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWSub(lhs, rhs, "sub");
+            return builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub");
         }
 
         llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWMul(lhs, rhs, "mul");
+            return builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul");
         }
 
         llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateSDiv(lhs, rhs, "sdiv") : builder()->CreateUDiv(lhs, rhs, "udiv");
+            return isSigned() ? builder()->CreateSDiv(coerce(lhs), coerce(rhs), "sdiv")
+                              : builder()->CreateUDiv(coerce(lhs), coerce(rhs), "udiv");
         }
 
         llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateSRem(lhs, rhs, "srem") : builder()->CreateURem(lhs, rhs, "urem");
+            return isSigned() ? builder()->CreateSRem(coerce(lhs), coerce(rhs), "srem")
+                              : builder()->CreateURem(coerce(lhs), coerce(rhs), "urem");
         }
 
         llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
@@ -214,52 +223,56 @@ namespace pepper {
         }
 
         llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSLT(lhs, rhs, "slt") : builder()->CreateICmpULT(lhs, rhs, "ult");
+            return isSigned() ? builder()->CreateICmpSLT(coerce(lhs), coerce(rhs), "slt")
+                              : builder()->CreateICmpULT(coerce(lhs), coerce(rhs), "ult");
         }
 
         llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSLE(lhs, rhs, "sle") : builder()->CreateICmpULE(lhs, rhs, "ule");
+            return isSigned() ? builder()->CreateICmpSLE(coerce(lhs), coerce(rhs), "sle")
+                              : builder()->CreateICmpULE(coerce(lhs), coerce(rhs), "ule");
         }
 
         llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSGT(lhs, rhs, "sgt") : builder()->CreateICmpUGT(lhs, rhs, "ugt");
+            return isSigned() ? builder()->CreateICmpSGT(coerce(lhs), coerce(rhs), "sgt")
+                              : builder()->CreateICmpUGT(coerce(lhs), coerce(rhs), "ugt");
         }
 
         llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSGE(lhs, rhs, "sge") : builder()->CreateICmpUGE(lhs, rhs, "uge");
+            return isSigned() ? builder()->CreateICmpSGE(coerce(lhs), coerce(rhs), "sge")
+                              : builder()->CreateICmpUGE(coerce(lhs), coerce(rhs), "uge");
         }
 
         llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateLShr(lhs, rhs, "lshr");
+            return builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr");
         }
 
         llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateAShr(lhs, rhs, "ashr");
+            return builder()->CreateAShr(coerce(lhs), coerce(rhs), "ashr");
         }
 
         llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpEQ(lhs, rhs, "eq");
+            return builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq");
         }
 
         llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpNE(lhs, rhs, "ne");
+            return builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne");
         }
 
         llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
-            builder()->CreateStore(rhs, lhs);
+            builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
         llvm::Value* bitAnd(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateAnd(lhs, rhs, "and");
+            return builder()->CreateAnd(coerce(lhs), coerce(rhs), "and");
         }
 
         llvm::Value* bitXor(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateXor(lhs, rhs, "xor");
+            return builder()->CreateXor(coerce(lhs), coerce(rhs), "xor");
         }
 
         llvm::Value* bitOr(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateOr(lhs, rhs, "or");
+            return builder()->CreateOr(coerce(lhs), coerce(rhs), "or");
         }
 
         llvm::Value* asBool(llvm::Value* value) const override {
@@ -281,8 +294,27 @@ namespace pepper {
             if (value->getType() == *this) {
                 return value;
             }
+            auto type = value->getType();
+
+
             if (value->getType()->isIntegerTy() || value->getType()->isFloatingPointTy()) {
-                return builder()->CreateFPCast(value, *this);
+                auto converted = builder()->CreateAlloca(*this);
+                auto reg = builder()->CreateLoad(value->getType(), value);
+                llvm::Value* cast = nullptr;
+                if (value->getType()->isIntegerTy()) {
+                    bool signedInt = true;
+                    if (signedInt)
+                        cast = builder()->CreateSIToFP(reg, *this);
+                    else
+                        cast = builder()->CreateUIToFP(reg, *this);
+                } else {
+                    if (Type->getPrimitiveSizeInBits() > value->getType()->getPrimitiveSizeInBits())
+                        return builder()->CreateFPExt(reg, *this);
+                    else
+                        return builder()->CreateFPTrunc(reg, *this);
+                }
+                builder()->CreateStore(cast, converted);
+                return converted;
             }
             throw CompileError("Cannot convert from {0} to {0}",
                                Types::toString(value->getType()),
@@ -290,23 +322,23 @@ namespace pepper {
         }
 
         llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFAdd(lhs, rhs, "fdd");
+            return builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd");
         }
 
         llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFSub(lhs, rhs, "fsub");
+            return builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub");
         }
 
         llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFMul(lhs, rhs, "fmul");
+            return builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul");
         }
 
         llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFDiv(lhs, rhs, "fdiv");
+            return builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv");
         }
 
         llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFRem(lhs, rhs, "frem");
+            return builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem");
         }
 
         llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
@@ -317,31 +349,31 @@ namespace pepper {
         }
 
         llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOLT(lhs, rhs, "olt");
+            return builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt");
         }
 
         llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOLE(lhs, rhs, "ole");
+            return builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole");
         }
 
         llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOGT(lhs, rhs, "ogt");
+            return builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt");
         }
 
         llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOGE(lhs, rhs, "oge");
+            return builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge");
         }
 
         llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOEQ(lhs, rhs, "oeq");
+            return builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq");
         }
 
         llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpONE(lhs, rhs, "one");
+            return builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one");
         }
 
         llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
-            builder()->CreateStore(rhs, lhs);
+            builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
