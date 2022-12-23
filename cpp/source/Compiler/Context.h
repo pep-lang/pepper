@@ -32,7 +32,6 @@ namespace pepper {
         Ref<Scope> Builtins;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
-        Ref<ast::AST> Ast;
 
       public:
         static Context& get();
@@ -65,10 +64,6 @@ namespace pepper {
 
         [[nodiscard]] Ref<Scope> locals() const {
             return Locals;
-        }
-
-        [[nodiscard]] Ref<ast::AST> ast() const {
-            return Ast;
         }
 
         [[nodiscard]] Ref<Scope> runtime() const {

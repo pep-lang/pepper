@@ -7,6 +7,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/raw_ostream.h"
 #include <sstream>
+#include <vector>
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted
@@ -31,6 +32,7 @@ namespace pepper {
 
     llvm::Type* Types::Bool;
     llvm::Type* Types::Void;
+    llvm::Type* Types::VoidPtr;
     llvm::Type* Types::Int8;
     llvm::Type* Types::UInt8;
     llvm::Type* Types::Int32;
@@ -42,22 +44,25 @@ namespace pepper {
 
     Types::Types(llvm::LLVMContext& ctx)
         : Ctx(ctx) {
-        KnownTypes["void"] = Void = llvm::Type::getVoidTy(ctx);
-        KnownTypes["char"] = KnownTypes["i8"] = Int8 = llvm::Type::getInt8Ty(ctx);
-        KnownTypes["byte"] = KnownTypes["u8"] = UInt8 = llvm::Type::getInt8Ty(ctx);
-        KnownTypes["int"] = KnownTypes["i32"] = Int32 = llvm::Type::getInt32Ty(ctx);
-        KnownTypes["uint"] = KnownTypes["u32"] = UInt32 = llvm::Type::getInt32Ty(ctx);
-        KnownTypes["long"] = KnownTypes["i64"] = Int64 = llvm::Type::getInt64Ty(ctx);
-        KnownTypes["ulong"] = KnownTypes["u64"] = UInt64 = llvm::Type::getInt64Ty(ctx);
-        KnownTypes["Bool"] = Bool = llvm::Type::getInt1Ty(ctx);
-        KnownTypes["double"] = KnownTypes["f64"] = Double = llvm::Type::getDoubleTy(ctx);
-        KnownTypes["float"] = KnownTypes["f32"] = Float = llvm::Type::getFloatTy(ctx);
+        Bool = KnownTypes["void"] = Void = llvm::Type::getVoidTy(ctx);
+        Int8 = KnownTypes["char"] = KnownTypes["i8"] = Int8 = llvm::Type::getInt8Ty(ctx);
+        UInt8 = KnownTypes["byte"] = KnownTypes["u8"] = UInt8 = llvm::Type::getInt8Ty(ctx);
+        Int32 = KnownTypes["int"] = KnownTypes["i32"] = Int32 = llvm::Type::getInt32Ty(ctx);
+        UInt32 = KnownTypes["uint"] = KnownTypes["u32"] = UInt32 = llvm::Type::getInt32Ty(ctx);
+        Int64 = KnownTypes["long"] = KnownTypes["i64"] = Int64 = llvm::Type::getInt64Ty(ctx);
+        UInt64 = KnownTypes["ulong"] = KnownTypes["u64"] = UInt64 = llvm::Type::getInt64Ty(ctx);
+        Bool = KnownTypes["bool"] = Bool = llvm::Type::getInt1Ty(ctx);
+        Double = KnownTypes["double"] = KnownTypes["f64"] = Double = llvm::Type::getDoubleTy(ctx);
+        Float = KnownTypes["float"] = KnownTypes["f32"] = Float = llvm::Type::getFloatTy(ctx);
         // insert pointer types for all native types
-        for (const auto& ty : KnownTypes) {
-            if (ty.first() == "bool")
+        llvm::SmallVector<std::string> keys(KnownTypes.keys());
+        for (const auto& ty : keys) {
+            if (ty == "bool" || ty == "void")
                 continue;
-            KnownTypes[ty.first().str() + "*"] = ty.second->getPointerTo(0);
+            KnownTypes[ty + "*"] = KnownTypes[ty]->getPointerTo(0);
         }
+        // llvm has no void*, use char* intead
+        VoidPtr = KnownTypes["void*"] = KnownTypes["i8*"];
     }
 
     llvm::Type* Types::getType(const std::string& name) {

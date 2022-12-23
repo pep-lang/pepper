@@ -1,11 +1,16 @@
 
 #pragma once
 
+#include "Core/Common.h"
 #include <memory>
 #include <string>
 
 namespace pepper {
     class Codegen;
+
+    namespace ast {
+        class AST;
+    }
 
     struct SourceLocation {
         const std::string File;
@@ -24,7 +29,7 @@ namespace pepper {
         Parser() = default;
         ~Parser() = default;
 
-        void parse(std::istream& stream, const std::string& name = "");
+        Ref<ast::AST> parse(std::istream& stream, const std::string& name = "");
     };
 
 } // namespace pepper

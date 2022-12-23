@@ -1,16 +1,13 @@
 
 #pragma once
 
+#include "Core/Common.h"
 #include "llvm/Support/FormatVariadic.h"
 #include <exception>
 #include <memory>
 #include <string>
 
 namespace pepper {
-    template <typename T>
-    concept HasToString = requires(T t) {
-                              { t.toString() } -> std::same_as<std::string>;
-                          };
 
     class CompileError : public std::exception {
       private:

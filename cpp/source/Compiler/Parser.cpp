@@ -25,12 +25,17 @@ namespace pepper {
     class ParserListener : public PepperBaseListener {
         using Super = PepperBaseListener;
 
-        AST ast;
+        Ref<AST> Tree;
         Ref<Builder> builder;
 
       public:
-        ParserListener() {
-            builder = ast.builder();
+        ParserListener()
+            : Tree(Ref<AST>::New()) {
+            builder = Tree->builder();
+        }
+
+        Ref<AST> ast() const {
+            return Tree;
         }
 
         void pushStack(Ref<Node> val) {
@@ -63,6 +68,25 @@ namespace pepper {
             return {context->start->getInputStream()->getSourceName(), static_cast<int>(context->start->getLine())};
         }
 
+        void visitTerminal(antlr4::tree::TerminalNode* terminal) override {
+            Super::visitTerminal(terminal);
+        }
+
+        Ref<Expression> evalNumericConstant(antlr4::tree::TerminalNode* constant) {
+            auto value = constant->toString();
+            try {
+                auto intVal = std::stoll(value);
+                return Ref<IntegerLiteral>::New(intVal);
+            } catch (std::invalid_argument) {
+            }
+            try {
+                auto floatVal = std::stold(value);
+                return Ref<FloatLiteral>::New(floatVal);
+            } catch (std::invalid_argument) {
+            }
+            throw CompileError("Unable to parse numeric literal: {0}", value);
+        }
+
         void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
             Super::exitVariableSpecifier(context);
             auto identifiers = context->Identifier();
@@ -74,6 +98,33 @@ namespace pepper {
             auto type = builder->findType(typeName);
             auto decl = Ref<VariableDef>::New(type, identifier);
             builder->variable(decl);
+        }
+
+        void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) {
+            Super::exitPrimaryExpression(context);
+            auto constant = context->Constant();
+            if (constant) {
+                builder->pushStack(evalNumericConstant(constant));
+                return;
+            }
+            auto stringLiterals = context->StringLiteral();
+            if (stringLiterals.size()) {
+                std::string strVal = "";
+                std::for_each(
+                    stringLiterals.begin(), stringLiterals.end(), [&strVal](auto str) { strVal += str->toString(); });
+                builder->pushStack(Ref<StringLiteral>::New(strVal));
+                return;
+            }
+            auto ident = context->Identifier();
+            if (ident) {
+                auto identifier = ident->toString();
+                auto symbol = builder->findSymbol(identifier);
+                if (!symbol) {
+                    throw CompileError("Unable to find symbol {0}", identifier);
+                }
+                builder->pushStack(Ref<VariableRef>::New(symbol->type(), identifier));
+                return;
+            }
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
@@ -335,16 +386,21 @@ namespace pepper {
         }
     };
 
-    void Parser::parse(std::istream& stream, const std::string& name) {
+    Ref<AST> Parser::parse(std::istream& stream, const std::string& name) {
         antlr4::ANTLRInputStream inputStream(stream);
         inputStream.name = name;
         PepperLexer lexer(&inputStream);
         antlr4::CommonTokenStream tokenStream(&lexer);
         PepperParser parser(&tokenStream);
+        parser.setBuildParseTree(true);
+        parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
+        parser.setTrace(true);
 
         antlr4::tree::ParseTree* tree = parser.compilationUnit();
         ParserListener listener;
         antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+
+        return listener.ast();
     }
 
 } // namespace pepper

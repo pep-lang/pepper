@@ -26,7 +26,7 @@ namespace pepper {
         Ref<ast::AST> Tree;
 
       public:
-        Codegen(const Ref<ast::AST> tree)
+        Codegen(Ref<ast::AST> tree)
             : Tree(tree) {
         }
 

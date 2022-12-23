@@ -20,20 +20,19 @@ namespace pepper {
         return *Instance;
     }
 
-    Context::Context(const std::string& moduleName)
-        : Ast(Ref<ast::AST>::New()) {
+    Context::Context(const std::string& moduleName) {
         assert(Instance == nullptr);
         Instance = this;
+
+        Exec = Executor::Create();
+        Ctx = std::make_unique<llvm::LLVMContext>();
+        TypeMap = Ref<Types>::New(*Ctx);
+        Module = std::make_unique<llvm::Module>(moduleName, *Ctx);
+        Exec->configureModule(Module.get());
 
         Builtins = Ref<Runtime>::New();
         Globals = Ref<Scope>::New("Globals", Builtins);
         Locals = Globals;
-
-        Exec = Executor::Create();
-        Ctx = std::make_unique<llvm::LLVMContext>();
-        Module = std::make_unique<llvm::Module>(moduleName, *Ctx);
-        Exec->configureModule(Module.get());
-        TypeMap = Ref<Types>::New(*Ctx);
     }
 
     Context::~Context() {

@@ -32,7 +32,7 @@ namespace pepper::ast {
         virtual Builder* beginFunction(Ref<ast::FunctionDef> func) = 0;
         virtual Builder* endFunction() = 0;
         virtual Ref<FunctionDef> returnTarget() const = 0;
-        virtual Builder* beginScope() = 0;
+        virtual Builder* beginScope(const std::string& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;
         virtual void pushStack(Ref<ast::Node> value) = 0;
         virtual Ref<ast::Node> popStack() = 0;

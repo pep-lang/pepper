@@ -40,7 +40,7 @@ namespace pepper::ast {
       public:
         explicit BuilderImpl(AST& _ast)
             : ast(_ast) {
-            Stack.emplace_back(); // global scope
+            Stack.emplace_back("Global"); // global scope
         }
 
         Ref<ast::FunctionDef> returnTarget() const override {
@@ -125,18 +125,21 @@ namespace pepper::ast {
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = Stack.back();
             scope.Functions[func->identifier()] = func;
-            scope.ReturnTarget = func;
-            beginScope();
+            beginScope(func->identifier());
+            auto& fnScope = Stack.back();
+            fnScope.ReturnTarget = func;
             return this;
         }
 
         Builder* endFunction() override {
+            auto& scope = Stack.back();
+            ast.newRoot(scope.ReturnTarget);
             endScope();
             return this;
         }
 
-        Builder* beginScope() override {
-            Stack.emplace_back();
+        Builder* beginScope(const std::string& name = "Anonymous") override {
+            Stack.emplace_back(name);
             return this;
         }
 
@@ -158,6 +161,8 @@ namespace pepper::ast {
         }
 
         Builder* expression(Ref<ast::Expression> expr) override {
+            auto function = returnTarget();
+            function->body().push_back(expr);
             return this;
         }
     };

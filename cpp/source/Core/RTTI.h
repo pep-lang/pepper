@@ -33,14 +33,14 @@ namespace pepper {
         }
 
         struct None {
-            constexpr const RTTI* rtti() const {
+            static constexpr const RTTI* _rtti() {
                 return nullptr;
             }
         };
 
         template <typename T>
         static constexpr const RTTI* of() {
-            return static_cast<T*>(nullptr)->rtti();
+            return T::_rtti();
         }
 
         template <typename T>
@@ -99,14 +99,15 @@ namespace pepper {
 
 #define DECLARE_RTTI(T, ...)                                                                                           \
   public:                                                                                                              \
-    const pepper::RttiInstance<T>* rtti() const {                                                                      \
+    static const pepper::RttiInstance<T>* _rtti() {                                                                    \
         return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
     }                                                                                                                  \
-    template <typename Base>                                                                                           \
+    virtual const pepper::RTTI* rtti() const { return _rtti(); }                                                       \
+    template <typename T>                                                                                              \
     bool is() {                                                                                                        \
         auto thisTy = rtti();                                                                                          \
-        auto baseTy = pepper::RTTI::of<Base>();                                                                        \
-        return thisTy->is(baseTy);                                                                                     \
+        auto tTy = pepper::RTTI::of<T>();                                                                              \
+        return thisTy->is(tTy);                                                                                        \
     }                                                                                                                  \
     template <typename To>                                                                                             \
     To as() {                                                                                                          \
@@ -114,10 +115,4 @@ namespace pepper {
             return static_cast<To>(this);                                                                              \
         }                                                                                                              \
         return nullptr;                                                                                                \
-    }                                                                                                                  \
-    T* downcast() {                                                                                                    \
-        return rtti()->downcast(this);                                                                                 \
-    }                                                                                                                  \
-    const T* downcast() const {                                                                                        \
-        return rtti()->downcast(this);                                                                                 \
     }

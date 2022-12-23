@@ -46,6 +46,7 @@ namespace pepper {
         static std::string toString(llvm::Type* ty);
 
         static llvm::Type* Void;
+        static llvm::Type* VoidPtr;
         static llvm::Type* Int8;
         static llvm::Type* UInt8;
         static llvm::Type* Int32;

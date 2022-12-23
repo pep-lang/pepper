@@ -25,6 +25,8 @@ namespace pepper::ast {
 
         Ref<Builder> builder();
 
+        void newRoot(Ref<ast::Node> root);
+
         [[nodiscard]] const std::vector<Ref<ast::Node>>& roots() const {
             return Roots;
         }

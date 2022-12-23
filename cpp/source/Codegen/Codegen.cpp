@@ -102,6 +102,7 @@ namespace pepper {
     static llvm::Value* emit(Ref<FunctionDef> functionDef) {
         auto function =
             Ref<UserFunction>::New(functionDef->identifier(), functionDef->returnType(), functionDef->params());
+        codegen(function, functionDef);
         return function->function();
     }
 

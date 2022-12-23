@@ -4,8 +4,8 @@
 
 TEST(IntMath, Let) {
     const char* source = R"SOURCE(
-        int _test() {
-            let x = 1;
+        int test() {
+            int x = 1;
             return x;
         }
     )SOURCE";
