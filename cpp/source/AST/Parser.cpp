@@ -100,9 +100,13 @@ namespace pepper {
             }
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
-            auto defaultValue = (context->assignmentExpression()) ? popStack<Expression>() : nullptr;
-            auto decl = Ref<VariableDef>::New(typeName, identifier, defaultValue);
-            builder->variable(decl);
+
+            if (builder->structTarget()) {
+                builder->symbol(Ref<FieldDef>::New(builder->structTarget(), typeName, identifier));
+            } else {
+                auto defaultValue = (context->assignmentExpression()) ? popStack<Expression>() : nullptr;
+                builder->symbol(Ref<VariableDef>::New(typeName, identifier, defaultValue));
+            }
         }
 
         void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
@@ -135,8 +139,25 @@ namespace pepper {
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
             // TODO: args, pass to FunctionDef
             Params params;
+            if (auto paramList = context->parameterList()) {
+                auto paramDecls = paramList->parameterDeclaration();
+                std::for_each(paramDecls.begin(), paramDecls.end(), [&](auto p) {
+                    auto identifiers = p->Identifier();
+                    auto typeName = identifiers[0]->toString();
+                    auto paramName = identifiers[1]->toString();
+                    Ref<Expression> defaultValue;
+                    if (p->Assign()) {
+                        defaultValue = builder->popStack();
+                    }
+                    params.emplace_back(paramName, typeName, defaultValue);
+                });
+            }
+
             auto function = builder->create<FunctionDef>(returnType, identifier, params);
             builder->beginFunction(function);
+            for (auto& param : params) {
+                builder->symbol(Ref<VariableDef>::New(param.Type, param.Identifier));
+            }
         }
 
         void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
@@ -167,8 +188,27 @@ namespace pepper {
             if (context->expression()) {
                 returnValue = popStack<Expression>();
             }
-            auto function = builder->returnTarget();
+            auto function = builder->functionTarget();
             builder->expression(Ref<Return>::New(function, returnValue));
+        }
+
+        void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
+            Super::enterStructDeclaration(context);
+            auto identifier = context->Identifier()->toString();
+            auto structDef = Ref<StructDef>::New(identifier, identifier);
+            builder->beginStruct(structDef);
+        }
+
+        void exitStructDeclaration(PepperParser::StructDeclarationContext* context) override {
+            Super::exitStructDeclaration(context);
+            builder->endStruct();
+        }
+
+        void exitMemberAccess(PepperParser::MemberAccessContext* context) override {
+            Super::exitMemberAccess(context);
+            auto lhs = popStack<Expression>();
+            auto rhs = context->Identifier()->toString();
+            builder->expression(Ref<MemberRef>::New(lhs, rhs));
         }
 
         void exitAdd(PepperParser::AddContext* context) override {

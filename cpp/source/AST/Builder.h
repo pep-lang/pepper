@@ -15,6 +15,7 @@ namespace pepper::ast {
     class Node;
     class FunctionDef;
     class VariableDef;
+    class StructDef;
     class Expression;
     class Symbol;
 
@@ -25,19 +26,23 @@ namespace pepper::ast {
             return Ref<N>::New(std::forward<decltype(args)>(args)...);
         }
 
-        [[nodiscard]] virtual Ref<ast::FunctionDef> findFunction(const Name& name) const = 0;
-        [[nodiscard]] virtual Ref<ast::VariableDef> findVariable(const Name& name) const = 0;
-        [[nodiscard]] virtual Ref<ast::Symbol> findSymbol(const Name& name) const = 0;
+        [[nodiscard]] virtual Ref<StructDef> findStruct(const Name& name) const = 0;
+        [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Name& name) const = 0;
+        [[nodiscard]] virtual Ref<VariableDef> findVariable(const Name& name) const = 0;
+        [[nodiscard]] virtual Ref<Symbol> findSymbol(const Name& name) const = 0;
 
-        virtual Builder* beginFunction(Ref<ast::FunctionDef> func) = 0;
+        virtual Builder* beginStruct(Ref<StructDef> str) = 0;
+        virtual Builder* endStruct() = 0;
+        virtual Ref<StructDef> structTarget() const = 0;
+        virtual Builder* beginFunction(Ref<FunctionDef> func) = 0;
         virtual Builder* endFunction() = 0;
-        virtual Ref<FunctionDef> returnTarget() const = 0;
+        virtual Ref<FunctionDef> functionTarget() const = 0;
         virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;
-        virtual void pushStack(Ref<ast::Node> value) = 0;
-        virtual Ref<ast::Node> popStack() = 0;
-        virtual Ref<ast::Node> peekStack(unsigned int idx) = 0;
-        virtual Builder* variable(Ref<ast::VariableDef> var) = 0;
-        virtual Builder* expression(Ref<ast::Expression> expr) = 0;
+        virtual void pushStack(Ref<Node> value) = 0;
+        virtual Ref<Node> popStack() = 0;
+        virtual Ref<Node> peekStack(unsigned int idx) = 0;
+        virtual Builder* symbol(Ref<VariableDef> var) = 0;
+        virtual Builder* expression(Ref<Expression> expr) = 0;
     };
 } // namespace pepper::ast

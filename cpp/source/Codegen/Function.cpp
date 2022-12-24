@@ -3,6 +3,7 @@
 
 #include "Codegen/Context.h"
 #include "Codegen/Scope.h"
+#include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
@@ -19,10 +20,26 @@ namespace pepper {
             llvm::Function::Create(FuncType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
     }
 
+    llvm::Value* Function::call(const llvm::SmallVector<llvm::Value*>& args) const {
+        // TODO: deal with default values for params
+        llvm::SmallVector<llvm::Value*> coercedArgs;
+        int idx = 0;
+        for (auto* arg : args) {
+            auto expectedType = TypeOps::get(*Parameters[idx++].ParamType);
+            coercedArgs.push_back(expectedType->coerce(arg));
+        }
+        return Context::get().locals()->Builder->CreateCall(FuncType, Func, coercedArgs);
+    }
+
     UserFunction::UserFunction(const Name& name, Ref<Type> returnType, const Params& params)
         : Function(name, returnType, params) {
         auto& context = Context::get().module()->getContext();
         Body = llvm::BasicBlock::Create(context, "entry", Func);
         Builder = Ref<llvm::IRBuilder<>>::New(Body);
     }
+
+    Ref<ExternFunction> ExternFunction::Malloc =
+        Ref<ExternFunction>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
+    Ref<ExternFunction> ExternFunction::Free =
+        Ref<ExternFunction>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
 } // namespace pepper

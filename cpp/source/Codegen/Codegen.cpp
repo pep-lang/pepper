@@ -9,6 +9,7 @@
 #include "Codegen/Function.h"
 #include "Codegen/ModuleContext.h"
 #include "Codegen/Scope.h"
+#include "Codegen/Struct.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
@@ -57,6 +58,33 @@ namespace pepper {
         return value;
     }
 
+    static void codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
+        Context::get().pushFunction(function);
+
+        // Allocate parameters
+        auto llvmFunction = function->function();
+        auto args = llvm::SmallVector<llvm::Value*>();
+        for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
+            auto param = function->params()[paramIdx];
+            auto arg = llvmFunction->getArg(paramIdx);
+            auto local = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
+            Context::get().locals()->newSymbol(param.ParamName, local);
+            args.push_back(local);
+        }
+
+        // Push all known variables at the top of the function block
+        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](const auto& local) { codegen(local); });
+
+        // Emit the body of the function, after ensuring there is a return instruction
+        auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
+        if (!lastExpr || !lastExpr->is<Return>()) {
+            funcDef->body().push_back(Ref<Return>::New(funcDef));
+        }
+        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](const auto& expr) { codegen(expr); });
+
+        Context::get().popScope();
+    }
+
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
         pushStack(value);
@@ -94,8 +122,41 @@ namespace pepper {
         return value;
     }
 
-    static llvm::Value* emit(Ref<StructDef> structDef) {
-        return nullptr;
+    static Ref<Struct> emit(Ref<StructDef> structDef) {
+        // convert fields to symbols before type gen
+        pepper::Params fields;
+        llvm::SmallVector<llvm::Type*> fieldTypes;
+        for (auto& field : structDef->Fields) {
+            auto type = Types::get(field->type());
+            fieldTypes.push_back(*type);
+            fields.emplace_back(field->identifier(), type);
+        }
+
+        // generate the new struct type
+        auto llvmType = llvm::StructType::create(fieldTypes, structDef->identifier());
+        auto structType = Types::add(Ref<Type>::New(structDef->identifier(), llvmType));
+        auto structPtrType = Types::get(structDef->identifier() + "*");
+        auto structDesc = Ref<Struct>::New(structType, structDef->identifier());
+
+        // create Struct()/new function
+        auto newFn = Ref<Method>::New(structDef->identifier(), structPtrType);
+        Context::get().pushFunction(newFn);
+        {
+            auto size = structDesc->size();
+            auto addr = ExternFunction::Malloc->call({size});
+            structDesc->constructor()->call({addr});
+            newFn->Builder->CreateRet(addr);
+        }
+        Context::get().popScope();
+        // Export new function to the enclosing scope
+        Context::get().locals()->newFunction(newFn);
+
+        codegenFunction(structDesc->initializer(), structDef->Initializer);
+        Context::get().locals()->newFunction(structDesc->initializer(), "__init");
+        codegenFunction(structDesc->constructor(), structDef->Constructor);
+        codegenFunction(structDesc->destructor(), structDef->Destructor);
+
+        return structDesc;
     }
 
     static llvm::Value* emit(Ref<FieldDef> fieldDef) {
@@ -111,33 +172,6 @@ namespace pepper {
         return thisPtr;
     }
 
-    static void codegen(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
-        Context::get().pushFunction(function);
-
-        // Allocate parameters
-        auto llvmFunction = function->function();
-        auto args = llvm::SmallVector<llvm::Value*>();
-        for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
-            auto param = function->params()[paramIdx];
-            auto arg = llvmFunction->getArg(paramIdx);
-            auto local = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
-            Context::get().locals()->newSymbol(param.ParamName, local);
-            args.push_back(local);
-        }
-
-        // Push all known variables at the top of the function block
-        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](const auto& local) { codegen(local); });
-
-        // Emit the body of the function, after ensuring there is a return instruction
-        auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
-        if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->body().push_back(Ref<Return>::New(funcDef));
-        }
-        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](const auto& expr) { codegen(expr); });
-
-        Context::get().popScope();
-    }
-
     static pepper::Params astToTypedParams(const ast::Params& src) {
         pepper::Params params;
         for (auto p : src) {
@@ -150,7 +184,7 @@ namespace pepper {
         auto returnType = Types::get(functionDef->returnType());
         auto params = astToTypedParams(functionDef->params());
         auto function = Ref<UserFunction>::New(functionDef->identifier(), returnType, params);
-        codegen(function, functionDef);
+        codegenFunction(function, functionDef);
         return function->function();
     }
 
@@ -282,8 +316,6 @@ namespace pepper {
     static llvm::Value* codegen(Ref<Node> node) {
         if (node->is<BinaryOp>())
             return emit(node.as<BinaryOp>());
-        if (node->is<StructDef>())
-            return emit(node.as<StructDef>());
         if (node->is<FieldDef>())
             return emit(node.as<FieldDef>());
         if (node->is<VariableDef>())
@@ -309,6 +341,10 @@ namespace pepper {
         throw InternalCompilerError("Unknown AST node");
     }
 
+    static Ref<Struct> codegenStruct(Ref<StructDef> structDef) {
+        return emit(structDef);
+    }
+
     Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)
         : Tree(tree) {
         Ctx = Ref<Context>::New(moduleName);
@@ -316,8 +352,11 @@ namespace pepper {
     }
 
     Ref<ModuleContext> Codegen::emit() {
-        for (const auto& root : Tree->roots()) {
-            codegen(root);
+        for (auto root : Tree->roots()) {
+            if (root->is<StructDef>())
+                codegenStruct(root.as<StructDef>());
+            else
+                codegen(root);
         }
         return Context::get().moduleContext();
     }

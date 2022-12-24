@@ -56,15 +56,8 @@ namespace pepper {
         Double = addType(Ref<Type>::New("f64", llvm::Type::getDoubleTy(ctx)), {"double"});
         Float = addType(Ref<Type>::New("f32", llvm::Type::getFloatTy(ctx)), {"float"});
         // insert pointer types for all native types
-        llvm::SmallVector<std::string> keys(KnownTypes.keys());
-        for (const auto& name : keys) {
-            if (name == "bool" || name == "void")
-                continue;
-            const auto& ty = KnownTypes[name];
-            const auto pname = name + "*";
-            const auto pty = getType(pname);
-            KnownTypes[pname] = pty ? pty : Ref<Type>::New(pname, ty->llvmType()->getPointerTo(0));
-        }
+        KnownTypes.erase("bool*");
+        KnownTypes.erase("void*");
         // llvm has no void*, use char* intead
         VoidPtr = addType(Ref<Type>::New("void*", *KnownTypes["i8*"]));
     }
@@ -72,6 +65,18 @@ namespace pepper {
     Ref<Type> Types::addType(Ref<Type> t, const llvm::SmallVector<Name>& aliases) {
         KnownTypes[t->name()] = t;
         TypeCache[*t] = t;
+        for (const auto& alias : aliases) {
+            KnownTypes[alias] = t;
+        }
+        // add pointer type(s) as well
+        if (!t->llvmType()->isPointerTy()) {
+            auto ptrType = Ref<Type>::New(t->name() + "*", t->llvmType()->getPointerTo());
+            KnownTypes[t->name() + "*"] = ptrType;
+            TypeCache[*ptrType] = ptrType;
+            for (const auto& alias : aliases) {
+                KnownTypes[alias + "*"] = ptrType;
+            }
+        }
         for (const auto& alias : aliases) {
             KnownTypes[alias] = t;
         }

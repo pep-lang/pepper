@@ -35,8 +35,8 @@ namespace pepper {
         return Outer ? Outer->findSymbol(identifier) : nullptr;
     }
 
-    Ref<Function> Scope::returnTarget() const {
-        return ReturnTarget ? ReturnTarget : (Outer ? Outer->returnTarget() : nullptr);
+    Ref<Function> Scope::functionTarget() const {
+        return FunctionTarget ? FunctionTarget : (Outer ? Outer->functionTarget() : nullptr);
     }
 
     Ref<llvm::IRBuilderBase> Scope::builder() const {
@@ -44,7 +44,7 @@ namespace pepper {
     }
 
     Ref<llvm::IRBuilderBase> Scope::registers() const {
-        auto func = returnTarget().as<UserFunction>();
+        auto func = functionTarget().as<UserFunction>();
         auto funcStart = func->Body->getFirstInsertionPt();
         auto builder = func->Builder;
         if (funcStart != func->Body->getInstList().begin()) {

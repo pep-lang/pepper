@@ -52,7 +52,7 @@ namespace pepper {
 
     void Context::pushFunction(Ref<UserFunction> function) {
         pushScope(function->name(), function->Builder);
-        Locals->ReturnTarget = function;
+        Locals->FunctionTarget = function;
     }
 
     void Context::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {

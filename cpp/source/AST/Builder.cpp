@@ -27,7 +27,7 @@ namespace pepper::ast {
             llvm::StringMap<Ref<ast::FunctionDef>> Functions;
             std::vector<Ref<FunctionDef>> OrderedFunctions;
             std::vector<Ref<Expression>> Expressions;
-            Ref<ast::FunctionDef> ReturnTarget = nullptr;
+            Ref<ast::FunctionDef> FunctionTarget = nullptr;
 
             std::vector<Ref<ast::Node>> Stack;
 
@@ -45,10 +45,26 @@ namespace pepper::ast {
             Stack.emplace_back("Global"); // global scope
         }
 
-        Ref<ast::FunctionDef> returnTarget() const override {
+        Ref<ast::FunctionDef> functionTarget() const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (scope.ReturnTarget)
-                    return scope.ReturnTarget;
+                if (scope.FunctionTarget)
+                    return scope.FunctionTarget;
+            }
+            return nullptr;
+        }
+
+        Ref<ast::StructDef> structTarget() const override {
+            for (const auto& scope : llvm::reverse(Stack)) {
+                if (scope.StructTarget)
+                    return scope.StructTarget;
+            }
+            return nullptr;
+        }
+
+        [[nodiscard]] Ref<StructDef> findStruct(const Name& name) const override {
+            for (const auto& scope : llvm::reverse(Stack)) {
+                if (auto str = scope.Structs.lookup(name))
+                    return str;
             }
             return nullptr;
         }
@@ -82,10 +98,10 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        Ref<ast::FunctionDef> returnTarget() {
+        Ref<ast::FunctionDef> functionTarget() {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (scope.ReturnTarget) {
-                    return scope.ReturnTarget;
+                if (scope.FunctionTarget) {
+                    return scope.FunctionTarget;
                 }
             }
             return nullptr;
@@ -115,18 +131,42 @@ namespace pepper::ast {
             return scope.Stack[scope.Stack.size() - 1 - idx];
         }
 
+        Builder* beginStruct(Ref<StructDef> structDef) override {
+            auto& scope = Stack.back();
+            scope.Structs[structDef->identifier()] = structDef;
+            scope.Functions[structDef->identifier()] = structDef->New;
+
+            if (!structTarget() && !functionTarget()) {
+                ast.newRoot(structDef);
+            }
+
+            beginScope(structDef->identifier());
+            auto& structScope = Stack.back();
+            structScope.StructTarget = structDef;
+            return this;
+        }
+
+        Builder* endStruct() override {
+            auto& scope = Stack.back();
+            auto structDef = scope.StructTarget;
+            structDef->Fields.append(scope.OrderedSymbols.begin(), scope.OrderedSymbols.end());
+            structDef->finish();
+            endScope();
+            return this;
+        }
+
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = Stack.back();
             scope.Functions[func->identifier()] = func;
             beginScope(func->identifier());
             auto& fnScope = Stack.back();
-            fnScope.ReturnTarget = func;
+            fnScope.FunctionTarget = func;
             return this;
         }
 
         Builder* endFunction() override {
             auto& scope = Stack.back();
-            auto function = scope.ReturnTarget;
+            auto function = scope.FunctionTarget;
             std::for_each(scope.Locals.begin(), scope.Locals.end(), [&function](auto& local) {
                 function->locals().push_back(local.second);
             });
@@ -145,14 +185,14 @@ namespace pepper::ast {
             return this;
         }
 
-        Builder* variable(Ref<ast::VariableDef> var) override {
+        Builder* symbol(Ref<ast::VariableDef> var) override {
             auto& scope = Stack.back();
             scope.Locals[var->identifier()] = var;
             return this;
         }
 
         Builder* expression(Ref<ast::Expression> expr) override {
-            auto function = returnTarget();
+            auto function = functionTarget();
             function->body().push_back(expr);
             pushStack(expr);
             return this;

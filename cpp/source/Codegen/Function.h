@@ -31,7 +31,7 @@ namespace pepper {
         llvm::FunctionType* FuncType;
 
       public:
-        Function(const Name& name, Ref<Type> returnType, const Params& params);
+        Function(const Name& name, Ref<Type> returnType, const Params& params = Params());
 
         const Name& name() const {
             return Identifier;
@@ -56,6 +56,8 @@ namespace pepper {
         llvm::FunctionType* type() const {
             return FuncType;
         }
+
+        llvm::Value* call(const llvm::SmallVector<llvm::Value*>& args) const;
     };
 
     class ExternFunction : public Function {
@@ -63,6 +65,10 @@ namespace pepper {
 
       public:
         using Function::Function;
+
+      public:
+        static Ref<ExternFunction> Malloc;
+        static Ref<ExternFunction> Free;
     };
 
     class UserFunction : public Function {
@@ -73,7 +79,14 @@ namespace pepper {
         Ref<llvm::IRBuilderBase> Builder = nullptr;
         unsigned int NumLocals = 0;
 
-        UserFunction(const Name& name, Ref<Type> returnType, const Params& params);
+        UserFunction(const Name& name, Ref<Type> returnType, const Params& params = Params());
+    };
+
+    class Method : public UserFunction {
+        DECLARE_RTTI(Method, UserFunction);
+
+      public:
+        using UserFunction::UserFunction;
     };
 
 } // namespace pepper

@@ -33,7 +33,7 @@ namespace pepper {
         std::vector<std::string> OrderedSymbols;
 
         llvm::StringMap<Ref<Function>> Functions;
-        Ref<Function> ReturnTarget;
+        Ref<Function> FunctionTarget;
 
         std::vector<llvm::Value*> Stack;
 
@@ -65,6 +65,6 @@ namespace pepper {
         [[nodiscard]] llvm::Value* findSymbol(const std::string& identifier) const;
         Ref<llvm::IRBuilderBase> builder() const;
         Ref<llvm::IRBuilderBase> registers() const;
-        Ref<Function> returnTarget() const;
+        Ref<Function> functionTarget() const;
     };
 } // namespace pepper

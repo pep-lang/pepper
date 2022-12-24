@@ -13,6 +13,8 @@ target_sources(PepperCore PUBLIC
         Runtime.h
         Scope.cpp
         Scope.h
+        Struct.cpp
+        Struct.h
         TypeOps.cpp
         TypeOps.h
         Types.cpp

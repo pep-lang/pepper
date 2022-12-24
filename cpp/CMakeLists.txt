@@ -9,7 +9,7 @@ set(GLOBAL PROPERTY USE_FOLDERS ON)
 enable_testing()
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /wd4624")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /wd4624 /Zc:preprocessor")
 else ()
 
 endif ()

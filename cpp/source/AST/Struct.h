@@ -34,19 +34,17 @@ namespace pepper::ast {
     class MemberRef : public Expression {
         DECLARE_RTTI(MemberRef, Expression);
 
-        const Name Type;
         Ref<Expression> LHS;
         const Name MemberName;
 
       public:
-        MemberRef(const Name& type, Ref<Expression> lhs, const Name& fieldName)
-            : Type(type)
-            , LHS(lhs)
+        MemberRef(Ref<Expression> lhs, const Name& fieldName)
+            : LHS(lhs)
             , MemberName(fieldName) {
         }
 
         const Name& type() const override {
-            return Type;
+            return LHS->type();
         }
 
         Ref<Expression> lhs() const {
