@@ -37,9 +37,21 @@ namespace pepper {
         return Context::get().locals()->registers();
     }
 
+    using llvm::cast;
+    using llvm::isa;
+
+    static llvm::Value* read(llvm::Value* value) {
+        if (isa<llvm::AllocaInst>(*value)) {
+            auto allocaInst = cast<llvm::AllocaInst>(value);
+            auto type = allocaInst->getAllocatedType();
+            return ir()->CreateLoad(type, value);
+        }
+        return value;
+    }
+
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
-        // return ir()->CreateLoad(type, value, variableRef->identifier());
+        Context::get().locals()->pushStack(value);
         return value;
     }
 
@@ -58,16 +70,19 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<StringLiteral> stringLiteral) {
         auto value = ir()->CreateGlobalString(stringLiteral->value());
+        Context::get().locals()->pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<IntegerLiteral> intLiteral) {
         auto value = llvm::ConstantInt::get(*Types::Int64, intLiteral->value());
+        Context::get().locals()->pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<FloatLiteral> floatLiteral) {
         auto value = llvm::ConstantFP::get(*Types::Double, floatLiteral->value());
+        Context::get().locals()->pushStack(value);
         return value;
     }
 
@@ -132,13 +147,12 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<Return> ret) {
-        auto rvAddr = maybeCodegen(ret->value());
-        if (rvAddr) {
+        if (ret->value()) {
+            auto returnValue = Context::get().locals()->popStack();
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
             auto type = TypeOps::get(*returnType);
-            auto rvLoad = ir()->CreateLoad(*returnType, rvAddr);
-            auto rv = type->coerce(rvLoad);
+            auto rv = type->coerce(returnValue);
             return ir()->CreateRet(rv);
         }
         return ir()->CreateRetVoid();
@@ -229,6 +243,8 @@ namespace pepper {
     static llvm::Value* emit(Ref<BinaryOp> op) {
         auto lhs = codegen(op->lhs());
         auto rhs = codegen(op->rhs());
+        lhs = read(lhs);
+        rhs = read(rhs);
         auto opType = operandType(op, lhs->getType(), rhs->getType());
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
@@ -241,6 +257,7 @@ namespace pepper {
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);
         auto result = std::invoke(typeOp, typeOps, lhsOperand, rhsOperand);
+        Context::get().locals()->pushStack(result);
         return result;
     }
 

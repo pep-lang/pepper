@@ -3,6 +3,7 @@
 //
 
 #include "AST/Builder.h"
+#include <vector>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
@@ -10,7 +11,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/Type.h"
-#include <vector>
 
 namespace pepper::ast {
     class BuilderImpl : public Builder {
@@ -154,6 +154,7 @@ namespace pepper::ast {
         Builder* expression(Ref<ast::Expression> expr) override {
             auto function = returnTarget();
             function->body().push_back(expr);
+            pushStack(expr);
             return this;
         }
     };

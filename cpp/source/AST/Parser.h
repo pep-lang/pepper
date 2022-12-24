@@ -1,9 +1,10 @@
 
 #pragma once
 
-#include "Core/Common.h"
 #include <memory>
 #include <string>
+
+#include "Core/Common.h"
 
 namespace pepper {
     class Codegen;
@@ -14,11 +15,13 @@ namespace pepper {
 
     struct SourceLocation {
         const std::string File;
-        const int Line;
+        const size_t Line;
+        const size_t Column;
 
-        SourceLocation(const std::string& file, int line)
+        SourceLocation(const std::string& file, size_t line, size_t column = 0)
             : File(file)
-            , Line(line) {
+            , Line(line)
+            , Column(column) {
         }
 
         std::string toString() const;

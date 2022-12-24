@@ -95,6 +95,22 @@ namespace pepper {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Type));
     }
 
+    using llvm::cast;
+    using llvm::isa;
+
+    Ref<llvm::IRBuilderBase> ir() {
+        return Context::get().locals()->builder();
+    }
+
+    static llvm::Value* read(llvm::Value* value) {
+        if (isa<llvm::AllocaInst>(*value)) {
+            auto allocaInst = cast<llvm::AllocaInst>(value);
+            auto type = allocaInst->getAllocatedType();
+            return ir()->CreateLoad(type, value);
+        }
+        return value;
+    }
+
     class NativeType : public TypeOps {
         DECLARE_RTTI(NativeType, TypeOps)
       protected:
@@ -170,15 +186,11 @@ namespace pepper {
         }
 
         llvm::Value* coerce(llvm::Value* value) const override {
+            value = read(value);
             if (value->getType() == *this) {
                 return value;
             }
             auto type = value->getType();
-            auto operand = llvm::getPointerOperand(value);
-            if (operand) {
-                type = operand->getType();
-                value = builder()->CreateLoad(type, value);
-            }
             bool signedVal = !type->isIntegerTy(1) && isSigned();
 
             if (type->isIntegerTy()) {

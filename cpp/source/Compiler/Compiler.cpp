@@ -9,14 +9,13 @@
 #include "Codegen/ModuleContext.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "llvm/Support/Error.h"
 
 namespace pepper {
     class PepperCompiler : public Compiler {
       private:
         std::unique_ptr<Parser> ParserRef;
-        std::vector<Ref<Warning>> Warnings;
-        std::vector<Ref<Error>> Errors;
 
       public:
         explicit PepperCompiler(const std::string& moduleName) {
@@ -26,13 +25,7 @@ namespace pepper {
         }
 
         Ref<ast::AST> parse(std::istream& inputStream, const std::string& sourceFile) {
-            try {
-                return ParserRef->parse(inputStream, sourceFile);
-            } catch (const std::exception& e) {
-                std::cerr << e.what() << '\n';
-            }
-
-            return nullptr;
+            return ParserRef->parse(inputStream, sourceFile);
         }
 
         Ref<ModuleContext> compile(const std::string& sourceFile) override {
@@ -45,17 +38,17 @@ namespace pepper {
             SourcePath = sourceFile;
             auto ast = parse(sourceStream, sourceFile);
             if (!ast) {
-                Report<Error>("Failed to parse {0}", sourceFile);
+                Messages::Report<Error>("Failed to parse {0}", sourceFile);
             }
 
-            if (Errors.size()) {
+            if (Messages::errors().size()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
             Codegen gen(ModuleName, ast);
             auto module = gen.emit();
 
-            if (Errors.size()) {
+            if (Messages::errors().size()) {
                 throw CompileError("Codegen error(s) encountered, cannot continue");
             }
 
@@ -63,26 +56,14 @@ namespace pepper {
 
             auto err = module->verify();
             if (err) {
-                Report<Error>("Module Verification failed: {0}", llvm::toString(std::move(err)));
+                Messages::Report<Error>("Module Verification failed: {0}", llvm::toString(std::move(err)));
             }
 
-            if (Errors.size()) {
+            if (Messages::errors().size()) {
                 throw CompileError("Verification failed, cannot continue");
             }
 
             return module;
-        }
-
-        void report(Ref<Message> msg) override {
-            if (msg->is<Warning>()) {
-                Warnings.push_back(msg.as<Warning>());
-                std::cout << msg->message();
-            }
-
-            if (msg->is<Error>()) {
-                Errors.push_back(msg.as<Error>());
-                std::cerr << msg->message();
-            }
         }
     };
 

@@ -7,7 +7,9 @@
 #include "AST/Builder.h"
 #include "AST/Nodes.h"
 #include "AST/Param.h"
+#include "Compiler/Compiler.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
@@ -18,7 +20,7 @@ namespace pepper {
     using namespace pepper::ast;
 
     std::string SourceLocation::toString() const {
-        return llvm::formatv("{0}:({1})", File, Line);
+        return llvm::formatv("{0}({1},{2})", File, Line, Column);
     }
 
     class ParserListener : public PepperBaseListener {
@@ -64,7 +66,11 @@ namespace pepper {
         }
 
         static SourceLocation sourceLocation(const antlr4::ParserRuleContext* context) {
-            return {context->start->getInputStream()->getSourceName(), static_cast<int>(context->start->getLine())};
+            return {
+                context->start->getInputStream()->getSourceName(),
+                context->start->getLine(),
+                context->start->getCharPositionInLine(),
+            };
         }
 
         void visitTerminal(antlr4::tree::TerminalNode* terminal) override {
@@ -380,6 +386,17 @@ namespace pepper {
         }
     };
 
+    static void reportError(const antlr4::RecognitionException& rex, const std::string& prefix) {
+        auto src = SourceLocation{
+            rex.getOffendingToken()->getTokenSource()->getSourceName(),
+            rex.getOffendingToken()->getLine(),
+            rex.getOffendingToken()->getCharPositionInLine(),
+        };
+        auto text = rex.getOffendingToken()->getText();
+        auto expected = rex.getExpectedTokens().toString();
+        Messages::Report<Error>(src, "{0} \"{1}\", expected \"{2}\"", prefix, text, expected);
+    }
+
     Ref<AST> Parser::parse(std::istream& stream, const std::string& name) {
         antlr4::ANTLRInputStream inputStream(stream);
         inputStream.name = name;
@@ -390,11 +407,23 @@ namespace pepper {
         parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
         // parser.setTrace(true);
 
-        antlr4::tree::ParseTree* tree = parser.compilationUnit();
-        ParserListener listener;
-        antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+        try {
+            antlr4::tree::ParseTree* tree = parser.compilationUnit();
+            ParserListener listener;
+            antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
 
-        return listener.ast();
+            return listener.ast();
+        } catch (const antlr4::ParseCancellationException& pex) {
+            try {
+                std::rethrow_if_nested(pex);
+                Messages::Report<Error>(pex.what());
+            } catch (const antlr4::InputMismatchException& ime) {
+                reportError(ime, "Unexpected token: ");
+            } catch (const antlr4::NoViableAltException& nva) {
+                reportError(nva, "Parse failure at: ");
+            }
+        }
+        return nullptr;
     }
 
 } // namespace pepper
