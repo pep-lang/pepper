@@ -97,12 +97,7 @@ namespace pepper {
 
 } // namespace pepper
 
-#define DECLARE_RTTI(T, ...)                                                                                           \
-  public:                                                                                                              \
-    static const pepper::RttiInstance<T>* _rtti() {                                                                    \
-        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
-    }                                                                                                                  \
-    virtual const pepper::RTTI* rtti() const { return _rtti(); }                                                       \
+#define DECLARE_RTTI_COMMON(T)                                                                                         \
     template <typename T>                                                                                              \
     bool is() {                                                                                                        \
         auto thisTy = rtti();                                                                                          \
@@ -116,3 +111,23 @@ namespace pepper {
         }                                                                                                              \
         return nullptr;                                                                                                \
     }
+
+#define DECLARE_RTTI_IMPL(T, ...)                                                                                      \
+    static const pepper::RttiInstance<T>* _rtti() {                                                                    \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<>>(), #T);                            \
+    }                                                                                                                  \
+    virtual const pepper::RTTI* rtti() const {                                                                         \
+        return _rtti();                                                                                                \
+    }
+
+#define DECLARE_RTTI_IMPL_DERIVED(T, ...)                                                                              \
+    static const pepper::RttiInstance<T>* _rtti() {                                                                    \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
+    }                                                                                                                  \
+    const pepper::RTTI* rtti() const override {                                                                        \
+        return _rtti();                                                                                                \
+    }
+
+#define DECLARE_RTTI(T, ...)                                                                                           \
+  public:                                                                                                              \
+    DECLARE_RTTI_IMPL##__VA_OPT__(_DERIVED)(T, __VA_ARGS__) DECLARE_RTTI_COMMON(T)

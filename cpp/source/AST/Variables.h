@@ -2,11 +2,7 @@
 #pragma once
 
 #include "Core/Common.h"
-#include <string>
-
-namespace llvm {
-    class Type;
-}
+#include "Core/Name.h"
 
 namespace pepper::ast {
     class VariableDef : public Symbol {
@@ -15,7 +11,7 @@ namespace pepper::ast {
         Ref<Expression> Default;
 
       public:
-        VariableDef(llvm::Type* type, const std::string& identifier, Ref<Expression> defaultValue = nullptr)
+        VariableDef(const Name& type, const Name& identifier, Ref<Expression> defaultValue = nullptr)
             : Symbol(type, identifier)
             , Default(defaultValue) {
         }
@@ -31,7 +27,7 @@ namespace pepper::ast {
       public:
         Ref<StructDef> Struct;
 
-        FieldDef(Ref<StructDef> strct, llvm::Type* type, const std::string& name)
+        FieldDef(Ref<StructDef> strct, const Name& type, const Name& name)
             : VariableDef(type, name) {
             Struct = strct;
         }
@@ -41,7 +37,7 @@ namespace pepper::ast {
         DECLARE_RTTI(ConstantDef, VariableDef);
 
       public:
-        ConstantDef(llvm::Type* type, const std::string& name)
+        ConstantDef(const Name& type, const Name& name)
             : VariableDef(type, name) {
         }
     };
@@ -50,20 +46,14 @@ namespace pepper::ast {
         DECLARE_RTTI(VariableRef, Expression);
 
       private:
-        llvm::Type* Type;
-        std::string Identifier;
+        const Name Identifier;
 
       public:
-        VariableRef(llvm::Type* type, const std::string identifier)
-            : Type(type)
-            , Identifier(identifier) {
+        VariableRef(const Name& identifier)
+            : Identifier(identifier) {
         }
 
-        llvm::Type* type() const override {
-            return Type;
-        }
-
-        const std::string& identifier() const {
+        const Name& identifier() const {
             return Identifier;
         }
     };

@@ -1,17 +1,18 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include "llvm/Support/FormatVariadic.h"
 #include <memory>
 #include <string>
+
+#include "Core/Common.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace llvm {
     class Module;
 }
 
 namespace pepper {
-    class Context;
+    class ModuleContext;
 
     class Message {
         DECLARE_RTTI(Message);
@@ -46,7 +47,7 @@ namespace pepper {
         DECLARE_RTTI(Warning, Message)
         using Message::Message;
 
-        std::string prefix() const {
+        std::string prefix() const override {
             return "Warning: ";
         }
     };
@@ -61,6 +62,10 @@ namespace pepper {
     };
 
     class Compiler {
+      protected:
+        std::string ModuleName;
+        std::string SourcePath;
+
       public:
         static Ref<Compiler> Create(const std::string& moduleName);
 
@@ -69,9 +74,8 @@ namespace pepper {
             report(Ref<T>::New(fmt, std::forward<Args>(args)...));
         }
 
-        virtual Context& context() const = 0;
-        virtual llvm::Module* compile(const std::string& sourceFile) = 0;
-        virtual llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile = "<stream>") = 0;
+        virtual Ref<ModuleContext> compile(const std::string& sourceFile) = 0;
+        virtual Ref<ModuleContext> compile(std::istream& sourceStream, const std::string& sourceFile = "<stream>") = 0;
 
         virtual void report(Ref<Message> msg) = 0;
     };

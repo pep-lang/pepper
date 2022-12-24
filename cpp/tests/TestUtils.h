@@ -1,24 +1,23 @@
 #pragma once
 
+#include <sstream>
+#include <string>
+
+#include "Codegen/ModuleContext.h"
 #include "Compiler/Compiler.h"
-#include "Compiler/Context.h"
 #include "Core/Common.h"
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include <sstream>
-#include <string>
 
 namespace TestUtils {
+    using namespace pepper;
+
     inline int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry = "test") {
-        auto compiler = pepper::Compiler::Create(name);
+        auto compiler = Compiler::Create(name);
         auto sourceStream = std::istringstream(source);
-        if (!compiler->compile(sourceStream, name))
-            return -1;
-        auto& context = compiler->context();
-        auto executor = context.executor();
-        auto ctx = std::move(context.takeContext());
-        auto module = std::move(context.takeModule());
-        return executor->execute(std::move(ctx), std::move(module), entry);
+        auto context = compiler->compile(sourceStream, name);
+        auto executor = Executor::Create();
+        return executor->execute(context, entry);
     }
 } // namespace TestUtils

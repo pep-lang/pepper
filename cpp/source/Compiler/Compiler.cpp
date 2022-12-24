@@ -1,40 +1,28 @@
 
 #include "Compiler/Compiler.h"
-
-#include "Codegen/Codegen.h"
-#include "Compiler/Context.h"
-#include "Compiler/Exceptions.h"
-#include "Compiler/Options.h"
-#include "Compiler/Parser.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/raw_ostream.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
+#include "AST/Parser.h"
+#include "Codegen/Codegen.h"
+#include "Codegen/ModuleContext.h"
+#include "Compiler/Options.h"
+#include "Core/Exceptions.h"
+#include "llvm/Support/Error.h"
+
 namespace pepper {
     class PepperCompiler : public Compiler {
       private:
-        std::unique_ptr<Context> Ctx;
         std::unique_ptr<Parser> ParserRef;
         std::vector<Ref<Warning>> Warnings;
         std::vector<Ref<Error>> Errors;
 
       public:
         explicit PepperCompiler(const std::string& moduleName) {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            llvm::InitializeNativeTargetAsmParser();
+            ModuleName = moduleName;
 
-            Ctx = std::make_unique<Context>(moduleName);
             ParserRef = std::make_unique<Parser>();
-        }
-
-        [[nodiscard]] Context& context() const override {
-            return *Ctx;
         }
 
         Ref<ast::AST> parse(std::istream& inputStream, const std::string& sourceFile) {
@@ -47,13 +35,14 @@ namespace pepper {
             return nullptr;
         }
 
-        llvm::Module* compile(const std::string& sourceFile) override {
+        Ref<ModuleContext> compile(const std::string& sourceFile) override {
             std::ifstream sourceStream(sourceFile, std::ios_base::in);
             auto sourcePath = std::filesystem::path(sourceFile);
             return compile(sourceStream, sourcePath.string());
         }
 
-        llvm::Module* compile(std::istream& sourceStream, const std::string& sourceFile) override {
+        Ref<ModuleContext> compile(std::istream& sourceStream, const std::string& sourceFile) override {
+            SourcePath = sourceFile;
             auto ast = parse(sourceStream, sourceFile);
             if (!ast) {
                 Report<Error>("Failed to parse {0}", sourceFile);
@@ -63,28 +52,23 @@ namespace pepper {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
-            Codegen gen(ast);
-            gen.emit();
+            Codegen gen(ModuleName, ast);
+            auto module = gen.emit();
 
             if (Errors.size()) {
                 throw CompileError("Codegen error(s) encountered, cannot continue");
             }
 
-            llvm::raw_os_ostream out(std::cout);
-            Ctx->module()->print(out, nullptr, false, true);
-
-            std::string verifyOutput;
-            llvm::raw_string_ostream vout(verifyOutput);
-            bool debugInfoBroken = false;
-            if (llvm::verifyModule(*Ctx->module(), &vout, &debugInfoBroken)) {
-                Report<Error>("Module Verification failed: {0}", verifyOutput);
+            auto err = module->verify();
+            if (err) {
+                Report<Error>("Module Verification failed: {0}", llvm::toString(std::move(err)));
             }
 
             if (Errors.size()) {
                 throw CompileError("Verification failed, cannot continue");
             }
 
-            return Context::get().module();
+            return module;
         }
 
         void report(Ref<Message> msg) override {

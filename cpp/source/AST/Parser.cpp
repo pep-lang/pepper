@@ -1,18 +1,17 @@
 
-#include "Compiler/Parser.h"
+#include "Parser.h"
+#include <utility>
 
 #include "ANTLRInputStream.h"
 #include "AST/AST.h"
 #include "AST/Builder.h"
 #include "AST/Nodes.h"
-#include "Compiler/Exceptions.h"
-#include "Compiler/Types.h"
-#include "Param.h"
+#include "AST/Param.h"
+#include "Core/Exceptions.h"
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
 #include "llvm/Support/FormatVariadic.h"
-#include <utility>
 
 namespace pepper {
     using namespace Pepper::Parser;
@@ -95,12 +94,11 @@ namespace pepper {
             }
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
-            auto type = builder->findType(typeName);
-            auto decl = Ref<VariableDef>::New(type, identifier);
+            auto decl = Ref<VariableDef>::New(typeName, identifier);
             builder->variable(decl);
         }
 
-        void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) {
+        void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
             Super::exitPrimaryExpression(context);
             auto constant = context->Constant();
             if (constant) {
@@ -118,11 +116,7 @@ namespace pepper {
             auto ident = context->Identifier();
             if (ident) {
                 auto identifier = ident->toString();
-                auto symbol = builder->findSymbol(identifier);
-                if (!symbol) {
-                    throw CompileError("Unable to find symbol {0}", identifier);
-                }
-                builder->pushStack(Ref<VariableRef>::New(symbol->type(), identifier));
+                builder->pushStack(Ref<VariableRef>::New(identifier));
                 return;
             }
         }
@@ -130,9 +124,8 @@ namespace pepper {
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             Super::enterFunctionDefinition(context);
             auto identifier = context->Identifier()->toString();
-            auto returnTypeName =
+            auto returnType =
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
-            auto returnType = builder->findType(returnTypeName);
             // TODO: args, pass to FunctionDef
             Params params;
             auto function = builder->create<FunctionDef>(returnType, identifier, params);
@@ -155,7 +148,7 @@ namespace pepper {
             }
             auto call = builder->create<FunctionCall>(func, args);
             builder->expression(call);
-            if (func->returnType() != Types::Void) {
+            if (func->returnType() != "void") {
                 pushStack(call);
             }
         }

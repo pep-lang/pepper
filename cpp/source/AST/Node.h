@@ -1,8 +1,10 @@
 
 #pragma once
 
-#include "Core/Common.h"
 #include <string>
+
+#include "Core/Common.h"
+#include "Core/Name.h"
 
 namespace llvm {
     class Type;
@@ -22,20 +24,20 @@ namespace pepper::ast {
         DECLARE_RTTI(Symbol, Node);
 
       private:
-        llvm::Type* Type;
-        std::string Identifier;
+        Name Type;
+        Name Identifier;
 
       public:
-        Symbol(llvm::Type* type, std::string name)
+        Symbol(const Name& type, const Name& name)
             : Type(type)
-            , Identifier(std::move(name)) {
+            , Identifier(name) {
         }
 
-        llvm::Type* type() const {
+        [[nodiscard]] const Name& type() const {
             return Type;
         }
 
-        [[nodiscard]] const std::string& identifier() const {
+        [[nodiscard]] const Name& identifier() const {
             return Identifier;
         }
     };
@@ -44,6 +46,9 @@ namespace pepper::ast {
         DECLARE_RTTI(Expression, Node);
 
       public:
-        [[nodiscard]] virtual llvm::Type* type() const = 0;
+        virtual const Name& type() const {
+            static Name Void("void");
+            return Void;
+        }
     };
 } // namespace pepper::ast

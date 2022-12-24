@@ -1,52 +1,31 @@
 
 #include "AST/Nodes.h"
+#include <algorithm>
 
 #include "Codegen/Scope.h"
-#include "Compiler/Context.h"
-#include "Compiler/Exceptions.h"
-#include "Compiler/Types.h"
+#include "Core/Exceptions.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
-#include <algorithm>
+#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
 
-    static llvm::FunctionType* functionTy(llvm::Type* returnType, const Params& args, bool vararg = false) {
-        std::vector<llvm::Type*> argTypes;
-        std::for_each(args.begin(), args.end(), [&](auto s) { argTypes.push_back(s.Type); });
-        return llvm::FunctionType::get(returnType, argTypes, vararg);
+    static std::string functionTy(const Name& returnType, const Params& args, bool vararg = false) {
+        Name argsStr;
+        for (auto it = args.begin(); it != args.end(); ++it) {
+            argsStr += it->Type;
+            if (it != args.end() - 1)
+                argsStr += ", ";
+        }
+        std::string ellipsis = vararg ? "..." : "";
+        return llvm::formatv("{0}({1}{2})", returnType, argsStr, ellipsis);
     }
 
-    FunctionNode::FunctionNode(llvm::Type* returnType, const std::string& name, const Params& params, bool vararg)
+    FunctionNode::FunctionNode(const Name& returnType, const Name& name, const Params& params, bool vararg)
         : Symbol(functionTy(returnType, params, vararg), name)
         , ReturnType(returnType)
         , Parameters(params)
         , Vararg(vararg) {
-    }
-
-    llvm::Type* IntegerLiteral::type() const {
-        return Types::Int64;
-    }
-
-    llvm::Type* FloatLiteral::type() const {
-        return Types::Double;
-    }
-
-    llvm::Type* StringLiteral::type() const {
-        return Types::Int8->getPointerTo(0);
-    }
-
-    llvm::Type* BinaryOp::operandType(llvm::Type* lhsType, llvm::Type* rhsType) const {
-        if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
-            return lhsType->getIntegerBitWidth() > rhsType->getIntegerBitWidth() ? lhsType : rhsType;
-        }
-        if (lhsType->isFloatingPointTy() || rhsType->isFloatingPointTy()) {
-            auto bits = std::max(lhsType->getPrimitiveSizeInBits(), rhsType->getPrimitiveSizeInBits());
-            return (bits > 32) ? Types::Double : Types::Float;
-        }
-        throw CompileError("Unable to determine operand type between lhs={0} rhs={1}",
-                           Types::toString(lhsType),
-                           Types::toString(rhsType));
     }
 } // namespace pepper::ast

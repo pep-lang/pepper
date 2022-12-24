@@ -7,10 +7,6 @@
 #include <string>
 #include <vector>
 
-namespace pepper {
-    class Type;
-} // namespace pepper
-
 namespace pepper::ast {
     class Node;
     class Builder;

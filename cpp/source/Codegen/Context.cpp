@@ -1,16 +1,17 @@
 
-#include "Compiler/Context.h"
+#include "Codegen/Context.h"
+#include <cassert>
 
 #include "AST/AST.h"
 #include "Codegen/Function.h"
+#include "Codegen/ModuleContext.h"
 #include "Codegen/Runtime.h"
 #include "Codegen/Scope.h"
-#include "Compiler/Param.h"
-#include "Compiler/Types.h"
+#include "Codegen/Types.h"
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include <cassert>
+#include "llvm/Support/TargetSelect.h"
 
 namespace pepper {
     Context* Context::Instance = nullptr;
@@ -24,11 +25,14 @@ namespace pepper {
         assert(Instance == nullptr);
         Instance = this;
 
+        llvm::InitializeNativeTarget();
+        llvm::InitializeNativeTargetAsmPrinter();
+        llvm::InitializeNativeTargetAsmParser();
+
+        Module = Ref<ModuleContext>::New(moduleName);
+
         Exec = Executor::Create();
-        Ctx = std::make_unique<llvm::LLVMContext>();
-        TypeMap = Ref<Types>::New(*Ctx);
-        Module = std::make_unique<llvm::Module>(moduleName, *Ctx);
-        Exec->configureModule(Module.get());
+        TypeMap = Ref<Types>::New(*Module->getContext());
 
         Builtins = Ref<Runtime>::New();
         Globals = Ref<Scope>::New("Globals", Builtins);
@@ -37,6 +41,14 @@ namespace pepper {
 
     Context::~Context() {
         Instance = nullptr;
+    }
+
+    std::unique_ptr<llvm::Module>&& Context::takeModule() {
+        return std::move(Module->takeModule());
+    }
+
+    std::unique_ptr<llvm::LLVMContext>&& Context::takeContext() {
+        return std::move(Module->takeContext());
     }
 
     void Context::pushFunction(Ref<UserFunction> function) {
@@ -54,7 +66,7 @@ namespace pepper {
     }
 
     llvm::Module* Context::module() const {
-        return Module.get();
+        return *Module;
     }
 
     llvm::LLVMContext& Context::llvmContext() const {

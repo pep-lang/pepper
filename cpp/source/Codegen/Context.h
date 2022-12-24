@@ -1,10 +1,10 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include <cassert>
 #include <memory>
 #include <string>
+
+#include "Core/Common.h"
 
 namespace llvm {
     class LLVMContext;
@@ -19,6 +19,7 @@ namespace pepper {
     class Scope;
     class Executor;
     class Function;
+    class ModuleContext;
     class Types;
     class UserFunction;
 
@@ -26,8 +27,7 @@ namespace pepper {
         static Context* Instance;
 
         Ref<Executor> Exec;
-        std::unique_ptr<llvm::LLVMContext> Ctx;
-        std::unique_ptr<llvm::Module> Module;
+        Ref<ModuleContext> Module;
         Ref<Types> TypeMap;
         Ref<Scope> Builtins;
         Ref<Scope> Globals;
@@ -42,13 +42,12 @@ namespace pepper {
         [[nodiscard]] llvm::Module* module() const;
         [[nodiscard]] llvm::LLVMContext& llvmContext() const;
 
-        std::unique_ptr<llvm::Module>&& takeModule() {
-            return std::move(Module);
+        Ref<ModuleContext> moduleContext() const {
+            return Module;
         }
 
-        std::unique_ptr<llvm::LLVMContext>&& takeContext() {
-            return std::move(Ctx);
-        }
+        std::unique_ptr<llvm::Module>&& takeModule();
+        std::unique_ptr<llvm::LLVMContext>&& takeContext();
 
         [[nodiscard]] Ref<Executor> executor() const {
             return Exec;

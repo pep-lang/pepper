@@ -1,8 +1,8 @@
 
 #pragma once
 
+#include "Core/Name.h"
 #include "llvm/ADT/SmallVector.h"
-#include <string>
 
 namespace llvm {
     class Type;
@@ -10,14 +10,16 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
+    class Type;
+
     struct Param {
-        llvm::Type* Type;
-        std::string Name;
+        Ref<Type> ParamType;
+        Name ParamName;
         llvm::Value* Default;
 
-        Param(std::string name, llvm::Type* type, llvm::Value* defaultValue = nullptr)
-            : Name(std::move(name))
-            , Type(type)
+        Param(const Name& name, Ref<Type> type, llvm::Value* defaultValue = nullptr)
+            : ParamName(name)
+            , ParamType(type)
             , Default(defaultValue) {
         }
     };

@@ -4,10 +4,10 @@
 
 #include "Codegen/TypeOps.h"
 
+#include "Codegen/Context.h"
 #include "Codegen/Scope.h"
-#include "Compiler/Context.h"
-#include "Compiler/Exceptions.h"
-#include "Compiler/Types.h"
+#include "Codegen/Types.h"
+#include "Core/Exceptions.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted
@@ -137,7 +137,7 @@ namespace pepper {
 
         llvm::Value* asBool(llvm::Value* value) const override {
             auto zero = llvm::ConstantInt::getFalse(Type);
-            auto valAsInt = builder()->CreatePtrToInt(value, Types::Int64);
+            auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
             return builder()->CreateICmpNE(zero, valAsInt, "bool");
         }
     };

@@ -3,11 +3,7 @@
 
 #include "AST/Node.h"
 #include "Core/Common.h"
-
-namespace llvm {
-    class Type;
-    class Value;
-} // namespace llvm
+#include "Core/Name.h"
 
 namespace pepper::ast {
     class BinaryOp : public Expression {
@@ -16,12 +12,6 @@ namespace pepper::ast {
       public:
         Ref<Expression> LHS;
         Ref<Expression> RHS;
-
-        llvm::Type* type() const override {
-            return operandType(LHS->type(), RHS->type());
-        }
-
-        virtual llvm::Type* operandType(llvm::Type* lhsType, llvm::Type* rhsType) const;
 
         BinaryOp(Ref<Expression> lhs, Ref<Expression> rhs)
             : LHS(lhs)

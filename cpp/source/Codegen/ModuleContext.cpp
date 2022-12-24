@@ -1,0 +1,70 @@
+//
+// Created by Justin Boswell on 12/23/22.
+//
+
+#include <memory>
+
+#include "Codegen/ModuleContext.h"
+#include "Core/Exceptions.h"
+#include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
+#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
+
+namespace pepper {
+    static llvm::DataLayout getDataLayout() {
+        auto EPC = llvm::orc::SelfExecutorProcessControl::Create();
+        if (!EPC) {
+            throw InternalCompilerError("Failed to initialize process control: {}", llvm::toString(EPC.takeError()));
+        }
+        auto ES = Ref<llvm::orc::ExecutionSession>::New(std::move(EPC.get()));
+
+        llvm::orc::JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
+        auto DL = JTMB.getDefaultDataLayoutForTarget();
+        if (!DL) {
+            throw InternalCompilerError("Unable to get default layout for target: {}", llvm::toString(DL.takeError()));
+        }
+        return DL.get();
+    }
+
+    ModuleContext::ModuleContext(const Name& name)
+        : ModuleName(name) {
+        Context = std::make_unique<llvm::LLVMContext>();
+        Module = std::make_unique<llvm::Module>(name, *Context);
+
+        auto targetTriple = llvm::sys::getDefaultTargetTriple();
+        Module->setTargetTriple(targetTriple);
+
+        Module->setDataLayout(getDataLayout());
+    }
+
+    std::unique_ptr<llvm::LLVMContext>&& ModuleContext::takeContext() {
+        return std::move(Context);
+    }
+
+    std::unique_ptr<llvm::Module>&& ModuleContext::takeModule() {
+        return std::move(Module);
+    }
+
+    llvm::Error ModuleContext::verify() const {
+        std::string verifyOutput;
+        llvm::raw_string_ostream vout(verifyOutput);
+        bool debugInfoBroken = false;
+        if (llvm::verifyModule(*Module, &vout, &debugInfoBroken)) {
+            return llvm::createStringError(std::error_code(), verifyOutput);
+        }
+        return llvm::Error::success();
+    }
+
+    std::string ModuleContext::toString() const {
+        std::string ir;
+        llvm::raw_string_ostream stream(ir);
+        Module->print(stream, nullptr, false, true);
+        return ir;
+        ;
+    }
+} // namespace pepper

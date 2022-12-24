@@ -20,7 +20,10 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        [[nodiscard]] llvm::Type* type() const override;
+        [[nodiscard]] const Name& type() const override {
+            static Name Long("long");
+            return Long;
+        }
 
         int64_t value() const {
             return Value;
@@ -38,7 +41,10 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        llvm::Type* type() const override;
+        const Name& type() const override {
+            static Name Double("double");
+            return Double;
+        }
 
         double value() const {
             return Value;
@@ -56,7 +62,10 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        llvm::Type* type() const override;
+        const Name& type() const override {
+            static Name String("string");
+            return String;
+        }
 
         const std::string& value() const {
             return Value;

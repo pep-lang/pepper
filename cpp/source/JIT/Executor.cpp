@@ -1,7 +1,8 @@
 
 #include "JIT/Executor.h"
 
-#include "Compiler/Exceptions.h"
+#include "Codegen/ModuleContext.h"
+#include "Core/Exceptions.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -91,18 +92,13 @@ namespace pepper {
             return ES->lookup({&Dylib}, Mangle(Name.str()));
         }
 
-        void configureModule(llvm::Module* module) override {
-            auto targetTriple = llvm::sys::getDefaultTargetTriple();
-            module->setTargetTriple(targetTriple);
-            module->setDataLayout(getDataLayout());
-        }
-
-        int execute(std::unique_ptr<llvm::LLVMContext> context,
-                    std::unique_ptr<llvm::Module> module,
-                    const std::string& entry) override {
-            if (auto err = addModule(std::move(ThreadSafeModule(std::move(module), std::move(context))))) {
+        int execute(Ref<ModuleContext> context, const std::string& entry) override {
+            if (auto err = addModule(
+                    std::move(ThreadSafeModule(std::move(context->takeModule()), std::move(context->takeContext()))))) {
                 throw InternalCompilerError("Unable to initialize module: {0}", llvm::toString(std::move(err)));
             }
+            // reset the context, since its contents have been stolen
+            context.reset();
 
             auto entryFn = lookup(entry);
             if (auto err = entryFn.takeError()) {

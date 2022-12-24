@@ -6,19 +6,17 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
-#include "Compiler/Context.h"
-#include "Compiler/Exceptions.h"
-#include "Compiler/Types.h"
+#include "Core/Exceptions.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/IR/Type.h"
 #include <vector>
 
 namespace pepper::ast {
     class BuilderImpl : public Builder {
         struct Scope {
-            std::string Name = "Anonymous";
+            Name Ident;
 
-            llvm::StringMap<llvm::Type*> Types;
             llvm::StringMap<Ref<ast::VariableDef>> Locals;
             llvm::StringMap<Ref<Symbol>> Symbols;
             std::vector<Ref<Symbol>> OrderedSymbols;
@@ -32,6 +30,10 @@ namespace pepper::ast {
             Ref<ast::FunctionDef> ReturnTarget = nullptr;
 
             std::vector<Ref<ast::Node>> Stack;
+
+            Scope(const Name& name = "Anonymous")
+                : Ident(name) {
+            }
         };
 
         AST& ast;
@@ -51,7 +53,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::VariableDef> findVariable(const std::string& name) const override {
+        [[nodiscard]] Ref<ast::VariableDef> findVariable(const Name& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
                 auto var = scope.Locals.lookup(name);
                 if (var) {
@@ -61,7 +63,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::FunctionDef> findFunction(const std::string& name) const override {
+        [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Name& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
                 if (auto var = scope.Functions.lookup(name)) {
                     return var;
@@ -70,7 +72,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::Symbol> findSymbol(const std::string& name) const override {
+        [[nodiscard]] Ref<ast::Symbol> findSymbol(const Name& name) const override {
             if (auto var = findVariable(name)) {
                 return var.as<ast::Symbol>();
             }
@@ -78,15 +80,6 @@ namespace pepper::ast {
                 return func.as<ast::Symbol>();
             }
             return nullptr;
-        }
-
-        [[nodiscard]] llvm::Type* findType(const std::string& name) const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
-                if (auto ty = scope.Types.lookup(name)) {
-                    return ty;
-                }
-            }
-            return Context::get().types()->getType(name);
         }
 
         Ref<ast::FunctionDef> returnTarget() {
@@ -135,26 +128,20 @@ namespace pepper::ast {
             auto& scope = Stack.back();
             auto function = scope.ReturnTarget;
             std::for_each(scope.Locals.begin(), scope.Locals.end(), [&function](auto& local) {
-                function->newLocal(local.second);
+                function->locals().push_back(local.second);
             });
             ast.newRoot(function);
             endScope();
             return this;
         }
 
-        Builder* beginScope(const std::string& name = "Anonymous") override {
+        Builder* beginScope(const Name& name = "Anonymous") override {
             Stack.emplace_back(name);
             return this;
         }
 
         Builder* endScope() override {
             Stack.pop_back();
-            return this;
-        }
-
-        Builder* type(llvm::Type* newType) override {
-            auto& scope = Stack.back();
-            scope.Types[Types::toString(newType)] = newType;
             return this;
         }
 

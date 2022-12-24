@@ -1,7 +1,10 @@
 
 #pragma once
 
+#include <memory>
+
 #include "Core/Common.h"
+#include "Core/Name.h"
 
 namespace pepper::ast {
     class AST;
@@ -21,16 +24,18 @@ namespace pepper::ast {
 } // namespace pepper::ast
 
 namespace pepper {
+    class Context;
+    class ModuleContext;
+
     class Codegen {
       protected:
         Ref<ast::AST> Tree;
+        Ref<ModuleContext> Ctx;
 
       public:
-        Codegen(Ref<ast::AST> tree)
-            : Tree(tree) {
-        }
+        Codegen(const Name& moduleName, Ref<ast::AST> tree);
 
-        void emit();
+        Ref<ModuleContext> emit();
     };
 
 } // namespace pepper

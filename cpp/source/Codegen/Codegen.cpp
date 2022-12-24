@@ -1,25 +1,32 @@
 
 #include "Codegen.h"
+#include <functional>
+#include <unordered_map>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
+#include "Codegen/Context.h"
 #include "Codegen/Function.h"
+#include "Codegen/ModuleContext.h"
 #include "Codegen/Scope.h"
 #include "Codegen/TypeOps.h"
-#include "Compiler/Context.h"
-#include "Compiler/Exceptions.h"
+#include "Codegen/Types.h"
+#include "Core/Exceptions.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
-#include <functional>
-#include <unordered_map>
 
 namespace pepper {
     using namespace pepper::ast;
 
     static llvm::Value* codegen(Ref<Node> node);
+
+    template <typename N>
+    static llvm::Value* maybeCodegen(Ref<N> node) {
+        return node ? codegen(node) : nullptr;
+    }
 
     static Ref<llvm::IRBuilderBase> ir() {
         return Context::get().locals()->builder();
@@ -35,7 +42,8 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<VariableDef> variableDef) {
-        auto value = registers()->CreateAlloca(variableDef->type(), nullptr, variableDef->identifier());
+        auto type = Types::get(variableDef->type());
+        auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
         if (variableDef->defaultValue()) {
             auto defaultValue = codegen(variableDef->defaultValue());
             ir()->CreateStore(defaultValue, value);
@@ -50,12 +58,12 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<IntegerLiteral> intLiteral) {
-        auto value = llvm::ConstantInt::get(intLiteral->type(), intLiteral->value());
+        auto value = llvm::ConstantInt::get(*Types::Int64, intLiteral->value());
         return value;
     }
 
     static llvm::Value* emit(Ref<FloatLiteral> floatLiteral) {
-        auto value = llvm::ConstantFP::get(floatLiteral->type(), floatLiteral->value());
+        auto value = llvm::ConstantFP::get(*Types::Double, floatLiteral->value());
         return value;
     }
 
@@ -85,8 +93,8 @@ namespace pepper {
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
             auto arg = llvmFunction->getArg(paramIdx);
-            auto local = ir()->CreateAlloca(param.Type, nullptr, param.Name);
-            Context::get().locals()->newSymbol(param.Name, local);
+            auto local = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
+            Context::get().locals()->newSymbol(param.ParamName, local);
             args.push_back(local);
         }
 
@@ -103,9 +111,18 @@ namespace pepper {
         Context::get().popScope();
     }
 
+    static pepper::Params astToTypedParams(const ast::Params& src) {
+        pepper::Params params;
+        for (auto p : src) {
+            params.emplace_back(p.Identifier, Types::get(p.Type), maybeCodegen(p.Default));
+        }
+        return params;
+    }
+
     static llvm::Value* emit(Ref<FunctionDef> functionDef) {
-        auto function =
-            Ref<UserFunction>::New(functionDef->identifier(), functionDef->returnType(), functionDef->params());
+        auto returnType = Types::get(functionDef->returnType());
+        auto params = astToTypedParams(functionDef->params());
+        auto function = Ref<UserFunction>::New(functionDef->identifier(), returnType, params);
         codegen(function, functionDef);
         return function->function();
     }
@@ -165,7 +182,7 @@ namespace pepper {
     static llvm::Value* emit(Ref<BinaryOp> op) {
         auto lhs = codegen(op->lhs());
         auto rhs = codegen(op->rhs());
-        auto operandType = op->operandType(lhs->getType(), rhs->getType());
+        auto operandType = nullptr; // op->operandType(lhs->getType(), rhs->getType());
         auto typeOps = TypeOps::get(operandType);
         auto lhsOperand = typeOps->coerce(lhs);
         auto rhsOperand = typeOps->coerce(rhs);
@@ -204,9 +221,15 @@ namespace pepper {
         throw InternalCompilerError("Unknown AST node");
     }
 
-    void Codegen::emit() {
+    Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)
+        : Tree(tree) {
+        Ctx = Ref<ModuleContext>::New(moduleName);
+    }
+
+    Ref<ModuleContext> Codegen::emit() {
         for (const auto& root : Tree->roots()) {
             codegen(root);
         }
+        return Context::get().moduleContext();
     }
 } // namespace pepper

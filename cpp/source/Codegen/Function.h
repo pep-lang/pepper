@@ -1,12 +1,14 @@
 
 #pragma once
 
-#include "Compiler/Param.h"
-#include "Core/Common.h"
-#include "llvm/ADT/SmallVector.h"
 #include <memory>
 #include <string>
 #include <utility>
+
+#include "Codegen/Param.h"
+#include "Core/Common.h"
+#include "Core/Name.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace llvm {
     class BasicBlock;
@@ -22,20 +24,20 @@ namespace pepper {
         DECLARE_RTTI(Function);
 
       protected:
-        const std::string Name;
-        llvm::Type* ReturnType;
+        const Name Identifier;
+        Ref<Type> ReturnType;
         const Params Parameters;
         llvm::Function* Func;
         llvm::FunctionType* FuncType;
 
       public:
-        Function(std::string name, llvm::Type* returnType, const Params& params);
+        Function(const Name& name, Ref<Type> returnType, const Params& params);
 
-        const std::string& name() const {
-            return Name;
+        const Name& name() const {
+            return Identifier;
         }
 
-        const llvm::Type* returnType() const {
+        const Ref<Type> returnType() const {
             return ReturnType;
         }
 
@@ -71,7 +73,7 @@ namespace pepper {
         Ref<llvm::IRBuilderBase> Builder = nullptr;
         unsigned int NumLocals = 0;
 
-        UserFunction(std::string name, llvm::Type* returnType, const Params& params);
+        UserFunction(const Name& name, Ref<Type> returnType, const Params& params);
     };
 
 } // namespace pepper

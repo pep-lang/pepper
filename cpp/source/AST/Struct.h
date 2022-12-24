@@ -4,14 +4,11 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include "llvm/ADT/SmallVector.h"
 #include <string>
 
-namespace llvm {
-    class Type;
-    class Value;
-} // namespace llvm
+#include "Core/Common.h"
+#include "Core/Name.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace pepper::ast {
     class FieldDef;
@@ -27,8 +24,8 @@ namespace pepper::ast {
         llvm::SmallVector<Ref<MethodDef>> Methods;
 
       public:
-        StructDef(llvm::Type* type, std::string name)
-            : Symbol(type, std::move(name)) {
+        StructDef(const Name& type, const Name& name)
+            : Symbol(type, name) {
         }
 
         void finish();
@@ -37,18 +34,18 @@ namespace pepper::ast {
     class MemberRef : public Expression {
         DECLARE_RTTI(MemberRef, Expression);
 
-        llvm::Type* Type;
+        const Name Type;
         Ref<Expression> LHS;
-        const std::string Name;
+        const Name MemberName;
 
       public:
-        MemberRef(llvm::Type* type, Ref<Expression> lhs, const std::string& fieldName)
+        MemberRef(const Name& type, Ref<Expression> lhs, const Name& fieldName)
             : Type(type)
             , LHS(lhs)
-            , Name(fieldName) {
+            , MemberName(fieldName) {
         }
 
-        llvm::Type* type() const override {
+        const Name& type() const override {
             return Type;
         }
 
@@ -56,8 +53,8 @@ namespace pepper::ast {
             return LHS;
         }
 
-        const std::string& name() const {
-            return Name;
+        const Name& name() const {
+            return MemberName;
         }
     };
 

@@ -28,32 +28,9 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat
 
 add_subdirectory(grammar)
 
-add_library(PepperCore STATIC
-        source/AST/Nodes.h
-        source/Core/RTTI.h
-        source/Core/Common.h
-        source/Compiler/Compiler.h
-        source/Compiler/Compiler.cpp
-        source/Compiler/Context.h
-        source/Compiler/Context.cpp
-        source/Compiler/Options.h
-        source/Compiler/Options.cpp
-        source/Compiler/Parser.h
-        source/Compiler/Parser.cpp
-        source/Compiler/Types.h
-        source/Compiler/Types.cpp
-        source/AST/AST.h
-        source/AST/AST.cpp
-        source/AST/Nodes.cpp
-        source/Codegen/Codegen.cpp
-        source/Codegen/Codegen.h
-        source/Codegen/Function.cpp
-        source/Codegen/Function.h
-        source/JIT/Executor.cpp
-        source/JIT/Executor.h
-        source/AST/Builder.cpp
-        source/AST/Builder.h
-        source/Core/Ref.h source/Codegen/Runtime.h source/Codegen/Scope.h source/Codegen/Runtime.cpp source/Codegen/Runtime.cpp source/Codegen/Scope.cpp source/Codegen/TypeOps.h source/Codegen/TypeOps.cpp)
+add_library(PepperCore STATIC source/Codegen/ModuleContext.h)
+add_subdirectory(source)
+
 
 add_dependencies(PepperCore PepperParser)
 target_compile_definitions(PepperCore
