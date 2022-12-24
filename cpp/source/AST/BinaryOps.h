@@ -174,73 +174,73 @@ namespace pepper::ast {
         using BinaryOp::BinaryOp;
     };
 
-    class AddAssign : public BinaryOp {
-        DECLARE_RTTI(AddAssign, BinaryOp);
+    class AddAssign : public CompoundAssign {
+        DECLARE_RTTI(AddAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class SubAssign : public BinaryOp {
-        DECLARE_RTTI(SubAssign, BinaryOp);
+    class SubAssign : public CompoundAssign {
+        DECLARE_RTTI(SubAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class MulAssign : public BinaryOp {
-        DECLARE_RTTI(MulAssign, BinaryOp);
+    class MulAssign : public CompoundAssign {
+        DECLARE_RTTI(MulAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class DivAssign : public BinaryOp {
-        DECLARE_RTTI(DivAssign, BinaryOp);
+    class DivAssign : public CompoundAssign {
+        DECLARE_RTTI(DivAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class ModAssign : public BinaryOp {
-        DECLARE_RTTI(ModAssign, BinaryOp);
+    class ModAssign : public CompoundAssign {
+        DECLARE_RTTI(ModAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class LShiftAssign : public BinaryOp {
-        DECLARE_RTTI(LShiftAssign, BinaryOp);
+    class LShiftAssign : public CompoundAssign {
+        DECLARE_RTTI(LShiftAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class RShiftAssign : public BinaryOp {
-        DECLARE_RTTI(RShiftAssign, BinaryOp);
+    class RShiftAssign : public CompoundAssign {
+        DECLARE_RTTI(RShiftAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class BitAndAssign : public BinaryOp {
-        DECLARE_RTTI(BitAndAssign, BinaryOp);
+    class BitAndAssign : public CompoundAssign {
+        DECLARE_RTTI(BitAndAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class BitOrAssign : public BinaryOp {
-        DECLARE_RTTI(BitOrAssign, BinaryOp);
+    class BitOrAssign : public CompoundAssign {
+        DECLARE_RTTI(BitOrAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 
-    class BitXorAssign : public BinaryOp {
-        DECLARE_RTTI(BitXorAssign, BinaryOp);
+    class BitXorAssign : public CompoundAssign {
+        DECLARE_RTTI(BitXorAssign, CompoundAssign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using CompoundAssign::CompoundAssign;
     };
 } // namespace pepper::ast

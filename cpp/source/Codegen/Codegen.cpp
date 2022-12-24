@@ -37,6 +37,14 @@ namespace pepper {
         return Context::get().locals()->registers();
     }
 
+    static void pushStack(llvm::Value* value) {
+        Context::get().locals()->pushStack(value);
+    }
+
+    static llvm::Value* popStack() {
+        return Context::get().locals()->popStack();
+    }
+
     using llvm::cast;
     using llvm::isa;
 
@@ -51,7 +59,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
-        Context::get().locals()->pushStack(value);
+        pushStack(value);
         return value;
     }
 
@@ -70,19 +78,19 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<StringLiteral> stringLiteral) {
         auto value = ir()->CreateGlobalString(stringLiteral->value());
-        Context::get().locals()->pushStack(value);
+        pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<IntegerLiteral> intLiteral) {
         auto value = llvm::ConstantInt::get(*Types::Int64, intLiteral->value());
-        Context::get().locals()->pushStack(value);
+        pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<FloatLiteral> floatLiteral) {
         auto value = llvm::ConstantFP::get(*Types::Double, floatLiteral->value());
-        Context::get().locals()->pushStack(value);
+        pushStack(value);
         return value;
     }
 
@@ -148,7 +156,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<Return> ret) {
         if (ret->value()) {
-            auto returnValue = Context::get().locals()->popStack();
+            auto returnValue = popStack();
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
             auto type = TypeOps::get(*returnType);
@@ -237,12 +245,22 @@ namespace pepper {
             .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
             .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
             .Cases("LogicalAnd", "LogicalOr", Types::Bool)
+            .Cases("AddAssign", "SubAssign", "MulAssign", "ModAssign", largestOperandType(lhs, rhs))
+            .Cases(
+                "LShiftAssign", "RShiftAssign", "BitAndAssign", "BitOrAssign", "BitXorAssign", largestIntType(lhs, rhs))
             .Case("Assign", Types::get(lhs));
     }
 
+    static llvm::Value* emit(Ref<CompoundAssign> op) {
+        return nullptr;
+    }
+
     static llvm::Value* emit(Ref<BinaryOp> op) {
-        auto lhs = codegen(op->lhs());
-        auto rhs = codegen(op->rhs());
+        if (op->is<CompoundAssign>())
+            return emit(op.as<CompoundAssign>());
+
+        auto lhs = popStack();
+        auto rhs = popStack();
         lhs = read(lhs);
         rhs = read(rhs);
         auto opType = operandType(op, lhs->getType(), rhs->getType());
@@ -257,7 +275,7 @@ namespace pepper {
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);
         auto result = std::invoke(typeOp, typeOps, lhsOperand, rhsOperand);
-        Context::get().locals()->pushStack(result);
+        pushStack(result);
         return result;
     }
 

@@ -300,29 +300,27 @@ namespace pepper {
         ~FloatType() = default;
 
         llvm::Value* coerce(llvm::Value* value) const override {
+            value = read(value);
             if (value->getType() == *this) {
                 return value;
             }
             auto type = value->getType();
 
-            if (value->getType()->isIntegerTy() || value->getType()->isFloatingPointTy()) {
-                auto converted = builder()->CreateAlloca(*this);
-                auto reg = builder()->CreateLoad(value->getType(), value);
+            if (type->isIntegerTy() || type->isFloatingPointTy()) {
                 llvm::Value* cast = nullptr;
-                if (value->getType()->isIntegerTy()) {
+                if (type->isIntegerTy()) {
                     bool signedInt = true;
                     if (signedInt)
-                        cast = builder()->CreateSIToFP(reg, *this);
+                        cast = builder()->CreateSIToFP(value, *this);
                     else
-                        cast = builder()->CreateUIToFP(reg, *this);
+                        cast = builder()->CreateUIToFP(value, *this);
                 } else {
-                    if (Type->getPrimitiveSizeInBits() > value->getType()->getPrimitiveSizeInBits())
-                        return builder()->CreateFPExt(reg, *this);
+                    if (Type->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
+                        return builder()->CreateFPExt(value, *this);
                     else
-                        return builder()->CreateFPTrunc(reg, *this);
+                        return builder()->CreateFPTrunc(value, *this);
                 }
-                builder()->CreateStore(cast, converted);
-                return converted;
+                return cast;
             }
             throw CompileError(
                 "Cannot convert from {0} to {0}", Types::toString(value->getType()), Types::toString(Type));
