@@ -49,10 +49,17 @@ namespace pepper {
     using llvm::cast;
     using llvm::isa;
 
-    static llvm::Value* read(llvm::Value* value) {
+    static llvm::Type* resolveType(llvm::Value* value) {
         if (isa<llvm::AllocaInst>(*value)) {
             auto allocaInst = cast<llvm::AllocaInst>(value);
-            auto type = allocaInst->getAllocatedType();
+            return allocaInst->getAllocatedType();
+        }
+        return value->getType();
+    }
+
+    static llvm::Value* read(llvm::Value* value) {
+        if (isa<llvm::AllocaInst>(*value)) {
+            auto type = resolveType(value);
             return ir()->CreateLoad(type, value);
         }
         return value;
@@ -285,8 +292,47 @@ namespace pepper {
             .Case("Assign", Types::get(lhs));
     }
 
+    static auto compoundOp(Ref<CompoundAssign> op) {
+        if (op->is<AddAssign>())
+            return &TypeOps::add;
+        if (op->is<SubAssign>())
+            return &TypeOps::sub;
+        if (op->is<MulAssign>())
+            return &TypeOps::mul;
+        if (op->is<DivAssign>())
+            return &TypeOps::div;
+        if (op->is<ModAssign>())
+            return &TypeOps::mod;
+        if (op->is<LShiftAssign>())
+            return &TypeOps::lshift;
+        if (op->is<RShiftAssign>())
+            return &TypeOps::rshift;
+        if (op->is<BitAndAssign>())
+            return &TypeOps::bitAnd;
+        if (op->is<BitOrAssign>())
+            return &TypeOps::bitOr;
+        if (op->is<BitXorAssign>())
+            return &TypeOps::bitXor;
+        throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
+    }
+
     static llvm::Value* emit(Ref<CompoundAssign> op) {
-        return nullptr;
+        auto rhs = codegen(op->rhs());
+        auto lhs = codegen(op->lhs());
+        auto opType = Types::get(resolveType(lhs));
+        if (!opType) {
+            throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
+                                        Types::toString(lhs->getType()),
+                                        Types::toString(rhs->getType()),
+                                        op->rtti()->name());
+        }
+        auto typeOps = TypeOps::get(*opType);
+        auto mathOp = compoundOp(op);
+        auto lhsOperand = typeOps->coerce(read(lhs));
+        auto rhsOperand = typeOps->coerce(read(rhs));
+        auto result = std::invoke(mathOp, typeOps, lhsOperand, rhsOperand);
+        typeOps->assign(lhs, result);
+        return lhs;
     }
 
     static llvm::Value* emit(Ref<BinaryOp> op) {
