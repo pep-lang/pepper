@@ -38,8 +38,11 @@ namespace pepper {
         Builder = Ref<llvm::IRBuilder<>>::New(Body);
     }
 
-    Ref<ExternFunction> ExternFunction::Malloc =
-        Ref<ExternFunction>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
-    Ref<ExternFunction> ExternFunction::Free =
-        Ref<ExternFunction>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
+    Ref<ExternFunction> ExternFunction::Malloc;
+    Ref<ExternFunction> ExternFunction::Free;
+
+    void ExternFunction::StaticInit() {
+        Malloc = Ref<ExternFunction>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
+        Free = Ref<ExternFunction>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
+    }
 } // namespace pepper

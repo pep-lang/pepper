@@ -66,6 +66,8 @@ namespace pepper {
       public:
         using Function::Function;
 
+        static void StaticInit();
+
       public:
         static Ref<ExternFunction> Malloc;
         static Ref<ExternFunction> Free;

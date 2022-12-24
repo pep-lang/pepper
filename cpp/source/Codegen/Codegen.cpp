@@ -256,10 +256,10 @@ namespace pepper {
     }
 
     static Ref<Type> largestOperandType(llvm::Type* lhs, llvm::Type* rhs) {
-        if (lhs->isIntegerTy() && lhs->isIntegerTy()) {
+        if (lhs->isIntegerTy() && rhs->isIntegerTy()) {
             return largestIntType(lhs, rhs);
         }
-        if (lhs->isFloatingPointTy() || lhs->isFloatingPointTy()) {
+        if (lhs->isFloatingPointTy() || rhs->isFloatingPointTy()) {
             auto bits = std::max(lhs->getPrimitiveSizeInBits(), rhs->getPrimitiveSizeInBits());
             return (bits > 32) ? Types::Double : Types::Float;
         }

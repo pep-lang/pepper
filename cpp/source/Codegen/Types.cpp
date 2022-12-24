@@ -57,7 +57,6 @@ namespace pepper {
         Float = addType(Ref<Type>::New("f32", llvm::Type::getFloatTy(ctx)), {"float"});
         // insert pointer types for all native types
         KnownTypes.erase("bool*");
-        KnownTypes.erase("void*");
         // llvm has no void*, use char* intead
         VoidPtr = addType(Ref<Type>::New("void*", *KnownTypes["i8*"]));
     }
@@ -69,7 +68,7 @@ namespace pepper {
             KnownTypes[alias] = t;
         }
         // add pointer type(s) as well
-        if (!t->llvmType()->isPointerTy()) {
+        if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
             auto ptrType = Ref<Type>::New(t->name() + "*", t->llvmType()->getPointerTo());
             KnownTypes[t->name() + "*"] = ptrType;
             TypeCache[*ptrType] = ptrType;

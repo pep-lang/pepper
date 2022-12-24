@@ -28,4 +28,7 @@ namespace pepper::ast {
         , Parameters(params)
         , Vararg(vararg) {
     }
+
+    void StructDef::finish() {
+    }
 } // namespace pepper::ast
