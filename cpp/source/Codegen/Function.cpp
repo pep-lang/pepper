@@ -22,7 +22,7 @@ namespace pepper {
     UserFunction::UserFunction(const Name& name, Ref<Type> returnType, const Params& params)
         : Function(name, returnType, params) {
         auto& context = Context::get().module()->getContext();
-        Body = llvm::BasicBlock::Create(context, "entry");
+        Body = llvm::BasicBlock::Create(context, "entry", Func);
         Builder = Ref<llvm::IRBuilder<>>::New(Body);
     }
 } // namespace pepper

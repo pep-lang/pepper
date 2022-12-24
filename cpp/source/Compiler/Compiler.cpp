@@ -59,6 +59,8 @@ namespace pepper {
                 throw CompileError("Codegen error(s) encountered, cannot continue");
             }
 
+            std::cout << module->toString() << std::endl;
+
             auto err = module->verify();
             if (err) {
                 Report<Error>("Module Verification failed: {0}", llvm::toString(std::move(err)));

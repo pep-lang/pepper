@@ -12,12 +12,12 @@
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
-#include "llvm/ADT/StringSwitch.h"
 
 namespace pepper {
     using namespace pepper::ast;
@@ -39,6 +39,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
+        // return ir()->CreateLoad(type, value, variableRef->identifier());
         return value;
     }
 
@@ -47,7 +48,9 @@ namespace pepper {
         auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
         if (variableDef->defaultValue()) {
             auto defaultValue = codegen(variableDef->defaultValue());
-            ir()->CreateStore(defaultValue, value);
+            auto typeOps = TypeOps::get(*type);
+            auto coercedValue = typeOps->coerce(defaultValue);
+            ir()->CreateStore(coercedValue, value);
         }
         Context::get().locals()->newSymbol(variableDef->identifier(), value);
         return value;
@@ -129,7 +132,16 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<Return> ret) {
-        return nullptr;
+        auto rvAddr = maybeCodegen(ret->value());
+        if (rvAddr) {
+            auto func = ret->target();
+            auto returnType = Types::get(func->returnType());
+            auto type = TypeOps::get(*returnType);
+            auto rvLoad = ir()->CreateLoad(*returnType, rvAddr);
+            auto rv = type->coerce(rvLoad);
+            return ir()->CreateRet(rv);
+        }
+        return ir()->CreateRetVoid();
     }
 
     static llvm::Value* emit(Ref<FunctionCall> call) {
@@ -159,6 +171,8 @@ namespace pepper {
             return &TypeOps::equal;
         if (op->is<NotEqual>())
             return &TypeOps::notEqual;
+        if (op->is<Assign>())
+            return &TypeOps::assign;
         if (op->is<Less>())
             return &TypeOps::less;
         if (op->is<LessEqual>())
@@ -186,7 +200,6 @@ namespace pepper {
     }
 
     static Ref<Type> largestOperandType(llvm::Type* lhs, llvm::Type* rhs) {
-
         if (lhs->isIntegerTy() && lhs->isIntegerTy()) {
             return largestIntType(lhs, rhs);
         }
@@ -209,7 +222,8 @@ namespace pepper {
             .Cases("Add", "Sub", "Mul", "Div", "Mod", "Pow", largestOperandType(lhs, rhs))
             .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
             .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
-            .Cases("LogicalAnd", "LogicalOr", Types::Bool);
+            .Cases("LogicalAnd", "LogicalOr", Types::Bool)
+            .Case("Assign", Types::get(lhs));
     }
 
     static llvm::Value* emit(Ref<BinaryOp> op) {
@@ -217,7 +231,10 @@ namespace pepper {
         auto rhs = codegen(op->rhs());
         auto opType = operandType(op, lhs->getType(), rhs->getType());
         if (!opType) {
-            throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}", Types::toString(lhs->getType()), Types::toString(rhs->getType()), op->rtti()->name());
+            throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
+                                        Types::toString(lhs->getType()),
+                                        Types::toString(rhs->getType()),
+                                        op->rtti()->name());
         }
         auto typeOps = TypeOps::get(*opType);
         auto lhsOperand = typeOps->coerce(lhs);
@@ -259,7 +276,8 @@ namespace pepper {
 
     Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)
         : Tree(tree) {
-        Ctx = Ref<ModuleContext>::New(moduleName);
+        Ctx = Ref<Context>::New(moduleName);
+        Module = Ctx->moduleContext();
     }
 
     Ref<ModuleContext> Codegen::emit() {

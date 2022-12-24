@@ -1,18 +1,19 @@
 
 #pragma once
 
+#include <format>
+#include <functional>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 #include "Core/Common.h"
 #include "Core/Name.h"
 #include "Core/RTTI.h"
 #include "Param.h"
 #include "llvm/ADT/StringMap.h"
-#include <format>
-#include <functional>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-#include <unordered_map>
 
 namespace llvm {
     class Type;
@@ -26,14 +27,15 @@ namespace pepper {
     class FunctionType {
         static std::string Signature(llvm::Type* returnType, const Params& params, bool varargs = false);
     };
-    
+
     class Type {
         DECLARE_RTTI(Type);
+
       private:
         const Name TypeName;
         llvm::Type* TypeRef;
         const bool IsSigned;
-        
+
       public:
         Type(const Name& name, llvm::Type* type, bool signedInt = false)
             : TypeName(name)
@@ -44,15 +46,15 @@ namespace pepper {
         llvm::Type* llvmType() const {
             return TypeRef;
         }
-        
+
         const Name& name() const {
             return TypeName;
         }
-        
+
         operator llvm::Type*() const {
             return TypeRef;
         }
-        
+
         bool isSigned() const {
             return IsSigned;
         }
@@ -65,6 +67,7 @@ namespace pepper {
 
         Ref<Type> addType(Ref<Type> t, const llvm::SmallVector<Name>& aliases = {});
         Ref<Type> getType(const Name& name) const;
+        Ref<Type> getType(llvm::Type* type) const;
 
       public:
         Types(llvm::LLVMContext& ctx);

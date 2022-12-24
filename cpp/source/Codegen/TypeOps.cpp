@@ -174,20 +174,18 @@ namespace pepper {
                 return value;
             }
             auto type = value->getType();
+            auto operand = llvm::getPointerOperand(value);
+            if (operand) {
+                type = operand->getType();
+                value = builder()->CreateLoad(type, value);
+            }
             bool signedVal = !type->isIntegerTy(1) && isSigned();
+
             if (type->isIntegerTy()) {
-                auto reg = builder()->CreateLoad(type, value);
-                auto converted = builder()->CreateAlloca(*this);
-                auto cast = builder()->CreateIntCast(reg, *this, signedVal);
-                builder()->CreateStore(cast, converted);
-                return converted;
+                return builder()->CreateIntCast(value, *this, signedVal);
             }
             if (type->isFloatingPointTy()) {
-                auto reg = builder()->CreateLoad(type, value);
-                auto converted = builder()->CreateAlloca(*this);
-                auto cast = signedVal ? builder()->CreateFPToSI(reg, *this) : builder()->CreateFPToUI(reg, *this);
-                builder()->CreateStore(cast, converted);
-                return converted;
+                return signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this);
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
         }

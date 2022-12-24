@@ -26,7 +26,6 @@ namespace pepper {
     class Context {
         static Context* Instance;
 
-        Ref<Executor> Exec;
         Ref<ModuleContext> Module;
         Ref<Types> TypeMap;
         Ref<Scope> Builtins;
@@ -48,10 +47,6 @@ namespace pepper {
 
         std::unique_ptr<llvm::Module>&& takeModule();
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
-
-        [[nodiscard]] Ref<Executor> executor() const {
-            return Exec;
-        }
 
         [[nodiscard]] Ref<Types> types() const {
             return TypeMap;

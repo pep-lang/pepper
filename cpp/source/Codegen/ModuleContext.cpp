@@ -26,7 +26,12 @@ namespace pepper {
         llvm::orc::JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
         auto DL = JTMB.getDefaultDataLayoutForTarget();
         if (!DL) {
-            throw InternalCompilerError("Unable to get default layout for target: {}", llvm::toString(DL.takeError()));
+            throw InternalCompilerError("Unable to get default layout for target: {0}", llvm::toString(DL.takeError()));
+        }
+
+        auto err = ES->endSession();
+        if (err) {
+            throw InternalCompilerError("Failed to end temporary execution session: {0}", llvm::toString(std::move(err)));
         }
         return DL.get();
     }

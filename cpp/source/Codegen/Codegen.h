@@ -30,7 +30,8 @@ namespace pepper {
     class Codegen {
       protected:
         Ref<ast::AST> Tree;
-        Ref<ModuleContext> Ctx;
+        Ref<Context> Ctx;
+        Ref<ModuleContext> Module;
 
       public:
         Codegen(const Name& moduleName, Ref<ast::AST> tree);

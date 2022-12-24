@@ -94,7 +94,8 @@ namespace pepper {
             }
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
-            auto decl = Ref<VariableDef>::New(typeName, identifier);
+            auto defaultValue = (context->assignmentExpression()) ? popStack<Expression>() : nullptr;
+            auto decl = Ref<VariableDef>::New(typeName, identifier, defaultValue);
             builder->variable(decl);
         }
 
@@ -387,7 +388,7 @@ namespace pepper {
         PepperParser parser(&tokenStream);
         parser.setBuildParseTree(true);
         parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
-        parser.setTrace(true);
+        // parser.setTrace(true);
 
         antlr4::tree::ParseTree* tree = parser.compilationUnit();
         ParserListener listener;
