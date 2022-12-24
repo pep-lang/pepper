@@ -1,11 +1,12 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include "llvm/ADT/StringMap.h"
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "Core/Common.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {
     class Node;

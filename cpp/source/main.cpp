@@ -1,6 +1,7 @@
-#include "Compiler/Compiler.h"
 #include <filesystem>
 #include <fstream>
+
+#include "Compiler/Compiler.h"
 
 int main(int argc, char** argv) {
     if (argc > 1) {

@@ -1,11 +1,12 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include "llvm/Support/FormatVariadic.h"
 #include <exception>
 #include <memory>
 #include <string>
+
+#include "Core/Common.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
 

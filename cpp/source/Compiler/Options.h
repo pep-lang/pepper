@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Core/Common.h"
 #include <string>
 #include <vector>
+
+#include "Core/Common.h"
 
 namespace pepper {
     class Options {

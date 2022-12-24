@@ -1,8 +1,9 @@
 
 #pragma once
 
-#include "AST/Node.h"
 #include <cstdint>
+
+#include "AST/Node.h"
 
 namespace pepper::ast {
     class Literal : public Expression {

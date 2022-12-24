@@ -31,7 +31,8 @@ namespace pepper {
 
         auto err = ES->endSession();
         if (err) {
-            throw InternalCompilerError("Failed to end temporary execution session: {0}", llvm::toString(std::move(err)));
+            throw InternalCompilerError("Failed to end temporary execution session: {0}",
+                                        llvm::toString(std::move(err)));
         }
         return DL.get();
     }

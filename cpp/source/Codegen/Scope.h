@@ -4,11 +4,12 @@
 
 #pragma once
 
-#include "Core/Common.h"
-#include "llvm/ADT/StringMap.h"
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "Core/Common.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace llvm {
     class Function;

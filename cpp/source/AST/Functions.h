@@ -4,11 +4,12 @@
 
 #pragma once
 
+#include <utility>
+#include <vector>
+
 #include "AST/Node.h"
 #include "AST/Param.h"
 #include "Core/Common.h"
-#include <utility>
-#include <vector>
 
 namespace pepper::ast {
     class StructDef;
@@ -73,11 +74,8 @@ namespace pepper::ast {
         Ref<StructDef> Struct;
 
       public:
-        MethodDef(Ref<StructDef> strct,
-                  const Name& returnType,
-                  const Name& name,
-                  const Params& params,
-                  bool varargs = false)
+        MethodDef(
+            Ref<StructDef> strct, const Name& returnType, const Name& name, const Params& params, bool varargs = false)
             : FunctionDef(returnType, name, params, varargs)
             , Struct(std::move(strct)) {
         }

@@ -30,7 +30,7 @@ namespace pepper {
         llvm::InitializeNativeTargetAsmParser();
 
         Module = Ref<ModuleContext>::New(moduleName);
-        
+
         TypeMap = Ref<Types>::New(*Module->getContext());
 
         Builtins = Ref<Runtime>::New();
