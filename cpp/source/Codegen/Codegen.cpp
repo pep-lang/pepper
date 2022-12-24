@@ -17,6 +17,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/ADT/StringSwitch.h"
 
 namespace pepper {
     using namespace pepper::ast;
@@ -179,11 +180,46 @@ namespace pepper {
         throw InternalCompilerError("Unknown binary op: {0}", op->rtti()->name());
     }
 
+    static Ref<Type> largestIntType(llvm::Type* lhs, llvm::Type* rhs) {
+        auto bits = std::max(lhs->getIntegerBitWidth(), rhs->getIntegerBitWidth());
+        return (bits > 32) ? Types::Int64 : Types::Int32;
+    }
+
+    static Ref<Type> largestOperandType(llvm::Type* lhs, llvm::Type* rhs) {
+
+        if (lhs->isIntegerTy() && lhs->isIntegerTy()) {
+            return largestIntType(lhs, rhs);
+        }
+        if (lhs->isFloatingPointTy() || lhs->isFloatingPointTy()) {
+            auto bits = std::max(lhs->getPrimitiveSizeInBits(), rhs->getPrimitiveSizeInBits());
+            return (bits > 32) ? Types::Double : Types::Float;
+        }
+        return nullptr;
+    }
+
+    static Ref<Type> structOperandType(Ref<BinaryOp> op, llvm::Type* lhs, llvm::Type* rhs) {
+        return nullptr;
+    }
+
+    static Ref<Type> operandType(Ref<BinaryOp> op, llvm::Type* lhs, llvm::Type* rhs) {
+        if (lhs->isStructTy() || lhs->isPointerTy()) {
+            return structOperandType(op, lhs, rhs);
+        }
+        return llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
+            .Cases("Add", "Sub", "Mul", "Div", "Mod", "Pow", largestOperandType(lhs, rhs))
+            .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
+            .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
+            .Cases("LogicalAnd", "LogicalOr", Types::Bool);
+    }
+
     static llvm::Value* emit(Ref<BinaryOp> op) {
         auto lhs = codegen(op->lhs());
         auto rhs = codegen(op->rhs());
-        auto operandType = nullptr; // op->operandType(lhs->getType(), rhs->getType());
-        auto typeOps = TypeOps::get(operandType);
+        auto opType = operandType(op, lhs->getType(), rhs->getType());
+        if (!opType) {
+            throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}", Types::toString(lhs->getType()), Types::toString(rhs->getType()), op->rtti()->name());
+        }
+        auto typeOps = TypeOps::get(*opType);
         auto lhsOperand = typeOps->coerce(lhs);
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);
