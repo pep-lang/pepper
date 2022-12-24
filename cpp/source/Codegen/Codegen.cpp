@@ -150,7 +150,7 @@ namespace pepper {
         Context::get().pushFunction(newFn);
         {
             auto size = structDesc->size();
-            auto addr = ExternFunction::Malloc->call({size});
+            auto addr = ExternFunction::Malloc->call({llvm::ConstantInt::get(*Types::UInt64, size)});
             structDesc->constructor()->call({addr});
             newFn->Builder->CreateRet(addr);
         }

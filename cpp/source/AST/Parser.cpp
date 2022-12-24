@@ -169,7 +169,9 @@ namespace pepper {
             Super::exitFunctionCall(context);
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
-            auto providedArgsCount = context->argumentExpressionList()->assignmentExpression().size();
+            auto providedArgsCount = context->argumentExpressionList()
+                                         ? context->argumentExpressionList()->assignmentExpression().size()
+                                         : 0;
             std::vector<Ref<Expression>> args;
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.push_back(popStack<Expression>());

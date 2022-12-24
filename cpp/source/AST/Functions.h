@@ -46,7 +46,7 @@ namespace pepper::ast {
         std::vector<Ref<Node>> Body;
 
       public:
-        FunctionDef(const Name& returnType, const Name& name, const Params& params, bool varargs = false)
+        FunctionDef(const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
         }
 
@@ -74,8 +74,11 @@ namespace pepper::ast {
         Ref<StructDef> Struct;
 
       public:
-        MethodDef(
-            Ref<StructDef> strct, const Name& returnType, const Name& name, const Params& params, bool varargs = false)
+        MethodDef(Ref<StructDef> strct,
+                  const Name& returnType,
+                  const Name& name,
+                  const Params& params = Params(),
+                  bool varargs = false)
             : FunctionDef(returnType, name, params, varargs)
             , Struct(std::move(strct)) {
         }
@@ -89,7 +92,8 @@ namespace pepper::ast {
         DECLARE_RTTI(ExternFunctionDef, FunctionNode);
 
       public:
-        ExternFunctionDef(const Name& returnType, const Name& name, const Params& params, bool varargs = false)
+        ExternFunctionDef(
+            const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
         }
     };

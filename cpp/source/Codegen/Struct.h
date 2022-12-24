@@ -19,15 +19,12 @@ namespace pepper {
         Ref<Type> StructType;
         std::map<Name, Ref<Param>> Fields;
         llvm::StringMap<Ref<Method>> Methods;
+        size_t Size;
 
         static llvm::StringMap<Ref<Struct>> Structs;
 
       public:
-        Struct(Ref<Type> type, const Name& name)
-            : StructType(type)
-            , Identifier(name) {
-            Structs[name] = shared_from_this();
-        }
+        Struct(Ref<Type> type, const Name& name);
 
         Ref<Type> type() const {
             return StructType;
@@ -77,9 +74,8 @@ namespace pepper {
             return method("__dtor");
         }
 
-        llvm::Value* size() const {
-            // TODO
-            return nullptr;
+        size_t size() const {
+            return Size;
         }
 
         static Ref<Struct> get(const Name& name) {

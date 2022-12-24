@@ -13,7 +13,9 @@
 namespace pepper::ast {
     class FieldDef;
 
-    class StructDef : public Symbol {
+    class StructDef
+        : public Symbol
+        , public std::enable_shared_from_this<StructDef> {
         DECLARE_RTTI(StructDef, Symbol);
 
         Ref<FunctionDef> New;
@@ -24,9 +26,7 @@ namespace pepper::ast {
         llvm::SmallVector<Ref<MethodDef>> Methods;
 
       public:
-        StructDef(const Name& type, const Name& name)
-            : Symbol(type, name) {
-        }
+        StructDef(const Name& type, const Name& name);
 
         void finish();
     };
