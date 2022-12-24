@@ -13,6 +13,9 @@ namespace pepper {
         , Identifier(name) {
         Structs[name] = shared_from_this();
 
+        // deal with params at some point
+        New = Ref<UserFunction>::New(name, StructType);
+
         // compute size from data layout
         auto module = Context::get().module();
         auto dataLayout = module->getDataLayout();

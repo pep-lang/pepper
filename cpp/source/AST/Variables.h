@@ -19,6 +19,10 @@ namespace pepper::ast {
         Ref<Expression> defaultValue() const {
             return Default;
         }
+
+        void setDefaultValue(Ref<Expression> newDefault) {
+            Default = newDefault;
+        }
     };
 
     class FieldDef : public VariableDef {

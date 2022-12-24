@@ -17,6 +17,7 @@ namespace pepper {
     class Struct : public std::enable_shared_from_this<Struct> {
         Name Identifier;
         Ref<Type> StructType;
+        Ref<Function> New;
         std::map<Name, Ref<Param>> Fields;
         llvm::StringMap<Ref<Method>> Methods;
         size_t Size;
@@ -60,6 +61,10 @@ namespace pepper {
                 ms.push_back(m.getValue());
             }
             return ms;
+        }
+
+        Ref<Function> instanceNew() const {
+            return New;
         }
 
         Ref<Function> initializer() const {

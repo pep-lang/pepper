@@ -145,23 +145,47 @@ namespace pepper {
         auto structPtrType = Types::get(structDef->identifier() + "*");
         auto structDesc = Ref<Struct>::New(structType, structDef->identifier());
 
-        // create Struct()/new function
-        auto newFn = Ref<Method>::New(structDef->identifier(), structPtrType);
-        Context::get().pushFunction(newFn);
-        {
-            auto size = structDesc->size();
-            auto addr = ExternFunction::Malloc->call({llvm::ConstantInt::get(*Types::UInt64, size)});
-            structDesc->constructor()->call({addr});
-            newFn->Builder->CreateRet(addr);
-        }
-        Context::get().popScope();
-        // Export new function to the enclosing scope
-        Context::get().locals()->newFunction(newFn);
+        // Update Struct()/new function now that the size of the struct is known
+        auto sizeVar = std::find_if(structDef->New->locals().begin(), structDef->New->locals().end(), [](auto& local) {
+            return (local->identifier() == "size");
+        });
+        assert(sizeVar != structDef->New->locals().end());
+        (*sizeVar)->setDefaultValue(Ref<IntegerLiteral>::New(structDesc->size()));
 
+        // Export new function to the enclosing scope
+        Context::get().locals()->newFunction(structDesc->instanceNew());
+
+        // finally, codegen all the methods
+        codegenFunction(structDesc->instanceNew(), structDef->New);
         codegenFunction(structDesc->initializer(), structDef->Initializer);
         Context::get().locals()->newFunction(structDesc->initializer(), "__init");
         codegenFunction(structDesc->constructor(), structDef->Constructor);
         codegenFunction(structDesc->destructor(), structDef->Destructor);
+
+        // map method names to mangled free functions while maintaining order
+        llvm::SmallVector<Ref<Method>> methods;
+        for (auto& method : structDef->Methods) {
+            auto realName = method->identifier();
+            pepper::Params params;
+            // add this pointer
+            auto thisType = Types::get(structDef->identifier() + "*");
+            params.emplace_back("this", thisType);
+            for (auto& paramDef : method->params()) {
+                auto type = Types::get(paramDef.Type);
+                params.emplace_back(paramDef.Identifier, type, maybeCodegen(paramDef.Default));
+            }
+            // TODO
+            auto mangledName = realName;
+            auto returnType = Types::get(method->returnType());
+            auto freeFunction = Ref<UserFunction>::New(mangledName, returnType, params);
+            methods.push_back(freeFunction);
+        }
+
+        for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
+            auto& method = methods[methodIdx];
+            auto& methodDef = structDef->Methods[methodIdx];
+            codegenFunction(method, methodDef);
+        }
 
         return structDesc;
     }

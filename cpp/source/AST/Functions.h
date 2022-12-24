@@ -29,6 +29,10 @@ namespace pepper::ast {
             return ReturnType;
         }
 
+        void setReturnType(const Name& newReturnType) {
+            ReturnType = newReturnType;
+        }
+
         [[nodiscard]] const Params& params() const {
             return Parameters;
         }
@@ -89,13 +93,16 @@ namespace pepper::ast {
     };
 
     class ExternFunctionDef : public FunctionDef {
-        DECLARE_RTTI(ExternFunctionDef, FunctionNode);
+        DECLARE_RTTI(ExternFunctionDef, FunctionDef);
 
       public:
         ExternFunctionDef(
             const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
         }
+
+        static Ref<ExternFunctionDef> Malloc;
+        static Ref<ExternFunctionDef> Free;
     };
 
     class FunctionCall : public Expression {
