@@ -135,10 +135,6 @@ declarationSpecifiers
 	: declarationSpecifier+
 	;
 
-paramSpecifiers
-	: declarationSpecifier+
-	;
-
 declarationSpecifier
 	: storageClassSpecifier
 	| typeSpecifier
