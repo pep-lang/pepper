@@ -46,6 +46,11 @@ namespace pepper {
             return QueryInst(std::move(results));
         }
 
+        QueryInst& concat(llvm::ArrayRef<T> rhs) {
+            std::copy(rhs.begin(), rhs.end(), std::back_inserter(Src));
+            return *this;
+        }
+
         void each(std::function<void(const T&)> func) {
             std::for_each(Src.begin(), Src.end(), func);
         }
