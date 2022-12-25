@@ -55,11 +55,19 @@ namespace pepper {
             auto allocaInst = cast<llvm::AllocaInst>(value);
             return allocaInst->getAllocatedType();
         }
+        if (isa<llvm::GetElementPtrInst>(value)) {
+            auto gepInst = cast<llvm::GetElementPtrInst>(value);
+            return gepInst->getResultElementType();
+        }
         return value->getType();
     }
 
     static llvm::Value* read(llvm::Value* value) {
         if (isa<llvm::AllocaInst>(*value)) {
+            auto type = resolveType(value);
+            return ir()->CreateLoad(type, value);
+        }
+        if (isa<llvm::GetElementPtrInst>(value)) {
             auto type = resolveType(value);
             return ir()->CreateLoad(type, value);
         }
@@ -230,6 +238,7 @@ namespace pepper {
         auto structDesc = Struct::get(lhsType->name());
         auto memberName = memberRef->name();
         auto member = structDesc->getMember(lhs, memberName);
+        member = read(member);
         // push this onto stack
         if (member->getType()->isFunctionTy()) {
             pushStack(lhs);
@@ -261,7 +270,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<Return> ret) {
         if (ret->value()) {
-            auto returnValue = codegen(ret->value());
+            auto returnValue = popStack(); // codegen(ret->value());
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
             auto type = TypeOps::get(*returnType);
