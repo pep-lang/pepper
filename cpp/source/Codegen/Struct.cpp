@@ -13,12 +13,12 @@ namespace pepper {
         : StructType(type)
         , Identifier(name) {
         // deal with params at some point
-        NewInstance = Ref<UserFunction>::New(name, StructType);
+        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name() + "*"));
 
         // compute size from data layout
         auto module = Context::get().module();
         auto dataLayout = module->getDataLayout();
-        Size = dataLayout.getStructLayout(static_cast<llvm::StructType*>(type->llvmType()))->getSizeInBytes();
+        Size = dataLayout.getStructLayout(cast<llvm::StructType>(type->llvmType()))->getSizeInBytes();
     }
 
     Ref<Struct> Struct::New(Ref<Type> type, const Name& name) {

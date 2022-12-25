@@ -106,7 +106,10 @@ namespace pepper {
         }
 
         static Ref<Struct> get(const Name& name) {
-            return Structs.lookup(name);
+            Name structType = name;
+            if (structType.ends_with("*"))
+                structType.erase(structType.size() - 1);
+            return Structs.lookup(structType);
         }
     };
 } // namespace pepper

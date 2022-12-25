@@ -56,12 +56,16 @@ namespace pepper::ast {
     void StructDef::finish() {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         NewInstance->locals().push_back(Ref<VariableDef>::New("u64", "size"));
-        NewInstance->body().push_back(Ref<Return>::New(
-            NewInstance,
-            Ref<FunctionCall>::New(
-                Constructor,
-                std::vector<Ref<Expression>>{Ref<FunctionCall>::New(
-                    ExternFunctionDef::Malloc, std::vector<Ref<Expression>>{Ref<VariableRef>::New("size")})})));
+        NewInstance->locals().push_back(
+            Ref<VariableDef>::New(identifier() + "*",
+                                  "this",
+                                  Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
+                                                         std::vector<Ref<Expression>>{Ref<VariableRef>::New("size")})));
+        std::vector<Ref<Node>> body = {
+            Ref<FunctionCall>::New(Constructor),
+            Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
+        };
+        NewInstance->body() = body;
 
         // Fill in initializer
         for (auto& field : Fields) {
@@ -78,6 +82,7 @@ namespace pepper::ast {
             Destructor->body().pop_back();
         }
 
-        Destructor->body().push_back(Ref<FunctionCall>::New(ExternFunctionDef::Free));
+        Destructor->body().push_back(Ref<FunctionCall>::New(
+            ExternFunctionDef::Free, std::vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
     }
 } // namespace pepper::ast

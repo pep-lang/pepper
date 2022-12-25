@@ -76,6 +76,7 @@ namespace pepper {
             auto param = function->params()[paramIdx];
             auto arg = llvmFunction->getArg(paramIdx);
             auto local = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
+            ir()->CreateStore(arg, local);
             Context::get().locals()->newSymbol(param.ParamName, local);
             args.push_back(local);
         }
@@ -111,7 +112,11 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<VariableDef> variableDef) {
-        auto type = Types::get(variableDef->type());
+        auto typeName = variableDef->type();
+        if (auto structDesc = Struct::get(typeName)) {
+            typeName += typeName.ends_with("*") ? "" : "*";
+        }
+        auto type = Types::get(typeName);
         auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
 
         auto defaultValue = maybeCodegen(variableDef->defaultValue());
@@ -170,12 +175,6 @@ namespace pepper {
         // Export new function to the enclosing scope
         Context::get().locals()->newFunction(structDesc->instanceNew());
 
-        // finally, codegen all the methods in dependency order
-        //        codegenFunction(structDesc->initializer(), structDef->Initializer);
-        //        codegenFunction(structDesc->constructor(), structDef->Constructor);
-        //        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
-        //        codegenFunction(structDesc->destructor(), structDef->Destructor);
-
         // map method names to mangled free functions while maintaining order
         llvm::SmallVector<Ref<Method>> methods;
         for (auto& method : structDef->Methods) {
@@ -191,9 +190,9 @@ namespace pepper {
             // TODO: mangle these properly
             auto mangledName = structDef->identifier() + "." + realName;
             auto returnType = Types::get(method->returnType());
-            auto freeFunction = Ref<UserFunction>::New(mangledName, returnType, params);
-            methods.push_back(freeFunction);
-            structDesc->addMethod(freeFunction);
+            auto newMethod = Ref<Method>::New(mangledName, returnType, params);
+            methods.push_back(newMethod);
+            structDesc->addMethod(newMethod);
         }
 
         for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
@@ -227,10 +226,14 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<MemberRef> memberRef) {
         auto lhs = codegen(memberRef->lhs());
+        auto lhsType = Types::get(lhs->getType());
+        auto structDesc = Struct::get(lhsType->name());
         auto memberName = memberRef->name();
-        auto type = Types::get(memberRef->type());
-        auto st = Struct::get(memberName);
-        auto member = st->getMember(lhs, memberName);
+        auto member = structDesc->getMember(lhs, memberName);
+        // push this onto stack
+        if (member->getType()->isFunctionTy()) {
+            pushStack(lhs);
+        }
         pushStack(member);
         return member;
     }
@@ -288,6 +291,14 @@ namespace pepper {
             return nullptr;
         }
         llvm::SmallVector<llvm::Value*> args;
+        if (function->is<Method>()) {
+            auto thisRef = Context::get().locals()->findSymbol("this");
+            if (!thisRef)
+                thisRef = popStack();
+            assert(thisRef);
+            args.push_back(thisRef);
+        }
+
         const auto& callArgs = call->args();
         for (auto argExpr : callArgs) {
             args.push_back(codegen(argExpr));

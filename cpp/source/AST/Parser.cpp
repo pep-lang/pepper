@@ -101,6 +101,11 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
 
+            // convert struct references to pointers
+            if (auto structType = builder->findStruct(typeName)) {
+                typeName += "*";
+            }
+
             if (builder->structTarget()) {
                 builder->symbol(Ref<FieldDef>::New(builder->structTarget(), typeName, identifier));
             } else {
@@ -444,7 +449,7 @@ namespace pepper {
         PepperParser parser(&tokenStream);
         parser.setBuildParseTree(true);
         parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
-        parser.setTrace(true);
+        // parser.setTrace(true);
 
         try {
             antlr4::tree::ParseTree* tree = parser.compilationUnit();
