@@ -13,7 +13,7 @@ namespace pepper {
         : StructType(type)
         , Identifier(name) {
         // deal with params at some point
-        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name() + "*"));
+        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name()));
 
         // compute size from data layout
         auto module = Context::get().module();

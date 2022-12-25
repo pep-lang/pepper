@@ -121,9 +121,6 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<VariableDef> variableDef) {
         auto typeName = variableDef->type();
-        if (auto structDesc = Struct::get(typeName)) {
-            typeName += typeName.ends_with("*") ? "" : "*";
-        }
         auto type = Types::get(typeName);
         auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
 
@@ -169,7 +166,7 @@ namespace pepper {
         // generate the new struct type
         auto llvmType = llvm::StructType::create(fieldTypes, structDef->identifier());
         auto structType = Types::add(Ref<Type>::New(structDef->identifier(), llvmType));
-        auto structPtrType = Types::get(structDef->identifier() + "*");
+        auto structPtrType = Types::get(structDef->identifier());
         auto structDesc = Struct::New(structType, structDef->identifier());
         structDesc->setFields(fields);
 
@@ -189,7 +186,7 @@ namespace pepper {
             auto realName = method->identifier();
             pepper::Params params;
             // inject this pointer
-            auto thisType = Types::get(structDef->identifier() + "*");
+            auto thisType = Types::get(structDef->identifier());
             params.emplace_back("this", thisType);
             for (auto& paramDef : method->params()) {
                 auto type = Types::get(paramDef.Type);

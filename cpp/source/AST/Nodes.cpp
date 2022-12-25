@@ -40,7 +40,7 @@ namespace pepper::ast {
 
     Ref<StructDef> StructDef::New(const Name& type, const Name& name) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
-        structDef->NewInstance = Ref<FunctionDef>::New(type + "*", name);
+        structDef->NewInstance = Ref<FunctionDef>::New(type, name);
         // Note that the order of these is important, ctor depends on init, so must be generated after
         // TODO: deal with parameters to ctor here
         structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
@@ -57,7 +57,7 @@ namespace pepper::ast {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         NewInstance->locals().push_back(Ref<VariableDef>::New("u64", "size"));
         NewInstance->locals().push_back(
-            Ref<VariableDef>::New(identifier() + "*",
+            Ref<VariableDef>::New(identifier(),
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          std::vector<Ref<Expression>>{Ref<VariableRef>::New("size")})));

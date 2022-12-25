@@ -62,23 +62,37 @@ namespace pepper {
     }
 
     Ref<Type> Types::addType(Ref<Type> t, const llvm::SmallVector<Name>& aliases) {
-        KnownTypes[t->name()] = t;
-        TypeCache[*t] = t;
-        for (const auto& alias : aliases) {
-            KnownTypes[alias] = t;
-        }
-        // add pointer type(s) as well
-        if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
-            auto ptrType = Ref<Type>::New(t->name() + "*", t->llvmType()->getPointerTo());
+        if (t->llvmType()->isStructTy()) {
+            // add <struct>* as "<struct>", and <struct> as "_<struct>"
+            KnownTypes["_" + t->name()] = t;
+            TypeCache[*t] = t;
+            auto ptrType = Ref<Type>::New(t->name(), t->llvmType()->getPointerTo());
+            KnownTypes[t->name()] = ptrType;
             KnownTypes[t->name() + "*"] = ptrType;
             TypeCache[*ptrType] = ptrType;
             for (const auto& alias : aliases) {
-                KnownTypes[alias + "*"] = ptrType;
+                KnownTypes[alias] = ptrType;
+                if (!alias.ends_with('*'))
+                    KnownTypes[alias + "*"] = ptrType;
+            }
+        } else {
+            // add requested type with aliases
+            KnownTypes[t->name()] = t;
+            TypeCache[*t] = t;
+            for (const auto& alias : aliases) {
+                KnownTypes[alias] = t;
+            }
+            // add pointer types as well
+            if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
+                auto ptrType = Ref<Type>::New(t->name() + "*", t->llvmType()->getPointerTo());
+                KnownTypes[t->name() + "*"] = ptrType;
+                TypeCache[*ptrType] = ptrType;
+                for (const auto& alias : aliases) {
+                    KnownTypes[alias + "*"] = ptrType;
+                }
             }
         }
-        for (const auto& alias : aliases) {
-            KnownTypes[alias] = t;
-        }
+
         return t;
     }
 

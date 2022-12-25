@@ -101,11 +101,6 @@ namespace pepper {
             auto typeName = identifiers[0]->toString();
             auto identifier = identifiers[1]->toString();
 
-            // convert struct references to pointers
-            if (auto structType = builder->findStruct(typeName)) {
-                typeName += "*";
-            }
-
             if (builder->structTarget()) {
                 builder->symbol(Ref<FieldDef>::New(builder->structTarget(), typeName, identifier));
             } else {
