@@ -18,15 +18,17 @@ namespace pepper::ast {
         , public std::enable_shared_from_this<StructDef> {
         DECLARE_RTTI(StructDef, Symbol);
 
-        Ref<FunctionDef> New;
+        Ref<FunctionDef> NewInstance;
         Ref<MethodDef> Initializer;
         Ref<MethodDef> Constructor;
         Ref<MethodDef> Destructor;
         llvm::SmallVector<Ref<FieldDef>> Fields;
         llvm::SmallVector<Ref<MethodDef>> Methods;
 
-      public:
         StructDef(const Name& type, const Name& name);
+
+      public:
+        static Ref<StructDef> New(const Name& type, const Name& name);
 
         void finish();
     };

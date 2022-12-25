@@ -143,20 +143,20 @@ namespace pepper {
         auto llvmType = llvm::StructType::create(fieldTypes, structDef->identifier());
         auto structType = Types::add(Ref<Type>::New(structDef->identifier(), llvmType));
         auto structPtrType = Types::get(structDef->identifier() + "*");
-        auto structDesc = Ref<Struct>::New(structType, structDef->identifier());
+        auto structDesc = Struct::New(structType, structDef->identifier());
 
         // Update Struct()/new function now that the size of the struct is known
-        auto sizeVar = std::find_if(structDef->New->locals().begin(), structDef->New->locals().end(), [](auto& local) {
-            return (local->identifier() == "size");
-        });
-        assert(sizeVar != structDef->New->locals().end());
+        auto sizeVar = std::find_if(structDef->NewInstance->locals().begin(),
+                                    structDef->NewInstance->locals().end(),
+                                    [](auto& local) { return (local->identifier() == "size"); });
+        assert(sizeVar != structDef->NewInstance->locals().end());
         (*sizeVar)->setDefaultValue(Ref<IntegerLiteral>::New(structDesc->size()));
 
         // Export new function to the enclosing scope
         Context::get().locals()->newFunction(structDesc->instanceNew());
 
         // finally, codegen all the methods
-        codegenFunction(structDesc->instanceNew(), structDef->New);
+        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
         codegenFunction(structDesc->initializer(), structDef->Initializer);
         Context::get().locals()->newFunction(structDesc->initializer(), "__init");
         codegenFunction(structDesc->constructor(), structDef->Constructor);

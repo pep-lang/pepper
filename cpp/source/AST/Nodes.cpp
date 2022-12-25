@@ -36,21 +36,27 @@ namespace pepper::ast {
 
     StructDef::StructDef(const Name& type, const Name& name)
         : Symbol(type, name) {
-        New = Ref<FunctionDef>::New(type + "*", name);
+    }
+
+    Ref<StructDef> StructDef::New(const Name& type, const Name& name) {
+        Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
+        structDef->NewInstance = Ref<FunctionDef>::New(type + "*", name);
         // TODO: deal with parameters to ctor here
-        Initializer = Ref<MethodDef>::New(shared_from_this(), "void", "__init");
-        Constructor = Ref<MethodDef>::New(shared_from_this(), "void", "__ctor");
-        Destructor = Ref<MethodDef>::New(shared_from_this(), "void", "__dtor");
-        Methods.push_back(Initializer);
-        Methods.push_back(Constructor);
-        Methods.push_back(Destructor);
+        structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
+        structDef->Constructor = Ref<MethodDef>::New(structDef, "void", "__ctor");
+        structDef->Destructor = Ref<MethodDef>::New(structDef, "void", "__dtor");
+        structDef->Methods.push_back(structDef->Initializer);
+        structDef->Methods.push_back(structDef->Constructor);
+        structDef->Methods.push_back(structDef->Destructor);
+
+        return structDef;
     }
 
     void StructDef::finish() {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
-        New->locals().push_back(Ref<VariableDef>::New("u64", "size"));
-        New->body().push_back(Ref<Return>::New(
-            New,
+        NewInstance->locals().push_back(Ref<VariableDef>::New("u64", "size"));
+        NewInstance->body().push_back(Ref<Return>::New(
+            NewInstance,
             Ref<FunctionCall>::New(
                 Constructor,
                 std::vector<Ref<Expression>>{Ref<FunctionCall>::New(

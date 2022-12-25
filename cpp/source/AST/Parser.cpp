@@ -178,9 +178,6 @@ namespace pepper {
             }
             auto call = builder->create<FunctionCall>(func, args);
             builder->expression(call);
-            if (func->returnType() != "void") {
-                pushStack(call);
-            }
         }
 
         void exitReturn(PepperParser::ReturnContext* context) override {
@@ -197,7 +194,7 @@ namespace pepper {
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
             Super::enterStructDeclaration(context);
             auto identifier = context->Identifier()->toString();
-            auto structDef = Ref<StructDef>::New(identifier, identifier);
+            auto structDef = StructDef::New(identifier, identifier);
             builder->beginStruct(structDef);
         }
 

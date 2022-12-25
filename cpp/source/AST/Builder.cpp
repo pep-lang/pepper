@@ -134,7 +134,7 @@ namespace pepper::ast {
         Builder* beginStruct(Ref<StructDef> structDef) override {
             auto& scope = Stack.back();
             scope.Structs[structDef->identifier()] = structDef;
-            scope.Functions[structDef->identifier()] = structDef->New;
+            scope.Functions[structDef->identifier()] = structDef->NewInstance;
 
             if (!structTarget() && !functionTarget()) {
                 ast.newRoot(structDef);
@@ -148,7 +148,7 @@ namespace pepper::ast {
 
         Builder* endStruct() override {
             auto& scope = Stack.back();
-            auto structDef = scope.StructTarget;
+            auto& structDef = scope.StructTarget;
             structDef->Fields.append(scope.OrderedSymbols.begin(), scope.OrderedSymbols.end());
             structDef->finish();
             endScope();
@@ -166,7 +166,7 @@ namespace pepper::ast {
 
         Builder* endFunction() override {
             auto& scope = Stack.back();
-            auto function = scope.FunctionTarget;
+            auto& function = scope.FunctionTarget;
             std::for_each(scope.Locals.begin(), scope.Locals.end(), [&function](auto& local) {
                 function->locals().push_back(local.second);
             });
@@ -188,6 +188,7 @@ namespace pepper::ast {
         Builder* symbol(Ref<ast::VariableDef> var) override {
             auto& scope = Stack.back();
             scope.Locals[var->identifier()] = var;
+            scope.OrderedSymbols.push_back(var);
             return this;
         }
 
