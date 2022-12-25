@@ -41,6 +41,7 @@ namespace pepper::ast {
     Ref<StructDef> StructDef::New(const Name& type, const Name& name) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
         structDef->NewInstance = Ref<FunctionDef>::New(type + "*", name);
+        // Note that the order of these is important, ctor depends on init, so must be generated after
         // TODO: deal with parameters to ctor here
         structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
         structDef->Constructor = Ref<MethodDef>::New(structDef, "void", "__ctor");
@@ -69,9 +70,7 @@ namespace pepper::ast {
         Initializer->body().push_back(Ref<Return>::New(Initializer));
 
         // insert initializer as the first instruction in Constructor
-        Constructor->body().insert(
-            Constructor->body().begin(),
-            Ref<FunctionCall>::New(Initializer, std::vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
+        Constructor->body().insert(Constructor->body().begin(), Ref<FunctionCall>::New(Initializer));
 
         // insert free as the last instruction before return in Destructor
         auto lastExpr = Destructor->body().size() ? Destructor->body().back() : nullptr;
@@ -79,7 +78,6 @@ namespace pepper::ast {
             Destructor->body().pop_back();
         }
 
-        Destructor->body().push_back(Ref<FunctionCall>::New(
-            ExternFunctionDef::Free, std::vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
+        Destructor->body().push_back(Ref<FunctionCall>::New(ExternFunctionDef::Free));
     }
 } // namespace pepper::ast

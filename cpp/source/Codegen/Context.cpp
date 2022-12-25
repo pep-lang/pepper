@@ -21,6 +21,14 @@ namespace pepper {
         return *Instance;
     }
 
+    Ref<llvm::IRBuilderBase> Context::ir() {
+        return get().locals()->builder();
+    }
+
+    Ref<llvm::IRBuilderBase> Context::registers() {
+        return get().locals()->registers();
+    }
+
     Context::Context(const std::string& moduleName) {
         assert(Instance == nullptr);
         Instance = this;

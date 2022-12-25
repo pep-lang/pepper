@@ -63,7 +63,7 @@
       }
     },
     {
-      "name": "mac-clang-x64",
+      "name": "mac-apple-clang-x64",
       "displayName": "Clang 13.1.6 x86_64-apple-darwin21.2.0",
       "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -74,13 +74,28 @@
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "mac-llvm-clang-x64",
+      "displayName": "Clang 15.x x86_64",
+      "description": "Using compilers: C = /usr/local/opt/llvm/bin/clang, CXX = /usr/local/opt/llvm/bin/clang++",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+        "CMAKE_C_COMPILER": "/usr/local/opt/llvm/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     }
   ],
   "testPresets": [
     {
       "name": "default",
-      "configurePreset": "mac-clang-x64",
-      "output": { "outputOnFailure": true },
+      "configurePreset": "mac-llvm-clang-x64",
+      "output": {
+        "outputOnFailure": true
+      },
       "execution": {
         "noTestsAction": "error",
         "stopOnFailure": true

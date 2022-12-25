@@ -13,6 +13,7 @@
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -80,16 +81,27 @@ namespace pepper {
         }
 
         // Push all known variables at the top of the function block
-        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](const auto& local) { codegen(local); });
+        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](auto local) { codegen(local); });
 
         // Emit the body of the function, after ensuring there is a return instruction
         auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {
             funcDef->body().push_back(Ref<Return>::New(funcDef));
         }
-        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](const auto& expr) { codegen(expr); });
+        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](auto expr) { codegen(expr); });
 
         Context::get().popScope();
+        Context::get().locals()->newFunction(function);
+    }
+
+    llvm::Value* zeroValue(llvm::Type* type) {
+        if (type->isIntegerTy())
+            return llvm::ConstantInt::get(type, 0);
+        if (type->isFloatingPointTy())
+            return llvm::ConstantFP::get(type, 0.0f);
+        if (type->isPointerTy())
+            return llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type));
+        throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
@@ -101,12 +113,14 @@ namespace pepper {
     static llvm::Value* emit(Ref<VariableDef> variableDef) {
         auto type = Types::get(variableDef->type());
         auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
-        if (variableDef->defaultValue()) {
-            auto defaultValue = codegen(variableDef->defaultValue());
-            auto typeOps = TypeOps::get(*type);
-            auto coercedValue = typeOps->coerce(defaultValue);
-            ir()->CreateStore(coercedValue, value);
-        }
+
+        auto defaultValue = maybeCodegen(variableDef->defaultValue());
+        if (!defaultValue)
+            defaultValue = zeroValue(*type);
+
+        auto typeOps = TypeOps::get(*type);
+        auto coercedValue = typeOps->coerce(defaultValue);
+        ir()->CreateStore(coercedValue, value);
         Context::get().locals()->newSymbol(variableDef->identifier(), value);
         return value;
     }
@@ -144,6 +158,7 @@ namespace pepper {
         auto structType = Types::add(Ref<Type>::New(structDef->identifier(), llvmType));
         auto structPtrType = Types::get(structDef->identifier() + "*");
         auto structDesc = Struct::New(structType, structDef->identifier());
+        structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
         auto sizeVar = std::find_if(structDef->NewInstance->locals().begin(),
@@ -155,30 +170,30 @@ namespace pepper {
         // Export new function to the enclosing scope
         Context::get().locals()->newFunction(structDesc->instanceNew());
 
-        // finally, codegen all the methods
-        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
-        codegenFunction(structDesc->initializer(), structDef->Initializer);
-        Context::get().locals()->newFunction(structDesc->initializer(), "__init");
-        codegenFunction(structDesc->constructor(), structDef->Constructor);
-        codegenFunction(structDesc->destructor(), structDef->Destructor);
+        // finally, codegen all the methods in dependency order
+        //        codegenFunction(structDesc->initializer(), structDef->Initializer);
+        //        codegenFunction(structDesc->constructor(), structDef->Constructor);
+        //        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
+        //        codegenFunction(structDesc->destructor(), structDef->Destructor);
 
         // map method names to mangled free functions while maintaining order
         llvm::SmallVector<Ref<Method>> methods;
         for (auto& method : structDef->Methods) {
             auto realName = method->identifier();
             pepper::Params params;
-            // add this pointer
+            // inject this pointer
             auto thisType = Types::get(structDef->identifier() + "*");
             params.emplace_back("this", thisType);
             for (auto& paramDef : method->params()) {
                 auto type = Types::get(paramDef.Type);
                 params.emplace_back(paramDef.Identifier, type, maybeCodegen(paramDef.Default));
             }
-            // TODO
-            auto mangledName = realName;
+            // TODO: mangle these properly
+            auto mangledName = structDef->identifier() + "." + realName;
             auto returnType = Types::get(method->returnType());
             auto freeFunction = Ref<UserFunction>::New(mangledName, returnType, params);
             methods.push_back(freeFunction);
+            structDesc->addMethod(freeFunction);
         }
 
         for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
@@ -187,15 +202,37 @@ namespace pepper {
             codegenFunction(method, methodDef);
         }
 
+        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
+
         return structDesc;
     }
 
     static llvm::Value* emit(Ref<FieldDef> fieldDef) {
-        return nullptr;
+        auto st = Struct::get(fieldDef->Struct->identifier());
+        auto instance = Context::get().locals()->findSymbol("this");
+        auto fieldName = fieldDef->identifier();
+        auto field = st->getField(instance, fieldName);
+        if (!field) {
+            Messages::Report<Error>("struct {0} does not contain a field named {1}", st->name(), fieldName);
+        }
+        auto type = Types::get(fieldDef->type());
+        auto value = maybeCodegen(fieldDef->defaultValue());
+        if (!value) {
+            value = zeroValue(*type);
+            pushStack(value);
+        }
+        ir()->CreateStore(value, field);
+        return field;
     }
 
     static llvm::Value* emit(Ref<MemberRef> memberRef) {
-        return nullptr;
+        auto lhs = codegen(memberRef->lhs());
+        auto memberName = memberRef->name();
+        auto type = Types::get(memberRef->type());
+        auto st = Struct::get(memberName);
+        auto member = st->getMember(lhs, memberName);
+        pushStack(member);
+        return member;
     }
 
     static llvm::Value* emit(Ref<ThisRef> thisRef) {
@@ -221,7 +258,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<Return> ret) {
         if (ret->value()) {
-            auto returnValue = popStack();
+            auto returnValue = codegen(ret->value());
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
             auto type = TypeOps::get(*returnType);
@@ -231,8 +268,31 @@ namespace pepper {
         return ir()->CreateRetVoid();
     }
 
+    static Ref<Function> resolveFunction(Ref<FunctionCall> call) {
+        auto functionName = call->target()->identifier();
+        auto target = call->target();
+        if (target->is<MethodDef>()) {
+            auto methodDef = target.as<MethodDef>();
+            auto st = methodDef->structDef();
+            auto name = methodDef->identifier();
+            auto mangledName = st->identifier() + "." + name;
+            functionName = mangledName;
+        }
+        return Context::get().locals()->findFunction(functionName);
+    }
+
     static llvm::Value* emit(Ref<FunctionCall> call) {
-        return nullptr;
+        auto function = resolveFunction(call);
+        if (!function) {
+            Messages::Report<Error>("Function {0} not found", call->target()->identifier());
+            return nullptr;
+        }
+        llvm::SmallVector<llvm::Value*> args;
+        const auto& callArgs = call->args();
+        for (auto argExpr : callArgs) {
+            args.push_back(codegen(argExpr));
+        }
+        return function->call(args);
     }
 
     static auto binaryOp(Ref<BinaryOp> op) {

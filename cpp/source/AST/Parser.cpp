@@ -444,7 +444,7 @@ namespace pepper {
         PepperParser parser(&tokenStream);
         parser.setBuildParseTree(true);
         parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
-        // parser.setTrace(true);
+        parser.setTrace(true);
 
         try {
             antlr4::tree::ParseTree* tree = parser.compilationUnit();

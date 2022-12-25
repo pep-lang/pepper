@@ -18,7 +18,7 @@ namespace pepper {
         Name Identifier;
         Ref<Type> StructType;
         Ref<Function> NewInstance;
-        std::map<Name, Ref<Param>> Fields;
+        std::map<Name, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
         size_t Size;
 
@@ -36,20 +36,36 @@ namespace pepper {
             return Identifier;
         }
 
-        Ref<Param> field(const Name& name) const {
-            auto it = Fields.find(name);
-            if (it != Fields.end()) {
-                return it->second;
+        void setFields(const Params& fields) {
+            for (auto& field : fields) {
+                Fields.insert_or_assign(field.ParamName, field);
             }
-            return nullptr;
         }
+
+        //        const Param& field(const Name& name) const {
+        //            auto it = Fields.find(name);
+        //            if (it != Fields.end()) {
+        //                return it->second;
+        //            }
+        //            return nullptr;
+        //        }
 
         Params fields() const {
             Params fs;
             for (auto& field : Fields) {
-                fs.push_back(*field.second);
+                fs.push_back(field.second);
             }
             return fs;
+        }
+
+        void setMethods(const llvm::SmallVector<Ref<Method>>& methods) {
+            for (auto& method : methods) {
+                addMethod(method);
+            }
+        }
+
+        void addMethod(Ref<Method> method) {
+            Methods[method->name()] = method;
         }
 
         Ref<Function> method(const Name& name) const {
@@ -63,6 +79,11 @@ namespace pepper {
             }
             return ms;
         }
+
+        llvm::Value* getMember(llvm::Value* instance, const Name& name) const;
+        llvm::Value* getField(llvm::Value* instance, const Name& name) const;
+        llvm::Value* getField(llvm::Value* instance, int idx, const Param& field) const;
+        llvm::Function* getMethod(llvm::Value* instance, const Name& name) const;
 
         Ref<Function> instanceNew() const {
             return NewInstance;

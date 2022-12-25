@@ -108,10 +108,10 @@ namespace pepper::ast {
     class FunctionCall : public Expression {
         DECLARE_RTTI(FunctionCall, Expression);
         Ref<FunctionDef> Target;
-        const std::vector<Ref<Expression>>& Args;
+        const std::vector<Ref<Expression>> Args;
 
       public:
-        FunctionCall(Ref<FunctionDef> target, const std::vector<Ref<Expression>>& args)
+        FunctionCall(Ref<FunctionDef> target, const std::vector<Ref<Expression>>& args = {})
             : Target(target)
             , Args(args) {
         }

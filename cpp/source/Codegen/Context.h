@@ -34,6 +34,8 @@ namespace pepper {
 
       public:
         static Context& get();
+        static Ref<llvm::IRBuilderBase> ir();
+        static Ref<llvm::IRBuilderBase> registers();
 
         explicit Context(const std::string& moduleName);
         ~Context();
