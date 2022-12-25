@@ -7,7 +7,6 @@
 #include "AST/Builder.h"
 #include "AST/Nodes.h"
 #include "AST/Param.h"
-#include "Compiler/Compiler.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "PepperBaseListener.h"

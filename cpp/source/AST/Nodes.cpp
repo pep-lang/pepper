@@ -4,9 +4,6 @@
 
 #include "AST/Param.h"
 #include "Core/Exceptions.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Type.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
