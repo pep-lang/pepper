@@ -28,8 +28,8 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat
 
 add_subdirectory(grammar)
 
-add_library(PepperCore STATIC source/Codegen/ModuleContext.h)
-add_subdirectory(source)
+file(GLOB_RECURSE PEPPER_CORE_SOURCE LIST_DIRECTORIES false source/**)
+add_library(PepperCore STATIC ${PEPPER_CORE_SOURCE})
 
 
 add_dependencies(PepperCore PepperParser)
