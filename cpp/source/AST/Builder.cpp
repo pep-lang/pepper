@@ -3,11 +3,12 @@
 //
 
 #include "AST/Builder.h"
-#include <vector>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
+#include "Core/Query.h"
+#include "Core/Vector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/Type.h"
@@ -19,17 +20,17 @@ namespace pepper::ast {
 
             llvm::StringMap<Ref<ast::VariableDef>> Locals;
             llvm::StringMap<Ref<Symbol>> Symbols;
-            std::vector<Ref<Symbol>> OrderedSymbols;
+            Vector<Ref<Symbol>> OrderedSymbols;
 
             llvm::StringMap<Ref<StructDef>> Structs;
             Ref<ast::StructDef> StructTarget;
 
             llvm::StringMap<Ref<ast::FunctionDef>> Functions;
-            std::vector<Ref<FunctionDef>> OrderedFunctions;
-            std::vector<Ref<Expression>> Expressions;
+            Vector<Ref<FunctionDef>> OrderedFunctions;
+            Vector<Ref<Expression>> Expressions;
             Ref<ast::FunctionDef> FunctionTarget = nullptr;
 
-            std::vector<Ref<ast::Node>> Stack;
+            Vector<Ref<ast::Node>> Stack;
 
             Scope(const Name& name = "Anonymous")
                 : Ident(name) {
@@ -37,33 +38,33 @@ namespace pepper::ast {
         };
 
         AST& ast;
-        std::vector<Scope> Stack;
+        Vector<Ref<Scope>> Stack;
 
       public:
         explicit BuilderImpl(AST& _ast)
             : ast(_ast) {
-            Stack.emplace_back("Global"); // global scope
+            Stack.emplace_back(Ref<Scope>::New("Global")); // global scope
         }
 
         Ref<ast::FunctionDef> functionTarget() const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (scope.FunctionTarget)
-                    return scope.FunctionTarget;
+                if (scope->FunctionTarget)
+                    return scope->FunctionTarget;
             }
             return nullptr;
         }
 
         Ref<ast::StructDef> structTarget() const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (scope.StructTarget)
-                    return scope.StructTarget;
+                if (scope->StructTarget)
+                    return scope->StructTarget;
             }
             return nullptr;
         }
 
         [[nodiscard]] Ref<StructDef> findStruct(const Name& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (auto str = scope.Structs.lookup(name))
+                if (auto str = scope->Structs.lookup(name))
                     return str;
             }
             return nullptr;
@@ -71,7 +72,7 @@ namespace pepper::ast {
 
         [[nodiscard]] Ref<ast::VariableDef> findVariable(const Name& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                auto var = scope.Locals.lookup(name);
+                auto var = scope->Locals.lookup(name);
                 if (var) {
                     return var;
                 }
@@ -81,7 +82,7 @@ namespace pepper::ast {
 
         [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Name& name) const override {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (auto var = scope.Functions.lookup(name)) {
+                if (auto var = scope->Functions.lookup(name)) {
                     return var;
                 }
             }
@@ -100,8 +101,8 @@ namespace pepper::ast {
 
         Ref<ast::FunctionDef> functionTarget() {
             for (const auto& scope : llvm::reverse(Stack)) {
-                if (scope.FunctionTarget) {
-                    return scope.FunctionTarget;
+                if (scope->FunctionTarget) {
+                    return scope->FunctionTarget;
                 }
             }
             return nullptr;
@@ -109,32 +110,32 @@ namespace pepper::ast {
 
         void pushStack(Ref<ast::Node> value) override {
             auto& scope = Stack.back();
-            scope.Stack.push_back(value);
+            scope->Stack.push_back(value);
         }
 
         Ref<ast::Node> popStack() override {
             auto& scope = Stack.back();
-            if (scope.Stack.empty()) {
+            if (scope->Stack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty AST stack");
             }
-            auto val = scope.Stack.back();
-            scope.Stack.pop_back();
+            auto val = scope->Stack.back();
+            scope->Stack.pop_back();
             return val;
         }
 
         Ref<ast::Node> peekStack(unsigned int idx) override {
             const auto& scope = Stack.back();
-            if (idx > (scope.Stack.size() - 1)) {
+            if (idx > (scope->Stack.size() - 1)) {
                 throw InternalCompilerError(
-                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope.Stack.size());
+                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope->Stack.size());
             }
-            return scope.Stack[scope.Stack.size() - 1 - idx];
+            return scope->Stack[scope->Stack.size() - 1 - idx];
         }
 
         Builder* beginStruct(Ref<StructDef> structDef) override {
             auto& scope = Stack.back();
-            scope.Structs[structDef->identifier()] = structDef;
-            scope.Functions[structDef->identifier()] = structDef->NewInstance;
+            scope->Structs[structDef->identifier()] = structDef;
+            scope->Functions[structDef->identifier()] = structDef->NewInstance;
 
             if (!structTarget() && !functionTarget()) {
                 ast.newRoot(structDef);
@@ -142,14 +143,14 @@ namespace pepper::ast {
 
             beginScope(structDef->identifier());
             auto& structScope = Stack.back();
-            structScope.StructTarget = structDef;
+            structScope->StructTarget = structDef;
             return this;
         }
 
         Builder* endStruct() override {
             auto& scope = Stack.back();
-            auto& structDef = scope.StructTarget;
-            structDef->Fields.append(scope.OrderedSymbols.begin(), scope.OrderedSymbols.end());
+            auto& structDef = scope->StructTarget;
+            structDef->Fields.append(scope->OrderedSymbols.begin(), scope->OrderedSymbols.end());
             structDef->finish();
             endScope();
             return this;
@@ -157,18 +158,29 @@ namespace pepper::ast {
 
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = Stack.back();
-            scope.Functions[func->identifier()] = func;
+            scope->Functions[func->identifier()] = func;
             beginScope(func->identifier());
             auto& fnScope = Stack.back();
-            fnScope.FunctionTarget = func;
+            fnScope->FunctionTarget = func;
             return this;
         }
 
         Builder* endFunction() override {
             auto& scope = Stack.back();
-            auto& function = scope.FunctionTarget;
-            std::for_each(scope.Locals.begin(), scope.Locals.end(), [&function](auto& local) {
-                function->locals().push_back(local.second);
+            auto& function = scope->FunctionTarget;
+            std::for_each(scope->Locals.begin(), scope->Locals.end(), [&function](auto& local) {
+                // move local default value expressions to the init block, and remove matching expressions from the body
+                auto var = local.second;
+                auto defaultValue = var->defaultValue();
+                function->body().remove_if([defaultValue](const auto& expr) {
+                    if (expr->rtti() == defaultValue->rtti()) {
+                        return true;
+                    }
+                    return false;
+                });
+                function->locals().push_back(var);
+                auto ref = Ref<VariableRef>::New(var->identifier());
+                function->inits().push_back(Ref<Assign>::New(ref, defaultValue));
             });
             ast.newRoot(function);
             endScope();
@@ -176,7 +188,7 @@ namespace pepper::ast {
         }
 
         Builder* beginScope(const Name& name = "Anonymous") override {
-            Stack.emplace_back(name);
+            Stack.emplace_back(Ref<Scope>::New(name));
             return this;
         }
 
@@ -187,8 +199,8 @@ namespace pepper::ast {
 
         Builder* symbol(Ref<ast::VariableDef> var) override {
             auto& scope = Stack.back();
-            scope.Locals[var->identifier()] = var;
-            scope.OrderedSymbols.push_back(var);
+            scope->Locals[var->identifier()] = var;
+            scope->OrderedSymbols.push_back(var);
             return this;
         }
 

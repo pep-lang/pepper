@@ -3,9 +3,9 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "Core/Common.h"
+#include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {
@@ -14,7 +14,7 @@ namespace pepper::ast {
 
     class AST {
       private:
-        std::vector<Ref<ast::Node>> Roots;
+        Vector<Ref<ast::Node>> Roots;
         WeakRef<Builder> ActiveBuilder;
 
       public:
@@ -24,7 +24,7 @@ namespace pepper::ast {
 
         void newRoot(Ref<ast::Node> root);
 
-        [[nodiscard]] const std::vector<Ref<ast::Node>>& roots() const {
+        [[nodiscard]] const Vector<Ref<ast::Node>>& roots() const {
             return Roots;
         }
     };

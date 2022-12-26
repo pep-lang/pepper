@@ -20,7 +20,7 @@ namespace pepper {
     Ref<Options> Options::fromCommandLine(int argc, const char** argv) {
         llvm::cl::ParseCommandLineOptions(argc, argv);
         auto opts = std::make_shared<Options>();
-        opts->SourceFiles = cli::SourceFiles;
+        opts->SourceFiles.assign(cli::SourceFiles.begin(), cli::SourceFiles.end());
         opts->OutputPath = cli::OutputPath;
         if (cli::OutputPath.length() > 0)
             opts->ModuleName = PathToFilename(cli::OutputPath);

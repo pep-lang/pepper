@@ -3,7 +3,7 @@
 
 #include "Core/Common.h"
 #include "Core/Name.h"
-#include "llvm/ADT/SmallVector.h"
+#include "Core/Vector.h"
 
 namespace pepper::ast {
     class Expression;
@@ -26,5 +26,5 @@ namespace pepper::ast {
         }
     };
 
-    using Params = llvm::SmallVector<Param>;
+    using Params = Vector<Param>;
 } // namespace pepper::ast

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "Core/Name.h"
-#include "llvm/ADT/SmallVector.h"
+#include "Core/Vector.h"
 
 namespace llvm {
     class Type;
@@ -24,5 +24,5 @@ namespace pepper {
         }
     };
 
-    using Params = llvm::SmallVector<Param>;
+    using Params = Vector<Param>;
 } // namespace pepper

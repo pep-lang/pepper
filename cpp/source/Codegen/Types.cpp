@@ -1,17 +1,17 @@
 
 #include "Codegen/Types.h"
 #include <sstream>
-#include <vector>
 
 #include "AST/Nodes.h"
 #include "Codegen/Context.h"
+#include "Core/Vector.h"
 #include "Param.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/raw_ostream.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted
-#include "llvm/ADT/SmallVector.h"
+#include "Core/Vector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
@@ -23,7 +23,7 @@
 namespace pepper {
 
     std::string FunctionType::Signature(llvm::Type* returnType, const Params& params, bool varargs) {
-        std::vector<std::string> paramNames;
+        Vector<std::string> paramNames;
         std::transform(
             params.begin(), params.end(), std::back_inserter(paramNames), [](auto p) { return p.ParamName; });
         std::string paramsString = llvm::join(paramNames.begin(), paramNames.end(), ", ");
@@ -61,7 +61,7 @@ namespace pepper {
         VoidPtr = addType(Ref<Type>::New("void*", *KnownTypes["i8*"]));
     }
 
-    Ref<Type> Types::addType(Ref<Type> t, const llvm::SmallVector<Name>& aliases) {
+    Ref<Type> Types::addType(Ref<Type> t, const Vector<Name>& aliases) {
         if (t->llvmType()->isStructTy()) {
             // add <struct>* as "<struct>", and <struct> as "_<struct>"
             KnownTypes["_" + t->name()] = t;
@@ -119,7 +119,7 @@ namespace pepper {
         return str;
     }
 
-    Ref<Type> Types::add(Ref<Type> type, const llvm::SmallVector<Name>& aliases) {
+    Ref<Type> Types::add(Ref<Type> type, const Vector<Name>& aliases) {
         return Context::get().types()->addType(type, aliases);
     }
 

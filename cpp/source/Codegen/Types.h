@@ -7,11 +7,11 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include "Core/Common.h"
 #include "Core/Name.h"
 #include "Core/RTTI.h"
+#include "Core/Vector.h"
 #include "Param.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -65,7 +65,7 @@ namespace pepper {
         llvm::StringMap<Ref<Type>> KnownTypes;
         std::unordered_map<llvm::Type*, Ref<Type>> TypeCache;
 
-        Ref<Type> addType(Ref<Type> t, const llvm::SmallVector<Name>& aliases = {});
+        Ref<Type> addType(Ref<Type> t, const Vector<Name>& aliases = {});
         Ref<Type> getType(const Name& name) const;
         Ref<Type> getType(llvm::Type* type) const;
 
@@ -76,7 +76,7 @@ namespace pepper {
         static std::string toString(llvm::Type* ty);
         static Ref<Type> get(const Name& name);
         static Ref<Type> get(llvm::Type* type);
-        static Ref<Type> add(Ref<Type> type, const llvm::SmallVector<Name>& aliases = {});
+        static Ref<Type> add(Ref<Type> type, const Vector<Name>& aliases = {});
 
         static Ref<Type> Void;
         static Ref<Type> VoidPtr;

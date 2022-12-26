@@ -8,7 +8,7 @@
 #include "Codegen/Param.h"
 #include "Core/Common.h"
 #include "Core/Name.h"
-#include "llvm/ADT/SmallVector.h"
+#include "Core/Vector.h"
 
 namespace llvm {
     class BasicBlock;
@@ -41,7 +41,7 @@ namespace pepper {
             return ReturnType;
         }
 
-        const llvm::SmallVector<Param>& params() const {
+        const Vector<Param>& params() const {
             return Parameters;
         }
 
@@ -57,7 +57,7 @@ namespace pepper {
             return FuncType;
         }
 
-        llvm::Value* call(const llvm::SmallVector<llvm::Value*>& args) const;
+        llvm::Value* call(const Vector<llvm::Value*>& args) const;
     };
 
     class ExternFunction : public Function {

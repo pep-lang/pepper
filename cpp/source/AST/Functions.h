@@ -5,11 +5,11 @@
 #pragma once
 
 #include <utility>
-#include <vector>
 
 #include "AST/Node.h"
 #include "AST/Param.h"
 #include "Core/Common.h"
+#include "Core/Vector.h"
 
 namespace pepper::ast {
     class StructDef;
@@ -46,28 +46,37 @@ namespace pepper::ast {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
       private:
-        std::vector<Ref<VariableDef>> Locals;
-        std::vector<Ref<Node>> Body;
+        Vector<Ref<VariableDef>> Locals;
+        Vector<Ref<Expression>> Inits;
+        Vector<Ref<Expression>> Body;
 
       public:
         FunctionDef(const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
         }
 
-        std::vector<Ref<Node>>& body() {
-            return Body;
-        }
-
-        [[nodiscard]] const std::vector<Ref<Node>>& body() const {
-            return Body;
-        }
-
-        std::vector<Ref<VariableDef>>& locals() {
+        Vector<Ref<VariableDef>>& locals() {
             return Locals;
         }
 
-        const std::vector<Ref<VariableDef>>& locals() const {
+        const Vector<Ref<VariableDef>>& locals() const {
             return Locals;
+        }
+
+        Vector<Ref<Expression>>& inits() {
+            return Inits;
+        }
+
+        const Vector<Ref<Expression>>& inits() const {
+            return Inits;
+        }
+
+        Vector<Ref<Expression>>& body() {
+            return Body;
+        }
+
+        [[nodiscard]] const Vector<Ref<Expression>>& body() const {
+            return Body;
         }
     };
 
@@ -108,10 +117,10 @@ namespace pepper::ast {
     class FunctionCall : public Expression {
         DECLARE_RTTI(FunctionCall, Expression);
         Ref<FunctionDef> Target;
-        const std::vector<Ref<Expression>> Args;
+        const Vector<Ref<Expression>> Args;
 
       public:
-        FunctionCall(Ref<FunctionDef> target, const std::vector<Ref<Expression>>& args = {})
+        FunctionCall(Ref<FunctionDef> target, const Vector<Ref<Expression>>& args = {})
             : Target(target)
             , Args(args) {
         }
@@ -120,7 +129,7 @@ namespace pepper::ast {
             return Target;
         }
 
-        const std::vector<Ref<Expression>>& args() const {
+        const Vector<Ref<Expression>>& args() const {
             return Args;
         }
 

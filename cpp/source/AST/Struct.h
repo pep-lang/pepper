@@ -8,7 +8,7 @@
 
 #include "Core/Common.h"
 #include "Core/Name.h"
-#include "llvm/ADT/SmallVector.h"
+#include "Core/Vector.h"
 
 namespace pepper::ast {
     class FieldDef;
@@ -22,8 +22,8 @@ namespace pepper::ast {
         Ref<MethodDef> Initializer;
         Ref<MethodDef> Constructor;
         Ref<MethodDef> Destructor;
-        llvm::SmallVector<Ref<FieldDef>> Fields;
-        llvm::SmallVector<Ref<MethodDef>> Methods;
+        Vector<Ref<FieldDef>> Fields;
+        Vector<Ref<MethodDef>> Methods;
 
         StructDef(const Name& type, const Name& name);
 

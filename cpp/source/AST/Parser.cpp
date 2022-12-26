@@ -171,7 +171,7 @@ namespace pepper {
             auto providedArgsCount = context->argumentExpressionList()
                                          ? context->argumentExpressionList()->assignmentExpression().size()
                                          : 0;
-            std::vector<Ref<Expression>> args;
+            Vector<Ref<Expression>> args;
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.push_back(popStack<Expression>());
             }

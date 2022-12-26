@@ -1,13 +1,13 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include "Core/Common.h"
+#include "Core/Vector.h"
 
 namespace pepper {
     class Options {
-        std::vector<std::string> SourceFiles;
+        Vector<std::string> SourceFiles;
         std::string OutputPath;
         std::string ModuleName;
 
@@ -15,7 +15,7 @@ namespace pepper {
         static Ref<Options> fromCommandLine(int argc, const char** argv);
 
       public:
-        const std::vector<std::string>& sourceFiles() const {
+        const Vector<std::string>& sourceFiles() const {
             return SourceFiles;
         }
 

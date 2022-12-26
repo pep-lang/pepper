@@ -59,7 +59,7 @@ namespace pepper {
             return fs;
         }
 
-        void setMethods(const llvm::SmallVector<Ref<Method>>& methods) {
+        void setMethods(const Vector<Ref<Method>>& methods) {
             for (auto& method : methods) {
                 addMethod(method);
             }
@@ -73,8 +73,8 @@ namespace pepper {
             return Methods.lookup(name);
         }
 
-        llvm::SmallVector<Ref<Method>> methods() const {
-            llvm::SmallVector<Ref<Method>> ms;
+        Vector<Ref<Method>> methods() const {
+            Vector<Ref<Method>> ms;
             for (auto& m : Methods) {
                 ms.push_back(m.getValue());
             }

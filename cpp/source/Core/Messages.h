@@ -60,12 +60,12 @@ namespace pepper {
 
     class Messages {
         static auto& _errors() {
-            static llvm::SmallVector<Error> Errors;
+            static Vector<Error> Errors;
             return Errors;
         }
 
         static auto& _warnings() {
-            static llvm::SmallVector<Warning> Warnings;
+            static Vector<Warning> Warnings;
             return Warnings;
         }
 
@@ -80,11 +80,11 @@ namespace pepper {
             report(std::move(M(fmt, std::forward<Args>(args)...)));
         }
 
-        static const llvm::SmallVector<Error>& errors() {
+        static const Vector<Error>& errors() {
             return _errors();
         }
 
-        static const llvm::SmallVector<Warning>& warnings() {
+        static const Vector<Warning>& warnings() {
             return _warnings();
         }
 

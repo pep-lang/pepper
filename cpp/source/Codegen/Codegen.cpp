@@ -14,6 +14,7 @@
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
+#include "Core/Query.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -79,7 +80,7 @@ namespace pepper {
 
         // Allocate parameters
         auto llvmFunction = function->function();
-        auto args = llvm::SmallVector<llvm::Value*>();
+        auto args = Vector<llvm::Value*>();
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
             auto arg = llvmFunction->getArg(paramIdx);
@@ -89,8 +90,10 @@ namespace pepper {
             args.push_back(local);
         }
 
+        // Move all default value construction/assignment to the init block
+
         // Push all known variables at the top of the function block
-        std::for_each(funcDef->locals().begin(), funcDef->locals().end(), [&](auto local) { codegen(local); });
+        Query(funcDef->locals()).each([&](auto local) { codegen(local); });
 
         // Emit the body of the function, after ensuring there is a return instruction
         auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
@@ -156,7 +159,7 @@ namespace pepper {
     static Ref<Struct> emit(Ref<StructDef> structDef) {
         // convert fields to symbols before type gen
         pepper::Params fields;
-        llvm::SmallVector<llvm::Type*> fieldTypes;
+        Vector<llvm::Type*> fieldTypes;
         for (auto& field : structDef->Fields) {
             auto type = Types::get(field->type());
             fieldTypes.push_back(*type);
@@ -181,7 +184,7 @@ namespace pepper {
         Context::get().locals()->newFunction(structDesc->instanceNew());
 
         // map method names to mangled free functions while maintaining order
-        llvm::SmallVector<Ref<Method>> methods;
+        Vector<Ref<Method>> methods;
         for (auto& method : structDef->Methods) {
             auto realName = method->identifier();
             pepper::Params params;
@@ -295,7 +298,7 @@ namespace pepper {
         if (!function) {
             throw CompileError("Function {0} not found", call->target()->identifier());
         }
-        llvm::SmallVector<llvm::Value*> args;
+        Vector<llvm::Value*> args;
         if (function->is<Method>()) {
             auto thisRef = Context::get().locals()->findSymbol("this");
             if (!thisRef)

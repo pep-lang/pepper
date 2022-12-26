@@ -13,16 +13,16 @@ namespace pepper {
         : Identifier(name)
         , ReturnType(returnType)
         , Parameters(params) {
-        std::vector<llvm::Type*> paramTypes;
+        Vector<llvm::Type*> paramTypes;
         std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.ParamType); });
         FuncType = llvm::FunctionType::get(*returnType, paramTypes, false);
         Func =
             llvm::Function::Create(FuncType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
     }
 
-    llvm::Value* Function::call(const llvm::SmallVector<llvm::Value*>& args) const {
+    llvm::Value* Function::call(const Vector<llvm::Value*>& args) const {
         // TODO: deal with default values for params
-        llvm::SmallVector<llvm::Value*> coercedArgs;
+        Vector<llvm::Value*> coercedArgs;
         int idx = 0;
         for (auto* arg : args) {
             auto expectedType = TypeOps::get(*Parameters[idx++].ParamType);

@@ -6,9 +6,9 @@
 
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "Core/Common.h"
+#include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace llvm {
@@ -30,12 +30,12 @@ namespace pepper {
         llvm::StringMap<llvm::Type*> Types;
 
         llvm::StringMap<llvm::Value*> Symbols;
-        std::vector<std::string> OrderedSymbols;
+        Vector<std::string> OrderedSymbols;
 
         llvm::StringMap<Ref<Function>> Functions;
         Ref<Function> FunctionTarget;
 
-        std::vector<llvm::Value*> Stack;
+        Vector<llvm::Value*> Stack;
 
         Ref<llvm::IRBuilderBase> Builder;
 

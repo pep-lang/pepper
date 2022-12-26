@@ -4,64 +4,89 @@
 
 #pragma once
 
+#include "Core/Vector.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/SmallVector.h"
 
 namespace pepper {
     template <typename T>
     struct QueryInst;
 
     template <typename T>
-    QueryInst<T> Query(const llvm::ArrayRef<T>& arr);
+    QueryInst<T> Query(llvm::ArrayRef<T> arr);
+
+    template <typename T>
+    QueryInst<T> Query(const Vector<T>& arr);
 
     template <typename T>
     struct QueryInst {
-        template <typename E>
-        using Vector = llvm::SmallVector<E>;
-
         Vector<T> Src;
+        llvm::ArrayRef<T> Ref;
 
-        friend QueryInst<T> Query<T>(const llvm::ArrayRef<T>&);
+        friend QueryInst<T> Query<T>(llvm::ArrayRef<T>);
+        friend QueryInst<T> Query<T>(const Vector<T>&);
 
-        explicit QueryInst(const llvm::ArrayRef<T>& src)
-            : Src(src) {
+        explicit QueryInst(llvm::ArrayRef<T> ref)
+            : Ref(ref) {
+        }
+
+        // just reference the incoming vector
+        explicit QueryInst(const Vector<T>& src)
+            : Ref(src) {
         }
 
         // used internally to move from one operation to the next
-        explicit QueryInst(Vector<T>&& src)
-            : Src(std::move(src)) {
+        explicit QueryInst(QueryInst<T>&& src)
+            : Src(std::move(src))
+            , Ref(Src) {
         }
 
       public:
         template <typename U>
         QueryInst<U> select(std::function<U(const T&)> selector) {
             Vector<U> results;
-            std::transform(Src.begin(), Src.end(), std::back_inserter(results), selector);
+            std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
             return QueryInst<U>(std::move(results));
         }
 
         QueryInst where(std::function<bool(const T&)> selector) {
             Vector<T> results;
-            std::copy_if(Src.begin(), Src.end(), std::back_inserter(results), selector);
+            std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
+            return QueryInst(std::move(results));
+        }
+
+        QueryInst without(std::function<bool(const T&)> selector) {
+            Vector<T> results;
+            std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), [&selector](const T& item) {
+                return !selector(item);
+            });
             return QueryInst(std::move(results));
         }
 
         QueryInst& concat(llvm::ArrayRef<T> rhs) {
-            std::copy(rhs.begin(), rhs.end(), std::back_inserter(Src));
+            if (Ref.size() != Src.size()) {
+                std::copy(Ref.begin(), Ref.end(), std::back_inserter(Src));
+                Ref = Src;
+            }
+            std::copy(rhs.begin(), rhs.end(), std::back_inserter(Ref));
             return *this;
         }
 
         void each(std::function<void(const T&)> func) {
-            std::for_each(Src.begin(), Src.end(), func);
+            std::for_each(Ref.begin(), Ref.end(), func);
         }
 
-        Vector<T>&& vector() const {
+        operator Vector<T>&&() const {
             return std::move(Src);
         }
     };
 
     template <typename T>
-    QueryInst<T> Query(const llvm::ArrayRef<T>& arr) {
+    QueryInst<T> Query(llvm::ArrayRef<T> arr) {
+        return QueryInst<T>(arr);
+    }
+
+    template <typename T>
+    QueryInst<T> Query(const Vector<T>& arr) {
         return QueryInst<T>(arr);
     }
 } // namespace pepper
