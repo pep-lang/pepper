@@ -25,13 +25,18 @@ namespace pepper {
         friend QueryInst<T> Query<T>(llvm::ArrayRef<T>);
         friend QueryInst<T> Query<T>(const Vector<T>&);
 
-        explicit QueryInst(llvm::ArrayRef<T> ref)
+        /* implicit */ QueryInst(llvm::ArrayRef<T> ref)
             : Ref(ref) {
         }
 
         // just reference the incoming vector
-        explicit QueryInst(const Vector<T>& src)
+        /* implicit */ QueryInst(const Vector<T>& src)
             : Ref(src) {
+        }
+
+        explicit QueryInst(Vector<T>&& src)
+            : Src(std::move(src))
+            , Ref(Src) {
         }
 
         // used internally to move from one operation to the next
@@ -75,18 +80,18 @@ namespace pepper {
             std::for_each(Ref.begin(), Ref.end(), func);
         }
 
-        operator Vector<T>&&() const {
-            return std::move(Src);
+        operator Vector<T>() {
+            return Vector<T>(Ref.begin(), Ref.end());
         }
     };
 
     template <typename T>
     QueryInst<T> Query(llvm::ArrayRef<T> arr) {
-        return QueryInst<T>(arr);
+        return arr;
     }
 
     template <typename T>
     QueryInst<T> Query(const Vector<T>& arr) {
-        return QueryInst<T>(arr);
+        return arr;
     }
 } // namespace pepper
