@@ -35,27 +35,11 @@ namespace pepper {
         llvm::StringMap<Ref<Function>> Functions;
         Ref<Function> FunctionTarget;
 
-        Vector<llvm::Value*> Stack;
-
         Ref<llvm::IRBuilderBase> Builder;
 
         explicit Scope(const std::string& name = "Anonymous", Ref<Scope> outer = nullptr)
             : Name(name)
             , Outer(std::move(outer)) {
-        }
-
-        void pushStack(llvm::Value* value) {
-            Stack.push_back(value);
-        }
-
-        llvm::Value* popStack() {
-            auto top = Stack.back();
-            Stack.pop_back();
-            return top;
-        }
-
-        llvm::Value* peekStack(unsigned int idx) {
-            return Stack[Stack.size() - 1 - idx];
         }
 
         void newSymbol(const std::string& identifier, llvm::Value* value);

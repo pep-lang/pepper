@@ -7,6 +7,7 @@
 #include "AST/Nodes.h"
 #include "Codegen/Context.h"
 #include "Codegen/Function.h"
+#include "Codegen/LLVMUtils.h"
 #include "Codegen/ModuleContext.h"
 #include "Codegen/Scope.h"
 #include "Codegen/Struct.h"
@@ -38,14 +39,6 @@ namespace pepper {
 
     static Ref<llvm::IRBuilderBase> registers() {
         return Context::get().locals()->registers();
-    }
-
-    static void pushStack(llvm::Value* value) {
-        Context::get().locals()->pushStack(value);
-    }
-
-    static llvm::Value* popStack() {
-        return Context::get().locals()->popStack();
     }
 
     using llvm::cast;
@@ -116,7 +109,6 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
-        pushStack(value);
         return value;
     }
 
@@ -138,19 +130,16 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<StringLiteral> stringLiteral) {
         auto value = ir()->CreateGlobalString(stringLiteral->value());
-        pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<IntegerLiteral> intLiteral) {
         auto value = llvm::ConstantInt::get(*Types::Int64, intLiteral->value());
-        pushStack(value);
         return value;
     }
 
     static llvm::Value* emit(Ref<FloatLiteral> floatLiteral) {
         auto value = llvm::ConstantFP::get(*Types::Double, floatLiteral->value());
-        pushStack(value);
         return value;
     }
 
@@ -224,7 +213,6 @@ namespace pepper {
         auto value = maybeCodegen(fieldDef->defaultValue());
         if (!value) {
             value = zeroValue(*type);
-            pushStack(value);
         }
         ir()->CreateStore(value, field);
         return field;
@@ -237,12 +225,6 @@ namespace pepper {
         auto memberName = memberRef->name();
         auto thisPtr = read(lhs);
         auto member = structDesc->getMember(thisPtr, memberName);
-        member = read(member);
-        // push this onto stack
-        if (member->getType()->isFunctionTy()) {
-            pushStack(lhs);
-        }
-        pushStack(member);
         return member;
     }
 
@@ -269,7 +251,7 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<Return> ret) {
         if (ret->value()) {
-            auto returnValueExpr = popStack(); // codegen(ret->value());
+            auto returnValueExpr = codegen(ret->value());
             auto returnValue = read(returnValueExpr);
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
@@ -301,8 +283,6 @@ namespace pepper {
         Vector<llvm::Value*> args;
         if (function->is<Method>()) {
             auto thisRef = Context::get().locals()->findSymbol("this");
-            if (!thisRef)
-                thisRef = popStack();
             assert(thisRef);
             args.push_back(thisRef);
         }
@@ -420,8 +400,8 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<CompoundAssign> op) {
-        auto rhs = popStack();
-        auto lhs = popStack();
+        auto rhs = codegen(op->rhs());
+        auto lhs = codegen(op->lhs());
         auto opType = Types::get(resolveType(lhs));
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
@@ -442,8 +422,8 @@ namespace pepper {
         if (op->is<CompoundAssign>())
             return emit(op.as<CompoundAssign>());
 
-        auto rhs = popStack();
-        auto lhs = popStack();
+        auto rhs = codegen(op->rhs());
+        auto lhs = codegen(op->lhs());
         lhs = read(lhs);
         rhs = read(rhs);
         auto opType = operandType(op, lhs->getType(), rhs->getType());
@@ -458,11 +438,12 @@ namespace pepper {
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);
         auto result = std::invoke(typeOp, typeOps, lhsOperand, rhsOperand);
-        pushStack(result);
         return result;
     }
 
     static llvm::Value* codegen(Ref<Node> node) {
+        std::cout << "codegen:" << std::endl;
+        std::cout << node->toString() << std::endl;
         if (node->is<BinaryOp>())
             return emit(node.as<BinaryOp>());
         if (node->is<FieldDef>())
@@ -491,6 +472,8 @@ namespace pepper {
     }
 
     static Ref<Struct> codegenStruct(Ref<StructDef> structDef) {
+        std::cout << "codegen:" << std::endl;
+        std::cout << structDef->toString() << std::endl;
         return emit(structDef);
     }
 
