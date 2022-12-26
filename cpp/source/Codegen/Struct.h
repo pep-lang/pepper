@@ -21,6 +21,7 @@ namespace pepper {
         std::map<Name, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
         size_t Size;
+        size_t Align;
 
         static llvm::StringMap<Ref<Struct>> Structs;
 
@@ -103,6 +104,10 @@ namespace pepper {
 
         size_t size() const {
             return Size;
+        }
+
+        size_t align() const {
+            return Align;
         }
 
         static Ref<Struct> get(const Name& name) {

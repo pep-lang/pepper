@@ -6,6 +6,7 @@
 
 #include "Core/Common.h"
 #include "Core/Name.h"
+#include "Core/SourceLocation.h"
 
 namespace llvm {
     class Type;
@@ -22,9 +23,13 @@ namespace pepper::ast {
     class Builder {
       public:
         template <typename N, typename... Args>
-        Ref<N> create(Args&&... args) {
-            return Ref<N>::New(std::forward<decltype(args)>(args)...);
+        Ref<N> New(Args&&... args) {
+            auto node = Ref<N>::New(std::forward<decltype(args)>(args)...);
+            node->Source = Source;
+            return node;
         }
+
+        SourceLocation Source;
 
         [[nodiscard]] virtual Ref<StructDef> findStruct(const Name& name) const = 0;
         [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Name& name) const = 0;

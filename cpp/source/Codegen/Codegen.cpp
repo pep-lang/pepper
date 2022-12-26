@@ -217,7 +217,7 @@ namespace pepper {
         auto fieldName = fieldDef->identifier();
         auto field = st->getField(instance, fieldName);
         if (!field) {
-            Messages::Report<Error>("struct {0} does not contain a field named {1}", st->name(), fieldName);
+            throw CompileError("struct {0} does not contain a field named {1}", st->name(), fieldName);
         }
         auto type = Types::get(fieldDef->type());
         auto value = maybeCodegen(fieldDef->defaultValue());
@@ -293,8 +293,7 @@ namespace pepper {
     static llvm::Value* emit(Ref<FunctionCall> call) {
         auto function = resolveFunction(call);
         if (!function) {
-            Messages::Report<Error>("Function {0} not found", call->target()->identifier());
-            return nullptr;
+            throw CompileError("Function {0} not found", call->target()->identifier());
         }
         llvm::SmallVector<llvm::Value*> args;
         if (function->is<Method>()) {
@@ -500,10 +499,17 @@ namespace pepper {
 
     Ref<ModuleContext> Codegen::emit() {
         for (auto root : Tree->roots()) {
-            if (root->is<StructDef>())
-                codegenStruct(root.as<StructDef>());
-            else
-                codegen(root);
+            try {
+                if (root->is<StructDef>())
+                    codegenStruct(root.as<StructDef>());
+                else
+                    codegen(root);
+            } catch (CompileError ce) {
+                Messages::Report<Error>(ce.what());
+            } catch (InternalCompilerError ice) {
+                Messages::Report<Error>(ice.what());
+                return nullptr;
+            }
         }
         return Context::get().moduleContext();
     }

@@ -13,20 +13,6 @@ namespace pepper {
         class AST;
     }
 
-    struct SourceLocation {
-        const std::string File;
-        const size_t Line;
-        const size_t Column;
-
-        SourceLocation(const std::string& file, size_t line, size_t column = 0)
-            : File(file)
-            , Line(line)
-            , Column(column) {
-        }
-
-        std::string toString() const;
-    };
-
     class Parser {
       public:
         Parser() = default;

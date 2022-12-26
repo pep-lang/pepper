@@ -37,19 +37,15 @@ namespace pepper {
         Ref<ModuleContext> compile(std::istream& sourceStream, const std::string& sourceFile) override {
             SourcePath = sourceFile;
             auto ast = parse(sourceStream, sourceFile);
-            if (!ast) {
-                Messages::Report<Error>("Failed to parse {0}", sourceFile);
-            }
-
-            if (Messages::errors().size()) {
+            if (!ast || Messages::errors().size()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
             Codegen gen(ModuleName, ast);
             auto module = gen.emit();
 
-            if (Messages::errors().size()) {
-                throw CompileError("Codegen error(s) encountered, cannot continue");
+            if (!module || Messages::errors().size()) {
+                throw CompileError("Error(s) encountered, cannot continue");
             }
 
             std::cout << module->toString() << std::endl;

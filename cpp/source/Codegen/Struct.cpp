@@ -18,7 +18,9 @@ namespace pepper {
         // compute size from data layout
         auto module = Context::get().module();
         auto dataLayout = module->getDataLayout();
-        Size = dataLayout.getStructLayout(cast<llvm::StructType>(type->llvmType()))->getSizeInBytes();
+        auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(type->llvmType()));
+        Size = structLayout->getSizeInBytes();
+        Align = structLayout->getAlignment().value();
     }
 
     Ref<Struct> Struct::New(Ref<Type> type, const Name& name) {

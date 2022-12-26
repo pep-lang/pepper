@@ -5,6 +5,7 @@
 
 #include "Core/Common.h"
 #include "Core/Name.h"
+#include "Core/SourceLocation.h"
 
 namespace llvm {
     class Type;
@@ -14,6 +15,8 @@ namespace pepper::ast {
 
     class Node {
         DECLARE_RTTI(Node);
+
+        SourceLocation Source;
 
       public:
         Node() = default;

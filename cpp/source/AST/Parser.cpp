@@ -18,10 +18,6 @@ namespace pepper {
     using namespace Pepper::Parser;
     using namespace pepper::ast;
 
-    std::string SourceLocation::toString() const {
-        return llvm::formatv("{0}({1},{2})", File, Line, Column);
-    }
-
     class ParserListener : public PepperBaseListener {
         using Super = PepperBaseListener;
 
@@ -72,6 +68,10 @@ namespace pepper {
             };
         }
 
+        void recordSourceLocation(const antlr4::ParserRuleContext* context) {
+            builder->Source = sourceLocation(context);
+        }
+
         void visitTerminal(antlr4::tree::TerminalNode* terminal) override {
             Super::visitTerminal(terminal);
         }
@@ -80,12 +80,12 @@ namespace pepper {
             auto value = constant->toString();
             try {
                 auto intVal = std::stoll(value);
-                return Ref<IntegerLiteral>::New(intVal);
+                return builder->New<IntegerLiteral>(intVal);
             } catch (std::invalid_argument) {
             }
             try {
                 auto floatVal = std::stold(value);
-                return Ref<FloatLiteral>::New(floatVal);
+                return builder->New<FloatLiteral>(floatVal);
             } catch (std::invalid_argument) {
             }
             throw CompileError("Unable to parse numeric literal: {0}", value);
@@ -101,10 +101,10 @@ namespace pepper {
             auto identifier = identifiers[1]->toString();
 
             if (builder->structTarget()) {
-                builder->symbol(Ref<FieldDef>::New(builder->structTarget(), typeName, identifier));
+                builder->symbol(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
             } else {
                 auto defaultValue = (context->assignmentExpression()) ? popStack<Expression>() : nullptr;
-                builder->symbol(Ref<VariableDef>::New(typeName, identifier, defaultValue));
+                builder->symbol(builder->New<VariableDef>(typeName, identifier, defaultValue));
             }
         }
 
@@ -120,13 +120,13 @@ namespace pepper {
                 std::string strVal = "";
                 std::for_each(
                     stringLiterals.begin(), stringLiterals.end(), [&strVal](auto str) { strVal += str->toString(); });
-                builder->pushStack(Ref<StringLiteral>::New(strVal));
+                builder->pushStack(builder->New<StringLiteral>(strVal));
                 return;
             }
             auto ident = context->Identifier();
             if (ident) {
                 auto identifier = ident->toString();
-                builder->pushStack(Ref<VariableRef>::New(identifier));
+                builder->pushStack(builder->New<VariableRef>(identifier));
                 return;
             }
         }
@@ -152,10 +152,10 @@ namespace pepper {
                 });
             }
 
-            auto function = builder->create<FunctionDef>(returnType, identifier, params);
+            auto function = builder->New<FunctionDef>(returnType, identifier, params);
             builder->beginFunction(function);
             for (auto& param : params) {
-                builder->symbol(Ref<VariableDef>::New(param.Type, param.Identifier));
+                builder->symbol(builder->New<VariableDef>(param.Type, param.Identifier));
             }
         }
 
@@ -175,7 +175,7 @@ namespace pepper {
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
                 args.push_back(popStack<Expression>());
             }
-            auto call = builder->create<FunctionCall>(func, args);
+            auto call = builder->New<FunctionCall>(func, args);
             builder->expression(call);
         }
 
@@ -187,7 +187,7 @@ namespace pepper {
                 returnValue = popStack<Expression>();
             }
             auto function = builder->functionTarget();
-            builder->expression(Ref<Return>::New(function, returnValue));
+            builder->expression(builder->New<Return>(function, returnValue));
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
@@ -206,140 +206,140 @@ namespace pepper {
             Super::exitMemberAccess(context);
             auto lhs = popStack<Expression>();
             auto rhs = context->Identifier()->toString();
-            builder->expression(Ref<MemberRef>::New(lhs, rhs));
+            builder->expression(builder->New<MemberRef>(lhs, rhs));
         }
 
         void exitAdd(PepperParser::AddContext* context) override {
             Super::exitAdd(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Add>::New(lhs, rhs));
+            builder->expression(builder->New<Add>(lhs, rhs));
         }
 
         void exitSub(PepperParser::SubContext* context) override {
             Super::exitSub(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Sub>::New(lhs, rhs));
+            builder->expression(builder->New<Sub>(lhs, rhs));
         }
 
         void exitMul(PepperParser::MulContext* context) override {
             Super::exitMul(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Mul>::New(lhs, rhs));
+            builder->expression(builder->New<Mul>(lhs, rhs));
         }
 
         void exitDiv(PepperParser::DivContext* context) override {
             Super::exitDiv(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Div>::New(lhs, rhs));
+            builder->expression(builder->New<Div>(lhs, rhs));
         }
 
         void exitMod(PepperParser::ModContext* context) override {
             Super::exitMod(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Mod>::New(lhs, rhs));
+            builder->expression(builder->New<Mod>(lhs, rhs));
         }
 
         void exitPow(PepperParser::PowContext* context) override {
             Super::exitPow(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Pow>::New(lhs, rhs));
+            builder->expression(builder->New<Pow>(lhs, rhs));
         }
 
         void exitLShift(PepperParser::LShiftContext* context) override {
             Super::exitLShift(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<LShift>::New(lhs, rhs));
+            builder->expression(builder->New<LShift>(lhs, rhs));
         }
 
         void exitRShift(PepperParser::RShiftContext* context) override {
             Super::exitRShift(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<RShift>::New(lhs, rhs));
+            builder->expression(builder->New<RShift>(lhs, rhs));
         }
 
         void exitBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
             Super::exitBitwiseAnd(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitAnd>::New(lhs, rhs));
+            builder->expression(builder->New<BitAnd>(lhs, rhs));
         }
 
         void exitBitwiseXor(PepperParser::BitwiseXorContext* context) override {
             Super::exitBitwiseXor(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitXor>::New(lhs, rhs));
+            builder->expression(builder->New<BitXor>(lhs, rhs));
         }
 
         void exitBitwiseOr(PepperParser::BitwiseOrContext* context) override {
             Super::exitBitwiseOr(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitOr>::New(lhs, rhs));
+            builder->expression(builder->New<BitOr>(lhs, rhs));
         }
 
         void exitLess(PepperParser::LessContext* context) override {
             Super::exitLess(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Less>::New(lhs, rhs));
+            builder->expression(builder->New<Less>(lhs, rhs));
         }
 
         void exitLessEqual(PepperParser::LessEqualContext* context) override {
             Super::exitLessEqual(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<LessEqual>::New(lhs, rhs));
+            builder->expression(builder->New<LessEqual>(lhs, rhs));
         }
 
         void exitGreater(PepperParser::GreaterContext* context) override {
             Super::exitGreater(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Greater>::New(lhs, rhs));
+            builder->expression(builder->New<Greater>(lhs, rhs));
         }
 
         void exitGreaterEqual(PepperParser::GreaterEqualContext* context) override {
             Super::exitGreaterEqual(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<GreaterEqual>::New(lhs, rhs));
+            builder->expression(builder->New<GreaterEqual>(lhs, rhs));
         }
 
         void exitEqual(PepperParser::EqualContext* context) override {
             Super::exitEqual(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Equal>::New(lhs, rhs));
+            builder->expression(builder->New<Equal>(lhs, rhs));
         }
 
         void exitNotEqual(PepperParser::NotEqualContext* context) override {
             Super::exitNotEqual(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<NotEqual>::New(lhs, rhs));
+            builder->expression(builder->New<NotEqual>(lhs, rhs));
         }
 
         void exitLogicalAnd(PepperParser::LogicalAndContext* context) override {
             Super::exitLogicalAnd(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<LogicalAnd>::New(lhs, rhs));
+            builder->expression(builder->New<LogicalAnd>(lhs, rhs));
         }
 
         void exitLogicalOr(PepperParser::LogicalOrContext* context) override {
             Super::exitLogicalOr(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<LogicalOr>::New(lhs, rhs));
+            builder->expression(builder->New<LogicalOr>(lhs, rhs));
         }
 
         void exitTernary(PepperParser::TernaryContext* context) override {
@@ -350,77 +350,77 @@ namespace pepper {
             Super::exitAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<Assign>::New(lhs, rhs));
+            builder->expression(builder->New<Assign>(lhs, rhs));
         }
 
         void exitMulAssignment(PepperParser::MulAssignmentContext* context) override {
             Super::exitMulAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<MulAssign>::New(lhs, rhs));
+            builder->expression(builder->New<MulAssign>(lhs, rhs));
         }
 
         void exitDivAssignment(PepperParser::DivAssignmentContext* context) override {
             Super::exitDivAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<DivAssign>::New(lhs, rhs));
+            builder->expression(builder->New<DivAssign>(lhs, rhs));
         }
 
         void exitModAssignment(PepperParser::ModAssignmentContext* context) override {
             Super::exitModAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<ModAssign>::New(lhs, rhs));
+            builder->expression(builder->New<ModAssign>(lhs, rhs));
         }
 
         void exitAddAssignment(PepperParser::AddAssignmentContext* context) override {
             Super::exitAddAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<AddAssign>::New(lhs, rhs));
+            builder->expression(builder->New<AddAssign>(lhs, rhs));
         }
 
         void exitSubAssignment(PepperParser::SubAssignmentContext* context) override {
             Super::exitSubAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<SubAssign>::New(lhs, rhs));
+            builder->expression(builder->New<SubAssign>(lhs, rhs));
         }
 
         void exitLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
             Super::exitLShiftAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<LShiftAssign>::New(lhs, rhs));
+            builder->expression(builder->New<LShiftAssign>(lhs, rhs));
         }
 
         void exitRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
             Super::exitRShiftAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<RShiftAssign>::New(lhs, rhs));
+            builder->expression(builder->New<RShiftAssign>(lhs, rhs));
         }
 
         void exitBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
             Super::exitBitAndAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitAndAssign>::New(lhs, rhs));
+            builder->expression(builder->New<BitAndAssign>(lhs, rhs));
         }
 
         void exitBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
             Super::exitBitXorAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitXorAssign>::New(lhs, rhs));
+            builder->expression(builder->New<BitXorAssign>(lhs, rhs));
         }
 
         void exitBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
             Super::exitBitOrAssignment(context);
             auto rhs = popStack<Expression>();
             auto lhs = popStack<Expression>();
-            builder->expression(Ref<BitOrAssign>::New(lhs, rhs));
+            builder->expression(builder->New<BitOrAssign>(lhs, rhs));
         }
     };
 
@@ -432,7 +432,7 @@ namespace pepper {
         };
         auto text = rex.getOffendingToken()->getText();
         auto expected = rex.getExpectedTokens().toString();
-        Messages::Report<Error>(src, "{0} \"{1}\", expected \"{2}\"", prefix, text, expected);
+        throw CompileError(src, "{0} \"{1}\", expected \"{2}\"", prefix, text, expected);
     }
 
     Ref<AST> Parser::parse(std::istream& stream, const std::string& name) {
