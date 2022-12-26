@@ -420,8 +420,8 @@ namespace pepper {
     }
 
     static llvm::Value* emit(Ref<CompoundAssign> op) {
-        auto rhs = codegen(op->rhs());
-        auto lhs = codegen(op->lhs());
+        auto rhs = popStack();
+        auto lhs = popStack();
         auto opType = Types::get(resolveType(lhs));
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
@@ -442,8 +442,8 @@ namespace pepper {
         if (op->is<CompoundAssign>())
             return emit(op.as<CompoundAssign>());
 
-        auto lhs = popStack();
         auto rhs = popStack();
+        auto lhs = popStack();
         lhs = read(lhs);
         rhs = read(rhs);
         auto opType = operandType(op, lhs->getType(), rhs->getType());
