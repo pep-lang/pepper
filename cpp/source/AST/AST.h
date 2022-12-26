@@ -27,5 +27,7 @@ namespace pepper::ast {
         [[nodiscard]] const Vector<Ref<ast::Node>>& roots() const {
             return Roots;
         }
+
+        void dump() const;
     };
 } // namespace pepper::ast

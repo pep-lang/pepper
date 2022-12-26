@@ -25,6 +25,10 @@ namespace pepper::ast {
         Ref<Expression> rhs() const {
             return RHS;
         }
+
+        std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("({0}), ({1})", LHS->toString(), RHS->toString()));
+        }
     };
 
     class Add : public BinaryOp {

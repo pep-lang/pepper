@@ -29,6 +29,10 @@ namespace pepper::ast {
         int64_t value() const {
             return Value;
         }
+
+        virtual std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0}", Value));
+        }
     };
 
     class FloatLiteral : public Literal {
@@ -50,6 +54,10 @@ namespace pepper::ast {
         double value() const {
             return Value;
         }
+
+        virtual std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0}", Value));
+        }
     };
 
     class StringLiteral : public Literal {
@@ -70,6 +78,10 @@ namespace pepper::ast {
 
         const std::string& value() const {
             return Value;
+        }
+
+        virtual std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0}", Value));
         }
     };
 } // namespace pepper::ast

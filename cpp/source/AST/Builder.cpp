@@ -3,6 +3,7 @@
 //
 
 #include "AST/Builder.h"
+#include <iostream>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
@@ -207,6 +208,10 @@ namespace pepper::ast {
             function->body().push_back(expr);
             pushStack(expr);
             return this;
+        }
+
+        void maybeDump(Ref<Node> node) const override {
+            std::cout << node->toString() << std::endl;
         }
     };
 

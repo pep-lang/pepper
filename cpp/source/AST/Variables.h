@@ -23,6 +23,10 @@ namespace pepper::ast {
         void setDefaultValue(Ref<Expression> newDefault) {
             Default = newDefault;
         }
+
+        std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0} {1} = {2}", type(), identifier(), Default ? Default->toString() : "default"));
+        }
     };
 
     class FieldDef : public VariableDef {
@@ -31,9 +35,13 @@ namespace pepper::ast {
       public:
         Ref<StructDef> Struct;
 
-        FieldDef(Ref<StructDef> strct, const Name& type, const Name& name)
+        FieldDef(Ref<StructDef> st, const Name& type, const Name& name)
             : VariableDef(type, name) {
-            Struct = strct;
+            Struct = st;
+        }
+
+        std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0} {1}.{2} = {3}", type(), Struct->identifier(), identifier(), Default ? Default->toString() : "default"));
         }
     };
 
@@ -59,6 +67,10 @@ namespace pepper::ast {
 
         const Name& identifier() const {
             return Identifier;
+        }
+
+        std::string toString() const override {
+            return Node::toString() + identifier();
         }
     };
 } // namespace pepper::ast

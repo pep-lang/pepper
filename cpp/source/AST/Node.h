@@ -21,6 +21,10 @@ namespace pepper::ast {
       public:
         Node() = default;
         virtual ~Node() = default;
+
+        virtual std::string toString() const {
+            return llvm::formatv("{0}: ", rtti()->name());
+        }
     };
 
     class Symbol : public Node {

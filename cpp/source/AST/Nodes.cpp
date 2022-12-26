@@ -82,4 +82,15 @@ namespace pepper::ast {
         Destructor->body().push_back(Ref<FunctionCall>::New(
             ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
     }
+
+    std::string StructDef::toString() const {
+        const char* sep = "\n  ";
+        Vector<std::string> fields = Query(Fields).select<std::string>([](auto f) { return f->toString(); });
+        Vector<std::string> methods = Query(Methods).select<std::string>([](auto m) { return m->toString(); });
+        return llvm::join_items(sep,
+                                Node::toString() + std::string(llvm::formatv("{0}", identifier())),
+                                llvm::join(fields.begin(), fields.end(), sep),
+                                llvm::join(methods.begin(), methods.end(), sep));
+    }
+
 } // namespace pepper::ast

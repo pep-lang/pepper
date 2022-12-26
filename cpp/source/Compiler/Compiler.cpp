@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "AST/AST.h"
 #include "AST/Parser.h"
 #include "Codegen/Codegen.h"
 #include "Codegen/ModuleContext.h"
@@ -40,6 +41,8 @@ namespace pepper {
             if (!ast || Messages::errors().size()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
+
+            ast->dump();
 
             Codegen gen(ModuleName, ast);
             auto module = gen.emit();

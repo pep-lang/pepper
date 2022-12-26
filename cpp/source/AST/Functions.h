@@ -8,7 +8,11 @@
 
 #include "AST/Node.h"
 #include "AST/Param.h"
+#include "AST/Struct.h"
+#include "AST/Variables.h"
 #include "Core/Common.h"
+#include "Core/Query.h"
+#include "Core/String.h"
 #include "Core/Vector.h"
 
 namespace pepper::ast {
@@ -40,6 +44,13 @@ namespace pepper::ast {
         [[nodiscard]] bool isVararg() const {
             return Vararg;
         }
+
+        virtual std::string toString() const override {
+            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+            return Node::toString() +
+                   std::string(llvm::formatv(
+                       "{0} {1}({2})", ReturnType, identifier(), llvm::join(types.begin(), types.end(), ", ")));
+        }
     };
 
     class FunctionDef : public FunctionNode {
@@ -69,6 +80,17 @@ namespace pepper::ast {
         [[nodiscard]] const Vector<Ref<Expression>>& body() const {
             return Body;
         }
+
+        std::string toString() const override {
+            const char* sep = "\n  ";
+            Vector<std::string> vars = Query(Locals).select<std::string>([](auto l) { return l->toString(); });
+            Vector<std::string> exprs = Query(Body).select<std::string>([](auto e) { return e->toString(); });
+            auto contents = rtrim(llvm::join_items(sep,
+                                                   FunctionNode::toString(),
+                                                   llvm::join(vars.begin(), vars.end(), sep),
+                                                   llvm::join(exprs.begin(), exprs.end(), sep)));
+            return contents;
+        }
     };
 
     class MethodDef : public FunctionDef {
@@ -89,6 +111,21 @@ namespace pepper::ast {
 
         [[nodiscard]] Ref<StructDef> structDef() const {
             return Struct;
+        }
+
+        virtual std::string toString() const override {
+            const char* sep = "\n    ";
+            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+            Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->toString(); });
+            Vector<std::string> exprs = Query(body()).select<std::string>([](auto e) { return e->toString(); });
+            return Node::toString() +
+                   std::string(llvm::formatv("{0} {1}.{2}({3})",
+                                             ReturnType,
+                                             structDef()->identifier(),
+                                             identifier(),
+                                             llvm::join(types.begin(), types.end(), ", "))) +
+                   sep + llvm::join(vars.begin(), vars.end(), sep) + sep + llvm::join(exprs.begin(), exprs.end(), sep);
+            ;
         }
     };
 
@@ -127,6 +164,13 @@ namespace pepper::ast {
         const Name& type() const override {
             return Target->returnType();
         }
+
+        std::string toString() const override {
+            Vector<std::string> argsStr = Query(args()).select<std::string>([](auto a) { return a->toString(); });
+            return Node::toString() +
+                   std::string(llvm::formatv(
+                       "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", ")));
+        }
     };
 
     class FunctionEnd : public Node {
@@ -156,6 +200,10 @@ namespace pepper::ast {
 
         Ref<FunctionDef> target() const {
             return Target;
+        }
+
+        std::string toString() const override {
+            return Node::toString() + std::string(llvm::formatv("{0}", Value ? Value->toString() : "void"));
         }
     };
 } // namespace pepper::ast
