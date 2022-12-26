@@ -5,12 +5,9 @@
 #include <string>
 
 #include "Core/Common.h"
-
-namespace llvm {
-    class LLVMContext;
-    class Module;
-    class IRBuilderBase;
-} // namespace llvm
+#include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
 
 namespace pepper {
     namespace ast {
@@ -31,11 +28,13 @@ namespace pepper {
         Ref<Scope> Builtins;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
+        Ref<llvm::DIBuilder> DebugInfo;
 
       public:
         static Context& get();
         static Ref<llvm::IRBuilderBase> ir();
         static Ref<llvm::IRBuilderBase> registers();
+        static Ref<llvm::DIBuilder> dbg();
 
         explicit Context(const std::string& moduleName);
         ~Context();

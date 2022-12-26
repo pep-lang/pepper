@@ -29,6 +29,10 @@ namespace pepper {
         return get().locals()->registers();
     }
 
+    Ref<llvm::DIBuilder> Context::dbg() {
+        return get().DebugInfo;
+    }
+
     Context::Context(const std::string& moduleName) {
         assert(Instance == nullptr);
         Instance = this;
@@ -38,6 +42,7 @@ namespace pepper {
         llvm::InitializeNativeTargetAsmParser();
 
         Module = Ref<ModuleContext>::New(moduleName);
+        DebugInfo = Ref<llvm::DIBuilder>::New(*(*Module));
 
         TypeMap = Ref<Types>::New(*Module->getContext());
 
