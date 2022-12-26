@@ -16,11 +16,15 @@ namespace pepper {
         using llvm::SmallVector<T>::operator=;
 
         void remove(const T& item) {
-            this->erase(std::remove(this->begin(), this->end(), item));
+            auto it = std::remove(this->begin(), this->end(), item);
+            if (it != this->end())
+                this->erase();
         }
 
         void remove_if(std::function<bool(const T&)> pred) {
-            this->erase(std::remove_if(this->begin(), this->end(), pred));
+            auto it = std::remove_if(this->begin(), this->end(), pred);
+            if (it != this->end())
+                this->erase(it);
         }
     };
 } // namespace pepper

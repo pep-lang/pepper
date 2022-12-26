@@ -23,10 +23,15 @@ namespace pepper::ast {
     class Builder {
       public:
         template <typename N, typename... Args>
-        Ref<N> New(Args&&... args) {
+        Ref<N> NewAt(const SourceLocation& source, Args&&... args) {
             auto node = Ref<N>::New(std::forward<decltype(args)>(args)...);
-            node->Source = Source;
+            node->Source = source;
             return node;
+        }
+
+        template <typename N, typename... Args>
+        Ref<N> New(Args&&... args) {
+            return NewAt<N>(Source, std::forward<decltype(args)>(args)...);
         }
 
         SourceLocation Source;
@@ -44,9 +49,9 @@ namespace pepper::ast {
         virtual Ref<FunctionDef> functionTarget() const = 0;
         virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;
-        virtual void pushStack(Ref<Node> value) = 0;
-        virtual Ref<Node> popStack() = 0;
-        virtual Ref<Node> peekStack(unsigned int idx) = 0;
+        virtual void pushStack(Ref<Expression> value) = 0;
+        virtual Ref<Expression> popStack() = 0;
+        virtual Ref<Expression> peekStack(unsigned int idx) = 0;
         virtual Builder* symbol(Ref<VariableDef> var) = 0;
         virtual Builder* expression(Ref<Expression> expr) = 0;
     };

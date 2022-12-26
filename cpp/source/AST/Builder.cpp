@@ -30,7 +30,7 @@ namespace pepper::ast {
             Vector<Ref<Expression>> Expressions;
             Ref<ast::FunctionDef> FunctionTarget = nullptr;
 
-            Vector<Ref<ast::Node>> Stack;
+            Vector<Ref<ast::Expression>> Stack;
 
             Scope(const Name& name = "Anonymous")
                 : Ident(name) {
@@ -108,12 +108,12 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        void pushStack(Ref<ast::Node> value) override {
+        void pushStack(Ref<Expression> value) override {
             auto& scope = Stack.back();
             scope->Stack.push_back(value);
         }
 
-        Ref<ast::Node> popStack() override {
+        Ref<Expression> popStack() override {
             auto& scope = Stack.back();
             if (scope->Stack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty AST stack");
@@ -123,7 +123,7 @@ namespace pepper::ast {
             return val;
         }
 
-        Ref<ast::Node> peekStack(unsigned int idx) override {
+        Ref<Expression> peekStack(unsigned int idx) override {
             const auto& scope = Stack.back();
             if (idx > (scope->Stack.size() - 1)) {
                 throw InternalCompilerError(
@@ -168,19 +168,17 @@ namespace pepper::ast {
         Builder* endFunction() override {
             auto& scope = Stack.back();
             auto& function = scope->FunctionTarget;
-            std::for_each(scope->Locals.begin(), scope->Locals.end(), [&function](auto& local) {
+            std::for_each(scope->Locals.begin(), scope->Locals.end(), [&](auto& local) {
                 // move local default value expressions to the init block, and remove matching expressions from the body
                 auto var = local.second;
                 auto defaultValue = var->defaultValue();
                 function->body().remove_if([defaultValue](const auto& expr) {
                     if (expr->rtti() == defaultValue->rtti()) {
-                        return true;
+                        return expr->Source == defaultValue->Source;
                     }
                     return false;
                 });
                 function->locals().push_back(var);
-                auto ref = Ref<VariableRef>::New(var->identifier());
-                function->inits().push_back(Ref<Assign>::New(ref, defaultValue));
             });
             ast.newRoot(function);
             endScope();

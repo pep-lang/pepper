@@ -90,8 +90,6 @@ namespace pepper {
             args.push_back(local);
         }
 
-        // Move all default value construction/assignment to the init block
-
         // Push all known variables at the top of the function block
         Query(funcDef->locals()).each([&](auto local) { codegen(local); });
 
@@ -237,7 +235,8 @@ namespace pepper {
         auto lhsType = Types::get(lhs->getType());
         auto structDesc = Struct::get(lhsType->name());
         auto memberName = memberRef->name();
-        auto member = structDesc->getMember(lhs, memberName);
+        auto thisPtr = read(lhs);
+        auto member = structDesc->getMember(thisPtr, memberName);
         member = read(member);
         // push this onto stack
         if (member->getType()->isFunctionTy()) {
@@ -270,7 +269,8 @@ namespace pepper {
 
     static llvm::Value* emit(Ref<Return> ret) {
         if (ret->value()) {
-            auto returnValue = popStack(); // codegen(ret->value());
+            auto returnValueExpr = popStack(); // codegen(ret->value());
+            auto returnValue = read(returnValueExpr);
             auto func = ret->target();
             auto returnType = Types::get(func->returnType());
             auto type = TypeOps::get(*returnType);

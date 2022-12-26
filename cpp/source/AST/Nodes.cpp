@@ -59,6 +59,7 @@ namespace pepper::ast {
             Ref<FunctionCall>::New(ExternFunctionDef::Malloc, Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})));
         Vector<Ref<Expression>> body = {
             Ref<FunctionCall>::New(Constructor),
+            Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
         };
         NewInstance->body() = body;

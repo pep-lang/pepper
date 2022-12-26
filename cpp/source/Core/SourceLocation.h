@@ -20,5 +20,13 @@ namespace pepper {
         std::string toString() const {
             return llvm::formatv("{0}({1},{2})", File, Line, Column);
         }
+
+        bool operator==(const SourceLocation& other) const {
+            return Line == other.Line && Column == other.Column && File == other.File;
+        }
+
+        bool operator!=(const SourceLocation& other) const {
+            return !(*this == other);
+        }
     };
 } // namespace pepper

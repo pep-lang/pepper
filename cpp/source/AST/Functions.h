@@ -47,7 +47,6 @@ namespace pepper::ast {
 
       private:
         Vector<Ref<VariableDef>> Locals;
-        Vector<Ref<Expression>> Inits;
         Vector<Ref<Expression>> Body;
 
       public:
@@ -61,14 +60,6 @@ namespace pepper::ast {
 
         const Vector<Ref<VariableDef>>& locals() const {
             return Locals;
-        }
-
-        Vector<Ref<Expression>>& inits() {
-            return Inits;
-        }
-
-        const Vector<Ref<Expression>>& inits() const {
-            return Inits;
         }
 
         Vector<Ref<Expression>>& body() {
