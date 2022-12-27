@@ -6,7 +6,7 @@
 
 #include "AST/AST.h"
 #include "AST/Parser.h"
-#include "Codegen/Codegen.h"
+#include "Codegen/IR/Codegen.h"
 #include "Codegen/ModuleContext.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"

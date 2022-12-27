@@ -8,7 +8,6 @@
 
 #include "AST/Node.h"
 #include "AST/Param.h"
-#include "AST/Struct.h"
 #include "AST/Variables.h"
 #include "Core/Common.h"
 #include "Core/Query.h"
@@ -94,42 +93,6 @@ namespace pepper::ast {
                                                    llvm::join(vars.begin(), vars.end(), sep),
                                                    llvm::join(exprs.begin(), exprs.end(), sep)));
             return contents;
-        }
-    };
-
-    class MethodDef : public FunctionDef {
-        DECLARE_RTTI(MethodDef, FunctionDef);
-
-      private:
-        Ref<StructDef> Struct;
-
-      public:
-        MethodDef(Ref<StructDef> strct,
-                  const Name& returnType,
-                  const Name& name,
-                  const Params& params = Params(),
-                  bool varargs = false)
-            : FunctionDef(returnType, name, params, varargs)
-            , Struct(std::move(strct)) {
-        }
-
-        [[nodiscard]] Ref<StructDef> structDef() const {
-            return Struct;
-        }
-
-        virtual std::string toString() const override {
-            const char* sep = "\n    ";
-            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-            Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->toString(); });
-            Vector<std::string> exprs = Query(body()).select<std::string>([](auto e) { return e->toString(); });
-            return Node::toString() +
-                   std::string(llvm::formatv("{0} {1}.{2}({3})",
-                                             ReturnType,
-                                             structDef()->identifier(),
-                                             identifier(),
-                                             llvm::join(types.begin(), types.end(), ", "))) +
-                   sep + llvm::join(vars.begin(), vars.end(), sep) + sep + llvm::join(exprs.begin(), exprs.end(), sep);
-            ;
         }
     };
 

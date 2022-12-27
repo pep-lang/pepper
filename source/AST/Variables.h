@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "AST/Node.h"
 #include "Core/Common.h"
 #include "Core/Name.h"
 
@@ -28,26 +29,6 @@ namespace pepper::ast {
             return Node::toString() +
                    std::string(
                        llvm::formatv("{0} {1} = {2}", type(), identifier(), Default ? Default->toString() : "default"));
-        }
-    };
-
-    class FieldDef : public VariableDef {
-        DECLARE_RTTI(FieldDef, VariableDef);
-
-      public:
-        Ref<StructDef> Struct;
-
-        FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue = nullptr)
-            : VariableDef(type, name) {
-            Struct = st;
-        }
-
-        std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0} {1}.{2} = {3}",
-                                                                type(),
-                                                                Struct->identifier(),
-                                                                identifier(),
-                                                                Default ? Default->toString() : "default"));
         }
     };
 

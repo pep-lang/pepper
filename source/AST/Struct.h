@@ -6,14 +6,47 @@
 
 #include <string>
 
+#include "AST/Functions.h"
+#include "AST/Node.h"
+#include "AST/Variables.h"
 #include "Core/Common.h"
 #include "Core/Name.h"
 #include "Core/Vector.h"
 
 namespace pepper::ast {
-    class FieldDef;
-    class FunctionDef;
-    class MethodDef;
+
+    class StructDef;
+
+    class FieldDef : public VariableDef {
+        DECLARE_RTTI(FieldDef, VariableDef);
+
+      public:
+        Ref<StructDef> Struct;
+
+        FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue = nullptr);
+
+        std::string toString() const override;
+    };
+
+    class MethodDef : public FunctionDef {
+        DECLARE_RTTI(MethodDef, FunctionDef);
+
+      private:
+        Ref<StructDef> Struct;
+
+      public:
+        MethodDef(Ref<StructDef> st,
+                  const Name& returnType,
+                  const Name& name,
+                  const Params& params = Params(),
+                  bool vararg = false);
+
+        [[nodiscard]] Ref<StructDef> structDef() const {
+            return Struct;
+        }
+
+         std::string toString() const override;
+    };
 
     class StructDef
         : public Symbol

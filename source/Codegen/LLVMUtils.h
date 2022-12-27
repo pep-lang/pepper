@@ -12,14 +12,14 @@
 #include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
-    std::string toString(llvm::Value* value) {
+    inline std::string toString(llvm::Value* value) {
         std::string str;
         llvm::raw_string_ostream ostr(str);
         value->print(ostr, true);
         return str;
     }
 
-    std::string toString(llvm::Type* type) {
+    inline std::string toString(llvm::Type* type) {
         std::string str;
         llvm::raw_string_ostream ostr(str);
         type->print(ostr, true);

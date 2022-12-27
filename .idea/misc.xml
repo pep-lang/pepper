@@ -17,4 +17,20 @@
     </option>
   </component>
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
+  <component name="CidrRootsConfiguration">
+    <libraryRoots>
+      <file path="$PROJECT_DIR$/deps" />
+      <file path="$PROJECT_DIR$/deps/llvm/install" />
+    </libraryRoots>
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/.vs" />
+      <file path="$PROJECT_DIR$/.vscode" />
+      <file path="$PROJECT_DIR$/deps/antlr4/antlr4" />
+      <file path="$PROJECT_DIR$/deps/antlr4/build" />
+      <file path="$PROJECT_DIR$/deps/llvm/build" />
+      <file path="$PROJECT_DIR$/deps/llvm/llvm-project" />
+      <file path="$PROJECT_DIR$/out" />
+      <file path="$PROJECT_DIR$/prototype" />
+    </excludeRoots>
+  </component>
 </project>

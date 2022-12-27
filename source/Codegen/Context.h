@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "Codegen/Scope.h"
 #include "Core/Common.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
@@ -13,7 +14,6 @@ namespace pepper {
     namespace ast {
         class AST;
     }
-    class Scope;
     class Executor;
     class Function;
     class ModuleContext;

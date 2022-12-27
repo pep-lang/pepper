@@ -1,35 +1,42 @@
+//
+// Created by Justin Boswell on 12/26/22.
+//
 
-#include "AST/Nodes.h"
-#include <algorithm>
-
-#include "AST/Param.h"
-#include "Core/Exceptions.h"
-#include "llvm/Support/FormatVariadic.h"
+#include "AST/Struct.h"
 
 namespace pepper::ast {
-
-    static std::string functionTy(const Name& returnType, const Params& args, bool vararg = false) {
-        Name argsStr;
-        for (auto it = args.begin(); it != args.end(); ++it) {
-            argsStr += it->Type;
-            if (it != args.end() - 1)
-                argsStr += ", ";
-        }
-        std::string ellipsis = vararg ? "..." : "";
-        return llvm::formatv("{0}({1}{2})", returnType, argsStr, ellipsis);
+    FieldDef::FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue)
+        : VariableDef(type, name) {
+        Struct = st;
     }
 
-    FunctionNode::FunctionNode(const Name& returnType, const Name& name, const Params& params, bool vararg)
-        : Symbol(functionTy(returnType, params, vararg), name)
-        , ReturnType(returnType)
-        , Parameters(params)
-        , Vararg(vararg) {
+    std::string FieldDef::toString() const {
+        return Node::toString() + std::string(llvm::formatv("{0} {1}.{2} = {3}",
+                                                            type(),
+                                                            Struct->identifier(),
+                                                            identifier(),
+                                                            Default ? Default->toString() : "default"));
     }
 
-    Ref<ExternFunctionDef> ExternFunctionDef::Malloc =
-        Ref<ExternFunctionDef>::New("void*", "malloc", Params{{"size", "u64"}});
-    Ref<ExternFunctionDef> ExternFunctionDef::Free =
-        Ref<ExternFunctionDef>::New("void", "free", Params{{"ptr", "void*"}});
+    MethodDef::MethodDef(Ref<StructDef> st, const Name& returnType, const Name& name, const Params& params, bool vararg)
+        : FunctionDef(returnType, name, params, vararg)
+        , Struct(std::move(st)) {
+    }
+
+    std::string MethodDef::toString() const {
+        const char* sep = "\n    ";
+        Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+        Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->toString(); });
+        Vector<std::string> exprs = Query(body()).select<std::string>([](auto e) { return e->toString(); });
+        return Node::toString() +
+               std::string(llvm::formatv("{0} {1}.{2}({3})",
+                                         ReturnType,
+                                         structDef()->identifier(),
+                                         identifier(),
+                                         llvm::join(types.begin(), types.end(), ", "))) +
+               sep + llvm::join(vars.begin(), vars.end(), sep) + sep + llvm::join(exprs.begin(), exprs.end(), sep);
+        ;
+    }
 
     StructDef::StructDef(const Name& type, const Name& name)
         : Symbol(type, name) {
@@ -92,5 +99,4 @@ namespace pepper::ast {
                                 llvm::join(fields.begin(), fields.end(), sep),
                                 llvm::join(methods.begin(), methods.end(), sep));
     }
-
 } // namespace pepper::ast
