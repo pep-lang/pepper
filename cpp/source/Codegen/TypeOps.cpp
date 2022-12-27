@@ -290,6 +290,33 @@ namespace pepper {
         }
     };
 
+    class BoolType : public IntegerType {
+      public:
+        BoolType(llvm::Type* type)
+            : IntegerType(type) {
+        }
+
+        llvm::Value* coerce(llvm::Value* value) const override {
+            value = read(value);
+            if (value->getType() == *this) {
+                return value;
+            }
+            auto type = value->getType();
+            auto bits = type->getPrimitiveSizeInBits();
+            auto intType = bits > 32 ? *Types::Int64 : *Types::Int32;
+            auto zero = llvm::ConstantInt::get(intType, 0);
+            llvm::Value* asInt = nullptr;
+            if (type->isIntegerTy()) {
+                return builder()->CreateICmpNE(value, zero, "bool");
+            }
+            if (type->isFloatingPointTy()) {
+                auto asInt = builder()->CreateFPToSI(value, *this);
+                return builder()->CreateICmpNE(asInt, zero, "bool");
+            }
+            throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
+        }
+    };
+
     class FloatType : public NativeType {
         DECLARE_RTTI(FloatType, NativeType)
       public:
@@ -393,6 +420,8 @@ namespace pepper {
 
     Ref<TypeOps> TypeOps::get(llvm::Type* type) {
         if (type->isIntegerTy()) {
+            if (type->getIntegerBitWidth() == 1)
+                return Ref<BoolType>::New(type);
             return Ref<IntegerType>::New(type);
         }
         if (type->isFloatingPointTy()) {
