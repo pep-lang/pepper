@@ -365,3 +365,9 @@ FodyWeavers.xsd
 # ignore generated parser code
 Parser/
 /Properties/launchSettings.json
+
+build/
+Testing/
+CMakeFiles/
+llvm-project/
+out/
