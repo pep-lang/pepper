@@ -31,7 +31,8 @@ namespace pepper::ast {
             Vector<Ref<Expression>> Expressions;
             Ref<ast::FunctionDef> FunctionTarget = nullptr;
 
-            Vector<Ref<ast::Expression>> Stack;
+            Vector<Ref<Node>> LValueStack;
+            Vector<Ref<Expression>> RValueStack;
 
             Scope(const Name& name = "Anonymous")
                 : Ident(name) {
@@ -109,28 +110,52 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        void pushStack(Ref<Expression> value) override {
+        void pushRValue(Ref<Expression> value) override {
             auto& scope = Stack.back();
-            scope->Stack.push_back(value);
+            scope->RValueStack.push_back(value);
         }
 
-        Ref<Expression> popStack() override {
+        Ref<Expression> popRValue() override {
             auto& scope = Stack.back();
-            if (scope->Stack.empty()) {
+            if (scope->RValueStack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty AST stack");
             }
-            auto val = scope->Stack.back();
-            scope->Stack.pop_back();
+            auto val = scope->RValueStack.back();
+            scope->RValueStack.pop_back();
             return val;
         }
 
-        Ref<Expression> peekStack(unsigned int idx) override {
+        Ref<Expression> peekRValue(unsigned int idx = 0) const override {
             const auto& scope = Stack.back();
-            if (idx > (scope->Stack.size() - 1)) {
+            if (idx > (scope->RValueStack.size() - 1)) {
                 throw InternalCompilerError(
-                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope->Stack.size());
+                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope->RValueStack.size());
             }
-            return scope->Stack[scope->Stack.size() - 1 - idx];
+            return scope->RValueStack[scope->RValueStack.size() - 1 - idx];
+        }
+
+        void pushLValue(Ref<Node> value) override {
+            auto& scope = Stack.back();
+            scope->LValueStack.push_back(value);
+        }
+
+        Ref<Node> popLValue() override {
+            auto& scope = Stack.back();
+            if (scope->LValueStack.empty()) {
+                throw InternalCompilerError("Attempted to pop empty AST stack");
+            }
+            auto val = scope->LValueStack.back();
+            scope->LValueStack.pop_back();
+            return val;
+        }
+
+        Ref<Node> peekLValue(unsigned int idx = 0) const override {
+            const auto& scope = Stack.back();
+            const int maxDepth = scope->LValueStack.size() - 1;
+            if (int(idx) > maxDepth) {
+                return nullptr;
+            }
+            return scope->LValueStack[maxDepth - idx];
         }
 
         Builder* beginStruct(Ref<StructDef> structDef) override {
@@ -205,8 +230,11 @@ namespace pepper::ast {
 
         Builder* expression(Ref<ast::Expression> expr) override {
             auto function = functionTarget();
-            function->body().push_back(expr);
-            pushStack(expr);
+            if (peekLValue())
+                pushRValue(expr);
+            else
+                function->body().push_back(expr);
+
             return this;
         }
 

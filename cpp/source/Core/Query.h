@@ -18,22 +18,22 @@ namespace pepper {
     QueryInst<T> Query(const Vector<T>& arr);
 
     template <typename T>
+    QueryInst<T> Query(const std::vector<T>& arr);
+
+    template <typename T>
     struct QueryInst {
         Vector<T> Src;
         llvm::ArrayRef<T> Ref;
 
         friend QueryInst<T> Query<T>(llvm::ArrayRef<T>);
         friend QueryInst<T> Query<T>(const Vector<T>&);
+        friend QueryInst<T> Query<T>(const std::vector<T>&);
 
         /* implicit */ QueryInst(llvm::ArrayRef<T> ref)
             : Ref(ref) {
         }
 
-        // just reference the incoming vector
-        /* implicit */ QueryInst(const Vector<T>& src)
-            : Ref(src) {
-        }
-
+        // used internally to movce from one operation to the next
         explicit QueryInst(Vector<T>&& src)
             : Src(std::move(src))
             , Ref(Src) {
@@ -92,6 +92,11 @@ namespace pepper {
 
     template <typename T>
     QueryInst<T> Query(const Vector<T>& arr) {
-        return arr;
+        return llvm::ArrayRef<T>(arr);
+    }
+
+    template <typename T>
+    QueryInst<T> Query(const std::vector<T>& arr) {
+        return llvm::ArrayRef<T>(arr);
     }
 } // namespace pepper

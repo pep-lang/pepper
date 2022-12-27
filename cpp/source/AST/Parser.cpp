@@ -34,13 +34,15 @@ namespace pepper {
             return Tree;
         }
 
-        void pushStack(Ref<Node> val) {
-            builder->pushStack(std::move(val));
+        void lvaluePush(Ref<Node> val) {
+            std::cout << "lpush: " << val->toString() << std::endl;
+            builder->pushLValue(std::move(val));
         }
 
         template <typename N>
-        Ref<N> popStack() {
-            auto val = builder->popStack();
+        Ref<N> lvaluePop() {
+            auto val = builder->popLValue();
+            std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
@@ -49,8 +51,33 @@ namespace pepper {
         }
 
         template <typename N>
-        Ref<N> peekStack(unsigned int idx) {
-            auto val = builder->peekStack(idx);
+        Ref<N> lvaluePeek(unsigned int idx = 0) {
+            auto val = builder->peekLValue(idx);
+            if (val && val->is<N>()) {
+                return std::static_pointer_cast<N>(val);
+            }
+            return nullptr;
+        }
+
+        void rvaluePush(Ref<Node> val) {
+            // Only bother tracking this rvalue if there is an l-value on the stack to receive it
+            if (lvaluePeek<Node>())
+                builder->pushRValue(std::move(val));
+        }
+
+        template <typename N>
+        Ref<N> rvaluePop() {
+            auto val = builder->popRValue();
+            if (val->is<N>()) {
+                return std::static_pointer_cast<N>(val);
+            }
+            throw InternalCompilerError(
+                "Attempted to pop {} from AST stack, found {} instead", RTTI::of<N>()->name(), RTTI::of(*val)->name());
+        }
+
+        template <typename N>
+        Ref<N> rvaluePeek(unsigned int idx) {
+            auto val = builder->peekRValue(idx);
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
@@ -91,8 +118,7 @@ namespace pepper {
             throw CompileError("Unable to parse numeric literal: {0}", value);
         }
 
-        void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
-            Super::exitVariableSpecifier(context);
+        void enterVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
             auto identifiers = context->Identifier();
             if (identifiers.size() != 2) {
                 throw CompileError(sourceLocation(context), "Expected <type> <identifier> in variable declaration");
@@ -101,18 +127,26 @@ namespace pepper {
             auto identifier = identifiers[1]->toString();
 
             if (builder->structTarget()) {
-                builder->symbol(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
+                lvaluePush(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
             } else {
-                auto defaultValue = (context->assignmentExpression()) ? popStack<Expression>() : nullptr;
-                builder->symbol(builder->New<VariableDef>(typeName, identifier, defaultValue));
+                lvaluePush(builder->New<VariableDef>(typeName, identifier));
             }
         }
 
+        void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
+            auto symbol = lvaluePop<VariableDef>();
+            if (context->assignmentExpression()) {
+                auto defaultValue = rvaluePop<Expression>();
+                symbol->setDefaultValue(defaultValue);
+            }
+
+            builder->symbol(symbol);
+        }
+
         void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
-            Super::exitPrimaryExpression(context);
             auto constant = context->Constant();
             if (constant) {
-                builder->pushStack(evalNumericConstant(constant));
+                rvaluePush(evalNumericConstant(constant));
                 return;
             }
             auto stringLiterals = context->StringLiteral();
@@ -120,19 +154,18 @@ namespace pepper {
                 std::string strVal = "";
                 std::for_each(
                     stringLiterals.begin(), stringLiterals.end(), [&strVal](auto str) { strVal += str->toString(); });
-                builder->pushStack(builder->New<StringLiteral>(strVal));
+                rvaluePush(builder->New<StringLiteral>(strVal));
                 return;
             }
             auto ident = context->Identifier();
             if (ident) {
                 auto identifier = ident->toString();
-                builder->pushStack(builder->New<VariableRef>(identifier));
+                rvaluePush(builder->New<VariableRef>(identifier));
                 return;
             }
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
-            Super::enterFunctionDefinition(context);
             auto identifier = context->Identifier()->toString();
             auto returnType =
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
@@ -140,19 +173,16 @@ namespace pepper {
             Params params;
             if (auto paramList = context->parameterList()) {
                 auto paramDecls = paramList->parameterDeclaration();
-                std::for_each(paramDecls.begin(), paramDecls.end(), [&](auto p) {
+                params = Query(paramDecls).select<Param>([&](auto p) {
                     auto identifiers = p->Identifier();
                     auto typeName = identifiers[0]->toString();
                     auto paramName = identifiers[1]->toString();
-                    Ref<Expression> defaultValue;
-                    if (p->Assign()) {
-                        defaultValue = builder->popStack();
-                    }
-                    params.emplace_back(paramName, typeName, defaultValue);
+                    return Param{paramName, typeName};
                 });
             }
 
             auto function = builder->New<FunctionDef>(returnType, identifier, params);
+            lvaluePush(function);
             builder->beginFunction(function);
             for (auto& param : params) {
                 builder->symbol(builder->New<VariableDef>(param.Type, param.Identifier));
@@ -160,12 +190,22 @@ namespace pepper {
         }
 
         void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
-            Super::exitFunctionDefinition(context);
             builder->endFunction();
+            // for each default value, fill them in from computed rvalues
+            auto function = lvaluePop<FunctionDef>();
+            if (auto paramsList = context->parameterList()) {
+                auto paramDecls = paramsList->parameterDeclaration();
+                int idx = 0;
+                Query(paramDecls).each([&](auto p) {
+                    if (p->Assign()) {
+                        function->params()[idx].Default = rvaluePop<Expression>();
+                    }
+                    ++idx;
+                });
+            }
         }
 
         void exitFunctionCall(PepperParser::FunctionCallContext* context) override {
-            Super::exitFunctionCall(context);
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
             auto providedArgsCount = context->argumentExpressionList()
@@ -173,254 +213,260 @@ namespace pepper {
                                          : 0;
             Vector<Ref<Expression>> args;
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.push_back(popStack<Expression>());
+                args.push_back(rvaluePop<Expression>());
             }
             auto call = builder->New<FunctionCall>(func, args);
             builder->expression(call);
         }
 
-        void exitReturn(PepperParser::ReturnContext* context) override {
-            Super::exitReturn(context);
-
-            Ref<Expression> returnValue = nullptr;
-            if (context->expression()) {
-                returnValue = popStack<Expression>();
-            }
+        void enterReturn(PepperParser::ReturnContext* context) override {
             auto function = builder->functionTarget();
-            builder->expression(builder->New<Return>(function, returnValue));
+            auto ret = builder->New<Return>(function);
+            lvaluePush(ret);
+        }
+
+        void exitReturn(PepperParser::ReturnContext* context) override {
+            auto ret = lvaluePop<Return>();
+            if (context->expression()) {
+                auto returnValue = rvaluePop<Expression>();
+                ret->setValue(returnValue);
+            }
+            builder->expression(ret);
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            Super::enterStructDeclaration(context);
             auto identifier = context->Identifier()->toString();
             auto structDef = StructDef::New(identifier, identifier);
             builder->beginStruct(structDef);
         }
 
         void exitStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            Super::exitStructDeclaration(context);
             builder->endStruct();
         }
 
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {
-            Super::exitMemberAccess(context);
-            auto lhs = popStack<Expression>();
+            auto lhs = rvaluePop<Expression>();
             auto rhs = context->Identifier()->toString();
             builder->expression(builder->New<MemberRef>(lhs, rhs));
         }
 
         void exitAdd(PepperParser::AddContext* context) override {
-            Super::exitAdd(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Add>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Add>(lhs, rhs));
         }
 
         void exitSub(PepperParser::SubContext* context) override {
-            Super::exitSub(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Sub>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Sub>(lhs, rhs));
         }
 
         void exitMul(PepperParser::MulContext* context) override {
-            Super::exitMul(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Mul>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Mul>(lhs, rhs));
         }
 
         void exitDiv(PepperParser::DivContext* context) override {
-            Super::exitDiv(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Div>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Div>(lhs, rhs));
         }
 
         void exitMod(PepperParser::ModContext* context) override {
-            Super::exitMod(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Mod>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Mod>(lhs, rhs));
         }
 
         void exitPow(PepperParser::PowContext* context) override {
-            Super::exitPow(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Pow>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Pow>(lhs, rhs));
         }
 
         void exitLShift(PepperParser::LShiftContext* context) override {
-            Super::exitLShift(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<LShift>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<LShift>(lhs, rhs));
         }
 
         void exitRShift(PepperParser::RShiftContext* context) override {
-            Super::exitRShift(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<RShift>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<RShift>(lhs, rhs));
         }
 
         void exitBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
-            Super::exitBitwiseAnd(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitAnd>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<BitAnd>(lhs, rhs));
         }
 
         void exitBitwiseXor(PepperParser::BitwiseXorContext* context) override {
-            Super::exitBitwiseXor(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitXor>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<BitXor>(lhs, rhs));
         }
 
         void exitBitwiseOr(PepperParser::BitwiseOrContext* context) override {
-            Super::exitBitwiseOr(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitOr>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<BitOr>(lhs, rhs));
         }
 
         void exitLess(PepperParser::LessContext* context) override {
-            Super::exitLess(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Less>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Less>(lhs, rhs));
         }
 
         void exitLessEqual(PepperParser::LessEqualContext* context) override {
-            Super::exitLessEqual(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<LessEqual>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<LessEqual>(lhs, rhs));
         }
 
         void exitGreater(PepperParser::GreaterContext* context) override {
-            Super::exitGreater(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Greater>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Greater>(lhs, rhs));
         }
 
         void exitGreaterEqual(PepperParser::GreaterEqualContext* context) override {
-            Super::exitGreaterEqual(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<GreaterEqual>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<GreaterEqual>(lhs, rhs));
         }
 
         void exitEqual(PepperParser::EqualContext* context) override {
-            Super::exitEqual(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Equal>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<Equal>(lhs, rhs));
         }
 
         void exitNotEqual(PepperParser::NotEqualContext* context) override {
-            Super::exitNotEqual(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<NotEqual>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<NotEqual>(lhs, rhs));
         }
 
         void exitLogicalAnd(PepperParser::LogicalAndContext* context) override {
-            Super::exitLogicalAnd(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<LogicalAnd>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<LogicalAnd>(lhs, rhs));
         }
 
         void exitLogicalOr(PepperParser::LogicalOrContext* context) override {
-            Super::exitLogicalOr(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<LogicalOr>(lhs, rhs));
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            rvaluePush(builder->New<LogicalOr>(lhs, rhs));
         }
 
         void exitTernary(PepperParser::TernaryContext* context) override {
-            Super::exitTernary(context);
+        }
+
+        template <typename Op>
+        void beginAssign() {
+            auto op = builder->New<Op>();
+            lvaluePush(op);
+        }
+
+        template <typename Op>
+        void endAssign() {
+            auto op = lvaluePop<Op>();
+            auto rhs = rvaluePop<Expression>();
+            auto lhs = rvaluePop<Expression>();
+            builder->expression(builder->New<Op>(lhs, rhs));
+        }
+
+        void enterAssignment(PepperParser::AssignmentContext* context) override {
+            beginAssign<Assign>();
         }
 
         void exitAssignment(PepperParser::AssignmentContext* context) override {
-            Super::exitAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<Assign>(lhs, rhs));
+            endAssign<Assign>();
+        }
+
+        void enterMulAssignment(PepperParser::MulAssignmentContext* context) override {
+            beginAssign<MulAssign>();
         }
 
         void exitMulAssignment(PepperParser::MulAssignmentContext* context) override {
-            Super::exitMulAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<MulAssign>(lhs, rhs));
+            endAssign<MulAssign>();
+        }
+
+        void enterDivAssignment(PepperParser::DivAssignmentContext* context) override {
+            beginAssign<DivAssign>();
         }
 
         void exitDivAssignment(PepperParser::DivAssignmentContext* context) override {
-            Super::exitDivAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<DivAssign>(lhs, rhs));
+            endAssign<DivAssign>();
+        }
+
+        void enterModAssignment(PepperParser::ModAssignmentContext* context) override {
+            beginAssign<ModAssign>();
         }
 
         void exitModAssignment(PepperParser::ModAssignmentContext* context) override {
-            Super::exitModAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<ModAssign>(lhs, rhs));
+            endAssign<ModAssign>();
+        }
+
+        void enterAddAssignment(PepperParser::AddAssignmentContext* context) override {
+            beginAssign<AddAssign>();
         }
 
         void exitAddAssignment(PepperParser::AddAssignmentContext* context) override {
-            Super::exitAddAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<AddAssign>(lhs, rhs));
+            endAssign<AddAssign>();
+        }
+
+        void enterSubAssignment(PepperParser::SubAssignmentContext* context) override {
+            beginAssign<SubAssign>();
         }
 
         void exitSubAssignment(PepperParser::SubAssignmentContext* context) override {
-            Super::exitSubAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<SubAssign>(lhs, rhs));
+            endAssign<SubAssign>();
+        }
+
+        void enterLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
+            beginAssign<LShiftAssign>();
         }
 
         void exitLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
-            Super::exitLShiftAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<LShiftAssign>(lhs, rhs));
+            endAssign<LShiftAssign>();
+        }
+
+        void enterRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
+            beginAssign<RShiftAssign>();
         }
 
         void exitRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
-            Super::exitRShiftAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<RShiftAssign>(lhs, rhs));
+            endAssign<RShiftAssign>();
+        }
+
+        void enterBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
+            beginAssign<BitAndAssign>();
         }
 
         void exitBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
-            Super::exitBitAndAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitAndAssign>(lhs, rhs));
+            endAssign<BitAndAssign>();
+        }
+
+        void enterBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
+            beginAssign<BitXorAssign>();
         }
 
         void exitBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
-            Super::exitBitXorAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitXorAssign>(lhs, rhs));
+            endAssign<BitXorAssign>();
+        }
+
+        void enterBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
+            beginAssign<BitOrAssign>();
         }
 
         void exitBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
-            Super::exitBitOrAssignment(context);
-            auto rhs = popStack<Expression>();
-            auto lhs = popStack<Expression>();
-            builder->expression(builder->New<BitOrAssign>(lhs, rhs));
+            endAssign<BitOrAssign>();
         }
     };
 

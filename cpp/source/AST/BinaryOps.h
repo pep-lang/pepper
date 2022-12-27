@@ -9,10 +9,11 @@ namespace pepper::ast {
     class BinaryOp : public Expression {
         DECLARE_RTTI(BinaryOp, Expression);
 
-      public:
+      protected:
         Ref<Expression> LHS;
         Ref<Expression> RHS;
 
+      public:
         BinaryOp(Ref<Expression> lhs, Ref<Expression> rhs)
             : LHS(lhs)
             , RHS(rhs) {
@@ -22,12 +23,22 @@ namespace pepper::ast {
             return LHS;
         }
 
+        void setLhs(Ref<Expression> newLhs) {
+            LHS = newLhs;
+        }
+
         Ref<Expression> rhs() const {
             return RHS;
         }
 
+        void setRhs(Ref<Expression> newRhs) {
+            RHS = newRhs;
+        }
+
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("({0}), ({1})", LHS->toString(), RHS->toString()));
+            return Node::toString() +
+                   std::string(
+                       llvm::formatv("({0}), ({1})", LHS ? LHS->toString() : "empty", RHS ? RHS->toString() : "empty"));
         }
     };
 
@@ -168,14 +179,16 @@ namespace pepper::ast {
         DECLARE_RTTI(Assign, BinaryOp);
 
       public:
-        using BinaryOp::BinaryOp;
+        Assign(Ref<Expression> lhs = nullptr, Ref<Expression> rhs = nullptr)
+            : BinaryOp(lhs, rhs) {
+        }
     };
 
-    class CompoundAssign : public BinaryOp {
-        DECLARE_RTTI(CompoundAssign, BinaryOp);
+    class CompoundAssign : public Assign {
+        DECLARE_RTTI(CompoundAssign, Assign);
 
       public:
-        using BinaryOp::BinaryOp;
+        using Assign::Assign;
     };
 
     class AddAssign : public CompoundAssign {

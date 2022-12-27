@@ -252,11 +252,11 @@ namespace pepper {
         }
 
         llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr");
+            return builder()->CreateShl(coerce(lhs), coerce(rhs), "shl");
         }
 
         llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateAShr(coerce(lhs), coerce(rhs), "ashr");
+            return builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr");
         }
 
         llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {

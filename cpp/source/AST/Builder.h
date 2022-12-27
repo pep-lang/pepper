@@ -48,11 +48,18 @@ namespace pepper::ast {
         virtual Builder* beginFunction(Ref<FunctionDef> func) = 0;
         virtual Builder* endFunction() = 0;
         virtual Ref<FunctionDef> functionTarget() const = 0;
+
         virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;
-        virtual void pushStack(Ref<Expression> value) = 0;
-        virtual Ref<Expression> popStack() = 0;
-        virtual Ref<Expression> peekStack(unsigned int idx) = 0;
+
+        virtual void pushRValue(Ref<Expression> value) = 0;
+        virtual Ref<Expression> popRValue() = 0;
+        virtual Ref<Expression> peekRValue(unsigned int idx) const = 0;
+
+        virtual void pushLValue(Ref<Node> value) = 0;
+        virtual Ref<Node> popLValue() = 0;
+        virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
+
         virtual Builder* symbol(Ref<VariableDef> var) = 0;
         virtual Builder* expression(Ref<Expression> expr) = 0;
         virtual void maybeDump(Ref<Node> node) const = 0;

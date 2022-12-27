@@ -69,6 +69,61 @@ TEST(IntMath, Mod) {
     EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(IntMath, And) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            int y = 5;
+            return x & y;
+        }
+    )SOURCE";
+    EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, Or) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            int y = 5;
+            return x | y;
+        }
+    )SOURCE";
+    EXPECT_EQ(13, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, Xor) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 19;
+            int y = 7;
+            return x ^ y;
+        }
+    )SOURCE";
+    EXPECT_EQ(20, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, LShift) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            int y = 5;
+            return x << y;
+        }
+    )SOURCE";
+    EXPECT_EQ(384, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, RShift) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 72;
+            int y = 5;
+            return x >> y;
+        }
+    )SOURCE";
+    EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(IntMath, AddAssign) {
     const char* source = R"SOURCE(
         int test() {
@@ -122,4 +177,81 @@ TEST(IntMath, ModAssign) {
         }
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, AndAssign) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            x &= 4;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, OrAssign) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            x |= 3;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(15, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, XorAssign) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            x ^= 3;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(15, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, LShiftAssign) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 12;
+            x <<= 3;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(96, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, RShiftAssign) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 32;
+            x >>= 3;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, LogicalAnd) {
+    const char* source = R"SOURCE(
+        int test() {
+            bool x = 12;
+            bool y = 0;
+            return x && y;
+        }
+    )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, LogicalOr) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            int y = 0;
+            return x || y;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }

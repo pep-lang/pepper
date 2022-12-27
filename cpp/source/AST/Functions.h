@@ -23,7 +23,7 @@ namespace pepper::ast {
         DECLARE_RTTI(FunctionNode, Node);
 
         Name ReturnType;
-        const Params Parameters;
+        Params Parameters;
         const bool Vararg;
 
       public:
@@ -38,6 +38,10 @@ namespace pepper::ast {
         }
 
         [[nodiscard]] const Params& params() const {
+            return Parameters;
+        }
+
+        [[nodiscard]] Params& params() {
             return Parameters;
         }
 
@@ -196,6 +200,10 @@ namespace pepper::ast {
 
         Ref<Expression> value() const {
             return Value;
+        }
+
+        void setValue(Ref<Expression> value) {
+            Value = value;
         }
 
         Ref<FunctionDef> target() const {
