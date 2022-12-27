@@ -91,8 +91,19 @@
   ],
   "testPresets": [
     {
-      "name": "default",
+      "name": "mac",
       "configurePreset": "mac-llvm-clang-x64",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": true
+      }
+    },
+    {
+      "name": "windows",
+      "configurePreset": "x64-debug",
       "output": {
         "outputOnFailure": true
       },
