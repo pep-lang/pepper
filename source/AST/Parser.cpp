@@ -249,6 +249,44 @@ namespace pepper {
             builder->expression(builder->New<MemberRef>(lhs, rhs));
         }
 
+        void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
+            auto branch = builder->New<Branch>();
+            if (context->ifStatement()) {
+                branch->thenBlock() = builder->New<Block>(branch, "if");
+            }
+            if (context->elseStatement()) {
+                branch->elseBlock() = builder->New<Block>(branch, "else");
+            }
+            lvaluePush(branch);
+        }
+
+        void exitSelectionStatement(PepperParser::SelectionStatementContext* context) override {
+        }
+
+        void enterIfStatement(PepperParser::IfStatementContext* context) override {
+            auto branch = lvaluePeek<Branch>();
+            builder->beginBlock(branch->thenBlock());
+        }
+
+        void exitIfStatement(PepperParser::IfStatementContext* context) override {
+            auto branch = lvaluePop<Branch>();
+            auto condition = rvaluePop<Expression>();
+            branch->condition() = condition;
+            builder->endBlock();
+            if (branch->elseBlock()) {
+                lvaluePush(branch);
+            }
+        }
+
+        void enterElseStatement(PepperParser::ElseStatementContext* context) override {
+            auto branch = lvaluePop<Branch>();
+            builder->beginBlock(branch->thenBlock());
+        }
+
+        void exitElseStatement(PepperParser::ElseStatementContext* context) override {
+            builder->endBlock();
+        }
+
         void exitAdd(PepperParser::AddContext* context) override {
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();

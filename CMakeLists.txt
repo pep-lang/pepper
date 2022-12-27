@@ -29,7 +29,7 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat
 add_subdirectory(grammar)
 
 file(GLOB_RECURSE PEPPER_CORE_SOURCE LIST_DIRECTORIES false source/**)
-add_library(PepperCore STATIC ${PEPPER_CORE_SOURCE})
+add_library(PepperCore STATIC ${PEPPER_CORE_SOURCE} Source/AST/Branches.h)
 
 
 add_dependencies(PepperCore PepperParser)

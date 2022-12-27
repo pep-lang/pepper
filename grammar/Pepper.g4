@@ -266,8 +266,16 @@ expressionStatement
     ;
 
 selectionStatement
-    :   If '(' expression ')' statement (Else statement)?
-    |   Switch '(' expression ')' statement
+    :   ifStatement elseStatement?
+    //|   Switch '(' expression ')' statement
+    ;
+
+ifStatement
+    : If '(' expression ')' statement
+    ;
+
+elseStatement
+    : Else statement
     ;
 
 iterationStatement
