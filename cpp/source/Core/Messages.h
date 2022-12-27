@@ -58,6 +58,13 @@ namespace pepper {
         }
     };
 
+    enum class TraceChannel : uint64_t {
+        AST = 1 << 0,
+        Codegen = 1 << 1,
+        Parser = 1 << 2,
+        ALL = 0xffffffff,
+    };
+
     class Messages {
         static auto& _errors() {
             static Vector<Error> Errors;
@@ -67,6 +74,11 @@ namespace pepper {
         static auto& _warnings() {
             static Vector<Warning> Warnings;
             return Warnings;
+        }
+
+        static auto& _traceChannels() {
+            static uint64_t channels = 0;
+            return channels;
         }
 
       public:
@@ -88,6 +100,26 @@ namespace pepper {
             return _warnings();
         }
 
+        static bool ShouldTrace(TraceChannel channel) {
+            return _traceChannels() & uint64_t(channel);
+        }
+
+        static void SetTraceChannels(uint64_t channels) {
+            _traceChannels() = channels;
+        }
+
+        static void SetTraceChannels(TraceChannel channel) {
+            SetTraceChannels(uint64_t(channel));
+        }
+
+        static uint64_t GetTraceChannels() {
+            return _traceChannels();
+        }
+
+        static void Trace(TraceChannel channel, const std::string& msg) {
+            std::cout << msg << std::endl;
+        }
+
       private:
         static void report(Error&& msg) {
             std::cout << msg.message() << std::endl;
@@ -100,3 +132,12 @@ namespace pepper {
         }
     };
 } // namespace pepper
+
+#define PEP_TRACING(channel) (Messages::ShouldTrace(channel))
+
+#define PEP_TRACE(channel, fmt, ...)                                                                                   \
+    if (Messages::ShouldTrace(channel)) {                                                                              \
+        std::string msg(fmt);                                                                                          \
+        __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                             \
+        Messages::Trace(channel, msg);                                                                                 \
+    }

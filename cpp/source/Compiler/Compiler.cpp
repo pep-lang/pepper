@@ -36,6 +36,8 @@ namespace pepper {
         }
 
         Ref<ModuleContext> compile(std::istream& sourceStream, const std::string& sourceFile) override {
+            Messages::SetTraceChannels(TraceChannel::ALL);
+
             SourcePath = sourceFile;
             auto ast = parse(sourceStream, sourceFile);
             if (!ast || Messages::errors().size()) {

@@ -31,3 +31,5 @@ namespace pepper::ast {
         void dump() const;
     };
 } // namespace pepper::ast
+
+#define PEP_TRACE_AST(fmt, ...) PEP_TRACE(TraceChannel::AST, fmt, __VA_ARGS__)

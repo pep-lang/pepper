@@ -8,6 +8,7 @@
 #include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/Query.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -238,8 +239,8 @@ namespace pepper::ast {
             return this;
         }
 
-        void maybeDump(Ref<Node> node) const override {
-            std::cout << node->toString() << std::endl;
+        void trace(const Ref<Node>& node) const override {
+            PEP_TRACE(TraceChannel::Parser, node->toString());
         }
     };
 

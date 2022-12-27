@@ -18,4 +18,11 @@ namespace pepper {
         value->print(ostr, true);
         return str;
     }
+
+    std::string toString(llvm::Type* type) {
+        std::string str;
+        llvm::raw_string_ostream ostr(str);
+        type->print(ostr, true);
+        return str;
+    }
 } // namespace pepper

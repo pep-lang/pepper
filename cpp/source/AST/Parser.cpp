@@ -35,14 +35,14 @@ namespace pepper {
         }
 
         void lvaluePush(Ref<Node> val) {
-            std::cout << "lpush: " << val->toString() << std::endl;
+            // std::cout << "lpush: " << val->toString() << std::endl;
             builder->pushLValue(std::move(val));
         }
 
         template <typename N>
         Ref<N> lvaluePop() {
             auto val = builder->popLValue();
-            std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
+            // std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }

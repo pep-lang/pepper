@@ -26,7 +26,7 @@ namespace pepper::ast {
         Ref<N> NewAt(const SourceLocation& source, Args&&... args) {
             auto node = Ref<N>::New(std::forward<decltype(args)>(args)...);
             node->Source = source;
-            maybeDump(node);
+            trace(node);
             return node;
         }
 
@@ -62,6 +62,6 @@ namespace pepper::ast {
 
         virtual Builder* symbol(Ref<VariableDef> var) = 0;
         virtual Builder* expression(Ref<Expression> expr) = 0;
-        virtual void maybeDump(Ref<Node> node) const = 0;
+        virtual void trace(const Ref<Node>& node) const = 0;
     };
 } // namespace pepper::ast

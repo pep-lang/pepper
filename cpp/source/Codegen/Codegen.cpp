@@ -442,39 +442,43 @@ namespace pepper {
     }
 
     static llvm::Value* codegen(Ref<Node> node) {
-        std::cout << "codegen:" << std::endl;
-        std::cout << node->toString() << std::endl;
+        llvm::Value* value = nullptr;
         if (node->is<BinaryOp>())
-            return emit(node.as<BinaryOp>());
-        if (node->is<FieldDef>())
-            return emit(node.as<FieldDef>());
-        if (node->is<VariableDef>())
-            return emit(node.as<VariableDef>());
-        if (node->is<ThisRef>())
-            return emit(node.as<ThisRef>());
-        if (node->is<MemberRef>())
-            return emit(node.as<MemberRef>());
-        if (node->is<VariableRef>())
-            return emit(node.as<VariableRef>());
-        if (node->is<FunctionDef>())
-            return emit(node.as<FunctionDef>());
-        if (node->is<Return>())
-            return emit(node.as<Return>());
-        if (node->is<FunctionCall>())
-            return emit(node.as<FunctionCall>());
-        if (node->is<StringLiteral>())
-            return emit(node.as<StringLiteral>());
-        if (node->is<FloatLiteral>())
-            return emit(node.as<FloatLiteral>());
-        if (node->is<IntegerLiteral>())
-            return emit(node.as<IntegerLiteral>());
+            value = emit(node.as<BinaryOp>());
+        else if (node->is<FieldDef>())
+            value = emit(node.as<FieldDef>());
+        else if (node->is<VariableDef>())
+            value = emit(node.as<VariableDef>());
+        else if (node->is<ThisRef>())
+            value = emit(node.as<ThisRef>());
+        else if (node->is<MemberRef>())
+            value = emit(node.as<MemberRef>());
+        else if (node->is<VariableRef>())
+            value = emit(node.as<VariableRef>());
+        else if (node->is<FunctionDef>())
+            value = emit(node.as<FunctionDef>());
+        else if (node->is<Return>())
+            value = emit(node.as<Return>());
+        else if (node->is<FunctionCall>())
+            value = emit(node.as<FunctionCall>());
+        else if (node->is<StringLiteral>())
+            value = emit(node.as<StringLiteral>());
+        else if (node->is<FloatLiteral>())
+            value = emit(node.as<FloatLiteral>());
+        else if (node->is<IntegerLiteral>())
+            value = emit(node.as<IntegerLiteral>());
+        if (value) {
+            PEP_TRACE(TraceChannel::Codegen, "{0} -> {1}", node->toString(), toString(value));
+            return value;
+        }
         throw InternalCompilerError("Unknown AST node");
     }
 
     static Ref<Struct> codegenStruct(Ref<StructDef> structDef) {
-        std::cout << "codegen:" << std::endl;
-        std::cout << structDef->toString() << std::endl;
-        return emit(structDef);
+        auto st = emit(structDef);
+        PEP_TRACE(
+            TraceChannel::Codegen, "StructDef {0} -> {1}", structDef->identifier(), toString(st->type()->llvmType()));
+        return st;
     }
 
     Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)

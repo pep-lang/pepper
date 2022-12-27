@@ -171,9 +171,9 @@ namespace pepper::ast {
 
         std::string toString() const override {
             Vector<std::string> argsStr = Query(args()).select<std::string>([](auto a) { return a->toString(); });
-            return Node::toString() +
-                   std::string(llvm::formatv(
-                       "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", ")));
+            return trim(Node::toString() +
+                        std::string(llvm::formatv(
+                            "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
     };
 
