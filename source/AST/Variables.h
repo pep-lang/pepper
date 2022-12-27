@@ -51,6 +51,13 @@ namespace pepper::ast {
         }
     };
 
+    class ParamDef : public VariableDef {
+        DECLARE_RTTI(ParamDef, VariableDef);
+
+      public:
+        using VariableDef::VariableDef;
+    };
+
     class ConstantDef : public VariableDef {
         DECLARE_RTTI(ConstantDef, VariableDef);
 

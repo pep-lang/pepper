@@ -18,6 +18,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(PepperTests
         FloatMath.cpp
+        Function.cpp
         IntMath.cpp
         RTTI.cpp
         Structs.cpp

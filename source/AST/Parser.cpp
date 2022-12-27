@@ -185,7 +185,7 @@ namespace pepper {
             lvaluePush(function);
             builder->beginFunction(function);
             for (auto& param : params) {
-                builder->symbol(builder->New<VariableDef>(param.Type, param.Identifier));
+                builder->symbol(builder->New<ParamDef>(param.Type, param.Identifier));
             }
         }
 
@@ -213,7 +213,7 @@ namespace pepper {
                                          : 0;
             Vector<Ref<Expression>> args;
             for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.push_back(rvaluePop<Expression>());
+                args.insert(args.begin(), rvaluePop<Expression>());
             }
             auto call = builder->New<FunctionCall>(func, args);
             builder->expression(call);

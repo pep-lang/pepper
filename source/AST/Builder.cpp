@@ -196,15 +196,7 @@ namespace pepper::ast {
             auto& scope = Stack.back();
             auto& function = scope->FunctionTarget;
             std::for_each(scope->Locals.begin(), scope->Locals.end(), [&](auto& local) {
-                // move local default value expressions to the init block, and remove matching expressions from the body
                 auto var = local.second;
-                auto defaultValue = var->defaultValue();
-                function->body().remove_if([defaultValue](const auto& expr) {
-                    if (expr->rtti() == defaultValue->rtti()) {
-                        return expr->Source == defaultValue->Source;
-                    }
-                    return false;
-                });
                 function->locals().push_back(var);
             });
             ast.newRoot(function);
