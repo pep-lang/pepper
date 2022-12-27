@@ -266,7 +266,7 @@ expressionStatement
     ;
 
 selectionStatement
-    :   If '(' expression ')' statement ('else' statement)?
+    :   If '(' expression ')' statement (Else statement)?
     |   Switch '(' expression ')' statement
     ;
 

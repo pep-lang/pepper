@@ -78,6 +78,7 @@ namespace pepper {
         if (function->is<Method>()) {
             auto thisRef = Context::get().locals()->findSymbol("this");
             assert(thisRef);
+            thisRef = read(thisRef);
             args.push_back(thisRef);
         }
 

@@ -19,6 +19,7 @@ namespace pepper {
     llvm::Value* Codegen::emit(Ref<FieldDef> fieldDef) {
         auto st = Struct::get(fieldDef->Struct->identifier());
         auto instance = Context::get().locals()->findSymbol("this");
+        instance = read(instance);
         auto fieldName = fieldDef->identifier();
         auto field = st->getField(instance, fieldName);
         if (!field) {
