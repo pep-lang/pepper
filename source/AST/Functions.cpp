@@ -1,7 +1,7 @@
 
-#include "AST/Nodes.h"
 #include <algorithm>
 
+#include "AST/Nodes.h"
 #include "AST/Param.h"
 #include "Core/Exceptions.h"
 #include "llvm/Support/FormatVariadic.h"

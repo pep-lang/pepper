@@ -45,7 +45,7 @@ namespace pepper::ast {
             return Struct;
         }
 
-         std::string toString() const override;
+        std::string toString() const override;
     };
 
     class StructDef
