@@ -70,7 +70,7 @@ namespace pepper {
         Ref<Type> getType(llvm::Type* type) const;
 
       public:
-        Types(llvm::LLVMContext& ctx);
+        explicit Types(llvm::LLVMContext& ctx);
         ~Types() = default;
 
         static std::string toString(llvm::Type* ty);

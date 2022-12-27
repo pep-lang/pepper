@@ -12,7 +12,6 @@
 #include "PepperBaseListener.h"
 #include "PepperLexer.h"
 #include "PepperParser.h"
-#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
     using namespace Pepper::Parser;
