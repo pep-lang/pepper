@@ -98,6 +98,14 @@ namespace pepper {
             builder->Source = sourceLocation(context);
         }
 
+        void enterEveryRule(antlr4::ParserRuleContext* context) override {
+            recordSourceLocation(context);
+        }
+
+        void exitEveryRule(antlr4::ParserRuleContext* context) override {
+            recordSourceLocation(context);
+        }
+
         void visitTerminal(antlr4::tree::TerminalNode* terminal) override {
             Super::visitTerminal(terminal);
         }
@@ -252,7 +260,7 @@ namespace pepper {
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = builder->New<Branch>();
             if (context->ifStatement()) {
-                branch->thenBlock() = builder->New<Block>(branch, "if");
+                branch->thenBlock() = builder->New<Block>(branch, "then");
             }
             if (context->elseStatement()) {
                 branch->elseBlock() = builder->New<Block>(branch, "else");
@@ -261,11 +269,15 @@ namespace pepper {
         }
 
         void exitSelectionStatement(PepperParser::SelectionStatementContext* context) override {
+            auto branch = lvaluePop<Branch>();
+            builder->expression(branch);
         }
 
         void enterIfStatement(PepperParser::IfStatementContext* context) override {
-            auto branch = lvaluePeek<Branch>();
+            auto branch = lvaluePop<Branch>();
             builder->beginBlock(branch->thenBlock());
+            // push into the new scope
+            lvaluePush(branch);
         }
 
         void exitIfStatement(PepperParser::IfStatementContext* context) override {
@@ -273,18 +285,19 @@ namespace pepper {
             auto condition = rvaluePop<Expression>();
             branch->condition() = condition;
             builder->endBlock();
-            if (branch->elseBlock()) {
-                lvaluePush(branch);
-            }
+            lvaluePush(branch);
         }
 
         void enterElseStatement(PepperParser::ElseStatementContext* context) override {
             auto branch = lvaluePop<Branch>();
             builder->beginBlock(branch->thenBlock());
+            lvaluePush(branch);
         }
 
         void exitElseStatement(PepperParser::ElseStatementContext* context) override {
+            auto branch = lvaluePop<Branch>();
             builder->endBlock();
+            lvaluePush(branch);
         }
 
         void exitAdd(PepperParser::AddContext* context) override {

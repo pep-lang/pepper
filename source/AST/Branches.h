@@ -5,6 +5,8 @@
 #pragma once
 
 #include "AST/Node.h"
+#include "Core/Query.h"
+#include "Core/String.h"
 #include "Core/Vector.h"
 
 namespace pepper::ast {
@@ -32,6 +34,11 @@ namespace pepper::ast {
         Ref<Node> parent() {
             return Parent;
         }
+
+        std::string toString() const override {
+            Vector<std::string> items = Query(Items).select<std::string>([](auto item) { return item->toString(); });
+            return std::string(llvm::formatv("{0}: {{\n  ", Name)) + llvm::join(items, "\n  ") + "\n}";
+        }
     };
 
     class Branch : public Expression {
@@ -54,6 +61,14 @@ namespace pepper::ast {
 
         Ref<Block>& elseBlock() {
             return Else;
+        }
+
+        std::string toString() const override {
+            auto ifBlock =
+                Then ? std::string(llvm::formatv("if ({0}) {{\n  ", Condition->toString())) + Then->toString() + "}"
+                     : "";
+            auto elseBlock = Else ? std::string(" else {\n  ") + Else->toString() + "}" : "";
+            return ifBlock + elseBlock;
         }
     };
 } // namespace pepper::ast

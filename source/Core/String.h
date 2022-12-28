@@ -33,4 +33,24 @@ namespace pepper {
     }
 
 #undef WHITESPACE
+
+    inline std::string replace(const std::string& s, const std::string& search, const std::string& replacement) {
+        auto res = s;
+        auto pos = res.find(search);
+        if (pos != -1)
+            res.replace(pos, search.size(), replacement);
+        return res;
+    }
+
+    inline std::string replace_all(const std::string& s, const std::string& search, const std::string& replacement) {
+        auto res = s;
+        ssize_t pos = 0;
+        while (pos != -1) {
+            pos = res.find(search, pos);
+            if (pos >= 0) {
+                res.replace(pos, search.size(), replacement);
+            }
+        }
+        return res;
+    }
 } // namespace pepper
