@@ -60,11 +60,9 @@ namespace pepper {
     class Types {
         llvm::LLVMContext& Ctx;
         llvm::StringMap<Ref<TypeInfo>> KnownTypes;
-        // std::unordered_map<llvm::Type*, Ref<TypeInfo>> TypeCache;
 
         Ref<TypeInfo> addType(Ref<TypeInfo> t, const Vector<Name>& aliases = {});
         Ref<TypeInfo> getType(const Name& name) const;
-        // Ref<TypeInfo> getType(llvm::Type* type) const;
 
       public:
         explicit Types(llvm::LLVMContext& ctx);

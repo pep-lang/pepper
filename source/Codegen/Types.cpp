@@ -129,13 +129,6 @@ namespace pepper {
         return nullptr;
     }
 
-    //    Ref<TypeInfo> Types::getType(llvm::Type* type) const {
-    //        auto it = TypeCache.find(type);
-    //        if (it != TypeCache.end()) {
-    //            return it->second;
-    //        }
-    //        return nullptr;
-    //    }
     std::string Types::toString(Ref<TypeInfo> ty) {
         return ty->name();
     }
@@ -154,8 +147,4 @@ namespace pepper {
     Ref<TypeInfo> Types::get(const Name& name) {
         return Context::get().types()->getType(name);
     }
-
-    //    Ref<TypeInfo> Types::get(llvm::Type* type) {
-    //        return Context::get().types()->getType(type);
-    //    }
 } // namespace pepper

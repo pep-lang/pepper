@@ -43,14 +43,6 @@ namespace pepper {
             }
         }
 
-        //        const Param& field(const Name& name) const {
-        //            auto it = Fields.find(name);
-        //            if (it != Fields.end()) {
-        //                return it->second;
-        //            }
-        //            return nullptr;
-        //        }
-
         Params fields() const {
             Params fs;
             for (auto& field : Fields) {

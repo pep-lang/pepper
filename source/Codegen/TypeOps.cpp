@@ -6,7 +6,6 @@
 
 #include "Codegen/Context.h"
 #include "Codegen/IR/Value.h"
-#include "Codegen/Scope.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
 
