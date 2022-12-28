@@ -22,7 +22,7 @@ add_executable(PepperTests
         IntMath.cpp
         RTTI.cpp
         Structs.cpp
-        )
+        Branches.cpp)
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS})
 target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES})
 set_target_properties(PepperTests PROPERTIES LINKER_LANGUAGE CXX)
