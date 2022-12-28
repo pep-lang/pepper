@@ -5,6 +5,7 @@
 #include "Codegen/TypeOps.h"
 
 #include "Codegen/Context.h"
+#include "Codegen/IR/Value.h"
 #include "Codegen/Scope.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
@@ -19,79 +20,79 @@
 #include "llvm/IR/Value.h"
 
 namespace pepper {
-    llvm::Value* TypeOps::add(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::add(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support addition", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::sub(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::sub(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support subtraction", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::mul(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::mul(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support multiplication", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::div(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::div(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support division", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::mod(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::mod(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support modulus", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::pow(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::pow(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support pow", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::less(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::less(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support <", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::lessEq(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::lessEq(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support <=", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::greater(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::greater(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support >", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::greaterEq(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::greaterEq(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support >=", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::lshift(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::lshift(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support <<", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::rshift(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::rshift(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support >>", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::equal(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::equal(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support equality", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::notEqual(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::notEqual(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support non-equality", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::assign(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::assign(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support assignment", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::bitAnd(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::bitAnd(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support bitwise and", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::bitXor(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::bitXor(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support bitwise xor", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::bitOr(llvm::Value* lhs, llvm::Value* rhs) const {
+    Value TypeOps::bitOr(Value lhs, Value rhs) const {
         throw CompileError("Type {0} does not support bitwise or", Types::toString(Type));
     }
 
-    llvm::Value* TypeOps::asBool(llvm::Value* value) const {
+    Value TypeOps::asBool(Value value) const {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Type));
     }
 
@@ -102,11 +103,11 @@ namespace pepper {
         return Context::get().locals()->builder();
     }
 
-    static llvm::Value* read(llvm::Value* value) {
+    static Value read(Value value) {
         if (isa<llvm::AllocaInst>(*value)) {
-            auto allocaInst = cast<llvm::AllocaInst>(value);
+            auto allocaInst = cast<llvm::AllocaInst>(value.V);
             auto type = allocaInst->getAllocatedType();
-            return ir()->CreateLoad(type, value);
+            return Value(value.Ty, ir()->CreateLoad(type, value));
         }
         return value;
     }
@@ -119,7 +120,7 @@ namespace pepper {
         }
 
       public:
-        NativeType(llvm::Type* type)
+        NativeType(Ref<TypeInfo> type)
             : TypeOps(type) {
         }
     };
@@ -127,34 +128,34 @@ namespace pepper {
     class PointerType : public NativeType {
         DECLARE_RTTI(PointerType, NativeType)
       public:
-        PointerType(llvm::Type* type)
+        PointerType(Ref<TypeInfo> type)
             : NativeType(type) {
         }
 
-        llvm::Value* coerce(llvm::Value* value) const override {
-            if (value->getType()->isPointerTy()) {
+        Value coerce(Value value) const override {
+            if (value.Ty->llvmType()->isPointerTy()) {
                 return value;
             }
             throw CompileError("Coercion to pointer is not supported");
         }
 
-        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpEQ(coerce(lhs), coerce(rhs));
+        Value equal(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs)));
         }
 
-        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpNE(coerce(lhs), coerce(rhs));
+        Value notEqual(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs)));
         }
 
-        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+        Value assign(Value lhs, Value rhs) const override {
             builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
-        llvm::Value* asBool(llvm::Value* value) const override {
-            auto zero = llvm::ConstantInt::getFalse(Type);
+        Value asBool(Value value) const override {
+            auto zero = llvm::ConstantInt::getFalse(*Type);
             auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
-            return builder()->CreateICmpNE(zero, valAsInt, "bool");
+            return Value(Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool"));
         }
     };
 
@@ -162,10 +163,10 @@ namespace pepper {
         DECLARE_RTTI(VoidType, NativeType)
       public:
         VoidType()
-            : NativeType(llvm::Type::getVoidTy(Context::get().llvmContext())) {
+            : NativeType(Types::Void) {
         }
 
-        llvm::Value* coerce(llvm::Value* value) const override {
+        Value coerce(Value value) const override {
             throw CompileError("Cannot convert {0} to void", Types::toString(value->getType()));
         }
     };
@@ -176,16 +177,16 @@ namespace pepper {
         bool Signed = false;
 
       public:
-        IntegerType(llvm::Type* type)
+        IntegerType(Ref<TypeInfo> type)
             : NativeType(type)
-            , Bits(type->getIntegerBitWidth()) {
+            , Bits(type->llvmType()->getIntegerBitWidth()) {
         }
 
         bool isSigned() const {
             return Signed;
         }
 
-        llvm::Value* coerce(llvm::Value* value) const override {
+        Value coerce(Value value) const override {
             value = read(value);
             if (value->getType() == *this) {
                 return value;
@@ -194,109 +195,116 @@ namespace pepper {
             bool signedVal = !type->isIntegerTy(1) && isSigned();
 
             if (type->isIntegerTy()) {
-                return builder()->CreateIntCast(value, *this, signedVal);
+                return Value(Type, builder()->CreateIntCast(value, *this, signedVal));
             }
             if (type->isFloatingPointTy()) {
-                return signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this);
+                return Value(Type,
+                             signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this));
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
         }
 
-        llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add");
+        Value add(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add"));
         }
 
-        llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub");
+        Value sub(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub"));
         }
 
-        llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul");
+        Value mul(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul"));
         }
 
-        llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateSDiv(coerce(lhs), coerce(rhs), "sdiv")
-                              : builder()->CreateUDiv(coerce(lhs), coerce(rhs), "udiv");
+        Value div(Value lhs, Value rhs) const override {
+            return Value(Type,
+                         isSigned() ? builder()->CreateSDiv(coerce(lhs), coerce(rhs), "sdiv")
+                                    : builder()->CreateUDiv(coerce(lhs), coerce(rhs), "udiv"));
         }
 
-        llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateSRem(coerce(lhs), coerce(rhs), "srem")
-                              : builder()->CreateURem(coerce(lhs), coerce(rhs), "urem");
+        Value mod(Value lhs, Value rhs) const override {
+            return Value(Type,
+                         isSigned() ? builder()->CreateSRem(coerce(lhs), coerce(rhs), "srem")
+                                    : builder()->CreateURem(coerce(lhs), coerce(rhs), "urem"));
         }
 
-        llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
+        Value pow(Value lhs, Value rhs) const override {
             // auto pow = builder()->
             // Value::New(
             //     ref(), builder()->CreateCall())
-            return nullptr;
+            throw InternalCompilerError("Pow not implemented");
         }
 
-        llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSLT(coerce(lhs), coerce(rhs), "slt")
-                              : builder()->CreateICmpULT(coerce(lhs), coerce(rhs), "ult");
+        Value less(Value lhs, Value rhs) const override {
+            return Value(Types::Bool,
+                         isSigned() ? builder()->CreateICmpSLT(coerce(lhs), coerce(rhs), "slt")
+                                    : builder()->CreateICmpULT(coerce(lhs), coerce(rhs), "ult"));
         }
 
-        llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSLE(coerce(lhs), coerce(rhs), "sle")
-                              : builder()->CreateICmpULE(coerce(lhs), coerce(rhs), "ule");
+        Value lessEq(Value lhs, Value rhs) const override {
+            return Value(Types::Bool,
+                         isSigned() ? builder()->CreateICmpSLE(coerce(lhs), coerce(rhs), "sle")
+                                    : builder()->CreateICmpULE(coerce(lhs), coerce(rhs), "ule"));
         }
 
-        llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSGT(coerce(lhs), coerce(rhs), "sgt")
-                              : builder()->CreateICmpUGT(coerce(lhs), coerce(rhs), "ugt");
+        Value greater(Value lhs, Value rhs) const override {
+            return Value(Types::Bool,
+                         isSigned() ? builder()->CreateICmpSGT(coerce(lhs), coerce(rhs), "sgt")
+                                    : builder()->CreateICmpUGT(coerce(lhs), coerce(rhs), "ugt"));
         }
 
-        llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return isSigned() ? builder()->CreateICmpSGE(coerce(lhs), coerce(rhs), "sge")
-                              : builder()->CreateICmpUGE(coerce(lhs), coerce(rhs), "uge");
+        Value greaterEq(Value lhs, Value rhs) const override {
+            return Value(Types::Bool,
+                         isSigned() ? builder()->CreateICmpSGE(coerce(lhs), coerce(rhs), "sge")
+                                    : builder()->CreateICmpUGE(coerce(lhs), coerce(rhs), "uge"));
         }
 
-        llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateShl(coerce(lhs), coerce(rhs), "shl");
+        Value lshift(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateShl(coerce(lhs), coerce(rhs), "shl"));
         }
 
-        llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr");
+        Value rshift(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr"));
         }
 
-        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq");
+        Value equal(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq"));
         }
 
-        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne");
+        Value notEqual(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne"));
         }
 
-        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+        Value assign(Value lhs, Value rhs) const override {
             builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
-        llvm::Value* bitAnd(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateAnd(coerce(lhs), coerce(rhs), "and");
+        Value bitAnd(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateAnd(coerce(lhs), coerce(rhs), "and"));
         }
 
-        llvm::Value* bitXor(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateXor(coerce(lhs), coerce(rhs), "xor");
+        Value bitXor(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateXor(coerce(lhs), coerce(rhs), "xor"));
         }
 
-        llvm::Value* bitOr(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateOr(coerce(lhs), coerce(rhs), "or");
+        Value bitOr(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateOr(coerce(lhs), coerce(rhs), "or"));
         }
 
-        llvm::Value* asBool(llvm::Value* value) const override {
-            auto zero = llvm::ConstantInt::getFalse(Type);
-            return builder()->CreateICmpNE(value, zero, "bool");
+        Value asBool(Value value) const override {
+            auto zero = llvm::ConstantInt::getFalse(*Type);
+            return Value(Types::Bool, builder()->CreateICmpNE(value, zero, "bool"));
         }
     };
 
     class BoolType : public IntegerType {
       public:
-        BoolType(llvm::Type* type)
+        BoolType(Ref<TypeInfo> type)
             : IntegerType(type) {
         }
 
-        llvm::Value* coerce(llvm::Value* value) const override {
+        Value coerce(Value value) const override {
             value = read(value);
             if (value->getType() == *this) {
                 return value;
@@ -305,13 +313,12 @@ namespace pepper {
             auto bits = type->getPrimitiveSizeInBits();
             auto intType = bits > 32 ? *Types::Int64 : *Types::Int32;
             auto zero = llvm::ConstantInt::get(intType, 0);
-            llvm::Value* asInt = nullptr;
             if (type->isIntegerTy()) {
-                return builder()->CreateICmpNE(value, zero, "bool");
+                return Value(Types::Bool, builder()->CreateICmpNE(value, zero, "bool"));
             }
             if (type->isFloatingPointTy()) {
                 auto asInt = builder()->CreateFPToSI(value, *this);
-                return builder()->CreateICmpNE(asInt, zero, "bool");
+                return Value(Types::Bool, builder()->CreateICmpNE(asInt, zero, "bool"));
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
         }
@@ -320,13 +327,13 @@ namespace pepper {
     class FloatType : public NativeType {
         DECLARE_RTTI(FloatType, NativeType)
       public:
-        FloatType(llvm::Type* type)
+        FloatType(Ref<TypeInfo> type)
             : NativeType(type) {
         }
 
         ~FloatType() = default;
 
-        llvm::Value* coerce(llvm::Value* value) const override {
+        Value coerce(Value value) const override {
             value = read(value);
             if (value->getType() == *this) {
                 return value;
@@ -342,95 +349,90 @@ namespace pepper {
                     else
                         cast = builder()->CreateUIToFP(value, *this);
                 } else {
-                    if (Type->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
-                        return builder()->CreateFPExt(value, *this);
+                    if (Type->llvmType()->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
+                        cast = builder()->CreateFPExt(value, *this);
                     else
-                        return builder()->CreateFPTrunc(value, *this);
+                        cast = builder()->CreateFPTrunc(value, *this);
                 }
-                return cast;
+                return Value(Type, cast);
             }
             throw CompileError(
                 "Cannot convert from {0} to {0}", Types::toString(value->getType()), Types::toString(Type));
         }
 
-        llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd");
+        Value add(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd"));
         }
 
-        llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub");
+        Value sub(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub"));
         }
 
-        llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul");
+        Value mul(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul"));
         }
 
-        llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv");
+        Value div(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv"));
         }
 
-        llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem");
+        Value mod(Value lhs, Value rhs) const override {
+            return Value(Type, builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem"));
         }
 
-        llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const override {
-            // auto pow = builder()->
-            // Value::New(
-            //     ref(), builder()->CreateCall())
-            return nullptr;
+        Value less(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt"));
         }
 
-        llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt");
+        Value lessEq(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole"));
         }
 
-        llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole");
+        Value greater(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt"));
         }
 
-        llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt");
+        Value greaterEq(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge"));
         }
 
-        llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge");
+        Value equal(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq"));
         }
 
-        llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq");
+        Value notEqual(Value lhs, Value rhs) const override {
+            return Value(Types::Bool, builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one"));
         }
 
-        llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const override {
-            return builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one");
-        }
-
-        llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const override {
+        Value assign(Value lhs, Value rhs) const override {
             builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
-        llvm::Value* asBool(llvm::Value* value) const override {
-            auto intType = Type->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(builder()->getContext())
-                                                           : llvm::Type::getInt32Ty(builder()->getContext());
+        Value asBool(Value value) const override {
+            auto intType = Type->llvmType()->getIntegerBitWidth() > 32
+                               ? llvm::Type::getInt64Ty(builder()->getContext())
+                               : llvm::Type::getInt32Ty(builder()->getContext());
             auto zero = llvm::ConstantInt::getFalse(intType);
             auto valAsInt = builder()->CreateFPToSI(value, intType);
-            return builder()->CreateICmpNE(valAsInt, zero, "bool");
+            return Value(Types::Bool, builder()->CreateICmpNE(valAsInt, zero, "bool"));
         }
     };
 
-    Ref<TypeOps> TypeOps::get(llvm::Type* type) {
-        if (type->isIntegerTy()) {
-            if (type->getIntegerBitWidth() == 1)
+    Ref<TypeOps> TypeOps::get(Ref<TypeInfo> type) {
+        auto llvmTy = type->llvmType();
+        if (llvmTy->isIntegerTy()) {
+            if (llvmTy->getIntegerBitWidth() == 1)
                 return Ref<BoolType>::New(type);
             return Ref<IntegerType>::New(type);
         }
-        if (type->isFloatingPointTy()) {
+        if (llvmTy->isFloatingPointTy()) {
             return Ref<FloatType>::New(type);
         }
-        if (type->isPointerTy()) {
+        if (llvmTy->isPointerTy()) {
             return Ref<PointerType>::New(type);
         }
-        if (type->isVoidTy()) {
+        if (llvmTy->isVoidTy()) {
             return Ref<VoidType>::New();
         }
         throw InternalCompilerError("Unknown type {0} found while looking for TypeOps", Types::toString(type));

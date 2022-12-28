@@ -20,7 +20,7 @@ namespace pepper {
         }
     }
 
-    void DebugInfo::newBasicType(llvm::StringRef name, Ref<Type> type) {
+    void DebugInfo::newBasicType(llvm::StringRef name, Ref<TypeInfo> type) {
         auto sizeInBits = Module->getDataLayout().getTypeSizeInBits(*type);
         assert(!type->llvmType()->isArrayTy() && !type->llvmType()->isStructTy());
         auto encoding = llvm::dwarf::DW_ATE_unsigned;

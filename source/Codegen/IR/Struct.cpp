@@ -4,6 +4,7 @@
 
 #include "Codegen/Struct.h"
 
+#include "AST/Functions.h"
 #include "AST/Literals.h"
 #include "AST/Struct.h"
 #include "Codegen/Context.h"
@@ -16,7 +17,7 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    llvm::Value* Codegen::emit(Ref<FieldDef> fieldDef) {
+    Value Codegen::emit(Ref<FieldDef> fieldDef) {
         auto st = Struct::get(fieldDef->Struct->identifier());
         auto instance = Context::get().locals()->findSymbol("this");
         instance = read(instance);
@@ -28,10 +29,10 @@ namespace pepper {
         auto type = Types::get(fieldDef->type());
         auto value = maybeCodegen(fieldDef->defaultValue());
         if (!value) {
-            value = zeroValue(*type);
+            value = zeroValue(type);
         }
         ir()->CreateStore(value, field);
-        return field;
+        return Value(type, field);
     }
 
     Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
@@ -47,14 +48,16 @@ namespace pepper {
         return Context::get().locals()->findFunction(functionName);
     }
 
-    llvm::Value* Codegen::emit(Ref<MemberRef> memberRef) {
+    Value Codegen::emit(Ref<MemberRef> memberRef) {
         auto lhs = codegen(memberRef->lhs());
-        auto lhsType = Types::get(lhs->getType());
+        auto lhsType = lhs.Ty;
         auto structDesc = Struct::get(lhsType->name());
         auto memberName = memberRef->name();
+        auto field =
+            Query(structDesc->fields()).find([&memberName](auto f) { return f.ParamName == memberName; }).value();
         auto thisPtr = read(lhs);
         auto member = structDesc->getMember(thisPtr, memberName);
-        return member;
+        return Value(field.ParamType, member);
     }
 
     Ref<Struct> Codegen::emit(Ref<StructDef> structDef) {
@@ -69,7 +72,7 @@ namespace pepper {
 
         // generate the new struct type
         auto llvmType = llvm::StructType::create(fieldTypes, structDef->identifier());
-        auto structType = Types::add(Ref<Type>::New(structDef->identifier(), llvmType));
+        auto structType = Types::add(Ref<TypeInfo>::New(structDef->identifier(), llvmType));
         auto structPtrType = Types::get(structDef->identifier());
         auto structDesc = Struct::New(structType, structDef->identifier());
         structDesc->setFields(fields);
@@ -118,7 +121,7 @@ namespace pepper {
         return structDesc;
     }
 
-    llvm::Value* Codegen::emit(Ref<ThisRef> thisRef) {
+    Value Codegen::emit(Ref<ThisRef> thisRef) {
         auto thisPtr = Context::get().locals()->findSymbol("this");
         return thisPtr;
     }

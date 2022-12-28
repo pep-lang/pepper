@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "Codegen/IR/Value.h"
 #include "Core/Common.h"
 #include "Core/Name.h"
 #include "llvm/IR/IRBuilder.h"
@@ -47,8 +48,8 @@ namespace pepper {
 
       protected:
         template <typename N>
-        llvm::Value* maybeCodegen(Ref<N> node) {
-            return node ? codegen(node) : nullptr;
+        Value maybeCodegen(Ref<N> node) {
+            return node ? codegen(node) : Value::Null();
         }
 
         // General builder, normal insertion point
@@ -56,27 +57,27 @@ namespace pepper {
         // builder placed at the head of the current block, to allow mem2reg to optimize register mappings
         static Ref<llvm::IRBuilderBase> registers();
 
-        static llvm::Type* resolveType(llvm::Value* value);
-        static llvm::Value* read(llvm::Value* value);
-        static llvm::Value* zeroValue(llvm::Type* type);
+        static llvm::Type* resolveType(Value value);
+        static Value read(Value value);
+        static Value zeroValue(Ref<TypeInfo> type);
 
         // Entry to polymorphic emit calls, use this to force generation of a node and its children
-        llvm::Value* codegen(Ref<ast::Node> node);
+        Value codegen(Ref<ast::Node> node);
 
         // individual AST -> IR transforms
-        llvm::Value* emit(Ref<ast::VariableRef> variableRef);
-        llvm::Value* emit(Ref<ast::VariableDef> variableDef);
-        llvm::Value* emit(Ref<ast::StringLiteral> stringLiteral);
-        llvm::Value* emit(Ref<ast::IntegerLiteral> intLiteral);
-        llvm::Value* emit(Ref<ast::FloatLiteral> floatLiteral);
-        llvm::Value* emit(Ref<ast::FieldDef> fieldDef);
-        llvm::Value* emit(Ref<ast::MemberRef> memberRef);
-        llvm::Value* emit(Ref<ast::ThisRef> thisRef);
-        llvm::Value* emit(Ref<ast::FunctionDef> functionDef);
-        llvm::Value* emit(Ref<ast::Return> ret);
-        llvm::Value* emit(Ref<ast::FunctionCall> call);
-        llvm::Value* emit(Ref<ast::CompoundAssign> op);
-        llvm::Value* emit(Ref<ast::BinaryOp> op);
+        Value emit(Ref<ast::VariableRef> variableRef);
+        Value emit(Ref<ast::VariableDef> variableDef);
+        Value emit(Ref<ast::StringLiteral> stringLiteral);
+        Value emit(Ref<ast::IntegerLiteral> intLiteral);
+        Value emit(Ref<ast::FloatLiteral> floatLiteral);
+        Value emit(Ref<ast::FieldDef> fieldDef);
+        Value emit(Ref<ast::MemberRef> memberRef);
+        Value emit(Ref<ast::ThisRef> thisRef);
+        Value emit(Ref<ast::FunctionDef> functionDef);
+        Value emit(Ref<ast::Return> ret);
+        Value emit(Ref<ast::FunctionCall> call);
+        Value emit(Ref<ast::CompoundAssign> op);
+        Value emit(Ref<ast::BinaryOp> op);
 
         Ref<class Struct> emit(Ref<ast::StructDef> structDef);
 

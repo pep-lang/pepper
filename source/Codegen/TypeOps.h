@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "Codegen/IR/Value.h"
 #include "Core/Common.h"
 
 namespace llvm {
@@ -12,58 +13,54 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class Type;
+    class TypeInfo;
     class PointerType;
-    class Symbol;
-
-    namespace ast {
-        class Symbol;
-    } // namespace ast
 
     class TypeOps {
         DECLARE_RTTI(TypeOps);
 
       protected:
-        llvm::Type* Type = nullptr;
+        Ref<TypeInfo> Type = nullptr;
 
       public:
-        explicit TypeOps(llvm::Type* type)
+        explicit TypeOps(Ref<TypeInfo> type)
             : Type(type) {
         }
 
         operator llvm::Type*() const {
-            return Type;
+            return Type->llvmType();
         }
 
-        static Ref<TypeOps> get(llvm::Type* type);
+        static Ref<TypeOps> get(Ref<TypeInfo> type);
+        static Ref<TypeOps> get(const TypeInfo* type);
 
-        virtual llvm::Value* coerce(llvm::Value* value) const = 0;
+        virtual Value coerce(Value value) const = 0;
 
-        virtual llvm::Value* add(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* sub(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* mul(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* div(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* mod(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* pow(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* less(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* lessEq(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* greater(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* greaterEq(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* lshift(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* rshift(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* equal(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* notEqual(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* assign(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* bitAnd(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* bitXor(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* bitOr(llvm::Value* lhs, llvm::Value* rhs) const;
-        virtual llvm::Value* asBool(llvm::Value* value) const;
+        virtual Value add(Value lhs, Value rhs) const;
+        virtual Value sub(Value lhs, Value rhs) const;
+        virtual Value mul(Value lhs, Value rhs) const;
+        virtual Value div(Value lhs, Value rhs) const;
+        virtual Value mod(Value lhs, Value rhs) const;
+        virtual Value pow(Value lhs, Value rhs) const;
+        virtual Value less(Value lhs, Value rhs) const;
+        virtual Value lessEq(Value lhs, Value rhs) const;
+        virtual Value greater(Value lhs, Value rhs) const;
+        virtual Value greaterEq(Value lhs, Value rhs) const;
+        virtual Value lshift(Value lhs, Value rhs) const;
+        virtual Value rshift(Value lhs, Value rhs) const;
+        virtual Value equal(Value lhs, Value rhs) const;
+        virtual Value notEqual(Value lhs, Value rhs) const;
+        virtual Value assign(Value lhs, Value rhs) const;
+        virtual Value bitAnd(Value lhs, Value rhs) const;
+        virtual Value bitXor(Value lhs, Value rhs) const;
+        virtual Value bitOr(Value lhs, Value rhs) const;
+        virtual Value asBool(Value value) const;
     };
 
     class UserType : public TypeOps {
         DECLARE_RTTI(UserType, TypeOps)
       public:
-        UserType(const std::string& name, llvm::Type* type);
+        UserType(const std::string& name, Ref<TypeInfo> type);
         ~UserType() = default;
     };
 } // namespace pepper

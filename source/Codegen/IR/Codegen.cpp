@@ -32,78 +32,79 @@ namespace pepper {
     using llvm::cast;
     using llvm::isa;
 
-    llvm::Type* Codegen::resolveType(llvm::Value* value) {
-        if (isa<llvm::AllocaInst>(*value)) {
-            auto allocaInst = cast<llvm::AllocaInst>(value);
+    llvm::Type* Codegen::resolveType(Value value) {
+        if (isa<llvm::AllocaInst>(*value.V)) {
+            auto allocaInst = cast<llvm::AllocaInst>(value.V);
             return allocaInst->getAllocatedType();
         }
-        if (isa<llvm::GetElementPtrInst>(value)) {
-            auto gepInst = cast<llvm::GetElementPtrInst>(value);
+        if (isa<llvm::GetElementPtrInst>(*value.V)) {
+            auto gepInst = cast<llvm::GetElementPtrInst>(value.V);
             return gepInst->getResultElementType();
         }
         return value->getType();
     }
 
-    llvm::Value* Codegen::read(llvm::Value* value) {
-        if (isa<llvm::AllocaInst>(*value)) {
+    Value Codegen::read(Value value) {
+        if (isa<llvm::AllocaInst>(*value.V)) {
             auto type = resolveType(value);
-            return ir()->CreateLoad(type, value);
+            return Value(value.Ty, ir()->CreateLoad(type, value));
         }
-        if (isa<llvm::GetElementPtrInst>(value)) {
+        if (isa<llvm::GetElementPtrInst>(*value.V)) {
             auto type = resolveType(value);
-            return ir()->CreateLoad(type, value);
+            return Value(value.Ty, ir()->CreateLoad(type, value));
         }
         return value;
     }
 
-    llvm::Value* Codegen::zeroValue(llvm::Type* type) {
-        if (type->isIntegerTy())
-            return llvm::ConstantInt::get(type, 0);
-        if (type->isFloatingPointTy())
-            return llvm::ConstantFP::get(type, 0.0f);
-        if (type->isPointerTy())
-            return llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type));
+    Value Codegen::zeroValue(Ref<TypeInfo> type) {
+        if (type->llvmType()->isIntegerTy())
+            return Value(type, llvm::ConstantInt::get(*type, 0));
+        if (type->llvmType()->isFloatingPointTy())
+            return Value(type, llvm::ConstantFP::get(*type, 0.0f));
+        if (type->llvmType()->isPointerTy())
+            return Value(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
         throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 
-    llvm::Value* Codegen::emit(Ref<VariableRef> variableRef) {
+    Value Codegen::emit(Ref<VariableRef> variableRef) {
         auto value = Context::get().locals()->findSymbol(variableRef->identifier());
         return value;
     }
 
-    llvm::Value* Codegen::emit(Ref<VariableDef> variableDef) {
+    Value Codegen::emit(Ref<VariableDef> variableDef) {
         auto typeName = variableDef->type();
         auto type = Types::get(typeName);
-        auto value = registers()->CreateAlloca(*type, nullptr, variableDef->identifier());
+        auto value = Value(
+            type, registers()->CreateAlloca(*type, nullptr, variableDef->identifier()), variableDef->identifier());
 
         auto defaultValue = maybeCodegen(variableDef->defaultValue());
         if (!defaultValue)
-            defaultValue = zeroValue(*type);
+            defaultValue = zeroValue(type);
 
-        auto typeOps = TypeOps::get(*type);
+        auto typeOps = TypeOps::get(type);
         auto coercedValue = typeOps->coerce(defaultValue);
         ir()->CreateStore(coercedValue, value);
-        Context::get().locals()->newSymbol(variableDef->identifier(), value);
+        Context::get().locals()->newSymbol(value);
         return value;
     }
 
-    llvm::Value* Codegen::emit(Ref<StringLiteral> stringLiteral) {
-        auto value = ir()->CreateGlobalString(stringLiteral->value());
+    Value Codegen::emit(Ref<StringLiteral> stringLiteral) {
+        auto value = Value(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->value()));
         return value;
     }
 
-    llvm::Value* Codegen::emit(Ref<IntegerLiteral> intLiteral) {
-        auto value = llvm::ConstantInt::get(*Types::Int64, intLiteral->value());
+    Value Codegen::emit(Ref<IntegerLiteral> intLiteral) {
+        auto value = Value(Types::Int64, llvm::ConstantInt::get(*Types::Int64, intLiteral->value()));
         return value;
     }
 
-    llvm::Value* Codegen::emit(Ref<FloatLiteral> floatLiteral) {
-        auto value = llvm::ConstantFP::get(*Types::Double, floatLiteral->value());
+    Value Codegen::emit(Ref<FloatLiteral> floatLiteral) {
+        auto value = Value(Types::Double, llvm::ConstantFP::get(*Types::Double, floatLiteral->value()));
         return value;
     }
 
-    llvm::Value* Codegen::codegen(Ref<Node> node) {
-        llvm::Value* value = nullptr;
+    Value Codegen::codegen(Ref<Node> node) {
+        Value value;
         if (node->is<BinaryOp>())
             value = emit(node.as<BinaryOp>());
         else if (node->is<FieldDef>())

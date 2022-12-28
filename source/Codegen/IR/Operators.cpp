@@ -57,31 +57,31 @@ namespace pepper {
         throw InternalCompilerError("Unknown binary op: {0}", op->rtti()->name());
     }
 
-    static Ref<Type> largestIntType(llvm::Type* lhs, llvm::Type* rhs) {
-        auto bits = std::max(lhs->getIntegerBitWidth(), rhs->getIntegerBitWidth());
+    static Ref<TypeInfo> largestIntType(Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+        auto bits = std::max(lhs->llvmType()->getIntegerBitWidth(), rhs->llvmType()->getIntegerBitWidth());
         return (bits > 32) ? Types::Int64 : Types::Int32;
     }
 
-    static Ref<Type> largestOperandType(llvm::Type* lhs, llvm::Type* rhs) {
-        if (lhs->isIntegerTy() && rhs->isIntegerTy()) {
+    static Ref<TypeInfo> largestOperandType(Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+        if (lhs->llvmType()->isIntegerTy() && rhs->llvmType()->isIntegerTy()) {
             return largestIntType(lhs, rhs);
         }
-        if (lhs->isFloatingPointTy() || rhs->isFloatingPointTy()) {
-            auto bits = std::max(lhs->getPrimitiveSizeInBits(), rhs->getPrimitiveSizeInBits());
+        if (lhs->llvmType()->isFloatingPointTy() || rhs->llvmType()->isFloatingPointTy()) {
+            auto bits = std::max(lhs->llvmType()->getPrimitiveSizeInBits(), rhs->llvmType()->getPrimitiveSizeInBits());
             return (bits > 32) ? Types::Double : Types::Float;
         }
         return nullptr;
     }
 
-    static Ref<Type> structOperandType(Ref<BinaryOp> op, llvm::Type* lhs, llvm::Type* rhs) {
+    static Ref<TypeInfo> structOperandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
         return nullptr;
     }
 
-    static Ref<Type> operandType(Ref<BinaryOp> op, llvm::Type* lhs, llvm::Type* rhs) {
-        if (lhs->isStructTy() || lhs->isPointerTy()) {
+    static Ref<TypeInfo> operandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+        if (lhs->llvmType()->isStructTy() || lhs->llvmType()->isPointerTy()) {
             return structOperandType(op, lhs, rhs);
         }
-        return llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
+        return llvm::StringSwitch<Ref<TypeInfo>>(op->rtti()->name())
             .Cases("Add", "Sub", "Mul", "Div", "Mod", "Pow", largestOperandType(lhs, rhs))
             .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
             .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
@@ -89,7 +89,7 @@ namespace pepper {
             .Cases("AddAssign", "SubAssign", "MulAssign", "ModAssign", largestOperandType(lhs, rhs))
             .Cases(
                 "LShiftAssign", "RShiftAssign", "BitAndAssign", "BitOrAssign", "BitXorAssign", largestIntType(lhs, rhs))
-            .Case("Assign", Types::get(lhs));
+            .Case("Assign", lhs);
     }
 
     static auto compoundOp(Ref<CompoundAssign> op) {
@@ -116,17 +116,17 @@ namespace pepper {
         throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
     }
 
-    llvm::Value* Codegen::emit(Ref<CompoundAssign> op) {
+    Value Codegen::emit(Ref<CompoundAssign> op) {
         auto rhs = codegen(op->rhs());
         auto lhs = codegen(op->lhs());
-        auto opType = Types::get(resolveType(lhs));
+        auto opType = lhs.Ty;
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
                                         Types::toString(lhs->getType()),
                                         Types::toString(rhs->getType()),
                                         op->rtti()->name());
         }
-        auto typeOps = TypeOps::get(*opType);
+        auto typeOps = TypeOps::get(opType);
         auto mathOp = compoundOp(op);
         auto lhsOperand = typeOps->coerce(read(lhs));
         auto rhsOperand = typeOps->coerce(read(rhs));
@@ -135,7 +135,7 @@ namespace pepper {
         return lhs;
     }
 
-    llvm::Value* Codegen::emit(Ref<BinaryOp> op) {
+    Value Codegen::emit(Ref<BinaryOp> op) {
         if (op->is<CompoundAssign>())
             return emit(op.as<CompoundAssign>());
 
@@ -143,14 +143,14 @@ namespace pepper {
         auto lhs = codegen(op->lhs());
         lhs = read(lhs);
         rhs = read(rhs);
-        auto opType = operandType(op, lhs->getType(), rhs->getType());
+        auto opType = operandType(op, lhs.Ty, rhs.Ty);
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
                                         Types::toString(lhs->getType()),
                                         Types::toString(rhs->getType()),
                                         op->rtti()->name());
         }
-        auto typeOps = TypeOps::get(*opType);
+        auto typeOps = TypeOps::get(opType);
         auto lhsOperand = typeOps->coerce(lhs);
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);

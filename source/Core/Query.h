@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "Core/Vector.h"
 #include "llvm/ADT/ArrayRef.h"
 
@@ -78,6 +80,14 @@ namespace pepper {
 
         void each(std::function<void(const T&)> func) {
             std::for_each(Ref.begin(), Ref.end(), func);
+        }
+
+        std::optional<T> find(std::function<bool(const T&)> pred) {
+            auto it = std::find_if(Ref.begin(), Ref.end(), pred);
+            if (it != Ref.end()) {
+                return *it;
+            }
+            return {};
         }
 
         operator Vector<T>() {

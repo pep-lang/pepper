@@ -16,7 +16,7 @@
 namespace pepper {
     class Struct : public std::enable_shared_from_this<Struct> {
         Name Identifier;
-        Ref<Type> StructType;
+        Ref<TypeInfo> StructType;
         Ref<Function> NewInstance;
         std::map<Name, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
@@ -26,10 +26,10 @@ namespace pepper {
         static llvm::StringMap<Ref<Struct>> Structs;
 
       public:
-        Struct(Ref<Type> type, const Name& name);
-        static Ref<Struct> New(Ref<Type> type, const Name& name);
+        Struct(Ref<TypeInfo> type, const Name& name);
+        static Ref<Struct> New(Ref<TypeInfo> type, const Name& name);
 
-        Ref<Type> type() const {
+        Ref<TypeInfo> type() const {
             return StructType;
         }
 

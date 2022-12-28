@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 
+#include "Codegen/IR/Value.h"
 #include "Codegen/Param.h"
 #include "Core/Common.h"
 #include "Core/Name.h"
@@ -25,19 +26,19 @@ namespace pepper {
 
       protected:
         const Name Identifier;
-        Ref<Type> ReturnType;
+        Ref<TypeInfo> ReturnType;
         const Params Parameters;
         llvm::Function* Func;
-        llvm::FunctionType* FuncType;
+        Ref<TypeInfo> FuncType;
 
       public:
-        Function(const Name& name, Ref<Type> returnType, const Params& params = Params());
+        Function(const Name& name, Ref<TypeInfo> returnType, const Params& params = Params());
 
         const Name& name() const {
             return Identifier;
         }
 
-        const Ref<Type> returnType() const {
+        const Ref<TypeInfo> returnType() const {
             return ReturnType;
         }
 
@@ -53,11 +54,11 @@ namespace pepper {
             return Func;
         }
 
-        llvm::FunctionType* type() const {
+        Ref<TypeInfo> type() const {
             return FuncType;
         }
 
-        llvm::Value* call(const Vector<llvm::Value*>& args) const;
+        Value call(const Vector<Value>& args) const;
     };
 
     class ExternFunction : public Function {
@@ -81,7 +82,7 @@ namespace pepper {
         Ref<llvm::IRBuilderBase> Builder = nullptr;
         unsigned int NumLocals = 0;
 
-        UserFunction(const Name& name, Ref<Type> returnType, const Params& params = Params());
+        UserFunction(const Name& name, Ref<TypeInfo> returnType, const Params& params = Params());
     };
 
     class Method : public UserFunction {

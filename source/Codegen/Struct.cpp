@@ -9,7 +9,7 @@
 namespace pepper {
     llvm::StringMap<Ref<Struct>> Struct::Structs;
 
-    Struct::Struct(Ref<Type> type, const Name& name)
+    Struct::Struct(Ref<TypeInfo> type, const Name& name)
         : StructType(type)
         , Identifier(name) {
         // deal with params at some point
@@ -23,7 +23,7 @@ namespace pepper {
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(Ref<Type> type, const Name& name) {
+    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Name& name) {
         Ref<Struct> newStruct = Ref<Struct>::New(type, name);
         Structs[name] = newStruct;
         return newStruct;

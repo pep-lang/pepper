@@ -12,7 +12,6 @@
 #include "Core/Name.h"
 #include "Core/RTTI.h"
 #include "Core/Vector.h"
-#include "Param.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace llvm {
@@ -23,25 +22,19 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
+    class TypeOps;
 
-    class FunctionType {
-        static std::string Signature(llvm::Type* returnType, const Params& params, bool varargs = false);
-    };
-
-    class Type {
-        DECLARE_RTTI(Type);
+    class TypeInfo : public std::enable_shared_from_this<TypeInfo> {
+        DECLARE_RTTI(TypeInfo);
 
       private:
         const Name TypeName;
         llvm::Type* TypeRef;
         const bool IsSigned;
+        Ref<TypeOps> Ops;
 
       public:
-        Type(const Name& name, llvm::Type* type, bool signedInt = false)
-            : TypeName(name)
-            , TypeRef(type)
-            , IsSigned(signedInt) {
-        }
+        TypeInfo(const Name& name, llvm::Type* type, bool isSigned = false);
 
         llvm::Type* llvmType() const {
             return TypeRef;
@@ -58,37 +51,41 @@ namespace pepper {
         bool isSigned() const {
             return IsSigned;
         }
+
+        TypeOps* ops();
+
+        Ref<TypeInfo> pointer() const;
     };
 
     class Types {
         llvm::LLVMContext& Ctx;
-        llvm::StringMap<Ref<Type>> KnownTypes;
-        std::unordered_map<llvm::Type*, Ref<Type>> TypeCache;
+        llvm::StringMap<Ref<TypeInfo>> KnownTypes;
+        // std::unordered_map<llvm::Type*, Ref<TypeInfo>> TypeCache;
 
-        Ref<Type> addType(Ref<Type> t, const Vector<Name>& aliases = {});
-        Ref<Type> getType(const Name& name) const;
-        Ref<Type> getType(llvm::Type* type) const;
+        Ref<TypeInfo> addType(Ref<TypeInfo> t, const Vector<Name>& aliases = {});
+        Ref<TypeInfo> getType(const Name& name) const;
+        // Ref<TypeInfo> getType(llvm::Type* type) const;
 
       public:
         explicit Types(llvm::LLVMContext& ctx);
         ~Types() = default;
 
         static std::string toString(llvm::Type* ty);
-        static Ref<Type> get(const Name& name);
-        static Ref<Type> get(llvm::Type* type);
-        static Ref<Type> add(Ref<Type> type, const Vector<Name>& aliases = {});
+        static std::string toString(Ref<TypeInfo> ty);
+        static Ref<TypeInfo> get(const Name& name);
+        static Ref<TypeInfo> add(Ref<TypeInfo> type, const Vector<Name>& aliases = {});
 
-        static Ref<Type> Void;
-        static Ref<Type> VoidPtr;
-        static Ref<Type> Int8;
-        static Ref<Type> UInt8;
-        static Ref<Type> Int32;
-        static Ref<Type> UInt32;
-        static Ref<Type> Int64;
-        static Ref<Type> UInt64;
-        static Ref<Type> Bool;
-        static Ref<Type> Double;
-        static Ref<Type> Float;
+        static Ref<TypeInfo> Void;
+        static Ref<TypeInfo> VoidPtr;
+        static Ref<TypeInfo> Int8;
+        static Ref<TypeInfo> UInt8;
+        static Ref<TypeInfo> Int32;
+        static Ref<TypeInfo> UInt32;
+        static Ref<TypeInfo> Int64;
+        static Ref<TypeInfo> UInt64;
+        static Ref<TypeInfo> Bool;
+        static Ref<TypeInfo> Double;
+        static Ref<TypeInfo> Float;
     };
 
 } // namespace pepper

@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "Codegen/IR/Value.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
@@ -15,13 +16,12 @@ namespace llvm {
     class Function;
     class IRBuilderBase;
     class Type;
-    class Value;
 } // namespace llvm
 
 namespace pepper {
     class Function;
     class Symbol;
-    class Type;
+    class TypeInfo;
 
     struct Scope {
         std::string Name;
@@ -29,7 +29,7 @@ namespace pepper {
 
         llvm::StringMap<llvm::Type*> Types;
 
-        llvm::StringMap<llvm::Value*> Symbols;
+        llvm::StringMap<Value> Symbols;
         Vector<std::string> OrderedSymbols;
 
         llvm::StringMap<Ref<Function>> Functions;
@@ -42,11 +42,11 @@ namespace pepper {
             , Outer(std::move(outer)) {
         }
 
-        void newSymbol(const std::string& identifier, llvm::Value* value);
+        void newSymbol(const Value& value);
         void newFunction(Ref<Function> function, const std::string& name = "");
 
         [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
-        [[nodiscard]] llvm::Value* findSymbol(const std::string& identifier) const;
+        [[nodiscard]] const Value& findSymbol(const std::string& identifier) const;
         Ref<llvm::IRBuilderBase> builder() const;
         Ref<llvm::IRBuilderBase> registers() const;
         Ref<Function> functionTarget() const;

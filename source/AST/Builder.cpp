@@ -216,7 +216,7 @@ namespace pepper::ast {
             endScope();
         }
 
-        Ref<Block> block() const {
+        Ref<Block> block() const override {
             return Stack.back()->BlockStack.back();
         }
 

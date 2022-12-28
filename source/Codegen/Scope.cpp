@@ -23,16 +23,16 @@ namespace pepper {
         return Outer ? Outer->findFunction(name) : nullptr;
     }
 
-    void Scope::newSymbol(const std::string& identifier, llvm::Value* value) {
-        Symbols[identifier] = value;
-        OrderedSymbols.push_back(identifier);
+    void Scope::newSymbol(const Value& value) {
+        Symbols[value.Identifier] = value;
+        OrderedSymbols.push_back(value.Identifier);
     }
 
-    llvm::Value* Scope::findSymbol(const std::string& identifier) const {
+    const Value& Scope::findSymbol(const std::string& identifier) const {
         auto it = Symbols.find(identifier);
         if (it != Symbols.end())
             return it->second;
-        return Outer ? Outer->findSymbol(identifier) : nullptr;
+        return Outer ? Outer->findSymbol(identifier) : Value::Null();
     }
 
     Ref<Function> Scope::functionTarget() const {

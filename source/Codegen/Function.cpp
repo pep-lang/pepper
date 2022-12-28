@@ -9,29 +9,33 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
-    Function::Function(const Name& name, Ref<Type> returnType, const Params& params)
+    Function::Function(const Name& name, Ref<TypeInfo> returnType, const Params& params)
         : Identifier(name)
         , ReturnType(returnType)
         , Parameters(params) {
         Vector<llvm::Type*> paramTypes;
         std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.ParamType); });
-        FuncType = llvm::FunctionType::get(*returnType, paramTypes, false);
+        auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
+        auto sig = Types::toString(llvmType);
+        FuncType = Types::add(Ref<TypeInfo>::New(sig, llvmType));
         Func =
-            llvm::Function::Create(FuncType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
+            llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
     }
 
-    llvm::Value* Function::call(const Vector<llvm::Value*>& args) const {
+    Value Function::call(const Vector<Value>& args) const {
         // TODO: deal with default values for params
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;
-        for (auto* arg : args) {
-            auto expectedType = TypeOps::get(*Parameters[idx++].ParamType);
+        for (const auto& arg : args) {
+            auto expectedType = Parameters[idx++].ParamType->ops();
             coercedArgs.push_back(expectedType->coerce(arg));
         }
-        return Context::get().locals()->Builder->CreateCall(FuncType, Func, coercedArgs);
+        return Value(
+            ReturnType,
+            Context::get().locals()->Builder->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs));
     }
 
-    UserFunction::UserFunction(const Name& name, Ref<Type> returnType, const Params& params)
+    UserFunction::UserFunction(const Name& name, Ref<TypeInfo> returnType, const Params& params)
         : Function(name, returnType, params) {
         auto& context = Context::get().module()->getContext();
         Body = llvm::BasicBlock::Create(context, "entry", Func);

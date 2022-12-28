@@ -1,23 +1,19 @@
 
 #pragma once
 
+#include "Codegen/IR/Value.h"
 #include "Core/Name.h"
 #include "Core/Vector.h"
 
-namespace llvm {
-    class Type;
-    class Value;
-} // namespace llvm
-
 namespace pepper {
-    class Type;
+    class TypeInfo;
 
     struct Param {
-        Ref<Type> ParamType;
+        Ref<TypeInfo> ParamType;
         Name ParamName;
-        llvm::Value* Default;
+        Value Default;
 
-        Param(const Name& name, Ref<Type> type, llvm::Value* defaultValue = nullptr)
+        Param(const Name& name, Ref<TypeInfo> type, Value defaultValue = {})
             : ParamName(name)
             , ParamType(type)
             , Default(defaultValue) {
