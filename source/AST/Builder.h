@@ -14,6 +14,7 @@ namespace llvm {
 
 namespace pepper::ast {
     class Node;
+    class Block;
     class FunctionDef;
     class VariableDef;
     class StructDef;
@@ -48,6 +49,10 @@ namespace pepper::ast {
         virtual Builder* beginFunction(Ref<FunctionDef> func) = 0;
         virtual Builder* endFunction() = 0;
         virtual Ref<FunctionDef> functionTarget() const = 0;
+
+        virtual void beginBlock(Ref<Block> block) = 0;
+        virtual void endBlock() = 0;
+        virtual Ref<Block> block() const = 0;
 
         virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;

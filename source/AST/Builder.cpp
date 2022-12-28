@@ -32,6 +32,8 @@ namespace pepper::ast {
             Vector<Ref<Expression>> Expressions;
             Ref<ast::FunctionDef> FunctionTarget = nullptr;
 
+            Ref<Node> Parent;
+            Vector<Ref<Block>> BlockStack;
             Vector<Ref<Node>> LValueStack;
             Vector<Ref<Expression>> RValueStack;
 
@@ -202,6 +204,20 @@ namespace pepper::ast {
             ast.newRoot(function);
             endScope();
             return this;
+        }
+
+        void beginBlock(Ref<Block> block) override {
+            beginScope(block->name());
+            auto scope = Stack.back();
+            scope->BlockStack.push_back(block);
+        }
+
+        void endBlock() override {
+            endScope();
+        }
+
+        Ref<Block> block() const {
+            return Stack.back()->BlockStack.back();
         }
 
         Builder* beginScope(const Name& name = "Anonymous") override {
