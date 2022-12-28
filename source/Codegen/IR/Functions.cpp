@@ -35,11 +35,11 @@ namespace pepper {
             .each([&](auto local) { codegen(local); });
 
         // Emit the body of the function, after ensuring there is a return instruction
-        auto lastExpr = (funcDef->body().size()) ? funcDef->body().back() : nullptr;
+        auto lastExpr = (funcDef->body()->Items.size()) ? funcDef->body()->Items.back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->body().push_back(Ref<Return>::New(funcDef));
+            funcDef->body()->Items.push_back(Ref<Return>::New(funcDef));
         }
-        std::for_each(funcDef->body().begin(), funcDef->body().end(), [&](auto expr) { codegen(expr); });
+        std::for_each(funcDef->body()->Items.begin(), funcDef->body()->Items.end(), [&](auto expr) { codegen(expr); });
 
         Context::get().popScope();
         Context::get().locals()->newFunction(function);

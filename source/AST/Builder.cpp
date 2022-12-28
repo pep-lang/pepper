@@ -43,16 +43,16 @@ namespace pepper::ast {
         };
 
         AST& ast;
-        Vector<Ref<Scope>> Stack;
+        Vector<Ref<Scope>> ScopeStack;
 
       public:
         explicit BuilderImpl(AST& _ast)
             : ast(_ast) {
-            Stack.emplace_back(Ref<Scope>::New("Global")); // global scope
+            ScopeStack.emplace_back(Ref<Scope>::New("Global")); // global scope
         }
 
         Ref<ast::FunctionDef> functionTarget() const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget)
                     return scope->FunctionTarget;
             }
@@ -60,7 +60,7 @@ namespace pepper::ast {
         }
 
         Ref<ast::StructDef> structTarget() const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->StructTarget)
                     return scope->StructTarget;
             }
@@ -68,7 +68,7 @@ namespace pepper::ast {
         }
 
         [[nodiscard]] Ref<StructDef> findStruct(const Name& name) const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto str = scope->Structs.lookup(name))
                     return str;
             }
@@ -76,7 +76,7 @@ namespace pepper::ast {
         }
 
         [[nodiscard]] Ref<ast::VariableDef> findVariable(const Name& name) const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 auto var = scope->Locals.lookup(name);
                 if (var) {
                     return var;
@@ -86,7 +86,7 @@ namespace pepper::ast {
         }
 
         [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Name& name) const override {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto var = scope->Functions.lookup(name)) {
                     return var;
                 }
@@ -105,7 +105,7 @@ namespace pepper::ast {
         }
 
         Ref<ast::FunctionDef> functionTarget() {
-            for (const auto& scope : llvm::reverse(Stack)) {
+            for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget) {
                     return scope->FunctionTarget;
                 }
@@ -114,12 +114,12 @@ namespace pepper::ast {
         }
 
         void pushRValue(Ref<Expression> value) override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             scope->RValueStack.push_back(value);
         }
 
         Ref<Expression> popRValue() override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty AST stack");
             }
@@ -129,7 +129,7 @@ namespace pepper::ast {
         }
 
         Ref<Expression> peekRValue(unsigned int idx = 0) const override {
-            const auto& scope = Stack.back();
+            const auto& scope = ScopeStack.back();
             if (idx > (scope->RValueStack.size() - 1)) {
                 throw InternalCompilerError(
                     "Attempted to peek AST stack slot {}, stack size: {}", idx, scope->RValueStack.size());
@@ -138,12 +138,12 @@ namespace pepper::ast {
         }
 
         void pushLValue(Ref<Node> value) override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             scope->LValueStack.push_back(value);
         }
 
         Ref<Node> popLValue() override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             if (scope->LValueStack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty AST stack");
             }
@@ -153,7 +153,7 @@ namespace pepper::ast {
         }
 
         Ref<Node> peekLValue(unsigned int idx = 0) const override {
-            const auto& scope = Stack.back();
+            const auto& scope = ScopeStack.back();
             const int maxDepth = scope->LValueStack.size() - 1;
             if (int(idx) > maxDepth) {
                 return nullptr;
@@ -162,76 +162,77 @@ namespace pepper::ast {
         }
 
         Builder* beginStruct(Ref<StructDef> structDef) override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             scope->Structs[structDef->identifier()] = structDef;
             scope->Functions[structDef->identifier()] = structDef->NewInstance;
 
-            if (!structTarget() && !functionTarget()) {
-                ast.newRoot(structDef);
-            }
-
             beginScope(structDef->identifier());
-            auto& structScope = Stack.back();
+            auto& structScope = ScopeStack.back();
             structScope->StructTarget = structDef;
             return this;
         }
 
         Builder* endStruct() override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             auto& structDef = scope->StructTarget;
             structDef->Fields.append(scope->OrderedSymbols.begin(), scope->OrderedSymbols.end());
             structDef->finish();
+            ast.newRoot(structDef);
             endScope();
             return this;
         }
 
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             scope->Functions[func->identifier()] = func;
-            beginScope(func->identifier());
-            auto& fnScope = Stack.back();
+            // set the parent to the enclosing function for lambdas, its null otherwise
+            func->body() = Ref<Block>::New(functionTarget(), func->identifier());
+            beginBlock(func->body());
+            auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
             return this;
         }
 
         Builder* endFunction() override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             auto& function = scope->FunctionTarget;
             std::for_each(scope->Locals.begin(), scope->Locals.end(), [&](auto& local) {
                 auto var = local.second;
                 function->locals().push_back(var);
             });
             ast.newRoot(function);
-            endScope();
+            endBlock();
             return this;
         }
 
         void beginBlock(Ref<Block> block) override {
             beginScope(block->name());
-            auto scope = Stack.back();
+            auto scope = ScopeStack.back();
             scope->BlockStack.push_back(block);
         }
 
         void endBlock() override {
+            auto scope = ScopeStack.back();
+            scope->BlockStack.pop_back();
             endScope();
         }
 
         Ref<Block> block() const override {
-            return Stack.back()->BlockStack.back();
+            return ScopeStack.back()->BlockStack.back();
         }
 
         Builder* beginScope(const Name& name = "Anonymous") override {
-            Stack.emplace_back(Ref<Scope>::New(name));
+            ScopeStack.emplace_back(Ref<Scope>::New(name));
             return this;
         }
 
         Builder* endScope() override {
-            Stack.pop_back();
+            ScopeStack.pop_back();
             return this;
         }
 
         Builder* symbol(Ref<ast::VariableDef> var) override {
-            auto& scope = Stack.back();
+            auto& scope = ScopeStack.back();
             scope->Locals[var->identifier()] = var;
             scope->OrderedSymbols.push_back(var);
             return this;
@@ -239,10 +240,12 @@ namespace pepper::ast {
 
         Builder* expression(Ref<ast::Expression> expr) override {
             auto function = functionTarget();
+            // If there's an l-value waiting for an expression value, it'll pull it
+            // off the stack when its terminal completes
             if (peekLValue())
                 pushRValue(expr);
             else
-                function->body().push_back(expr);
+                block()->Items.push_back(expr);
 
             return this;
         }

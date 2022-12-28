@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "AST/Branches.h"
 #include "AST/Node.h"
 #include "AST/Param.h"
 #include "AST/Variables.h"
@@ -61,11 +62,12 @@ namespace pepper::ast {
 
       private:
         Vector<Ref<VariableDef>> Locals;
-        Vector<Ref<Expression>> Body;
+        Ref<Block> Body;
 
       public:
         FunctionDef(const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
+            Body = Ref<Block>::New(nullptr, name);
         }
 
         Vector<Ref<VariableDef>>& locals() {
@@ -76,18 +78,18 @@ namespace pepper::ast {
             return Locals;
         }
 
-        Vector<Ref<Expression>>& body() {
+        Ref<Block>& body() {
             return Body;
         }
 
-        [[nodiscard]] const Vector<Ref<Expression>>& body() const {
+        [[nodiscard]] const Ref<Block>& body() const {
             return Body;
         }
 
         std::string toString() const override {
             const char* sep = "\n  ";
             Vector<std::string> vars = Query(Locals).select<std::string>([](auto l) { return l->toString(); });
-            Vector<std::string> exprs = Query(Body).select<std::string>([](auto e) { return e->toString(); });
+            Vector<std::string> exprs = Query(Body->Items).select<std::string>([](auto e) { return e->toString(); });
             auto contents = rtrim(llvm::join_items(sep,
                                                    FunctionNode::toString(),
                                                    llvm::join(vars.begin(), vars.end(), sep),

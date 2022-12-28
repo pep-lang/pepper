@@ -13,10 +13,10 @@ namespace pepper::ast {
 
         const std::string Name;
         Ref<Node> Parent;
-        Vector<Ref<Node>> Items;
+        Vector<Ref<Expression>> Items;
 
       public:
-        Block(Ref<Node> parent, const std::string& name = "block")
+        Block(Ref<Node> parent = nullptr, const std::string& name = "block")
             : Parent(parent)
             , Name(name) {
         }
@@ -25,7 +25,7 @@ namespace pepper::ast {
             return Name;
         }
 
-        Vector<Ref<Node>> items() {
+        Vector<Ref<Expression>> items() {
             return Items;
         }
 

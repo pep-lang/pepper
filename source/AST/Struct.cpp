@@ -27,7 +27,7 @@ namespace pepper::ast {
         const char* sep = "\n    ";
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
         Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->toString(); });
-        Vector<std::string> exprs = Query(body()).select<std::string>([](auto e) { return e->toString(); });
+        Vector<std::string> exprs = Query(body()->Items).select<std::string>([](auto e) { return e->toString(); });
         return Node::toString() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
                                          ReturnType,
@@ -69,24 +69,24 @@ namespace pepper::ast {
             Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
         };
-        NewInstance->body() = body;
+        NewInstance->body()->Items = body;
 
         // Fill in initializer
         for (auto& field : Fields) {
             Initializer->locals().push_back(field);
         }
-        Initializer->body().push_back(Ref<Return>::New(Initializer));
+        Initializer->body()->Items.push_back(Ref<Return>::New(Initializer));
 
         // insert initializer as the first instruction in Constructor
-        Constructor->body().insert(Constructor->body().begin(), Ref<FunctionCall>::New(Initializer));
+        Constructor->body()->Items.insert(Constructor->body()->Items.begin(), Ref<FunctionCall>::New(Initializer));
 
         // insert free as the last instruction before return in Destructor
-        auto lastExpr = Destructor->body().size() ? Destructor->body().back() : nullptr;
+        auto lastExpr = Destructor->body()->Items.size() ? Destructor->body()->Items.back() : nullptr;
         if (lastExpr && lastExpr->is<Return>()) {
-            Destructor->body().pop_back();
+            Destructor->body()->Items.pop_back();
         }
 
-        Destructor->body().push_back(Ref<FunctionCall>::New(
+        Destructor->body()->Items.push_back(Ref<FunctionCall>::New(
             ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
     }
 
