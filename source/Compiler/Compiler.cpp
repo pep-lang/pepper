@@ -44,6 +44,7 @@ namespace pepper {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
+            std::cout << "Parse tree:" << std::endl;
             ast->dump();
 
             Codegen gen(ModuleName, ast);
@@ -53,6 +54,7 @@ namespace pepper {
                 throw CompileError("Error(s) encountered, cannot continue");
             }
 
+            std::cout << "LLVM IR:" << std::endl;
             std::cout << module->toString() << std::endl;
 
             auto err = module->verify();

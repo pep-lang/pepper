@@ -31,7 +31,11 @@ namespace pepper::ast {
         }
 
         virtual std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}", Value));
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+        }
+
+        virtual std::string dump() const override {
+            return toString();
         }
     };
 
@@ -56,7 +60,11 @@ namespace pepper::ast {
         }
 
         virtual std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}", Value));
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+        }
+
+        virtual std::string dump() const override {
+            return toString();
         }
     };
 
@@ -81,7 +89,11 @@ namespace pepper::ast {
         }
 
         virtual std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}", Value));
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+        }
+
+        virtual std::string dump() const override {
+            return toString();
         }
     };
 } // namespace pepper::ast

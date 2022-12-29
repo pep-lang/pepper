@@ -51,9 +51,20 @@ namespace pepper::ast {
 
         virtual std::string toString() const override {
             Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-            return Node::toString() +
-                   std::string(llvm::formatv(
-                       "{0} {1}({2})", ReturnType, identifier(), llvm::join(types.begin(), types.end(), ", ")));
+            return llvm::formatv("{0} {1} {2}({3})",
+                                 Node::toString(),
+                                 ReturnType,
+                                 identifier(),
+                                 llvm::join(types.begin(), types.end(), ", "));
+        }
+
+        virtual std::string dump() const override {
+            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+            return llvm::formatv("{0} {1} {2}({3})",
+                                 Node::dump(),
+                                 ReturnType,
+                                 identifier(),
+                                 llvm::join(types.begin(), types.end(), ", "));
         }
     };
 
@@ -87,11 +98,22 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            const char* sep = "\n  ";
+            const char* sep = "\n";
             Vector<std::string> vars = Query(Locals).select<std::string>([](auto l) { return l->toString(); });
             Vector<std::string> exprs = Query(Body->Items).select<std::string>([](auto e) { return e->toString(); });
             auto contents = rtrim(llvm::join_items(sep,
                                                    FunctionNode::toString(),
+                                                   llvm::join(vars.begin(), vars.end(), sep),
+                                                   llvm::join(exprs.begin(), exprs.end(), sep)));
+            return contents;
+        }
+
+        std::string dump() const override {
+            const char* sep = "\n  ";
+            Vector<std::string> vars = Query(Locals).select<std::string>([](auto l) { return l->dump(); });
+            Vector<std::string> exprs = Query(Body->Items).select<std::string>([](auto e) { return e->dump(); });
+            auto contents = rtrim(llvm::join_items(sep,
+                                                   FunctionNode::dump(),
                                                    llvm::join(vars.begin(), vars.end(), sep),
                                                    llvm::join(exprs.begin(), exprs.end(), sep)));
             return contents;
@@ -140,10 +162,13 @@ namespace pepper::ast {
                         std::string(llvm::formatv(
                             "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
-    };
 
-    class FunctionEnd : public Node {
-        DECLARE_RTTI(FunctionEnd, Node);
+        std::string dump() const override {
+            Vector<std::string> argsStr = Query(args()).select<std::string>([](auto a) { return a->dump(); });
+            return trim(Node::dump() +
+                        std::string(llvm::formatv(
+                            "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+        }
     };
 
     class Return : public Expression {
@@ -176,7 +201,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}", Value ? Value->toString() : "void"));
+            return llvm::formatv("{0} {1}", Node::toString(), Value ? Value->toString() : "void");
+        }
+
+        std::string dump() const override {
+            return llvm::formatv("{0} {1}", Node::dump(), Value ? Value->dump() : "void");
         }
     };
 } // namespace pepper::ast

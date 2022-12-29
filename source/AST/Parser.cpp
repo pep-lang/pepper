@@ -258,7 +258,7 @@ namespace pepper {
         }
 
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
-            auto branch = builder->New<Branch>();
+            auto branch = builder->New<If>();
             if (context->ifStatement()) {
                 branch->thenBlock() = builder->New<Block>(branch, "then");
             }

@@ -49,8 +49,27 @@ namespace pepper {
             pos = res.find(search, pos);
             if (pos >= 0) {
                 res.replace(pos, search.size(), replacement);
+                ++pos;
             }
         }
         return res;
+    }
+
+    inline std::string repeat(const std::string& str, size_t n) {
+        std::string res;
+        for (int idx = 0; idx < n; ++idx) {
+            res += str;
+        }
+        return res;
+    }
+
+    inline std::string rpad(const std::string& s, size_t width) {
+        return s + repeat(" ", width - s.size());
+    }
+
+    inline std::string indent(const std::string& s, size_t width) {
+        auto prefix = repeat(" ", width);
+        auto linePrefix = "\n" + prefix;
+        return replace_all(s, "\n", linePrefix);
     }
 } // namespace pepper

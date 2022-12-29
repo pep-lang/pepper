@@ -8,6 +8,7 @@
 #include "Core/Query.h"
 #include "Core/String.h"
 #include "Core/Vector.h"
+#include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
     class Block : public Node {
@@ -36,8 +37,28 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
+            static int indent = 0;
+
+            std::string str = std::string(llvm::formatv("{0}: {1}", Node::toString(), Name));
             Vector<std::string> items = Query(Items).select<std::string>([](auto item) { return item->toString(); });
-            return std::string(llvm::formatv("{0}: {{\n  ", Name)) + llvm::join(items, "\n  ") + "\n}";
+            if (items.size()) {
+                indent += 2;
+                std::string padding = std::string("\n") + repeat(" ", indent);
+                str = std::string(llvm::formatv("{0}: {{\n", Name)) + llvm::join(items, padding) + "\n}";
+                indent -= 2;
+            }
+
+            return str;
+        }
+
+        std::string dump() const override {
+            static int indent = 0;
+            indent += 2;
+            Vector<std::string> items = Query(Items).select<std::string>([](auto item) { return item->dump(); });
+            std::string padding = std::string("\n") + repeat(" ", indent);
+            std::string str = std::string(llvm::formatv("{0}: {{\n", Name)) + llvm::join(items, padding) + "\n}";
+            indent -= 2;
+            return str;
         }
     };
 
@@ -63,11 +84,20 @@ namespace pepper::ast {
         Ref<Block>& elseBlock() {
             return Else;
         }
+    };
 
+    class If : public Branch {
+        DECLARE_RTTI(If, Branch);
+
+      public:
         std::string toString() const override {
-            auto ifCond = std::string(llvm::formatv("if ({0}) {{\n  ", Condition ? Condition->toString() : "??"));
-            auto thenBlock = Then ? Then->toString() + "}" : "";
-            auto elseBlock = Else ? std::string(" else {\n  ") + Else->toString() + "}" : "";
+            return Node::toString();
+        }
+
+        std::string dump() const override {
+            auto ifCond = std::string(llvm::formatv("if ({0}) {{\n", Condition ? Condition->dump() : "??"));
+            auto thenBlock = Then ? Then->dump() + "}" : "";
+            auto elseBlock = Else ? std::string(" else {\n  ") + Else->dump() + "}" : "";
             return ifCond + thenBlock + elseBlock + "\n";
         }
     };

@@ -36,6 +36,14 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
+            auto str = Node::toString();
+            if (LHS && RHS) {
+                str += std::string(llvm::formatv("({0}), ({1})", LHS->toString(), RHS->toString()));
+            }
+            return str;
+        }
+
+        std::string dump() const override {
             return Node::toString() +
                    std::string(
                        llvm::formatv("({0}), ({1})", LHS ? LHS->toString() : "empty", RHS ? RHS->toString() : "empty"));

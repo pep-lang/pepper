@@ -26,9 +26,14 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() +
-                   std::string(
-                       llvm::formatv("{0} {1} = {2}", type(), identifier(), Default ? Default->toString() : "default"));
+            auto str = std::string(llvm::formatv("{0} {1} {2}", Node::toString(), type(), identifier()));
+            if (Default)
+                str += std::string(llvm::formatv(" = {0}", Default->toString()));
+            return str;
+        }
+
+        std::string dump() const override {
+            return toString();
         }
     };
 
@@ -64,7 +69,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() + identifier();
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), identifier()));
+        }
+
+        std::string dump() const override {
+            return toString();
         }
     };
 } // namespace pepper::ast

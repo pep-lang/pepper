@@ -26,6 +26,7 @@ namespace pepper::ast {
         FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue = nullptr);
 
         std::string toString() const override;
+        std::string dump() const override;
     };
 
     class MethodDef : public FunctionDef {
@@ -46,6 +47,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override;
+        std::string dump() const override;
     };
 
     class StructDef
@@ -68,6 +70,7 @@ namespace pepper::ast {
         void finish();
 
         std::string toString() const override;
+        std::string dump() const override;
     };
 
     class MemberRef : public Expression {
@@ -97,6 +100,10 @@ namespace pepper::ast {
         std::string toString() const override {
             return Node::toString() + std::string(llvm::formatv("({0}).{1}", LHS->toString(), MemberName));
         }
+
+        std::string dump() const override {
+            return toString();
+        }
     };
 
     class ThisRef : public Expression {
@@ -116,6 +123,10 @@ namespace pepper::ast {
 
         std::string toString() const override {
             return Node::toString() + std::string(llvm::formatv("{0}*", ThisDef->identifier()));
+        }
+
+        std::string dump() const override {
+            return toString();
         }
     };
 } // namespace pepper::ast

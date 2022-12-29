@@ -12,7 +12,6 @@
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
-#include "Core/Messages.h"
 #include "llvm/IR/BasicBlock.h"
 
 namespace pepper {

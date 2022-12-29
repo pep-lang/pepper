@@ -115,7 +115,7 @@ namespace pepper::ast {
 
         void pushRValue(Ref<Expression> value) override {
             auto& scope = ScopeStack.back();
-            std::cout << "rpush: " << scope->Ident << ": " << value->toString() << std::endl;
+            //            std::cout << "rpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->RValueStack.push_back(value);
         }
 
@@ -125,7 +125,7 @@ namespace pepper::ast {
                 throw InternalCompilerError("Attempted to pop empty r-value stack");
             }
             auto val = scope->RValueStack.pop_back_val();
-            std::cout << "rpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
+            //            std::cout << "rpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
             return val;
         }
 
@@ -136,14 +136,15 @@ namespace pepper::ast {
                 return nullptr;
             }
             auto val = scope->RValueStack[maxDepth - idx];
-            std::cout << "rpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " << val->rtti()->name()
-                      << std::endl;
+            //            std::cout << "rpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " <<
+            //            val->rtti()->name()
+            //                      << std::endl;
             return val;
         }
 
         void pushLValue(Ref<Node> value) override {
             auto& scope = ScopeStack.back();
-            std::cout << "lpush: " << scope->Ident << ": " << value->toString() << std::endl;
+            //            std::cout << "lpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->LValueStack.push_back(value);
         }
 
@@ -153,7 +154,7 @@ namespace pepper::ast {
                 throw InternalCompilerError("Attempted to pop empty l-value stack");
             }
             auto val = scope->LValueStack.pop_back_val();
-            std::cout << "lpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
+            //            std::cout << "lpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
             return val;
         }
 
@@ -164,8 +165,9 @@ namespace pepper::ast {
                 return nullptr;
             }
             auto val = scope->LValueStack[maxDepth - idx];
-            std::cout << "lpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " << val->rtti()->name()
-                      << std::endl;
+            //            std::cout << "lpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " <<
+            //            val->rtti()->name()
+            //                      << std::endl;
             return val;
         }
 
@@ -231,13 +233,13 @@ namespace pepper::ast {
 
         Builder* beginScope(const Name& name = "Anonymous") override {
             ScopeStack.emplace_back(Ref<Scope>::New(name));
-            std::cout << "begin: " << name << std::endl;
+            // std::cout << "begin: " << name << std::endl;
             return this;
         }
 
         Builder* endScope() override {
             auto scope = ScopeStack.pop_back_val();
-            std::cout << "end:   " << scope->Ident << std::endl;
+            // std::cout << "end:   " << scope->Ident << std::endl;
             return this;
         }
 
@@ -245,17 +247,19 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             scope->Locals[var->identifier()] = var;
             scope->OrderedSymbols.push_back(var);
+            trace(var);
             return this;
         }
 
         Builder* expression(Ref<ast::Expression> expr) override {
-            auto function = functionTarget();
             // If there's an l-value waiting for an expression value, it'll pull it
             // off the stack when its terminal completes
-            if (peekLValue())
+            if (peekLValue()) {
                 pushRValue(expr);
-            else
+            } else {
+                auto function = functionTarget();
                 block()->Items.push_back(expr);
+            }
 
             return this;
         }

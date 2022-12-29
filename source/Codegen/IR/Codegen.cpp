@@ -132,7 +132,9 @@ namespace pepper {
         else if (node->is<IntegerLiteral>())
             value = emit(node.as<IntegerLiteral>());
         if (value) {
-            PEP_TRACE(TraceChannel::Codegen, "{0} -> {1}", node->toString(), toString(value));
+            std::string output =
+                llvm::formatv("{0} {1} -> {2}", node->sourcePrefix(), rpad(node->rtti()->name(), 20), toString(value));
+            PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
             return value;
         }
         throw InternalCompilerError("Unknown AST node");
@@ -145,6 +147,7 @@ namespace pepper {
     }
 
     Ref<ModuleContext> Codegen::emit() {
+        PEP_TRACE(TraceChannel::Codegen, "Code generation:")
         for (auto root : Tree->roots()) {
             try {
                 if (root->is<StructDef>())

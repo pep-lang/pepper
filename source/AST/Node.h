@@ -6,6 +6,7 @@
 #include "Core/Common.h"
 #include "Core/Name.h"
 #include "Core/SourceLocation.h"
+#include "Core/String.h"
 
 namespace llvm {
     class Type;
@@ -22,7 +23,18 @@ namespace pepper::ast {
         Node() = default;
         virtual ~Node() = default;
 
+        std::string sourcePrefix() const {
+            int width = Source.File.size() + 10;
+            std::string src = Source.toString();
+            std::string padding = repeat(" ", width - src.size());
+            return llvm::formatv("{0}:{1}", Source.toString(), padding);
+        }
+
         virtual std::string toString() const {
+            return llvm::formatv("{0} {1}", sourcePrefix(), rtti()->name());
+        }
+
+        virtual std::string dump() const {
             return llvm::formatv("{0}: ", rtti()->name());
         }
     };

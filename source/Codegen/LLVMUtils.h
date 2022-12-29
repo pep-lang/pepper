@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "Core/String.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -16,13 +17,13 @@ namespace pepper {
         std::string str;
         llvm::raw_string_ostream ostr(str);
         value->print(ostr, true);
-        return str;
+        return trim(str);
     }
 
     inline std::string toString(llvm::Type* type) {
         std::string str;
         llvm::raw_string_ostream ostr(str);
         type->print(ostr, true);
-        return str;
+        return trim(str);
     }
 } // namespace pepper
