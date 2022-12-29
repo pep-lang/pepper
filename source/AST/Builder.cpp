@@ -115,40 +115,45 @@ namespace pepper::ast {
 
         void pushRValue(Ref<Expression> value) override {
             auto& scope = ScopeStack.back();
+            std::cout << "rpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->RValueStack.push_back(value);
         }
 
         Ref<Expression> popRValue() override {
             auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
-                throw InternalCompilerError("Attempted to pop empty AST stack");
+                throw InternalCompilerError("Attempted to pop empty r-value stack");
             }
-            auto val = scope->RValueStack.back();
-            scope->RValueStack.pop_back();
+            auto val = scope->RValueStack.pop_back_val();
+            std::cout << "rpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
             return val;
         }
 
         Ref<Expression> peekRValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
-            if (idx > (scope->RValueStack.size() - 1)) {
-                throw InternalCompilerError(
-                    "Attempted to peek AST stack slot {}, stack size: {}", idx, scope->RValueStack.size());
+            const int maxDepth = scope->RValueStack.size() - 1;
+            if (idx > maxDepth) {
+                return nullptr;
             }
-            return scope->RValueStack[scope->RValueStack.size() - 1 - idx];
+            auto val = scope->RValueStack[maxDepth - idx];
+            std::cout << "rpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " << val->rtti()->name()
+                      << std::endl;
+            return val;
         }
 
         void pushLValue(Ref<Node> value) override {
             auto& scope = ScopeStack.back();
+            std::cout << "lpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->LValueStack.push_back(value);
         }
 
         Ref<Node> popLValue() override {
             auto& scope = ScopeStack.back();
             if (scope->LValueStack.empty()) {
-                throw InternalCompilerError("Attempted to pop empty AST stack");
+                throw InternalCompilerError("Attempted to pop empty l-value stack");
             }
-            auto val = scope->LValueStack.back();
-            scope->LValueStack.pop_back();
+            auto val = scope->LValueStack.pop_back_val();
+            std::cout << "lpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
             return val;
         }
 
@@ -158,7 +163,10 @@ namespace pepper::ast {
             if (int(idx) > maxDepth) {
                 return nullptr;
             }
-            return scope->LValueStack[maxDepth - idx];
+            auto val = scope->LValueStack[maxDepth - idx];
+            std::cout << "lpeek: " << scope->Ident << " " << idx << "/" << maxDepth + 1 << ": " << val->rtti()->name()
+                      << std::endl;
+            return val;
         }
 
         Builder* beginStruct(Ref<StructDef> structDef) override {
@@ -223,11 +231,13 @@ namespace pepper::ast {
 
         Builder* beginScope(const Name& name = "Anonymous") override {
             ScopeStack.emplace_back(Ref<Scope>::New(name));
+            std::cout << "begin: " << name << std::endl;
             return this;
         }
 
         Builder* endScope() override {
-            ScopeStack.pop_back();
+            auto scope = ScopeStack.pop_back_val();
+            std::cout << "end:   " << scope->Ident << std::endl;
             return this;
         }
 

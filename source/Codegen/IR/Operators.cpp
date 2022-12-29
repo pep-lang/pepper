@@ -116,6 +116,14 @@ namespace pepper {
         throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
     }
 
+    Value Codegen::emit(Ref<Assign> op) {
+        auto rhs = codegen(op->rhs());
+        auto lhs = codegen(op->lhs());
+        auto typeOps = TypeOps::get(lhs.Ty);
+        typeOps->assign(lhs, typeOps->coerce(rhs));
+        return lhs;
+    }
+
     Value Codegen::emit(Ref<CompoundAssign> op) {
         auto rhs = codegen(op->rhs());
         auto lhs = codegen(op->lhs());
@@ -138,6 +146,8 @@ namespace pepper {
     Value Codegen::emit(Ref<BinaryOp> op) {
         if (op->is<CompoundAssign>())
             return emit(op.as<CompoundAssign>());
+        if (op->is<Assign>())
+            return emit(op.as<Assign>());
 
         auto rhs = codegen(op->rhs());
         auto lhs = codegen(op->lhs());

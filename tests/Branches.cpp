@@ -6,7 +6,7 @@
 
 using namespace TestUtils;
 
-TEST(Branches, DISABLED_If) {
+TEST(Branches, If) {
     const char* source = R"SOURCE(
         int test() {
             int x = 0;
@@ -18,7 +18,7 @@ TEST(Branches, DISABLED_If) {
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
 
-TEST(Branches, DISABLED_IfElse) {
+TEST(Branches, IfElse) {
     const char* source = R"SOURCE(
         int test() {
             int x = 1;
@@ -27,6 +27,7 @@ TEST(Branches, DISABLED_IfElse) {
             } else {
                 x = 3;
             }
+            return x;
         }
         )SOURCE";
     EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));

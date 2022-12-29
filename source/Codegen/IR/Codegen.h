@@ -13,6 +13,7 @@
 namespace pepper::ast {
     class AST;
     class Node;
+    class Assign;
     class CompoundAssign;
     class FieldDef;
     class FunctionCall;
@@ -27,6 +28,7 @@ namespace pepper::ast {
     class IntegerLiteral;
     class BinaryOp;
     class Return;
+    class Branch;
 } // namespace pepper::ast
 
 namespace pepper {
@@ -76,8 +78,10 @@ namespace pepper {
         Value emit(Ref<ast::FunctionDef> functionDef);
         Value emit(Ref<ast::Return> ret);
         Value emit(Ref<ast::FunctionCall> call);
+        Value emit(Ref<ast::Assign> op);
         Value emit(Ref<ast::CompoundAssign> op);
         Value emit(Ref<ast::BinaryOp> op);
+        Value emit(Ref<ast::Branch> branch);
 
         Ref<class Struct> emit(Ref<ast::StructDef> structDef);
 

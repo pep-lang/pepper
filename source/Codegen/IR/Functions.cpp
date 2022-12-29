@@ -39,7 +39,7 @@ namespace pepper {
         if (!lastExpr || !lastExpr->is<Return>()) {
             funcDef->body()->Items.push_back(Ref<Return>::New(funcDef));
         }
-        std::for_each(funcDef->body()->Items.begin(), funcDef->body()->Items.end(), [&](auto expr) { codegen(expr); });
+        Query(funcDef->body()->Items).each([&](auto expr) { codegen(expr); });
 
         Context::get().popScope();
         Context::get().locals()->newFunction(function);

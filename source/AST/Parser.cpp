@@ -265,39 +265,40 @@ namespace pepper {
             if (context->elseStatement()) {
                 branch->elseBlock() = builder->New<Block>(branch, "else");
             }
+            builder->beginScope("select");
             lvaluePush(branch);
         }
 
         void exitSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = lvaluePop<Branch>();
+            builder->endScope();
             builder->expression(branch);
         }
 
         void enterIfStatement(PepperParser::IfStatementContext* context) override {
-            auto branch = lvaluePop<Branch>();
-            builder->beginBlock(branch->thenBlock());
-            // push into the new scope
-            lvaluePush(branch);
         }
 
         void exitIfStatement(PepperParser::IfStatementContext* context) override {
-            auto branch = lvaluePop<Branch>();
-            auto condition = rvaluePop<Expression>();
-            branch->condition() = condition;
             builder->endBlock();
-            lvaluePush(branch);
+        }
+
+        void exitCondition(PepperParser::ConditionContext* context) override {
+            auto branch = lvaluePeek<Branch>();
+            branch->Condition = rvaluePop<Expression>();
+        }
+
+        void exitIfCondition(PepperParser::IfConditionContext* context) override {
+            auto branch = lvaluePeek<Branch>();
+            builder->beginBlock(branch->thenBlock());
         }
 
         void enterElseStatement(PepperParser::ElseStatementContext* context) override {
-            auto branch = lvaluePop<Branch>();
-            builder->beginBlock(branch->thenBlock());
-            lvaluePush(branch);
+            auto branch = lvaluePeek<Branch>();
+            builder->beginBlock(branch->elseBlock());
         }
 
         void exitElseStatement(PepperParser::ElseStatementContext* context) override {
-            auto branch = lvaluePop<Branch>();
             builder->endBlock();
-            lvaluePush(branch);
         }
 
         void exitAdd(PepperParser::AddContext* context) override {

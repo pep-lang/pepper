@@ -203,10 +203,6 @@ declarator
     | declarator '(' identifierList? ')'
 	;
 
-typeQualifierList
-	: typeQualifier+
-	;
-
 parameterTypeList
 	: parameterList (',' '...')?
 	;
@@ -270,8 +266,16 @@ selectionStatement
     //|   Switch '(' expression ')' statement
     ;
 
+condition
+    : expression
+    ;
+
+ifCondition
+    : condition
+    ;
+
 ifStatement
-    : If '(' expression ')' statement
+    : If '(' ifCondition ')' statement
     ;
 
 elseStatement

@@ -41,6 +41,7 @@ namespace pepper::ast {
         }
     };
 
+    // Branches can be expressions (ternary/loops) or void (if/else)
     class Branch : public Expression {
         DECLARE_RTTI(Branch, Expression);
 
@@ -64,11 +65,10 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            auto ifBlock =
-                Then ? std::string(llvm::formatv("if ({0}) {{\n  ", Condition->toString())) + Then->toString() + "}"
-                     : "";
+            auto ifCond = std::string(llvm::formatv("if ({0}) {{\n  ", Condition ? Condition->toString() : "??"));
+            auto thenBlock = Then ? Then->toString() + "}" : "";
             auto elseBlock = Else ? std::string(" else {\n  ") + Else->toString() + "}" : "";
-            return ifBlock + elseBlock;
+            return ifCond + thenBlock + elseBlock + "\n";
         }
     };
 } // namespace pepper::ast

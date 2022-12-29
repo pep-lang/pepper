@@ -267,11 +267,11 @@ namespace pepper {
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq"));
+            return Value(Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq"));
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne"));
+            return Value(Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne"));
         }
 
         Value assign(Value lhs, Value rhs) const override {
@@ -292,8 +292,8 @@ namespace pepper {
         }
 
         Value asBool(Value value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*Type);
-            return Value(Types::Bool, builder()->CreateICmpNE(value, zero, "bool"));
+            auto zero = llvm::ConstantInt::get(*Type, 0);
+            return Value(Types::Bool, builder()->CreateICmpNE(read(value), zero, "bool"));
         }
     };
 
