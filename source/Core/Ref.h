@@ -23,7 +23,7 @@ namespace pepper {
 
         template <typename U>
         // requires HasRtti<T> && HasRtti<U>
-        Ref<U> as() {
+        Ref<U> as() const {
             return std::static_pointer_cast<U>(*this);
         }
 

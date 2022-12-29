@@ -78,11 +78,17 @@ namespace pepper {
         structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
-        auto sizeVar = std::find_if(structDef->NewInstance->locals().begin(),
-                                    structDef->NewInstance->locals().end(),
-                                    [](auto& local) { return (local->identifier() == "size"); });
-        assert(sizeVar != structDef->NewInstance->locals().end());
-        (*sizeVar)->setDefaultValue(Ref<IntegerLiteral>::New(structDesc->size()));
+        auto sizeVar = Query(structDef->NewInstance->body()->Items)
+                           .find([](auto& local) {
+                               if (local->template is<VariableDef>()) {
+                                   auto var = local.template as<VariableDef>();
+                                   return var->identifier() == "size";
+                               }
+                               return false;
+                           })
+                           .value()
+                           .as<VariableDef>();
+        sizeVar->setDefaultValue(Ref<IntegerLiteral>::New(structDesc->size()));
 
         // Export new function to the enclosing scope
         Context::get().locals()->newFunction(structDesc->instanceNew());

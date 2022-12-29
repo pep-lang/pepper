@@ -15,8 +15,12 @@
 namespace pepper {
     inline std::string toString(llvm::Value* value) {
         std::string str;
-        llvm::raw_string_ostream ostr(str);
-        value->print(ostr, true);
+        if (value) {
+            llvm::raw_string_ostream ostr(str);
+            value->print(ostr, true);
+        } else {
+            str = "null";
+        }
         return trim(str);
     }
 

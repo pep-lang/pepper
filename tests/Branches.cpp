@@ -32,3 +32,46 @@ TEST(Branches, IfElse) {
         )SOURCE";
     EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Branches, NestedIf) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 2;
+            int y = 3;
+            if (y % x) {
+                if (x && y) {
+                    y -= x;
+                } else {
+                    y = 0;
+                }
+            }
+            return y;
+        }
+        )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(Branches, NestedIfElse) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 1;
+            int y = 2;
+            if (y % x) {
+                if (x && y) {
+                    y -= x;
+                } else {
+                    y = 0;
+                }
+            } else {
+                int z = 4;
+                if (z % y) {
+                    y = z;
+                } else {
+                    y = z*z;
+                }
+            }
+            return y;
+        }
+        )SOURCE";
+    EXPECT_EQ(16, CompileAndRun(TestName(test_info_), source));
+}

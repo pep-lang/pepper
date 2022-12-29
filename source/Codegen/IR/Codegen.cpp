@@ -131,13 +131,13 @@ namespace pepper {
             value = emit(node.as<FloatLiteral>());
         else if (node->is<IntegerLiteral>())
             value = emit(node.as<IntegerLiteral>());
-        if (value) {
-            std::string output =
-                llvm::formatv("{0} {1} -> {2}", node->sourcePrefix(), rpad(node->rtti()->name(), 20), toString(value));
-            PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
-            return value;
-        }
-        throw InternalCompilerError("Unknown AST node");
+        else
+            throw InternalCompilerError("Unknown AST node");
+
+        std::string output =
+            llvm::formatv("{0} {1} -> {2}", node->sourcePrefix(), rpad(node->rtti()->name(), 20), toString(value));
+        PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
+        return value;
     }
 
     Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)

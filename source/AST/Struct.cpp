@@ -30,7 +30,6 @@ namespace pepper::ast {
     std::string MethodDef::toString() const {
         const char* sep = "\n    ";
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-        Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->toString(); });
         Vector<std::string> exprs = Query(body()->Items).select<std::string>([](auto e) { return e->toString(); });
         return Node::toString() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
@@ -38,13 +37,12 @@ namespace pepper::ast {
                                          structDef()->identifier(),
                                          identifier(),
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + llvm::join(vars.begin(), vars.end(), sep) + sep + llvm::join(exprs.begin(), exprs.end(), sep);
+               sep + llvm::join(exprs.begin(), exprs.end(), sep);
     }
 
     std::string MethodDef::dump() const {
         const char* sep = "\n";
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-        Vector<std::string> vars = Query(locals()).select<std::string>([](auto l) { return l->dump(); });
         Vector<std::string> exprs = Query(body()->Items).select<std::string>([](auto e) { return e->dump(); });
         return Node::dump() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
@@ -52,7 +50,7 @@ namespace pepper::ast {
                                          structDef()->identifier(),
                                          identifier(),
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + llvm::join(vars.begin(), vars.end(), sep) + sep + llvm::join(exprs.begin(), exprs.end(), sep);
+               sep + llvm::join(exprs.begin(), exprs.end(), sep);
     }
 
     StructDef::StructDef(const Name& type, const Name& name)
@@ -76,12 +74,12 @@ namespace pepper::ast {
 
     void StructDef::finish() {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
-        NewInstance->locals().push_back(Ref<VariableDef>::New("u64", "size"));
-        NewInstance->locals().push_back(Ref<VariableDef>::New(
-            identifier(),
-            "this",
-            Ref<FunctionCall>::New(ExternFunctionDef::Malloc, Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})));
-        Vector<Ref<Expression>> body = {
+        Vector<Ref<Node>> body = {
+            Ref<VariableDef>::New("u64", "size"),
+            Ref<VariableDef>::New(identifier(),
+                                  "this",
+                                  Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
+                                                         Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
             Ref<FunctionCall>::New(Constructor),
             Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
@@ -90,7 +88,7 @@ namespace pepper::ast {
 
         // Fill in initializer
         for (auto& field : Fields) {
-            Initializer->locals().push_back(field);
+            Initializer->body()->Items.push_back(field);
         }
         Initializer->body()->Items.push_back(Ref<Return>::New(Initializer));
 

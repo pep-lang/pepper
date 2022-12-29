@@ -191,9 +191,6 @@ namespace pepper {
             auto function = builder->New<FunctionDef>(returnType, identifier, params);
             lvaluePush(function);
             builder->beginFunction(function);
-            for (auto& param : params) {
-                builder->symbol(builder->New<ParamDef>(param.Type, param.Identifier));
-            }
         }
 
         void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {

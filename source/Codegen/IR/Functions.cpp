@@ -29,11 +29,6 @@ namespace pepper {
             Context::get().locals()->newSymbol(local);
         }
 
-        // Push all known variables (except params, which are already done above) at the top of the function block
-        Query(funcDef->locals())
-            .without([](auto local) { return local->template is<ParamDef>(); })
-            .each([&](auto local) { codegen(local); });
-
         // Emit the body of the function, after ensuring there is a return instruction
         auto lastExpr = (funcDef->body()->Items.size()) ? funcDef->body()->Items.back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {

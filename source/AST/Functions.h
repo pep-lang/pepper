@@ -81,14 +81,6 @@ namespace pepper::ast {
             Body = Ref<Block>::New(nullptr, name);
         }
 
-        Vector<Ref<VariableDef>>& locals() {
-            return Locals;
-        }
-
-        const Vector<Ref<VariableDef>>& locals() const {
-            return Locals;
-        }
-
         Ref<Block>& body() {
             return Body;
         }

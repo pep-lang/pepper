@@ -206,10 +206,6 @@ namespace pepper::ast {
         Builder* endFunction() override {
             auto& scope = ScopeStack.back();
             auto& function = scope->FunctionTarget;
-            std::for_each(scope->Locals.begin(), scope->Locals.end(), [&](auto& local) {
-                auto var = local.second;
-                function->locals().push_back(var);
-            });
             ast.newRoot(function);
             endBlock();
             return this;
@@ -228,11 +224,16 @@ namespace pepper::ast {
         }
 
         Ref<Block> block() const override {
-            return ScopeStack.back()->BlockStack.back();
+            const auto& scope = ScopeStack.back();
+            if (scope->BlockStack.size())
+                return ScopeStack.back()->BlockStack.back();
+            return nullptr;
         }
 
         Builder* beginScope(const Name& name = "Anonymous") override {
-            ScopeStack.emplace_back(Ref<Scope>::New(name));
+            auto top = ScopeStack.back();
+            std::string newScopeName = llvm::formatv("{0}.{1}", top->Ident, name);
+            ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
             // std::cout << "begin: " << name << std::endl;
             return this;
         }
@@ -247,6 +248,9 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             scope->Locals[var->identifier()] = var;
             scope->OrderedSymbols.push_back(var);
+            if (block()) {
+                block()->Items.push_back(var);
+            }
             trace(var);
             return this;
         }
@@ -257,7 +261,6 @@ namespace pepper::ast {
             if (peekLValue()) {
                 pushRValue(expr);
             } else {
-                auto function = functionTarget();
                 block()->Items.push_back(expr);
             }
 
