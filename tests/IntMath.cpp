@@ -14,6 +14,15 @@ TEST(IntMath, Let) {
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(IntMath, BoolToInt) {
+    const char* source = R"SOURCE(
+        int test() {
+            return true;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(IntMath, Add) {
     const char* source = R"SOURCE(
         int test() {

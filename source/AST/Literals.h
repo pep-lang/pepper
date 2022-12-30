@@ -10,6 +10,34 @@ namespace pepper::ast {
         DECLARE_RTTI(Literal, Expression);
     };
 
+    class BoolLiteral : public Literal {
+        DECLARE_RTTI(BoolLiteral, Literal);
+
+        const bool Value;
+
+      public:
+        explicit BoolLiteral(bool value)
+            : Value(value) {
+        }
+
+        const Name& type() const override {
+            static Name Bool("bool");
+            return Bool;
+        }
+
+        bool value() const {
+            return Value;
+        }
+
+        virtual std::string toString() const override {
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+        }
+
+        virtual std::string dump() const override {
+            return toString();
+        }
+    };
+
     class IntegerLiteral : public Literal {
         DECLARE_RTTI(IntegerLiteral, Literal);
 

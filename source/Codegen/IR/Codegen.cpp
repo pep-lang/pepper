@@ -103,6 +103,11 @@ namespace pepper {
         return value;
     }
 
+    Value Codegen::emit(Ref<BoolLiteral> boolLiteral) {
+        auto value = Value(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->value()));
+        return value;
+    }
+
     Value Codegen::codegen(Ref<Node> node) {
         Value value;
         if (node->is<BinaryOp>())
@@ -135,6 +140,8 @@ namespace pepper {
             value = emit(node.as<FloatLiteral>());
         else if (node->is<IntegerLiteral>())
             value = emit(node.as<IntegerLiteral>());
+        else if (node->is<BoolLiteral>())
+            value = emit(node.as<BoolLiteral>());
         else
             throw InternalCompilerError("Unknown AST node");
 

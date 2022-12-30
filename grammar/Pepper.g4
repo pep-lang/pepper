@@ -4,9 +4,15 @@ grammar Pepper;
 primaryExpression
 	: Identifier
 	| Constant
+	| boolConstant
     | StringLiteral+
 	| '(' expression ')'
 	;
+
+boolConstant
+    : True
+    | False
+    ;
 
 postfixExpression
 	: primaryExpression (PlusPlus | MinusMinus)*
@@ -344,6 +350,7 @@ Do : 'do';
 Else : 'else';
 Enum : 'enum';
 Extern : 'extern';
+False: 'false';
 For : 'for';
 If : 'if';
 Or: 'or';
@@ -351,6 +358,7 @@ Return : 'return';
 Static : 'static';
 Struct : 'struct';
 Switch : 'switch';
+True: 'true';
 Void : 'void';
 While : 'while';
 
@@ -435,7 +443,6 @@ Digit
 Constant
     :   IntegerConstant
     |   FloatingConstant
-    //|   EnumerationConstant
     |   CharacterConstant
     ;
 

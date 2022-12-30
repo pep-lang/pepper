@@ -26,6 +26,7 @@ namespace pepper::ast {
     class StringLiteral;
     class FloatLiteral;
     class IntegerLiteral;
+    class BoolLiteral;
     class BinaryOp;
     class Return;
     class Branch;
@@ -76,6 +77,7 @@ namespace pepper {
         Value emit(Ref<ast::StringLiteral> stringLiteral);
         Value emit(Ref<ast::IntegerLiteral> intLiteral);
         Value emit(Ref<ast::FloatLiteral> floatLiteral);
+        Value emit(Ref<ast::BoolLiteral> boolLiteral);
         Value emit(Ref<ast::FieldDef> fieldDef);
         Value emit(Ref<ast::MemberRef> memberRef);
         Value emit(Ref<ast::ThisRef> thisRef);

@@ -125,6 +125,11 @@ namespace pepper {
             throw CompileError("Unable to parse numeric literal: {0}", value);
         }
 
+        Ref<Expression> evalBoolConstant(PepperParser::BoolConstantContext* boolConstant) {
+            bool boolVal = boolConstant->True();
+            return builder->New<BoolLiteral>(boolVal);
+        }
+
         void enterVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
             auto identifiers = context->Identifier();
             if (identifiers.size() != 2) {
@@ -151,6 +156,11 @@ namespace pepper {
         }
 
         void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
+            auto boolConstant = context->boolConstant();
+            if (boolConstant) {
+                rvaluePush(evalBoolConstant(boolConstant));
+                return;
+            }
             auto constant = context->Constant();
             if (constant) {
                 rvaluePush(evalNumericConstant(constant));
