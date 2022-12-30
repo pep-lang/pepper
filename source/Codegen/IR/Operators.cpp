@@ -81,14 +81,24 @@ namespace pepper {
         if (lhs->llvmType()->isStructTy() || lhs->llvmType()->isPointerTy()) {
             return structOperandType(op, lhs, rhs);
         }
+        if (lhs->llvmType()->isIntegerTy() && lhs->llvmType()->isIntegerTy()) {
+            auto intType = llvm::StringSwitch<Ref<TypeInfo>>(op->rtti()->name())
+                               .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
+                               .Cases("LShiftAssign",
+                                      "RShiftAssign",
+                                      "BitAndAssign",
+                                      "BitOrAssign",
+                                      "BitXorAssign",
+                                      largestIntType(lhs, rhs))
+                               .Default(nullptr);
+            if (intType)
+                return intType;
+        }
         return llvm::StringSwitch<Ref<TypeInfo>>(op->rtti()->name())
             .Cases("Add", "Sub", "Mul", "Div", "Mod", "Pow", largestOperandType(lhs, rhs))
             .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
-            .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
             .Cases("LogicalAnd", "LogicalOr", Types::Bool)
             .Cases("AddAssign", "SubAssign", "MulAssign", "ModAssign", largestOperandType(lhs, rhs))
-            .Cases(
-                "LShiftAssign", "RShiftAssign", "BitAndAssign", "BitOrAssign", "BitXorAssign", largestIntType(lhs, rhs))
             .Case("Assign", lhs);
     }
 
