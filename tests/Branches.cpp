@@ -85,3 +85,14 @@ TEST(Branches, Ternary) {
         )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Branches, NestedTernary) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 1;
+            int y = 0;
+            return x ? 0 : (y ? 1: 0);
+        }
+        )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
