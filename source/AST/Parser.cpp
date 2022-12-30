@@ -112,16 +112,19 @@ namespace pepper {
 
         Ref<Expression> evalNumericConstant(antlr4::tree::TerminalNode* constant) {
             auto value = constant->toString();
+            if (value.find('.') != -1) {
+                try {
+                    auto floatVal = std::stold(value);
+                    return builder->New<FloatLiteral>(floatVal);
+                } catch (std::invalid_argument) {
+                }
+            }
             try {
                 auto intVal = std::stoll(value);
                 return builder->New<IntegerLiteral>(intVal);
             } catch (std::invalid_argument) {
             }
-            try {
-                auto floatVal = std::stold(value);
-                return builder->New<FloatLiteral>(floatVal);
-            } catch (std::invalid_argument) {
-            }
+
             throw CompileError("Unable to parse numeric literal: {0}", value);
         }
 

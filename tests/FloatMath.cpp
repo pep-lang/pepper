@@ -25,3 +25,14 @@ TEST(FloatMath, Add) {
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(FloatMath, Sub) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 0.42;
+            float y = 0.1;
+            return (x - y) > 0;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
