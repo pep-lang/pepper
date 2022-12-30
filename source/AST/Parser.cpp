@@ -298,6 +298,19 @@ namespace pepper {
             builder->endBlock();
         }
 
+        void enterTernary(PepperParser::TernaryContext* context) override {
+            auto branch = builder->New<Ternary>();
+            lvaluePush(branch);
+        }
+
+        void exitTernary(PepperParser::TernaryContext* context) override {
+            auto branch = lvaluePop<Ternary>();
+            branch->FalseResult = rvaluePop<Expression>();
+            branch->TrueResult = rvaluePop<Expression>();
+            branch->Condition = rvaluePop<Expression>();
+            builder->expression(branch);
+        }
+
         void exitAdd(PepperParser::AddContext* context) override {
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
@@ -410,9 +423,6 @@ namespace pepper {
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
             rvaluePush(builder->New<LogicalOr>(lhs, rhs));
-        }
-
-        void exitTernary(PepperParser::TernaryContext* context) override {
         }
 
         template <typename Op>

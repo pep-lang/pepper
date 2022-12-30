@@ -109,6 +109,8 @@ namespace pepper {
             value = emit(node.as<BinaryOp>());
         else if (node->is<Branch>())
             value = emit(node.as<Branch>());
+        else if (node->is<Ternary>())
+            value = emit(node.as<Ternary>());
         else if (node->is<FieldDef>())
             value = emit(node.as<FieldDef>());
         else if (node->is<VariableDef>())

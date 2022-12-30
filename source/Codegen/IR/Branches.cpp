@@ -59,4 +59,35 @@ namespace pepper {
         return Value(Types::VoidPtr,
                      llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
+
+    Value Codegen::emit(Ref<Ternary> ternary) {
+        auto function = ir()->GetInsertBlock()->getParent();
+        auto& context = function->getContext();
+        auto trueBlock = llvm::BasicBlock::Create(context, "true", function);
+        auto falseBlock = llvm::BasicBlock::Create(context, "false");
+        falseBlock->insertInto(function);
+        auto mergeBlock = llvm::BasicBlock::Create(context, "ternarycont");
+        mergeBlock->insertInto(function);
+        auto condition = codegen(ternary->Condition);
+        auto condBool = condition.Ty->ops()->asBool(condition);
+
+        // create conditional jump
+        ir()->CreateCondBr(condBool, trueBlock, falseBlock);
+
+        ir()->SetInsertPoint(trueBlock);
+        Value trueValue = codegen(ternary->TrueResult);
+        ir()->CreateBr(mergeBlock);
+        trueBlock = ir()->GetInsertBlock();
+
+        ir()->SetInsertPoint(falseBlock);
+        Value falseValue = codegen(ternary->FalseResult);
+        ir()->CreateBr(mergeBlock);
+        falseBlock = ir()->GetInsertBlock();
+
+        ir()->SetInsertPoint(mergeBlock);
+        auto phi = ir()->CreatePHI(trueValue->getType(), 2, "ternary");
+        phi->addIncoming(trueValue, trueBlock);
+        phi->addIncoming(falseValue, falseBlock);
+        return Value(trueValue.Ty, phi);
+    }
 } // namespace pepper

@@ -328,9 +328,6 @@ returnType
     : Identifier
     ;
 
-declarationList
-    :   declaration+
-    ;
 
 And: 'and';
 As: 'as';

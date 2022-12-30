@@ -101,4 +101,21 @@ namespace pepper::ast {
             return ifCond + thenBlock + elseBlock + "\n";
         }
     };
+
+    class Ternary : public Expression {
+        DECLARE_RTTI(Ternary, Expression);
+
+        Ref<Expression> Condition;
+        Ref<Expression> TrueResult;
+        Ref<Expression> FalseResult;
+
+      public:
+        std::string toString() const override {
+            return Node::toString();
+        }
+
+        std::string dump() const override {
+            return std::string(llvm::formatv("({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
+        }
+    };
 } // namespace pepper::ast

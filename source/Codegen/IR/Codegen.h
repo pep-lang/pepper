@@ -29,6 +29,7 @@ namespace pepper::ast {
     class BinaryOp;
     class Return;
     class Branch;
+    class Ternary;
 } // namespace pepper::ast
 
 namespace pepper {
@@ -82,6 +83,7 @@ namespace pepper {
         Value emit(Ref<ast::CompoundAssign> op);
         Value emit(Ref<ast::BinaryOp> op);
         Value emit(Ref<ast::Branch> branch);
+        Value emit(Ref<ast::Ternary> ternary);
 
         Ref<class Struct> emit(Ref<ast::StructDef> structDef);
 
