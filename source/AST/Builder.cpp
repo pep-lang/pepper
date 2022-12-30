@@ -255,11 +255,11 @@ namespace pepper::ast {
             return this;
         }
 
-        Builder* expression(Ref<ast::Expression> expr) override {
+        Builder* insert(Ref<ast::Node> expr) override {
             // If there's an l-value waiting for an expression value, it'll pull it
             // off the stack when its terminal completes
             if (peekLValue()) {
-                pushRValue(expr);
+                pushRValue(expr.as<Expression>());
             } else {
                 block()->Items.push_back(expr);
             }

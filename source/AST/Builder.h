@@ -66,7 +66,7 @@ namespace pepper::ast {
         virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
 
         virtual Builder* symbol(Ref<VariableDef> var) = 0;
-        virtual Builder* expression(Ref<Expression> expr) = 0;
+        virtual Builder* insert(Ref<Node> expr) = 0;
         virtual void trace(const Ref<Node>& node) const = 0;
     };
 } // namespace pepper::ast

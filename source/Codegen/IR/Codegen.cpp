@@ -111,6 +111,8 @@ namespace pepper {
             value = emit(node.as<Branch>());
         else if (node->is<Ternary>())
             value = emit(node.as<Ternary>());
+        else if (node->is<While>())
+            value = emit(node.as<While>());
         else if (node->is<FieldDef>())
             value = emit(node.as<FieldDef>());
         else if (node->is<VariableDef>())

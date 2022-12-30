@@ -20,6 +20,7 @@ add_executable(PepperTests
         FloatMath.cpp
         Function.cpp
         IntMath.cpp
+        Loops.cpp
         RTTI.cpp
         Structs.cpp
         Branches.cpp)

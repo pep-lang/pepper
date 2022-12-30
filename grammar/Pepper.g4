@@ -283,9 +283,13 @@ elseStatement
     ;
 
 iterationStatement
-    :   While '(' expression ')' statement
-    |   Do statement While '(' expression ')' ';'?
-    |   For '(' forCondition ')' statement
+    :   While '(' whileCondition ')' statement #WhileLoop
+    //|   Do statement While '(' condition ')' ';'? #DoWhileLoop
+    |   For '(' forCondition ')' statement #ForLoop
+    ;
+
+whileCondition
+    : condition
     ;
 
 forCondition

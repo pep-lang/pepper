@@ -220,7 +220,7 @@ namespace pepper {
                 args.insert(args.begin(), rvaluePop<Expression>());
             }
             auto call = builder->New<FunctionCall>(func, args);
-            builder->expression(call);
+            builder->insert(call);
         }
 
         void enterReturn(PepperParser::ReturnContext* context) override {
@@ -235,7 +235,7 @@ namespace pepper {
                 auto returnValue = rvaluePop<Expression>();
                 ret->setValue(returnValue);
             }
-            builder->expression(ret);
+            builder->insert(ret);
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
@@ -251,7 +251,7 @@ namespace pepper {
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {
             auto lhs = rvaluePop<Expression>();
             auto rhs = context->Identifier()->toString();
-            builder->expression(builder->New<MemberRef>(lhs, rhs));
+            builder->insert(builder->New<MemberRef>(lhs, rhs));
         }
 
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
@@ -269,7 +269,7 @@ namespace pepper {
         void exitSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = lvaluePop<Branch>();
             builder->endScope();
-            builder->expression(branch);
+            builder->insert(branch);
         }
 
         void enterIfStatement(PepperParser::IfStatementContext* context) override {
@@ -279,13 +279,9 @@ namespace pepper {
             builder->endBlock();
         }
 
-        void exitCondition(PepperParser::ConditionContext* context) override {
-            auto branch = lvaluePeek<Branch>();
-            branch->Condition = rvaluePop<Expression>();
-        }
-
         void exitIfCondition(PepperParser::IfConditionContext* context) override {
             auto branch = lvaluePeek<Branch>();
+            branch->Condition = rvaluePop<Expression>();
             builder->beginBlock(branch->thenBlock());
         }
 
@@ -303,12 +299,30 @@ namespace pepper {
             lvaluePush(branch);
         }
 
+        void enterWhileLoop(PepperParser::WhileLoopContext* context) override {
+            auto loop = builder->New<While>();
+            loop->Body = builder->New<Block>();
+            lvaluePush(loop);
+        }
+
+        void exitWhileLoop(PepperParser::WhileLoopContext* context) override {
+            builder->endBlock();
+            auto loop = lvaluePop<While>();
+            builder->insert(loop);
+        }
+
+        void exitWhileCondition(PepperParser::WhileConditionContext* context) override {
+            auto loop = lvaluePeek<While>();
+            loop->Condition = rvaluePop<Expression>();
+            builder->beginBlock(loop->Body);
+        }
+
         void exitTernary(PepperParser::TernaryContext* context) override {
             auto branch = lvaluePop<Ternary>();
             branch->FalseResult = rvaluePop<Expression>();
             branch->TrueResult = rvaluePop<Expression>();
             branch->Condition = rvaluePop<Expression>();
-            builder->expression(branch);
+            builder->insert(branch);
         }
 
         void exitAdd(PepperParser::AddContext* context) override {
@@ -436,7 +450,7 @@ namespace pepper {
             auto op = lvaluePop<Op>();
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
-            builder->expression(builder->New<Op>(lhs, rhs));
+            builder->insert(builder->New<Op>(lhs, rhs));
         }
 
         void enterAssignment(PepperParser::AssignmentContext* context) override {

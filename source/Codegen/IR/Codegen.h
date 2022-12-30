@@ -30,6 +30,9 @@ namespace pepper::ast {
     class Return;
     class Branch;
     class Ternary;
+    class While;
+    class ForIndex;
+    class ForRange;
 } // namespace pepper::ast
 
 namespace pepper {
@@ -84,6 +87,7 @@ namespace pepper {
         Value emit(Ref<ast::BinaryOp> op);
         Value emit(Ref<ast::Branch> branch);
         Value emit(Ref<ast::Ternary> ternary);
+        Value emit(Ref<ast::While> loop);
 
         Ref<class Struct> emit(Ref<ast::StructDef> structDef);
 
