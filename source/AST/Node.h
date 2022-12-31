@@ -39,6 +39,8 @@ namespace pepper::ast {
         }
     };
 
+    // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
+    // in the stack to cause r-values to be collected
     class Pending : public Node {
         DECLARE_RTTI(Pending, Node);
 
@@ -50,6 +52,11 @@ namespace pepper::ast {
         Pending(Ref<N> node) {
             Value = node;
             Type = RTTI::of<N>();
+        }
+
+        template <typename N>
+        static Ref<Pending> New() {
+            return Ref<Pending>::New(Ref<N>{});
         }
     };
 

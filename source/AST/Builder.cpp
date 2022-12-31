@@ -243,9 +243,7 @@ namespace pepper::ast {
 
         Ref<Block> block() const override {
             const auto& scope = ScopeStack.back();
-            if (scope->Block)
-                return scope->Block;
-            return nullptr;
+            return scope->Block;
         }
 
         void beginScope(const Name& name = "Anonymous") override {

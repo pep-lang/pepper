@@ -312,12 +312,12 @@ namespace pepper {
         }
 
         void enterMethodCall(PepperParser::MethodCallContext* context) override {
-            auto call = Ref<Pending>::New(Ref<MethodCall>());
+            auto call = Pending::New<MethodCall>();
             lvaluePush(call);
         }
 
         void exitMethodCall(PepperParser::MethodCallContext* context) override {
-            auto pendingCall = lvaluePop<MethodCall>();
+            lvaluePop<MethodCall>();
             auto providedArgsCount = context->argumentExpressionList()
                                          ? context->argumentExpressionList()->assignmentExpression().size()
                                          : 0;
@@ -331,7 +331,7 @@ namespace pepper {
         }
 
         void enterFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
-            auto call = Ref<Pending>::New(Ref<FunctionCall>());
+            auto call = Pending::New<FunctionCall>();
             lvaluePush(call);
         }
 
@@ -366,7 +366,7 @@ namespace pepper {
         }
 
         void enterMemberAccess(PepperParser::MemberAccessContext* context) override {
-            auto memberRef = builder->New<Pending>(Ref<MemberRef>());
+            auto memberRef = Pending::New<MemberRef>();
             lvaluePush(memberRef);
             if (context->This()) {
                 rvaluePush(builder->New<VariableRef>("this"));
