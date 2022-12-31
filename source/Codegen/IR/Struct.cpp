@@ -95,7 +95,7 @@ namespace pepper {
             // TODO: mangle these properly
             auto mangledName = structDef->identifier() + "." + realName;
             auto returnType = Types::get(method->returnType());
-            auto newMethod = Ref<Method>::New(mangledName, returnType, params);
+            auto newMethod = Ref<Method>::New(structDesc, mangledName, returnType, params);
             methods.push_back(newMethod);
             structDesc->addMethod(newMethod, realName);
         }

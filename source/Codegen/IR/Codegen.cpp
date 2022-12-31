@@ -25,10 +25,6 @@ namespace pepper {
         return Context::get().locals()->builder();
     }
 
-    Ref<llvm::IRBuilderBase> Codegen::registers() {
-        return Context::get().locals()->registers();
-    }
-
     using llvm::cast;
     using llvm::isa;
 
@@ -74,8 +70,8 @@ namespace pepper {
     Value Codegen::emit(Ref<VariableDef> variableDef) {
         auto typeName = variableDef->type();
         auto type = Types::get(typeName);
-        auto value = Value(
-            type, registers()->CreateAlloca(*type, nullptr, variableDef->identifier()), variableDef->identifier());
+        auto value =
+            Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->identifier()), variableDef->identifier());
 
         auto defaultValue = maybeCodegen(variableDef->defaultValue());
         if (!defaultValue)

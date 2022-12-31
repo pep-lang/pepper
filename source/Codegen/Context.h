@@ -19,6 +19,7 @@ namespace pepper {
     class ModuleContext;
     class Types;
     class UserFunction;
+    class Method;
 
     class Context {
         static Context* Instance;
@@ -33,7 +34,6 @@ namespace pepper {
       public:
         static Context& get();
         static Ref<llvm::IRBuilderBase> ir();
-        static Ref<llvm::IRBuilderBase> registers();
         static Ref<llvm::DIBuilder> dbg();
 
         explicit Context(const std::string& moduleName);

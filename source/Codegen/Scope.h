@@ -20,6 +20,7 @@ namespace llvm {
 
 namespace pepper {
     class Function;
+    class Struct;
     class Symbol;
     class TypeInfo;
 
@@ -35,6 +36,8 @@ namespace pepper {
         llvm::StringMap<Ref<Function>> Functions;
         Ref<Function> FunctionTarget;
 
+        Ref<Struct> This;
+
         Ref<llvm::IRBuilderBase> Builder;
 
         explicit Scope(const std::string& name = "Anonymous", Ref<Scope> outer = nullptr)
@@ -48,7 +51,6 @@ namespace pepper {
         [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
         [[nodiscard]] const Value& findSymbol(const std::string& identifier) const;
         Ref<llvm::IRBuilderBase> builder() const;
-        Ref<llvm::IRBuilderBase> registers() const;
         Ref<Function> functionTarget() const;
     };
 } // namespace pepper

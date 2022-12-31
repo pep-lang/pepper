@@ -4,9 +4,8 @@
 
 #include "Codegen/Scope.h"
 
-#include "Function.h"
+#include "Codegen/Function.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
@@ -43,18 +42,18 @@ namespace pepper {
         return Builder ? Builder : (Outer ? Outer->builder() : nullptr);
     }
 
-    Ref<llvm::IRBuilderBase> Scope::registers() const {
-        auto func = functionTarget().as<UserFunction>();
-        auto funcStart = func->Body->getFirstInsertionPt();
-        auto builder = func->Builder;
-        if (funcStart != func->Body->getInstList().begin()) {
-            // skip past existing locals
-            for (int localIdx = 0; localIdx < func->NumLocals; ++localIdx)
-                ++funcStart;
-            builder = Ref<llvm::IRBuilder<>>::New(func->Body);
-            builder->SetInsertPoint(func->Body, funcStart);
-        }
-        ++func->NumLocals;
-        return builder;
-    }
+    //    Ref<llvm::IRBuilderBase> Scope::registers() const {
+    //        auto func = functionTarget().as<UserFunction>();
+    //        auto funcStart = func->Body->getFirstInsertionPt();
+    //        auto builder = func->Builder;
+    //        if (funcStart != func->Body->getInstList().begin()) {
+    //            // skip past existing locals
+    //            for (int localIdx = 0; localIdx < func->NumLocals; ++localIdx)
+    //                ++funcStart;
+    //            builder = Ref<llvm::IRBuilder<>>::New(func->Body);
+    //            builder->SetInsertPoint(func->Body, funcStart);
+    //        }
+    //        ++func->NumLocals;
+    //        return builder;
+    //    }
 } // namespace pepper

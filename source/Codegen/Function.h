@@ -80,16 +80,22 @@ namespace pepper {
       public:
         llvm::BasicBlock* Body = nullptr;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
-        unsigned int NumLocals = 0;
 
         UserFunction(const Name& name, Ref<TypeInfo> returnType, const Params& params = Params());
     };
 
+    class Struct;
+
     class Method : public UserFunction {
         DECLARE_RTTI(Method, UserFunction);
 
+        Ref<Struct> This;
+
       public:
-        using UserFunction::UserFunction;
+        Method(Ref<Struct> st, const Name& name, Ref<TypeInfo> returnType, const Params& params = {})
+            : UserFunction(name, returnType, params)
+            , This(st) {
+        }
     };
 
 } // namespace pepper

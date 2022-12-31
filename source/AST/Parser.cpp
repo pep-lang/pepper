@@ -64,6 +64,8 @@ namespace pepper {
 
         void rvaluePush(Ref<Node> val) {
             // Only bother tracking this rvalue if there is an l-value on the stack to receive it
+            if (!val)
+                int x = 3;
             if (lvaluePeek<Node>())
                 builder->pushRValue(std::move(val));
         }
@@ -167,6 +169,20 @@ namespace pepper {
             rvaluePush(symbol);
         }
 
+        Ref<Expression> resolveLocal(const Name& identifier) {
+            auto symbol = builder->findSymbol(identifier);
+            if (symbol && symbol->is<FieldDef>()) {
+                auto field = symbol.as<FieldDef>();
+                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->identifier());
+            }
+            if (symbol && symbol->is<MethodDef>()) {
+                auto method = symbol.as<MethodDef>();
+                return builder->New<MemberRef>(Ref<ThisRef>::New(method->structDef()), method->identifier());
+            }
+            // anything else can be looked up later, at codegen/pass time
+            return builder->New<VariableRef>(identifier);
+        }
+
         void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
             auto boolConstant = context->boolConstant();
             if (boolConstant) {
@@ -188,8 +204,8 @@ namespace pepper {
             }
             auto ident = context->Identifier();
             if (ident) {
-                auto identifier = ident->toString();
-                rvaluePush(builder->New<VariableRef>(identifier));
+                auto symbol = resolveLocal(ident->toString());
+                rvaluePush(symbol);
                 return;
             }
         }
@@ -269,9 +285,14 @@ namespace pepper {
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
-            auto structName = context->Identifier()->toString();
-            auto structDef = builder->findStruct(structName);
-            builder->beginExtension(structDef);
+            auto identifiers = context->Identifier();
+            if (identifiers.size() == 1) {
+                auto structName = identifiers[0]->toString();
+                auto structDef = builder->findStruct(structName);
+                builder->beginExtension(structDef);
+                return;
+            }
+            throw InternalCompilerError("extension with is not implemented");
         }
 
         void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {

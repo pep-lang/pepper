@@ -62,8 +62,6 @@ namespace pepper {
 
         // General builder, normal insertion point
         static Ref<llvm::IRBuilderBase> ir();
-        // builder placed at the head of the current block, to allow mem2reg to optimize register mappings
-        static Ref<llvm::IRBuilderBase> registers();
 
         static llvm::Type* resolveType(Value value);
         static Value read(Value value);

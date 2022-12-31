@@ -30,7 +30,7 @@ namespace pepper::ast {
             llvm::StringMap<Ref<ast::FunctionDef>> Functions;
             Vector<Ref<FunctionDef>> OrderedFunctions;
             Vector<Ref<Expression>> Expressions;
-            Ref<ast::FunctionDef> FunctionTarget = nullptr;
+            Ref<ast::FunctionDef> FunctionTarget;
 
             Ref<Node> Parent;
             Vector<Ref<Block>> BlockStack;
@@ -82,6 +82,12 @@ namespace pepper::ast {
                     return var;
                 }
             }
+            if (auto st = structTarget()) {
+                auto field = Query(st->Fields).find([&](auto f) { return f->identifier() == name; });
+                if (field) {
+                    return field.value();
+                }
+            }
             return nullptr;
         }
 
@@ -89,6 +95,12 @@ namespace pepper::ast {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto var = scope->Functions.lookup(name)) {
                     return var;
+                }
+            }
+            if (auto st = structTarget()) {
+                auto method = Query(st->Methods).find([&](auto m) { return m->identifier() == name; });
+                if (method) {
+                    return method.value();
                 }
             }
             return nullptr;
@@ -210,16 +222,17 @@ namespace pepper::ast {
             beginBlock(func->body());
             auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
+            fnScope->StructTarget = func->is<MethodDef>() ? func.as<MethodDef>()->structDef() : nullptr;
             return this;
         }
 
         Builder* endFunction() override {
             auto& scope = ScopeStack.back();
             auto& function = scope->FunctionTarget;
+            endBlock();
             if (!structTarget()) {
                 ast.newRoot(function);
             }
-            endBlock();
             return this;
         }
 

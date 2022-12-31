@@ -25,9 +25,9 @@ namespace pepper {
         return get().locals()->builder();
     }
 
-    Ref<llvm::IRBuilderBase> Context::registers() {
-        return get().locals()->registers();
-    }
+//    Ref<llvm::IRBuilderBase> Context::registers() {
+//        return get().locals()->registers();
+//    }
 
     Ref<llvm::DIBuilder> Context::dbg() {
         return get().DebugInfo;
@@ -68,6 +68,9 @@ namespace pepper {
     void Context::pushFunction(Ref<UserFunction> function) {
         pushScope(function->name(), function->Builder);
         Locals->FunctionTarget = function;
+        if (function->is<Method>()) {
+            Locals->This = function.as<Method>()->This;
+        }
     }
 
     void Context::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {

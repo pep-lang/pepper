@@ -335,7 +335,8 @@ functionDefinitionList
     ;
 
 extensionDefinition
-    :   Extend Identifier With '{' functionDefinitionList '}'
+    :   Extend Identifier '{' functionDefinitionList '}'
+    |   Extend Identifier With Identifier ';'
     ;
 
 returnType

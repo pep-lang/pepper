@@ -5,6 +5,7 @@
 #include "Codegen/Scope.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
+#include "Core/Exceptions.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
 
@@ -29,6 +30,16 @@ namespace pepper {
         for (const auto& arg : args) {
             auto expectedType = Parameters[idx++].ParamType->ops();
             coercedArgs.push_back(expectedType->coerce(arg));
+        }
+
+        // fill in default params
+        for (int argIdx = coercedArgs.size(); argIdx < Parameters.size(); ++argIdx) {
+            const auto& param = Parameters[argIdx];
+            if (!param.Default) {
+                throw CompileError(
+                    "Missing argument {0}({1}) of type {2} to {3}", argIdx, param.ParamName, Types::toString(param.ParamType), Identifier);
+            }
+            coercedArgs.push_back(param.Default);
         }
         return Value(
             ReturnType,
