@@ -34,3 +34,16 @@ TEST(Function, NestedCalls) {
         )SOURCE";
     EXPECT_EQ(65, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Function, DefaultParams) {
+    const char* source = R"SOURCE(
+        int addTo(int x, int y = 1) {
+            return x + y;
+        }
+
+        int test() {
+            return addTo(64);
+        }
+        )SOURCE";
+    EXPECT_EQ(65, CompileAndRun(TestName(test_info_), source));
+}

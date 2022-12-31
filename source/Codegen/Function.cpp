@@ -36,10 +36,13 @@ namespace pepper {
         for (int argIdx = coercedArgs.size(); argIdx < Parameters.size(); ++argIdx) {
             const auto& param = Parameters[argIdx];
             if (!param.Default) {
-                throw CompileError(
-                    "Missing argument {0}({1}) of type {2} to {3}", argIdx, param.ParamName, Types::toString(param.ParamType), Identifier);
+                throw CompileError("Missing argument {0}({1}) of type {2} to {3}",
+                                   argIdx,
+                                   param.ParamName,
+                                   Types::toString(param.ParamType),
+                                   Identifier);
             }
-            coercedArgs.push_back(param.Default);
+            coercedArgs.push_back(param.ParamType->ops()->coerce(param.Default));
         }
         return Value(
             ReturnType,

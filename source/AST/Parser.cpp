@@ -210,43 +210,40 @@ namespace pepper {
             }
         }
 
+        void enterParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
+            lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+        }
+
+        void exitParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
+            lvaluePop<VariableDef>();
+            auto identifiers = context->Identifier();
+            auto typeName = identifiers[0]->toString();
+            auto name = identifiers[1]->toString();
+            Ref<Expression> defaultValue;
+            if (context->Assign()) {
+                defaultValue = rvaluePop<Expression>();
+            }
+            auto func = builder->functionTarget();
+            func->Parameters.emplace_back(name, typeName, defaultValue);
+        }
+
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             auto identifier = context->Identifier()->toString();
             auto returnType =
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
-            Params params;
-            if (auto paramList = context->parameterList()) {
-                auto paramDecls = paramList->parameterDeclaration();
-                params = Query(paramDecls).select<Param>([&](auto p) {
-                    auto identifiers = p->Identifier();
-                    auto typeName = identifiers[0]->toString();
-                    auto paramName = identifiers[1]->toString();
-                    return Param{paramName, typeName};
-                });
-            }
 
             auto function =
                 builder->structTarget()
-                    ? builder->New<MethodDef>(builder->structTarget(), returnType, identifier, params).as<FunctionDef>()
-                    : builder->New<FunctionDef>(returnType, identifier, params);
+                    ? builder->New<MethodDef>(builder->structTarget(), returnType, identifier).as<FunctionDef>()
+                    : builder->New<FunctionDef>(returnType, identifier);
             lvaluePush(function);
             builder->beginFunction(function);
         }
 
         void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             builder->endFunction();
-            // for each default value, fill them in from computed rvalues
+
             auto function = lvaluePop<FunctionDef>();
-            if (auto paramsList = context->parameterList()) {
-                auto paramDecls = paramsList->parameterDeclaration();
-                int idx = 0;
-                Query(paramDecls).each([&](auto p) {
-                    if (p->Assign()) {
-                        function->params()[idx].Default = rvaluePop<Expression>();
-                    }
-                    ++idx;
-                });
-            }
             if (function->is<MethodDef>()) {
                 builder->structTarget()->Methods.push_back(function.as<MethodDef>());
             }
