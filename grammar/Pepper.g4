@@ -14,6 +14,12 @@ boolConstant
     | False
     ;
 
+sliceNotation
+    :   expression '..'
+    |   expression '..' expression?
+    |   expression '..' expression? (',' expression)?
+    ;
+
 postfixExpression
 	: primaryExpression (PlusPlus | MinusMinus)*
 	| arrayAccess
@@ -30,7 +36,7 @@ functionCall
     ;
 
 memberAccess
-    : primaryExpression '.' Identifier
+    : primaryExpression Dot Identifier
     ;
 
 argumentExpressionList
@@ -199,7 +205,7 @@ enumeratorConstant
 	;
 
 typeQualifier
-	: 'const'
+	: 'var'
 	;
 
 // This probably needs way more
@@ -299,21 +305,23 @@ whileCondition
     ;
 
 forCondition
-	:   (forDeclaration | expression?) ';' forExpression? ';' forExpression?
+	:   forDeclaration In forExpression
+	|   forExpression
 	;
 
 forDeclaration
-    :   declarationSpecifiers initDeclaratorList?
+    :   declarationSpecifiers? Identifier
     ;
 
 forExpression
-    :   assignmentExpression (',' assignmentExpression)*
+    :   sliceNotation
+    |   expression
     ;
 
-jumpStatement:
-	Continue ';'				# Continue
-	| Break ';'					# Break
-	| Return expression? ';'	# Return
+jumpStatement
+    :   Continue ';'		    # Continue
+	|   Break ';'				# Break
+	|   Return expression? ';'	# Return
     ;
 
 compilationUnit
@@ -353,12 +361,14 @@ Extern : 'extern';
 False: 'false';
 For : 'for';
 If : 'if';
+In: 'in';
 Or: 'or';
 Return : 'return';
 Static : 'static';
 Struct : 'struct';
 Switch : 'switch';
 True: 'true';
+Var: 'var';
 Void : 'void';
 While : 'while';
 
@@ -415,6 +425,7 @@ Equal : '==';
 NotEqual : '!=';
 
 Arrow : '->';
+DotDot : '..';
 Dot : '.';
 Ellipsis : '...';
 
@@ -441,9 +452,13 @@ Digit
     ;
 
 Constant
+    :   NumericConstant
+    |   CharacterConstant
+    ;
+
+NumericConstant
     :   IntegerConstant
     |   FloatingConstant
-    |   CharacterConstant
     ;
 
 fragment
@@ -513,8 +528,7 @@ HexadecimalFloatingConstant
 
 fragment
 FractionalConstant
-    :   DigitSequence? '.' DigitSequence
-    |   DigitSequence '.'
+    :   DigitSequence '.' DigitSequence
     ;
 
 fragment

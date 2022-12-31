@@ -23,12 +23,13 @@ namespace pepper::ast {
         }
     };
 
-    class ForIndex : public Node {
-        DECLARE_RTTI(ForIndex, Node);
+    class ForRange : public Node {
+        DECLARE_RTTI(ForRange, Node);
 
-        Ref<VariableDef> Init;
-        Ref<Expression> Condition;
-        Ref<Expression> Next;
+        Ref<VariableDef> Var;
+        Ref<Expression> Init;
+        Ref<Expression> Step;
+        Ref<Expression> Done;
         Ref<Block> Body;
 
         std::string toString() const override {
@@ -37,24 +38,8 @@ namespace pepper::ast {
 
         std::string dump() const override {
             return Node::dump() +
-                   std::string(llvm::formatv("({0}; {1}; {2})", Init->dump(), Condition->dump(), Next->dump())) +
+                   std::string(llvm::formatv("{0} : {1}..{2}", Var ? Var->dump() : "", Init->dump(), Done->dump())) +
                    Body->dump();
-        }
-    };
-
-    class ForRange : public Node {
-        DECLARE_RTTI(ForRange, Node);
-
-        Ref<VariableDef> Var;
-        Ref<Expression> Range;
-        Ref<Block> Body;
-
-        std::string toString() const override {
-            return Node::toString();
-        }
-
-        std::string dump() const override {
-            return Node::dump() + std::string(llvm::formatv("{0} : {1}", Var->dump(), Range->dump())) + Body->dump();
         }
     };
 } // namespace pepper::ast

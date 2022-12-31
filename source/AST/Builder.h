@@ -57,9 +57,9 @@ namespace pepper::ast {
         virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
         virtual Builder* endScope() = 0;
 
-        virtual void pushRValue(Ref<Expression> value) = 0;
-        virtual Ref<Expression> popRValue() = 0;
-        virtual Ref<Expression> peekRValue(unsigned int idx) const = 0;
+        virtual void pushRValue(Ref<Node> value) = 0;
+        virtual Ref<Node> popRValue() = 0;
+        virtual Ref<Node> peekRValue(unsigned int idx) const = 0;
 
         virtual void pushLValue(Ref<Node> value) = 0;
         virtual Ref<Node> popLValue() = 0;

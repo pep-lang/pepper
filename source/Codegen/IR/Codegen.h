@@ -90,6 +90,7 @@ namespace pepper {
         Value emit(Ref<ast::Branch> branch);
         Value emit(Ref<ast::Ternary> ternary);
         Value emit(Ref<ast::While> loop);
+        Value emit(Ref<ast::ForRange> loop);
 
         Ref<class Struct> emit(Ref<ast::StructDef> structDef);
 

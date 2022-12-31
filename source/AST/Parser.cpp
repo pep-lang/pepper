@@ -156,6 +156,7 @@ namespace pepper {
             }
 
             builder->symbol(symbol);
+            rvaluePush(symbol);
         }
 
         void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
@@ -328,6 +329,41 @@ namespace pepper {
             auto loop = lvaluePeek<While>();
             loop->Condition = rvaluePop<Expression>();
             builder->beginBlock(loop->Body);
+        }
+
+        void enterForLoop(PepperParser::ForLoopContext* context) override {
+            auto loop = builder->New<ForRange>();
+            loop->Body = builder->New<Block>();
+            lvaluePush(loop);
+        }
+
+        void exitForCondition(PepperParser::ForConditionContext* context) override {
+            auto loop = lvaluePeek<ForRange>();
+            if (context->forDeclaration()) {
+                loop->Var = rvaluePop<VariableDef>();
+            }
+            auto rangeExpr = context->forExpression();
+            if (auto slice = rangeExpr->sliceNotation()) {
+                auto exprs = slice->expression();
+                if (exprs.size() == 3) {
+                    loop->Init = rvaluePop<Expression>();
+                    loop->Done = rvaluePop<Expression>();
+                    loop->Step = rvaluePop<Expression>();
+                } else if (exprs.size() == 2) {
+                    loop->Init = rvaluePop<Expression>();
+                    loop->Done = rvaluePop<Expression>();
+                } else {
+                    loop->Init = rvaluePop<Expression>();
+                }
+                if (!loop->Step) {
+                    // TODO: figure out which is larger and set the step pos or neg
+                    // TODO: emit a range that encapsulates all of this
+                    loop->Step = builder->New<IntegerLiteral>(1);
+                }
+            }
+        }
+
+        void exitForLoop(PepperParser::ForLoopContext* context) override {
         }
 
         void exitTernary(PepperParser::TernaryContext* context) override {

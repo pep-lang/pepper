@@ -35,7 +35,7 @@ namespace pepper::ast {
             Ref<Node> Parent;
             Vector<Ref<Block>> BlockStack;
             Vector<Ref<Node>> LValueStack;
-            Vector<Ref<Expression>> RValueStack;
+            Vector<Ref<Node>> RValueStack;
 
             Scope(const Name& name = "Anonymous")
                 : Ident(name) {
@@ -113,13 +113,13 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        void pushRValue(Ref<Expression> value) override {
+        void pushRValue(Ref<Node> value) override {
             auto& scope = ScopeStack.back();
             //            std::cout << "rpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->RValueStack.push_back(value);
         }
 
-        Ref<Expression> popRValue() override {
+        Ref<Node> popRValue() override {
             auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
                 throw InternalCompilerError("Attempted to pop empty r-value stack");
@@ -129,7 +129,7 @@ namespace pepper::ast {
             return val;
         }
 
-        Ref<Expression> peekRValue(unsigned int idx = 0) const override {
+        Ref<Node> peekRValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
             const int maxDepth = scope->RValueStack.size() - 1;
             if (idx > maxDepth) {

@@ -49,4 +49,17 @@ namespace pepper {
                      llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
 
+    Value Codegen::emit(Ref<ForRange> loop) {
+        auto function = ir()->GetInsertBlock()->getParent();
+        auto& context = function->getContext();
+        auto bodyBlock = llvm::BasicBlock::Create(context, "for", function);
+        auto mergeBlock = llvm::BasicBlock::Create(context, "forcont");
+        mergeBlock->insertInto(function);
+        auto init = codegen(loop->Init);
+
+        // TODO: insert range here
+
+        return Value();
+    }
+
 } // namespace pepper
