@@ -8,14 +8,32 @@ using namespace TestUtils;
 
 TEST(Structs, Simple) {
     const char* source = R"SOURCE(
-        struct Test {
-            int x = 0;
-        };
+struct Test {
+    int x = 0;
+};
 
-        int test() {
-            Test t = Test();
-            return t.x;
-        }
+int test() {
+    Test t = Test();
+    return t.x;
+}
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(Structs, Constructor) {
+    const char* source = R"SOURCE(
+struct Test {
+    int x = 0;
+
+    new() {
+        this.x = 1;
+    }
+};
+
+int test() {
+    Test t = Test();
+    return t.x;
+}
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }

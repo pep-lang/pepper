@@ -190,7 +190,6 @@ namespace pepper {
             auto identifier = context->Identifier()->toString();
             auto returnType =
                 context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
-            // TODO: args, pass to FunctionDef
             Params params;
             if (auto paramList = context->parameterList()) {
                 auto paramDecls = paramList->parameterDeclaration();
@@ -223,6 +222,38 @@ namespace pepper {
             }
         }
 
+        void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
+            auto identifier = context->Identifier()->toString();
+            auto structDef = StructDef::New(identifier, identifier);
+            builder->beginStruct(structDef);
+        }
+
+        void exitStructDeclaration(PepperParser::StructDeclarationContext* context) override {
+            builder->endStruct();
+        }
+
+        void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
+            Params params;
+            if (auto paramList = context->parameterList()) {
+                auto paramDecls = paramList->parameterDeclaration();
+                params = Query(paramDecls).select<Param>([&](auto p) {
+                    auto identifiers = p->Identifier();
+                    auto typeName = identifiers[0]->toString();
+                    auto paramName = identifiers[1]->toString();
+                    return Param{paramName, typeName};
+                });
+            }
+
+            auto st = builder->structTarget();
+            st->Constructor = builder->New<MethodDef>(st, "void", "__ctor", params);
+            lvaluePush(st->Constructor);
+            builder->beginFunction(st->Constructor);
+        }
+
+        void exitConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
+            builder->endFunction();
+        }
+
         void exitFunctionCall(PepperParser::FunctionCallContext* context) override {
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
@@ -250,16 +281,6 @@ namespace pepper {
                 ret->setValue(returnValue);
             }
             builder->insert(ret);
-        }
-
-        void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            auto identifier = context->Identifier()->toString();
-            auto structDef = StructDef::New(identifier, identifier);
-            builder->beginStruct(structDef);
-        }
-
-        void exitStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            builder->endStruct();
         }
 
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {

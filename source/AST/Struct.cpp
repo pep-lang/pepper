@@ -65,10 +65,6 @@ namespace pepper::ast {
         structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
         structDef->Constructor = Ref<MethodDef>::New(structDef, "void", "__ctor");
         structDef->Destructor = Ref<MethodDef>::New(structDef, "void", "__dtor");
-        structDef->Methods.push_back(structDef->Initializer);
-        structDef->Methods.push_back(structDef->Constructor);
-        structDef->Methods.push_back(structDef->Destructor);
-
         return structDef;
     }
 
@@ -103,6 +99,10 @@ namespace pepper::ast {
 
         Destructor->body()->Items.push_back(Ref<FunctionCall>::New(
             ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
+
+        Methods.push_back(Initializer);
+        Methods.push_back(Constructor);
+        Methods.push_back(Destructor);
     }
 
     std::string StructDef::toString() const {

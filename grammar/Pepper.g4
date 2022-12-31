@@ -172,16 +172,21 @@ typeSpecifier
 	;
 
 variableSpecifier
-    : Identifier Identifier Assign assignmentExpression
+    : Identifier Identifier (Assign assignmentExpression)?
     ;
 
 structDeclaration
-	: Struct Identifier '{' fieldDeclarationList '}'
+	: Struct Identifier '{' structMemberDeclaration* '}'
 	;
 
-fieldDeclarationList
-	: fieldDeclaration*
-	;
+structMemberDeclaration
+    :   fieldDeclaration
+    |   constructorDefinition
+    ;
+
+constructorDefinition
+    :   New '(' parameterList? ')' compoundStatement
+    ;
 
 fieldDeclaration
 	: typeQualifier* variableSpecifier ';'
@@ -334,12 +339,21 @@ translationUnit
 
 externalDeclaration
     : functionDefinition
-    | structDeclaration  
+    | structDeclaration
+    | extensionDefinition
     |   ';' // stray ;
     ;
 
 functionDefinition
     :   returnType? Identifier '(' parameterList? ')' compoundStatement
+    ;
+
+functionDefinitionList
+    :   functionDefinition* {}
+    ;
+
+extensionDefinition
+    :   Extend Identifier With '{' functionDefinitionList '}'
     ;
 
 returnType
@@ -357,11 +371,13 @@ Default : 'default';
 Do : 'do';
 Else : 'else';
 Enum : 'enum';
+Extend : 'extend';
 Extern : 'extern';
 False: 'false';
 For : 'for';
 If : 'if';
 In: 'in';
+New: 'new';
 Or: 'or';
 Return : 'return';
 Static : 'static';
@@ -371,6 +387,7 @@ True: 'true';
 Var: 'var';
 Void : 'void';
 While : 'while';
+With: 'with';
 
 LeftParen : '(';
 RightParen : ')';
