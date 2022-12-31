@@ -265,6 +265,37 @@ namespace pepper {
             builder->endFunction();
         }
 
+        void enterConstructorParam(PepperParser::ConstructorParamContext* context) override {
+            lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+        }
+
+        void exitConstructorParam(PepperParser::ConstructorParamContext* context) override {
+            if (context->This()) {
+                lvaluePop<VariableDef>();
+                auto fieldName = context->Identifier()->toString();
+                Ref<Expression> defaultValue;
+                if (context->Assign()) {
+                    defaultValue = rvaluePop<Expression>();
+                }
+
+                // lookup the desired field
+                auto st = builder->structTarget();
+                auto field = Query(st->Fields).find([&](auto f) { return f->identifier() == fieldName; });
+                if (!field) {
+                    throw CompileError("Unknown field {0} found during this initializer", fieldName);
+                }
+
+                // generate a parameter to receive the argument value/establish defaults
+                auto paramName = "__this__" + fieldName;
+                auto func = builder->functionTarget();
+                func->Parameters.emplace_back(paramName, field.value()->type(), defaultValue);
+
+                // Add the assignment to the field to the ctor
+                func->body()->Items.push_back(builder->New<Assign>(
+                    builder->New<MemberRef>(Ref<ThisRef>::New(st), fieldName), builder->New<VariableRef>(paramName)));
+            }
+        }
+
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
             auto identifiers = context->Identifier();
             if (identifiers.size() == 1) {
@@ -335,16 +366,18 @@ namespace pepper {
         }
 
         void enterMemberAccess(PepperParser::MemberAccessContext* context) override {
-            auto memberRef = builder->New<MemberRef>();
+            auto memberRef = builder->New<Pending>(Ref<MemberRef>());
             lvaluePush(memberRef);
+            if (context->This()) {
+                rvaluePush(builder->New<VariableRef>("this"));
+            }
         }
 
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {
             auto lhs = rvaluePop<Expression>();
             auto rhs = context->Identifier()->toString();
-            auto memberRef = lvaluePop<MemberRef>();
-            memberRef->LHS = lhs;
-            memberRef->MemberName = rhs;
+            lvaluePop<MemberRef>();
+            auto memberRef = builder->New<MemberRef>(lhs, rhs);
             builder->insert(memberRef);
         }
 

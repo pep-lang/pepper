@@ -37,7 +37,7 @@ functionCall:
     ;
 
 memberAccess
-    : primaryExpression Dot Identifier
+    : (primaryExpression|This) Dot Identifier
     ;
 
 argumentExpressionList
@@ -183,8 +183,17 @@ structMemberDeclaration
     |   constructorDefinition
     ;
 
+constructorParam
+    : parameterDeclaration
+    | 'this' '.' Identifier (Assign assignmentExpression)?
+    ;
+
+constructorParamList
+    : constructorParam (',' constructorParam)*
+    ;
+
 constructorDefinition
-    :   New '(' parameterList? ')' compoundStatement
+    :   New '(' constructorParamList? ')' compoundStatement
     ;
 
 fieldDeclaration
@@ -366,6 +375,7 @@ Return : 'return';
 Static : 'static';
 Struct : 'struct';
 Switch : 'switch';
+This: 'this';
 True: 'true';
 Var: 'var';
 While : 'while';

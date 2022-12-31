@@ -197,7 +197,6 @@ namespace pepper::ast {
         Builder* endStruct() override {
             auto& scope = ScopeStack.back();
             auto& structDef = scope->StructTarget;
-            structDef->Fields.append(scope->OrderedSymbols.begin(), scope->OrderedSymbols.end());
             structDef->finish();
             ast.newRoot(structDef);
             endScope();
@@ -271,10 +270,15 @@ namespace pepper::ast {
 
         Builder* symbol(Ref<ast::VariableDef> var) override {
             auto& scope = ScopeStack.back();
-            scope->Locals[var->identifier()] = var;
-            scope->OrderedSymbols.push_back(var);
-            if (block()) {
-                block()->Items.push_back(var);
+            if (var->is<FieldDef>()) {
+                auto field = var.as<FieldDef>();
+                structTarget()->Fields.push_back(field);
+            } else {
+                scope->Locals[var->identifier()] = var;
+                scope->OrderedSymbols.push_back(var);
+                if (block()) {
+                    block()->Items.push_back(var);
+                }
             }
             trace(var);
             return this;

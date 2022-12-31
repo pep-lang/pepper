@@ -25,9 +25,7 @@ TEST(Structs, Constructor) {
 struct Test {
     int x = 0;
 
-    new() {
-        this.x = 1;
-    }
+    new(this.x = 1) {}
 };
 
 int test() {
