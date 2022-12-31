@@ -24,7 +24,7 @@ namespace pepper {
     }
 
     Value Function::call(const Vector<Value>& args) const {
-        // TODO: deal with default values for params
+        // fill in supplied params
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;
         for (const auto& arg : args) {

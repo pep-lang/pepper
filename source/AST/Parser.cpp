@@ -64,8 +64,6 @@ namespace pepper {
 
         void rvaluePush(Ref<Node> val) {
             // Only bother tracking this rvalue if there is an l-value on the stack to receive it
-            if (!val)
-                int x = 3;
             if (lvaluePeek<Node>())
                 builder->pushRValue(std::move(val));
         }
