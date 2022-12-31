@@ -82,10 +82,7 @@ namespace pepper {
         template <typename N>
         Ref<N> rvaluePeek(unsigned int idx) {
             auto val = builder->peekRValue(idx);
-            // unwrap pending node if found
-            if (val->is<Pending>())
-                val = val.as<Pending>()->Value;
-            if (val->is<N>()) {
+            if (val && val->is<N>()) {
                 return val.as<N>();
             }
             throw InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
@@ -258,19 +255,8 @@ namespace pepper {
         }
 
         void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
-            Params params;
-            if (auto paramList = context->parameterList()) {
-                auto paramDecls = paramList->parameterDeclaration();
-                params = Query(paramDecls).select<Param>([&](auto p) {
-                    auto identifiers = p->Identifier();
-                    auto typeName = identifiers[0]->toString();
-                    auto paramName = identifiers[1]->toString();
-                    return Param{paramName, typeName};
-                });
-            }
-
             auto st = builder->structTarget();
-            st->Constructor = builder->New<MethodDef>(st, "void", "__ctor", params);
+            st->Constructor = builder->New<MethodDef>(st, "void", "__ctor");
             lvaluePush(st->Constructor);
             builder->beginFunction(st->Constructor);
         }
@@ -313,7 +299,13 @@ namespace pepper {
             builder->insert(call);
         }
 
+        void enterFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
+            auto call = Ref<Pending>::New(Ref<FunctionCall>());
+            lvaluePush(call);
+        }
+
         void exitFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
+            lvaluePop<FunctionCall>();
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
             auto providedArgsCount = context->argumentExpressionList()
