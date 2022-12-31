@@ -4,6 +4,7 @@
 
 #include "AST/Functions.h"
 
+#include "AST/Struct.h"
 #include "Codegen/Context.h"
 #include "Codegen/Function.h"
 #include "Codegen/IR/Codegen.h"
@@ -14,6 +15,12 @@
 
 namespace pepper {
     using namespace pepper::ast;
+
+    Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
+        auto functionName = call->target()->identifier();
+        auto target = call->target();
+        return Context::get().locals()->findFunction(functionName);
+    }
 
     void Codegen::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
         Context::get().pushFunction(function);
@@ -82,4 +89,5 @@ namespace pepper {
         }
         return Value(function->returnType(), function->call(args));
     }
+
 } // namespace pepper

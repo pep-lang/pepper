@@ -192,6 +192,16 @@ namespace pepper::ast {
             return this;
         }
 
+        void beginExtension(Ref<StructDef> structDef) override {
+            beginScope(structDef->identifier());
+            auto& structScope = ScopeStack.back();
+            structScope->StructTarget = structDef;
+        }
+
+        void endExtension() override {
+            endScope();
+        }
+
         Builder* beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = ScopeStack.back();
             scope->Functions[func->identifier()] = func;

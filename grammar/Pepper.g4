@@ -31,8 +31,9 @@ arrayAccess
     : primaryExpression '[' expression ']'
     ;
 
-functionCall
-    : (Identifier|'(' expression ')') '(' argumentExpressionList? ')'
+functionCall:
+	Identifier '(' argumentExpressionList? ')'		# FreeFunctionCall
+	| memberAccess '(' argumentExpressionList? ')'	# MethodCall
     ;
 
 memberAccess
@@ -166,9 +167,7 @@ storageClassSpecifier
 	;
 
 typeSpecifier
-	: variableSpecifier
-	| structDeclaration
-	| enumSpecifier
+: variableSpecifier | structDeclaration
 	;
 
 variableSpecifier
@@ -190,24 +189,7 @@ constructorDefinition
 
 fieldDeclaration
 	: typeQualifier* variableSpecifier ';'
-	;
-
-enumSpecifier
-	: 'enum' Identifier '{' enumeratorList ','? '}'
-	;
-
-enumeratorList
-	: enumerator (',' enumerator)*
-	;
-
-// come back to this to add classes in here
-enumerator
-	: enumeratorConstant
-	;
-
-enumeratorConstant
-	: Identifier
-	;
+;
 
 typeQualifier
 	: 'var'
@@ -385,7 +367,6 @@ Struct : 'struct';
 Switch : 'switch';
 True: 'true';
 Var: 'var';
-Void : 'void';
 While : 'while';
 With: 'with';
 

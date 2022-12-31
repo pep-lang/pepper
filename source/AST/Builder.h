@@ -45,7 +45,12 @@ namespace pepper::ast {
 
         virtual Builder* beginStruct(Ref<StructDef> str) = 0;
         virtual Builder* endStruct() = 0;
+
+        virtual void beginExtension(Ref<StructDef> structDef) = 0;
+        virtual void endExtension() = 0;
+
         virtual Ref<StructDef> structTarget() const = 0;
+
         virtual Builder* beginFunction(Ref<FunctionDef> func) = 0;
         virtual Builder* endFunction() = 0;
         virtual Ref<FunctionDef> functionTarget() const = 0;

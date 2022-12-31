@@ -39,6 +39,20 @@ namespace pepper::ast {
         }
     };
 
+    class Pending : public Node {
+        DECLARE_RTTI(Pending, Node);
+
+        const RTTI* Type;
+        Ref<Node> Value;
+
+      public:
+        template <typename N>
+        Pending(Ref<N> node) {
+            Value = node;
+            Type = RTTI::of<N>();
+        }
+    };
+
     class Symbol : public Node {
         DECLARE_RTTI(Symbol, Node);
 

@@ -134,6 +134,8 @@ namespace pepper {
             value = emit(node.as<FunctionDef>());
         else if (node->is<Return>())
             value = emit(node.as<Return>());
+        else if (node->is<MethodCall>())
+            value = emit(node.as<MethodCall>());
         else if (node->is<FunctionCall>())
             value = emit(node.as<FunctionCall>());
         else if (node->is<StringLiteral>())

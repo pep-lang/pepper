@@ -17,6 +17,7 @@ namespace pepper::ast {
     class CompoundAssign;
     class FieldDef;
     class FunctionCall;
+    class MethodCall;
     class FunctionDef;
     class MemberRef;
     class StructDef;
@@ -32,7 +33,6 @@ namespace pepper::ast {
     class Branch;
     class Ternary;
     class While;
-    class ForIndex;
     class ForRange;
 } // namespace pepper::ast
 
@@ -40,6 +40,7 @@ namespace pepper {
     class Context;
     class ModuleContext;
     class Function;
+    class Method;
 
     class Codegen {
       protected:
@@ -84,6 +85,7 @@ namespace pepper {
         Value emit(Ref<ast::FunctionDef> functionDef);
         Value emit(Ref<ast::Return> ret);
         Value emit(Ref<ast::FunctionCall> call);
+        Value emit(Ref<ast::MethodCall> call);
         Value emit(Ref<ast::Assign> op);
         Value emit(Ref<ast::CompoundAssign> op);
         Value emit(Ref<ast::BinaryOp> op);

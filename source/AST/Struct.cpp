@@ -76,7 +76,7 @@ namespace pepper::ast {
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
-            Ref<FunctionCall>::New(Constructor),
+            Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__ctor"),
             Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
         };
@@ -89,7 +89,8 @@ namespace pepper::ast {
         Initializer->body()->Items.push_back(Ref<Return>::New(Initializer));
 
         // insert initializer as the first instruction in Constructor
-        Constructor->body()->Items.insert(Constructor->body()->Items.begin(), Ref<FunctionCall>::New(Initializer));
+        Constructor->body()->Items.insert(Constructor->body()->Items.begin(),
+                                          Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__init"));
 
         // insert free as the last instruction before return in Destructor
         auto lastExpr = Destructor->body()->Items.size() ? Destructor->body()->Items.back() : nullptr;

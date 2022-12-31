@@ -77,9 +77,11 @@ namespace pepper::ast {
         DECLARE_RTTI(MemberRef, Expression);
 
         Ref<Expression> LHS;
-        const Name MemberName;
+        Name MemberName;
 
       public:
+        MemberRef() = default;
+
         MemberRef(Ref<Expression> lhs, const Name& fieldName)
             : LHS(lhs)
             , MemberName(fieldName) {
@@ -98,11 +100,27 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("({0}).{1}", LHS->toString(), MemberName));
+            return Node::toString() +
+                   std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", MemberName));
         }
 
         std::string dump() const override {
             return toString();
+        }
+    };
+
+    class MethodCall : public Expression {
+        DECLARE_RTTI(MethodCall, Expression);
+
+        Ref<Expression> This;
+        const Name MethodName;
+        Vector<Ref<Expression>> Args;
+
+      public:
+        MethodCall(Ref<Expression> thisRef, const Name& methodName, const Vector<Ref<Expression>>& args = {})
+            : This(thisRef)
+            , MethodName(methodName)
+            , Args(args) {
         }
     };
 

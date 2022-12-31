@@ -35,19 +35,6 @@ namespace pepper {
         return Value(type, field);
     }
 
-    Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
-        auto functionName = call->target()->identifier();
-        auto target = call->target();
-        if (target->is<MethodDef>()) {
-            auto methodDef = target.as<MethodDef>();
-            auto st = methodDef->structDef();
-            auto name = methodDef->identifier();
-            auto mangledName = st->identifier() + "." + name;
-            functionName = mangledName;
-        }
-        return Context::get().locals()->findFunction(functionName);
-    }
-
     Value Codegen::emit(Ref<MemberRef> memberRef) {
         auto lhs = codegen(memberRef->lhs());
         auto lhsType = lhs.Ty;
@@ -110,7 +97,7 @@ namespace pepper {
             auto returnType = Types::get(method->returnType());
             auto newMethod = Ref<Method>::New(mangledName, returnType, params);
             methods.push_back(newMethod);
-            structDesc->addMethod(newMethod);
+            structDesc->addMethod(newMethod, realName);
         }
 
         for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
@@ -130,5 +117,23 @@ namespace pepper {
     Value Codegen::emit(Ref<ThisRef> thisRef) {
         auto thisPtr = Context::get().locals()->findSymbol("this");
         return thisPtr;
+    }
+
+    Value Codegen::emit(Ref<MethodCall> call) {
+        auto thisRef = codegen(call->This);
+        auto st = Struct::get(thisRef.Ty->name());
+        auto method = st->method(call->MethodName).as<Method>();
+        if (!method) {
+            throw CompileError("Method {0} not found", call->MethodName);
+        }
+        Vector<Value> args;
+        thisRef = read(thisRef);
+        args.push_back(thisRef);
+
+        const auto& callArgs = call->Args;
+        for (auto argExpr : callArgs) {
+            args.push_back(codegen(argExpr));
+        }
+        return Value(method->returnType(), method->call(args));
     }
 } // namespace pepper

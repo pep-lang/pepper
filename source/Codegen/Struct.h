@@ -57,8 +57,10 @@ namespace pepper {
             }
         }
 
-        void addMethod(Ref<Method> method) {
+        void addMethod(Ref<Method> method, const Name& realName = "") {
             Methods[method->name()] = method;
+            if (realName.size())
+                Methods[realName] = method;
         }
 
         Ref<Function> method(const Name& name) const {

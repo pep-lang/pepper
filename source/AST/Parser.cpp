@@ -41,12 +41,16 @@ namespace pepper {
         template <typename N>
         Ref<N> lvaluePop() {
             auto val = builder->popLValue();
+            // unwrap pending node if found
+            if (val->is<Pending>() && val.as<Pending>()->Type->is(RTTI::of<N>()))
+                return val.as<Pending>()->Value.as<N>();
             // std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw InternalCompilerError(
-                "Attempted to pop {} from AST stack, found {} instead", RTTI::of<N>()->name(), RTTI::of(*val)->name());
+            throw InternalCompilerError("Attempted to pop {0} from AST stack, found {1} instead",
+                                        RTTI::of<N>()->name(),
+                                        RTTI::of(*val)->name());
         }
 
         template <typename N>
@@ -70,15 +74,19 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw InternalCompilerError(
-                "Attempted to pop {} from AST stack, found {} instead", RTTI::of<N>()->name(), RTTI::of(*val)->name());
+            throw InternalCompilerError("Attempted to pop {0} from AST stack, found {1} instead",
+                                        RTTI::of<N>()->name(),
+                                        RTTI::of(*val)->name());
         }
 
         template <typename N>
         Ref<N> rvaluePeek(unsigned int idx) {
             auto val = builder->peekRValue(idx);
+            // unwrap pending node if found
+            if (val->is<Pending>())
+                val = val.as<Pending>()->Value;
             if (val->is<N>()) {
-                return std::static_pointer_cast<N>(val);
+                return val.as<N>();
             }
             throw InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
                                         RTTI::of<N>()->name(),
@@ -201,7 +209,10 @@ namespace pepper {
                 });
             }
 
-            auto function = builder->New<FunctionDef>(returnType, identifier, params);
+            auto function =
+                builder->structTarget()
+                    ? builder->New<MethodDef>(builder->structTarget(), returnType, identifier, params).as<FunctionDef>()
+                    : builder->New<FunctionDef>(returnType, identifier, params);
             lvaluePush(function);
             builder->beginFunction(function);
         }
@@ -219,6 +230,9 @@ namespace pepper {
                     }
                     ++idx;
                 });
+            }
+            if (function->is<MethodDef>()) {
+                builder->structTarget()->Methods.push_back(function.as<MethodDef>());
             }
         }
 
@@ -254,7 +268,36 @@ namespace pepper {
             builder->endFunction();
         }
 
-        void exitFunctionCall(PepperParser::FunctionCallContext* context) override {
+        void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
+            auto structName = context->Identifier()->toString();
+            auto structDef = builder->findStruct(structName);
+            builder->beginExtension(structDef);
+        }
+
+        void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
+            builder->endExtension();
+        }
+
+        void enterMethodCall(PepperParser::MethodCallContext* context) override {
+            auto call = Ref<Pending>::New(Ref<MethodCall>());
+            lvaluePush(call);
+        }
+
+        void exitMethodCall(PepperParser::MethodCallContext* context) override {
+            auto pendingCall = lvaluePop<MethodCall>();
+            auto providedArgsCount = context->argumentExpressionList()
+                                         ? context->argumentExpressionList()->assignmentExpression().size()
+                                         : 0;
+            Vector<Ref<Expression>> args;
+            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
+                args.insert(args.begin(), rvaluePop<Expression>());
+            }
+            auto member = rvaluePop<MemberRef>();
+            auto call = builder->New<MethodCall>(member->LHS, member->MemberName, args);
+            builder->insert(call);
+        }
+
+        void exitFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
             auto identifier = context->Identifier()->toString();
             auto func = builder->findFunction(identifier);
             auto providedArgsCount = context->argumentExpressionList()
@@ -283,10 +326,18 @@ namespace pepper {
             builder->insert(ret);
         }
 
+        void enterMemberAccess(PepperParser::MemberAccessContext* context) override {
+            auto memberRef = builder->New<MemberRef>();
+            lvaluePush(memberRef);
+        }
+
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {
             auto lhs = rvaluePop<Expression>();
             auto rhs = context->Identifier()->toString();
-            builder->insert(builder->New<MemberRef>(lhs, rhs));
+            auto memberRef = lvaluePop<MemberRef>();
+            memberRef->LHS = lhs;
+            memberRef->MemberName = rhs;
+            builder->insert(memberRef);
         }
 
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
