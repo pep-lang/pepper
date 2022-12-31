@@ -33,7 +33,7 @@ namespace pepper::ast {
             Ref<ast::FunctionDef> FunctionTarget;
 
             Ref<Node> Parent;
-            Vector<Ref<Block>> BlockStack;
+            Ref<Block> Block;
             Vector<Ref<Node>> LValueStack;
             Vector<Ref<Node>> RValueStack;
 
@@ -183,7 +183,7 @@ namespace pepper::ast {
             return val;
         }
 
-        Builder* beginStruct(Ref<StructDef> structDef) override {
+        void beginStruct(Ref<StructDef> structDef) override {
             auto& scope = ScopeStack.back();
             scope->Structs[structDef->identifier()] = structDef;
             scope->Functions[structDef->identifier()] = structDef->NewInstance;
@@ -191,16 +191,14 @@ namespace pepper::ast {
             beginScope(structDef->identifier());
             auto& structScope = ScopeStack.back();
             structScope->StructTarget = structDef;
-            return this;
         }
 
-        Builder* endStruct() override {
+        void endStruct() override {
             auto& scope = ScopeStack.back();
             auto& structDef = scope->StructTarget;
             structDef->finish();
             ast.newRoot(structDef);
             endScope();
-            return this;
         }
 
         void beginExtension(Ref<StructDef> structDef) override {
@@ -213,7 +211,7 @@ namespace pepper::ast {
             endScope();
         }
 
-        Builder* beginFunction(Ref<ast::FunctionDef> func) override {
+        void beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = ScopeStack.back();
             scope->Functions[func->identifier()] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
@@ -222,53 +220,47 @@ namespace pepper::ast {
             auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
             fnScope->StructTarget = func->is<MethodDef>() ? func.as<MethodDef>()->structDef() : nullptr;
-            return this;
         }
 
-        Builder* endFunction() override {
+        void endFunction() override {
             auto& scope = ScopeStack.back();
             auto& function = scope->FunctionTarget;
             endBlock();
             if (!structTarget()) {
                 ast.newRoot(function);
             }
-            return this;
         }
 
         void beginBlock(Ref<Block> block) override {
             beginScope(block->name());
             auto scope = ScopeStack.back();
-            scope->BlockStack.push_back(block);
+            scope->Block = block;
         }
 
         void endBlock() override {
-            auto scope = ScopeStack.back();
-            scope->BlockStack.pop_back();
             endScope();
         }
 
         Ref<Block> block() const override {
             const auto& scope = ScopeStack.back();
-            if (scope->BlockStack.size())
-                return ScopeStack.back()->BlockStack.back();
+            if (scope->Block)
+                return scope->Block;
             return nullptr;
         }
 
-        Builder* beginScope(const Name& name = "Anonymous") override {
+        void beginScope(const Name& name = "Anonymous") override {
             auto top = ScopeStack.back();
             std::string newScopeName = llvm::formatv("{0}.{1}", top->Ident, name);
             ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
             // std::cout << "begin: " << name << std::endl;
-            return this;
         }
 
-        Builder* endScope() override {
+        void endScope() override {
             auto scope = ScopeStack.pop_back_val();
             // std::cout << "end:   " << scope->Ident << std::endl;
-            return this;
         }
 
-        Builder* symbol(Ref<ast::VariableDef> var) override {
+        void symbol(Ref<ast::VariableDef> var) override {
             auto& scope = ScopeStack.back();
             if (var->is<FieldDef>()) {
                 auto field = var.as<FieldDef>();
@@ -281,10 +273,9 @@ namespace pepper::ast {
                 }
             }
             trace(var);
-            return this;
         }
 
-        Builder* insert(Ref<ast::Node> expr) override {
+        void insert(Ref<ast::Node> expr) override {
             // If there's an l-value waiting for an expression value, it'll pull it
             // off the stack when its terminal completes
             if (peekLValue()) {
@@ -292,8 +283,6 @@ namespace pepper::ast {
             } else {
                 block()->Items.push_back(expr);
             }
-
-            return this;
         }
 
         void trace(const Ref<Node>& node) const override {

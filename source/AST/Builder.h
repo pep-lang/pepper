@@ -43,24 +43,24 @@ namespace pepper::ast {
         [[nodiscard]] virtual Ref<VariableDef> findVariable(const Name& name) const = 0;
         [[nodiscard]] virtual Ref<Symbol> findSymbol(const Name& name) const = 0;
 
-        virtual Builder* beginStruct(Ref<StructDef> str) = 0;
-        virtual Builder* endStruct() = 0;
+        virtual void beginStruct(Ref<StructDef> str) = 0;
+        virtual void endStruct() = 0;
 
         virtual void beginExtension(Ref<StructDef> structDef) = 0;
         virtual void endExtension() = 0;
 
         virtual Ref<StructDef> structTarget() const = 0;
 
-        virtual Builder* beginFunction(Ref<FunctionDef> func) = 0;
-        virtual Builder* endFunction() = 0;
+        virtual void beginFunction(Ref<FunctionDef> func) = 0;
+        virtual void endFunction() = 0;
         virtual Ref<FunctionDef> functionTarget() const = 0;
 
         virtual void beginBlock(Ref<Block> block) = 0;
         virtual void endBlock() = 0;
         virtual Ref<Block> block() const = 0;
 
-        virtual Builder* beginScope(const Name& name = "Anonymous") = 0;
-        virtual Builder* endScope() = 0;
+        virtual void beginScope(const Name& name = "Anonymous") = 0;
+        virtual void endScope() = 0;
 
         virtual void pushRValue(Ref<Node> value) = 0;
         virtual Ref<Node> popRValue() = 0;
@@ -70,8 +70,8 @@ namespace pepper::ast {
         virtual Ref<Node> popLValue() = 0;
         virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
 
-        virtual Builder* symbol(Ref<VariableDef> var) = 0;
-        virtual Builder* insert(Ref<Node> expr) = 0;
+        virtual void symbol(Ref<VariableDef> var) = 0;
+        virtual void insert(Ref<Node> expr) = 0;
         virtual void trace(const Ref<Node>& node) const = 0;
     };
 } // namespace pepper::ast
