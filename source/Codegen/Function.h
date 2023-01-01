@@ -8,7 +8,7 @@
 #include "Codegen/IR/Value.h"
 #include "Codegen/Param.h"
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/Vector.h"
 
 namespace llvm {
@@ -25,16 +25,16 @@ namespace pepper {
         DECLARE_RTTI(Function);
 
       protected:
-        const Name Identifier;
+        const Ident Identifier;
         Ref<TypeInfo> ReturnType;
         const Params Parameters;
         llvm::Function* Func;
         Ref<TypeInfo> FuncType;
 
       public:
-        Function(const Name& name, Ref<TypeInfo> returnType, const Params& params = Params());
+        Function(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());
 
-        const Name& name() const {
+        const Ident& name() const {
             return Identifier;
         }
 
@@ -81,7 +81,7 @@ namespace pepper {
         llvm::BasicBlock* Body = nullptr;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
-        UserFunction(const Name& name, Ref<TypeInfo> returnType, const Params& params = Params());
+        UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());
     };
 
     class Struct;
@@ -92,7 +92,7 @@ namespace pepper {
         Ref<Struct> This;
 
       public:
-        Method(Ref<Struct> st, const Name& name, Ref<TypeInfo> returnType, const Params& params = {})
+        Method(Ref<Struct> st, const Ident& name, Ref<TypeInfo> returnType, const Params& params = {})
             : UserFunction(name, returnType, params)
             , This(st) {
         }

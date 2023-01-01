@@ -10,7 +10,7 @@
 #include "AST/Node.h"
 #include "AST/Variables.h"
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/Vector.h"
 
 namespace pepper::ast {
@@ -22,7 +22,7 @@ namespace pepper::ast {
 
         Ref<StructDef> Struct;
 
-        FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue = nullptr);
+        FieldDef(Ref<StructDef> st, const Ident& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
 
         std::string toString() const override;
         std::string dump(int indent) const override;
@@ -35,8 +35,8 @@ namespace pepper::ast {
 
       public:
         MethodDef(Ref<StructDef> st,
-                  const Name& returnType,
-                  const Name& name,
+                  const Ident& returnType,
+                  const Ident& name,
                   const Params& params = Params(),
                   bool vararg = false);
 
@@ -56,9 +56,9 @@ namespace pepper::ast {
         Vector<Ref<FieldDef>> Fields;
         Vector<Ref<MethodDef>> Methods;
 
-        StructDef(const Name& type, const Name& name);
+        StructDef(const Ident& type, const Ident& name);
 
-        static Ref<StructDef> New(const Name& type, const Name& name);
+        static Ref<StructDef> New(const Ident& type, const Ident& name);
 
         void finish();
 
@@ -70,16 +70,16 @@ namespace pepper::ast {
         DECLARE_RTTI(MemberRef, Expression);
 
         Ref<Expression> LHS;
-        Name MemberName;
+        Ident MemberName;
 
         MemberRef() = default;
 
-        MemberRef(Ref<Expression> lhs, const Name& fieldName)
+        MemberRef(Ref<Expression> lhs, const Ident& fieldName)
             : LHS(lhs)
             , MemberName(fieldName) {
         }
 
-        const Name& type() const override {
+        const Ident& type() const override {
             return LHS->type();
         }
 
@@ -98,10 +98,10 @@ namespace pepper::ast {
         DECLARE_RTTI(MethodCall, Expression);
 
         Ref<Expression> This;
-        const Name MethodName;
+        const Ident MethodName;
         Vector<Ref<Expression>> Args;
 
-        MethodCall(Ref<Expression> thisRef, const Name& methodName, const Vector<Ref<Expression>>& args = {})
+        MethodCall(Ref<Expression> thisRef, const Ident& methodName, const Vector<Ref<Expression>>& args = {})
             : This(thisRef)
             , MethodName(methodName)
             , Args(args) {

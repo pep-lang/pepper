@@ -9,7 +9,7 @@
 namespace pepper {
     llvm::StringMap<Ref<Struct>> Struct::Structs;
 
-    Struct::Struct(Ref<TypeInfo> type, const Name& name)
+    Struct::Struct(Ref<TypeInfo> type, const Ident& name)
         : StructType(type)
         , Identifier(name) {
         // deal with params at some point
@@ -23,19 +23,19 @@ namespace pepper {
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Name& name) {
+    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Ident& name) {
         Ref<Struct> newStruct = Ref<Struct>::New(type, name);
         Structs[name] = newStruct;
         return newStruct;
     }
 
-    llvm::Value* Struct::getMember(llvm::Value* instance, const Name& name) const {
+    llvm::Value* Struct::getMember(llvm::Value* instance, const Ident& name) const {
         if (auto field = getField(instance, name))
             return field;
         return getMethod(instance, name);
     }
 
-    llvm::Value* Struct::getField(llvm::Value* instance, const Name& name) const {
+    llvm::Value* Struct::getField(llvm::Value* instance, const Ident& name) const {
         auto fieldIt = Fields.find(name);
         if (fieldIt != Fields.end()) {
             int idx = std::distance(Fields.begin(), fieldIt);
@@ -48,7 +48,7 @@ namespace pepper {
         return Context::ir()->CreateStructGEP(*StructType, instance, idx, field.ParamName);
     }
 
-    llvm::Function* Struct::getMethod(llvm::Value* instance, const Name& name) const {
+    llvm::Function* Struct::getMethod(llvm::Value* instance, const Ident& name) const {
         auto it = Methods.find(name);
         if (it != Methods.end()) {
             auto method = it->second;

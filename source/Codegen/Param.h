@@ -2,7 +2,7 @@
 #pragma once
 
 #include "Codegen/IR/Value.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/Vector.h"
 
 namespace pepper {
@@ -10,10 +10,10 @@ namespace pepper {
 
     struct Param {
         Ref<TypeInfo> ParamType;
-        Name ParamName;
+        Ident ParamName;
         Value Default;
 
-        Param(const Name& name, Ref<TypeInfo> type, Value defaultValue = {})
+        Param(const Ident& name, Ref<TypeInfo> type, Value defaultValue = {})
             : ParamName(name)
             , ParamType(type)
             , Default(defaultValue) {

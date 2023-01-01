@@ -8,8 +8,8 @@
 
 namespace pepper::ast {
 
-    static std::string functionTy(const Name& returnType, const Params& args, bool vararg = false) {
-        Name argsStr;
+    static std::string functionTy(const Ident& returnType, const Params& args, bool vararg = false) {
+        Ident argsStr;
         for (auto it = args.begin(); it != args.end(); ++it) {
             argsStr += it->Type;
             if (it != args.end() - 1)
@@ -19,7 +19,7 @@ namespace pepper::ast {
         return llvm::formatv("{0}({1}{2})", returnType, argsStr, ellipsis);
     }
 
-    FunctionNode::FunctionNode(const Name& returnType, const Name& name, const Params& params, bool vararg)
+    FunctionNode::FunctionNode(const Ident& returnType, const Ident& name, const Params& params, bool vararg)
         : Symbol(functionTy(returnType, params, vararg), name)
         , ReturnType(returnType)
         , Parameters(params)

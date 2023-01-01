@@ -3,7 +3,7 @@
 
 #include "AST/Node.h"
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 
 namespace pepper::ast {
     struct VariableDef : public Symbol {
@@ -11,7 +11,7 @@ namespace pepper::ast {
 
         Ref<Expression> Default;
 
-        VariableDef(const Name& type, const Name& identifier, Ref<Expression> defaultValue = nullptr)
+        VariableDef(const Ident& type, const Ident& identifier, Ref<Expression> defaultValue = nullptr)
             : Symbol(type, identifier)
             , Default(defaultValue) {
         }
@@ -42,14 +42,14 @@ namespace pepper::ast {
         DECLARE_RTTI(VariableRef, Expression);
 
       private:
-        const Name Identifier;
+        const Ident Identifier;
 
       public:
-        VariableRef(const Name& identifier)
+        VariableRef(const Ident& identifier)
             : Identifier(identifier) {
         }
 
-        const Name& identifier() const {
+        const Ident& identifier() const {
             return Identifier;
         }
 

@@ -3,7 +3,7 @@
 
 #include "AST/Node.h"
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 
 namespace pepper::ast {
     struct BinaryOp : public Expression {

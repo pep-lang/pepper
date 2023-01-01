@@ -150,7 +150,7 @@ namespace pepper {
         return value;
     }
 
-    Codegen::Codegen(const Name& moduleName, Ref<ast::AST> tree)
+    Codegen::Codegen(const Ident& moduleName, Ref<ast::AST> tree)
         : Tree(tree) {
         Ctx = Ref<Context>::New(moduleName);
         Module = Ctx->moduleContext();

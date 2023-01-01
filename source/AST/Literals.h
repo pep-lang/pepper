@@ -19,8 +19,8 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        const Name& type() const override {
-            static Name Bool("bool");
+        const Ident& type() const override {
+            static Ident Bool("bool");
             return Bool;
         }
 
@@ -42,8 +42,8 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        [[nodiscard]] const Name& type() const override {
-            static Name Long("long");
+        [[nodiscard]] const Ident& type() const override {
+            static Ident Long("long");
             return Long;
         }
 
@@ -65,8 +65,8 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        const Name& type() const override {
-            static Name Double("double");
+        const Ident& type() const override {
+            static Ident Double("double");
             return Double;
         }
 
@@ -88,8 +88,8 @@ namespace pepper::ast {
             : Value(value) {
         }
 
-        const Name& type() const override {
-            static Name String("string");
+        const Ident& type() const override {
+            static Ident String("string");
             return String;
         }
 

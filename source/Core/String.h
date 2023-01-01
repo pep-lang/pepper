@@ -44,10 +44,10 @@ namespace pepper {
 
     inline std::string replace_all(const std::string& s, const std::string& search, const std::string& replacement) {
         auto res = s;
-        ssize_t pos = 0;
-        while (pos != -1) {
+        size_t pos = 0;
+        while (pos != std::string::npos) {
             pos = res.find(search, pos);
-            if (pos >= 0) {
+            if (pos != std::string::npos) {
                 res.replace(pos, search.size(), replacement);
                 ++pos;
             }

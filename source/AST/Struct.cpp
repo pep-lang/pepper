@@ -5,7 +5,7 @@
 #include "AST/Struct.h"
 
 namespace pepper::ast {
-    FieldDef::FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue)
+    FieldDef::FieldDef(Ref<StructDef> st, const Ident& type, const Ident& name, Ref<Expression> defaultValue)
         : VariableDef(type, name) {
         Struct = st;
     }
@@ -22,7 +22,8 @@ namespace pepper::ast {
                                                               Default ? Default->toString() : "default"));
     }
 
-    MethodDef::MethodDef(Ref<StructDef> st, const Name& returnType, const Name& name, const Params& params, bool vararg)
+    MethodDef::MethodDef(
+        Ref<StructDef> st, const Ident& returnType, const Ident& name, const Params& params, bool vararg)
         : FunctionDef(returnType, name, params, vararg)
         , Struct(std::move(st)) {
     }
@@ -51,11 +52,11 @@ namespace pepper::ast {
                sep + Body->dump(indent);
     }
 
-    StructDef::StructDef(const Name& type, const Name& name)
+    StructDef::StructDef(const Ident& type, const Ident& name)
         : Symbol(type, name) {
     }
 
-    Ref<StructDef> StructDef::New(const Name& type, const Name& name) {
+    Ref<StructDef> StructDef::New(const Ident& type, const Ident& name) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
         structDef->NewInstance = Ref<FunctionDef>::New(type, name);
         // Note that the order of these is important, ctor depends on init, so must be generated after

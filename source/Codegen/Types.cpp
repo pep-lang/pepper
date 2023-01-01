@@ -24,7 +24,7 @@
 
 namespace pepper {
 
-    TypeInfo::TypeInfo(const Name& name, llvm::Type* type, bool isSigned)
+    TypeInfo::TypeInfo(const Ident& name, llvm::Type* type, bool isSigned)
         : std::enable_shared_from_this<TypeInfo>()
         , TypeName(name)
         , TypeRef(type)
@@ -86,7 +86,7 @@ namespace pepper {
         VoidPtr = addType(Ref<TypeInfo>::New("void*", *KnownTypes["i8*"]));
     }
 
-    Ref<TypeInfo> Types::addType(Ref<TypeInfo> t, const Vector<Name>& aliases) {
+    Ref<TypeInfo> Types::addType(Ref<TypeInfo> t, const Vector<Ident>& aliases) {
         if (t->llvmType()->isStructTy()) {
             // add <struct>* as "<struct>", and <struct> as "_<struct>"
             KnownTypes["_" + t->name()] = t;
@@ -121,7 +121,7 @@ namespace pepper {
         return t;
     }
 
-    Ref<TypeInfo> Types::getType(const Name& name) const {
+    Ref<TypeInfo> Types::getType(const Ident& name) const {
         auto it = KnownTypes.find(name);
         if (it != KnownTypes.end()) {
             return it->second;
@@ -140,11 +140,11 @@ namespace pepper {
         return str;
     }
 
-    Ref<TypeInfo> Types::add(Ref<TypeInfo> type, const Vector<Name>& aliases) {
+    Ref<TypeInfo> Types::add(Ref<TypeInfo> type, const Vector<Ident>& aliases) {
         return Context::get().types()->addType(type, aliases);
     }
 
-    Ref<TypeInfo> Types::get(const Name& name) {
+    Ref<TypeInfo> Types::get(const Ident& name) {
         return Context::get().types()->getType(name);
     }
 } // namespace pepper

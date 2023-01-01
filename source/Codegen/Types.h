@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/RTTI.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
@@ -28,19 +28,19 @@ namespace pepper {
         DECLARE_RTTI(TypeInfo);
 
       private:
-        const Name TypeName;
+        const Ident TypeName;
         llvm::Type* TypeRef;
         const bool IsSigned;
         Ref<TypeOps> Ops;
 
       public:
-        TypeInfo(const Name& name, llvm::Type* type, bool isSigned = false);
+        TypeInfo(const Ident& name, llvm::Type* type, bool isSigned = false);
 
         llvm::Type* llvmType() const {
             return TypeRef;
         }
 
-        const Name& name() const {
+        const Ident& name() const {
             return TypeName;
         }
 
@@ -61,8 +61,8 @@ namespace pepper {
         llvm::LLVMContext& Ctx;
         llvm::StringMap<Ref<TypeInfo>> KnownTypes;
 
-        Ref<TypeInfo> addType(Ref<TypeInfo> t, const Vector<Name>& aliases = {});
-        Ref<TypeInfo> getType(const Name& name) const;
+        Ref<TypeInfo> addType(Ref<TypeInfo> t, const Vector<Ident>& aliases = {});
+        Ref<TypeInfo> getType(const Ident& name) const;
 
       public:
         explicit Types(llvm::LLVMContext& ctx);
@@ -70,8 +70,8 @@ namespace pepper {
 
         static std::string toString(llvm::Type* ty);
         static std::string toString(Ref<TypeInfo> ty);
-        static Ref<TypeInfo> get(const Name& name);
-        static Ref<TypeInfo> add(Ref<TypeInfo> type, const Vector<Name>& aliases = {});
+        static Ref<TypeInfo> get(const Ident& name);
+        static Ref<TypeInfo> add(Ref<TypeInfo> type, const Vector<Ident>& aliases = {});
 
         static Ref<TypeInfo> Void;
         static Ref<TypeInfo> VoidPtr;

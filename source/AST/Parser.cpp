@@ -169,7 +169,7 @@ namespace pepper {
             rvaluePush(symbol);
         }
 
-        Ref<Expression> resolveLocal(const Name& identifier) {
+        Ref<Expression> resolveLocal(const Ident& identifier) {
             auto symbol = builder->findSymbol(identifier);
             if (symbol && symbol->is<FieldDef>()) {
                 auto field = symbol.as<FieldDef>();

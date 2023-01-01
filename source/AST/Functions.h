@@ -22,11 +22,11 @@ namespace pepper::ast {
     struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
-        Name ReturnType;
+        Ident ReturnType;
         Params Parameters;
         const bool Vararg;
 
-        FunctionNode(const Name& returnType, const Name& name, const Params& params, bool vararg = false);
+        FunctionNode(const Ident& returnType, const Ident& name, const Params& params, bool vararg = false);
 
         virtual std::string toString() const override {
             Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
@@ -54,7 +54,7 @@ namespace pepper::ast {
 
         Ref<Block> Body;
 
-        FunctionDef(const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
+        FunctionDef(const Ident& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
             Body = Ref<Block>::New(nullptr, name);
         }
@@ -76,7 +76,7 @@ namespace pepper::ast {
         DECLARE_RTTI(ExternFunctionDef, FunctionDef);
 
         ExternFunctionDef(
-            const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
+            const Ident& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
         }
 
@@ -95,7 +95,7 @@ namespace pepper::ast {
             , Args(args) {
         }
 
-        const Name& type() const override {
+        const Ident& type() const override {
             return Target->ReturnType;
         }
 
@@ -125,7 +125,7 @@ namespace pepper::ast {
             , Value(value) {
         }
 
-        const Name& type() const override {
+        const Ident& type() const override {
             return Target->ReturnType;
         }
 

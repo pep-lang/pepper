@@ -25,9 +25,9 @@ namespace pepper {
         return get().locals()->builder();
     }
 
-//    Ref<llvm::IRBuilderBase> Context::registers() {
-//        return get().locals()->registers();
-//    }
+    //    Ref<llvm::IRBuilderBase> Context::registers() {
+    //        return get().locals()->registers();
+    //    }
 
     Ref<llvm::DIBuilder> Context::dbg() {
         return get().DebugInfo;

@@ -55,6 +55,12 @@ namespace pepper {
             return QueryInst<U>(std::move(results));
         }
 
+        QueryInst map(std::function<T(const T&)> func) {
+            Vector<T> results;
+            std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), func);
+            return QueryInst(std::move(results));
+        }
+
         QueryInst where(std::function<bool(const T&)> selector) {
             Vector<T> results;
             std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), selector);

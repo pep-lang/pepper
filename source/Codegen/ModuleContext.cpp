@@ -37,7 +37,7 @@ namespace pepper {
         return DL.get();
     }
 
-    ModuleContext::ModuleContext(const Name& name)
+    ModuleContext::ModuleContext(const Ident& name)
         : ModuleName(name) {
         Context = std::make_unique<llvm::LLVMContext>();
         Module = std::make_unique<llvm::Module>(name, *Context);

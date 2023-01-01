@@ -5,16 +5,16 @@
 #pragma once
 
 #include "Codegen/Types.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {
     struct Value {
-        Name Identifier;
+        Ident Identifier;
         llvm::Value* V;
         Ref<TypeInfo> Ty;
 
-        Value(Ref<TypeInfo> type = nullptr, llvm::Value* value = nullptr, const Name& identifier = "")
+        Value(Ref<TypeInfo> type = nullptr, llvm::Value* value = nullptr, const Ident& identifier = "")
             : Identifier(identifier)
             , Ty(type)
             , V(value) {

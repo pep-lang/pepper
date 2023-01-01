@@ -5,7 +5,7 @@
 #pragma once
 
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/SourceLocation.h"
 
 namespace llvm {
@@ -38,10 +38,10 @@ namespace pepper::ast {
 
         SourceLocation Source;
 
-        [[nodiscard]] virtual Ref<StructDef> findStruct(const Name& name) const = 0;
-        [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Name& name) const = 0;
-        [[nodiscard]] virtual Ref<VariableDef> findVariable(const Name& name) const = 0;
-        [[nodiscard]] virtual Ref<Symbol> findSymbol(const Name& name) const = 0;
+        [[nodiscard]] virtual Ref<StructDef> findStruct(const Ident& name) const = 0;
+        [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Ident& name) const = 0;
+        [[nodiscard]] virtual Ref<VariableDef> findVariable(const Ident& name) const = 0;
+        [[nodiscard]] virtual Ref<Symbol> findSymbol(const Ident& name) const = 0;
 
         virtual void beginStruct(Ref<StructDef> str) = 0;
         virtual void endStruct() = 0;
@@ -59,7 +59,7 @@ namespace pepper::ast {
         virtual void endBlock() = 0;
         virtual Ref<Block> block() const = 0;
 
-        virtual void beginScope(const Name& name = "Anonymous") = 0;
+        virtual void beginScope(const Ident& name = "Anonymous") = 0;
         virtual void endScope() = 0;
 
         virtual void pushRValue(Ref<Node> value) = 0;

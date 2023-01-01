@@ -3,7 +3,6 @@
 //
 
 #include "AST/Builder.h"
-#include <iostream>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
@@ -13,12 +12,11 @@
 #include "Core/Vector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
-#include "llvm/IR/Type.h"
 
 namespace pepper::ast {
     class BuilderImpl : public Builder {
         struct Scope {
-            Name Ident;
+            const Ident Name;
 
             llvm::StringMap<Ref<ast::VariableDef>> Locals;
             llvm::StringMap<Ref<Symbol>> Symbols;
@@ -37,8 +35,8 @@ namespace pepper::ast {
             Vector<Ref<Node>> LValueStack;
             Vector<Ref<Node>> RValueStack;
 
-            Scope(const Name& name = "Anonymous")
-                : Ident(name) {
+            explicit Scope(const Ident& name = "Anonymous")
+                : Name(name) {
             }
         };
 
@@ -51,7 +49,7 @@ namespace pepper::ast {
             ScopeStack.emplace_back(Ref<Scope>::New("Global")); // global scope
         }
 
-        Ref<ast::FunctionDef> functionTarget() const override {
+        [[nodiscard]] Ref<ast::FunctionDef> functionTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget)
                     return scope->FunctionTarget;
@@ -67,7 +65,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<StructDef> findStruct(const Name& name) const override {
+        [[nodiscard]] Ref<StructDef> findStruct(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto str = scope->Structs.lookup(name))
                     return str;
@@ -75,7 +73,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::VariableDef> findVariable(const Name& name) const override {
+        [[nodiscard]] Ref<ast::VariableDef> findVariable(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 auto var = scope->Locals.lookup(name);
                 if (var) {
@@ -91,7 +89,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Name& name) const override {
+        [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto var = scope->Functions.lookup(name)) {
                     return var;
@@ -106,7 +104,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::Symbol> findSymbol(const Name& name) const override {
+        [[nodiscard]] Ref<ast::Symbol> findSymbol(const Ident& name) const override {
             if (auto var = findVariable(name)) {
                 return var.as<ast::Symbol>();
             }
@@ -246,9 +244,9 @@ namespace pepper::ast {
             return scope->Block;
         }
 
-        void beginScope(const Name& name = "Anonymous") override {
+        void beginScope(const Ident& name = "Anonymous") override {
             auto top = ScopeStack.back();
-            std::string newScopeName = llvm::formatv("{0}.{1}", top->Ident, name);
+            std::string newScopeName = llvm::formatv("{0}.{1}", top->Name, name);
             ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
             PEP_TRACE(TraceChannel::Parser, "Scope({0}) {{", name);
             Messages::Indent(TraceChannel::Parser);
@@ -259,7 +257,7 @@ namespace pepper::ast {
             auto scope = ScopeStack.pop_back_val();
             // std::cout << "end:   " << scope->Ident << std::endl;
             Messages::Outdent(TraceChannel::Parser);
-            PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Ident);
+            PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Name);
         }
 
         void symbol(Ref<ast::VariableDef> var) override {

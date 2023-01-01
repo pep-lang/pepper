@@ -4,7 +4,7 @@
 #include <string>
 
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "Core/SourceLocation.h"
 #include "Core/String.h"
 
@@ -52,11 +52,11 @@ namespace pepper::ast {
     struct Symbol : public Node {
         DECLARE_RTTI(Symbol, Node);
 
-        Name Type;
-        Name Identifier;
+        Ident Type;
+        Ident Identifier;
 
       public:
-        Symbol(const Name& type, const Name& name)
+        Symbol(const Ident& type, const Ident& name)
             : Type(type)
             , Identifier(name) {
         }
@@ -66,8 +66,8 @@ namespace pepper::ast {
         DECLARE_RTTI(Expression, Node);
 
       public:
-        virtual const Name& type() const {
-            static Name Void("void");
+        virtual const Ident& type() const {
+            static Ident Void("void");
             return Void;
         }
     };

@@ -5,7 +5,7 @@
 
 #include "Codegen/IR/Value.h"
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -49,7 +49,7 @@ namespace pepper {
         Ref<ModuleContext> Module;
 
       public:
-        Codegen(const Name& moduleName, Ref<ast::AST> tree);
+        Codegen(const Ident& moduleName, Ref<ast::AST> tree);
 
         // entry point to codegen, runs all the roots of the AST and generates them
         Ref<ModuleContext> emit();

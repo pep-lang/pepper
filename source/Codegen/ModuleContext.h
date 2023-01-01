@@ -5,7 +5,7 @@
 #pragma once
 
 #include "Core/Common.h"
-#include "Core/Name.h"
+#include "Core/Ident.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
@@ -15,12 +15,12 @@ namespace llvm {
 
 namespace pepper {
     class ModuleContext {
-        Name ModuleName;
+        Ident ModuleName;
         std::unique_ptr<llvm::LLVMContext> Context;
         std::unique_ptr<llvm::Module> Module;
 
       public:
-        ModuleContext(const Name& name);
+        ModuleContext(const Ident& name);
 
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
         std::unique_ptr<llvm::Module>&& takeModule();
