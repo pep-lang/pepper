@@ -224,7 +224,7 @@ namespace pepper::ast {
 
         void endFunction() override {
             auto& scope = ScopeStack.back();
-            auto& function = scope->FunctionTarget;
+            auto function = scope->FunctionTarget;
             endBlock();
             if (!structTarget()) {
                 ast.newRoot(function);
