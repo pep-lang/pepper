@@ -17,7 +17,7 @@ namespace pepper {
     using namespace pepper::ast;
 
     Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
-        auto functionName = call->Target->Identifier;
+        auto functionName = call->Target->Name;
         auto target = call->Target;
         return Context::get().locals()->findFunction(functionName);
     }
@@ -50,9 +50,9 @@ namespace pepper {
     Value Codegen::emit(Ref<FunctionDef> functionDef) {
         auto returnType = Types::get(functionDef->ReturnType);
         auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
-            return pepper::Param{p.Identifier, Types::get(p.Type), p.Default ? codegen(p.Default) : Value::Null()};
+            return pepper::Param{p.Name, Types::get(p.Type), p.Default ? codegen(p.Default) : Value::Null()};
         });
-        auto function = Ref<UserFunction>::New(functionDef->Identifier, returnType, params);
+        auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
         codegenFunction(function, functionDef);
         return Value(function->type(), function->function());
     }
@@ -73,7 +73,7 @@ namespace pepper {
     Value Codegen::emit(Ref<FunctionCall> call) {
         auto function = resolveFunction(call);
         if (!function) {
-            throw CompileError("Function {0} not found", call->Target->Identifier);
+            throw CompileError("Function {0} not found", call->Target->Name);
         }
         Vector<Value> args;
         if (function->is<Method>()) {

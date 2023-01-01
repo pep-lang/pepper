@@ -70,7 +70,7 @@ namespace pepper {
     Value Codegen::emit(Ref<VariableDef> variableDef) {
         auto typeName = variableDef->Type;
         auto type = Types::get(typeName);
-        auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Identifier), variableDef->Identifier);
+        auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
 
         auto defaultValue = maybeCodegen(variableDef->Default);
         if (!defaultValue)

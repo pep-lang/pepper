@@ -22,9 +22,9 @@ namespace pepper::ast {
         Node() = default;
         virtual ~Node() = default;
 
-        std::string sourcePrefix(int width = -1, int indent = 0) const;
-        virtual std::string toString() const;
-        virtual std::string dump(int indent = 0) const;
+        [[nodiscard]] std::string sourcePrefix(int width = -1, int indent = 0) const;
+        [[nodiscard]] virtual std::string toString() const;
+        [[nodiscard]] virtual std::string dump(int indent = 0) const;
     };
 
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
@@ -36,7 +36,7 @@ namespace pepper::ast {
         Ref<Node> Value;
 
         template <typename N>
-        Pending(Ref<N> node) {
+        explicit Pending(Ref<N> node) {
             Value = node;
             Type = RTTI::of<N>();
         }
@@ -53,12 +53,12 @@ namespace pepper::ast {
         DECLARE_RTTI(Symbol, Node);
 
         Ident Type;
-        Ident Identifier;
+        Ident Name;
 
       public:
         Symbol(const Ident& type, const Ident& name)
             : Type(type)
-            , Identifier(name) {
+            , Name(name) {
         }
     };
 

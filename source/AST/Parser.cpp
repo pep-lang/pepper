@@ -173,11 +173,11 @@ namespace pepper {
             auto symbol = builder->findSymbol(identifier);
             if (symbol && symbol->is<FieldDef>()) {
                 auto field = symbol.as<FieldDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->Identifier);
+                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->Name);
             }
             if (symbol && symbol->is<MethodDef>()) {
                 auto method = symbol.as<MethodDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(method->Struct), method->Identifier);
+                return builder->New<MemberRef>(Ref<ThisRef>::New(method->Struct), method->Name);
             }
             // anything else can be looked up later, at codegen/pass time
             return builder->New<VariableRef>(identifier);
@@ -286,7 +286,7 @@ namespace pepper {
 
                 // lookup the desired field
                 auto st = builder->structTarget();
-                auto field = Query(st->Fields).find([&](auto f) { return f->Identifier == fieldName; });
+                auto field = Query(st->Fields).find([&](auto f) { return f->Name == fieldName; });
                 if (!field) {
                     throw CompileError("Unknown field {0} found during this initializer", fieldName);
                 }

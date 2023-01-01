@@ -28,24 +28,18 @@ namespace pepper::ast {
 
         FunctionNode(const Ident& returnType, const Ident& name, const Params& params, bool vararg = false);
 
-        virtual std::string toString() const override {
+        std::string toString() const override {
             Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-            std::string sig = llvm::formatv("{0} {1} {2}({3})",
-                                            Node::toString(),
-                                            ReturnType,
-                                            Identifier,
-                                            llvm::join(types.begin(), types.end(), ", "));
+            std::string sig = llvm::formatv(
+                "{0} {1} {2}({3})", Node::toString(), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
             return sig;
         }
 
         std::string dump(int indent) const override {
             Vector<std::string> types =
-                Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Identifier; });
-            return llvm::formatv("{0} {1} {2}({3})",
-                                 Node::dump(indent),
-                                 ReturnType,
-                                 Identifier,
-                                 llvm::join(types.begin(), types.end(), ", "));
+                Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Name; });
+            return llvm::formatv(
+                "{0} {1} {2}({3})", Node::dump(indent), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
         }
     };
 
@@ -91,7 +85,7 @@ namespace pepper::ast {
         const Vector<Ref<Expression>> Args;
 
         FunctionCall(Ref<FunctionDef> target, const Vector<Ref<Expression>>& args = {})
-            : Target(target)
+            : Target(std::move(target))
             , Args(args) {
         }
 
@@ -101,16 +95,16 @@ namespace pepper::ast {
 
         std::string toString() const override {
             Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->toString(); });
-            return trim(Node::toString() +
-                        std::string(llvm::formatv(
-                            "{0}({1})", Target->Identifier, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+            return trim(
+                Node::toString() +
+                std::string(llvm::formatv("{0}({1})", Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
 
         std::string dump(int indent) const override {
             Vector<std::string> argsStr = Query(Args).select<std::string>([indent](auto a) { return a->dump(indent); });
             return trim(
-                Node::dump() + std::string(llvm::formatv(
-                                   "{0}({1})", Target->Identifier, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+                Node::dump() +
+                std::string(llvm::formatv("{0}({1})", Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
     };
 
@@ -121,8 +115,8 @@ namespace pepper::ast {
         Ref<Expression> Value;
 
         Return(Ref<FunctionDef> target, Ref<Expression> value = nullptr)
-            : Target(target)
-            , Value(value) {
+            : Target(std::move(target))
+            , Value(std::move(value)) {
         }
 
         const Ident& type() const override {

@@ -118,11 +118,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}*", Struct->Identifier));
+            return Node::toString() + std::string(llvm::formatv("{0}*", Struct->Name));
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + std::string(llvm::formatv("{0}*", Struct->Identifier));
+            return Node::dump(indent) + std::string(llvm::formatv("{0}*", Struct->Name));
         }
     };
 } // namespace pepper::ast

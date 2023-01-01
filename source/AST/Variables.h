@@ -17,14 +17,14 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            auto str = std::string(llvm::formatv("{0} {1} {2}", Node::toString(), Type, Identifier));
+            auto str = std::string(llvm::formatv("{0} {1} {2}", Node::toString(), Type, Name));
             if (Default)
                 str += std::string(llvm::formatv(" = {0}", Default->toString()));
             return str;
         }
 
         std::string dump(int indent) const override {
-            auto str = std::string(llvm::formatv("{0} {1}", Type, Identifier));
+            auto str = std::string(llvm::formatv("{0} {1}", Type, Name));
             if (Default)
                 str += std::string(llvm::formatv(" = {0}", Default->toString()));
             return Node::dump(indent) + str;

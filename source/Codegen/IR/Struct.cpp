@@ -18,10 +18,10 @@ namespace pepper {
     using namespace pepper::ast;
 
     Value Codegen::emit(Ref<FieldDef> fieldDef) {
-        auto st = Struct::get(fieldDef->Struct->Identifier);
+        auto st = Struct::get(fieldDef->Struct->Name);
         auto instance = Context::get().locals()->findSymbol("this");
         instance = read(instance);
-        auto fieldName = fieldDef->Identifier;
+        auto fieldName = fieldDef->Name;
         auto field = st->getField(instance, fieldName);
         if (!field) {
             throw CompileError("struct {0} does not contain a field named {1}", st->name(), fieldName);
@@ -54,14 +54,14 @@ namespace pepper {
         for (auto& field : structDef->Fields) {
             auto type = Types::get(field->Type);
             fieldTypes.push_back(*type);
-            fields.emplace_back(field->Identifier, type);
+            fields.emplace_back(field->Name, type);
         }
 
         // generate the new struct type
-        auto llvmType = llvm::StructType::create(fieldTypes, structDef->Identifier);
-        auto structType = Types::add(Ref<TypeInfo>::New(structDef->Identifier, llvmType));
-        auto structPtrType = Types::get(structDef->Identifier);
-        auto structDesc = Struct::New(structType, structDef->Identifier);
+        auto llvmType = llvm::StructType::create(fieldTypes, structDef->Name);
+        auto structType = Types::add(Ref<TypeInfo>::New(structDef->Name, llvmType));
+        auto structPtrType = Types::get(structDef->Name);
+        auto structDesc = Struct::New(structType, structDef->Name);
         structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
@@ -69,7 +69,7 @@ namespace pepper {
                            .find([](auto& local) {
                                if (local->template is<VariableDef>()) {
                                    auto var = local.template as<VariableDef>();
-                                   return var->Identifier == "size";
+                                   return var->Name == "size";
                                }
                                return false;
                            })
@@ -83,17 +83,17 @@ namespace pepper {
         // map method names to mangled free functions while maintaining order
         Vector<Ref<Method>> methods;
         for (auto& method : structDef->Methods) {
-            auto realName = method->Identifier;
+            auto realName = method->Name;
             pepper::Params params;
             // inject this pointer
-            auto thisType = Types::get(structDef->Identifier);
+            auto thisType = Types::get(structDef->Name);
             params.emplace_back("this", thisType);
             for (auto& paramDef : method->Parameters) {
                 auto type = Types::get(paramDef.Type);
-                params.emplace_back(paramDef.Identifier, type, maybeCodegen(paramDef.Default));
+                params.emplace_back(paramDef.Name, type, maybeCodegen(paramDef.Default));
             }
             // TODO: mangle these properly
-            auto mangledName = structDef->Identifier + "." + realName;
+            auto mangledName = structDef->Name + "." + realName;
             auto returnType = Types::get(method->ReturnType);
             auto newMethod = Ref<Method>::New(structDesc, mangledName, returnType, params);
             methods.push_back(newMethod);
@@ -107,10 +107,8 @@ namespace pepper {
         }
 
         codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
-        PEP_TRACE(TraceChannel::Codegen,
-                  "StructDef {0} -> {1}",
-                  structDef->Identifier,
-                  toString(structDesc->type()->llvmType()));
+        PEP_TRACE(
+            TraceChannel::Codegen, "StructDef {0} -> {1}", structDef->Name, toString(structDesc->type()->llvmType()));
         return structDesc;
     }
 
