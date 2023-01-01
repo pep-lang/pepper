@@ -23,21 +23,9 @@ namespace pepper::ast {
         Node() = default;
         virtual ~Node() = default;
 
-        std::string sourcePrefix(int width = -1, int indent = 0) const {
-            width = (width >= 0) ? width : Source.File.size() + 10;
-            width += indent;
-            std::string src = Source.toString();
-            std::string padding = repeat(" ", width - src.size());
-            return llvm::formatv("{0}:{1}", Source.toString(), padding);
-        }
-
-        virtual std::string toString() const {
-            return llvm::formatv("{0}: ", rtti()->name());
-        }
-
-        virtual std::string dump(int indent = 0) const {
-            return llvm::formatv("{0}: {1}: ", sourcePrefix(-1, indent), rtti()->name());
-        }
+        std::string sourcePrefix(int width = -1, int indent = 0) const;
+        virtual std::string toString() const;
+        virtual std::string dump(int indent = 0) const;
     };
 
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be

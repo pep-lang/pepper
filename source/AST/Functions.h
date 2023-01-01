@@ -60,7 +60,7 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Identifier; });
             return llvm::formatv("{0} {1} {2}({3})",
                                  Node::dump(indent),
                                  ReturnType,
@@ -91,16 +91,13 @@ namespace pepper::ast {
 
         std::string toString() const override {
             const char* sep = "\n";
-            auto contents = rtrim(llvm::join_items(sep, FunctionNode::toString(), Body->toString()));
+            auto contents = llvm::join_items(sep, FunctionNode::toString(), Body->toString());
             return contents;
         }
 
         std::string dump(int indent = 0) const override {
             const char* sep = "\n  ";
-            Vector<std::string> exprs =
-                Query(Body->Items).select<std::string>([indent](auto e) { return e->dump(indent); });
-            auto contents =
-                rtrim(llvm::join_items(sep, FunctionNode::dump(indent), llvm::join(exprs.begin(), exprs.end(), sep)));
+            auto contents = llvm::join_items(sep, FunctionNode::dump(indent), Body->dump(indent));
             return contents;
         }
     };
