@@ -18,8 +18,8 @@ namespace pepper::ast {
             return Node::toString();
         }
 
-        std::string dump() const override {
-            return toString() + std::string(llvm::formatv("({0})", Condition->dump())) + Body->dump();
+        std::string dump(int indent = 0) const override {
+            return Node::dump(indent) + std::string(llvm::formatv("({0})", Condition->toString())) + Body->dump(indent);
         }
     };
 
@@ -36,10 +36,11 @@ namespace pepper::ast {
             return Node::toString();
         }
 
-        std::string dump() const override {
-            return Node::dump() +
-                   std::string(llvm::formatv("{0} : {1}..{2}", Var ? Var->dump() : "", Init->dump(), Done->dump())) +
-                   Body->dump();
+        std::string dump(int indent = 0) const override {
+            return Node::dump(indent) +
+                   std::string(llvm::formatv(
+                       "{0} : {1}..{2}", Var ? Var->toString() : "", Init->toString(), Done->toString())) +
+                   Body->dump(indent);
         }
     };
 } // namespace pepper::ast

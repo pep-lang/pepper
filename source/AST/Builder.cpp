@@ -250,12 +250,16 @@ namespace pepper::ast {
             auto top = ScopeStack.back();
             std::string newScopeName = llvm::formatv("{0}.{1}", top->Ident, name);
             ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
+            PEP_TRACE(TraceChannel::Parser, "Scope({0}) {{", name);
+            Messages::Indent(TraceChannel::Parser);
             // std::cout << "begin: " << name << std::endl;
         }
 
         void endScope() override {
             auto scope = ScopeStack.pop_back_val();
             // std::cout << "end:   " << scope->Ident << std::endl;
+            Messages::Outdent(TraceChannel::Parser);
+            PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Ident);
         }
 
         void symbol(Ref<ast::VariableDef> var) override {

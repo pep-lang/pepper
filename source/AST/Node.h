@@ -23,19 +23,20 @@ namespace pepper::ast {
         Node() = default;
         virtual ~Node() = default;
 
-        std::string sourcePrefix() const {
-            int width = Source.File.size() + 10;
+        std::string sourcePrefix(int width = -1, int indent = 0) const {
+            width = (width >= 0) ? width : Source.File.size() + 10;
+            width += indent;
             std::string src = Source.toString();
             std::string padding = repeat(" ", width - src.size());
             return llvm::formatv("{0}:{1}", Source.toString(), padding);
         }
 
         virtual std::string toString() const {
-            return llvm::formatv("{0} {1}", sourcePrefix(), rtti()->name());
+            return llvm::formatv("{0}: ", rtti()->name());
         }
 
-        virtual std::string dump() const {
-            return llvm::formatv("{0}: ", rtti()->name());
+        virtual std::string dump(int indent = 0) const {
+            return llvm::formatv("{0}: {1}: ", sourcePrefix(-1, indent), rtti()->name());
         }
     };
 
@@ -54,9 +55,11 @@ namespace pepper::ast {
             Type = RTTI::of<N>();
         }
 
-        template <typename N>
-        static Ref<Pending> New() {
-            return Ref<Pending>::New(Ref<N>{});
+        template <typename N, typename... Args>
+        static Ref<Pending> New(Args&&... args) {
+            if constexpr ((sizeof...(args)))
+                return Ref<Pending>::New(Ref<N>::New(std::forward<Args>(args)...));
+            return Ref<Pending>::New(Ref<N>());
         }
     };
 

@@ -21,7 +21,11 @@ namespace pepper::ast {
         Ref<Block> Else;
 
       public:
-        Branch() = default;
+        Branch(Ref<Expression> condition = {}, Ref<Block> thenBlock = {}, Ref<Block> elseBlock = {})
+            : Condition(condition)
+            , Then(thenBlock)
+            , Else(elseBlock) {
+        }
 
         Ref<Expression>& condition() {
             return Condition;
@@ -40,14 +44,16 @@ namespace pepper::ast {
         DECLARE_RTTI(If, Branch);
 
       public:
+        using Branch::Branch;
+
         std::string toString() const override {
             return Node::toString();
         }
 
-        std::string dump() const override {
+        std::string dump(int indent) const override {
             auto ifCond = std::string(llvm::formatv("if ({0}) {{\n", Condition ? Condition->dump() : "??"));
-            auto thenBlock = Then ? Then->dump() + "}" : "";
-            auto elseBlock = Else ? std::string(" else {\n  ") + Else->dump() + "}" : "";
+            auto thenBlock = Then ? Then->dump(indent) + "}" : "";
+            auto elseBlock = Else ? std::string(" else {\n  ") + Else->dump(indent) + "}" : "";
             return ifCond + thenBlock + elseBlock + "\n";
         }
     };
@@ -64,9 +70,9 @@ namespace pepper::ast {
             return Node::toString();
         }
 
-        std::string dump() const override {
+        std::string dump(int indent) const override {
             return std::string(
-                llvm::formatv("({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
+                llvm::formatv("({0}) ? {1} : {2}", Condition->toString(), TrueResult->toString(), FalseResult->toString()));
         }
     };
 } // namespace pepper::ast

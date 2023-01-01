@@ -14,12 +14,12 @@ namespace pepper::ast {
         return Node::toString() + std::string(llvm::formatv("{0} {1}.{2}", type(), Struct->identifier(), identifier()));
     }
 
-    std::string FieldDef::dump() const {
-        return Node::dump() + std::string(llvm::formatv("{0} {1}.{2} = {3}",
-                                                        type(),
-                                                        Struct->identifier(),
-                                                        identifier(),
-                                                        Default ? Default->toString() : "default"));
+    std::string FieldDef::dump(int indent) const {
+        return Node::dump(indent) + std::string(llvm::formatv("{0} {1}.{2} = {3}",
+                                                              type(),
+                                                              Struct->identifier(),
+                                                              identifier(),
+                                                              Default ? Default->toString() : "default"));
     }
 
     MethodDef::MethodDef(Ref<StructDef> st, const Name& returnType, const Name& name, const Params& params, bool vararg)
@@ -37,20 +37,19 @@ namespace pepper::ast {
                                          structDef()->identifier(),
                                          identifier(),
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + llvm::join(exprs.begin(), exprs.end(), sep);
+               sep + body()->toString();
     }
 
-    std::string MethodDef::dump() const {
+    std::string MethodDef::dump(int indent) const {
         const char* sep = "\n";
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-        Vector<std::string> exprs = Query(body()->Items).select<std::string>([](auto e) { return e->dump(); });
         return Node::dump() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
                                          ReturnType,
                                          structDef()->identifier(),
                                          identifier(),
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + llvm::join(exprs.begin(), exprs.end(), sep);
+               sep + body()->dump(indent);
     }
 
     StructDef::StructDef(const Name& type, const Name& name)
@@ -61,7 +60,6 @@ namespace pepper::ast {
         Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
         structDef->NewInstance = Ref<FunctionDef>::New(type, name);
         // Note that the order of these is important, ctor depends on init, so must be generated after
-        // TODO: deal with parameters to ctor here
         structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
         structDef->Constructor = Ref<MethodDef>::New(structDef, "void", "__ctor");
         structDef->Destructor = Ref<MethodDef>::New(structDef, "void", "__dtor");
@@ -110,12 +108,13 @@ namespace pepper::ast {
         return Node::toString() + identifier();
     }
 
-    std::string StructDef::dump() const {
-        const char* sep = "\n  ";
-        Vector<std::string> fields = Query(Fields).select<std::string>([](auto f) { return f->toString(); });
-        Vector<std::string> methods = Query(Methods).select<std::string>([](auto m) { return m->toString(); });
-        return llvm::join_items(sep,
-                                Node::dump() + std::string(llvm::formatv("{0}", identifier())),
+    std::string StructDef::dump(int indent) const {
+        const char* sep = "\n";
+        Vector<std::string> fields =
+            Query(Fields).select<std::string>([indent](auto f) { return f->dump(indent + 2); });
+        Vector<std::string> methods =
+            Query(Methods).select<std::string>([indent](auto m) { return m->dump(indent + 2); });
+        return llvm::join_items(Node::dump(indent) + std::string(llvm::formatv("{0}", identifier())),
                                 llvm::join(fields.begin(), fields.end(), sep),
                                 llvm::join(methods.begin(), methods.end(), sep));
     }

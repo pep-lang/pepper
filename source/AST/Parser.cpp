@@ -48,7 +48,7 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw InternalCompilerError("Attempted to pop {0} from AST stack, found {1} instead",
+            throw InternalCompilerError("Attempted to pop {0} from AST l-value stack, found {1} instead",
                                         RTTI::of<N>()->name(),
                                         RTTI::of(*val)->name());
         }
@@ -56,6 +56,11 @@ namespace pepper {
         template <typename N>
         Ref<N> lvaluePeek(unsigned int idx = 0) {
             auto val = builder->peekLValue(idx);
+            // unwrap pending node if found
+            if constexpr (!std::is_same_v<N, Pending>) {
+                if (val && val->is<Pending>() && val.as<Pending>()->Type->is(RTTI::of<N>()))
+                    return val.as<Pending>()->Value.as<N>();
+            }
             if (val && val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
@@ -63,8 +68,8 @@ namespace pepper {
         }
 
         void rvaluePush(Ref<Node> val) {
-            // Only bother tracking this rvalue if there is an l-value on the stack to receive it
-            if (lvaluePeek<Node>())
+            // Only bother tracking this rvalue if there is a pending l-value on the stack to receive it
+            if (lvaluePeek<Pending>() || lvaluePeek<Node>())
                 builder->pushRValue(std::move(val));
         }
 
@@ -74,7 +79,7 @@ namespace pepper {
             if (val->is<N>()) {
                 return std::static_pointer_cast<N>(val);
             }
-            throw InternalCompilerError("Attempted to pop {0} from AST stack, found {1} instead",
+            throw InternalCompilerError("Attempted to pop {0} from AST r-value stack, found {1} instead",
                                         RTTI::of<N>()->name(),
                                         RTTI::of(*val)->name());
         }
@@ -85,7 +90,7 @@ namespace pepper {
             if (val && val->is<N>()) {
                 return val.as<N>();
             }
-            throw InternalCompilerError("Attempted to peek a {} in AST stack at slot {}, found {} instead",
+            throw InternalCompilerError("Attempted to peek a {0} in AST r-value stack at slot {1}, found {2} instead",
                                         RTTI::of<N>()->name(),
                                         idx,
                                         RTTI::of(*val)->name());
@@ -270,6 +275,7 @@ namespace pepper {
         }
 
         void exitConstructorParam(PepperParser::ConstructorParamContext* context) override {
+            // normal params are handled by ParamDeclaration, this is for this-initializers
             if (context->This()) {
                 lvaluePop<VariableDef>();
                 auto fieldName = context->Identifier()->toString();
@@ -290,7 +296,7 @@ namespace pepper {
                 auto func = builder->functionTarget();
                 func->Parameters.emplace_back(paramName, field.value()->type(), defaultValue);
 
-                // Add the assignment to the field to the ctor
+                // GreaterEqual the assignment to the field to the ctor
                 func->body()->Items.push_back(builder->New<Assign>(
                     builder->New<MemberRef>(Ref<ThisRef>::New(st), fieldName), builder->New<VariableRef>(paramName)));
             }
@@ -351,17 +357,18 @@ namespace pepper {
         }
 
         void enterReturn(PepperParser::ReturnContext* context) override {
-            auto function = builder->functionTarget();
-            auto ret = builder->New<Return>(function);
+            auto ret = Pending::New<Return>();
             lvaluePush(ret);
         }
 
         void exitReturn(PepperParser::ReturnContext* context) override {
-            auto ret = lvaluePop<Return>();
+            lvaluePop<Return>();
+            auto function = builder->functionTarget();
+            Ref<Expression> returnValue;
             if (context->expression()) {
-                auto returnValue = rvaluePop<Expression>();
-                ret->setValue(returnValue);
+                returnValue = rvaluePop<Expression>();
             }
+            auto ret = builder->New<Return>(function, returnValue);
             builder->insert(ret);
         }
 
@@ -384,10 +391,10 @@ namespace pepper {
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = builder->New<If>();
             if (context->ifStatement()) {
-                branch->thenBlock() = builder->New<Block>(branch, "then");
+                branch->thenBlock() = Ref<Block>::New(branch, "then");
             }
             if (context->elseStatement()) {
-                branch->elseBlock() = builder->New<Block>(branch, "else");
+                branch->elseBlock() = Ref<Block>::New(branch, "else");
             }
             builder->beginScope("select");
             lvaluePush(branch);
@@ -487,118 +494,170 @@ namespace pepper {
             builder->insert(branch);
         }
 
-        void exitAdd(PepperParser::AddContext* context) override {
+        template <typename Op>
+        void beginBinaryOp() {
+            auto op = Pending::New<Op>();
+            lvaluePush(op);
+        }
+
+        template <typename Op>
+        void endBinaryOp() {
+            lvaluePop<Op>();
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Add>(lhs, rhs));
+            builder->insert(builder->New<Op>(lhs, rhs));
+        }
+
+        void enterAdd(PepperParser::AddContext* context) override {
+            beginBinaryOp<Add>();
+        }
+
+        void exitAdd(PepperParser::AddContext* context) override {
+            endBinaryOp<Add>();
+        }
+
+        void enterSub(PepperParser::SubContext* context) override {
+            beginBinaryOp<Sub>();
         }
 
         void exitSub(PepperParser::SubContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Sub>(lhs, rhs));
+            endBinaryOp<Sub>();
+        }
+
+        void enterMul(PepperParser::MulContext* context) override {
+            beginBinaryOp<Mul>();
         }
 
         void exitMul(PepperParser::MulContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Mul>(lhs, rhs));
+            endBinaryOp<Mul>();
+        }
+
+        void enterDiv(PepperParser::DivContext* context) override {
+            beginBinaryOp<Div>();
         }
 
         void exitDiv(PepperParser::DivContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Div>(lhs, rhs));
+            endBinaryOp<Div>();
+        }
+
+        void enterMod(PepperParser::ModContext* context) override {
+            beginBinaryOp<Mod>();
         }
 
         void exitMod(PepperParser::ModContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Mod>(lhs, rhs));
+            endBinaryOp<Mod>();
+        }
+
+        void enterPow(PepperParser::PowContext* context) override {
+            beginBinaryOp<Pow>();
         }
 
         void exitPow(PepperParser::PowContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Pow>(lhs, rhs));
+            endBinaryOp<Pow>();
+        }
+
+        void enterLShift(PepperParser::LShiftContext* context) override {
+            beginBinaryOp<LShift>();
         }
 
         void exitLShift(PepperParser::LShiftContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<LShift>(lhs, rhs));
+            endBinaryOp<LShift>();
+        }
+
+        void enterRShift(PepperParser::RShiftContext* context) override {
+            beginBinaryOp<RShift>();
         }
 
         void exitRShift(PepperParser::RShiftContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<RShift>(lhs, rhs));
+            endBinaryOp<RShift>();
+        }
+
+        void enterBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
+            beginBinaryOp<BitAnd>();
         }
 
         void exitBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<BitAnd>(lhs, rhs));
+            endBinaryOp<BitAnd>();
+        }
+
+        void enterBitwiseXor(PepperParser::BitwiseXorContext* context) override {
+            beginBinaryOp<BitXor>();
         }
 
         void exitBitwiseXor(PepperParser::BitwiseXorContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<BitXor>(lhs, rhs));
+            endBinaryOp<BitXor>();
+        }
+
+        void enterBitwiseOr(PepperParser::BitwiseOrContext* context) override {
+            beginBinaryOp<BitOr>();
         }
 
         void exitBitwiseOr(PepperParser::BitwiseOrContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<BitOr>(lhs, rhs));
+            endBinaryOp<BitOr>();
+        }
+
+        void enterLess(PepperParser::LessContext* context) override {
+            beginBinaryOp<Less>();
         }
 
         void exitLess(PepperParser::LessContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Less>(lhs, rhs));
+            endBinaryOp<Less>();
+        }
+
+        void enterLessEqual(PepperParser::LessEqualContext* context) override {
+            beginBinaryOp<LessEqual>();
         }
 
         void exitLessEqual(PepperParser::LessEqualContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<LessEqual>(lhs, rhs));
+            endBinaryOp<LessEqual>();
+        }
+
+        void enterGreater(PepperParser::GreaterContext* context) override {
+            beginBinaryOp<Greater>();
         }
 
         void exitGreater(PepperParser::GreaterContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Greater>(lhs, rhs));
+            endBinaryOp<Greater>();
+        }
+
+        void enterGreaterEqual(PepperParser::GreaterEqualContext* context) override {
+            beginBinaryOp<GreaterEqual>();
         }
 
         void exitGreaterEqual(PepperParser::GreaterEqualContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<GreaterEqual>(lhs, rhs));
+            endBinaryOp<GreaterEqual>();
+        }
+
+        void enterEqual(PepperParser::EqualContext* context) override {
+            beginBinaryOp<Equal>();
         }
 
         void exitEqual(PepperParser::EqualContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<Equal>(lhs, rhs));
+            endBinaryOp<Equal>();
+        }
+
+        void enterNotEqual(PepperParser::NotEqualContext* context) override {
+            beginBinaryOp<NotEqual>();
         }
 
         void exitNotEqual(PepperParser::NotEqualContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<NotEqual>(lhs, rhs));
+            endBinaryOp<NotEqual>();
+        }
+
+        void enterLogicalAnd(PepperParser::LogicalAndContext* context) override {
+            beginBinaryOp<LogicalAnd>();
         }
 
         void exitLogicalAnd(PepperParser::LogicalAndContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<LogicalAnd>(lhs, rhs));
+            endBinaryOp<LogicalAnd>();
+        }
+
+        void enterLogicalOr(PepperParser::LogicalOrContext* context) override {
+            beginBinaryOp<LogicalOr>();
         }
 
         void exitLogicalOr(PepperParser::LogicalOrContext* context) override {
-            auto rhs = rvaluePop<Expression>();
-            auto lhs = rvaluePop<Expression>();
-            rvaluePush(builder->New<LogicalOr>(lhs, rhs));
+            endBinaryOp<LogicalOr>();
         }
 
         template <typename Op>

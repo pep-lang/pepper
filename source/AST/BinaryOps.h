@@ -43,10 +43,9 @@ namespace pepper::ast {
             return str;
         }
 
-        std::string dump() const override {
-            return Node::toString() +
-                   std::string(
-                       llvm::formatv("({0}), ({1})", LHS ? LHS->toString() : "empty", RHS ? RHS->toString() : "empty"));
+        std::string dump(int indent) const override {
+            return Node::dump(indent) +
+                   std::string(llvm::formatv("({0}), ({1})", LHS ? LHS->dump() : "empty", RHS ? RHS->dump() : "empty"));
         }
     };
 

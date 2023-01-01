@@ -8,6 +8,7 @@
 #include <string>
 
 #include "Core/Common.h"
+#include "Core/String.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
@@ -81,6 +82,11 @@ namespace pepper {
             return channels;
         }
 
+        static auto& _indents() {
+            static std::unordered_map<TraceChannel, std::string> Indents;
+            return Indents;
+        }
+
       public:
         template <IsA<Message> M, HasToString Ctx, typename... Args>
         static void Report(const Ctx& src, std::string_view fmt, Args&&... args) {
@@ -104,6 +110,16 @@ namespace pepper {
             return _traceChannels() & uint64_t(channel);
         }
 
+        static void Indent(TraceChannel channel) {
+            _indents()[channel] += "  ";
+        }
+
+        static void Outdent(TraceChannel channel) {
+            const auto& existing = _indents()[channel];
+            if (existing.size() > 1)
+                _indents()[channel] = existing.substr(0, existing.size() - 2);
+        }
+
         static void SetTraceChannels(uint64_t channels) {
             _traceChannels() = channels;
         }
@@ -117,7 +133,9 @@ namespace pepper {
         }
 
         static void Trace(TraceChannel channel, const std::string& msg) {
-            std::cout << msg << std::endl;
+            const auto& indent = _indents()[channel];
+            auto output = indent + replace_all(msg, "\n", "\n" + indent);
+            std::cout << output << std::endl;
         }
 
       private:

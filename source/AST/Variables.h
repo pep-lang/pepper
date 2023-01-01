@@ -32,8 +32,11 @@ namespace pepper::ast {
             return str;
         }
 
-        std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            auto str = std::string(llvm::formatv("{0} {1}", type(), identifier()));
+            if (Default)
+                str += std::string(llvm::formatv(" = {0}", Default->toString()));
+            return Node::dump(indent) + str;
         }
     };
 
@@ -72,8 +75,8 @@ namespace pepper::ast {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), identifier()));
         }
 
-        std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            return Node::dump(indent) + Identifier;
         }
     };
 } // namespace pepper::ast

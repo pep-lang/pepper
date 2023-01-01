@@ -17,7 +17,7 @@ namespace pepper::ast {
     void AST::dump() const {
         if (PEP_TRACING(TraceChannel::AST)) {
             for (const auto& root : Roots) {
-                PEP_TRACE_AST(root->toString());
+                PEP_TRACE_AST(root->dump());
             }
         }
     }

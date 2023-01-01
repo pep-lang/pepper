@@ -29,12 +29,12 @@ namespace pepper::ast {
             return Value;
         }
 
-        virtual std::string toString() const override {
+        std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
 
-        virtual std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            return Node::dump(indent) + std::to_string(Value);
         }
     };
 
@@ -58,12 +58,12 @@ namespace pepper::ast {
             return Value;
         }
 
-        virtual std::string toString() const override {
+        std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
 
-        virtual std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            return Node::dump(indent) + std::to_string(Value);
         }
     };
 
@@ -87,12 +87,12 @@ namespace pepper::ast {
             return Value;
         }
 
-        virtual std::string toString() const override {
+        std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
 
-        virtual std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            return Node::dump(indent) + std::to_string(Value);
         }
     };
 
@@ -116,12 +116,12 @@ namespace pepper::ast {
             return Value;
         }
 
-        virtual std::string toString() const override {
+        std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
 
-        virtual std::string dump() const override {
-            return toString();
+        std::string dump(int indent) const override {
+            return Node::dump(indent) + Value;
         }
     };
 } // namespace pepper::ast
