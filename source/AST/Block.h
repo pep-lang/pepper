@@ -9,29 +9,16 @@
 #include "Core/Vector.h"
 
 namespace pepper::ast {
-    class Block : public Node {
+    struct Block : public Node {
         DECLARE_RTTI(Block, Node);
 
         const std::string Name;
         Ref<Node> Parent;
         Vector<Ref<Node>> Items;
 
-      public:
         Block(Ref<Node> parent = nullptr, const std::string& name = "block")
             : Parent(parent)
             , Name(name) {
-        }
-
-        const std::string& name() const {
-            return Name;
-        }
-
-        Vector<Ref<Node>>& items() {
-            return Items;
-        }
-
-        Ref<Node> parent() {
-            return Parent;
         }
 
         std::string toString() const override {

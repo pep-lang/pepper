@@ -15,12 +15,11 @@
 
 namespace pepper::ast {
 
-    class StructDef;
+    struct StructDef;
 
-    class FieldDef : public VariableDef {
+    struct FieldDef : public VariableDef {
         DECLARE_RTTI(FieldDef, VariableDef);
 
-      public:
         Ref<StructDef> Struct;
 
         FieldDef(Ref<StructDef> st, const Name& type, const Name& name, Ref<Expression> defaultValue = nullptr);
@@ -29,10 +28,9 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    class MethodDef : public FunctionDef {
+    struct MethodDef : public FunctionDef {
         DECLARE_RTTI(MethodDef, FunctionDef);
 
-      private:
         Ref<StructDef> Struct;
 
       public:
@@ -42,15 +40,11 @@ namespace pepper::ast {
                   const Params& params = Params(),
                   bool vararg = false);
 
-        [[nodiscard]] Ref<StructDef> structDef() const {
-            return Struct;
-        }
-
         std::string toString() const override;
         std::string dump(int indent) const override;
     };
 
-    class StructDef
+    struct StructDef
         : public Symbol
         , public std::enable_shared_from_this<StructDef> {
         DECLARE_RTTI(StructDef, Symbol);
@@ -64,7 +58,6 @@ namespace pepper::ast {
 
         StructDef(const Name& type, const Name& name);
 
-      public:
         static Ref<StructDef> New(const Name& type, const Name& name);
 
         void finish();
@@ -73,13 +66,12 @@ namespace pepper::ast {
         std::string dump(int indent = 0) const override;
     };
 
-    class MemberRef : public Expression {
+    struct MemberRef : public Expression {
         DECLARE_RTTI(MemberRef, Expression);
 
         Ref<Expression> LHS;
         Name MemberName;
 
-      public:
         MemberRef() = default;
 
         MemberRef(Ref<Expression> lhs, const Name& fieldName)
@@ -89,14 +81,6 @@ namespace pepper::ast {
 
         const Name& type() const override {
             return LHS->type();
-        }
-
-        Ref<Expression> lhs() const {
-            return LHS;
-        }
-
-        const Name& name() const {
-            return MemberName;
         }
 
         std::string toString() const override {
@@ -110,14 +94,13 @@ namespace pepper::ast {
         }
     };
 
-    class MethodCall : public Expression {
+    struct MethodCall : public Expression {
         DECLARE_RTTI(MethodCall, Expression);
 
         Ref<Expression> This;
         const Name MethodName;
         Vector<Ref<Expression>> Args;
 
-      public:
         MethodCall(Ref<Expression> thisRef, const Name& methodName, const Vector<Ref<Expression>>& args = {})
             : This(thisRef)
             , MethodName(methodName)
@@ -125,27 +108,21 @@ namespace pepper::ast {
         }
     };
 
-    class ThisRef : public Expression {
+    struct ThisRef : public Expression {
         DECLARE_RTTI(ThisRef, Expression);
 
-      private:
-        Ref<StructDef> ThisDef;
+        Ref<StructDef> Struct;
 
-      public:
         ThisRef(Ref<StructDef> thisType)
-            : ThisDef(thisType) {
-        }
-
-        Ref<StructDef> thisDef() const {
-            return ThisDef;
+            : Struct(thisType) {
         }
 
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}*", ThisDef->identifier()));
+            return Node::toString() + std::string(llvm::formatv("{0}*", Struct->Identifier));
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + std::string(llvm::formatv("{0}*", ThisDef->identifier()));
+            return Node::dump(indent) + std::string(llvm::formatv("{0}*", Struct->Identifier));
         }
     };
 } // namespace pepper::ast

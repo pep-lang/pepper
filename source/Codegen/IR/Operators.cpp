@@ -127,16 +127,16 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<Assign> op) {
-        auto rhs = codegen(op->rhs());
-        auto lhs = codegen(op->lhs());
+        auto rhs = codegen(op->RHS);
+        auto lhs = codegen(op->LHS);
         auto typeOps = TypeOps::get(lhs.Ty);
         typeOps->assign(lhs, typeOps->coerce(rhs));
         return lhs;
     }
 
     Value Codegen::emit(Ref<CompoundAssign> op) {
-        auto rhs = codegen(op->rhs());
-        auto lhs = codegen(op->lhs());
+        auto rhs = codegen(op->RHS);
+        auto lhs = codegen(op->LHS);
         auto opType = lhs.Ty;
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",
@@ -159,8 +159,8 @@ namespace pepper {
         if (op->is<Assign>())
             return emit(op.as<Assign>());
 
-        auto rhs = codegen(op->rhs());
-        auto lhs = codegen(op->lhs());
+        auto rhs = codegen(op->RHS);
+        auto lhs = codegen(op->LHS);
         lhs = read(lhs);
         rhs = read(rhs);
         auto opType = operandType(op, lhs.Ty, rhs.Ty);

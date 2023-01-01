@@ -11,14 +11,14 @@ namespace pepper::ast {
     }
 
     std::string FieldDef::toString() const {
-        return Node::toString() + std::string(llvm::formatv("{0} {1}.{2}", type(), Struct->identifier(), identifier()));
+        return Node::toString() + std::string(llvm::formatv("{0} {1}.{2}", Type, Struct->Identifier, Identifier));
     }
 
     std::string FieldDef::dump(int indent) const {
         return Node::dump(indent) + std::string(llvm::formatv("{0} {1}.{2} = {3}",
-                                                              type(),
-                                                              Struct->identifier(),
-                                                              identifier(),
+                                                              Type,
+                                                              Struct->Identifier,
+                                                              Identifier,
                                                               Default ? Default->toString() : "default"));
     }
 
@@ -30,14 +30,13 @@ namespace pepper::ast {
     std::string MethodDef::toString() const {
         const char* sep = "\n    ";
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-        Vector<std::string> exprs = Query(body()->Items).select<std::string>([](auto e) { return e->toString(); });
         return Node::toString() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
                                          ReturnType,
-                                         structDef()->identifier(),
-                                         identifier(),
+                                         Struct->Identifier,
+                                         Identifier,
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + body()->toString();
+               sep + Body->toString();
     }
 
     std::string MethodDef::dump(int indent) const {
@@ -46,10 +45,10 @@ namespace pepper::ast {
         return Node::dump() +
                std::string(llvm::formatv("{0} {1}.{2}({3})",
                                          ReturnType,
-                                         structDef()->identifier(),
-                                         identifier(),
+                                         Struct->Identifier,
+                                         Identifier,
                                          llvm::join(types.begin(), types.end(), ", "))) +
-               sep + body()->dump(indent);
+               sep + Body->dump(indent);
     }
 
     StructDef::StructDef(const Name& type, const Name& name)
@@ -70,7 +69,7 @@ namespace pepper::ast {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         Vector<Ref<Node>> body = {
             Ref<VariableDef>::New("u64", "size"),
-            Ref<VariableDef>::New(identifier(),
+            Ref<VariableDef>::New(Identifier,
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
@@ -78,25 +77,25 @@ namespace pepper::ast {
             Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
         };
-        NewInstance->body()->Items = body;
+        NewInstance->Body->Items = body;
 
         // Fill in initializer
         for (auto& field : Fields) {
-            Initializer->body()->Items.push_back(field);
+            Initializer->Body->Items.push_back(field);
         }
-        Initializer->body()->Items.push_back(Ref<Return>::New(Initializer));
+        Initializer->Body->Items.push_back(Ref<Return>::New(Initializer));
 
         // insert initializer as the first instruction in Constructor
-        Constructor->body()->Items.insert(Constructor->body()->Items.begin(),
-                                          Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__init"));
+        Constructor->Body->Items.insert(Constructor->Body->Items.begin(),
+                                        Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__init"));
 
         // insert free as the last instruction before return in Destructor
-        auto lastExpr = Destructor->body()->Items.size() ? Destructor->body()->Items.back() : nullptr;
+        auto lastExpr = Destructor->Body->Items.size() ? Destructor->Body->Items.back() : nullptr;
         if (lastExpr && lastExpr->is<Return>()) {
-            Destructor->body()->Items.pop_back();
+            Destructor->Body->Items.pop_back();
         }
 
-        Destructor->body()->Items.push_back(Ref<FunctionCall>::New(
+        Destructor->Body->Items.push_back(Ref<FunctionCall>::New(
             ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
 
         Methods.push_back(Initializer);
@@ -105,7 +104,7 @@ namespace pepper::ast {
     }
 
     std::string StructDef::toString() const {
-        return Node::toString() + identifier();
+        return Node::toString() + Identifier;
     }
 
     std::string StructDef::dump(int indent) const {
@@ -114,7 +113,7 @@ namespace pepper::ast {
             Query(Fields).select<std::string>([indent](auto f) { return f->dump(indent + 2); });
         Vector<std::string> methods =
             Query(Methods).select<std::string>([indent](auto m) { return m->dump(indent + 2); });
-        return llvm::join_items(Node::dump(indent) + std::string(llvm::formatv("{0}", identifier())),
+        return llvm::join_items(Node::dump(indent) + std::string(llvm::formatv("{0}", Identifier)),
                                 llvm::join(fields.begin(), fields.end(), sep),
                                 llvm::join(methods.begin(), methods.end(), sep));
     }

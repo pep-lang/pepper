@@ -68,12 +68,11 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<VariableDef> variableDef) {
-        auto typeName = variableDef->type();
+        auto typeName = variableDef->Type;
         auto type = Types::get(typeName);
-        auto value =
-            Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->identifier()), variableDef->identifier());
+        auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Identifier), variableDef->Identifier);
 
-        auto defaultValue = maybeCodegen(variableDef->defaultValue());
+        auto defaultValue = maybeCodegen(variableDef->Default);
         if (!defaultValue)
             defaultValue = zeroValue(type);
 
@@ -85,22 +84,22 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<StringLiteral> stringLiteral) {
-        auto value = Value(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->value()));
+        auto value = Value(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->Value));
         return value;
     }
 
     Value Codegen::emit(Ref<IntegerLiteral> intLiteral) {
-        auto value = Value(Types::Int64, llvm::ConstantInt::get(*Types::Int64, intLiteral->value()));
+        auto value = Value(Types::Int64, llvm::ConstantInt::get(*Types::Int64, intLiteral->Value));
         return value;
     }
 
     Value Codegen::emit(Ref<FloatLiteral> floatLiteral) {
-        auto value = Value(Types::Double, llvm::ConstantFP::get(*Types::Double, floatLiteral->value()));
+        auto value = Value(Types::Double, llvm::ConstantFP::get(*Types::Double, floatLiteral->Value));
         return value;
     }
 
     Value Codegen::emit(Ref<BoolLiteral> boolLiteral) {
-        auto value = Value(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->value()));
+        auto value = Value(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->Value));
         return value;
     }
 

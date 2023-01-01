@@ -13,37 +13,23 @@
 namespace pepper::ast {
 
     // Branches can be expressions (ternary/loops) or void (if/else)
-    class Branch : public Expression {
+    struct Branch : public Expression {
         DECLARE_RTTI(Branch, Expression);
 
         Ref<Expression> Condition;
         Ref<Block> Then;
         Ref<Block> Else;
 
-      public:
         Branch(Ref<Expression> condition = {}, Ref<Block> thenBlock = {}, Ref<Block> elseBlock = {})
             : Condition(condition)
             , Then(thenBlock)
             , Else(elseBlock) {
         }
-
-        Ref<Expression>& condition() {
-            return Condition;
-        }
-
-        Ref<Block>& thenBlock() {
-            return Then;
-        }
-
-        Ref<Block>& elseBlock() {
-            return Else;
-        }
     };
 
-    class If : public Branch {
+    struct If : public Branch {
         DECLARE_RTTI(If, Branch);
 
-      public:
         using Branch::Branch;
 
         std::string toString() const override {
@@ -58,14 +44,13 @@ namespace pepper::ast {
         }
     };
 
-    class Ternary : public Expression {
+    struct Ternary : public Expression {
         DECLARE_RTTI(Ternary, Expression);
 
         Ref<Expression> Condition;
         Ref<Expression> TrueResult;
         Ref<Expression> FalseResult;
 
-      public:
         std::string toString() const override {
             return Node::toString();
         }

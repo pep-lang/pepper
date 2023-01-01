@@ -83,7 +83,7 @@ namespace pepper::ast {
                 }
             }
             if (auto st = structTarget()) {
-                auto field = Query(st->Fields).find([&](auto f) { return f->identifier() == name; });
+                auto field = Query(st->Fields).find([&](auto f) { return f->Identifier == name; });
                 if (field) {
                     return field.value();
                 }
@@ -98,7 +98,7 @@ namespace pepper::ast {
                 }
             }
             if (auto st = structTarget()) {
-                auto method = Query(st->Methods).find([&](auto m) { return m->identifier() == name; });
+                auto method = Query(st->Methods).find([&](auto m) { return m->Identifier == name; });
                 if (method) {
                     return method.value();
                 }
@@ -185,10 +185,10 @@ namespace pepper::ast {
 
         void beginStruct(Ref<StructDef> structDef) override {
             auto& scope = ScopeStack.back();
-            scope->Structs[structDef->identifier()] = structDef;
-            scope->Functions[structDef->identifier()] = structDef->NewInstance;
+            scope->Structs[structDef->Identifier] = structDef;
+            scope->Functions[structDef->Identifier] = structDef->NewInstance;
 
-            beginScope(structDef->identifier());
+            beginScope(structDef->Identifier);
             auto& structScope = ScopeStack.back();
             structScope->StructTarget = structDef;
         }
@@ -202,7 +202,7 @@ namespace pepper::ast {
         }
 
         void beginExtension(Ref<StructDef> structDef) override {
-            beginScope(structDef->identifier());
+            beginScope(structDef->Identifier);
             auto& structScope = ScopeStack.back();
             structScope->StructTarget = structDef;
         }
@@ -213,13 +213,13 @@ namespace pepper::ast {
 
         void beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = ScopeStack.back();
-            scope->Functions[func->identifier()] = func;
+            scope->Functions[func->Identifier] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
-            func->body() = Ref<Block>::New(functionTarget(), func->identifier());
-            beginBlock(func->body());
+            func->Body = Ref<Block>::New(functionTarget(), func->Identifier);
+            beginBlock(func->Body);
             auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
-            fnScope->StructTarget = func->is<MethodDef>() ? func.as<MethodDef>()->structDef() : nullptr;
+            fnScope->StructTarget = func->is<MethodDef>() ? func.as<MethodDef>()->Struct : nullptr;
         }
 
         void endFunction() override {
@@ -232,7 +232,7 @@ namespace pepper::ast {
         }
 
         void beginBlock(Ref<Block> block) override {
-            beginScope(block->name());
+            beginScope(block->Name);
             auto scope = ScopeStack.back();
             scope->Block = block;
         }
@@ -268,7 +268,7 @@ namespace pepper::ast {
                 auto field = var.as<FieldDef>();
                 structTarget()->Fields.push_back(field);
             } else {
-                scope->Locals[var->identifier()] = var;
+                scope->Locals[var->Identifier] = var;
                 scope->OrderedSymbols.push_back(var);
                 if (block()) {
                     block()->Items.push_back(var);

@@ -6,16 +6,15 @@
 #include "AST/Node.h"
 
 namespace pepper::ast {
-    class Literal : public Expression {
+    struct Literal : public Expression {
         DECLARE_RTTI(Literal, Expression);
     };
 
-    class BoolLiteral : public Literal {
+    struct BoolLiteral : public Literal {
         DECLARE_RTTI(BoolLiteral, Literal);
 
         const bool Value;
 
-      public:
         explicit BoolLiteral(bool value)
             : Value(value) {
         }
@@ -25,10 +24,6 @@ namespace pepper::ast {
             return Bool;
         }
 
-        bool value() const {
-            return Value;
-        }
-
         std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
@@ -38,13 +33,11 @@ namespace pepper::ast {
         }
     };
 
-    class IntegerLiteral : public Literal {
+    struct IntegerLiteral : public Literal {
         DECLARE_RTTI(IntegerLiteral, Literal);
 
-      private:
         const int64_t Value;
 
-      public:
         explicit IntegerLiteral(int64_t value)
             : Value(value) {
         }
@@ -54,10 +47,6 @@ namespace pepper::ast {
             return Long;
         }
 
-        int64_t value() const {
-            return Value;
-        }
-
         std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
@@ -67,13 +56,11 @@ namespace pepper::ast {
         }
     };
 
-    class FloatLiteral : public Literal {
+    struct FloatLiteral : public Literal {
         DECLARE_RTTI(FloatLiteral, Literal);
 
-      private:
         const double Value;
 
-      public:
         FloatLiteral(double value)
             : Value(value) {
         }
@@ -83,10 +70,6 @@ namespace pepper::ast {
             return Double;
         }
 
-        double value() const {
-            return Value;
-        }
-
         std::string toString() const override {
             return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
         }
@@ -96,13 +79,11 @@ namespace pepper::ast {
         }
     };
 
-    class StringLiteral : public Literal {
+    struct StringLiteral : public Literal {
         DECLARE_RTTI(StringLiteral, Literal);
 
-      private:
         const std::string Value;
 
-      public:
         StringLiteral(const std::string& value)
             : Value(value) {
         }
@@ -110,10 +91,6 @@ namespace pepper::ast {
         const Name& type() const override {
             static Name String("string");
             return String;
-        }
-
-        const std::string& value() const {
-            return Value;
         }
 
         std::string toString() const override {

@@ -17,8 +17,8 @@ namespace pepper {
     using namespace pepper::ast;
 
     Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
-        auto functionName = call->target()->identifier();
-        auto target = call->target();
+        auto functionName = call->Target->Identifier;
+        auto target = call->Target;
         return Context::get().locals()->findFunction(functionName);
     }
 
@@ -37,32 +37,32 @@ namespace pepper {
         }
 
         // Emit the body of the function, after ensuring there is a return instruction
-        auto lastExpr = (funcDef->body()->Items.size()) ? funcDef->body()->Items.back() : nullptr;
+        auto lastExpr = (funcDef->Body->Items.size()) ? funcDef->Body->Items.back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->body()->Items.push_back(Ref<Return>::New(funcDef));
+            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef));
         }
-        Query(funcDef->body()->Items).each([&](auto expr) { codegen(expr); });
+        Query(funcDef->Body->Items).each([&](auto expr) { codegen(expr); });
 
         Context::get().popScope();
         Context::get().locals()->newFunction(function);
     }
 
     Value Codegen::emit(Ref<FunctionDef> functionDef) {
-        auto returnType = Types::get(functionDef->returnType());
-        auto params = Query(functionDef->params()).select<pepper::Param>([this](auto p) {
+        auto returnType = Types::get(functionDef->ReturnType);
+        auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
             return pepper::Param{p.Identifier, Types::get(p.Type), p.Default ? codegen(p.Default) : Value::Null()};
         });
-        auto function = Ref<UserFunction>::New(functionDef->identifier(), returnType, params);
+        auto function = Ref<UserFunction>::New(functionDef->Identifier, returnType, params);
         codegenFunction(function, functionDef);
         return Value(function->type(), function->function());
     }
 
     Value Codegen::emit(Ref<Return> ret) {
-        if (ret->value()) {
-            auto returnValueExpr = codegen(ret->value());
+        if (ret->Value) {
+            auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
-            auto func = ret->target();
-            auto returnType = Types::get(func->returnType());
+            auto func = ret->Target;
+            auto returnType = Types::get(func->ReturnType);
             auto type = TypeOps::get(returnType);
             auto rv = type->coerce(returnValue);
             return Value(returnType, ir()->CreateRet(rv));
@@ -73,7 +73,7 @@ namespace pepper {
     Value Codegen::emit(Ref<FunctionCall> call) {
         auto function = resolveFunction(call);
         if (!function) {
-            throw CompileError("Function {0} not found", call->target()->identifier());
+            throw CompileError("Function {0} not found", call->Target->Identifier);
         }
         Vector<Value> args;
         if (function->is<Method>()) {
@@ -83,7 +83,7 @@ namespace pepper {
             args.push_back(thisRef);
         }
 
-        const auto& callArgs = call->args();
+        const auto& callArgs = call->Args;
         for (auto argExpr : callArgs) {
             args.push_back(codegen(argExpr));
         }

@@ -19,74 +19,44 @@ namespace pepper::ast {
     class StructDef;
     class VariableDef;
 
-    class FunctionNode : public Symbol {
+    struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
         Name ReturnType;
         Params Parameters;
         const bool Vararg;
 
-      public:
         FunctionNode(const Name& returnType, const Name& name, const Params& params, bool vararg = false);
-
-        [[nodiscard]] const Name& returnType() const {
-            return ReturnType;
-        }
-
-        void setReturnType(const Name& newReturnType) {
-            ReturnType = newReturnType;
-        }
-
-        [[nodiscard]] const Params& params() const {
-            return Parameters;
-        }
-
-        [[nodiscard]] Params& params() {
-            return Parameters;
-        }
-
-        [[nodiscard]] bool isVararg() const {
-            return Vararg;
-        }
 
         virtual std::string toString() const override {
             Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
             std::string sig = llvm::formatv("{0} {1} {2}({3})",
                                             Node::toString(),
                                             ReturnType,
-                                            identifier(),
+                                            Identifier,
                                             llvm::join(types.begin(), types.end(), ", "));
             return sig;
         }
 
         std::string dump(int indent) const override {
-            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Identifier; });
+            Vector<std::string> types =
+                Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Identifier; });
             return llvm::formatv("{0} {1} {2}({3})",
                                  Node::dump(indent),
                                  ReturnType,
-                                 identifier(),
+                                 Identifier,
                                  llvm::join(types.begin(), types.end(), ", "));
         }
     };
 
-    class FunctionDef : public FunctionNode {
+    struct FunctionDef : public FunctionNode {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
-      private:
         Ref<Block> Body;
 
-      public:
         FunctionDef(const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
             Body = Ref<Block>::New(nullptr, name);
-        }
-
-        Ref<Block>& body() {
-            return Body;
-        }
-
-        [[nodiscard]] const Ref<Block>& body() const {
-            return Body;
         }
 
         std::string toString() const override {
@@ -102,10 +72,9 @@ namespace pepper::ast {
         }
     };
 
-    class ExternFunctionDef : public FunctionDef {
+    struct ExternFunctionDef : public FunctionDef {
         DECLARE_RTTI(ExternFunctionDef, FunctionDef);
 
-      public:
         ExternFunctionDef(
             const Name& returnType, const Name& name, const Params& params = Params(), bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
@@ -115,72 +84,49 @@ namespace pepper::ast {
         static Ref<ExternFunctionDef> Free;
     };
 
-    class FunctionCall : public Expression {
+    struct FunctionCall : public Expression {
         DECLARE_RTTI(FunctionCall, Expression);
+
         Ref<FunctionDef> Target;
         const Vector<Ref<Expression>> Args;
 
-      public:
         FunctionCall(Ref<FunctionDef> target, const Vector<Ref<Expression>>& args = {})
             : Target(target)
             , Args(args) {
         }
 
-        Ref<FunctionDef> target() const {
-            return Target;
-        }
-
-        const Vector<Ref<Expression>>& args() const {
-            return Args;
-        }
-
         const Name& type() const override {
-            return Target->returnType();
+            return Target->ReturnType;
         }
 
         std::string toString() const override {
-            Vector<std::string> argsStr = Query(args()).select<std::string>([](auto a) { return a->toString(); });
+            Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->toString(); });
             return trim(Node::toString() +
                         std::string(llvm::formatv(
-                            "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+                            "{0}({1})", Target->Identifier, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
 
         std::string dump(int indent) const override {
-            Vector<std::string> argsStr =
-                Query(args()).select<std::string>([indent](auto a) { return a->dump(indent); });
-            return trim(Node::dump() +
-                        std::string(llvm::formatv(
-                            "{0}({1})", Target->identifier(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+            Vector<std::string> argsStr = Query(Args).select<std::string>([indent](auto a) { return a->dump(indent); });
+            return trim(
+                Node::dump() + std::string(llvm::formatv(
+                                   "{0}({1})", Target->Identifier, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
     };
 
-    class Return : public Expression {
+    struct Return : public Expression {
         DECLARE_RTTI(Return, Expression);
 
-      private:
         Ref<FunctionDef> Target;
         Ref<Expression> Value;
 
-      public:
         Return(Ref<FunctionDef> target, Ref<Expression> value = nullptr)
             : Target(target)
             , Value(value) {
         }
 
         const Name& type() const override {
-            return Target->returnType();
-        }
-
-        Ref<Expression> value() const {
-            return Value;
-        }
-
-        void setValue(Ref<Expression> value) {
-            Value = value;
-        }
-
-        Ref<FunctionDef> target() const {
-            return Target;
+            return Target->ReturnType;
         }
 
         std::string toString() const override {

@@ -25,7 +25,7 @@ namespace pepper {
         elseBlock->insertInto(function);
         auto mergeBlock = llvm::BasicBlock::Create(context, "ifcont");
         mergeBlock->insertInto(function);
-        auto condition = codegen(branch->condition());
+        auto condition = codegen(branch->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
 
         // create conditional jump
@@ -34,15 +34,15 @@ namespace pepper {
         // generate then block
         ir()->SetInsertPoint(thenBlock);
         Value thenVal;
-        Query(branch->thenBlock()->Items).each([&](auto expr) { thenVal = codegen(expr); });
+        Query(branch->Then->Items).each([&](auto expr) { thenVal = codegen(expr); });
         ir()->CreateBr(mergeBlock);
         thenBlock = ir()->GetInsertBlock();
 
         // generate else block
         ir()->SetInsertPoint(elseBlock);
         Value elseVal;
-        if (branch->elseBlock()) {
-            Query(branch->elseBlock()->Items).each([&](auto expr) { elseVal = codegen(expr); });
+        if (branch->Else) {
+            Query(branch->Else->Items).each([&](auto expr) { elseVal = codegen(expr); });
         }
         ir()->CreateBr(mergeBlock);
         elseBlock = ir()->GetInsertBlock();

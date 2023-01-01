@@ -162,7 +162,7 @@ namespace pepper {
             auto symbol = lvaluePop<VariableDef>();
             if (context->assignmentExpression()) {
                 auto defaultValue = rvaluePop<Expression>();
-                symbol->setDefaultValue(defaultValue);
+                symbol->Default = defaultValue;
             }
 
             builder->symbol(symbol);
@@ -173,11 +173,11 @@ namespace pepper {
             auto symbol = builder->findSymbol(identifier);
             if (symbol && symbol->is<FieldDef>()) {
                 auto field = symbol.as<FieldDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->identifier());
+                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->Identifier);
             }
             if (symbol && symbol->is<MethodDef>()) {
                 auto method = symbol.as<MethodDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(method->structDef()), method->identifier());
+                return builder->New<MemberRef>(Ref<ThisRef>::New(method->Struct), method->Identifier);
             }
             // anything else can be looked up later, at codegen/pass time
             return builder->New<VariableRef>(identifier);
@@ -286,7 +286,7 @@ namespace pepper {
 
                 // lookup the desired field
                 auto st = builder->structTarget();
-                auto field = Query(st->Fields).find([&](auto f) { return f->identifier() == fieldName; });
+                auto field = Query(st->Fields).find([&](auto f) { return f->Identifier == fieldName; });
                 if (!field) {
                     throw CompileError("Unknown field {0} found during this initializer", fieldName);
                 }
@@ -294,10 +294,10 @@ namespace pepper {
                 // generate a parameter to receive the argument value/establish defaults
                 auto paramName = "__this__" + fieldName;
                 auto func = builder->functionTarget();
-                func->Parameters.emplace_back(paramName, field.value()->type(), defaultValue);
+                func->Parameters.emplace_back(paramName, field.value()->Type, defaultValue);
 
                 // GreaterEqual the assignment to the field to the ctor
-                func->body()->Items.push_back(builder->New<Assign>(
+                func->Body->Items.push_back(builder->New<Assign>(
                     builder->New<MemberRef>(Ref<ThisRef>::New(st), fieldName), builder->New<VariableRef>(paramName)));
             }
         }
@@ -391,10 +391,10 @@ namespace pepper {
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = builder->New<If>();
             if (context->ifStatement()) {
-                branch->thenBlock() = Ref<Block>::New(branch, "then");
+                branch->Then = Ref<Block>::New(branch, "then");
             }
             if (context->elseStatement()) {
-                branch->elseBlock() = Ref<Block>::New(branch, "else");
+                branch->Else = Ref<Block>::New(branch, "else");
             }
             builder->beginScope("select");
             lvaluePush(branch);
@@ -416,12 +416,12 @@ namespace pepper {
         void exitIfCondition(PepperParser::IfConditionContext* context) override {
             auto branch = lvaluePeek<Branch>();
             branch->Condition = rvaluePop<Expression>();
-            builder->beginBlock(branch->thenBlock());
+            builder->beginBlock(branch->Then);
         }
 
         void enterElseStatement(PepperParser::ElseStatementContext* context) override {
             auto branch = lvaluePeek<Branch>();
-            builder->beginBlock(branch->elseBlock());
+            builder->beginBlock(branch->Else);
         }
 
         void exitElseStatement(PepperParser::ElseStatementContext* context) override {

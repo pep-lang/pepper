@@ -8,7 +8,7 @@
 #include "AST/Variables.h"
 
 namespace pepper::ast {
-    class While : public Node {
+    struct While : public Node {
         DECLARE_RTTI(While, Node);
 
         Ref<Expression> Condition;
@@ -23,7 +23,7 @@ namespace pepper::ast {
         }
     };
 
-    class ForRange : public Node {
+    struct ForRange : public Node {
         DECLARE_RTTI(ForRange, Node);
 
         Ref<VariableDef> Var;

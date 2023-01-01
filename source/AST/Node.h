@@ -14,12 +14,11 @@ namespace llvm {
 
 namespace pepper::ast {
 
-    class Node {
+    struct Node {
         DECLARE_RTTI(Node);
 
         SourceLocation Source;
 
-      public:
         Node() = default;
         virtual ~Node() = default;
 
@@ -30,13 +29,12 @@ namespace pepper::ast {
 
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
     // in the stack to cause r-values to be collected
-    class Pending : public Node {
+    struct Pending : public Node {
         DECLARE_RTTI(Pending, Node);
 
         const RTTI* Type;
         Ref<Node> Value;
 
-      public:
         template <typename N>
         Pending(Ref<N> node) {
             Value = node;
@@ -51,10 +49,9 @@ namespace pepper::ast {
         }
     };
 
-    class Symbol : public Node {
+    struct Symbol : public Node {
         DECLARE_RTTI(Symbol, Node);
 
-      private:
         Name Type;
         Name Identifier;
 
@@ -62,14 +59,6 @@ namespace pepper::ast {
         Symbol(const Name& type, const Name& name)
             : Type(type)
             , Identifier(name) {
-        }
-
-        [[nodiscard]] const Name& type() const {
-            return Type;
-        }
-
-        [[nodiscard]] const Name& identifier() const {
-            return Identifier;
         }
     };
 
