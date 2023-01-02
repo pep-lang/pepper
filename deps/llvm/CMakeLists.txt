@@ -104,6 +104,8 @@ if (LISTS_NEWER OR NOT LLVM_FOUND)
     )
 
     # re-do the find_package now that it should succeed
+    find_package(LLD REQUIRED CONFIG NO_DEFAULT_PATH
+            HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
     find_package(LLVM REQUIRED CONFIG NO_DEFAULT_PATH
             HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 endif ()
@@ -135,5 +137,11 @@ set(LLVM_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLVM Include Dir
 set(LLVM_LIBRARY_DIRS ${LLVM_INSTALL_DIR}/lib CACHE STRING "LLVM Library Directories")
 set(LLVM_LIBRARIES ${LLVM_LIBRARIES} CACHE STRING "LLVM libraries selected for linking")
 
-message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
+set(LLD_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLD Include Directories")
+set(LLD_LIBRARIES "lldCommon;lldCOFF;lldELF;lldMachO;lldMinGW;lldWasm")
+
+message(STATUS "LLVM includes:  ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
+
+message(STATUS "LLD includes:   ${LLD_INCLUDE_DIRS}")
+message(STATUS "LLD libraries:  ${LLD_LIBRARIES}")

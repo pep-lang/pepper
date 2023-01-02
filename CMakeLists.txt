@@ -36,7 +36,7 @@ add_dependencies(PepperCore PepperParser)
 target_compile_definitions(PepperCore
         PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_include_directories(PepperCore
-        PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS}
+        PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS} ${LLD_INCLUDE_DIRS}
         )
 
 source_group(
@@ -46,7 +46,7 @@ source_group(
 add_executable(pepper source/main.cpp)
 add_dependencies(pepper PepperParser PepperCore)
 target_link_libraries(pepper
-        PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR4_LIBRARIES})
+        PepperCore PepperParser ${LLVM_LIBRARIES} ${LLD_LIBRARIES} ${ANTLR4_LIBRARIES})
 target_compile_definitions(pepper
         PRIVATE ${LLVM_DEFINITIONS_LIST})
 
