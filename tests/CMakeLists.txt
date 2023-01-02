@@ -17,6 +17,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(PepperTests
+        TestUtils.cpp
         FloatMath.cpp
         Function.cpp
         IntMath.cpp
