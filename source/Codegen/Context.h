@@ -20,23 +20,22 @@ namespace pepper {
     class Types;
     class UserFunction;
     class Method;
+    class Runtime;
 
     class Context {
         static Context* Instance;
 
         Ref<ModuleContext> Module;
         Ref<Types> TypeMap;
-        Ref<Scope> Builtins;
+        Ref<Runtime> Builtins;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
-        Ref<llvm::DIBuilder> DebugInfo;
 
       public:
         static Context& get();
         static Ref<llvm::IRBuilderBase> ir();
-        static Ref<llvm::DIBuilder> dbg();
 
-        explicit Context(const std::string& moduleName);
+        explicit Context(Ref<ModuleContext> module);
         ~Context();
 
         [[nodiscard]] llvm::Module* module() const;
@@ -61,7 +60,7 @@ namespace pepper {
             return Locals;
         }
 
-        [[nodiscard]] Ref<Scope> runtime() const {
+        [[nodiscard]] Ref<Runtime> runtime() const {
             return Builtins;
         }
 

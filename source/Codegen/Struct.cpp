@@ -7,7 +7,6 @@
 #include "llvm/IR/Module.h"
 
 namespace pepper {
-    llvm::StringMap<Ref<Struct>> Struct::Structs;
 
     Struct::Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams)
         : StructType(type)
@@ -25,8 +24,12 @@ namespace pepper {
 
     Ref<Struct> Struct::New(Ref<TypeInfo> type, const Ident& name, const Params& newParams) {
         Ref<Struct> newStruct = Ref<Struct>::New(type, name, newParams);
-        Structs[name] = newStruct;
+        Context::get().globals()->Structs[name] = newStruct;
         return newStruct;
+    }
+
+    Ref<Struct> Struct::get(const Ident& name) {
+        return Context::get().globals()->Structs.lookup(name);
     }
 
     llvm::Value* Struct::getMember(llvm::Value* instance, const Ident& name) const {

@@ -132,7 +132,8 @@ namespace pepper::ast {
         Ref<Node> popRValue() override {
             auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
-                throw InternalCompilerError("Attempted to pop empty r-value stack");
+                Messages::Report<Warning>("Attempted to pop empty r-value stack");
+                return nullptr;
             }
             auto val = scope->RValueStack.pop_back_val();
             //            std::cout << "rpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;

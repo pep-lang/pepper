@@ -5,8 +5,10 @@
 #pragma once
 
 #include "Codegen/Scope.h"
+#include "Core/Common.h"
 
 namespace pepper {
+
     class Runtime : public Scope {
       public:
         Runtime();

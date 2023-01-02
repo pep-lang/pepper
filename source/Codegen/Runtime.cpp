@@ -5,7 +5,9 @@
 #include "Codegen/Runtime.h"
 
 #include "Codegen/Function.h"
+#include "Codegen/ModuleContext.h"
 #include "Codegen/Param.h"
+#include "Codegen/Symbols.h"
 #include "Codegen/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"

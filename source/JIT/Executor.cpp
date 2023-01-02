@@ -2,6 +2,7 @@
 #include "JIT/Executor.h"
 
 #include "Codegen/ModuleContext.h"
+#include "Codegen/Runtime.h"
 #include "Core/Exceptions.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"

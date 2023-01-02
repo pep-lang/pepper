@@ -476,11 +476,6 @@ namespace pepper {
                 } else {
                     loop->Init = rvaluePop<Expression>();
                 }
-                if (!loop->Step) {
-                    // TODO: figure out which is larger and set the step pos or neg
-                    // TODO: emit a range that encapsulates all of this
-                    loop->Step = builder->New<IntegerLiteral>(1);
-                }
             }
         }
 

@@ -33,6 +33,8 @@ namespace pepper {
         llvm::StringMap<Value> Symbols;
         Vector<std::string> OrderedSymbols;
 
+        llvm::StringMap<Ref<Struct>> Structs;
+
         llvm::StringMap<Ref<Function>> Functions;
         Ref<Function> FunctionTarget;
 

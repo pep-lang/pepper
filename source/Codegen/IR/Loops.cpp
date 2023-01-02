@@ -8,10 +8,12 @@
 #include "AST/Loops.h"
 
 #include "Codegen/Context.h"
+#include "Codegen/Function.h"
 #include "Codegen/IR/Codegen.h"
 #include "Codegen/IR/Value.h"
 #include "Codegen/LLVMUtils.h"
 #include "Codegen/ModuleContext.h"
+#include "Codegen/Struct.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
@@ -56,10 +58,36 @@ namespace pepper {
         auto mergeBlock = llvm::BasicBlock::Create(context, "forcont");
         mergeBlock->insertInto(function);
         auto init = codegen(loop->Init);
+        auto end = maybeCodegen(loop->Done);
+        auto step = maybeCodegen(loop->Step);
 
-        // TODO: insert range here
+        Vector<Value> args;
+        args.emplace_back(init);
+        if (end)
+            args.emplace_back(end);
+        if (step)
+            args.emplace_back(step);
 
-        return Value();
+        auto rangeStruct = Struct::get("range");
+        auto rangeNew = Context::get().locals()->findFunction("range");
+        auto range = rangeNew->call(args);
+
+        auto next = rangeStruct->method("next");
+        auto condition = next->call({range});
+
+        // initial condition check
+        ir()->CreateCondBr(condition, bodyBlock, mergeBlock);
+        ir()->SetInsertPoint(bodyBlock);
+        // body
+        Query(loop->Body->Items).each([this](auto& expr) { codegen(expr); });
+        // update condition
+        condition = next->call({range});
+        ir()->CreateCondBr(condition, bodyBlock, mergeBlock);
+
+        ir()->SetInsertPoint(mergeBlock);
+
+        return Value(Types::VoidPtr,
+                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
 
 } // namespace pepper

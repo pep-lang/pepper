@@ -20,9 +20,9 @@ namespace TestUtils {
     }
 
     inline int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry = "test") {
-        auto compiler = Compiler::Create(name);
+        auto compiler = Compiler::Create(name, name);
         auto sourceStream = std::istringstream(source);
-        auto context = compiler->compile(sourceStream, name);
+        auto context = compiler->compile(sourceStream);
         auto executor = Executor::Create();
         return executor->execute(context, entry);
     }

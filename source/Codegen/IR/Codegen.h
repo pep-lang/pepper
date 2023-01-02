@@ -41,18 +41,18 @@ namespace pepper {
     class ModuleContext;
     class Function;
     class Method;
+    class Runtime;
 
     class Codegen {
       protected:
-        Ref<ast::AST> Tree;
         Ref<Context> Ctx;
         Ref<ModuleContext> Module;
 
       public:
-        Codegen(const Ident& moduleName, Ref<ast::AST> tree);
+        Codegen(Ref<ModuleContext> module);
 
         // entry point to codegen, runs all the roots of the AST and generates them
-        Ref<ModuleContext> emit();
+        void generate(Ref<ast::AST> parseTree);
 
       protected:
         template <typename N>

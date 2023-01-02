@@ -1,8 +1,8 @@
 
 #include "Codegen/Context.h"
 #include <cassert>
+#include <utility>
 
-#include "AST/AST.h"
 #include "Codegen/Function.h"
 #include "Codegen/ModuleContext.h"
 #include "Codegen/Runtime.h"
@@ -11,7 +11,6 @@
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Support/TargetSelect.h"
 
 namespace pepper {
     Context* Context::Instance = nullptr;
@@ -25,24 +24,11 @@ namespace pepper {
         return get().locals()->builder();
     }
 
-    //    Ref<llvm::IRBuilderBase> Context::registers() {
-    //        return get().locals()->registers();
-    //    }
-
-    Ref<llvm::DIBuilder> Context::dbg() {
-        return get().DebugInfo;
-    }
-
-    Context::Context(const std::string& moduleName) {
+    Context::Context(Ref<ModuleContext> module) {
         assert(Instance == nullptr);
         Instance = this;
 
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmPrinter();
-        llvm::InitializeNativeTargetAsmParser();
-
-        Module = Ref<ModuleContext>::New(moduleName);
-        DebugInfo = Ref<llvm::DIBuilder>::New(*(*Module));
+        Module = std::move(module);
 
         TypeMap = Ref<Types>::New(*Module->getContext());
 

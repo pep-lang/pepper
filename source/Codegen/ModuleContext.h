@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "Codegen/DebugInfo.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "llvm/Support/Error.h"
@@ -14,13 +15,18 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
+    class DebugInfo;
+    class Scope;
+    class Symbols;
+
     class ModuleContext {
         Ident ModuleName;
         std::unique_ptr<llvm::LLVMContext> Context;
         std::unique_ptr<llvm::Module> Module;
+        //std::unique_ptr<DebugInfo> Debug;
 
       public:
-        ModuleContext(const Ident& name);
+        ModuleContext(const Ident& name, const std::string& sourcePath);
 
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
         std::unique_ptr<llvm::Module>&& takeModule();
@@ -32,6 +38,10 @@ namespace pepper {
         llvm::LLVMContext* getContext() const {
             return Context.get();
         }
+
+//        DebugInfo* getDebugInfo() const {
+//            return Debug.get();
+//        }
 
         llvm::Error verify() const;
 

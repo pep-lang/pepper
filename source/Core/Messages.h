@@ -63,7 +63,9 @@ namespace pepper {
         AST = 1 << 0,
         Codegen = 1 << 1,
         Parser = 1 << 2,
+        IR = 1 << 3,
         ALL = 0xffffffff,
+        NONE = 0,
     };
 
     class Messages {

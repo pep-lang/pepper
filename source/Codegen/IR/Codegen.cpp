@@ -150,15 +150,14 @@ namespace pepper {
         return value;
     }
 
-    Codegen::Codegen(const Ident& moduleName, Ref<ast::AST> tree)
-        : Tree(tree) {
-        Ctx = Ref<Context>::New(moduleName);
+    Codegen::Codegen(Ref<ModuleContext> module) {
+        Ctx = Ref<Context>::New(module);
         Module = Ctx->moduleContext();
     }
 
-    Ref<ModuleContext> Codegen::emit() {
+    void Codegen::generate(Ref<ast::AST> tree) {
         PEP_TRACE(TraceChannel::Codegen, "Code generation:")
-        for (auto root : Tree->roots()) {
+        for (auto root : tree->roots()) {
             try {
                 if (root->is<StructDef>())
                     emit(root.as<StructDef>());
@@ -168,9 +167,7 @@ namespace pepper {
                 Messages::Report<Error>(ce.what());
             } catch (InternalCompilerError ice) {
                 Messages::Report<Error>(ice.what());
-                return nullptr;
             }
         }
-        return Context::get().moduleContext();
     }
 } // namespace pepper

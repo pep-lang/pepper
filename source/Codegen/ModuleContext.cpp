@@ -4,7 +4,10 @@
 
 #include <memory>
 
+#include "Codegen/DebugInfo.h"
 #include "Codegen/ModuleContext.h"
+#include "Codegen/Scope.h"
+#include "Codegen/Symbols.h"
 #include "Core/Exceptions.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
 #include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
@@ -25,22 +28,22 @@ namespace pepper {
 
         llvm::orc::JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
         auto DL = JTMB.getDefaultDataLayoutForTarget();
-        if (!DL) {
-            throw InternalCompilerError("Unable to get default layout for target: {0}", llvm::toString(DL.takeError()));
-        }
 
-        auto err = ES->endSession();
-        if (err) {
+        if (auto err = ES->endSession()) {
             throw InternalCompilerError("Failed to end temporary execution session: {0}",
                                         llvm::toString(std::move(err)));
+        }
+        if (!DL) {
+            throw InternalCompilerError("Unable to get default layout for target: {0}", llvm::toString(DL.takeError()));
         }
         return DL.get();
     }
 
-    ModuleContext::ModuleContext(const Ident& name)
+    ModuleContext::ModuleContext(const Ident& name, const std::string& sourcePath)
         : ModuleName(name) {
         Context = std::make_unique<llvm::LLVMContext>();
         Module = std::make_unique<llvm::Module>(name, *Context);
+        // Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
 
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
         Module->setTargetTriple(targetTriple);
@@ -71,6 +74,5 @@ namespace pepper {
         llvm::raw_string_ostream stream(ir);
         Module->print(stream, nullptr, false, true);
         return ir;
-        ;
     }
 } // namespace pepper

@@ -14,8 +14,8 @@ int main(int argc, char** argv) {
         auto contents = buffer.str();
         std::istringstream sourceStream(contents);
         auto sourcePath = std::filesystem::path(sourceFile);
-        auto compiler = pepper::Compiler::Create(sourcePath.filename().string());
-        return compiler->compile(sourceStream, sourcePath.string()) != nullptr;
+        auto compiler = pepper::Compiler::Create(sourcePath.filename().string(), sourcePath.string());
+        compiler->compile(sourceStream);
     }
 
     return 0;

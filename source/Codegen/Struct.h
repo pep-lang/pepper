@@ -23,8 +23,6 @@ namespace pepper {
         size_t Size;
         size_t Align;
 
-        static llvm::StringMap<Ref<Struct>> Structs;
-
       public:
         Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
         static Ref<Struct> New(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
@@ -104,8 +102,6 @@ namespace pepper {
             return Align;
         }
 
-        static Ref<Struct> get(const Ident& name) {
-            return Structs.lookup(name);
-        }
+        static Ref<Struct> get(const Ident& name);
     };
 } // namespace pepper
