@@ -11,6 +11,7 @@
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
+#include "Core/Query.h"
 #include "llvm/Support/Error.h"
 
 namespace pepper {
@@ -51,6 +52,7 @@ namespace pepper {
             auto module = gen.emit();
 
             if (!module || Messages::errors().size()) {
+                Query(Messages::errors()).each([](auto e) { std::cerr << e.message() << std::endl; });
                 throw CompileError("Error(s) encountered, cannot continue");
             }
 
