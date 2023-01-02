@@ -167,11 +167,11 @@ storageClassSpecifier
 	;
 
 typeSpecifier
-: variableSpecifier | structDeclaration
+    : variableSpecifier
 	;
 
 variableSpecifier
-    : Identifier Identifier (Assign assignmentExpression)?
+    : Identifier Brackets? Identifier (Assign assignmentExpression)?
     ;
 
 structDeclaration
@@ -620,6 +620,10 @@ SChar
     |   EscapeSequence
     |   '\\\n'   // Added line
     |   '\\\r\n' // Added line
+    ;
+
+Brackets
+    : LeftBracket RightBracket
     ;
 
 Whitespace
