@@ -98,12 +98,12 @@ namespace pepper::ast {
         DECLARE_RTTI(MethodCall, Expression);
 
         Ref<Expression> This;
-        const Ident MethodName;
+        const Ident Name;
         Vector<Ref<Expression>> Args;
 
         MethodCall(Ref<Expression> thisRef, const Ident& methodName, const Vector<Ref<Expression>>& args = {})
             : This(thisRef)
-            , MethodName(methodName)
+            , Name(methodName)
             , Args(args) {
         }
     };

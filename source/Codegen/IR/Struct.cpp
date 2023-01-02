@@ -57,11 +57,28 @@ namespace pepper {
             fields.emplace_back(field->Name, type);
         }
 
+        // apply constructor parameters to new
+        if (structDef->Constructor->Parameters.size() > structDef->NewInstance->Parameters.size()) {
+            structDef->NewInstance->Parameters = structDef->Constructor->Parameters;
+            auto ctorCall = Query(structDef->NewInstance->Body->Items).find([](auto instr) {
+                return instr->template is<MethodCall>() && instr.template as<MethodCall>()->Name == "__ctor";
+            });
+            assert(ctorCall && "ctor call not found in new");
+            auto ctor = ctorCall.value().as<MethodCall>();
+            for (auto& arg : structDef->NewInstance->Parameters) {
+                ctor->Args.emplace_back(Ref<VariableRef>::New(arg.Name));
+            }
+        }
+
+        auto newParams = Query(structDef->NewInstance->Parameters).select<pepper::Param>([this](auto p) {
+            return pepper::Param{p.Name, Types::get(p.Type), maybeCodegen(p.Default)};
+        });
+
         // generate the new struct type
         auto llvmType = llvm::StructType::create(fieldTypes, structDef->Name);
         auto structType = Types::add(Ref<TypeInfo>::New(structDef->Name, llvmType));
         auto structPtrType = Types::get(structDef->Name);
-        auto structDesc = Struct::New(structType, structDef->Name);
+        auto structDesc = Struct::New(structType, structDef->Name, newParams);
         structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
@@ -120,9 +137,9 @@ namespace pepper {
     Value Codegen::emit(Ref<MethodCall> call) {
         auto thisRef = codegen(call->This);
         auto st = Struct::get(thisRef.Ty->name());
-        auto method = st->method(call->MethodName).as<Method>();
+        auto method = st->method(call->Name).as<Method>();
         if (!method) {
-            throw CompileError("Method {0} not found", call->MethodName);
+            throw CompileError("Method {0} not found", call->Name);
         }
         Vector<Value> args;
         thisRef = read(thisRef);

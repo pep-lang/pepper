@@ -60,30 +60,34 @@ int test() {
     EXPECT_EQ(10, CompileAndRun(TestName(test_info_), source));
 }
 
-/*
-TEST(Structs, DISABLED_Range) {
+TEST(Structs, Range) {
     const char* source = R"SOURCE(
 struct range {
-    int current;
+    int start;
+    int current = 0xffffffff;
     int end;
     int step;
 
-    new(int start, int end, int step=1) {
-        this.current = start;
-        this.end = end;
-        this.step = step;
-    }
+    new(this.start, this.end, this.step=1) {}
 }
 
-extend range with {
+extend range {
     bool next() {
-        this.current += step;
-        return this.current < end;
+        if (current == 0xffffffff) {
+            current = start;
+        } else {
+            current += step;
+        }
+        return current < end;
+    }
+
+    int value() {
+        return current;
     }
 }
 
 int test() {
-    range r = range(0, 10, 1)
+    range r = range(0, 10)
     int x = 0;
     while (r.next()) {
         x += 1;
@@ -93,4 +97,3 @@ int test() {
     )SOURCE";
     EXPECT_EQ(10, CompileAndRun(TestName(test_info_), source));
 }
-*/

@@ -9,11 +9,11 @@
 namespace pepper {
     llvm::StringMap<Ref<Struct>> Struct::Structs;
 
-    Struct::Struct(Ref<TypeInfo> type, const Ident& name)
+    Struct::Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams)
         : StructType(type)
         , Identifier(name) {
         // deal with params at some point
-        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name()));
+        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name()), newParams);
 
         // compute size from data layout
         auto module = Context::get().module();
@@ -23,8 +23,8 @@ namespace pepper {
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Ident& name) {
-        Ref<Struct> newStruct = Ref<Struct>::New(type, name);
+    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Ident& name, const Params& newParams) {
+        Ref<Struct> newStruct = Ref<Struct>::New(type, name, newParams);
         Structs[name] = newStruct;
         return newStruct;
     }

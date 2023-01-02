@@ -26,8 +26,8 @@ namespace pepper {
         static llvm::StringMap<Ref<Struct>> Structs;
 
       public:
-        Struct(Ref<TypeInfo> type, const Ident& name);
-        static Ref<Struct> New(Ref<TypeInfo> type, const Ident& name);
+        Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
+        static Ref<Struct> New(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
 
         Ref<TypeInfo> type() const {
             return StructType;
