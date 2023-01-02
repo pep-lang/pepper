@@ -8,6 +8,7 @@ set(LLVM_GIT_REPO "https://github.com/llvm/llvm-project")
 set(LLVM_GIT_TAG "llvmorg-15.0.0")
 set(LLVM_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm-project)
 set(LLVM_RUNTIME_SOURCE_DIR ${LLVM_SOURCE_DIR}/llvm)
+set(LLVM_LLD_SOURCE_DIR ${LLVM_SOURCE_DIR}/lld)
 set(LLVM_BUILD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/build)
 set(LLVM_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/install)
 
@@ -59,7 +60,8 @@ if (LISTS_NEWER OR NOT LLVM_FOUND)
             -DLLVM_OPTIMIZED_TABLEGEN=ON
             -DLLVM_ENABLE_RTTI=ON
             "-DLLVM_TARGETS_TO_BUILD=X86"
-            "-DLLVM_ENABLE_PROJECTS=lld"
+            -DLLVM_ENABLE_PROJECTS=lld
+            -DLLVM_ENABLE_LLD=ON
             -DLLVM_ENABLE_ASSERTIONS=ON
             -DLLVM_INCLUDE_TOOLS=OFF
             -DLLVM_INCLUDE_TESTS=OFF
@@ -70,6 +72,32 @@ if (LISTS_NEWER OR NOT LLVM_FOUND)
     message(STATUS "Building LLVM...")
     execute_process(
             WORKING_DIRECTORY ${LLVM_BUILD_DIR}
+            COMMAND_ECHO STDOUT
+            COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} --target install
+            COMMAND_ERROR_IS_FATAL ANY
+    )
+
+    message(STATUS "Configuring LLD...")
+    file(MAKE_DIRECTORY ${LLVM_BUILD_DIR}/lld)
+    execute_process(
+            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
+            COMMAND_ECHO STDOUT
+            COMMAND ${CMAKE_COMMAND}
+            -G ${CMAKE_GENERATOR}
+            ${LLVM_GENERATOR_TOOLSET}
+            ${LLVM_GENERATOR_PLATFORM}
+            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
+            -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
+            -DLLVM_ENABLE_RTTI=ON
+            -DLLVM_ENABLE_ASSERTIONS=ON
+            -DLLVM_INCLUDE_TESTS=OFF
+            ${LLVM_LLD_SOURCE_DIR}
+    )
+
+    message(STATUS "Building LLD...")
+    execute_process(
+            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
             COMMAND_ECHO STDOUT
             COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} --target install
             COMMAND_ERROR_IS_FATAL ANY
