@@ -108,6 +108,11 @@ namespace pepper {
             auto type = allocaInst->getAllocatedType();
             return Value(value.Ty, ir()->CreateLoad(type, value));
         }
+        if (isa<llvm::GetElementPtrInst>(*value)) {
+            auto gep = cast<llvm::GetElementPtrInst>(value.V);
+            auto type = gep->getPointerOperandType();
+            return Value(value.Ty, ir()->CreateLoad(*value.Ty, value));
+        }
         return value;
     }
 
