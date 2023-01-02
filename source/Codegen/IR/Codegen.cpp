@@ -5,10 +5,8 @@
 #include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Codegen/Context.h"
-#include "Codegen/Function.h"
 #include "Codegen/LLVMUtils.h"
 #include "Codegen/ModuleContext.h"
-#include "Codegen/Struct.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
@@ -151,8 +149,7 @@ namespace pepper {
     }
 
     Codegen::Codegen(Ref<ModuleContext> module) {
-        Ctx = Ref<Context>::New(module);
-        Module = Ctx->moduleContext();
+        Module = Context::get().moduleContext();
     }
 
     void Codegen::generate(Ref<ast::AST> tree) {

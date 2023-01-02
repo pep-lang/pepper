@@ -5,7 +5,9 @@
 
 #include "Codegen/ModuleContext.h"
 #include "Compiler/Compiler.h"
+#include "Compiler/Options.h"
 #include "Core/Common.h"
+#include "Core/Messages.h"
 #include "JIT/Executor.h"
 #include "gtest/gtest.h"
 #include "llvm/IR/LLVMContext.h"
@@ -20,10 +22,16 @@ namespace TestUtils {
     }
 
     inline int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry = "test") {
-        auto compiler = Compiler::Create(name, name);
-        auto sourceStream = std::istringstream(source);
-        auto context = compiler->compile(sourceStream);
+        Messages::SetTraceChannels(TraceChannel::ALL);
+        auto sourceStream = std::make_unique<std::istringstream>(source);
+        auto options = Options::Defaults();
+        options->ModuleName = name;
+        options->SourceFiles.emplace_back(name);
+        options->InputStream = std::move(sourceStream);
+        auto compiler = Compiler::Create(options);
+        auto modules = compiler->compile();
+        auto module = modules[0];
         auto executor = Executor::Create();
-        return executor->execute(context, entry);
+        return executor->execute(module, entry);
     }
 } // namespace TestUtils

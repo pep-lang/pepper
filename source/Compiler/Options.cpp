@@ -17,9 +17,9 @@ namespace pepper {
         return std::filesystem::path(path).filename().string();
     }
 
-    Ref<Options> Options::fromCommandLine(int argc, const char** argv) {
+    Ref<Options> Options::FromCommandLine(int argc, const char** argv) {
         llvm::cl::ParseCommandLineOptions(argc, argv);
-        auto opts = std::make_shared<Options>();
+        auto opts = Defaults();
         opts->SourceFiles.assign(cli::SourceFiles.begin(), cli::SourceFiles.end());
         opts->OutputPath = cli::OutputPath;
         if (cli::OutputPath.length() > 0)
@@ -27,6 +27,11 @@ namespace pepper {
         else
             opts->ModuleName = PathToFilename(cli::SourceFiles.front());
 
+        return opts;
+    }
+
+    Ref<Options> Options::Defaults() {
+        auto opts = Ref<Options>::New();
         return opts;
     }
 
