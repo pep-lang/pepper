@@ -130,8 +130,9 @@ namespace pepper {
                 }
             }
             try {
-                auto intVal = std::stoll(value);
-                return builder->New<IntegerLiteral>(intVal);
+                int64_t intVal = 0;
+                if (llvm::to_integer(value, intVal))
+                    return builder->New<IntegerLiteral>(intVal);
             } catch (std::invalid_argument) {
             }
 
