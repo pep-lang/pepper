@@ -49,7 +49,7 @@ namespace pepper {
 
       public:
         template <typename U>
-        QueryInst<U> select(std::function<U(const T&)> selector) {
+        QueryInst<U> select(std::function<U(const T&)> selector) const {
             Vector<U> results;
             std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
             return QueryInst<U>(std::move(results));
@@ -61,17 +61,25 @@ namespace pepper {
             return QueryInst(std::move(results));
         }
 
-        QueryInst where(std::function<bool(const T&)> selector) {
+        QueryInst where(std::function<bool(const T&)> selector) const {
             Vector<T> results;
             std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
             return QueryInst(std::move(results));
         }
 
-        QueryInst without(std::function<bool(const T&)> selector) {
+        QueryInst without(std::function<bool(const T&)> selector) const {
             Vector<T> results;
             std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), [&selector](const T& item) {
                 return !selector(item);
             });
+            return QueryInst(std::move(results));
+        }
+
+        QueryInst range(size_t start, ssize_t len = -1) const {
+            Vector<T> results;
+            auto startIt = Ref.begin() + start;
+            len = (len == -1) ? std::distance(startIt, Ref.end()) : len;
+            std::copy_n(startIt, len, std::back_inserter(results));
             return QueryInst(std::move(results));
         }
 
@@ -84,11 +92,27 @@ namespace pepper {
             return *this;
         }
 
-        void each(std::function<void(const T&)> func) {
+        ssize_t indexOf(const T& item, size_t startIndex = 0) const {
+            auto it = std::find(Ref.begin() + startIndex, Ref.end(), item);
+            if (it != Ref.end()) {
+                return std::distance(Ref.begin(), it);
+            }
+            return -1;
+        }
+
+        ssize_t indexOf(std::function<bool(const T&)> pred, size_t startIndex = 0) const {
+            auto it = std::find_if(Ref.begin() + startIndex, Ref.end(), pred);
+            if (it != Ref.end()) {
+                return std::distance(Ref.begin(), it);
+            }
+            return -1;
+        }
+
+        void each(std::function<void(const T&)> func) const {
             std::for_each(Ref.begin(), Ref.end(), func);
         }
 
-        std::optional<T> find(std::function<bool(const T&)> pred) {
+        std::optional<T> find(std::function<bool(const T&)> pred) const {
             auto it = std::find_if(Ref.begin(), Ref.end(), pred);
             if (it != Ref.end()) {
                 return *it;
