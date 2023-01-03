@@ -31,8 +31,8 @@ arrayAccess
     : primaryExpression '[' expression ']'
     ;
 
-functionCall:
-	Identifier '(' argumentExpressionList? ')'		# FreeFunctionCall
+functionCall
+    : typeSpecifier '(' argumentExpressionList? ')'		# FreeFunctionCall
 	| memberAccess '(' argumentExpressionList? ')'	# MethodCall
     ;
 

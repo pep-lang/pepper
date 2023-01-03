@@ -90,9 +90,14 @@ namespace pepper::ast {
 
         // replace types in method return types and params
         for (const auto& srcMethod : GenericStruct->Methods) {
+            // Do not specialized init/ctor/dtor
+            if (srcMethod->Name.starts_with("__"))
+                continue;
             auto method = specializeMethod(srcMethod, shared_from_this());
             Methods.emplace_back(method);
         }
+
+        // Specialize the constructor (args could change), but the other functions can be defaulted
         Constructor = specializeMethod(GenericStruct->Constructor, shared_from_this());
     }
 

@@ -48,6 +48,11 @@ namespace pepper {
     }
 
     Ref<Struct> Codegen::emit(Ref<StructDef> structDef) {
+        // Generic struct bases are effectively abstract, so can't be instantiated
+        if (!structDef->GenericParams.empty()) {
+            return nullptr;
+        }
+
         // convert fields to symbols before type gen
         pepper::Params fields;
         Vector<llvm::Type*> fieldTypes;

@@ -158,6 +158,9 @@ namespace pepper {
         void enterVariableDeclaration(PepperParser::VariableDeclarationContext* context) override {
             auto typeName = parseTypeName(context->typeSpecifier());
             auto identifier = context->Identifier()->toString();
+            if (!typeName.GenericTypes.empty()) {
+                builder->specialize(typeName);
+            }
 
             if (builder->structTarget()) {
                 lvaluePush(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
@@ -363,8 +366,12 @@ namespace pepper {
 
         void exitFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
             lvaluePop<FunctionCall>();
-            auto identifier = context->Identifier()->toString();
+            auto functionName = parseTypeName(context->typeSpecifier());
+            auto identifier = functionName.toString();
             auto func = builder->findFunction(identifier);
+            if (!func) {
+                throw CompileError("Function {0} not found", identifier);
+            }
             auto providedArgsCount = context->argumentExpressionList()
                                          ? context->argumentExpressionList()->assignmentExpression().size()
                                          : 0;

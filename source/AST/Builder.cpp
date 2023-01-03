@@ -115,8 +115,17 @@ namespace pepper::ast {
         }
 
         Ref<StructDef> specialize(const TypeName& spec) override {
+            auto& scope = ScopeStack.back();
+            auto genericStruct = findStruct(spec.Name);
+            if (!genericStruct) {
+                throw CompileError("Cannot specialize non-existent struct {0}", spec.Name);
+            }
             auto specialized = StructDef::New(spec);
-            specialized->specialize(findStruct(spec.Name), {spec.GenericTypes.begin(), spec.GenericTypes.end()});
+            specialized->specialize(genericStruct, {spec.GenericTypes.begin(), spec.GenericTypes.end()});
+            specialized->finish();
+            ast.newRoot(specialized);
+            scope->Structs[spec.toString()] = specialized;
+            scope->Functions[spec.toString()] = specialized->NewInstance;
             return specialized;
         }
 
