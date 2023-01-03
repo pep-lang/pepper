@@ -124,8 +124,15 @@ namespace pepper::ast {
             specialized->specialize(genericStruct, {spec.GenericTypes.begin(), spec.GenericTypes.end()});
             specialized->finish();
             ast.newRoot(specialized);
-            scope->Structs[spec.toString()] = specialized;
-            scope->Functions[spec.toString()] = specialized->NewInstance;
+
+            auto name = spec.toString();
+            if (scope->Structs.lookup(name))
+                throw CompileError("Attempted to redefine struct {0}", name);
+            if (scope->Functions.lookup(name))
+                throw CompileError("Attempted to redefine constructor {0}", name);
+            scope->Structs[name] = specialized;
+            scope->Functions[name] = specialized->NewInstance;
+
             return specialized;
         }
 
@@ -199,9 +206,13 @@ namespace pepper::ast {
 
         void beginStruct(Ref<StructDef> structDef) override {
             auto& scope = ScopeStack.back();
+            if (scope->Structs.lookup(structDef->Name))
+                throw CompileError("Attempted to redefine struct {0}", structDef->Name);
             scope->Structs[structDef->Name] = structDef;
             // If the struct is generic, alias SomeStruct -> SomeStruct<...>
             if (!structDef->GenericParams.empty()) {
+                if (scope->Structs.lookup(structDef->Type.Name))
+                    throw CompileError("Cannot redefine struct {0}", structDef->Type.Name);
                 scope->Structs[structDef->Type.Name] = structDef;
             }
             scope->Functions[structDef->Name] = structDef->NewInstance;
@@ -231,6 +242,8 @@ namespace pepper::ast {
 
         void beginFunction(Ref<ast::FunctionDef> func) override {
             auto& scope = ScopeStack.back();
+            if (scope->Functions.lookup(func->Name))
+                throw CompileError("Cannot redefine existing function {0}", func->Name);
             scope->Functions[func->Name] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Body = Ref<Block>::New(functionTarget(), func->Name);
