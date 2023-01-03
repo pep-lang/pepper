@@ -17,11 +17,11 @@ namespace pepper::ast {
 
     struct TypeName {
         Ident Name;
-        std::vector<TypeName> GenericArgs;
+        std::vector<TypeName> GenericTypes;
 
-        TypeName(Ident name, const Vector<TypeName>& args = {})
+        TypeName(Ident name, const Vector<TypeName> types = {})
             : Name(std::move(name))
-            , GenericArgs(args.begin(), args.end()) {
+            , GenericTypes(types.begin(), types.end()) {
         }
 
         TypeName(const TypeName&) = default;

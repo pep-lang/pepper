@@ -62,12 +62,12 @@ namespace pepper::ast {
         // generic args for this specialization
         Vector<TypeName> GenericArgs;
 
-        StructDef(const TypeName& type, const Ident& name);
+        StructDef(const TypeName& type);
 
         void specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs);
         void finish();
 
-        static Ref<StructDef> New(const TypeName& type, const Ident& name);
+        static Ref<StructDef> New(const TypeName& type);
 
         std::string toString() const override;
         std::string dump(int indent = 0) const override;

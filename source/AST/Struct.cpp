@@ -44,13 +44,13 @@ namespace pepper::ast {
                sep + Body->dump(indent);
     }
 
-    StructDef::StructDef(const TypeName& type, const Ident& name)
-        : Symbol(type, name) {
+    StructDef::StructDef(const TypeName& type)
+        : Symbol(type, type.toString()) {
     }
 
-    Ref<StructDef> StructDef::New(const TypeName& type, const Ident& name) {
-        Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
-        structDef->NewInstance = Ref<FunctionDef>::New(type, name);
+    Ref<StructDef> StructDef::New(const TypeName& type) {
+        Ref<StructDef> structDef = Ref<StructDef>::New(type);
+        structDef->NewInstance = Ref<FunctionDef>::New(type, structDef->Name);
         // Note that the order of these is important, ctor depends on init, so must be generated after
         structDef->Initializer = Ref<MethodDef>::New(structDef, TypeName("void"), "__init");
         structDef->Constructor = Ref<MethodDef>::New(structDef, TypeName("void"), "__ctor");

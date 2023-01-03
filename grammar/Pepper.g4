@@ -341,8 +341,8 @@ functionDefinitionList
     ;
 
 extensionDefinition
-    :   Extend Identifier '{' functionDefinitionList '}'
-    |   Extend Identifier With Identifier ';'
+    :   Extend typeDeclaration '{' functionDefinitionList '}'
+    |   Extend typeDeclaration With Identifier ';'
     ;
 
 

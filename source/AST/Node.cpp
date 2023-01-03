@@ -9,9 +9,9 @@
 namespace pepper::ast {
     std::string TypeName::toString() const {
         std::string genericTypes;
-        if (!GenericArgs.empty()) {
+        if (!GenericTypes.empty()) {
             Vector<std::string> genericStrings =
-                Query(GenericArgs).select<std::string>([](auto& a) { return a.toString(); });
+                Query(GenericTypes).select<std::string>([](auto& a) { return a.toString(); });
             genericTypes = "<" + llvm::join(genericStrings.begin(), genericStrings.end(), ", ") + ">";
         }
         return Name + genericTypes;
@@ -21,7 +21,7 @@ namespace pepper::ast {
         if (Name == genericParam) {
             Name = genericArg;
         }
-        for (auto& arg : GenericArgs) {
+        for (auto& arg : GenericTypes) {
             arg.replace(genericParam, genericArg);
         }
     }

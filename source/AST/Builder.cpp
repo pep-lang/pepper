@@ -115,8 +115,8 @@ namespace pepper::ast {
         }
 
         Ref<StructDef> specialize(const TypeName& spec) override {
-            auto specialized = StructDef::New(spec, spec.toString());
-            specialized->specialize(findStruct(spec.Name), {spec.GenericArgs.begin(), spec.GenericArgs.end()});
+            auto specialized = StructDef::New(spec);
+            specialized->specialize(findStruct(spec.Name), {spec.GenericTypes.begin(), spec.GenericTypes.end()});
             return specialized;
         }
 
@@ -191,6 +191,10 @@ namespace pepper::ast {
         void beginStruct(Ref<StructDef> structDef) override {
             auto& scope = ScopeStack.back();
             scope->Structs[structDef->Name] = structDef;
+            // If the struct is generic, alias SomeStruct -> SomeStruct<...>
+            if (!structDef->GenericParams.empty()) {
+                scope->Structs[structDef->Type.Name] = structDef;
+            }
             scope->Functions[structDef->Name] = structDef->NewInstance;
 
             beginScope(structDef->Name);

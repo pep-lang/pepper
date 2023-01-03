@@ -149,7 +149,7 @@ namespace pepper {
             Vector<TypeName> params;
             if (auto genericParams = typeSpec->genericArgs()) {
                 for (auto paramType : genericParams->genericArgsList()->typeSpecifier()) {
-                    type.GenericArgs.emplace_back(parseTypeName(paramType));
+                    type.GenericTypes.emplace_back(parseTypeName(paramType));
                 }
             }
             return type;
@@ -255,9 +255,19 @@ namespace pepper {
             }
         }
 
+        TypeName parseTypeDeclaration(PepperParser::TypeDeclarationContext* typeDecl) {
+            TypeName type{typeDecl->Identifier()->toString()};
+            if (auto genericParams = typeDecl->genericParams()) {
+                for (auto param : genericParams->genericParamsList()->Identifier()) {
+                    type.GenericTypes.emplace_back(param->toString());
+                }
+            }
+            return type;
+        }
+
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            TypeName type{context->typeDeclaration()->Identifier()->toString()};
-            auto structDef = StructDef::New(type, type.Name);
+            TypeName type = parseTypeDeclaration(context->typeDeclaration());
+            auto structDef = StructDef::New(type);
             if (auto genericParams = context->typeDeclaration()->genericParams()) {
                 for (auto param : genericParams->genericParamsList()->Identifier()) {
                     structDef->GenericParams.emplace_back(param->toString());
@@ -314,10 +324,9 @@ namespace pepper {
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
-            auto identifiers = context->Identifier();
-            if (identifiers.size() == 1) {
-                auto structName = identifiers[0]->toString();
-                auto structDef = builder->findStruct(structName);
+            if (!context->With()) {
+                auto structType = parseTypeDeclaration(context->typeDeclaration());
+                auto structDef = builder->findStruct(structType.toString());
                 builder->beginExtension(structDef);
                 return;
             }
