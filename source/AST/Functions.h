@@ -22,14 +22,14 @@ namespace pepper::ast {
     struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
-        Ident ReturnType;
+        TypeName ReturnType;
         Params Parameters;
         const bool Vararg;
 
-        FunctionNode(const Ident& returnType, const Ident& name, const Params& params, bool vararg = false);
+        FunctionNode(const TypeName& returnType, const Ident& name, const Params& params, bool vararg = false);
 
         std::string toString() const override {
-            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
+            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type.toString(); });
             std::string sig = llvm::formatv(
                 "{0} {1} {2}({3})", Node::toString(), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
             return sig;
@@ -37,9 +37,12 @@ namespace pepper::ast {
 
         std::string dump(int indent) const override {
             Vector<std::string> types =
-                Query(Parameters).select<std::string>([](auto p) { return p.Type + " " + p.Name; });
-            return llvm::formatv(
-                "{0} {1} {2}({3})", Node::dump(indent), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
+                Query(Parameters).select<std::string>([](auto p) { return p.Type.toString() + " " + p.Name; });
+            return llvm::formatv("{0} {1} {2}({3})",
+                                 Node::dump(indent),
+                                 ReturnType.toString(),
+                                 Name,
+                                 llvm::join(types.begin(), types.end(), ", "));
         }
     };
 
@@ -48,7 +51,8 @@ namespace pepper::ast {
 
         Ref<Block> Body;
 
-        FunctionDef(const Ident& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
+        FunctionDef(
+            const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
             Body = Ref<Block>::New(nullptr, name);
         }
@@ -70,7 +74,7 @@ namespace pepper::ast {
         DECLARE_RTTI(ExternFunctionDef, FunctionDef);
 
         ExternFunctionDef(
-            const Ident& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
+            const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
         }
 
@@ -89,7 +93,7 @@ namespace pepper::ast {
             , Args(args) {
         }
 
-        const Ident& type() const override {
+        const TypeName& type() const override {
             return Target->ReturnType;
         }
 
@@ -119,7 +123,7 @@ namespace pepper::ast {
             , Value(std::move(value)) {
         }
 
-        const Ident& type() const override {
+        const TypeName& type() const override {
             return Target->ReturnType;
         }
 

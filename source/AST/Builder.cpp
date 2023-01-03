@@ -114,6 +114,12 @@ namespace pepper::ast {
             return nullptr;
         }
 
+        Ref<StructDef> specialize(const TypeName& spec) override {
+            auto specialized = StructDef::New(spec, spec.toString());
+            specialized->specialize(findStruct(spec.Name), {spec.GenericArgs.begin(), spec.GenericArgs.end()});
+            return specialized;
+        }
+
         Ref<ast::FunctionDef> functionTarget() {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget) {

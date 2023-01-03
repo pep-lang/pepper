@@ -141,7 +141,7 @@ constantExpression
     ;
 
 declaration
-	: declarationSpecifiers initDeclaratorList? ';'
+	: variableDeclaration
 	;
 
 declarationSpecifiers
@@ -154,28 +154,40 @@ declarationSpecifier
 	| typeQualifier
 	;
 
-initDeclaratorList
-	: initDeclarator (',' initDeclarator)*
-	;
-
-initDeclarator
-    :   declarator ('=' initializer)?
-    ;
-
 storageClassSpecifier
 	: 'static'
 	;
 
 typeSpecifier
-    : variableSpecifier
+    : Identifier genericArgs?
 	;
 
-variableSpecifier
-    : Identifier Brackets? Identifier (Assign assignmentExpression)?
+typeDeclaration
+    : Identifier genericParams?
+    ;
+
+variableDeclaration
+    : typeSpecifier Brackets? Identifier (Assign assignmentExpression)? ';'
+    ;
+
+genericArgs
+    : '<' genericArgsList '>'
+    ;
+
+genericArgsList
+    : typeSpecifier (',' typeSpecifier)?
+    ;
+
+genericParams
+    : '<' genericParamsList '>'
+    ;
+
+genericParamsList
+    : Identifier (',' Identifier)?
     ;
 
 structDeclaration
-	: Struct Identifier '{' structMemberDeclaration* '}'
+	: Struct typeDeclaration '{' structMemberDeclaration* '}'
 	;
 
 structMemberDeclaration
@@ -197,22 +209,11 @@ constructorDefinition
     ;
 
 fieldDeclaration
-	: typeQualifier* variableSpecifier ';'
+	: typeQualifier* variableDeclaration
 ;
 
 typeQualifier
 	: 'var'
-	;
-
-// This probably needs way more
-declarator
-	: Identifier
-    | declarator '(' parameterTypeList? ')'
-    | declarator '(' identifierList? ')'
-	;
-
-parameterTypeList
-	: parameterList (',' '...')?
 	;
 
 parameterList
@@ -220,11 +221,7 @@ parameterList
     ;
 
 parameterDeclaration
-	: Identifier Identifier (Assign assignmentExpression)?
-	;
-
-identifierList
-	: Identifier (',' Identifier)*
+	: typeSpecifier Identifier (Assign assignmentExpression)?
 	;
 
 initializer
@@ -336,7 +333,7 @@ externalDeclaration
     ;
 
 functionDefinition
-    :   returnType? Identifier '(' parameterList? ')' compoundStatement
+    :   typeSpecifier? Identifier '(' parameterList? ')' compoundStatement
     ;
 
 functionDefinitionList
@@ -346,10 +343,6 @@ functionDefinitionList
 extensionDefinition
     :   Extend Identifier '{' functionDefinitionList '}'
     |   Extend Identifier With Identifier ';'
-    ;
-
-returnType
-    : Identifier
     ;
 
 

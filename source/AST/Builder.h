@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "AST/Node.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/SourceLocation.h"
@@ -70,8 +71,10 @@ namespace pepper::ast {
         virtual Ref<Node> popLValue() = 0;
         virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
 
+        virtual Ref<StructDef> specialize(const TypeName& structSpec) = 0;
         virtual void symbol(Ref<VariableDef> var) = 0;
         virtual void insert(Ref<Node> expr) = 0;
+
         virtual void trace(const Ref<Node>& node) const = 0;
     };
 } // namespace pepper::ast

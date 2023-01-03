@@ -7,12 +7,35 @@
 #include "Core/Ident.h"
 #include "Core/SourceLocation.h"
 #include "Core/String.h"
+#include "Core/Vector.h"
 
 namespace llvm {
     class Type;
 }
 
 namespace pepper::ast {
+
+    struct TypeName {
+        Ident Name;
+        std::vector<TypeName> GenericArgs;
+
+        TypeName(Ident name, const Vector<TypeName>& args = {})
+            : Name(std::move(name))
+            , GenericArgs(args.begin(), args.end()) {
+        }
+
+        TypeName(const TypeName&) = default;
+        TypeName(TypeName&&) = default;
+        TypeName& operator=(const TypeName&) = default;
+
+        void replace(const Ident& genericParam, const TypeName& genericArg);
+
+        operator std::string() const {
+            return toString();
+        }
+
+        std::string toString() const;
+    };
 
     struct Node {
         DECLARE_RTTI(Node);
@@ -52,11 +75,11 @@ namespace pepper::ast {
     struct Symbol : public Node {
         DECLARE_RTTI(Symbol, Node);
 
-        Ident Type;
+        TypeName Type;
         Ident Name;
 
       public:
-        Symbol(const Ident& type, const Ident& name)
+        Symbol(const TypeName& type, const Ident& name)
             : Type(type)
             , Name(name) {
         }
@@ -66,8 +89,8 @@ namespace pepper::ast {
         DECLARE_RTTI(Expression, Node);
 
       public:
-        virtual const Ident& type() const {
-            static Ident Void("void");
+        virtual const TypeName& type() const {
+            static TypeName Void("void");
             return Void;
         }
     };

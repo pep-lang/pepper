@@ -22,7 +22,7 @@ namespace pepper::ast {
 
         Ref<StructDef> Struct;
 
-        FieldDef(Ref<StructDef> st, const Ident& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
+        FieldDef(Ref<StructDef> st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
 
         std::string toString() const override;
         std::string dump(int indent) const override;
@@ -35,7 +35,7 @@ namespace pepper::ast {
 
       public:
         MethodDef(Ref<StructDef> st,
-                  const Ident& returnType,
+                  const TypeName& returnType,
                   const Ident& name,
                   const Params& params = Params(),
                   bool vararg = false);
@@ -55,12 +55,19 @@ namespace pepper::ast {
         Ref<MethodDef> Destructor;
         Vector<Ref<FieldDef>> Fields;
         Vector<Ref<MethodDef>> Methods;
+        // type parameters in struct decl
+        Vector<Ident> GenericParams;
+        // generic struct that this struct is a specialization of
+        Ref<StructDef> GenericStruct;
+        // generic args for this specialization
+        Vector<TypeName> GenericArgs;
 
-        StructDef(const Ident& type, const Ident& name);
+        StructDef(const TypeName& type, const Ident& name);
 
-        static Ref<StructDef> New(const Ident& type, const Ident& name);
-
+        void specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs);
         void finish();
+
+        static Ref<StructDef> New(const TypeName& type, const Ident& name);
 
         std::string toString() const override;
         std::string dump(int indent = 0) const override;
@@ -79,7 +86,7 @@ namespace pepper::ast {
             , MemberName(fieldName) {
         }
 
-        const Ident& type() const override {
+        const TypeName& type() const override {
             return LHS->type();
         }
 

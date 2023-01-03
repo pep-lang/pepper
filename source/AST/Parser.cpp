@@ -144,13 +144,20 @@ namespace pepper {
             return builder->New<BoolLiteral>(boolVal);
         }
 
-        void enterVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
-            auto identifiers = context->Identifier();
-            if (identifiers.size() != 2) {
-                throw CompileError(sourceLocation(context), "Expected <type> <identifier> in variable declaration");
+        TypeName parseTypeName(PepperParser::TypeSpecifierContext* typeSpec) {
+            TypeName type{typeSpec->Identifier()->toString()};
+            Vector<TypeName> params;
+            if (auto genericParams = typeSpec->genericArgs()) {
+                for (auto paramType : genericParams->genericArgsList()->typeSpecifier()) {
+                    type.GenericArgs.emplace_back(parseTypeName(paramType));
+                }
             }
-            auto typeName = identifiers[0]->toString();
-            auto identifier = identifiers[1]->toString();
+            return type;
+        }
+
+        void enterVariableDeclaration(PepperParser::VariableDeclarationContext* context) override {
+            auto typeName = parseTypeName(context->typeSpecifier());
+            auto identifier = context->Identifier()->toString();
 
             if (builder->structTarget()) {
                 lvaluePush(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
@@ -159,7 +166,7 @@ namespace pepper {
             }
         }
 
-        void exitVariableSpecifier(PepperParser::VariableSpecifierContext* context) override {
+        void exitVariableDeclaration(PepperParser::VariableDeclarationContext* context) override {
             auto symbol = lvaluePop<VariableDef>();
             if (context->assignmentExpression()) {
                 auto defaultValue = rvaluePop<Expression>();
@@ -217,9 +224,8 @@ namespace pepper {
 
         void exitParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
             lvaluePop<VariableDef>();
-            auto identifiers = context->Identifier();
-            auto typeName = identifiers[0]->toString();
-            auto name = identifiers[1]->toString();
+            auto name = context->Identifier()->toString();
+            auto typeName = parseTypeName(context->typeSpecifier());
             Ref<Expression> defaultValue;
             if (context->Assign()) {
                 defaultValue = rvaluePop<Expression>();
@@ -230,8 +236,7 @@ namespace pepper {
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             auto identifier = context->Identifier()->toString();
-            auto returnType =
-                context->returnType()->Identifier() ? context->returnType()->Identifier()->toString() : "void";
+            auto returnType = context->typeSpecifier() ? parseTypeName(context->typeSpecifier()) : TypeName("void");
 
             auto function =
                 builder->structTarget()
@@ -251,8 +256,13 @@ namespace pepper {
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            auto identifier = context->Identifier()->toString();
-            auto structDef = StructDef::New(identifier, identifier);
+            TypeName type{context->typeDeclaration()->Identifier()->toString()};
+            auto structDef = StructDef::New(type, type.Name);
+            if (auto genericParams = context->typeDeclaration()->genericParams()) {
+                for (auto param : genericParams->genericParamsList()->Identifier()) {
+                    structDef->GenericParams.emplace_back(param->toString());
+                }
+            }
             builder->beginStruct(structDef);
         }
 
@@ -262,7 +272,7 @@ namespace pepper {
 
         void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
             auto st = builder->structTarget();
-            st->Constructor = builder->New<MethodDef>(st, "void", "__ctor");
+            st->Constructor = builder->New<MethodDef>(st, TypeName("void"), "__ctor");
             lvaluePush(st->Constructor);
             builder->beginFunction(st->Constructor);
         }

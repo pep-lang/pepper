@@ -4,7 +4,28 @@
 
 #include "AST/Node.h"
 
+#include "Core/Query.h"
+
 namespace pepper::ast {
+    std::string TypeName::toString() const {
+        std::string genericTypes;
+        if (!GenericArgs.empty()) {
+            Vector<std::string> genericStrings =
+                Query(GenericArgs).select<std::string>([](auto& a) { return a.toString(); });
+            genericTypes = "<" + llvm::join(genericStrings.begin(), genericStrings.end(), ", ") + ">";
+        }
+        return Name + genericTypes;
+    }
+
+    void TypeName::replace(const Ident& genericParam, const TypeName& genericArg) {
+        if (Name == genericParam) {
+            Name = genericArg;
+        }
+        for (auto& arg : GenericArgs) {
+            arg.replace(genericParam, genericArg);
+        }
+    }
+
     std::string Node::sourcePrefix(int width, int indent) const {
         width = (width >= 0) ? width : Source.File.size() + 10;
         width += indent;

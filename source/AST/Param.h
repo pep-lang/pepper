@@ -11,21 +11,19 @@ namespace pepper::ast {
     class Expression;
 
     struct Param {
-        Ident Type;
+        TypeName Type;
         Ident Name;
         Ref<Expression> Default;
 
-        Param(Ident identifier, Ident type, Ref<Expression> defaultValue = nullptr)
+        Param(Ident identifier, TypeName type, Ref<Expression> defaultValue = nullptr)
             : Name(std::move(identifier))
             , Type(std::move(type))
             , Default(std::move(defaultValue)) {
         }
 
-        Param(const Param& rhs) {
-            Type = rhs.Type;
-            Name = rhs.Name;
-            Default = rhs.Default;
-        }
+        Param(const Param& rhs) = default;
+        Param(Param&& rhs) = default;
+        Param& operator=(const Param& rhs) = default;
     };
 
     using Params = Vector<Param>;

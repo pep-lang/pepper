@@ -5,7 +5,7 @@
 #include "AST/Struct.h"
 
 namespace pepper::ast {
-    FieldDef::FieldDef(Ref<StructDef> st, const Ident& type, const Ident& name, Ref<Expression> defaultValue)
+    FieldDef::FieldDef(Ref<StructDef> st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue)
         : VariableDef(type, name) {
         Struct = st;
     }
@@ -21,7 +21,7 @@ namespace pepper::ast {
     }
 
     MethodDef::MethodDef(
-        Ref<StructDef> st, const Ident& returnType, const Ident& name, const Params& params, bool vararg)
+        Ref<StructDef> st, const TypeName& returnType, const Ident& name, const Params& params, bool vararg)
         : FunctionDef(returnType, name, params, vararg)
         , Struct(std::move(st)) {
     }
@@ -44,24 +44,62 @@ namespace pepper::ast {
                sep + Body->dump(indent);
     }
 
-    StructDef::StructDef(const Ident& type, const Ident& name)
+    StructDef::StructDef(const TypeName& type, const Ident& name)
         : Symbol(type, name) {
     }
 
-    Ref<StructDef> StructDef::New(const Ident& type, const Ident& name) {
+    Ref<StructDef> StructDef::New(const TypeName& type, const Ident& name) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type, name);
         structDef->NewInstance = Ref<FunctionDef>::New(type, name);
         // Note that the order of these is important, ctor depends on init, so must be generated after
-        structDef->Initializer = Ref<MethodDef>::New(structDef, "void", "__init");
-        structDef->Constructor = Ref<MethodDef>::New(structDef, "void", "__ctor");
-        structDef->Destructor = Ref<MethodDef>::New(structDef, "void", "__dtor");
+        structDef->Initializer = Ref<MethodDef>::New(structDef, TypeName("void"), "__init");
+        structDef->Constructor = Ref<MethodDef>::New(structDef, TypeName("void"), "__ctor");
+        structDef->Destructor = Ref<MethodDef>::New(structDef, TypeName("void"), "__dtor");
         return structDef;
+    }
+
+    static Ref<MethodDef> specializeMethod(Ref<MethodDef> srcMethod, Ref<StructDef> targetStruct) {
+        auto genericStruct = srcMethod->Struct;
+        auto method = Ref<MethodDef>::New(
+            targetStruct, srcMethod->ReturnType, srcMethod->Name, srcMethod->Parameters, srcMethod->Vararg);
+        for (int idx = 0; idx < genericStruct->GenericParams.size(); ++idx) {
+            const auto& param = genericStruct->GenericParams[idx];
+            const auto& type = targetStruct->GenericArgs[idx];
+            method->ReturnType.replace(param, type);
+            for (auto& methodParam : method->Parameters) {
+                methodParam.Type.replace(param, type);
+            }
+        }
+        return method;
+    }
+
+    void StructDef::specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs) {
+        GenericStruct = std::move(genericStruct);
+        GenericArgs = std::move(genericArgs);
+
+        // replace types on fields
+        for (const auto& srcField : GenericStruct->Fields) {
+            auto field = Ref<FieldDef>::New(shared_from_this(), srcField->Type, srcField->Name, srcField->Default);
+            for (int idx = 0; idx < GenericStruct->GenericParams.size(); ++idx) {
+                const auto& param = GenericStruct->GenericParams[idx];
+                const auto& type = GenericArgs[idx];
+                field->Type.replace(param, type);
+            }
+            Fields.emplace_back(field);
+        }
+
+        // replace types in method return types and params
+        for (const auto& srcMethod : GenericStruct->Methods) {
+            auto method = specializeMethod(srcMethod, shared_from_this());
+            Methods.emplace_back(method);
+        }
+        Constructor = specializeMethod(GenericStruct->Constructor, shared_from_this());
     }
 
     void StructDef::finish() {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         Vector<Ref<Node>> body = {
-            Ref<VariableDef>::New("u64", "size"),
+            Ref<VariableDef>::New(TypeName("u64"), "size"),
             Ref<VariableDef>::New(Name,
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,

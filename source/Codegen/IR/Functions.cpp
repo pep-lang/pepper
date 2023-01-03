@@ -48,9 +48,9 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<FunctionDef> functionDef) {
-        auto returnType = Types::get(functionDef->ReturnType);
+        auto returnType = Types::get(functionDef->ReturnType.toString());
         auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
-            return pepper::Param{p.Name, Types::get(p.Type), p.Default ? codegen(p.Default) : Value::Null()};
+            return pepper::Param{p.Name, Types::get(p.Type.toString()), p.Default ? codegen(p.Default) : Value::Null()};
         });
         auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
         codegenFunction(function, functionDef);
@@ -62,7 +62,7 @@ namespace pepper {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
             auto func = ret->Target;
-            auto returnType = Types::get(func->ReturnType);
+            auto returnType = Types::get(func->ReturnType.toString());
             auto type = TypeOps::get(returnType);
             auto rv = type->coerce(returnValue);
             return Value(returnType, ir()->CreateRet(rv));

@@ -26,7 +26,7 @@ namespace pepper {
         if (!field) {
             throw CompileError("struct {0} does not contain a field named {1}", st->name(), fieldName);
         }
-        auto type = Types::get(fieldDef->Type);
+        auto type = Types::get(fieldDef->Type.toString());
         auto value = maybeCodegen(fieldDef->Default);
         if (!value) {
             value = zeroValue(type);
@@ -52,7 +52,7 @@ namespace pepper {
         pepper::Params fields;
         Vector<llvm::Type*> fieldTypes;
         for (auto& field : structDef->Fields) {
-            auto type = Types::get(field->Type);
+            auto type = Types::get(field->Type.toString());
             fieldTypes.push_back(*type);
             fields.emplace_back(field->Name, type);
         }
@@ -71,7 +71,7 @@ namespace pepper {
         }
 
         auto newParams = Query(structDef->NewInstance->Parameters).select<pepper::Param>([this](auto p) {
-            return pepper::Param{p.Name, Types::get(p.Type), maybeCodegen(p.Default)};
+            return pepper::Param{p.Name, Types::get(p.Type.toString()), maybeCodegen(p.Default)};
         });
 
         // generate the new struct type
@@ -106,12 +106,12 @@ namespace pepper {
             auto thisType = Types::get(structDef->Name);
             params.emplace_back("this", thisType);
             for (auto& paramDef : method->Parameters) {
-                auto type = Types::get(paramDef.Type);
+                auto type = Types::get(paramDef.Type.toString());
                 params.emplace_back(paramDef.Name, type, maybeCodegen(paramDef.Default));
             }
             // TODO: mangle these properly
             auto mangledName = structDef->Name + "." + realName;
-            auto returnType = Types::get(method->ReturnType);
+            auto returnType = Types::get(method->ReturnType.toString());
             auto newMethod = Ref<Method>::New(structDesc, mangledName, returnType, params);
             methods.push_back(newMethod);
             structDesc->addMethod(newMethod, realName);

@@ -68,7 +68,12 @@ struct range {
     int end;
     int step;
 
-    new(this.start, this.end, this.step=1) {}
+    new(this.start, this.end = -1, this.step=1) {
+        if (end == -1) {
+            end = start + 1;
+            step = 0;
+        }
+    }
 }
 
 extend range {
@@ -87,7 +92,7 @@ extend range {
 }
 
 int test() {
-    range r = range(0, 10)
+    range r = range(0, 10);
     int x = 0;
     while (r.next()) {
         x += 1;

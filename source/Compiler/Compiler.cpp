@@ -52,6 +52,7 @@ namespace pepper {
         Vector<Ref<ModuleContext>> compile() override {
             Vector<Ref<ModuleContext>> modules;
             if (Opts->InputStream) {
+                SourcePath = ModuleName;
                 auto module = compile(*Opts->InputStream);
                 modules.emplace_back(module);
             } else {
