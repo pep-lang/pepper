@@ -4,12 +4,12 @@
 #include <memory>
 #include <string>
 
+#include "AST/Node.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {
-    class Node;
     class Builder;
 
     class AST {

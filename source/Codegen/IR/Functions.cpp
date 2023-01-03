@@ -89,5 +89,4 @@ namespace pepper {
         }
         return Value(function->returnType(), function->call(args));
     }
-
 } // namespace pepper

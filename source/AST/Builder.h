@@ -4,24 +4,13 @@
 
 #pragma once
 
-#include "AST/Node.h"
+#include "AST.h"
+#include "AST/Nodes.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/SourceLocation.h"
 
-namespace llvm {
-    class Type;
-}
-
 namespace pepper::ast {
-    class Node;
-    class Block;
-    class FunctionDef;
-    class VariableDef;
-    class StructDef;
-    class Expression;
-    class Symbol;
-
     class Builder {
       public:
         template <typename N, typename... Args>

@@ -58,7 +58,7 @@ namespace pepper {
             } else {
                 for (const auto& sourceFile : Opts->SourceFiles) {
                     std::ifstream sourceStream(sourceFile, std::ios_base::in);
-                    SourcePath = std::filesystem::path(sourceFile);
+                    SourcePath = std::filesystem::path(sourceFile).string();
                     auto module = compile(sourceStream);
                     modules.emplace_back(module);
                 }

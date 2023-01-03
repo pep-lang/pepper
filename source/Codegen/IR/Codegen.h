@@ -3,49 +3,19 @@
 
 #include <memory>
 
+#include "AST/AST.h"
+#include "AST/Nodes.h"
 #include "Codegen/IR/Value.h"
+#include "Codegen/ModuleContext.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
-namespace pepper::ast {
-    class AST;
-    class Node;
-    class Assign;
-    class CompoundAssign;
-    class FieldDef;
-    class FunctionCall;
-    class MethodCall;
-    class FunctionDef;
-    class MemberRef;
-    class StructDef;
-    class ThisRef;
-    class VariableRef;
-    class VariableDef;
-    class StringLiteral;
-    class FloatLiteral;
-    class IntegerLiteral;
-    class BoolLiteral;
-    class BinaryOp;
-    class Return;
-    class Branch;
-    class Ternary;
-    class While;
-    class ForRange;
-} // namespace pepper::ast
-
 namespace pepper {
-    class Context;
-    class ModuleContext;
-    class Function;
-    class Method;
-    class Runtime;
-
     class Codegen {
       protected:
-        Ref<Context> Ctx;
         Ref<ModuleContext> Module;
 
       public:
@@ -92,7 +62,7 @@ namespace pepper {
         Value emit(Ref<ast::While> loop);
         Value emit(Ref<ast::ForRange> loop);
 
-        Ref<class Struct> emit(Ref<ast::StructDef> structDef);
+        void emit(Ref<ast::StructDef> structDef);
 
         void codegenFunction(Ref<class UserFunction> function, Ref<ast::FunctionDef> funcDef);
         Ref<Function> resolveFunction(Ref<ast::FunctionCall> call);

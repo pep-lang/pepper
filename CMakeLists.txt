@@ -29,8 +29,7 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat
 add_subdirectory(grammar)
 
 file(GLOB_RECURSE PEPPER_CORE_SOURCE LIST_DIRECTORIES false source/**)
-add_library(PepperCore STATIC ${PEPPER_CORE_SOURCE} Source/AST/Branches.h)
-
+add_library(PepperCore STATIC ${PEPPER_CORE_SOURCE})
 
 add_dependencies(PepperCore PepperParser)
 target_compile_definitions(PepperCore
@@ -43,12 +42,12 @@ source_group(
         TREE ${CMAKE_CURRENT_SOURCE_DIR}
         FILES ${COMPILER_SRC})
 
+set(PEPPER_LIBRARIES ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES} PepperParser PepperCore)
+
 add_executable(pepper source/main.cpp)
 add_dependencies(pepper PepperParser PepperCore)
-target_link_libraries(pepper
-        PepperCore PepperParser ${LLVM_LIBRARIES} ${LLD_LIBRARIES} ${ANTLR4_LIBRARIES})
-target_compile_definitions(pepper
-        PRIVATE ${LLVM_DEFINITIONS_LIST})
+target_link_libraries(pepper ${PEPPER_LIBRARIES})
+target_compile_definitions(pepper PRIVATE ${LLVM_DEFINITIONS_LIST})
 
 if (MSVC)
     add_custom_command(TARGET pepper POST_BUILD
@@ -56,6 +55,6 @@ if (MSVC)
 endif ()
 
 set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
-set(PEPPER_LIBRARIES PepperCore PepperParser ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
+set(PEPPER_LIBRARIES PepperParser PepperCore ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
 
 add_subdirectory(tests)

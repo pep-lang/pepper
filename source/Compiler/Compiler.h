@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "Codegen/ModuleContext.h"
+#include "Compiler/Options.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -13,9 +15,6 @@ namespace llvm {
 }
 
 namespace pepper {
-    class ModuleContext;
-    class Options;
-
     class Compiler {
       public:
         static Ref<Compiler> Create(Ref<Options> options);

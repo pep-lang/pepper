@@ -16,9 +16,6 @@
 #include "Core/Vector.h"
 
 namespace pepper::ast {
-    class StructDef;
-    class VariableDef;
-
     struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 

@@ -47,10 +47,10 @@ namespace pepper {
         return Value(field.ParamType, member);
     }
 
-    Ref<Struct> Codegen::emit(Ref<StructDef> structDef) {
+    void Codegen::emit(Ref<StructDef> structDef) {
         // Generic struct bases are effectively abstract, so can't be instantiated
         if (!structDef->GenericParams.empty()) {
-            return nullptr;
+            return;
         }
 
         // convert fields to symbols before type gen
@@ -131,7 +131,6 @@ namespace pepper {
         codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
         PEP_TRACE(
             TraceChannel::Codegen, "StructDef {0} -> {1}", structDef->Name, toString(structDesc->type()->llvmType()));
-        return structDesc;
     }
 
     Value Codegen::emit(Ref<ThisRef> thisRef) {

@@ -4,15 +4,10 @@
 #include <memory>
 #include <string>
 
+#include "AST/AST.h"
 #include "Core/Common.h"
 
 namespace pepper {
-    class Codegen;
-
-    namespace ast {
-        class AST;
-    }
-
     class Parser {
       public:
         Parser() = default;
@@ -20,5 +15,4 @@ namespace pepper {
 
         Ref<ast::AST> parse(std::istream& stream, const std::string& name = "");
     };
-
 } // namespace pepper
