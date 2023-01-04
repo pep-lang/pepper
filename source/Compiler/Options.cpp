@@ -2,6 +2,8 @@
 #include "Compiler/Options.h"
 #include <filesystem>
 
+#include "Core/Exceptions.h"
+#include "Core/Query.h"
 #include "llvm/Support/CommandLine.h"
 
 namespace pepper {
@@ -11,6 +13,9 @@ namespace pepper {
     namespace cli {
         static cl::list<string> SourceFiles(cl::ConsumeAfter, cl::Required, cl::desc("<input files>"));
         static cl::opt<string> OutputPath("o", cl::desc("Output binary"), cl::value_desc("filename"));
+        static cl::opt<string> BuildPath(
+            "build", cl::desc("Build directory, defaults to ./build"), cl::value_desc("path"));
+        static cl::opt<bool> EmitLLVM("emit-llvm", cl::desc("Emit LLVM IR"));
     } // namespace cli
 
     static std::string PathToFilename(const std::string& path) {
@@ -21,17 +26,26 @@ namespace pepper {
         llvm::cl::ParseCommandLineOptions(argc, argv);
         auto opts = Defaults();
         opts->SourceFiles.assign(cli::SourceFiles.begin(), cli::SourceFiles.end());
-        opts->OutputPath = cli::OutputPath;
-        if (cli::OutputPath.length() > 0)
-            opts->ModuleName = PathToFilename(cli::OutputPath);
-        else
-            opts->ModuleName = PathToFilename(cli::SourceFiles.front());
+        opts->SourceFiles = Query(opts->SourceFiles).map([&](auto& src) {
+           return absolute(std::filesystem::path(src)).string();
+        });
 
+            if (cli::BuildPath.hasArgStr()) {
+            opts->BuildDir = cli::BuildPath;
+        }
+
+        if (cli::OutputPath.hasArgStr()) {
+            opts->OutputPath = cli::OutputPath;
+            opts->ExeName = PathToFilename(cli::OutputPath);
+        }
+
+        opts->EmitLLVM = cli::EmitLLVM;
         return opts;
     }
 
     Ref<Options> Options::Defaults() {
         auto opts = Ref<Options>::New();
+        opts->BuildDir = (std::filesystem::current_path() / ".pep" / "build").string();
         return opts;
     }
 

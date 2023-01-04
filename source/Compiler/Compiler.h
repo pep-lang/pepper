@@ -20,5 +20,6 @@ namespace pepper {
         static Ref<Compiler> Create(Ref<Options> options);
 
         virtual Vector<Ref<ModuleContext>> compile() = 0;
+        virtual void link() = 0;
     };
 } // namespace pepper

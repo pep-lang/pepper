@@ -42,10 +42,12 @@ source_group(
         TREE ${CMAKE_CURRENT_SOURCE_DIR}
         FILES ${COMPILER_SRC})
 
-set(PEPPER_LIBRARIES ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES} PepperParser PepperCore)
+set(PEPPER_LIBRARIES ${LLD_LIBRARIES} ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES} PepperParser PepperCore)
+set(PEPPER_LIBRARY_DIRS ${LLVM_LIBRARY_DIRS})
 
 add_executable(pepper source/main.cpp)
 add_dependencies(pepper PepperParser PepperCore)
+target_link_directories(pepper PRIVATE ${PEPPER_LIBRARY_DIRS})
 target_link_libraries(pepper ${PEPPER_LIBRARIES})
 target_compile_definitions(pepper PRIVATE ${LLVM_DEFINITIONS_LIST})
 

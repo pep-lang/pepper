@@ -76,7 +76,8 @@ namespace pepper::ast {
         Constructor = Ref<MethodDef>::New(this, TypeName("void"), "__ctor");
         Destructor = Ref<MethodDef>::New(this, TypeName("void"), "__dtor");
 
-        Fields.emplace_back(Ref<FieldDef>::New(this, TypeName("u32"), "__refcount"));
+        // Add a field at the head for the refcount
+        Fields.emplace_back(Ref<FieldDef>::New(this, TypeName{"u32"}, "__refcount", Ref<IntegerLiteral>::New(0)));
 
         Acquire = Ref<MethodDef>::New(this, TypeName{"void"}, "__acquire");
         Release = Ref<MethodDef>::New(this, TypeName{"void"}, "__release");

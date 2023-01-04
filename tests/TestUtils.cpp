@@ -26,7 +26,7 @@ namespace TestUtils {
         Messages::SetTraceChannels(TraceChannel::ALL);
         auto sourceStream = std::make_unique<std::istringstream>(source);
         auto options = Options::Defaults();
-        options->ModuleName = name;
+        options->ExeName = name;
         options->SourceFiles.emplace_back(name);
         options->InputStream = std::move(sourceStream);
         auto compiler = Compiler::Create(options);

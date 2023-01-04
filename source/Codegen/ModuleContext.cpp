@@ -45,10 +45,18 @@ namespace pepper {
         Module = std::make_unique<llvm::Module>(name, *Context);
         // Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
 
+        Module->setSourceFileName(sourcePath);
+
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
         Module->setTargetTriple(targetTriple);
 
         Module->setDataLayout(getDataLayout());
+    }
+
+    ModuleContext::ModuleContext(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module)
+        : Context(std::move(context))
+        , Module(std::move(module)) {
+        ModuleName = Module->getModuleIdentifier();
     }
 
     std::unique_ptr<llvm::LLVMContext>&& ModuleContext::takeContext() {

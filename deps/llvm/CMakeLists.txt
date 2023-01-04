@@ -18,14 +18,9 @@ else ()
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif ()
 
-file(TIMESTAMP ${LLVM_BUILD_DIR}/CMakeCache.txt CACHE_MODTIME)
-file(TIMESTAMP ${CMAKE_CURRENT_LIST_FILE} LISTS_MODTIME)
-message(STATUS "CMakeLists.txt: ${LISTS_MODTIME} CMakeCache.txt: ${CACHE_MODTIME}")
-string(COMPARE LESS "${CACHE_MODTIME}" "${LISTS_MODTIME}" LISTS_NEWER)
-message(STATUS "CMakeLists.txt is newer than cache")
 find_package(LLVM CONFIG QUIET NO_DEFAULT_PATH HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 
-if (LISTS_NEWER OR NOT LLVM_FOUND)
+if (NOT LLVM_FOUND)
     message(STATUS "Syncing LLVM source...")
     FetchContent_Declare(
             llvm_source
@@ -77,6 +72,14 @@ if (LISTS_NEWER OR NOT LLVM_FOUND)
             COMMAND_ERROR_IS_FATAL ANY
     )
 
+    find_package(LLVM REQUIRED CONFIG NO_DEFAULT_PATH
+            HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
+endif ()
+
+find_package(LLD CONFIG QUIET NO_DEFAULT_PATH
+        HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
+
+if (NOT LLD_FOUND)
     message(STATUS "Configuring LLD...")
     file(MAKE_DIRECTORY ${LLVM_BUILD_DIR}/lld)
     execute_process(
@@ -106,42 +109,40 @@ if (LISTS_NEWER OR NOT LLVM_FOUND)
     # re-do the find_package now that it should succeed
     find_package(LLD REQUIRED CONFIG NO_DEFAULT_PATH
             HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
-    find_package(LLVM REQUIRED CONFIG NO_DEFAULT_PATH
-            HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
-endif ()
+endif()
+
+#macro(copy_pdbs)
+#    if (MSVC)
+#        set(LLVM_BUILD_LIBRARY_DIR ${LLVM_BUILD_DIR}/${CMAKE_BUILD_TYPE}/lib)
+#
+#        foreach (LLVM_LIB ${LLVM_LIBRARIES})
+#            set(DEST_PDB ${LLVM_INSTALL_DIR}/lib/${LLVM_LIB}.pdb)
+#
+#            if (NOT EXISTS DEST_PDB)
+#                message(STATUS "Installing ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb -> ${DEST_PDB}")
+#                execute_process(
+#                        COMMAND_ECHO STDOUT
+#                        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb ${DEST_PDB}
+#                )
+#            endif ()
+#        endforeach ()
+#    endif ()
+#endmacro()
 
 message(STATUS "Found LLVM at ${LLVM_DIR}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
-explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat remarks mcjit option support core)
-
-macro(copy_pdbs)
-    if (MSVC)
-        set(LLVM_BUILD_LIBRARY_DIR ${LLVM_BUILD_DIR}/${CMAKE_BUILD_TYPE}/lib)
-
-        foreach (LLVM_LIB ${LLVM_LIBRARIES})
-            set(DEST_PDB ${LLVM_INSTALL_DIR}/lib/${LLVM_LIB}.pdb)
-
-            if (NOT EXISTS DEST_PDB)
-                message(STATUS "Installing ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb -> ${DEST_PDB}")
-                execute_process(
-                        COMMAND_ECHO STDOUT
-                        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LLVM_BUILD_LIBRARY_DIR}/${LLVM_LIB}.pdb ${DEST_PDB}
-                )
-            endif ()
-        endforeach ()
-    endif ()
-endmacro()
-
+explicit_map_components_to_libraries(LLVM_LIBRARIES windowsmanifest bitstreamreader binaryformat remarks mcjit option support core)
 set(LLVM_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_INSTALL_DIR}/lib CACHE STRING "LLVM Library Directories")
 set(LLVM_LIBRARIES ${LLVM_LIBRARIES} CACHE STRING "LLVM libraries selected for linking")
 
-set(LLD_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLD Include Directories")
-set(LLD_LIBRARIES "lldCommon;lldCOFF;lldELF;lldMachO;lldMinGW;lldWasm")
-
 message(STATUS "LLVM includes:  ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
+
+message(STATUS "Found LLD at ${LLD_INSTALL_PREFIX}")
+set(LLD_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLD Include Directories")
+set(LLD_LIBRARIES "lldCommon;lldCOFF;lldELF;lldMachO;lldMinGW;lldWasm" CACHE STRING "LLD libraries")
 
 message(STATUS "LLD includes:   ${LLD_INCLUDE_DIRS}")
 message(STATUS "LLD libraries:  ${LLD_LIBRARIES}")

@@ -27,11 +27,16 @@ namespace pepper {
 
       public:
         ModuleContext(const Ident& name, const std::string& sourcePath);
+        ModuleContext(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module);
 
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
         std::unique_ptr<llvm::Module>&& takeModule();
 
         operator llvm::Module*() const {
+            return Module.get();
+        }
+
+        llvm::Module* getModule() const {
             return Module.get();
         }
 
