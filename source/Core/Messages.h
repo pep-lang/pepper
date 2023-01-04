@@ -9,6 +9,7 @@
 
 #include "Core/Common.h"
 #include "Core/String.h"
+#include "Core/Vector.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
@@ -69,25 +70,10 @@ namespace pepper {
     };
 
     class Messages {
-        static auto& _errors() {
-            static Vector<Error> Errors;
-            return Errors;
-        }
-
-        static auto& _warnings() {
-            static Vector<Warning> Warnings;
-            return Warnings;
-        }
-
-        static auto& _traceChannels() {
-            static uint64_t channels = 0;
-            return channels;
-        }
-
-        static auto& _indents() {
-            static std::unordered_map<TraceChannel, std::string> Indents;
-            return Indents;
-        }
+        static Vector<Error> Errors;
+        static Vector<Warning> Warnings;
+        static uint64_t Channels;
+        static std::unordered_map<TraceChannel, std::string> Indents;
 
       public:
         template <IsA<Message> M, HasToString Ctx, typename... Args>
@@ -101,29 +87,29 @@ namespace pepper {
         }
 
         static const Vector<Error>& errors() {
-            return _errors();
+            return Errors;
         }
 
         static const Vector<Warning>& warnings() {
-            return _warnings();
+            return Warnings;
         }
 
         static bool ShouldTrace(TraceChannel channel) {
-            return _traceChannels() & uint64_t(channel);
+            return Channels & uint64_t(channel);
         }
 
         static void Indent(TraceChannel channel) {
-            _indents()[channel] += "  ";
+            Indents[channel] += "  ";
         }
 
         static void Outdent(TraceChannel channel) {
-            const auto& existing = _indents()[channel];
+            const auto& existing = Indents[channel];
             if (existing.size() > 1)
-                _indents()[channel] = existing.substr(0, existing.size() - 2);
+                Indents[channel] = existing.substr(0, existing.size() - 2);
         }
 
         static void SetTraceChannels(uint64_t channels) {
-            _traceChannels() = channels;
+            Channels = channels;
         }
 
         static void SetTraceChannels(TraceChannel channel) {
@@ -131,25 +117,15 @@ namespace pepper {
         }
 
         static uint64_t GetTraceChannels() {
-            return _traceChannels();
+            return Channels;
         }
 
-        static void Trace(TraceChannel channel, const std::string& msg) {
-            const auto& indent = _indents()[channel];
-            auto output = indent + replace_all(msg, "\n", "\n" + indent);
-            std::cout << output << std::endl;
-        }
+        static void Trace(TraceChannel channel, const std::string& msg);
 
       private:
-        static void report(Error&& msg) {
-            std::cout << msg.message() << std::endl;
-            _errors().emplace_back(std::move(msg));
-        }
+        static void report(Error&& msg);
 
-        static void report(Warning&& msg) {
-            std::cout << msg.message() << std::endl;
-            _warnings().emplace_back(std::move(msg));
-        }
+        static void report(Warning&& msg);
     };
 } // namespace pepper
 

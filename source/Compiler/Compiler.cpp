@@ -93,7 +93,7 @@ namespace pepper {
             IR->generate(ast);
 
             if (!Messages::errors().empty()) {
-                Query(Messages::errors()).each([](auto e) { std::cerr << e.message() << std::endl; });
+                Query(Messages::errors()).each([](auto e) { llvm::errs() << e.message() << "\n"; });
                 throw CompileError("Error(s) encountered, cannot continue");
             }
 
