@@ -218,7 +218,7 @@ fieldDeclaration
 ;
 
 typeQualifier
-	: 'var'
+	: Var
 	;
 
 parameterList
