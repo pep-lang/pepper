@@ -145,8 +145,10 @@ namespace pepper {
         else
             throw InternalCompilerError("Unknown AST node");
 
-        std::string output = llvm::formatv(
-            "{0} -> {1} @{2}", rpad(node->rtti()->name(), 20), rpad(toString(value), 80), node->sourcePrefix());
+        auto src = node->source();
+        auto at = src.empty() ? "" : "@";
+        std::string output =
+            llvm::formatv("{0} -> {1} {2}{3}", rpad(node->rtti()->name(), 20), rpad(toString(value), 80), at, src);
         PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
         return value;
     }

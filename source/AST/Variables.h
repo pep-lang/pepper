@@ -30,10 +30,10 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            auto str = std::string(llvm::formatv("{0} {1}", Type, Name));
+            std::string def;
             if (Default)
-                str += std::string(llvm::formatv(" = {0}", Default->toString()));
-            return Node::dump(indent) + str;
+                def = std::string(llvm::formatv(" = {0}", Default->dump()));
+            return llvm::formatv("{0} {1} {2}{3}", Node::dump(indent), Type, Name, def);
         }
 
         void specialize(const Specialization& spec) override {

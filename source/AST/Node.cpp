@@ -32,7 +32,7 @@ namespace pepper::ast {
         }
     }
 
-    std::string Node::sourcePrefix(int width, int indent, const char* sep) const {
+    std::string Node::source(int width, int indent, const char* sep) const {
         if (Source.File.empty()) {
             return {""};
         }
