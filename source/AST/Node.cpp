@@ -32,12 +32,12 @@ namespace pepper::ast {
         }
     }
 
-    std::string Node::sourcePrefix(int width, int indent) const {
+    std::string Node::sourcePrefix(int width, int indent, const char* sep) const {
         width = (width >= 0) ? width : Source.File.size() + 10;
         width += indent;
-        std::string src = Source.toString();
+        std::string src = Source.File.empty() ? "" : Source.toString();
         std::string padding = repeat(" ", width - src.size());
-        return llvm::formatv("{0}:{1}", Source.toString(), padding);
+        return llvm::formatv("{0}{1}{2}", Source.toString(), sep, padding);
     }
 
     std::string Node::toString() const {
@@ -45,7 +45,7 @@ namespace pepper::ast {
     }
 
     std::string Node::dump(int indent) const {
-        return llvm::formatv("{0}{1} ", repeat(" ", indent), rtti()->name());
+        return llvm::formatv("{0}{1}", repeat(" ", indent), rtti()->name());
     }
 
     Ref<Node> Node::clone() const {

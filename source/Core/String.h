@@ -64,6 +64,8 @@ namespace pepper {
     }
 
     inline std::string rpad(const std::string& s, size_t width) {
+        if (s.size() >= width)
+            return s;
         return s + repeat(" ", width - s.size());
     }
 

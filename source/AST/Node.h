@@ -63,7 +63,7 @@ namespace pepper::ast {
         virtual void specialize(const Specialization& spec) {
         }
 
-        [[nodiscard]] std::string sourcePrefix(int width = -1, int indent = 0) const;
+        [[nodiscard]] std::string sourcePrefix(int width = -1, int indent = 0, const char* sep = "") const;
         [[nodiscard]] virtual std::string toString() const;
         [[nodiscard]] virtual std::string dump(int indent = 0) const;
     };

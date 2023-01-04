@@ -18,6 +18,11 @@ namespace pepper {
         if (value) {
             llvm::raw_string_ostream ostr(str);
             value->print(ostr, true);
+            // trim functions down to their signature
+            auto bracePos = str.find('{');
+            if (bracePos != std::string::npos) {
+                str = str.substr(0, bracePos - 1);
+            }
         } else {
             str = "null";
         }
