@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "AST/Node.h"
 #include "Core/Query.h"
 #include "Core/Vector.h"
@@ -15,8 +17,9 @@ namespace pepper::ast {
         std::string Name;
         Vector<Ref<Node>> Items;
 
-        Block(const std::string& name = "block")
-            : Name(name) {
+        Block(std::string name = "block", Vector<Ref<Node>> body = {})
+            : Name(std::move(name))
+            , Items(std::move(body)) {
         }
 
         Block(const Block& block)

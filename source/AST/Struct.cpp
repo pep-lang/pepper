@@ -4,6 +4,9 @@
 
 #include "AST/Struct.h"
 
+#include "AST/BinaryOps.h"
+#include "AST/Literals.h"
+
 namespace pepper::ast {
     FieldDef::FieldDef(StructDef* st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue)
         : VariableDef(type, name, defaultValue)
@@ -72,6 +75,28 @@ namespace pepper::ast {
         Initializer = Ref<MethodDef>::New(this, TypeName("void"), "__init");
         Constructor = Ref<MethodDef>::New(this, TypeName("void"), "__ctor");
         Destructor = Ref<MethodDef>::New(this, TypeName("void"), "__dtor");
+
+        Fields.emplace_back(Ref<FieldDef>::New(this, TypeName("u32"), "__refcount"));
+
+        Acquire = Ref<MethodDef>::New(this, TypeName{"void"}, "__acquire");
+        Release = Ref<MethodDef>::New(this, TypeName{"void"}, "__release");
+
+        auto refcount = Ref<MemberRef>::New(Ref<ThisRef>::New(), "__refcount");
+        Acquire->Body->Items = {
+            // this.__refcount += 1
+            Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
+        };
+        Release->Body->Items = {
+            // __refcount -= 1
+            Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(-1))),
+            // if (this.__refcount == 0)
+            //     this.__dtor()
+            Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
+                         Ref<Block>::New("if",
+                                         Vector<Ref<Node>>{
+                                             Ref<MethodCall>::New(Ref<ThisRef>::New(), "__dtor"),
+                                         })),
+        };
     }
 
     StructDef::StructDef(const StructDef& rhs)
@@ -166,6 +191,8 @@ namespace pepper::ast {
         Methods.push_back(Initializer);
         Methods.push_back(Constructor);
         Methods.push_back(Destructor);
+        Methods.push_back(Acquire);
+        Methods.push_back(Release);
     }
 
     std::string StructDef::toString() const {

@@ -60,6 +60,8 @@ namespace pepper::ast {
         Ref<MethodDef> Initializer;
         Ref<MethodDef> Constructor;
         Ref<MethodDef> Destructor;
+        Ref<MethodDef> Acquire;
+        Ref<MethodDef> Release;
         Vector<Ref<FieldDef>> Fields;
         Vector<Ref<MethodDef>> Methods;
         // type parameters in struct decl
