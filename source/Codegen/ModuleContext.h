@@ -23,7 +23,7 @@ namespace pepper {
         Ident ModuleName;
         std::unique_ptr<llvm::LLVMContext> Context;
         std::unique_ptr<llvm::Module> Module;
-        //std::unique_ptr<DebugInfo> Debug;
+        // std::unique_ptr<DebugInfo> Debug;
 
       public:
         ModuleContext(const Ident& name, const std::string& sourcePath);
@@ -39,9 +39,9 @@ namespace pepper {
             return Context.get();
         }
 
-//        DebugInfo* getDebugInfo() const {
-//            return Debug.get();
-//        }
+        //        DebugInfo* getDebugInfo() const {
+        //            return Debug.get();
+        //        }
 
         llvm::Error verify() const;
 
