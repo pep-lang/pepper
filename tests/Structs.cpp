@@ -62,7 +62,7 @@ int test() {
 
 TEST(Structs, Range) {
     const char* source = R"SOURCE(
-struct range {
+struct range_test {
     int start;
     int current = 0xffffffff;
     int end;
@@ -76,7 +76,7 @@ struct range {
     }
 }
 
-extend range {
+extend range_test {
     bool next() {
         if (current == 0xffffffff) {
             current = start;
@@ -92,7 +92,7 @@ extend range {
 }
 
 int test() {
-    range r = range(0, 10);
+    range_test r = range_test(0, 10);
     int x = 0;
     while (r.next()) {
         x += 1;
@@ -131,4 +131,48 @@ int test() {
 }
     )SOURCE";
     EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(Structs, RangeGeneric) {
+    const char* source = R"SOURCE(
+struct range_test<T> {
+    T start;
+    T current;
+    T end;
+    T step;
+
+    new(this.start, this.end = -1, this.step=1) {
+        if (end == -1) {
+            end = start + 1;
+            step = 0;
+        }
+        current = start - step;
+    }
+}
+
+extend range_test<T> {
+    bool next() {
+        if ((current + step) == start) {
+            current = start;
+        } else {
+            current += step;
+        }
+        return current < end;
+    }
+
+    T value() {
+        return current;
+    }
+}
+
+int test() {
+    range_test<int> r = range_test<int>(0, 10);
+    int x = 0;
+    while (r.next()) {
+        x += 1;
+    }
+    return x;
+}
+    )SOURCE";
+    EXPECT_EQ(10, CompileAndRun(TestName(test_info_), source));
 }

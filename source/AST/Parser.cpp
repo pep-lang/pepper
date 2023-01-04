@@ -329,9 +329,11 @@ namespace pepper {
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
             if (!context->With()) {
                 auto structType = parseTypeDeclaration(context->typeDeclaration());
-                auto structDef = builder->findStruct(structType.toString());
-                builder->beginExtension(structDef);
-                return;
+                if (auto structDef = builder->findStruct(structType.toString())) {
+                    builder->beginExtension(structDef);
+                    return;
+                }
+                throw CompileError("Unable to extend unknown type {0}", structType.toString());
             }
             throw InternalCompilerError("extension with is not implemented");
         }
