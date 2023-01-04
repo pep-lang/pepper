@@ -49,11 +49,7 @@ namespace pepper::ast {
             return contents;
         }
 
-        std::string dump(int indent = 0) const override {
-            const char* sep = "\n  ";
-            auto contents = llvm::join_items(sep, FunctionNode::dump(indent), Body->dump(indent));
-            return contents;
-        }
+        std::string dump(int indent) const override;
 
         void specialize(const Specialization& spec) override;
     };
@@ -95,10 +91,10 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            Vector<std::string> argsStr = Query(Args).select<std::string>([indent](auto a) { return a->dump(indent); });
-            return trim(
-                Node::dump() +
-                std::string(llvm::formatv("{0}({1})", Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+            Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->dump(); });
+            return
+
+                       llvm::formatv("{0} {1}({2})", Node::dump(indent), Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "));
         }
     };
 

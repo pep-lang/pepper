@@ -33,11 +33,14 @@ namespace pepper::ast {
     }
 
     std::string Node::sourcePrefix(int width, int indent, const char* sep) const {
+        if (Source.File.empty()) {
+            return {""};
+        }
         width = (width >= 0) ? width : Source.File.size() + 10;
         width += indent;
-        std::string src = Source.File.empty() ? "" : Source.toString();
+        std::string src = Source.toString();
         std::string padding = repeat(" ", width - src.size());
-        return llvm::formatv("{0}{1}{2}", Source.toString(), sep, padding);
+        return llvm::formatv("{0}{1}{2}", src, sep, padding);
     }
 
     std::string Node::toString() const {

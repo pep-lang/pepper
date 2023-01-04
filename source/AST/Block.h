@@ -49,12 +49,9 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            indent += 2;
             Vector<std::string> items =
                 Query(Items).select<std::string>([&indent](auto& item) { return item->dump(indent); });
-            std::string str = std::string(llvm::formatv("{0}: {{\n", Name)) + llvm::join(items, "\n") + "\n}";
-            indent -= 2;
-            return str;
+            return llvm::join(items, "\n");
         }
 
         Ref<Node> clone() const override {

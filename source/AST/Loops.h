@@ -20,7 +20,8 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent = 0) const override {
-            return Node::dump(indent) + std::string(llvm::formatv("({0})", Condition->toString())) + Body->dump(indent);
+            return Node::dump(indent) + std::string(llvm::formatv(" ({0}) {{\n", Condition->dump())) +
+                   Body->dump(indent + 2) + "\n" + repeat(" ", indent) + "}";
         }
 
         void specialize(const Specialization& spec) override {

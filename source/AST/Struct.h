@@ -107,8 +107,7 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) +
-                   std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", MemberName));
+            return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", MemberName);
         }
 
         void specialize(const Specialization& spec) override {
@@ -131,6 +130,8 @@ namespace pepper::ast {
         }
 
         void specialize(const Specialization& spec) override;
+
+        std::string dump(int indent) const override;
     };
 
     struct ThisRef : public VariableRef {

@@ -72,7 +72,7 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + Identifier;
+            return llvm::formatv("{0} {1}", Node::dump(indent), Identifier);
         }
     };
 } // namespace pepper::ast

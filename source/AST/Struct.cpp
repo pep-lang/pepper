@@ -18,9 +18,12 @@ namespace pepper::ast {
     }
 
     std::string FieldDef::dump(int indent) const {
-        return Node::dump(indent) +
-               std::string(llvm::formatv(
-                   "{0} {1}.{2} = {3}", Type, Struct->Name, Name, Default ? Default->toString() : "default"));
+        return llvm::formatv("{0} {1} {2}.{3} = {4}",
+                             Node::dump(indent),
+                             Type,
+                             Struct->Name,
+                             Name,
+                             Default ? Default->toString() : "default");
     }
 
     Ref<Node> FieldDef::clone() const {
@@ -50,11 +53,16 @@ namespace pepper::ast {
 
     std::string MethodDef::dump(int indent) const {
         const char* sep = "\n";
-        Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type; });
-        return Node::dump() +
-               std::string(llvm::formatv(
-                   "{0} {1}.{2}({3})", ReturnType, Struct->Name, Name, llvm::join(types.begin(), types.end(), ", "))) +
-               sep + Body->dump(indent);
+        auto indentStr = repeat(" ", indent);
+        Vector<std::string> types =
+            Query(Parameters).select<std::string>([](auto p) { return p.Type.toString() + " " + p.Name; });
+        return std::string(llvm::formatv("{0} {1} {2}.{3}({4}) {{",
+                                         Node::dump(indent),
+                                         ReturnType,
+                                         Struct->Name,
+                                         Name,
+                                         llvm::join(types.begin(), types.end(), ", "))) +
+               sep + Body->dump(indent + 2) + "\n" + indentStr + "}";
     }
 
     Ref<Node> MethodDef::clone() const {
@@ -66,6 +74,17 @@ namespace pepper::ast {
     void MethodDef::specialize(const Specialization& spec) {
         FunctionDef::specialize(spec);
         Struct = spec.Struct.get();
+    }
+
+    void MethodCall::specialize(const Specialization& spec) {
+        This->specialize(spec);
+        Query(Args).each([&spec](auto& a) { a->specialize(spec); });
+    }
+
+    std::string MethodCall::dump(int indent) const {
+        Vector<std::string> args = Query(Args).select<std::string>([](auto& a) { return a->dump(); });
+        return llvm::formatv(
+            "{0} {1}.{2}({3})", Node::dump(indent), This->dump(), Name, llvm::join(args.begin(), args.end(), ", "));
     }
 
     StructDef::StructDef(const TypeName& type)
@@ -107,11 +126,6 @@ namespace pepper::ast {
     Ref<StructDef> StructDef::New(const TypeName& type) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type);
         return structDef;
-    }
-
-    void MethodCall::specialize(const Specialization& spec) {
-        This->specialize(spec);
-        Query(Args).each([&spec](auto& a) { a->specialize(spec); });
     }
 
     void StructDef::specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs) {
@@ -206,8 +220,10 @@ namespace pepper::ast {
             Query(Fields).select<std::string>([indent](auto f) { return f->dump(indent + 2); });
         Vector<std::string> methods =
             Query(Methods).select<std::string>([indent](auto m) { return m->dump(indent + 2); });
-        return llvm::join_items(Node::dump(indent) + std::string(llvm::formatv("{0}", Name)),
-                                llvm::join(fields.begin(), fields.end(), sep),
-                                llvm::join(methods.begin(), methods.end(), sep));
+        auto indentStr = repeat(" ", indent);
+        auto structStr = std::string(llvm::formatv("{0} {1} {{", Node::dump(indent), Name));
+        auto fieldsStr = llvm::join(fields.begin(), fields.end(), sep);
+        auto methodsStr = llvm::join(methods.begin(), methods.end(), sep);
+        return llvm::join_items(sep, structStr, fieldsStr, methodsStr, indentStr + "}");
     }
 } // namespace pepper::ast

@@ -28,6 +28,7 @@ namespace pepper::ast {
         if (PEP_TRACING(TraceChannel::AST)) {
             for (const auto& root : Roots) {
                 PEP_TRACE_AST(root->dump());
+                PEP_TRACE_AST({}); // add a newline between roots
             }
         }
     }

@@ -38,10 +38,11 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
+            auto indentStr = repeat(" ", indent);
             auto ifCond = std::string(llvm::formatv("if ({0}) {{\n", Condition ? Condition->dump() : "??"));
-            auto thenBlock = Then ? Then->dump(indent) + "}" : "";
-            auto elseBlock = Else ? std::string(" else {\n  ") + Else->dump(indent) + "}" : "";
-            return ifCond + thenBlock + elseBlock + "\n";
+            auto thenBlock = Then ? Then->dump(indent + 2) : "";
+            auto elseBlock = Else ? std::string(" else {\n") + Else->dump(indent + 2) + "\n" + indentStr + "}" : "";
+            return indentStr + ifCond + thenBlock + "\n" + indentStr + "}" + elseBlock;
         }
     };
 

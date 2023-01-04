@@ -30,7 +30,7 @@ namespace pepper::ast {
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + std::to_string(Value);
+            return llvm::formatv("{0}({1})", Node::dump(indent), std::to_string(Value));
         }
     };
 
@@ -50,11 +50,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + std::to_string(Value);
+            return llvm::formatv("{0} {1}", Node::dump(indent), std::to_string(Value));
         }
     };
 
@@ -74,11 +74,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + std::to_string(Value);
+            return llvm::formatv("{0} {1}", Node::dump(indent), std::to_string(Value));
         }
     };
 
@@ -98,11 +98,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}(\"{1}\")", Node::toString(), Value));
         }
 
         std::string dump(int indent) const override {
-            return Node::dump(indent) + Value;
+            return llvm::formatv("{0} {1}", Node::dump(indent), Value);
         }
     };
 } // namespace pepper::ast

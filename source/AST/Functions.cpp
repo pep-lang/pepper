@@ -53,6 +53,13 @@ namespace pepper::ast {
         Body->specialize(spec);
     }
 
+    std::string FunctionDef::dump(int indent) const {
+        const char* sep = "\n";
+        auto indentStr = repeat(" ", indent);
+        auto contents = llvm::join_items(sep, FunctionNode::dump(indent) + " {", Body->dump(indent + 2), indentStr + "}");
+        return contents;
+    }
+
     void Return::specialize(const Specialization& spec) {
         Type.specialize(spec.TypeMap);
     }
