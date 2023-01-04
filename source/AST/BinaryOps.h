@@ -33,6 +33,7 @@ namespace pepper::ast {
 
     struct Add : public BinaryOp {
         DECLARE_RTTI(Add, BinaryOp);
+        AST_NODE_POD_CLONE(Add);
 
       public:
         using BinaryOp::BinaryOp;
@@ -40,6 +41,7 @@ namespace pepper::ast {
 
     struct Sub : public BinaryOp {
         DECLARE_RTTI(Sub, BinaryOp);
+        AST_NODE_POD_CLONE(Sub);
 
       public:
         using BinaryOp::BinaryOp;
@@ -47,6 +49,7 @@ namespace pepper::ast {
 
     struct Mul : public BinaryOp {
         DECLARE_RTTI(Mul, BinaryOp);
+        AST_NODE_POD_CLONE(Mul);
 
       public:
         using BinaryOp::BinaryOp;
@@ -54,6 +57,7 @@ namespace pepper::ast {
 
     struct Div : public BinaryOp {
         DECLARE_RTTI(Div, BinaryOp);
+        AST_NODE_POD_CLONE(Div);
 
       public:
         using BinaryOp::BinaryOp;
@@ -61,6 +65,7 @@ namespace pepper::ast {
 
     struct Mod : public BinaryOp {
         DECLARE_RTTI(Mod, BinaryOp);
+        AST_NODE_POD_CLONE(Mod);
 
       public:
         using BinaryOp::BinaryOp;
@@ -68,6 +73,7 @@ namespace pepper::ast {
 
     struct Pow : public BinaryOp {
         DECLARE_RTTI(Pow, BinaryOp);
+        AST_NODE_POD_CLONE(Pow);
 
       public:
         using BinaryOp::BinaryOp;
@@ -75,6 +81,7 @@ namespace pepper::ast {
 
     struct Equal : public BinaryOp {
         DECLARE_RTTI(Equal, BinaryOp);
+        AST_NODE_POD_CLONE(Equal);
 
       public:
         using BinaryOp::BinaryOp;
@@ -82,6 +89,7 @@ namespace pepper::ast {
 
     struct NotEqual : public BinaryOp {
         DECLARE_RTTI(NotEqual, BinaryOp);
+        AST_NODE_POD_CLONE(NotEqual);
 
       public:
         using BinaryOp::BinaryOp;
@@ -89,6 +97,7 @@ namespace pepper::ast {
 
     struct Less : public BinaryOp {
         DECLARE_RTTI(Less, BinaryOp);
+        AST_NODE_POD_CLONE(Less);
 
       public:
         using BinaryOp::BinaryOp;
@@ -96,6 +105,7 @@ namespace pepper::ast {
 
     struct LessEqual : public BinaryOp {
         DECLARE_RTTI(LessEqual, BinaryOp);
+        AST_NODE_POD_CLONE(LessEqual);
 
       public:
         using BinaryOp::BinaryOp;
@@ -103,6 +113,7 @@ namespace pepper::ast {
 
     struct Greater : public BinaryOp {
         DECLARE_RTTI(Greater, BinaryOp);
+        AST_NODE_POD_CLONE(Greater);
 
       public:
         using BinaryOp::BinaryOp;
@@ -110,6 +121,7 @@ namespace pepper::ast {
 
     struct GreaterEqual : public BinaryOp {
         DECLARE_RTTI(GreaterEqual, BinaryOp);
+        AST_NODE_POD_CLONE(GreaterEqual);
 
       public:
         using BinaryOp::BinaryOp;
@@ -117,6 +129,7 @@ namespace pepper::ast {
 
     struct LShift : public BinaryOp {
         DECLARE_RTTI(LShift, BinaryOp);
+        AST_NODE_POD_CLONE(LShift);
 
       public:
         using BinaryOp::BinaryOp;
@@ -124,6 +137,7 @@ namespace pepper::ast {
 
     struct RShift : public BinaryOp {
         DECLARE_RTTI(RShift, BinaryOp);
+        AST_NODE_POD_CLONE(RShift);
 
       public:
         using BinaryOp::BinaryOp;
@@ -131,6 +145,7 @@ namespace pepper::ast {
 
     struct BitAnd : public BinaryOp {
         DECLARE_RTTI(BitAnd, BinaryOp);
+        AST_NODE_POD_CLONE(BitAnd);
 
       public:
         using BinaryOp::BinaryOp;
@@ -138,6 +153,7 @@ namespace pepper::ast {
 
     struct BitOr : public BinaryOp {
         DECLARE_RTTI(BitOr, BinaryOp);
+        AST_NODE_POD_CLONE(BitOr);
 
       public:
         using BinaryOp::BinaryOp;
@@ -145,6 +161,7 @@ namespace pepper::ast {
 
     struct BitXor : public BinaryOp {
         DECLARE_RTTI(BitXor, BinaryOp);
+        AST_NODE_POD_CLONE(BitXor);
 
       public:
         using BinaryOp::BinaryOp;
@@ -152,6 +169,7 @@ namespace pepper::ast {
 
     struct LogicalAnd : public BinaryOp {
         DECLARE_RTTI(LogicalAnd, BinaryOp);
+        AST_NODE_POD_CLONE(LogicalAnd);
 
       public:
         using BinaryOp::BinaryOp;
@@ -159,6 +177,7 @@ namespace pepper::ast {
 
     struct LogicalOr : public BinaryOp {
         DECLARE_RTTI(LogicalOr, BinaryOp);
+        AST_NODE_POD_CLONE(LogicalOr);
 
       public:
         using BinaryOp::BinaryOp;
@@ -166,6 +185,7 @@ namespace pepper::ast {
 
     struct Assign : public BinaryOp {
         DECLARE_RTTI(Assign, BinaryOp);
+        AST_NODE_POD_CLONE(Assign);
 
       public:
         Assign(Ref<Expression> lhs = nullptr, Ref<Expression> rhs = nullptr)
@@ -182,6 +202,7 @@ namespace pepper::ast {
 
     struct AddAssign : public CompoundAssign {
         DECLARE_RTTI(AddAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(AddAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -189,6 +210,7 @@ namespace pepper::ast {
 
     struct SubAssign : public CompoundAssign {
         DECLARE_RTTI(SubAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(SubAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -196,6 +218,7 @@ namespace pepper::ast {
 
     struct MulAssign : public CompoundAssign {
         DECLARE_RTTI(MulAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(MulAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -203,6 +226,7 @@ namespace pepper::ast {
 
     struct DivAssign : public CompoundAssign {
         DECLARE_RTTI(DivAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(DivAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -210,6 +234,7 @@ namespace pepper::ast {
 
     struct ModAssign : public CompoundAssign {
         DECLARE_RTTI(ModAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(ModAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -217,6 +242,7 @@ namespace pepper::ast {
 
     struct LShiftAssign : public CompoundAssign {
         DECLARE_RTTI(LShiftAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(LShiftAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -224,6 +250,7 @@ namespace pepper::ast {
 
     struct RShiftAssign : public CompoundAssign {
         DECLARE_RTTI(RShiftAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(RShiftAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -231,6 +258,7 @@ namespace pepper::ast {
 
     struct BitAndAssign : public CompoundAssign {
         DECLARE_RTTI(BitAndAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(BitAndAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -238,6 +266,7 @@ namespace pepper::ast {
 
     struct BitOrAssign : public CompoundAssign {
         DECLARE_RTTI(BitOrAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(BitOrAssign);
 
       public:
         using CompoundAssign::CompoundAssign;
@@ -245,6 +274,7 @@ namespace pepper::ast {
 
     struct BitXorAssign : public CompoundAssign {
         DECLARE_RTTI(BitXorAssign, CompoundAssign);
+        AST_NODE_POD_CLONE(BitXorAssign);
 
       public:
         using CompoundAssign::CompoundAssign;

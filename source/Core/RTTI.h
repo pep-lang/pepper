@@ -65,6 +65,15 @@ namespace pepper {
             return rtti;
         }
 
+        inline T* clone(const T* t) const {
+            return new T(*t);
+        }
+
+        //        template <typename... Args>
+        //        inline T* clone(Args&&... args) const {
+        //            return new T(std::forward<Args>(args)...);
+        //        }
+
         template <typename U>
         inline T* downcast(U* u) const {
             return static_cast<T*>(u);
@@ -99,17 +108,21 @@ namespace pepper {
 
 #define DECLARE_RTTI_COMMON(T)                                                                                         \
     template <typename T>                                                                                              \
-    bool is() {                                                                                                        \
+    bool is() const {                                                                                                  \
         auto thisTy = rtti();                                                                                          \
         auto tTy = pepper::RTTI::of<T>();                                                                              \
         return thisTy->is(tTy);                                                                                        \
     }                                                                                                                  \
     template <typename To>                                                                                             \
-    To as() {                                                                                                          \
+    std::add_pointer_t<To> as() {                                                                                      \
         if (this->is<To>()) {                                                                                          \
-            return static_cast<To>(this);                                                                              \
+            return static_cast<std::add_pointer_t<To>>(this);                                                          \
         }                                                                                                              \
         return nullptr;                                                                                                \
+    }                                                                                                                  \
+    template <typename To>                                                                                             \
+    const std::add_pointer_t<To> as() const {                                                                          \
+        return const_cast<T*>(this)->as<To>();                                                                         \
     }
 
 #define DECLARE_RTTI_IMPL(T, ...)                                                                                      \

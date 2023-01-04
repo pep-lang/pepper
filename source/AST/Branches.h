@@ -29,6 +29,7 @@ namespace pepper::ast {
 
     struct If : public Branch {
         DECLARE_RTTI(If, Branch);
+        AST_NODE_POD_CLONE(If);
 
         using Branch::Branch;
 
@@ -46,6 +47,7 @@ namespace pepper::ast {
 
     struct Ternary : public Expression {
         DECLARE_RTTI(Ternary, Expression);
+        AST_NODE_POD_CLONE(Ternary);
 
         Ref<Expression> Condition;
         Ref<Expression> TrueResult;

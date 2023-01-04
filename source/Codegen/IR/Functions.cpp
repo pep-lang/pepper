@@ -39,7 +39,7 @@ namespace pepper {
         // Emit the body of the function, after ensuring there is a return instruction
         auto lastExpr = (funcDef->Body->Items.size()) ? funcDef->Body->Items.back() : nullptr;
         if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef));
+            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef->ReturnType));
         }
         Query(funcDef->Body->Items).each([&](auto expr) { codegen(expr); });
 
@@ -54,20 +54,19 @@ namespace pepper {
         });
         auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
         codegenFunction(function, functionDef);
-        return Value(function->type(), function->function());
+        return Value{function->type(), function->function()};
     }
 
     Value Codegen::emit(Ref<Return> ret) {
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
-            auto func = ret->Target;
-            auto returnType = Types::get(func->ReturnType.toString());
+            auto returnType = Types::get(ret->Type.toString());
             auto type = TypeOps::get(returnType);
             auto rv = type->coerce(returnValue);
-            return Value(returnType, ir()->CreateRet(rv));
+            return Value{returnType, ir()->CreateRet(rv)};
         }
-        return Value(Types::Void, ir()->CreateRetVoid());
+        return Value{Types::Void, ir()->CreateRetVoid()};
     }
 
     Value Codegen::emit(Ref<FunctionCall> call) {

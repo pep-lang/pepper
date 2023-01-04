@@ -25,33 +25,22 @@ namespace pepper::ast {
 
         FunctionNode(const TypeName& returnType, const Ident& name, const Params& params, bool vararg = false);
 
-        std::string toString() const override {
-            Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type.toString(); });
-            std::string sig = llvm::formatv(
-                "{0} {1} {2}({3})", Node::toString(), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
-            return sig;
-        }
+        std::string toString() const override;
+        std::string dump(int indent) const override;
 
-        std::string dump(int indent) const override {
-            Vector<std::string> types =
-                Query(Parameters).select<std::string>([](auto p) { return p.Type.toString() + " " + p.Name; });
-            return llvm::formatv("{0} {1} {2}({3})",
-                                 Node::dump(indent),
-                                 ReturnType.toString(),
-                                 Name,
-                                 llvm::join(types.begin(), types.end(), ", "));
-        }
+        void specialize(const Specialization& spec) override;
     };
 
     struct FunctionDef : public FunctionNode {
         DECLARE_RTTI(FunctionDef, FunctionNode);
+        AST_NODE_POD_CLONE(FunctionDef);
 
         Ref<Block> Body;
 
         FunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
-            Body = Ref<Block>::New(nullptr, name);
+            Body = Ref<Block>::New(name);
         }
 
         std::string toString() const override {
@@ -65,10 +54,13 @@ namespace pepper::ast {
             auto contents = llvm::join_items(sep, FunctionNode::dump(indent), Body->dump(indent));
             return contents;
         }
+
+        void specialize(const Specialization& spec) override;
     };
 
     struct ExternFunctionDef : public FunctionDef {
         DECLARE_RTTI(ExternFunctionDef, FunctionDef);
+        AST_NODE_POD_CLONE(ExternFunctionDef);
 
         ExternFunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
@@ -81,6 +73,7 @@ namespace pepper::ast {
 
     struct FunctionCall : public Expression {
         DECLARE_RTTI(FunctionCall, Expression);
+        AST_NODE_POD_CLONE(FunctionCall);
 
         Ref<FunctionDef> Target;
         const Vector<Ref<Expression>> Args;
@@ -111,17 +104,18 @@ namespace pepper::ast {
 
     struct Return : public Expression {
         DECLARE_RTTI(Return, Expression);
+        AST_NODE_POD_CLONE(Return);
 
-        Ref<FunctionDef> Target;
+        TypeName Type;
         Ref<Expression> Value;
 
-        Return(Ref<FunctionDef> target, Ref<Expression> value = nullptr)
-            : Target(std::move(target))
+        Return(TypeName type = {"void"}, Ref<Expression> value = nullptr)
+            : Type(std::move(type))
             , Value(std::move(value)) {
         }
 
         const TypeName& type() const override {
-            return Target->ReturnType;
+            return Type;
         }
 
         std::string toString() const override {
@@ -131,5 +125,7 @@ namespace pepper::ast {
         std::string dump(int indent) const override {
             return llvm::formatv("{0} {1}", Node::dump(indent), Value ? Value->dump() : "void");
         }
+
+        void specialize(const Specialization& spec) override;
     };
 } // namespace pepper::ast

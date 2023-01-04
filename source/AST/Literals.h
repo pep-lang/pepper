@@ -12,6 +12,7 @@ namespace pepper::ast {
 
     struct BoolLiteral : public Literal {
         DECLARE_RTTI(BoolLiteral, Literal);
+        AST_NODE_POD_CLONE(BoolLiteral);
 
         const bool Value;
 
@@ -35,6 +36,7 @@ namespace pepper::ast {
 
     struct IntegerLiteral : public Literal {
         DECLARE_RTTI(IntegerLiteral, Literal);
+        AST_NODE_POD_CLONE(IntegerLiteral);
 
         const int64_t Value;
 
@@ -58,6 +60,7 @@ namespace pepper::ast {
 
     struct FloatLiteral : public Literal {
         DECLARE_RTTI(FloatLiteral, Literal);
+        AST_NODE_POD_CLONE(FloatLiteral);
 
         const double Value;
 
@@ -81,6 +84,7 @@ namespace pepper::ast {
 
     struct StringLiteral : public Literal {
         DECLARE_RTTI(StringLiteral, Literal);
+        AST_NODE_POD_CLONE(StringLiteral);
 
         const std::string Value;
 

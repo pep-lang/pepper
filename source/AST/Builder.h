@@ -33,7 +33,7 @@ namespace pepper::ast {
         [[nodiscard]] virtual Ref<VariableDef> findVariable(const Ident& name) const = 0;
         [[nodiscard]] virtual Ref<Symbol> findSymbol(const Ident& name) const = 0;
 
-        virtual void beginStruct(Ref<StructDef> str) = 0;
+        virtual void beginStruct(Ref<StructDef> st) = 0;
         virtual void endStruct() = 0;
 
         virtual void beginExtension(Ref<StructDef> structDef) = 0;

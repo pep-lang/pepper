@@ -24,7 +24,6 @@ namespace pepper {
 
     void Scope::newSymbol(const Value& value) {
         Symbols[value.Identifier] = value;
-        OrderedSymbols.push_back(value.Identifier);
     }
 
     const Value& Scope::findSymbol(const std::string& identifier) const {

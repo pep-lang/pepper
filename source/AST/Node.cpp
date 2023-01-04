@@ -26,6 +26,12 @@ namespace pepper::ast {
         }
     }
 
+    void TypeName::specialize(const Specialization::GenericTypeMap& map) {
+        for (const auto& generic : map) {
+            replace(generic.getKey().str(), generic.getValue());
+        }
+    }
+
     std::string Node::sourcePrefix(int width, int indent) const {
         width = (width >= 0) ? width : Source.File.size() + 10;
         width += indent;
@@ -40,5 +46,13 @@ namespace pepper::ast {
 
     std::string Node::dump(int indent) const {
         return llvm::formatv("{0}{1} ", repeat(" ", indent), rtti()->name());
+    }
+
+    Ref<Node> Node::clone() const {
+        return Ref<Node>{((const RttiInstance<Node>*)rtti())->clone(this)};
+    }
+
+    void Symbol::specialize(const Specialization& spec) {
+        Type.specialize(spec.TypeMap);
     }
 } // namespace pepper::ast

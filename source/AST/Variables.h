@@ -8,12 +8,18 @@
 namespace pepper::ast {
     struct VariableDef : public Symbol {
         DECLARE_RTTI(VariableDef, Symbol);
+        AST_NODE_POD_CLONE(VariableDef);
 
         Ref<Expression> Default;
 
         VariableDef(const TypeName& type, const Ident& identifier, Ref<Expression> defaultValue = nullptr)
             : Symbol(type, identifier)
-            , Default(defaultValue) {
+            , Default(std::move(defaultValue)) {
+        }
+
+        VariableDef(const VariableDef& rhs)
+            : Symbol(rhs)
+            , Default{rhs.Default ? rhs.Default->cloneAs<Expression>() : Ref<Expression>()} {
         }
 
         std::string toString() const override {
@@ -29,10 +35,17 @@ namespace pepper::ast {
                 str += std::string(llvm::formatv(" = {0}", Default->toString()));
             return Node::dump(indent) + str;
         }
+
+        void specialize(const Specialization& spec) override {
+            Symbol::specialize(spec);
+            if (Default)
+                Default->specialize(spec);
+        }
     };
 
     struct ParamDef : public VariableDef {
         DECLARE_RTTI(ParamDef, VariableDef);
+        AST_NODE_POD_CLONE(ParamDef);
 
       public:
         using VariableDef::VariableDef;
@@ -40,9 +53,10 @@ namespace pepper::ast {
 
     struct VariableRef : public Expression {
         DECLARE_RTTI(VariableRef, Expression);
+        AST_NODE_POD_CLONE(VariableRef);
 
       private:
-        const Ident Identifier;
+        Ident Identifier;
 
       public:
         VariableRef(const Ident& identifier)

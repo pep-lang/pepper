@@ -163,7 +163,7 @@ namespace pepper {
             }
 
             if (builder->structTarget()) {
-                lvaluePush(builder->New<FieldDef>(builder->structTarget(), typeName, identifier));
+                lvaluePush(builder->New<FieldDef>(builder->structTarget().get(), typeName, identifier));
             } else {
                 lvaluePush(builder->New<VariableDef>(typeName, identifier));
             }
@@ -184,11 +184,11 @@ namespace pepper {
             auto symbol = builder->findSymbol(identifier);
             if (symbol && symbol->is<FieldDef>()) {
                 auto field = symbol.as<FieldDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(field->Struct), field->Name);
+                return builder->New<MemberRef>(Ref<ThisRef>::New(), field->Name);
             }
             if (symbol && symbol->is<MethodDef>()) {
                 auto method = symbol.as<MethodDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(method->Struct), method->Name);
+                return builder->New<MemberRef>(Ref<ThisRef>::New(), method->Name);
             }
             // anything else can be looked up later, at codegen/pass time
             return builder->New<VariableRef>(identifier);
@@ -206,8 +206,8 @@ namespace pepper {
                 return;
             }
             auto stringLiterals = context->StringLiteral();
-            if (stringLiterals.size()) {
-                std::string strVal = "";
+            if (!stringLiterals.empty()) {
+                std::string strVal;
                 std::for_each(
                     stringLiterals.begin(), stringLiterals.end(), [&strVal](auto str) { strVal += str->toString(); });
                 rvaluePush(builder->New<StringLiteral>(strVal));
@@ -243,7 +243,7 @@ namespace pepper {
 
             auto function =
                 builder->structTarget()
-                    ? builder->New<MethodDef>(builder->structTarget(), returnType, identifier).as<FunctionDef>()
+                    ? builder->New<MethodDef>(builder->structTarget().get(), returnType, identifier).as<FunctionDef>()
                     : builder->New<FunctionDef>(returnType, identifier);
             lvaluePush(function);
             builder->beginFunction(function);
@@ -285,7 +285,7 @@ namespace pepper {
 
         void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
             auto st = builder->structTarget();
-            st->Constructor = builder->New<MethodDef>(st, TypeName("void"), "__ctor");
+            st->Constructor = builder->New<MethodDef>(st.get(), TypeName("void"), "__ctor");
             lvaluePush(st->Constructor);
             builder->beginFunction(st->Constructor);
         }
@@ -321,8 +321,8 @@ namespace pepper {
                 func->Parameters.emplace_back(paramName, field.value()->Type, defaultValue);
 
                 // GreaterEqual the assignment to the field to the ctor
-                func->Body->Items.push_back(builder->New<Assign>(
-                    builder->New<MemberRef>(Ref<ThisRef>::New(st), fieldName), builder->New<VariableRef>(paramName)));
+                func->Body->Items.emplace_back(builder->New<Assign>(
+                    builder->New<MemberRef>(Ref<ThisRef>::New(), fieldName), builder->New<VariableRef>(paramName)));
             }
         }
 
@@ -395,7 +395,7 @@ namespace pepper {
             if (context->expression()) {
                 returnValue = rvaluePop<Expression>();
             }
-            auto ret = builder->New<Return>(function, returnValue);
+            auto ret = builder->New<Return>(function->ReturnType, returnValue);
             builder->insert(ret);
         }
 
@@ -418,10 +418,10 @@ namespace pepper {
         void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
             auto branch = builder->New<If>();
             if (context->ifStatement()) {
-                branch->Then = Ref<Block>::New(branch, "then");
+                branch->Then = Ref<Block>::New("then");
             }
             if (context->elseStatement()) {
-                branch->Else = Ref<Block>::New(branch, "else");
+                branch->Else = Ref<Block>::New("else");
             }
             builder->beginScope("select");
             lvaluePush(branch);

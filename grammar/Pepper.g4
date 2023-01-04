@@ -31,6 +31,18 @@ arrayAccess
     : primaryExpression '[' expression ']'
     ;
 
+typeSpecifier
+    : Identifier genericArgs?
+	;
+
+genericArgs
+    : '<' genericArgsList '>'
+    ;
+
+genericArgsList
+    : typeSpecifier (',' typeSpecifier)?
+    ;
+
 functionCall
     : typeSpecifier '(' argumentExpressionList? ')'		# FreeFunctionCall
 	| memberAccess '(' argumentExpressionList? ')'	# MethodCall
@@ -56,8 +68,8 @@ unaryOperator
 	;
 
 castExpression
-	: '(' Identifier As Identifier ')'
-	| unaryExpression
+	: unaryExpression
+	| '(' Identifier As Identifier ')'
 	;
 
 binaryOpExpression
@@ -116,8 +128,13 @@ ternaryExpression
     | logicalOrExpression '?' expression ':' ternaryExpression #Ternary
 	;
 
+functionCallExpression
+    : functionCall
+    | ternaryExpression
+    ;
+
 assignmentExpression
-	: ternaryExpression #assignmentDefault
+	: functionCallExpression #assignmentDefault
 	| unaryExpression '=' assignmentExpression #Assignment
     | unaryExpression '*=' assignmentExpression #MulAssignment
     | unaryExpression '/=' assignmentExpression #DivAssignment
@@ -158,24 +175,12 @@ storageClassSpecifier
 	: 'static'
 	;
 
-typeSpecifier
-    : Identifier genericArgs?
-	;
-
 typeDeclaration
     : Identifier genericParams?
     ;
 
 variableDeclaration
     : typeSpecifier Brackets? Identifier (Assign assignmentExpression)? ';'
-    ;
-
-genericArgs
-    : '<' genericArgsList '>'
-    ;
-
-genericArgsList
-    : typeSpecifier (',' typeSpecifier)?
     ;
 
 genericParams

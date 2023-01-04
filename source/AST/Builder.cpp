@@ -2,9 +2,10 @@
 // Created by Justin Boswell on 12/21/22.
 //
 
-#include "AST/Builder.h"
+#include <utility>
 
 #include "AST/AST.h"
+#include "AST/Builder.h"
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
@@ -18,25 +19,22 @@ namespace pepper::ast {
         struct Scope {
             const Ident Name;
 
-            llvm::StringMap<Ref<ast::VariableDef>> Locals;
+            llvm::StringMap<Ref<VariableDef>> Locals;
             llvm::StringMap<Ref<Symbol>> Symbols;
-            Vector<Ref<Symbol>> OrderedSymbols;
 
             llvm::StringMap<Ref<StructDef>> Structs;
-            Ref<ast::StructDef> StructTarget;
+            Ref<StructDef> StructTarget = nullptr;
 
-            llvm::StringMap<Ref<ast::FunctionDef>> Functions;
-            Vector<Ref<FunctionDef>> OrderedFunctions;
-            Vector<Ref<Expression>> Expressions;
-            Ref<ast::FunctionDef> FunctionTarget;
+            llvm::StringMap<Ref<FunctionDef>> Functions;
+            Ref<FunctionDef> FunctionTarget = nullptr;
 
             Ref<Node> Parent;
             Ref<Block> Block;
             Vector<Ref<Node>> LValueStack;
             Vector<Ref<Node>> RValueStack;
 
-            explicit Scope(const Ident& name = "Anonymous")
-                : Name(name) {
+            explicit Scope(Ident name = "Anonymous")
+                : Name(std::move(name)) {
             }
         };
 
@@ -49,7 +47,7 @@ namespace pepper::ast {
             ScopeStack.emplace_back(Ref<Scope>::New("Global")); // global scope
         }
 
-        [[nodiscard]] Ref<ast::FunctionDef> functionTarget() const override {
+        [[nodiscard]] Ref<FunctionDef> functionTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget)
                     return scope->FunctionTarget;
@@ -57,7 +55,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        Ref<ast::StructDef> structTarget() const override {
+        [[nodiscard]] Ref<StructDef> structTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->StructTarget)
                     return scope->StructTarget;
@@ -67,8 +65,8 @@ namespace pepper::ast {
 
         [[nodiscard]] Ref<StructDef> findStruct(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (auto str = scope->Structs.lookup(name))
-                    return str;
+                if (auto st = scope->Structs.lookup(name))
+                    return st;
             }
             return nullptr;
         }
@@ -89,7 +87,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::FunctionDef> findFunction(const Ident& name) const override {
+        [[nodiscard]] Ref<FunctionDef> findFunction(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (auto var = scope->Functions.lookup(name)) {
                     return var;
@@ -122,7 +120,7 @@ namespace pepper::ast {
             }
             auto specialized = StructDef::New(spec);
             specialized->specialize(genericStruct, {spec.GenericTypes.begin(), spec.GenericTypes.end()});
-            specialized->finish();
+            // specialized->finish();
             ast.newRoot(specialized);
 
             auto name = spec.toString();
@@ -240,17 +238,17 @@ namespace pepper::ast {
             endScope();
         }
 
-        void beginFunction(Ref<ast::FunctionDef> func) override {
+        void beginFunction(Ref<FunctionDef> func) override {
             auto& scope = ScopeStack.back();
             if (scope->Functions.lookup(func->Name))
                 throw CompileError("Cannot redefine existing function {0}", func->Name);
             scope->Functions[func->Name] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
-            func->Body = Ref<Block>::New(functionTarget(), func->Name);
+            func->Body = Ref<Block>::New(func->Name);
             beginBlock(func->Body);
             auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
-            fnScope->StructTarget = func->is<MethodDef>() ? func.as<MethodDef>()->Struct : nullptr;
+            fnScope->StructTarget = func->is<MethodDef>() ? findStruct(func.as<MethodDef>()->Struct->Name) : nullptr;
         }
 
         void endFunction() override {
@@ -293,14 +291,13 @@ namespace pepper::ast {
             PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Name);
         }
 
-        void symbol(Ref<ast::VariableDef> var) override {
+        void symbol(Ref<VariableDef> var) override {
             auto& scope = ScopeStack.back();
             if (var->is<FieldDef>()) {
                 auto field = var.as<FieldDef>();
                 structTarget()->Fields.push_back(field);
             } else {
                 scope->Locals[var->Name] = var;
-                scope->OrderedSymbols.push_back(var);
                 if (block()) {
                     block()->Items.push_back(var);
                 }

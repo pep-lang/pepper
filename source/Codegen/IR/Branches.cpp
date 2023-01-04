@@ -54,10 +54,10 @@ namespace pepper {
             auto phiNode = ir()->CreatePHI(thenVal->getType(), 2, "iftmp");
             phiNode->addIncoming(thenVal, thenBlock);
             phiNode->addIncoming(elseVal, elseBlock);
-            return Value(thenVal.Ty, phiNode);
+            return Value{thenVal.Ty, phiNode};
         }
-        return Value(Types::VoidPtr,
-                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
+        return Value{Types::VoidPtr,
+                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType()))};
     }
 
     Value Codegen::emit(Ref<Ternary> ternary) {
@@ -88,6 +88,6 @@ namespace pepper {
         auto phi = ir()->CreatePHI(trueValue->getType(), 2, "ternary");
         phi->addIncoming(trueValue, trueBlock);
         phi->addIncoming(falseValue, falseBlock);
-        return Value(trueValue.Ty, phi);
+        return Value{trueValue.Ty, phi};
     }
 } // namespace pepper

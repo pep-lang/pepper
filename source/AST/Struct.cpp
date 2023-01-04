@@ -5,9 +5,9 @@
 #include "AST/Struct.h"
 
 namespace pepper::ast {
-    FieldDef::FieldDef(Ref<StructDef> st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue)
-        : VariableDef(type, name) {
-        Struct = st;
+    FieldDef::FieldDef(StructDef* st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue)
+        : VariableDef(type, name, defaultValue)
+        , Struct(st) {
     }
 
     std::string FieldDef::toString() const {
@@ -20,10 +20,20 @@ namespace pepper::ast {
                    "{0} {1}.{2} = {3}", Type, Struct->Name, Name, Default ? Default->toString() : "default"));
     }
 
+    Ref<Node> FieldDef::clone() const {
+        return Ref<FieldDef>::New(
+            Struct, Type, Name, Ref<Expression>{Default ? Default->cloneAs<Expression>() : nullptr});
+    }
+
+    void FieldDef::specialize(const Specialization& spec) {
+        VariableDef::specialize(spec);
+        Struct = spec.Struct.get();
+    }
+
     MethodDef::MethodDef(
-        Ref<StructDef> st, const TypeName& returnType, const Ident& name, const Params& params, bool vararg)
+        StructDef* st, const TypeName& returnType, const Ident& name, const Params& params, bool vararg)
         : FunctionDef(returnType, name, params, vararg)
-        , Struct(std::move(st)) {
+        , Struct(st) {
     }
 
     std::string MethodDef::toString() const {
@@ -44,74 +54,93 @@ namespace pepper::ast {
                sep + Body->dump(indent);
     }
 
+    Ref<Node> MethodDef::clone() const {
+        auto method = Ref<MethodDef>::New(Struct, ReturnType, Name, Parameters, Vararg);
+        method->Body = Body->cloneAs<Block>();
+        return method;
+    }
+
+    void MethodDef::specialize(const Specialization& spec) {
+        FunctionDef::specialize(spec);
+        Struct = spec.Struct.get();
+    }
+
     StructDef::StructDef(const TypeName& type)
         : Symbol(type, type.toString()) {
+        NewInstance = Ref<FunctionDef>::New(Type, Name);
+        // Note that the order of these is important, ctor depends on init, so must be generated after
+        Initializer = Ref<MethodDef>::New(this, TypeName("void"), "__init");
+        Constructor = Ref<MethodDef>::New(this, TypeName("void"), "__ctor");
+        Destructor = Ref<MethodDef>::New(this, TypeName("void"), "__dtor");
+    }
+
+    StructDef::StructDef(const StructDef& rhs)
+        : StructDef(rhs.Type) {
     }
 
     Ref<StructDef> StructDef::New(const TypeName& type) {
         Ref<StructDef> structDef = Ref<StructDef>::New(type);
-        structDef->NewInstance = Ref<FunctionDef>::New(type, structDef->Name);
-        // Note that the order of these is important, ctor depends on init, so must be generated after
-        structDef->Initializer = Ref<MethodDef>::New(structDef, TypeName("void"), "__init");
-        structDef->Constructor = Ref<MethodDef>::New(structDef, TypeName("void"), "__ctor");
-        structDef->Destructor = Ref<MethodDef>::New(structDef, TypeName("void"), "__dtor");
         return structDef;
     }
 
-    static Ref<MethodDef> specializeMethod(Ref<MethodDef> srcMethod, Ref<StructDef> targetStruct) {
-        auto genericStruct = srcMethod->Struct;
-        auto method = Ref<MethodDef>::New(
-            targetStruct, srcMethod->ReturnType, srcMethod->Name, srcMethod->Parameters, srcMethod->Vararg);
-        for (int idx = 0; idx < genericStruct->GenericParams.size(); ++idx) {
-            const auto& param = genericStruct->GenericParams[idx];
-            const auto& type = targetStruct->GenericArgs[idx];
-            method->ReturnType.replace(param, type);
-            for (auto& methodParam : method->Parameters) {
-                methodParam.Type.replace(param, type);
-            }
-        }
-        return method;
+    void MethodCall::specialize(const Specialization& spec) {
+        This->specialize(spec);
+        Query(Args).each([&spec](auto& a) { a->specialize(spec); });
     }
 
     void StructDef::specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs) {
         GenericStruct = std::move(genericStruct);
         GenericArgs = std::move(genericArgs);
 
+        Specialization spec{shared_from_this()};
+        // map params -> args
+        for (int idx = 0; idx < GenericStruct->GenericParams.size(); ++idx) {
+            const auto& param = GenericStruct->GenericParams[idx];
+            const auto& type = GenericArgs[idx];
+            spec.TypeMap[param] = type;
+        }
+
         // replace types on fields
         for (const auto& srcField : GenericStruct->Fields) {
-            auto field = Ref<FieldDef>::New(shared_from_this(), srcField->Type, srcField->Name, srcField->Default);
-            for (int idx = 0; idx < GenericStruct->GenericParams.size(); ++idx) {
-                const auto& param = GenericStruct->GenericParams[idx];
-                const auto& type = GenericArgs[idx];
-                field->Type.replace(param, type);
-            }
+            auto field = srcField->cloneAs<FieldDef>();
+            field->specialize(spec);
             Fields.emplace_back(field);
         }
 
+        // clone and specialize the `new` function
+        NewInstance = GenericStruct->NewInstance->cloneAs<FunctionDef>();
+        NewInstance->Name = spec.Struct->Name;
+        NewInstance->Type = spec.Struct->Type;
+        NewInstance->specialize(spec);
+
         // replace types in method return types and params
         for (const auto& srcMethod : GenericStruct->Methods) {
-            // Do not specialized init/ctor/dtor
-            if (srcMethod->Name.starts_with("__"))
-                continue;
-            auto method = specializeMethod(srcMethod, shared_from_this());
+            // clone the method then specialize it
+            auto method = srcMethod->cloneAs<MethodDef>();
+            method->specialize(spec);
             Methods.emplace_back(method);
-        }
 
-        // Specialize the constructor (args could change), but the other functions can be defaulted
-        Constructor = specializeMethod(GenericStruct->Constructor, shared_from_this());
+            // update Constructor once it's specialized
+            if (method->Name == "__ctor")
+                Constructor = method;
+            if (method->Name == "__init")
+                Initializer = method;
+            if (method->Name == "__dtor")
+                Destructor = method;
+        }
     }
 
     void StructDef::finish() {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         Vector<Ref<Node>> body = {
             Ref<VariableDef>::New(TypeName("u64"), "size"),
-            Ref<VariableDef>::New(Name,
+            Ref<VariableDef>::New(Type,
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
-            Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__ctor"),
+            Ref<MethodCall>::New(Ref<ThisRef>::New(), "__ctor"),
             Ref<VariableRef>::New("this"),
-            Ref<Return>::New(NewInstance, Ref<VariableRef>::New("this")),
+            Ref<Return>::New(NewInstance->ReturnType, Ref<VariableRef>::New("this")),
         };
         NewInstance->Body->Items = body;
 
@@ -119,20 +148,20 @@ namespace pepper::ast {
         for (auto& field : Fields) {
             Initializer->Body->Items.push_back(field);
         }
-        Initializer->Body->Items.push_back(Ref<Return>::New(Initializer));
+        Initializer->Body->Items.push_back(Ref<Return>::New());
 
         // insert initializer as the first instruction in Constructor
         Constructor->Body->Items.insert(Constructor->Body->Items.begin(),
-                                        Ref<MethodCall>::New(Ref<ThisRef>::New(shared_from_this()), "__init"));
+                                        Ref<MethodCall>::New(Ref<ThisRef>::New(), "__init"));
 
         // insert free as the last instruction before return in Destructor
-        auto lastExpr = Destructor->Body->Items.size() ? Destructor->Body->Items.back() : nullptr;
+        auto lastExpr = !Destructor->Body->Items.empty() ? Destructor->Body->Items.back() : nullptr;
         if (lastExpr && lastExpr->is<Return>()) {
             Destructor->Body->Items.pop_back();
         }
 
-        Destructor->Body->Items.push_back(Ref<FunctionCall>::New(
-            ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New(shared_from_this())}));
+        Destructor->Body->Items.push_back(
+            Ref<FunctionCall>::New(ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
 
         Methods.push_back(Initializer);
         Methods.push_back(Constructor);

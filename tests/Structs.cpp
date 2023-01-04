@@ -116,3 +116,19 @@ int test() {
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Structs, SimpleGenericCtor) {
+    const char* source = R"SOURCE(
+struct Test<T> {
+    T x;
+
+    new(this.x) {}
+};
+
+int test() {
+    Test<int> t = Test<int>(2);
+    return t.x;
+}
+    )SOURCE";
+    EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
+}

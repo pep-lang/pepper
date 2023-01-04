@@ -8,6 +8,7 @@
 #include "Core/SourceLocation.h"
 #include "Core/String.h"
 #include "Core/Vector.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace llvm {
     class Type;
@@ -15,11 +16,17 @@ namespace llvm {
 
 namespace pepper::ast {
 
+    struct Specialization {
+        using GenericTypeMap = llvm::StringMap<struct TypeName>;
+        Ref<struct StructDef> Struct;
+        GenericTypeMap TypeMap;
+    };
+
     struct TypeName {
         Ident Name;
         std::vector<TypeName> GenericTypes;
 
-        TypeName(Ident name, const Vector<TypeName> types = {})
+        TypeName(Ident name = "default", const Vector<TypeName> types = {})
             : Name(std::move(name))
             , GenericTypes(types.begin(), types.end()) {
         }
@@ -29,6 +36,7 @@ namespace pepper::ast {
         TypeName& operator=(const TypeName&) = default;
 
         void replace(const Ident& genericParam, const TypeName& genericArg);
+        void specialize(const Specialization::GenericTypeMap& map);
 
         operator std::string() const {
             return toString();
@@ -44,6 +52,16 @@ namespace pepper::ast {
 
         Node() = default;
         virtual ~Node() = default;
+
+        template <typename N>
+        Ref<N> cloneAs() const {
+            return Ref<N>{clone()};
+        }
+
+        virtual Ref<Node> clone() const;
+
+        virtual void specialize(const Specialization& spec) {
+        }
 
         [[nodiscard]] std::string sourcePrefix(int width = -1, int indent = 0) const;
         [[nodiscard]] virtual std::string toString() const;
@@ -83,6 +101,8 @@ namespace pepper::ast {
             : Type(type)
             , Name(name) {
         }
+
+        void specialize(const Specialization& spec) override;
     };
 
     class Expression : public Node {
@@ -95,3 +115,8 @@ namespace pepper::ast {
         }
     };
 } // namespace pepper::ast
+
+#define AST_NODE_POD_CLONE(N)                                                                                          \
+    inline Ref<Node> clone() const override {                                                                          \
+        return Ref<Node>{static_cast<const RttiInstance<N>*>(rtti())->clone(this)};                                    \
+    }

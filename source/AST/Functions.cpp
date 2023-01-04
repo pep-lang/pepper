@@ -1,9 +1,7 @@
 
-#include <algorithm>
-
 #include "AST/Nodes.h"
 #include "AST/Param.h"
-#include "Core/Exceptions.h"
+#include "Core/Query.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
@@ -24,6 +22,39 @@ namespace pepper::ast {
         , ReturnType(returnType)
         , Parameters(params)
         , Vararg(vararg) {
+    }
+
+    std::string FunctionNode::toString() const {
+        Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type.toString(); });
+        std::string sig = llvm::formatv(
+            "{0} {1} {2}({3})", Node::toString(), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
+        return sig;
+    }
+
+    std::string FunctionNode::dump(int indent) const {
+        Vector<std::string> types =
+            Query(Parameters).select<std::string>([](auto p) { return p.Type.toString() + " " + p.Name; });
+        return llvm::formatv("{0} {1} {2}({3})",
+                             Node::dump(indent),
+                             ReturnType.toString(),
+                             Name,
+                             llvm::join(types.begin(), types.end(), ", "));
+    }
+
+    void FunctionNode::specialize(const Specialization& spec) {
+        ReturnType.specialize(spec.TypeMap);
+        for (auto& param : Parameters) {
+            param.Type.specialize(spec.TypeMap);
+        }
+    }
+
+    void FunctionDef::specialize(const Specialization& spec) {
+        FunctionNode::specialize(spec);
+        Body->specialize(spec);
+    }
+
+    void Return::specialize(const Specialization& spec) {
+        Type.specialize(spec.TypeMap);
     }
 
     Ref<ExternFunctionDef> ExternFunctionDef::Malloc =

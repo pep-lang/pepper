@@ -20,9 +20,12 @@ namespace pepper::ast {
     struct FieldDef : public VariableDef {
         DECLARE_RTTI(FieldDef, VariableDef);
 
-        Ref<StructDef> Struct;
+        StructDef* Struct;
 
-        FieldDef(Ref<StructDef> st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
+        FieldDef(StructDef* st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
+
+        Ref<Node> clone() const override;
+        void specialize(const Specialization& spec) override;
 
         std::string toString() const override;
         std::string dump(int indent) const override;
@@ -31,14 +34,17 @@ namespace pepper::ast {
     struct MethodDef : public FunctionDef {
         DECLARE_RTTI(MethodDef, FunctionDef);
 
-        Ref<StructDef> Struct;
+        StructDef* Struct;
 
       public:
-        MethodDef(Ref<StructDef> st,
+        MethodDef(StructDef* st,
                   const TypeName& returnType,
                   const Ident& name,
                   const Params& params = Params(),
                   bool vararg = false);
+
+        Ref<Node> clone() const override;
+        void specialize(const Specialization& spec) override;
 
         std::string toString() const override;
         std::string dump(int indent) const override;
@@ -48,6 +54,7 @@ namespace pepper::ast {
         : public Symbol
         , public std::enable_shared_from_this<StructDef> {
         DECLARE_RTTI(StructDef, Symbol);
+        AST_NODE_POD_CLONE(StructDef);
 
         Ref<FunctionDef> NewInstance;
         Ref<MethodDef> Initializer;
@@ -62,7 +69,8 @@ namespace pepper::ast {
         // generic args for this specialization
         Vector<TypeName> GenericArgs;
 
-        StructDef(const TypeName& type);
+        explicit StructDef(const TypeName& type);
+        StructDef(const StructDef& rhs);
 
         void specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs);
         void finish();
@@ -75,6 +83,7 @@ namespace pepper::ast {
 
     struct MemberRef : public Expression {
         DECLARE_RTTI(MemberRef, Expression);
+        AST_NODE_POD_CLONE(MemberRef);
 
         Ref<Expression> LHS;
         Ident MemberName;
@@ -99,10 +108,15 @@ namespace pepper::ast {
             return Node::dump(indent) +
                    std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", MemberName));
         }
+
+        void specialize(const Specialization& spec) override {
+            LHS->specialize(spec);
+        }
     };
 
     struct MethodCall : public Expression {
         DECLARE_RTTI(MethodCall, Expression);
+        AST_NODE_POD_CLONE(MethodCall);
 
         Ref<Expression> This;
         const Ident Name;
@@ -113,23 +127,16 @@ namespace pepper::ast {
             , Name(methodName)
             , Args(args) {
         }
+
+        void specialize(const Specialization& spec) override;
     };
 
-    struct ThisRef : public Expression {
-        DECLARE_RTTI(ThisRef, Expression);
+    struct ThisRef : public VariableRef {
+        DECLARE_RTTI(ThisRef, VariableRef);
+        AST_NODE_POD_CLONE(ThisRef);
 
-        Ref<StructDef> Struct;
-
-        ThisRef(Ref<StructDef> thisType)
-            : Struct(thisType) {
-        }
-
-        std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("{0}*", Struct->Name));
-        }
-
-        std::string dump(int indent) const override {
-            return Node::dump(indent) + std::string(llvm::formatv("{0}*", Struct->Name));
+        ThisRef()
+            : VariableRef("this") {
         }
     };
 } // namespace pepper::ast
