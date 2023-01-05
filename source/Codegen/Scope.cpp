@@ -33,7 +33,7 @@ namespace pepper {
         return Outer ? Outer->findSymbol(identifier) : Value::Null();
     }
 
-    Ref<Function> Scope::functionTarget() const {
+    Ref<UserFunction> Scope::functionTarget() const {
         return FunctionTarget ? FunctionTarget : (Outer ? Outer->functionTarget() : nullptr);
     }
 

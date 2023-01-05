@@ -20,6 +20,7 @@ namespace llvm {
 
 namespace pepper {
     class Function;
+    class UserFunction;
     class Struct;
     class Symbol;
     class TypeInfo;
@@ -36,7 +37,7 @@ namespace pepper {
         llvm::StringMap<Ref<Struct>> Structs;
 
         llvm::StringMap<Ref<Function>> Functions;
-        Ref<Function> FunctionTarget;
+        Ref<UserFunction> FunctionTarget;
 
         Ref<Struct> This;
 
@@ -53,6 +54,6 @@ namespace pepper {
         [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
         [[nodiscard]] const Value& findSymbol(const std::string& identifier) const;
         Ref<llvm::IRBuilderBase> builder() const;
-        Ref<Function> functionTarget() const;
+        Ref<UserFunction> functionTarget() const;
     };
 } // namespace pepper

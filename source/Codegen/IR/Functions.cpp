@@ -35,12 +35,16 @@ namespace pepper {
             Context::get().locals()->newSymbol(local);
         }
 
-        // Emit the body of the function, after ensuring there is a return instruction
-        auto lastExpr = (funcDef->Body->Items.size()) ? funcDef->Body->Items.back() : nullptr;
-        if (!lastExpr || !lastExpr->is<Return>()) {
-            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef->ReturnType));
+        //        // Emit the body of the function, after ensuring there is a return instruction
+        //        auto lastExpr = (funcDef->Body->Items.size()) ? funcDef->Body->Items.back() : nullptr;
+        //        if (!lastExpr || !lastExpr->is<Return>()) {
+        //            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef->ReturnType));
+        //        }
+        Value lastInstr;
+        Query(funcDef->Body->Items).each([&](auto expr) { lastInstr = codegen(expr); });
+        if (!llvm::isa<llvm::BranchInst>(*lastInstr)) {
+            ir()->CreateBr(function->Return);
         }
-        Query(funcDef->Body->Items).each([&](auto expr) { codegen(expr); });
 
         Context::get().popScope();
         Context::get().locals()->newFunction(function);
@@ -57,15 +61,18 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<Return> ret) {
+        auto function = Context::get().locals()->functionTarget().as<UserFunction>();
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
             auto returnType = Types::get(ret->Type.toString());
             auto type = TypeOps::get(returnType);
             auto rv = type->coerce(returnValue);
-            return Value{returnType, ir()->CreateRet(rv)};
+            // save the return value to the return value address
+            ir()->CreateStore(rv, function->ReturnValue);
         }
-        return Value{Types::Void, ir()->CreateRetVoid()};
+        // jump to the return block
+        return Value{Types::Void, ir()->CreateBr(function->Return)};
     }
 
     Value Codegen::emit(Ref<FunctionCall> call) {

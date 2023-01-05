@@ -53,6 +53,17 @@ namespace pepper {
         auto& context = Context::get().module()->getContext();
         Body = llvm::BasicBlock::Create(context, "entry", Func);
         Builder = Ref<llvm::IRBuilder<>>::New(Body);
+
+        // Set up return block and return instruction
+        Return = llvm::BasicBlock::Create(context, "return", Func);
+        auto builder = Ref<llvm::IRBuilder<>>::New(Return);
+        builder->SetInsertPoint(Return);
+        if (returnType != Types::Void) {
+            ReturnValue = Value{returnType, Builder->CreateAlloca(*returnType, nullptr, "retval")};
+            builder->CreateRet(builder->CreateLoad(*ReturnType, ReturnValue));
+        } else {
+            builder->CreateRetVoid();
+        }
     }
 
     Ref<ExternFunction> ExternFunction::Malloc;

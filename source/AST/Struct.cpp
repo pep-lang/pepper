@@ -98,11 +98,25 @@ namespace pepper::ast {
         // Add a field at the head for the refcount
         Fields.emplace_back(Ref<FieldDef>::New(this, TypeName{"u32"}, "__refcount", Ref<IntegerLiteral>::New(0)));
 
-        Acquire = Ref<MethodDef>::New(this, TypeName{"void"}, "__acquire");
+        Acquire = Ref<MethodDef>::New(this, TypeName{"void"}, "__acquire", Params{{"ref", Type}});
         Release = Ref<MethodDef>::New(this, TypeName{"void"}, "__release");
 
         auto refcount = Ref<MemberRef>::New(Ref<ThisRef>::New(), "__refcount");
         Acquire->Body->Items = {
+            // if (ref == this)
+            //     return
+            Ref<If>::New(Ref<Equal>::New(Ref<VariableRef>::New("ref"), Ref<ThisRef>::New()),
+                         Ref<Block>::New("if",
+                                         Vector<Ref<Node>>{
+                                             Ref<Return>::New(),
+                                         })),
+            // if (ref)
+            //     ref.__release()
+            Ref<If>::New(Ref<NotEqual>::New(Ref<VariableRef>::New("ref"), PointerLiteral::Null()),
+                         Ref<Block>::New("if",
+                                         Vector<Ref<Node>>{
+                                             Ref<MethodCall>::New(Ref<VariableRef>::New("ref"), "__release"),
+                                         })),
             // this.__refcount += 1
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
         };

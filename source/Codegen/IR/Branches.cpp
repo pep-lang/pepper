@@ -17,13 +17,11 @@ namespace pepper {
     using namespace pepper::ast;
 
     Value Codegen::emit(Ref<Branch> branch) {
-        auto function = ir()->GetInsertBlock()->getParent();
-        auto& context = function->getContext();
-        auto thenBlock = llvm::BasicBlock::Create(context, "then", function);
-        auto elseBlock = llvm::BasicBlock::Create(context, "else");
-        elseBlock->insertInto(function);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "ifcont");
-        mergeBlock->insertInto(function);
+        auto function = Context::get().locals()->functionTarget();
+        auto& context = function->function()->getContext();
+        auto thenBlock = llvm::BasicBlock::Create(context, "then", function->function(), function->Return);
+        auto elseBlock = llvm::BasicBlock::Create(context, "else", function->function(), function->Return);
+        auto mergeBlock = llvm::BasicBlock::Create(context, "ifcont", function->function(), function->Return);
         auto condition = codegen(branch->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
 
@@ -34,7 +32,8 @@ namespace pepper {
         ir()->SetInsertPoint(thenBlock);
         Value thenVal;
         Query(branch->Then->Items).each([&](auto expr) { thenVal = codegen(expr); });
-        ir()->CreateBr(mergeBlock);
+        if (!thenVal || !llvm::isa<llvm::BranchInst>(*thenVal))
+            ir()->CreateBr(mergeBlock);
         thenBlock = ir()->GetInsertBlock();
 
         // generate else block
@@ -43,7 +42,8 @@ namespace pepper {
         if (branch->Else) {
             Query(branch->Else->Items).each([&](auto expr) { elseVal = codegen(expr); });
         }
-        ir()->CreateBr(mergeBlock);
+        if (!elseVal || !llvm::isa<llvm::BranchInst>(*elseVal))
+            ir()->CreateBr(mergeBlock);
         elseBlock = ir()->GetInsertBlock();
 
         ir()->SetInsertPoint(mergeBlock);
@@ -60,13 +60,11 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<Ternary> ternary) {
-        auto function = ir()->GetInsertBlock()->getParent();
-        auto& context = function->getContext();
-        auto trueBlock = llvm::BasicBlock::Create(context, "true", function);
-        auto falseBlock = llvm::BasicBlock::Create(context, "false");
-        falseBlock->insertInto(function);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "ternarycont");
-        mergeBlock->insertInto(function);
+        auto function = Context::get().locals()->functionTarget();
+        auto& context = function->function()->getContext();
+        auto trueBlock = llvm::BasicBlock::Create(context, "true", function->function(), function->Return);
+        auto falseBlock = llvm::BasicBlock::Create(context, "false", function->function(), function->Return);
+        auto mergeBlock = llvm::BasicBlock::Create(context, "ternarycont", function->function(), function->Return);
         auto condition = codegen(ternary->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
 

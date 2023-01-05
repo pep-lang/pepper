@@ -79,6 +79,8 @@ namespace pepper {
 
       public:
         llvm::BasicBlock* Body = nullptr;
+        llvm::BasicBlock* Return = nullptr;
+        Value ReturnValue;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
         UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());

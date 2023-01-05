@@ -21,11 +21,10 @@ namespace pepper {
     using namespace pepper::ast;
 
     Value Codegen::emit(Ref<While> loop) {
-        auto function = ir()->GetInsertBlock()->getParent();
-        auto& context = function->getContext();
-        auto bodyBlock = llvm::BasicBlock::Create(context, "while", function);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "whilecont");
-        mergeBlock->insertInto(function);
+        auto function = Context::get().locals()->functionTarget();
+        auto& context = function->function()->getContext();
+        auto bodyBlock = llvm::BasicBlock::Create(context, "while", function->function(), function->Return);
+        auto mergeBlock = llvm::BasicBlock::Create(context, "whilecont", function->function(), function->Return);
 
         auto condition = codegen(loop->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
