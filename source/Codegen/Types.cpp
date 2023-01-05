@@ -75,22 +75,16 @@ namespace pepper {
 
     Ref<TypeInfo> Types::addType(Ref<TypeInfo> t, const Vector<Ident>& aliases) {
         if (t->llvmType()->isStructTy()) {
-            // add <struct>* as "<struct>", and <struct> as "_<struct>"
-            KnownTypes["_" + t->name()] = t;
-            // TypeCache[*t] = t;
-            auto ptrType = Ref<TypeInfo>::New(t->name(), t->llvmType()->getPointerTo());
-            KnownTypes[t->name()] = ptrType;
-            KnownTypes[t->name() + "*"] = ptrType;
-            // TypeCache[*ptrType] = ptrType;
+            KnownTypes[t->name()] = t;
+            KnownTypes[t->name() + "*"] = t;
             for (const auto& alias : aliases) {
-                KnownTypes[alias] = ptrType;
+                KnownTypes[alias] = t;
                 if (!alias.ends_with('*'))
-                    KnownTypes[alias + "*"] = ptrType;
+                    KnownTypes[alias + "*"] = t;
             }
         } else {
             // add requested type with aliases
             KnownTypes[t->name()] = t;
-            // TypeCache[*t] = t;
             for (const auto& alias : aliases) {
                 KnownTypes[alias] = t;
             }
@@ -98,7 +92,6 @@ namespace pepper {
             if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
                 auto ptrType = Ref<TypeInfo>::New(t->name() + "*", t->llvmType()->getPointerTo());
                 KnownTypes[t->name() + "*"] = ptrType;
-                // TypeCache[*ptrType] = ptrType;
                 for (const auto& alias : aliases) {
                     KnownTypes[alias + "*"] = ptrType;
                 }

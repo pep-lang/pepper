@@ -82,9 +82,7 @@ namespace pepper {
 
         // generate the new struct type
         auto llvmType = llvm::StructType::create(fieldTypes, structDef->Name);
-        auto structType = Types::add(Ref<TypeInfo>::New(structDef->Name, llvmType));
-        auto structPtrType = Types::get(structDef->Name);
-        auto structDesc = Struct::New(structType, structDef->Name, newParams);
+        auto structDesc = Struct::New(llvmType, structDef->Name, newParams);
         structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known

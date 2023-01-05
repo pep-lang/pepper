@@ -14,10 +14,12 @@
 #include "llvm/IR/Type.h"
 
 namespace pepper {
+    class StructTypeInfo;
 
     class Struct : public std::enable_shared_from_this<Struct> {
         Ident Identifier;
-        Ref<TypeInfo> StructType;
+        Ref<StructTypeInfo> StructType;
+        Ref<StructTypeInfo> RefType;
         Ref<Function> NewInstance;
         std::map<Ident, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
@@ -25,10 +27,14 @@ namespace pepper {
         size_t Align;
 
       public:
-        Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
-        static Ref<Struct> New(Ref<TypeInfo> type, const Ident& name, const Params& newParams = {});
+        Struct(llvm::Type* llvmType, const Ident& name, const Params& newParams = {});
+        static Ref<Struct> New(llvm::Type* llvmType, const Ident& name, const Params& newParams = {});
 
-        Ref<TypeInfo> type() const {
+        Ref<StructTypeInfo> type() const {
+            return RefType;
+        }
+
+        Ref<StructTypeInfo> structType() const {
             return StructType;
         }
 
@@ -109,11 +115,11 @@ namespace pepper {
     class StructTypeInfo : public TypeInfo {
         DECLARE_RTTI(StructTypeInfo, TypeInfo);
 
-        Ref<Struct> Struct;
+        const Struct* StructDesc;
         Ref<TypeOps> Ops;
 
       public:
-        using TypeInfo::TypeInfo;
+        StructTypeInfo(const Struct* st, const Ident& name, llvm::Type* type);
 
         bool isStruct() const override {
             return true;

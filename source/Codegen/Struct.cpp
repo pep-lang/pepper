@@ -11,22 +11,23 @@
 
 namespace pepper {
 
-    Struct::Struct(Ref<TypeInfo> type, const Ident& name, const Params& newParams)
-        : StructType(type)
-        , Identifier(name) {
-        // deal with params at some point
-        NewInstance = Ref<UserFunction>::New(name, Types::get(StructType->name()), newParams);
+    Struct::Struct(llvm::Type* llvmType, const Ident& name, const Params& newParams)
+        : Identifier(name) {
+        StructType = Ref<StructTypeInfo>::New(this, "__" + name, llvmType);
+        RefType = Ref<StructTypeInfo>::New(this, name, llvmType->getPointerTo());
+        Types::add(RefType);
+        NewInstance = Ref<UserFunction>::New(name, Types::get(RefType->name()), newParams);
 
         // compute size from data layout
         auto module = Context::get().module();
         auto dataLayout = module->getDataLayout();
-        auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(type->llvmType()));
+        auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(llvmType));
         Size = structLayout->getSizeInBytes();
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(Ref<TypeInfo> type, const Ident& name, const Params& newParams) {
-        Ref<Struct> newStruct = Ref<Struct>::New(type, name, newParams);
+    Ref<Struct> Struct::New(llvm::Type* llvmType, const Ident& name, const Params& newParams) {
+        Ref<Struct> newStruct = Ref<Struct>::New(llvmType, name, newParams);
         Context::get().globals()->Structs[name] = newStruct;
         return newStruct;
     }
@@ -70,12 +71,12 @@ namespace pepper {
             return Context::get().locals()->builder();
         }
 
-        Ref<Struct> Struct;
+        const Struct* Struct;
 
       public:
         StructTypeOps(Ref<TypeInfo> type)
             : TypeOps(type) {
-            Struct = Type.as<StructTypeInfo>()->Struct;
+            Struct = Type.as<StructTypeInfo>()->StructDesc;
         }
 
         Value coerce(Value value) const override {
@@ -107,6 +108,11 @@ namespace pepper {
             return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
         }
     };
+
+    StructTypeInfo::StructTypeInfo(const Struct* st, const Ident& name, llvm::Type* type)
+        : TypeInfo(name, type)
+        , StructDesc(st) {
+    }
 
     TypeOps* StructTypeInfo::ops() {
         if (!Ops)
