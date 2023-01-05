@@ -5,18 +5,25 @@
 #include "Codegen/IR/Value.h"
 #include "Codegen/TypeOps.h"
 #include "Core/Exceptions.h"
+#include "Core/Query.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 
 namespace pepper {
 
-    Struct::Struct(llvm::Type* llvmType, const Ident& name, const Params& newParams)
+    Struct::Struct(const Ident& name, const Params& fields, const Params& newParams)
         : Identifier(name) {
+        // Create the LLVM struct type out of the field types
+        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.ParamType; });
+        auto llvmType = llvm::StructType::create(fieldTypes, Identifier);
+
         StructType = Ref<StructTypeInfo>::New(this, "__" + name, llvmType);
         RefType = Ref<StructTypeInfo>::New(this, name, llvmType->getPointerTo());
         Types::add(RefType);
         NewInstance = Ref<UserFunction>::New(name, Types::get(RefType->name()), newParams);
+
+        setFields(fields);
 
         // compute size from data layout
         auto module = Context::get().module();
@@ -26,8 +33,8 @@ namespace pepper {
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(llvm::Type* llvmType, const Ident& name, const Params& newParams) {
-        Ref<Struct> newStruct = Ref<Struct>::New(llvmType, name, newParams);
+    Ref<Struct> Struct::New(const Ident& name, const Params& fields, const Params& newParams) {
+        Ref<Struct> newStruct = Ref<Struct>::New(name, fields, newParams);
         Context::get().globals()->Structs[name] = newStruct;
         return newStruct;
     }

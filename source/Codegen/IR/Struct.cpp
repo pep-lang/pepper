@@ -56,10 +56,8 @@ namespace pepper {
 
         // convert fields to symbols before type gen
         pepper::Params fields;
-        Vector<llvm::Type*> fieldTypes;
         for (auto& field : structDef->Fields) {
             auto type = Types::get(field->Type.toString());
-            fieldTypes.push_back(*type);
             fields.emplace_back(field->Name, type);
         }
 
@@ -81,8 +79,7 @@ namespace pepper {
         });
 
         // generate the new struct type
-        auto llvmType = llvm::StructType::create(fieldTypes, structDef->Name);
-        auto structDesc = Struct::New(llvmType, structDef->Name, newParams);
+        auto structDesc = Struct::New(structDef->Name, fields, newParams);
         structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
