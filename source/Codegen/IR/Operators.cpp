@@ -73,7 +73,7 @@ namespace pepper {
         return nullptr;
     }
 
-    static Ref<TypeInfo> structOperandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+    static Ref<TypeInfo> structOperandType(Ref<BinaryOp>, Ref<TypeInfo>, Ref<TypeInfo>) {
         return nullptr;
     }
 

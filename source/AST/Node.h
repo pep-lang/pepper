@@ -26,7 +26,7 @@ namespace pepper::ast {
         Ident Name;
         std::vector<TypeName> GenericTypes;
 
-        TypeName(Ident name = "default", const Vector<TypeName> types = {})
+        TypeName(Ident name = "default", const Vector<TypeName>& types = {})
             : Name(std::move(name))
             , GenericTypes(types.begin(), types.end()) {
         }

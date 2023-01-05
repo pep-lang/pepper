@@ -2,7 +2,6 @@
 #include "Codegen/Function.h"
 
 #include "Codegen/Context.h"
-#include "Codegen/Scope.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
@@ -33,7 +32,7 @@ namespace pepper {
         }
 
         // fill in default params
-        for (int argIdx = coercedArgs.size(); argIdx < Parameters.size(); ++argIdx) {
+        for (auto argIdx = coercedArgs.size(); argIdx < Parameters.size(); ++argIdx) {
             const auto& param = Parameters[argIdx];
             if (!param.Default) {
                 throw CompileError("Missing argument {0}({1}) of type {2} to {3}",

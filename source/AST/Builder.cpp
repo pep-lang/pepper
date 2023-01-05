@@ -162,7 +162,7 @@ namespace pepper::ast {
 
         Ref<Node> peekRValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
-            const int maxDepth = scope->RValueStack.size() - 1;
+            const int maxDepth = (int)scope->RValueStack.size() - 1;
             if (idx > maxDepth) {
                 return nullptr;
             }
@@ -191,7 +191,7 @@ namespace pepper::ast {
 
         Ref<Node> peekLValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
-            const int maxDepth = scope->LValueStack.size() - 1;
+            const int maxDepth = (int)scope->LValueStack.size() - 1;
             if (int(idx) > maxDepth) {
                 return nullptr;
             }
@@ -277,7 +277,7 @@ namespace pepper::ast {
 
         void beginScope(const Ident& name = "Anonymous") override {
             auto top = ScopeStack.back();
-            std::string newScopeName = llvm::formatv("{0}.{1}", top->Name, name);
+            const std::string newScopeName = llvm::formatv("{0}.{1}", top->Name, name);
             ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
             PEP_TRACE(TraceChannel::Parser, "Scope({0}) {{", name);
             Messages::Indent(TraceChannel::Parser);

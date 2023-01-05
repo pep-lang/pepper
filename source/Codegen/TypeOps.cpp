@@ -196,7 +196,7 @@ namespace pepper {
                 return value;
             }
             auto type = value->getType();
-            bool signedVal = !type->isIntegerTy(1) && isSigned();
+            const bool signedVal = !type->isIntegerTy(1) && isSigned();
 
             if (type->isIntegerTy()) {
                 return Value{Type, builder()->CreateIntCast(value, *this, signedVal)};
@@ -347,7 +347,7 @@ namespace pepper {
             if (type->isIntegerTy() || type->isFloatingPointTy()) {
                 llvm::Value* cast = nullptr;
                 if (type->isIntegerTy()) {
-                    bool signedInt = true;
+                    const bool signedInt = true;
                     if (signedInt)
                         cast = builder()->CreateSIToFP(value, *this);
                     else

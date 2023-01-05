@@ -8,7 +8,6 @@
 #include "Codegen/IR/Codegen.h"
 #include "Codegen/IR/Value.h"
 #include "Codegen/LLVMUtils.h"
-#include "Codegen/ModuleContext.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"

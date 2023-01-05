@@ -126,27 +126,26 @@ namespace pepper {
                 try {
                     auto floatVal = std::stold(value);
                     return builder->New<FloatLiteral>(floatVal);
-                } catch (std::invalid_argument) {
+                } catch (std::invalid_argument&) {
                 }
             }
             try {
                 int64_t intVal = 0;
                 if (llvm::to_integer(value, intVal))
                     return builder->New<IntegerLiteral>(intVal);
-            } catch (std::invalid_argument) {
+            } catch (std::invalid_argument&) {
             }
 
             throw CompileError(builder->Source, "Unable to parse numeric literal: {0}", value);
         }
 
         Ref<Expression> evalBoolConstant(PepperParser::BoolConstantContext* boolConstant) {
-            bool boolVal = boolConstant->True();
+            const bool boolVal = boolConstant->True();
             return builder->New<BoolLiteral>(boolVal);
         }
 
         TypeName parseTypeName(PepperParser::TypeSpecifierContext* typeSpec) {
             TypeName type{typeSpec->Identifier()->toString()};
-            Vector<TypeName> params;
             if (auto genericParams = typeSpec->genericArgs()) {
                 for (auto paramType : genericParams->genericArgsList()->typeSpecifier()) {
                     type.GenericTypes.emplace_back(parseTypeName(paramType));
@@ -221,7 +220,7 @@ namespace pepper {
             }
         }
 
-        void enterParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
+        void enterParameterDeclaration(PepperParser::ParameterDeclarationContext*) override {
             lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
         }
 
@@ -249,7 +248,7 @@ namespace pepper {
             builder->beginFunction(function);
         }
 
-        void exitFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
+        void exitFunctionDefinition(PepperParser::FunctionDefinitionContext*) override {
             builder->endFunction();
 
             auto function = lvaluePop<FunctionDef>();
@@ -269,7 +268,7 @@ namespace pepper {
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
-            TypeName type = parseTypeDeclaration(context->typeDeclaration());
+            const TypeName type = parseTypeDeclaration(context->typeDeclaration());
             auto structDef = StructDef::New(type);
             if (auto genericParams = context->typeDeclaration()->genericParams()) {
                 for (auto param : genericParams->genericParamsList()->Identifier()) {
@@ -279,22 +278,22 @@ namespace pepper {
             builder->beginStruct(structDef);
         }
 
-        void exitStructDeclaration(PepperParser::StructDeclarationContext* context) override {
+        void exitStructDeclaration(PepperParser::StructDeclarationContext*) override {
             builder->endStruct();
         }
 
-        void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
+        void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext*) override {
             auto st = builder->structTarget();
             st->Constructor = builder->New<MethodDef>(st.get(), TypeName("void"), "__ctor");
             lvaluePush(st->Constructor);
             builder->beginFunction(st->Constructor);
         }
 
-        void exitConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
+        void exitConstructorDefinition(PepperParser::ConstructorDefinitionContext*) override {
             builder->endFunction();
         }
 
-        void enterConstructorParam(PepperParser::ConstructorParamContext* context) override {
+        void enterConstructorParam(PepperParser::ConstructorParamContext*) override {
             lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
         }
 
@@ -338,11 +337,11 @@ namespace pepper {
             throw InternalCompilerError(builder->Source, "extension with is not implemented");
         }
 
-        void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
+        void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext*) override {
             builder->endExtension();
         }
 
-        void enterMethodCall(PepperParser::MethodCallContext* context) override {
+        void enterMethodCall(PepperParser::MethodCallContext*) override {
             auto call = Pending::New<MethodCall>();
             lvaluePush(call);
         }
@@ -361,7 +360,7 @@ namespace pepper {
             builder->insert(call);
         }
 
-        void enterFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
+        void enterFreeFunctionCall(PepperParser::FreeFunctionCallContext*) override {
             auto call = Pending::New<FunctionCall>();
             lvaluePush(call);
         }
@@ -385,7 +384,7 @@ namespace pepper {
             builder->insert(call);
         }
 
-        void enterReturn(PepperParser::ReturnContext* context) override {
+        void enterReturn(PepperParser::ReturnContext*) override {
             auto ret = Pending::New<Return>();
             lvaluePush(ret);
         }
@@ -429,7 +428,7 @@ namespace pepper {
             lvaluePush(branch);
         }
 
-        void exitSelectionStatement(PepperParser::SelectionStatementContext* context) override {
+        void exitSelectionStatement(PepperParser::SelectionStatementContext*) override {
             auto branch = lvaluePop<Branch>();
             builder->endScope();
             builder->insert(branch);
@@ -438,49 +437,49 @@ namespace pepper {
         void enterIfStatement(PepperParser::IfStatementContext* context) override {
         }
 
-        void exitIfStatement(PepperParser::IfStatementContext* context) override {
+        void exitIfStatement(PepperParser::IfStatementContext*) override {
             builder->endBlock();
         }
 
-        void exitIfCondition(PepperParser::IfConditionContext* context) override {
+        void exitIfCondition(PepperParser::IfConditionContext*) override {
             auto branch = lvaluePeek<Branch>();
             branch->Condition = rvaluePop<Expression>();
             builder->beginBlock(branch->Then);
         }
 
-        void enterElseStatement(PepperParser::ElseStatementContext* context) override {
+        void enterElseStatement(PepperParser::ElseStatementContext*) override {
             auto branch = lvaluePeek<Branch>();
             builder->beginBlock(branch->Else);
         }
 
-        void exitElseStatement(PepperParser::ElseStatementContext* context) override {
+        void exitElseStatement(PepperParser::ElseStatementContext*) override {
             builder->endBlock();
         }
 
-        void enterTernary(PepperParser::TernaryContext* context) override {
+        void enterTernary(PepperParser::TernaryContext*) override {
             auto branch = builder->New<Ternary>();
             lvaluePush(branch);
         }
 
-        void enterWhileLoop(PepperParser::WhileLoopContext* context) override {
+        void enterWhileLoop(PepperParser::WhileLoopContext*) override {
             auto loop = builder->New<While>();
             loop->Body = builder->New<Block>();
             lvaluePush(loop);
         }
 
-        void exitWhileLoop(PepperParser::WhileLoopContext* context) override {
+        void exitWhileLoop(PepperParser::WhileLoopContext*) override {
             builder->endBlock();
             auto loop = lvaluePop<While>();
             builder->insert(loop);
         }
 
-        void exitWhileCondition(PepperParser::WhileConditionContext* context) override {
+        void exitWhileCondition(PepperParser::WhileConditionContext*) override {
             auto loop = lvaluePeek<While>();
             loop->Condition = rvaluePop<Expression>();
             builder->beginBlock(loop->Body);
         }
 
-        void enterForLoop(PepperParser::ForLoopContext* context) override {
+        void enterForLoop(PepperParser::ForLoopContext*) override {
             auto loop = builder->New<ForRange>();
             loop->Body = builder->New<Block>();
             lvaluePush(loop);
@@ -510,7 +509,7 @@ namespace pepper {
         void exitForLoop(PepperParser::ForLoopContext* context) override {
         }
 
-        void exitTernary(PepperParser::TernaryContext* context) override {
+        void exitTernary(PepperParser::TernaryContext*) override {
             auto branch = lvaluePop<Ternary>();
             branch->FalseResult = rvaluePop<Expression>();
             branch->TrueResult = rvaluePop<Expression>();
@@ -532,155 +531,155 @@ namespace pepper {
             builder->insert(builder->New<Op>(lhs, rhs));
         }
 
-        void enterAdd(PepperParser::AddContext* context) override {
+        void enterAdd(PepperParser::AddContext*) override {
             beginBinaryOp<Add>();
         }
 
-        void exitAdd(PepperParser::AddContext* context) override {
+        void exitAdd(PepperParser::AddContext*) override {
             endBinaryOp<Add>();
         }
 
-        void enterSub(PepperParser::SubContext* context) override {
+        void enterSub(PepperParser::SubContext*) override {
             beginBinaryOp<Sub>();
         }
 
-        void exitSub(PepperParser::SubContext* context) override {
+        void exitSub(PepperParser::SubContext*) override {
             endBinaryOp<Sub>();
         }
 
-        void enterMul(PepperParser::MulContext* context) override {
+        void enterMul(PepperParser::MulContext*) override {
             beginBinaryOp<Mul>();
         }
 
-        void exitMul(PepperParser::MulContext* context) override {
+        void exitMul(PepperParser::MulContext*) override {
             endBinaryOp<Mul>();
         }
 
-        void enterDiv(PepperParser::DivContext* context) override {
+        void enterDiv(PepperParser::DivContext*) override {
             beginBinaryOp<Div>();
         }
 
-        void exitDiv(PepperParser::DivContext* context) override {
+        void exitDiv(PepperParser::DivContext*) override {
             endBinaryOp<Div>();
         }
 
-        void enterMod(PepperParser::ModContext* context) override {
+        void enterMod(PepperParser::ModContext*) override {
             beginBinaryOp<Mod>();
         }
 
-        void exitMod(PepperParser::ModContext* context) override {
+        void exitMod(PepperParser::ModContext*) override {
             endBinaryOp<Mod>();
         }
 
-        void enterPow(PepperParser::PowContext* context) override {
+        void enterPow(PepperParser::PowContext*) override {
             beginBinaryOp<Pow>();
         }
 
-        void exitPow(PepperParser::PowContext* context) override {
+        void exitPow(PepperParser::PowContext*) override {
             endBinaryOp<Pow>();
         }
 
-        void enterLShift(PepperParser::LShiftContext* context) override {
+        void enterLShift(PepperParser::LShiftContext*) override {
             beginBinaryOp<LShift>();
         }
 
-        void exitLShift(PepperParser::LShiftContext* context) override {
+        void exitLShift(PepperParser::LShiftContext*) override {
             endBinaryOp<LShift>();
         }
 
-        void enterRShift(PepperParser::RShiftContext* context) override {
+        void enterRShift(PepperParser::RShiftContext*) override {
             beginBinaryOp<RShift>();
         }
 
-        void exitRShift(PepperParser::RShiftContext* context) override {
+        void exitRShift(PepperParser::RShiftContext*) override {
             endBinaryOp<RShift>();
         }
 
-        void enterBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
+        void enterBitwiseAnd(PepperParser::BitwiseAndContext*) override {
             beginBinaryOp<BitAnd>();
         }
 
-        void exitBitwiseAnd(PepperParser::BitwiseAndContext* context) override {
+        void exitBitwiseAnd(PepperParser::BitwiseAndContext*) override {
             endBinaryOp<BitAnd>();
         }
 
-        void enterBitwiseXor(PepperParser::BitwiseXorContext* context) override {
+        void enterBitwiseXor(PepperParser::BitwiseXorContext*) override {
             beginBinaryOp<BitXor>();
         }
 
-        void exitBitwiseXor(PepperParser::BitwiseXorContext* context) override {
+        void exitBitwiseXor(PepperParser::BitwiseXorContext*) override {
             endBinaryOp<BitXor>();
         }
 
-        void enterBitwiseOr(PepperParser::BitwiseOrContext* context) override {
+        void enterBitwiseOr(PepperParser::BitwiseOrContext*) override {
             beginBinaryOp<BitOr>();
         }
 
-        void exitBitwiseOr(PepperParser::BitwiseOrContext* context) override {
+        void exitBitwiseOr(PepperParser::BitwiseOrContext*) override {
             endBinaryOp<BitOr>();
         }
 
-        void enterLess(PepperParser::LessContext* context) override {
+        void enterLess(PepperParser::LessContext*) override {
             beginBinaryOp<Less>();
         }
 
-        void exitLess(PepperParser::LessContext* context) override {
+        void exitLess(PepperParser::LessContext*) override {
             endBinaryOp<Less>();
         }
 
-        void enterLessEqual(PepperParser::LessEqualContext* context) override {
+        void enterLessEqual(PepperParser::LessEqualContext*) override {
             beginBinaryOp<LessEqual>();
         }
 
-        void exitLessEqual(PepperParser::LessEqualContext* context) override {
+        void exitLessEqual(PepperParser::LessEqualContext*) override {
             endBinaryOp<LessEqual>();
         }
 
-        void enterGreater(PepperParser::GreaterContext* context) override {
+        void enterGreater(PepperParser::GreaterContext*) override {
             beginBinaryOp<Greater>();
         }
 
-        void exitGreater(PepperParser::GreaterContext* context) override {
+        void exitGreater(PepperParser::GreaterContext*) override {
             endBinaryOp<Greater>();
         }
 
-        void enterGreaterEqual(PepperParser::GreaterEqualContext* context) override {
+        void enterGreaterEqual(PepperParser::GreaterEqualContext*) override {
             beginBinaryOp<GreaterEqual>();
         }
 
-        void exitGreaterEqual(PepperParser::GreaterEqualContext* context) override {
+        void exitGreaterEqual(PepperParser::GreaterEqualContext*) override {
             endBinaryOp<GreaterEqual>();
         }
 
-        void enterEqual(PepperParser::EqualContext* context) override {
+        void enterEqual(PepperParser::EqualContext*) override {
             beginBinaryOp<Equal>();
         }
 
-        void exitEqual(PepperParser::EqualContext* context) override {
+        void exitEqual(PepperParser::EqualContext*) override {
             endBinaryOp<Equal>();
         }
 
-        void enterNotEqual(PepperParser::NotEqualContext* context) override {
+        void enterNotEqual(PepperParser::NotEqualContext*) override {
             beginBinaryOp<NotEqual>();
         }
 
-        void exitNotEqual(PepperParser::NotEqualContext* context) override {
+        void exitNotEqual(PepperParser::NotEqualContext*) override {
             endBinaryOp<NotEqual>();
         }
 
-        void enterLogicalAnd(PepperParser::LogicalAndContext* context) override {
+        void enterLogicalAnd(PepperParser::LogicalAndContext*) override {
             beginBinaryOp<LogicalAnd>();
         }
 
-        void exitLogicalAnd(PepperParser::LogicalAndContext* context) override {
+        void exitLogicalAnd(PepperParser::LogicalAndContext*) override {
             endBinaryOp<LogicalAnd>();
         }
 
-        void enterLogicalOr(PepperParser::LogicalOrContext* context) override {
+        void enterLogicalOr(PepperParser::LogicalOrContext*) override {
             beginBinaryOp<LogicalOr>();
         }
 
-        void exitLogicalOr(PepperParser::LogicalOrContext* context) override {
+        void exitLogicalOr(PepperParser::LogicalOrContext*) override {
             endBinaryOp<LogicalOr>();
         }
 
@@ -698,91 +697,91 @@ namespace pepper {
             builder->insert(builder->New<Op>(lhs, rhs));
         }
 
-        void enterAssignment(PepperParser::AssignmentContext* context) override {
+        void enterAssignment(PepperParser::AssignmentContext*) override {
             beginAssign<Assign>();
         }
 
-        void exitAssignment(PepperParser::AssignmentContext* context) override {
+        void exitAssignment(PepperParser::AssignmentContext*) override {
             endAssign<Assign>();
         }
 
-        void enterMulAssignment(PepperParser::MulAssignmentContext* context) override {
+        void enterMulAssignment(PepperParser::MulAssignmentContext*) override {
             beginAssign<MulAssign>();
         }
 
-        void exitMulAssignment(PepperParser::MulAssignmentContext* context) override {
+        void exitMulAssignment(PepperParser::MulAssignmentContext*) override {
             endAssign<MulAssign>();
         }
 
-        void enterDivAssignment(PepperParser::DivAssignmentContext* context) override {
+        void enterDivAssignment(PepperParser::DivAssignmentContext*) override {
             beginAssign<DivAssign>();
         }
 
-        void exitDivAssignment(PepperParser::DivAssignmentContext* context) override {
+        void exitDivAssignment(PepperParser::DivAssignmentContext*) override {
             endAssign<DivAssign>();
         }
 
-        void enterModAssignment(PepperParser::ModAssignmentContext* context) override {
+        void enterModAssignment(PepperParser::ModAssignmentContext*) override {
             beginAssign<ModAssign>();
         }
 
-        void exitModAssignment(PepperParser::ModAssignmentContext* context) override {
+        void exitModAssignment(PepperParser::ModAssignmentContext*) override {
             endAssign<ModAssign>();
         }
 
-        void enterAddAssignment(PepperParser::AddAssignmentContext* context) override {
+        void enterAddAssignment(PepperParser::AddAssignmentContext*) override {
             beginAssign<AddAssign>();
         }
 
-        void exitAddAssignment(PepperParser::AddAssignmentContext* context) override {
+        void exitAddAssignment(PepperParser::AddAssignmentContext*) override {
             endAssign<AddAssign>();
         }
 
-        void enterSubAssignment(PepperParser::SubAssignmentContext* context) override {
+        void enterSubAssignment(PepperParser::SubAssignmentContext*) override {
             beginAssign<SubAssign>();
         }
 
-        void exitSubAssignment(PepperParser::SubAssignmentContext* context) override {
+        void exitSubAssignment(PepperParser::SubAssignmentContext*) override {
             endAssign<SubAssign>();
         }
 
-        void enterLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
+        void enterLShiftAssignment(PepperParser::LShiftAssignmentContext*) override {
             beginAssign<LShiftAssign>();
         }
 
-        void exitLShiftAssignment(PepperParser::LShiftAssignmentContext* context) override {
+        void exitLShiftAssignment(PepperParser::LShiftAssignmentContext*) override {
             endAssign<LShiftAssign>();
         }
 
-        void enterRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
+        void enterRShiftAssignment(PepperParser::RShiftAssignmentContext*) override {
             beginAssign<RShiftAssign>();
         }
 
-        void exitRShiftAssignment(PepperParser::RShiftAssignmentContext* context) override {
+        void exitRShiftAssignment(PepperParser::RShiftAssignmentContext*) override {
             endAssign<RShiftAssign>();
         }
 
-        void enterBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
+        void enterBitAndAssignment(PepperParser::BitAndAssignmentContext*) override {
             beginAssign<BitAndAssign>();
         }
 
-        void exitBitAndAssignment(PepperParser::BitAndAssignmentContext* context) override {
+        void exitBitAndAssignment(PepperParser::BitAndAssignmentContext*) override {
             endAssign<BitAndAssign>();
         }
 
-        void enterBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
+        void enterBitXorAssignment(PepperParser::BitXorAssignmentContext*) override {
             beginAssign<BitXorAssign>();
         }
 
-        void exitBitXorAssignment(PepperParser::BitXorAssignmentContext* context) override {
+        void exitBitXorAssignment(PepperParser::BitXorAssignmentContext*) override {
             endAssign<BitXorAssign>();
         }
 
-        void enterBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
+        void enterBitOrAssignment(PepperParser::BitOrAssignmentContext*) override {
             beginAssign<BitOrAssign>();
         }
 
-        void exitBitOrAssignment(PepperParser::BitOrAssignmentContext* context) override {
+        void exitBitOrAssignment(PepperParser::BitOrAssignmentContext*) override {
             endAssign<BitOrAssign>();
         }
     };

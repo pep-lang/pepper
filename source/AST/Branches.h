@@ -58,9 +58,9 @@ namespace pepper::ast {
             return Node::toString();
         }
 
-        std::string dump(int indent) const override {
+        std::string dump(int) const override {
             return std::string(llvm::formatv(
-                "({0}) ? {1} : {2}", Condition->toString(), TrueResult->toString(), FalseResult->toString()));
+                "({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
         }
     };
 } // namespace pepper::ast

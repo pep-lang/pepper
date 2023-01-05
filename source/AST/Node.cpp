@@ -36,7 +36,7 @@ namespace pepper::ast {
         if (Source.File.empty()) {
             return {""};
         }
-        width = (width >= 0) ? width : Source.File.size() + 10;
+        width = (width >= 0) ? width : (int)Source.File.size() + 10;
         width += indent;
         std::string src = Source.toString();
         std::string padding = repeat(" ", width - src.size());

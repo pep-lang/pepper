@@ -23,7 +23,7 @@ namespace pepper::ast {
         }
 
         Block(const Block& block)
-            : Name(block.Name) {
+            : Block(block.Name) {
             for (const auto& node : block.Items) {
                 Items.emplace_back(node->clone());
             }

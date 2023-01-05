@@ -1,6 +1,5 @@
 
 #include "Codegen.h"
-#include <unordered_map>
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
@@ -147,7 +146,7 @@ namespace pepper {
 
         auto src = node->source();
         auto at = src.empty() ? "" : "@";
-        std::string output =
+        std::string const output =
             llvm::formatv("{0} -> {1} {2}{3}", rpad(node->rtti()->name(), 20), rpad(toString(value), 80), at, src);
         PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
         return value;
@@ -159,15 +158,15 @@ namespace pepper {
 
     void Codegen::generate(Ref<ast::AST> tree) {
         PEP_TRACE(TraceChannel::Codegen, "Code generation:")
-        for (auto root : tree->roots()) {
+        for (const auto& root : tree->roots()) {
             try {
                 if (root->is<StructDef>())
                     emit(root.as<StructDef>());
                 else
                     codegen(root);
-            } catch (CompileError ce) {
+            } catch (CompileError& ce) {
                 Messages::Report<Error>(ce.what());
-            } catch (InternalCompilerError ice) {
+            } catch (InternalCompilerError& ice) {
                 Messages::Report<Error>(ice.what());
             }
         }

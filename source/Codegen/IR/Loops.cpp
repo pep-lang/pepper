@@ -8,11 +8,9 @@
 #include "AST/Loops.h"
 
 #include "Codegen/Context.h"
-#include "Codegen/Function.h"
 #include "Codegen/IR/Codegen.h"
 #include "Codegen/IR/Value.h"
 #include "Codegen/LLVMUtils.h"
-#include "Codegen/ModuleContext.h"
 #include "Codegen/Struct.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"

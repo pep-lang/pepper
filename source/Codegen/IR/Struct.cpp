@@ -134,7 +134,7 @@ namespace pepper {
             TraceChannel::Codegen, "StructDef {0} -> {1}", structDef->Name, toString(structDesc->type()->llvmType()));
     }
 
-    Value Codegen::emit(Ref<ThisRef> thisRef) {
+    Value Codegen::emit(Ref<ThisRef>) {
         auto thisPtr = Context::get().locals()->findSymbol("this");
         return thisPtr;
     }
@@ -151,7 +151,7 @@ namespace pepper {
         args.push_back(thisRef);
 
         const auto& callArgs = call->Args;
-        for (auto argExpr : callArgs) {
+        for (const auto& argExpr : callArgs) {
             args.push_back(codegen(argExpr));
         }
         return Value{method->returnType(), method->call(args)};

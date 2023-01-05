@@ -41,7 +41,7 @@ namespace pepper {
     llvm::Value* Struct::getField(llvm::Value* instance, const Ident& name) const {
         auto fieldIt = Fields.find(name);
         if (fieldIt != Fields.end()) {
-            int idx = std::distance(Fields.begin(), fieldIt);
+            int idx = (int)std::distance(Fields.begin(), fieldIt);
             return getField(instance, idx, fieldIt->second);
         }
         return nullptr;

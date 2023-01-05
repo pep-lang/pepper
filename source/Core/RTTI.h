@@ -44,7 +44,7 @@ namespace pepper {
         }
 
         template <typename T>
-        static const RTTI* of(const T t) {
+        static const RTTI* of(const T) {
             return of<std::remove_cvref_t<std::remove_pointer_t<T>>>();
         }
     };
@@ -88,7 +88,7 @@ namespace pepper {
     template <>
     class RttiInstance<RTTI::None> {
       public:
-        inline static constexpr const RTTI* get(const RTTI* base, const char* name) {
+        inline static constexpr const RTTI* get(const RTTI*, const char*) {
             return nullptr;
         }
     };

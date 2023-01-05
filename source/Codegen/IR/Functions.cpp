@@ -4,7 +4,6 @@
 
 #include "AST/Functions.h"
 
-#include "AST/Struct.h"
 #include "Codegen/Context.h"
 #include "Codegen/Function.h"
 #include "Codegen/IR/Codegen.h"
@@ -83,7 +82,7 @@ namespace pepper {
         }
 
         const auto& callArgs = call->Args;
-        for (auto argExpr : callArgs) {
+        for (const auto& argExpr : callArgs) {
             args.push_back(codegen(argExpr));
         }
         return Value{function->returnType(), function->call(args)};

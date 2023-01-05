@@ -4,27 +4,14 @@
 
 #include "AST/Nodes.h"
 #include "Codegen/Context.h"
-#include "Core/Vector.h"
-#include "Param.h"
-#include "llvm/IR/Value.h"
-#include "llvm/Support/raw_ostream.h"
-
-#pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
-                                // implicitly defined as deleted
 #include "Codegen/TypeOps.h"
 #include "Core/Exceptions.h"
 #include "Core/Vector.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
 
-    TypeInfo::TypeInfo(const Ident& name, llvm::Type* type, bool isSigned)
+    TypeInfo::TypeInfo(const Ident& name, llvm::Type* type, bool)
         : std::enable_shared_from_this<TypeInfo>()
         , TypeName(name)
         , TypeRef(type)
