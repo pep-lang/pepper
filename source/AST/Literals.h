@@ -105,4 +105,32 @@ namespace pepper::ast {
             return llvm::formatv("{0} {1}", Node::dump(indent), Value);
         }
     };
+
+    struct PointerLiteral : public Literal {
+        DECLARE_RTTI(PointerLiteral, Literal);
+        AST_NODE_POD_CLONE(PointerLiteral);
+
+        const uint64_t Value;
+
+        explicit PointerLiteral(uint64_t value)
+            : Value(value) {
+        }
+
+        [[nodiscard]] const TypeName& type() const override {
+            static TypeName Ptr("ptr");
+            return Ptr;
+        }
+
+        std::string toString() const override {
+            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
+        }
+
+        std::string dump(int indent) const override {
+            return llvm::formatv("{0} {1}", Node::dump(indent), Value);
+        }
+
+        static Ref<PointerLiteral> Null() {
+            return Ref<PointerLiteral>::New(0);
+        }
+    };
 } // namespace pepper::ast

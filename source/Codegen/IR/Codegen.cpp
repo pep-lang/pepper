@@ -103,6 +103,13 @@ namespace pepper {
         return value;
     }
 
+    Value Codegen::emit(Ref<PointerLiteral> pointerLiteral) {
+        assert(pointerLiteral->Value == 0);
+        auto type = Types::UInt8->pointer();
+        auto value = Value(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
+        return value;
+    }
+
     Value Codegen::codegen(Ref<Node> node) {
         Value value;
         if (node->is<BinaryOp>())
@@ -133,6 +140,8 @@ namespace pepper {
             value = emit(node.as<MethodCall>());
         else if (node->is<FunctionCall>())
             value = emit(node.as<FunctionCall>());
+        else if (node->is<PointerLiteral>())
+            value = emit(node.as<PointerLiteral>());
         else if (node->is<StringLiteral>())
             value = emit(node.as<StringLiteral>());
         else if (node->is<FloatLiteral>())
