@@ -35,16 +35,7 @@ namespace pepper {
             locals()->newSymbol(local);
         }
 
-        //        // Emit the body of the function, after ensuring there is a return instruction
-        //        auto lastExpr = (funcDef->Body->Items.size()) ? funcDef->Body->Items.back() : nullptr;
-        //        if (!lastExpr || !lastExpr->is<Return>()) {
-        //            funcDef->Body->Items.push_back(Ref<Return>::New(funcDef->ReturnType));
-        //        }
-        Value lastInstr;
-        Query(funcDef->Body->Items).each([&](auto expr) { lastInstr = codegen(expr); });
-        if (!llvm::isa<llvm::BranchInst>(*lastInstr)) {
-            ir()->CreateBr(function->Return);
-        }
+        codegenBlock(function, funcDef->Body, function->Body, function->Return);
 
         popScope();
         locals()->newFunction(function);

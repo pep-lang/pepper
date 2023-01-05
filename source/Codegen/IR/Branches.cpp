@@ -11,7 +11,6 @@
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
-#include "llvm/IR/BasicBlock.h"
 
 namespace pepper {
     using namespace pepper::ast;
@@ -20,41 +19,25 @@ namespace pepper {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto thenBlock = function->appendBlock("then");
-        auto elseBlock = function->appendBlock("else");
+        auto elseBlock = branch->Else ? function->appendBlock("else") : nullptr;
         auto mergeBlock = function->appendBlock("ifcont");
-        auto condition = codegen(branch->Condition);
-        auto condBool = condition.Ty->ops()->asBool(condition);
 
         // create conditional jump
-        ir()->CreateCondBr(condBool, thenBlock, elseBlock);
+        auto condition = codegen(branch->Condition);
+        auto condBool = condition.Ty->ops()->asBool(condition);
+        ir()->CreateCondBr(condBool, thenBlock, elseBlock ? elseBlock : mergeBlock);
 
         // generate then block
-        ir()->SetInsertPoint(thenBlock);
-        Value thenVal;
-        Query(branch->Then->Items).each([&](auto expr) { thenVal = codegen(expr); });
-        if (!thenVal || !llvm::isa<llvm::BranchInst>(*thenVal))
-            ir()->CreateBr(mergeBlock);
-        thenBlock = ir()->GetInsertBlock();
+        thenBlock = codegenBlock(function, branch->Then, thenBlock, mergeBlock);
 
-        // generate else block
-        ir()->SetInsertPoint(elseBlock);
-        Value elseVal;
-        if (branch->Else) {
-            Query(branch->Else->Items).each([&](auto expr) { elseVal = codegen(expr); });
+        // generate else block if needed
+        if (elseBlock) {
+            elseBlock = codegenBlock(function, branch->Else, elseBlock, mergeBlock);
         }
-        if (!elseVal || !llvm::isa<llvm::BranchInst>(*elseVal))
-            ir()->CreateBr(mergeBlock);
-        elseBlock = ir()->GetInsertBlock();
 
+        // set the builder to the head of the merge block for whatever is next
         ir()->SetInsertPoint(mergeBlock);
 
-        // if the values are void or don't match, don't return a phi node
-        if (thenVal && elseVal && thenVal->getType() == elseVal->getType()) {
-            auto phiNode = ir()->CreatePHI(thenVal->getType(), 2, "iftmp");
-            phiNode->addIncoming(thenVal, thenBlock);
-            phiNode->addIncoming(elseVal, elseBlock);
-            return Value{thenVal.Ty, phiNode};
-        }
         return Value{Types::VoidPtr,
                      llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType()))};
     }

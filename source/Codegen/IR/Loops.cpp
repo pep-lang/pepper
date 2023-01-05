@@ -15,7 +15,6 @@
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
-#include "llvm/IR/BasicBlock.h"
 
 namespace pepper {
     using namespace pepper::ast;
@@ -32,16 +31,15 @@ namespace pepper {
         // Initial condition check
         ir()->CreateCondBr(condBool, bodyBlock, mergeBlock);
 
-        ir()->SetInsertPoint(bodyBlock);
-
-        // emit body
-        Query(loop->Body->Items).each([this](auto& expr) { codegen(expr); });
+        // generate body, ignoring wherever the insertion point is, we don't care
+        codegenBlock(function, loop->Body, bodyBlock);
 
         // Update condition
         condition = codegen(loop->Condition);
         condBool = condition.Ty->ops()->asBool(condition);
         ir()->CreateCondBr(condBool, bodyBlock, mergeBlock);
 
+        // loop is done, set insertion to the continuation block
         ir()->SetInsertPoint(mergeBlock);
 
         return Value(Types::VoidPtr,
@@ -73,13 +71,15 @@ namespace pepper {
 
         // initial condition check
         ir()->CreateCondBr(condition, bodyBlock, mergeBlock);
-        ir()->SetInsertPoint(bodyBlock);
-        // body
-        Query(loop->Body->Items).each([this](auto& expr) { codegen(expr); });
+
+        // generate body, ignoring wherever the insertion point is, we don't care
+        codegenBlock(function, loop->Body, bodyBlock);
+
         // update condition
         condition = next->call({range});
         ir()->CreateCondBr(condition, bodyBlock, mergeBlock);
 
+        // loop is done, set insertion to the continuation block
         ir()->SetInsertPoint(mergeBlock);
 
         return Value(Types::VoidPtr,

@@ -72,6 +72,10 @@ namespace pepper {
         void emit(Ref<ast::StructDef> structDef);
 
         void codegenFunction(Ref<class UserFunction> function, Ref<ast::FunctionDef> funcDef);
+        llvm::BasicBlock* codegenBlock(Ref<UserFunction> function,
+                                       Ref<ast::Block> block,
+                                       llvm::BasicBlock* basicBlock = nullptr,
+                                       llvm::BasicBlock* nextBlock = nullptr);
         Ref<Function> resolveFunction(Ref<ast::FunctionCall> call);
     };
 
