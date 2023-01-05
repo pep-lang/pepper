@@ -15,9 +15,6 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class DebugInfo;
-    class Scope;
-    class Symbols;
 
     class ModuleContext {
         Ident ModuleName;

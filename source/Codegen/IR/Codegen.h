@@ -7,6 +7,7 @@
 #include "AST/Nodes.h"
 #include "Codegen/IR/Value.h"
 #include "Codegen/ModuleContext.h"
+#include "Codegen/Scope.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "llvm/IR/IRBuilder.h"
