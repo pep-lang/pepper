@@ -1,3 +1,0 @@
-﻿using Pepper;
-
-Compiler.CompileAndRun();
