@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.24)
 include(FetchContent)
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif ()
 
 if (NOT DEFINED ANTLR4_WITH_STATIC_CRT)
