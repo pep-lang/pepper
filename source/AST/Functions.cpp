@@ -56,7 +56,8 @@ namespace pepper::ast {
     std::string FunctionDef::dump(int indent) const {
         const char* sep = "\n";
         auto indentStr = repeat(" ", indent);
-        auto contents = llvm::join_items(sep, FunctionNode::dump(indent) + " {", Body->dump(indent + 2), indentStr + "}");
+        auto contents =
+            llvm::join_items(sep, FunctionNode::dump(indent) + " {", Body->dump(indent + 2), indentStr + "}");
         return contents;
     }
 

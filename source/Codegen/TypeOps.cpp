@@ -106,12 +106,12 @@ namespace pepper {
         if (isa<llvm::AllocaInst>(*value)) {
             auto allocaInst = cast<llvm::AllocaInst>(value.V);
             auto type = allocaInst->getAllocatedType();
-            return Value(value.Ty, ir()->CreateLoad(type, value));
+            return Value{value.Ty, ir()->CreateLoad(type, value)};
         }
         if (isa<llvm::GetElementPtrInst>(*value)) {
             auto gep = cast<llvm::GetElementPtrInst>(value.V);
             auto type = gep->getPointerOperandType();
-            return Value(value.Ty, ir()->CreateLoad(*value.Ty, value));
+            return Value{value.Ty, ir()->CreateLoad(*value.Ty, value)};
         }
         return value;
     }
@@ -144,11 +144,11 @@ namespace pepper {
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs)));
+            return Value{Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs)));
+            return Value{Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs))};
         }
 
         Value assign(Value lhs, Value rhs) const override {
@@ -159,7 +159,7 @@ namespace pepper {
         Value asBool(Value value) const override {
             auto zero = llvm::ConstantInt::getFalse(*Type);
             auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
-            return Value(Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool"));
+            return Value{Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool")};
         }
     };
 
@@ -199,7 +199,7 @@ namespace pepper {
             bool signedVal = !type->isIntegerTy(1) && isSigned();
 
             if (type->isIntegerTy()) {
-                return Value(Type, builder()->CreateIntCast(value, *this, signedVal));
+                return Value{Type, builder()->CreateIntCast(value, *this, signedVal)};
             }
             if (type->isFloatingPointTy()) {
                 return Value(Type,
@@ -209,15 +209,15 @@ namespace pepper {
         }
 
         Value add(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add"));
+            return Value{Type, builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add")};
         }
 
         Value sub(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub"));
+            return Value{Type, builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub")};
         }
 
         Value mul(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul"));
+            return Value{Type, builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul")};
         }
 
         Value div(Value lhs, Value rhs) const override {
@@ -264,19 +264,19 @@ namespace pepper {
         }
 
         Value lshift(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateShl(coerce(lhs), coerce(rhs), "shl"));
+            return Value{Type, builder()->CreateShl(coerce(lhs), coerce(rhs), "shl")};
         }
 
         Value rshift(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr"));
+            return Value{Type, builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr")};
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq"));
+            return Value{Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq")};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne"));
+            return Value{Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne")};
         }
 
         Value assign(Value lhs, Value rhs) const override {
@@ -285,20 +285,20 @@ namespace pepper {
         }
 
         Value bitAnd(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateAnd(coerce(lhs), coerce(rhs), "and"));
+            return Value{Type, builder()->CreateAnd(coerce(lhs), coerce(rhs), "and")};
         }
 
         Value bitXor(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateXor(coerce(lhs), coerce(rhs), "xor"));
+            return Value{Type, builder()->CreateXor(coerce(lhs), coerce(rhs), "xor")};
         }
 
         Value bitOr(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateOr(coerce(lhs), coerce(rhs), "or"));
+            return Value{Type, builder()->CreateOr(coerce(lhs), coerce(rhs), "or")};
         }
 
         Value asBool(Value value) const override {
             auto zero = llvm::ConstantInt::get(*Type, 0);
-            return Value(Types::Bool, builder()->CreateICmpNE(read(value), zero, "bool"));
+            return Value{Types::Bool, builder()->CreateICmpNE(read(value), zero, "bool")};
         }
     };
 
@@ -318,11 +318,11 @@ namespace pepper {
             auto intType = bits > 32 ? *Types::Int64 : *Types::Int32;
             auto zero = llvm::ConstantInt::get(intType, 0);
             if (type->isIntegerTy()) {
-                return Value(Types::Bool, builder()->CreateICmpNE(value, zero, "bool"));
+                return Value{Types::Bool, builder()->CreateICmpNE(value, zero, "bool")};
             }
             if (type->isFloatingPointTy()) {
                 auto asInt = builder()->CreateFPToSI(value, *this);
-                return Value(Types::Bool, builder()->CreateICmpNE(asInt, zero, "bool"));
+                return Value{Types::Bool, builder()->CreateICmpNE(asInt, zero, "bool")};
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Type));
         }
@@ -358,54 +358,54 @@ namespace pepper {
                     else
                         cast = builder()->CreateFPTrunc(value, *this);
                 }
-                return Value(Type, cast);
+                return Value{Type, cast};
             }
             throw CompileError(
                 "Cannot convert from {0} to {0}", Types::toString(value->getType()), Types::toString(Type));
         }
 
         Value add(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd"));
+            return Value{Type, builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd")};
         }
 
         Value sub(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub"));
+            return Value{Type, builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub")};
         }
 
         Value mul(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul"));
+            return Value{Type, builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul")};
         }
 
         Value div(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv"));
+            return Value{Type, builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv")};
         }
 
         Value mod(Value lhs, Value rhs) const override {
-            return Value(Type, builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem"));
+            return Value{Type, builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem")};
         }
 
         Value less(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt"));
+            return Value{Types::Bool, builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt")};
         }
 
         Value lessEq(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole"));
+            return Value{Types::Bool, builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole")};
         }
 
         Value greater(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt"));
+            return Value{Types::Bool, builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt")};
         }
 
         Value greaterEq(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge"));
+            return Value{Types::Bool, builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge")};
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq"));
+            return Value{Types::Bool, builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq")};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value(Types::Bool, builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one"));
+            return Value{Types::Bool, builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one")};
         }
 
         Value assign(Value lhs, Value rhs) const override {
@@ -419,7 +419,7 @@ namespace pepper {
                                : llvm::Type::getInt32Ty(builder()->getContext());
             auto zero = llvm::ConstantInt::getFalse(intType);
             auto valAsInt = builder()->CreateFPToSI(value, intType);
-            return Value(Types::Bool, builder()->CreateICmpNE(valAsInt, zero, "bool"));
+            return Value{Types::Bool, builder()->CreateICmpNE(valAsInt, zero, "bool")};
         }
     };
 

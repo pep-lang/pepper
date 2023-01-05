@@ -33,7 +33,7 @@ namespace pepper {
             value = zeroValue(type);
         }
         ir()->CreateStore(value, field);
-        return Value(type, field);
+        return Value{type, field};
     }
 
     Value Codegen::emit(Ref<MemberRef> memberRef) {
@@ -45,7 +45,7 @@ namespace pepper {
             Query(structDesc->fields()).find([&memberName](auto f) { return f.ParamName == memberName; }).value();
         auto thisPtr = read(lhs);
         auto member = structDesc->getMember(thisPtr, memberName);
-        return Value(field.ParamType, member);
+        return Value{field.ParamType, member};
     }
 
     void Codegen::emit(Ref<StructDef> structDef) {
@@ -154,6 +154,6 @@ namespace pepper {
         for (auto argExpr : callArgs) {
             args.push_back(codegen(argExpr));
         }
-        return Value(method->returnType(), method->call(args));
+        return Value{method->returnType(), method->call(args)};
     }
 } // namespace pepper

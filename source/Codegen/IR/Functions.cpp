@@ -86,6 +86,6 @@ namespace pepper {
         for (auto argExpr : callArgs) {
             args.push_back(codegen(argExpr));
         }
-        return Value(function->returnType(), function->call(args));
+        return Value{function->returnType(), function->call(args)};
     }
 } // namespace pepper

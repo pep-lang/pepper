@@ -94,7 +94,8 @@ namespace pepper::ast {
             Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->dump(); });
             return
 
-                       llvm::formatv("{0} {1}({2})", Node::dump(indent), Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "));
+                llvm::formatv(
+                    "{0} {1}({2})", Node::dump(indent), Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "));
         }
     };
 

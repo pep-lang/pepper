@@ -41,22 +41,22 @@ namespace pepper {
     Value Codegen::read(Value value) {
         if (isa<llvm::AllocaInst>(*value.V)) {
             auto type = resolveType(value);
-            return Value(value.Ty, ir()->CreateLoad(type, value));
+            return Value{value.Ty, ir()->CreateLoad(type, value)};
         }
         if (isa<llvm::GetElementPtrInst>(*value.V)) {
             auto type = resolveType(value);
-            return Value(value.Ty, ir()->CreateLoad(type, value));
+            return Value{value.Ty, ir()->CreateLoad(type, value)};
         }
         return value;
     }
 
     Value Codegen::zeroValue(Ref<TypeInfo> type) {
         if (type->llvmType()->isIntegerTy())
-            return Value(type, llvm::ConstantInt::get(*type, 0));
+            return Value{type, llvm::ConstantInt::get(*type, 0)};
         if (type->llvmType()->isFloatingPointTy())
-            return Value(type, llvm::ConstantFP::get(*type, 0.0f));
+            return Value{type, llvm::ConstantFP::get(*type, 0.0f)};
         if (type->llvmType()->isPointerTy())
-            return Value(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
+            return Value{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType()))};
         throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 

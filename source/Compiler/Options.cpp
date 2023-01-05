@@ -26,11 +26,10 @@ namespace pepper {
         llvm::cl::ParseCommandLineOptions(argc, argv);
         auto opts = Defaults();
         opts->SourceFiles.assign(cli::SourceFiles.begin(), cli::SourceFiles.end());
-        opts->SourceFiles = Query(opts->SourceFiles).map([&](auto& src) {
-           return absolute(std::filesystem::path(src)).string();
-        });
+        opts->SourceFiles =
+            Query(opts->SourceFiles).map([&](auto& src) { return absolute(std::filesystem::path(src)).string(); });
 
-            if (cli::BuildPath.hasArgStr()) {
+        if (cli::BuildPath.hasArgStr()) {
             opts->BuildDir = cli::BuildPath;
         }
 
