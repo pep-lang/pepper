@@ -69,7 +69,7 @@ namespace pepper {
         auto typeName = variableDef->Type;
         auto type = Types::get(typeName.toString());
         if (!type) {
-            throw CompileError("Unknown type {0}", typeName.toString());
+            throw CompileError(variableDef->Source, "Unknown type {0}", typeName.toString());
         }
         auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
 

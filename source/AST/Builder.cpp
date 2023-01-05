@@ -116,7 +116,7 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             auto genericStruct = findStruct(spec.Name);
             if (!genericStruct) {
-                throw CompileError("Cannot specialize non-existent struct {0}", spec.Name);
+                throw CompileError(Source, "Cannot specialize non-existent struct {0}", spec.Name);
             }
             auto specialized = StructDef::New(spec);
             specialized->specialize(genericStruct, {spec.GenericTypes.begin(), spec.GenericTypes.end()});
@@ -125,9 +125,9 @@ namespace pepper::ast {
 
             auto name = spec.toString();
             if (scope->Structs.lookup(name))
-                throw CompileError("Attempted to redefine struct {0}", name);
+                throw CompileError(Source, "Attempted to redefine struct {0}", name);
             if (scope->Functions.lookup(name))
-                throw CompileError("Attempted to redefine constructor {0}", name);
+                throw CompileError(Source, "Attempted to redefine constructor {0}", name);
             scope->Structs[name] = specialized;
             scope->Functions[name] = specialized->NewInstance;
 
@@ -152,7 +152,7 @@ namespace pepper::ast {
         Ref<Node> popRValue() override {
             auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
-                Messages::Report<Warning>("Attempted to pop empty r-value stack");
+                Messages::Report<Warning>(Source, "Attempted to pop empty r-value stack");
                 return nullptr;
             }
             auto val = scope->RValueStack.pop_back_val();
@@ -182,7 +182,7 @@ namespace pepper::ast {
         Ref<Node> popLValue() override {
             auto& scope = ScopeStack.back();
             if (scope->LValueStack.empty()) {
-                throw InternalCompilerError("Attempted to pop empty l-value stack");
+                throw InternalCompilerError(Source, "Attempted to pop empty l-value stack");
             }
             auto val = scope->LValueStack.pop_back_val();
             //            std::cout << "lpop: " << scope->Ident << ": " << val->rtti()->name() << std::endl;
@@ -205,12 +205,12 @@ namespace pepper::ast {
         void beginStruct(Ref<StructDef> structDef) override {
             auto& scope = ScopeStack.back();
             if (scope->Structs.lookup(structDef->Name))
-                throw CompileError("Attempted to redefine struct {0}", structDef->Name);
+                throw CompileError(Source, "Attempted to redefine struct {0}", structDef->Name);
             scope->Structs[structDef->Name] = structDef;
             // If the struct is generic, alias SomeStruct -> SomeStruct<...>
             if (!structDef->GenericParams.empty()) {
                 if (scope->Structs.lookup(structDef->Type.Name))
-                    throw CompileError("Cannot redefine struct {0}", structDef->Type.Name);
+                    throw CompileError(Source, "Cannot redefine struct {0}", structDef->Type.Name);
                 scope->Structs[structDef->Type.Name] = structDef;
             }
             scope->Functions[structDef->Name] = structDef->NewInstance;
@@ -241,7 +241,7 @@ namespace pepper::ast {
         void beginFunction(Ref<FunctionDef> func) override {
             auto& scope = ScopeStack.back();
             if (scope->Functions.lookup(func->Name))
-                throw CompileError("Cannot redefine existing function {0}", func->Name);
+                throw CompileError(Source, "Cannot redefine existing function {0}", func->Name);
             scope->Functions[func->Name] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Body = Ref<Block>::New(func->Name);

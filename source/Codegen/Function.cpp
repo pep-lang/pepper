@@ -44,9 +44,9 @@ namespace pepper {
             }
             coercedArgs.push_back(param.ParamType->ops()->coerce(param.Default));
         }
-        return Value(
+        return Value{
             ReturnType,
-            Context::get().locals()->Builder->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs));
+            Context::get().locals()->Builder->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
     UserFunction::UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params)

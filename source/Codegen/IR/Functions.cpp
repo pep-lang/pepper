@@ -72,7 +72,7 @@ namespace pepper {
     Value Codegen::emit(Ref<FunctionCall> call) {
         auto function = resolveFunction(call);
         if (!function) {
-            throw CompileError("Function {0} not found", call->Target->Name);
+            throw CompileError(call->Source, "Function {0} not found", call->Target->Name);
         }
         Vector<Value> args;
         if (function->is<Method>()) {

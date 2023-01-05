@@ -24,7 +24,8 @@ namespace pepper {
         auto fieldName = fieldDef->Name;
         auto field = st->getField(instance, fieldName);
         if (!field) {
-            throw CompileError("struct {0} does not contain a field named {1}", st->name(), fieldName);
+            throw CompileError(
+                fieldDef->Source, "struct {0} does not contain a field named {1}", st->name(), fieldName);
         }
         auto type = Types::get(fieldDef->Type.toString());
         auto value = maybeCodegen(fieldDef->Default);

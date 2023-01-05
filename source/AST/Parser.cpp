@@ -136,7 +136,7 @@ namespace pepper {
             } catch (std::invalid_argument) {
             }
 
-            throw CompileError("Unable to parse numeric literal: {0}", value);
+            throw CompileError(builder->Source, "Unable to parse numeric literal: {0}", value);
         }
 
         Ref<Expression> evalBoolConstant(PepperParser::BoolConstantContext* boolConstant) {
@@ -312,7 +312,7 @@ namespace pepper {
                 auto st = builder->structTarget();
                 auto field = Query(st->Fields).find([&](auto f) { return f->Name == fieldName; });
                 if (!field) {
-                    throw CompileError("Unknown field {0} found during this initializer", fieldName);
+                    throw CompileError(builder->Source, "Unknown field {0} found during this initializer", fieldName);
                 }
 
                 // generate a parameter to receive the argument value/establish defaults
@@ -333,9 +333,9 @@ namespace pepper {
                     builder->beginExtension(structDef);
                     return;
                 }
-                throw CompileError("Unable to extend unknown type {0}", structType.toString());
+                throw CompileError(builder->Source, "Unable to extend unknown type {0}", structType.toString());
             }
-            throw InternalCompilerError("extension with is not implemented");
+            throw InternalCompilerError(builder->Source, "extension with is not implemented");
         }
 
         void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
@@ -372,7 +372,7 @@ namespace pepper {
             auto identifier = functionName.toString();
             auto func = builder->findFunction(identifier);
             if (!func) {
-                throw CompileError("Function {0} not found", identifier);
+                throw CompileError(builder->Source, "Function {0} not found", identifier);
             }
             auto providedArgsCount = context->argumentExpressionList()
                                          ? context->argumentExpressionList()->assignmentExpression().size()
@@ -795,7 +795,7 @@ namespace pepper {
         };
         auto text = rex.getOffendingToken()->getText();
         auto expected = rex.getExpectedTokens().toString();
-        throw CompileError(src, "{0} \"{1}\", expected \"{2}\"", prefix, text, expected);
+        throw CompileError(src, R"({0} "{1}", expected "{2}")", prefix, text, expected);
     }
 
     Ref<AST> Parser::parse(std::istream& stream, const std::string& name) {
