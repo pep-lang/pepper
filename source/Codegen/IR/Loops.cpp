@@ -23,8 +23,8 @@ namespace pepper {
     Value Codegen::emit(Ref<While> loop) {
         auto function = Context::get().locals()->functionTarget();
         auto& context = function->function()->getContext();
-        auto bodyBlock = llvm::BasicBlock::Create(context, "while", function->function(), function->Return);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "whilecont", function->function(), function->Return);
+        auto bodyBlock = function->appendBlock("while");
+        auto mergeBlock = function->appendBlock("whilecont");
 
         auto condition = codegen(loop->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
@@ -49,11 +49,10 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<ForRange> loop) {
-        auto function = ir()->GetInsertBlock()->getParent();
-        auto& context = function->getContext();
-        auto bodyBlock = llvm::BasicBlock::Create(context, "for", function);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "forcont");
-        mergeBlock->insertInto(function);
+        auto function = Context::get().locals()->functionTarget();
+        auto& context = function->function()->getContext();
+        auto bodyBlock = function->appendBlock("for");
+        auto mergeBlock = function->appendBlock("forcont");
         auto init = codegen(loop->Init);
         auto end = maybeCodegen(loop->Done);
         auto step = maybeCodegen(loop->Step);

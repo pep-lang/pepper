@@ -19,9 +19,9 @@ namespace pepper {
     Value Codegen::emit(Ref<Branch> branch) {
         auto function = Context::get().locals()->functionTarget();
         auto& context = function->function()->getContext();
-        auto thenBlock = llvm::BasicBlock::Create(context, "then", function->function(), function->Return);
-        auto elseBlock = llvm::BasicBlock::Create(context, "else", function->function(), function->Return);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "ifcont", function->function(), function->Return);
+        auto thenBlock = function->appendBlock("then");
+        auto elseBlock = function->appendBlock("else");
+        auto mergeBlock = function->appendBlock("ifcont");
         auto condition = codegen(branch->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
 
@@ -62,9 +62,9 @@ namespace pepper {
     Value Codegen::emit(Ref<Ternary> ternary) {
         auto function = Context::get().locals()->functionTarget();
         auto& context = function->function()->getContext();
-        auto trueBlock = llvm::BasicBlock::Create(context, "true", function->function(), function->Return);
-        auto falseBlock = llvm::BasicBlock::Create(context, "false", function->function(), function->Return);
-        auto mergeBlock = llvm::BasicBlock::Create(context, "ternarycont", function->function(), function->Return);
+        auto trueBlock = function->appendBlock("true");
+        auto falseBlock = function->appendBlock("false");
+        auto mergeBlock = function->appendBlock("ternarycont");
         auto condition = codegen(ternary->Condition);
         auto condBool = condition.Ty->ops()->asBool(condition);
 

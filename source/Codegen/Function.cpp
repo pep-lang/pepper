@@ -66,6 +66,11 @@ namespace pepper {
         }
     }
 
+    llvm::BasicBlock* UserFunction::appendBlock(const Ident& name) {
+        auto block = llvm::BasicBlock::Create(Func->getContext(), name, Func, Return);
+        return block;
+    }
+
     Ref<ExternFunction> ExternFunction::Malloc;
     Ref<ExternFunction> ExternFunction::Free;
 

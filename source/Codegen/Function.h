@@ -84,6 +84,8 @@ namespace pepper {
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
         UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());
+
+        llvm::BasicBlock* appendBlock(const Ident& name = {});
     };
 
     class Struct;
