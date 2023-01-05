@@ -114,6 +114,9 @@ namespace pepper {
                 emitObjFile();
             }
 
+            llvm::outs().flush();
+            llvm::errs().flush();
+
             return Module;
         }
 
