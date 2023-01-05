@@ -5,7 +5,6 @@
 #include <iostream>
 
 #include "AST/AST.h"
-#include "AST/Parser.h"
 #include "CodeGen/Codegen.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
@@ -14,6 +13,7 @@
 #include "Frontend/Context.h"
 #include "Frontend/ModuleContext.h"
 #include "Frontend/Runtime.h"
+#include "Parser/Parser.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IRReader/IRReader.h"
