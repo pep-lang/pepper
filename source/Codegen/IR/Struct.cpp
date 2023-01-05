@@ -19,7 +19,7 @@ namespace pepper {
 
     Value Codegen::emit(Ref<FieldDef> fieldDef) {
         auto st = Struct::get(fieldDef->Struct->Name);
-        auto instance = Context::get().locals()->findSymbol("this");
+        auto instance = locals()->findSymbol("this");
         instance = read(instance);
         auto fieldName = fieldDef->Name;
         auto field = st->getField(instance, fieldName);
@@ -101,7 +101,7 @@ namespace pepper {
         sizeVar->Default = Ref<IntegerLiteral>::New(structDesc->size());
 
         // Export new function to the enclosing scope
-        Context::get().locals()->newFunction(structDesc->instanceNew());
+        locals()->newFunction(structDesc->instanceNew());
 
         // map method names to mangled free functions while maintaining order
         Vector<Ref<Method>> methods;
@@ -135,7 +135,7 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<ThisRef>) {
-        auto thisPtr = Context::get().locals()->findSymbol("this");
+        auto thisPtr = locals()->findSymbol("this");
         return thisPtr;
     }
 

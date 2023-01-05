@@ -21,7 +21,7 @@ namespace pepper {
     using namespace pepper::ast;
 
     Value Codegen::emit(Ref<While> loop) {
-        auto function = Context::get().locals()->functionTarget();
+        auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("while");
         auto mergeBlock = function->appendBlock("whilecont");
@@ -49,7 +49,7 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<ForRange> loop) {
-        auto function = Context::get().locals()->functionTarget();
+        auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("for");
         auto mergeBlock = function->appendBlock("forcont");
@@ -65,7 +65,7 @@ namespace pepper {
             args.emplace_back(step);
 
         auto rangeStruct = Struct::get("range");
-        auto rangeNew = Context::get().locals()->findFunction("range");
+        auto rangeNew = locals()->findFunction("range");
         auto range = rangeNew->call(args);
 
         auto next = rangeStruct->method("next");

@@ -32,6 +32,11 @@ namespace pepper {
 
         // General builder, normal insertion point
         static Ref<llvm::IRBuilderBase> ir();
+        static Ref<Scope> locals();
+        static Ref<Scope> globals();
+        static void pushFunction(Ref<UserFunction> function);
+        static void pushScope(const Ident& name);
+        static void popScope();
 
         static llvm::Type* resolveType(Value value);
         static Value read(Value value);

@@ -22,6 +22,26 @@ namespace pepper {
         return Context::get().locals()->builder();
     }
 
+    Ref<Scope> Codegen::locals() {
+        return Context::get().locals();
+    }
+
+    Ref<Scope> Codegen::globals() {
+        return Context::get().globals();
+    }
+
+    void Codegen::pushFunction(Ref<UserFunction> function) {
+        Context::get().pushFunction(function);
+    }
+
+    void Codegen::pushScope(const Ident& name) {
+        Context::get().pushScope(name);
+    }
+
+    void Codegen::popScope() {
+        Context::get().popScope();
+    }
+
     using llvm::cast;
     using llvm::isa;
 
@@ -60,7 +80,7 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<VariableRef> variableRef) {
-        auto value = Context::get().locals()->findSymbol(variableRef->identifier());
+        auto value = locals()->findSymbol(variableRef->identifier());
         return value;
     }
 
@@ -79,7 +99,7 @@ namespace pepper {
         auto typeOps = TypeOps::get(type);
         auto coercedValue = typeOps->coerce(defaultValue);
         ir()->CreateStore(coercedValue, value);
-        Context::get().locals()->newSymbol(value);
+        locals()->newSymbol(value);
         return value;
     }
 

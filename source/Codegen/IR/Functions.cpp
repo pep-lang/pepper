@@ -18,11 +18,11 @@ namespace pepper {
     Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
         auto functionName = call->Target->Name;
         auto target = call->Target;
-        return Context::get().locals()->findFunction(functionName);
+        return locals()->findFunction(functionName);
     }
 
     void Codegen::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
-        Context::get().pushFunction(function);
+        pushFunction(function);
 
         // Allocate parameters
         auto llvmFunction = function->function();
@@ -32,7 +32,7 @@ namespace pepper {
             auto addr = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
             auto local = Value(param.ParamType, addr, param.ParamName);
             ir()->CreateStore(arg, local);
-            Context::get().locals()->newSymbol(local);
+            locals()->newSymbol(local);
         }
 
         //        // Emit the body of the function, after ensuring there is a return instruction
@@ -46,8 +46,8 @@ namespace pepper {
             ir()->CreateBr(function->Return);
         }
 
-        Context::get().popScope();
-        Context::get().locals()->newFunction(function);
+        popScope();
+        locals()->newFunction(function);
     }
 
     Value Codegen::emit(Ref<FunctionDef> functionDef) {
@@ -61,7 +61,7 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<Return> ret) {
-        auto function = Context::get().locals()->functionTarget().as<UserFunction>();
+        auto function = locals()->functionTarget().as<UserFunction>();
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
@@ -82,7 +82,7 @@ namespace pepper {
         }
         Vector<Value> args;
         if (function->is<Method>()) {
-            auto thisRef = Context::get().locals()->findSymbol("this");
+            auto thisRef = locals()->findSymbol("this");
             assert(thisRef);
             thisRef = read(thisRef);
             args.push_back(thisRef);

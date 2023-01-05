@@ -17,7 +17,7 @@ namespace pepper {
     using namespace pepper::ast;
 
     Value Codegen::emit(Ref<Branch> branch) {
-        auto function = Context::get().locals()->functionTarget();
+        auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto thenBlock = function->appendBlock("then");
         auto elseBlock = function->appendBlock("else");
@@ -60,7 +60,7 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<Ternary> ternary) {
-        auto function = Context::get().locals()->functionTarget();
+        auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto trueBlock = function->appendBlock("true");
         auto falseBlock = function->appendBlock("false");
