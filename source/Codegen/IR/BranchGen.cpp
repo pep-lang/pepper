@@ -3,7 +3,6 @@
 //
 
 #include "AST/Branches.h"
-
 #include "Codegen/Context.h"
 #include "Codegen/IR/Codegen.h"
 #include "Codegen/IR/Value.h"
