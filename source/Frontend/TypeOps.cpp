@@ -4,9 +4,9 @@
 
 #include "Frontend/TypeOps.h"
 
+#include "CodeGen/Value.h"
 #include "Core/Exceptions.h"
 #include "Frontend/Context.h"
-#include "IR/Value.h"
 #include "Frontend/Types.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was

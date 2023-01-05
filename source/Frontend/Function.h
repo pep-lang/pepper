@@ -5,10 +5,10 @@
 #include <string>
 #include <utility>
 
+#include "CodeGen/Value.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
-#include "IR/Value.h"
 #include "Frontend/Param.h"
 
 namespace llvm {

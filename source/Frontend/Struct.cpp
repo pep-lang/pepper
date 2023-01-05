@@ -1,10 +1,10 @@
 
 #include "Frontend/Struct.h"
 
+#include "CodeGen/Value.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Frontend/Context.h"
-#include "IR/Value.h"
 #include "Frontend/TypeOps.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"

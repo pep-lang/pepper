@@ -7,9 +7,9 @@
 #include <string>
 #include <utility>
 
+#include "CodeGen/Value.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
-#include "IR/Value.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace llvm {

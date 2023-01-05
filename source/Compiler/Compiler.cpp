@@ -6,12 +6,12 @@
 
 #include "AST/AST.h"
 #include "AST/Parser.h"
+#include "CodeGen/Codegen.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
 #include "Frontend/Context.h"
-#include "IR/Codegen.h"
 #include "Frontend/ModuleContext.h"
 #include "Frontend/Runtime.h"
 #include "llvm/ADT/Optional.h"
