@@ -5,11 +5,11 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
-#include "Codegen/IR/Value.h"
 #include "Codegen/ModuleContext.h"
 #include "Codegen/Scope.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
+#include "Value.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"

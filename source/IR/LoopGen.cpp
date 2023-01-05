@@ -6,15 +6,14 @@
 //
 
 #include "AST/Loops.h"
-
+#include "Codegen.h"
 #include "Codegen/Context.h"
-#include "Codegen/IR/Codegen.h"
-#include "Codegen/IR/Value.h"
 #include "Codegen/LLVMUtils.h"
 #include "Codegen/Struct.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "Value.h"
 
 namespace pepper {
     using namespace pepper::ast;

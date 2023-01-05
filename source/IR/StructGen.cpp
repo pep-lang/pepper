@@ -2,14 +2,13 @@
 // Created by Justin Boswell on 12/26/22.
 //
 
-#include "Codegen/Struct.h"
-
 #include "AST/Functions.h"
 #include "AST/Literals.h"
 #include "AST/Struct.h"
+#include "Codegen.h"
 #include "Codegen/Context.h"
-#include "Codegen/IR/Codegen.h"
 #include "Codegen/LLVMUtils.h"
+#include "Codegen/Struct.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"

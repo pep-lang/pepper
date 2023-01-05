@@ -3,10 +3,9 @@
 //
 
 #include "AST/Functions.h"
-
+#include "Codegen.h"
 #include "Codegen/Context.h"
 #include "Codegen/Function.h"
-#include "Codegen/IR/Codegen.h"
 #include "Codegen/TypeOps.h"
 #include "Codegen/Types.h"
 #include "Core/Exceptions.h"

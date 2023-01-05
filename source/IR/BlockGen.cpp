@@ -3,7 +3,7 @@
 //
 
 #include "AST/Block.h"
-#include "Codegen/IR/Codegen.h"
+#include "Codegen.h"
 #include "Codegen/Struct.h"
 #include "llvm/IR/BasicBlock.h"
 
