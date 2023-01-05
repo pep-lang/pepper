@@ -14,6 +14,7 @@
 #include "llvm/IR/Type.h"
 
 namespace pepper {
+
     class Struct : public std::enable_shared_from_this<Struct> {
         Ident Identifier;
         Ref<TypeInfo> StructType;
@@ -76,7 +77,7 @@ namespace pepper {
         llvm::Value* getMember(llvm::Value* instance, const Ident& name) const;
         llvm::Value* getField(llvm::Value* instance, const Ident& name) const;
         llvm::Value* getField(llvm::Value* instance, int idx, const Param& field) const;
-        llvm::Function* getMethod(llvm::Value* instance, const Ident& name) const;
+        llvm::Function* getMethod(const Ident& name) const;
 
         Ref<Function> instanceNew() const {
             return NewInstance;
@@ -103,5 +104,21 @@ namespace pepper {
         }
 
         static Ref<Struct> get(const Ident& name);
+    };
+
+    class StructTypeInfo : public TypeInfo {
+        DECLARE_RTTI(StructTypeInfo, TypeInfo);
+
+        Ref<Struct> Struct;
+        Ref<TypeOps> Ops;
+
+      public:
+        using TypeInfo::TypeInfo;
+
+        bool isStruct() const override {
+            return true;
+        }
+
+        TypeOps* ops() override;
     };
 } // namespace pepper

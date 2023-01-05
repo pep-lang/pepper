@@ -52,7 +52,11 @@ namespace pepper {
             return IsSigned;
         }
 
-        TypeOps* ops();
+        virtual bool isStruct() const {
+            return false;
+        }
+
+        virtual TypeOps* ops();
 
         Ref<TypeInfo> pointer() const;
     };

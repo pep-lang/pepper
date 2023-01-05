@@ -241,7 +241,7 @@ namespace pepper {
             for (const auto& searchPath : searchPaths) {
                 std::filesystem::path path(searchPath);
                 if (std::filesystem::exists(path)) {
-                    return path.string();
+                    return absolute(path).string();
                 }
             }
             throw InternalCompilerError("Could not find runtime");
@@ -298,7 +298,8 @@ namespace pepper {
             auto savedTraceChannels = Messages::GetTraceChannels();
 
             Opts = Options::Defaults();
-            Messages::SetTraceChannels(TraceChannel::NONE);
+            // Messages::SetTraceChannels(TraceChannel::NONE);
+            ensureBuildDirExists();
             auto runtimePath = findRuntimePath();
             auto runtimeSources = findRuntimeModuleSources(runtimePath);
             auto runtimeObjects = findRuntimeModuleObjects(Opts->BuildDir);

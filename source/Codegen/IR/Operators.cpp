@@ -73,8 +73,16 @@ namespace pepper {
         return nullptr;
     }
 
-    static Ref<TypeInfo> structOperandType(Ref<BinaryOp>, Ref<TypeInfo>, Ref<TypeInfo>) {
-        return nullptr;
+    static Ref<TypeInfo> structOperandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+        if (op->is<Assign>() && lhs == rhs) {
+            return lhs;
+        }
+        if ((op->is<Equal>() || op->is<NotEqual>()) && lhs->llvmType()->isPointerTy() &&
+            rhs->llvmType()->isPointerTy()) {
+            return Types::VoidPtr;
+        }
+        throw CompileError(
+            op->Source, "Cannot perform {0} between {1} and {2}", op->rtti()->name(), lhs->name(), rhs->name());
     }
 
     static Ref<TypeInfo> operandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {

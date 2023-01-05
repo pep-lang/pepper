@@ -57,10 +57,4 @@ namespace pepper {
         virtual Value asBool(Value value) const;
     };
 
-    class UserType : public TypeOps {
-        DECLARE_RTTI(UserType, TypeOps)
-      public:
-        UserType(const std::string& name, Ref<TypeInfo> type);
-        ~UserType() = default;
-    };
 } // namespace pepper
