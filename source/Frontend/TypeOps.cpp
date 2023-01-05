@@ -2,12 +2,12 @@
 // Created by Justin Boswell on 12/22/22.
 //
 
-#include "Codegen/TypeOps.h"
+#include "Frontend/TypeOps.h"
 
-#include "Codegen/Context.h"
-#include "Codegen/IR/Value.h"
-#include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "Frontend/Context.h"
+#include "IR/Value.h"
+#include "Frontend/Types.h"
 
 #pragma warning(disable : 4624) // warning C4624: 'llvm::detail::move_construction_triviality_helper<T>': destructor was
                                 // implicitly defined as deleted

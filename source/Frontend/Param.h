@@ -1,9 +1,9 @@
 
 #pragma once
 
-#include "Codegen/IR/Value.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
+#include "IR/Value.h"
 
 namespace pepper {
     class TypeInfo;

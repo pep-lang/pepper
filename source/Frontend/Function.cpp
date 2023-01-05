@@ -1,10 +1,10 @@
 
-#include "Codegen/Function.h"
+#include "Frontend/Function.h"
 
-#include "Codegen/Context.h"
-#include "Codegen/TypeOps.h"
-#include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "Frontend/Context.h"
+#include "Frontend/TypeOps.h"
+#include "Frontend/Types.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
 

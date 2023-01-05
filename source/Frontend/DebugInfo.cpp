@@ -1,8 +1,8 @@
 
-#include "Codegen/DebugInfo.h"
+#include "Frontend/DebugInfo.h"
 
-#include "Codegen/Param.h"
-#include "Codegen/Struct.h"
+#include "Frontend/Param.h"
+#include "Frontend/Struct.h"
 #include "llvm/IR/LLVMContext.h"
 
 namespace pepper {

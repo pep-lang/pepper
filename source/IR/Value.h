@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Codegen/Types.h"
 #include "Core/Ident.h"
+#include "Frontend/Types.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {

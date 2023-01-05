@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Codegen/IR/Value.h"
 #include "Core/Common.h"
+#include "IR/Value.h"
 
 namespace llvm {
     class Type;

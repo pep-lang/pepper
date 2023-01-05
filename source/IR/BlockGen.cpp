@@ -4,7 +4,7 @@
 
 #include "AST/Block.h"
 #include "Codegen.h"
-#include "Codegen/Struct.h"
+#include "Frontend/Struct.h"
 #include "llvm/IR/BasicBlock.h"
 
 namespace pepper {

@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "Codegen/DebugInfo.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
+#include "Frontend/DebugInfo.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {

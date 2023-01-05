@@ -4,10 +4,10 @@
 #include <memory>
 #include <string>
 
-#include "Codegen/ModuleContext.h"
 #include "Compiler/Options.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
+#include "Frontend/ModuleContext.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace llvm {

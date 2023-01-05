@@ -7,12 +7,12 @@
 
 #include "AST/Loops.h"
 #include "Codegen.h"
-#include "Codegen/Context.h"
-#include "Codegen/LLVMUtils.h"
-#include "Codegen/Struct.h"
-#include "Codegen/TypeOps.h"
-#include "Codegen/Types.h"
 #include "Core/Exceptions.h"
+#include "Frontend/Context.h"
+#include "Frontend/LLVMUtils.h"
+#include "Frontend/Struct.h"
+#include "Frontend/TypeOps.h"
+#include "Frontend/Types.h"
 #include "Value.h"
 
 namespace pepper {

@@ -1,11 +1,11 @@
 
-#include "Codegen/Struct.h"
+#include "Frontend/Struct.h"
 
-#include "Codegen/Context.h"
-#include "Codegen/IR/Value.h"
-#include "Codegen/TypeOps.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
+#include "Frontend/Context.h"
+#include "IR/Value.h"
+#include "Frontend/TypeOps.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"

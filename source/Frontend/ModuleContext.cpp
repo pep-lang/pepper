@@ -4,11 +4,11 @@
 
 #include <memory>
 
-// #include "Codegen/DebugInfo.h"
-#include "Codegen/ModuleContext.h"
-#include "Codegen/Scope.h"
-#include "Codegen/Symbols.h"
+// #include "Frontend/DebugInfo.h"
 #include "Core/Exceptions.h"
+#include "Frontend/ModuleContext.h"
+#include "Frontend/Scope.h"
+#include "Frontend/Symbols.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
 #include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"

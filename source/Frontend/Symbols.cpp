@@ -2,9 +2,9 @@
 // Created by Justin Boswell on 1/1/23.
 //
 
-#include "Codegen/Symbols.h"
+#include "Frontend/Symbols.h"
 
-#include "Codegen/Scope.h"
+#include "Frontend/Scope.h"
 
 namespace pepper {
     Symbols::Symbols() {

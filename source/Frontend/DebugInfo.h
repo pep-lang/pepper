@@ -3,10 +3,10 @@
 
 #include <unordered_map>
 
-#include "Codegen/Function.h"
-#include "Codegen/Struct.h"
 #include "Core/Common.h"
 #include "Core/SourceLocation.h"
+#include "Frontend/Function.h"
+#include "Frontend/Struct.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"

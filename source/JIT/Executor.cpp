@@ -1,9 +1,9 @@
 
 #include "JIT/Executor.h"
 
-#include "Codegen/ModuleContext.h"
-#include "Codegen/Runtime.h"
 #include "Core/Exceptions.h"
+#include "Frontend/ModuleContext.h"
+#include "Frontend/Runtime.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"

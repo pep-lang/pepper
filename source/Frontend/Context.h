@@ -4,8 +4,8 @@
 #include <memory>
 #include <string>
 
-#include "Codegen/Scope.h"
 #include "Core/Common.h"
+#include "Frontend/Scope.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"

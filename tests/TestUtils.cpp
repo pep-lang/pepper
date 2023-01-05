@@ -5,10 +5,10 @@
 #include "TestUtils.h"
 #include <sstream>
 
-#include "Codegen/ModuleContext.h"
 #include "Compiler/Compiler.h"
 #include "Compiler/Options.h"
 #include "Core/Messages.h"
+#include "Frontend/ModuleContext.h"
 #include "JIT/Executor.h"
 #include "gtest/gtest.h"
 #include "llvm/IR/LLVMContext.h"

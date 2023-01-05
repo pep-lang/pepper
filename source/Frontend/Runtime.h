@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Codegen/Scope.h"
 #include "Core/Common.h"
+#include "Frontend/Scope.h"
 
 namespace pepper {
 

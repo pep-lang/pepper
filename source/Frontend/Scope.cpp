@@ -2,9 +2,9 @@
 // Created by Justin Boswell on 12/21/22.
 //
 
-#include "Codegen/Scope.h"
+#include "Frontend/Scope.h"
 
-#include "Codegen/Function.h"
+#include "Frontend/Function.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
 

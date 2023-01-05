@@ -1,13 +1,13 @@
 
-#include "Codegen/Context.h"
+#include "Frontend/Context.h"
 #include <cassert>
 #include <utility>
 
-#include "Codegen/Function.h"
-#include "Codegen/ModuleContext.h"
-#include "Codegen/Runtime.h"
-#include "Codegen/Scope.h"
-#include "Codegen/Types.h"
+#include "Frontend/Function.h"
+#include "Frontend/ModuleContext.h"
+#include "Frontend/Runtime.h"
+#include "Frontend/Scope.h"
+#include "Frontend/Types.h"
 #include "JIT/Executor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"

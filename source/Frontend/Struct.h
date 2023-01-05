@@ -4,11 +4,11 @@
 #include <map>
 #include <memory>
 
-#include "Codegen/Function.h"
-#include "Codegen/Param.h"
-#include "Codegen/Types.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
+#include "Frontend/Function.h"
+#include "Frontend/Param.h"
+#include "Frontend/Types.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"

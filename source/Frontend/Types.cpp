@@ -1,12 +1,12 @@
 
-#include "Codegen/Types.h"
+#include "Frontend/Types.h"
 #include <sstream>
 
 #include "AST/Nodes.h"
-#include "Codegen/Context.h"
-#include "Codegen/TypeOps.h"
 #include "Core/Exceptions.h"
 #include "Core/Vector.h"
+#include "Frontend/Context.h"
+#include "Frontend/TypeOps.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
