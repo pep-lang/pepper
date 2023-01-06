@@ -10,6 +10,7 @@
 
 namespace pepper::ast {
     struct Transformer {
+        virtual ~Transformer() = default;
         virtual void run(Ref<AST> parseTree) = 0;
     };
 
