@@ -212,6 +212,7 @@ constructorParamList
 
 constructorDefinition
     :   New '(' constructorParamList? ')' compoundStatement
+    |   Del '(' ')' compoundStatement
     ;
 
 fieldDeclaration
@@ -360,6 +361,7 @@ Case : 'case';
 Const : 'const';
 Continue : 'continue';
 Default : 'default';
+Del : 'del';
 Do : 'do';
 Else : 'else';
 Enum : 'enum';

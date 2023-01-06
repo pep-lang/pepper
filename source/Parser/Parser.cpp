@@ -333,11 +333,15 @@ namespace pepper {
             builder->endStruct();
         }
 
-        void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext*) override {
+        void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
             auto st = builder->structTarget();
-            st->Constructor = builder->New<MethodDef>(st.get(), TypeName("void"), "__ctor");
-            lvaluePush(st->Constructor);
-            builder->beginFunction(st->Constructor);
+            if (context->New()) {
+                lvaluePush(st->Constructor);
+                builder->beginFunction(st->Constructor);
+            } else {
+                lvaluePush(st->Destructor);
+                builder->beginFunction(st->Destructor);
+            }
         }
 
         void exitConstructorDefinition(PepperParser::ConstructorDefinitionContext*) override {
@@ -370,7 +374,7 @@ namespace pepper {
                 auto func = builder->functionTarget();
                 func->Parameters.emplace_back(paramName, field.value()->Type, defaultValue);
 
-                // GreaterEqual the assignment to the field to the ctor
+                // Add the assignment to the field to the ctor
                 func->Body->Items.emplace_back(builder->New<Assign>(
                     builder->New<MemberRef>(Ref<ThisRef>::New(), fieldName), builder->New<VariableRef>(paramName)));
             }
