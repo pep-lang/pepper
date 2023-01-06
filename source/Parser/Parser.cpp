@@ -306,6 +306,18 @@ namespace pepper {
             return type;
         }
 
+        Ref<StructDef> findStructOrGeneric(const TypeName& typeName) {
+            if (auto st = builder->findStruct(typeName)) {
+                return st;
+            }
+            if (!typeName.GenericTypes.empty()) {
+                if (auto st = builder->findStruct(typeName.Name)) {
+                    return st;
+                }
+            }
+            return nullptr;
+        }
+
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
             const TypeName type = parseTypeDeclaration(context->typeDeclaration());
             auto structDef = StructDef::New(type);
@@ -370,6 +382,14 @@ namespace pepper {
                 if (auto structDef = builder->findStruct(structType)) {
                     builder->beginExtension(structDef);
                     return;
+                }
+                // If the target is generic, but hasn't been specialized yet, do it now
+                if (!structType.GenericTypes.empty()) {
+                    if (builder->findStruct(structType.Name)) {
+                        auto specialized = builder->specialize(structType);
+                        builder->beginExtension(specialized);
+                        return;
+                    }
                 }
                 throw CompileError(builder->Source, "Unable to extend unknown type {0}", structType.toString());
             }

@@ -190,3 +190,23 @@ int test() {
     )SOURCE";
     EXPECT_EQ(10, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Structs, SpecializedExtend) {
+    const char* source = R"SOURCE(
+struct Test<T> {
+    T x;
+};
+
+extend Test<int> {
+    int test() {
+        return x;
+    }
+};
+
+int test() {
+    const t = Test<int>();
+    return t.test();
+}
+    )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
