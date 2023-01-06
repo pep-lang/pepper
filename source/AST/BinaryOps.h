@@ -18,7 +18,7 @@ namespace pepper::ast {
         }
 
         const TypeName& type() const override {
-            return LHS->type();
+            return TypeName::Widest(LHS->type(), RHS->type());
         }
 
         std::string toString() const override {

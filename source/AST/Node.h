@@ -52,9 +52,21 @@ namespace pepper::ast {
 
         std::string toString() const;
 
+        static const TypeName& Widest(const TypeName& lhs, const TypeName& rhs);
+
         static const TypeName Void;
         static const TypeName Auto;
         static const TypeName Bool;
+
+        static const TypeName VoidPtr;
+        static const TypeName Int8;
+        static const TypeName UInt8;
+        static const TypeName Int32;
+        static const TypeName UInt32;
+        static const TypeName Int64;
+        static const TypeName UInt64;
+        static const TypeName Double;
+        static const TypeName Float;
     };
 
     struct Node {
