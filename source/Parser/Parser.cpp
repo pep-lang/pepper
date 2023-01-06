@@ -381,23 +381,20 @@ namespace pepper {
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
-            if (!context->With()) {
-                auto structType = parseTypeDeclaration(context->typeDeclaration());
-                if (auto structDef = builder->findStruct(structType)) {
-                    builder->beginExtension(structDef);
+            auto structType = parseTypeDeclaration(context->typeDeclaration());
+            if (auto structDef = builder->findStruct(structType)) {
+                builder->beginExtension(structDef);
+                return;
+            }
+            // If the target is generic, but hasn't been specialized yet, do it now
+            if (!structType.GenericTypes.empty()) {
+                if (builder->findStruct(structType.Name)) {
+                    auto specialized = builder->specialize(structType);
+                    builder->beginExtension(specialized);
                     return;
                 }
-                // If the target is generic, but hasn't been specialized yet, do it now
-                if (!structType.GenericTypes.empty()) {
-                    if (builder->findStruct(structType.Name)) {
-                        auto specialized = builder->specialize(structType);
-                        builder->beginExtension(specialized);
-                        return;
-                    }
-                }
-                throw CompileError(builder->Source, "Unable to extend unknown type {0}", structType.toString());
             }
-            throw InternalCompilerError(builder->Source, "extension with is not implemented");
+            throw CompileError(builder->Source, "Unable to extend unknown type {0}", structType.toString());
         }
 
         void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext*) override {
@@ -475,9 +472,6 @@ namespace pepper {
         void enterMemberAccess(PepperParser::MemberAccessContext* context) override {
             auto memberRef = Pending::New<MemberRef>();
             lvaluePush(memberRef);
-            if (context->This()) {
-                rvaluePush(builder->New<VariableRef>("this"));
-            }
         }
 
         void exitMemberAccess(PepperParser::MemberAccessContext* context) override {

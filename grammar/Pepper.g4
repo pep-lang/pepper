@@ -49,7 +49,7 @@ functionCall
     ;
 
 memberAccess
-    : (primaryExpression|This) Dot Identifier
+    : primaryExpression Dot Identifier
     ;
 
 argumentExpressionList
@@ -203,7 +203,7 @@ structMemberDeclaration
 
 constructorParam
     : parameterDeclaration
-    | 'this' '.' Identifier (Assign assignmentExpression)?
+    | This '.' Identifier (Assign assignmentExpression)?
     ;
 
 constructorParamList
@@ -350,7 +350,6 @@ functionDefinitionList
 
 extensionDefinition
     :   Extend typeDeclaration '{' functionDefinitionList '}'
-    |   Extend typeDeclaration With Identifier ';'
     ;
 
 
