@@ -21,7 +21,7 @@ namespace pepper {
         using Super = PepperBaseListener;
 
         Ref<AST> Tree;
-        Ref<Builder> builder;
+        Builder* builder;
 
       public:
         ParserListener()

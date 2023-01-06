@@ -320,13 +320,11 @@ namespace pepper::ast {
         }
     };
 
-    Ref<Builder> AST::builder() {
-        if (auto active = ActiveBuilder.lock()) {
-            return active;
+    Builder* AST::builder() {
+        if (!TreeBuilder) {
+            TreeBuilder = std::make_unique<BuilderImpl>(*this);
         }
 
-        auto active = Ref<BuilderImpl>::New(*this);
-        ActiveBuilder = active;
-        return active.as<Builder>();
+        return TreeBuilder.get();
     }
 } // namespace pepper::ast

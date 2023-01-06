@@ -15,12 +15,12 @@ namespace pepper::ast {
     class AST {
       private:
         Vector<Ref<ast::Node>> Roots;
-        WeakRef<Builder> ActiveBuilder;
+        std::unique_ptr<Builder> TreeBuilder;
 
       public:
         AST();
 
-        Ref<Builder> builder();
+        Builder* builder();
 
         void newRoot(Ref<ast::Node> root);
 

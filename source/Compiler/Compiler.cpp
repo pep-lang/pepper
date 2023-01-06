@@ -14,6 +14,7 @@
 #include "Frontend/ModuleContext.h"
 #include "Frontend/Runtime.h"
 #include "Parser/Parser.h"
+#include "Transforms/Transform.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IRReader/IRReader.h"
@@ -84,6 +85,9 @@ namespace pepper {
             if (!ast || !Messages::errors().empty()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
+
+            ast::TransformPass transform(ast);
+            ast = transform.run();
 
             if (PEP_TRACING(TraceChannel::AST)) {
                 PEP_TRACE(TraceChannel::AST, "Parse tree:");

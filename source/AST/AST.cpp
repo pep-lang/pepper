@@ -1,6 +1,7 @@
 
 #include "AST/AST.h"
 
+#include "AST/Builder.h"
 #include "AST/Node.h"
 #include "AST/Struct.h"
 #include "Core/Messages.h"

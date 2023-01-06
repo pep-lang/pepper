@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "AST.h"
+#include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
@@ -27,6 +27,8 @@ namespace pepper::ast {
         }
 
         SourceLocation Source;
+
+        virtual ~Builder() = default;
 
         [[nodiscard]] virtual Ref<StructDef> findStruct(const TypeName& name) const = 0;
         [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Ident& name) const = 0;
