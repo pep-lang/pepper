@@ -79,6 +79,9 @@ namespace pepper::ast {
 
         static Ref<StructDef> New(const TypeName& type);
 
+        Ref<FieldDef> getField(const Ident& name) const;
+        Ref<MethodDef> getMethod(const Ident& name) const;
+
         std::string toString() const override;
         std::string dump(int indent = 0) const override;
     };
@@ -119,14 +122,23 @@ namespace pepper::ast {
         DECLARE_RTTI(MethodCall, Expression);
         AST_NODE_POD_CLONE(MethodCall);
 
+        TypeName Type;
         Ref<Expression> This;
         const Ident Name;
         Vector<Ref<Expression>> Args;
 
-        MethodCall(Ref<Expression> thisRef, const Ident& methodName, const Vector<Ref<Expression>>& args = {})
-            : This(thisRef)
+        MethodCall(const TypeName& type,
+                   Ref<Expression> thisRef,
+                   const Ident& methodName,
+                   const Vector<Ref<Expression>>& args = {})
+            : Type(type)
+            , This(thisRef)
             , Name(methodName)
             , Args(args) {
+        }
+
+        const TypeName& type() const override {
+            return Type;
         }
 
         void specialize(const Specialization& spec) override;

@@ -7,6 +7,10 @@
 #include "Core/Query.h"
 
 namespace pepper::ast {
+    const TypeName TypeName::Void = TypeName{"void"};
+    const TypeName TypeName::Auto = TypeName{"__auto"};
+    const TypeName TypeName::Bool = TypeName{"bool"};
+    
     std::string TypeName::toString() const {
         std::string genericTypes;
         if (!GenericTypes.empty()) {

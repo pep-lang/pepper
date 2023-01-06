@@ -154,7 +154,26 @@ namespace pepper {
             return type;
         }
 
-        void enterVariableDeclaration(PepperParser::VariableDeclarationContext* context) override {
+        TypeName typeOfExpr(Ref<Expression> expr) const {
+            if (expr->type() != TypeName::Auto) {
+                return expr->type();
+            }
+            if (expr->is<VariableRef>()) {
+                auto var = expr.as<VariableRef>();
+                auto symbol = builder->findSymbol(var->identifier());
+                if (!symbol) {
+                    throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->identifier());
+                }
+                return symbol->Type;
+            }
+            if (expr->is<MemberRef>()) {
+                auto ref = expr.as<MemberRef>();
+                return typeOfExpr(ref->LHS);
+            }
+            throw CompileError(builder->Source, "Unknown expression type in {0}", expr->rtti()->name());
+        }
+
+        void enterExplicitVariableDeclaration(PepperParser::ExplicitVariableDeclarationContext* context) override {
             auto typeName = parseTypeName(context->typeSpecifier());
             auto identifier = context->Identifier()->toString();
             if (!typeName.GenericTypes.empty()) {
@@ -168,13 +187,33 @@ namespace pepper {
             }
         }
 
-        void exitVariableDeclaration(PepperParser::VariableDeclarationContext* context) override {
+        void exitExplicitVariableDeclaration(PepperParser::ExplicitVariableDeclarationContext* context) override {
             auto symbol = lvaluePop<VariableDef>();
             if (context->assignmentExpression()) {
                 auto defaultValue = rvaluePop<Expression>();
                 symbol->Default = defaultValue;
             }
 
+            builder->symbol(symbol);
+            rvaluePush(symbol);
+        }
+
+        void enterImplicitVariableDeclaration(PepperParser::ImplicitVariableDeclarationContext* context) override {
+            bool isConst = context->typeQualifier()->Const();
+            auto identifier = context->Identifier()->toString();
+            const auto& typeName = TypeName::Auto;
+            if (builder->structTarget()) {
+                lvaluePush(builder->New<FieldDef>(builder->structTarget().get(), typeName, identifier));
+            } else {
+                lvaluePush(builder->New<VariableDef>(typeName, identifier));
+            }
+        }
+
+        void exitImplicitVariableDeclaration(PepperParser::ImplicitVariableDeclarationContext*) override {
+            auto symbol = lvaluePop<VariableDef>();
+            auto defaultValue = rvaluePop<Expression>();
+            symbol->Default = defaultValue;
+            symbol->Type = typeOfExpr(symbol->Default);
             builder->symbol(symbol);
             rvaluePush(symbol);
         }
@@ -328,7 +367,7 @@ namespace pepper {
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
             if (!context->With()) {
                 auto structType = parseTypeDeclaration(context->typeDeclaration());
-                if (auto structDef = builder->findStruct(structType.toString())) {
+                if (auto structDef = builder->findStruct(structType)) {
                     builder->beginExtension(structDef);
                     return;
                 }
@@ -356,7 +395,16 @@ namespace pepper {
                 args.insert(args.begin(), rvaluePop<Expression>());
             }
             auto member = rvaluePop<MemberRef>();
-            auto call = builder->New<MethodCall>(member->LHS, member->MemberName, args);
+            assert(member->LHS);
+            auto structType = typeOfExpr(member->LHS);
+            auto structDef = builder->findStruct(structType);
+            assert(structDef);
+            auto method = structDef->getMethod(member->MemberName);
+            if (!method) {
+                throw CompileError(
+                    builder->Source, "No method named {0} in {1}", member->MemberName, structType.toString());
+            }
+            auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->MemberName, args);
             builder->insert(call);
         }
 

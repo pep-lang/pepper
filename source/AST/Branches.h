@@ -54,6 +54,10 @@ namespace pepper::ast {
         Ref<Expression> TrueResult;
         Ref<Expression> FalseResult;
 
+        const TypeName& type() const  override {
+            return TrueResult->type();
+        }
+
         std::string toString() const override {
             return Node::toString();
         }

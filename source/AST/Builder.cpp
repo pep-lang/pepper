@@ -63,15 +63,15 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<StructDef> findStruct(const Ident& name) const override {
+        [[nodiscard]] Ref<StructDef> findStruct(const TypeName& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (auto st = scope->Structs.lookup(name))
+                if (auto st = scope->Structs.lookup(name.toString()))
                     return st;
             }
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::VariableDef> findVariable(const Ident& name) const override {
+        [[nodiscard]] Ref<VariableDef> findVariable(const Ident& name) const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 auto var = scope->Locals.lookup(name);
                 if (var) {
@@ -102,7 +102,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<ast::Symbol> findSymbol(const Ident& name) const override {
+        [[nodiscard]] Ref<Symbol> findSymbol(const Ident& name) const override {
             if (auto var = findVariable(name)) {
                 return var.as<ast::Symbol>();
             }
@@ -206,7 +206,7 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             if (scope->Structs.lookup(structDef->Name))
                 throw CompileError(Source, "Attempted to redefine struct {0}", structDef->Name);
-            scope->Structs[structDef->Name] = structDef;
+            scope->Structs[structDef->Type.toString()] = structDef;
             // If the struct is generic, alias SomeStruct -> SomeStruct<...>
             if (!structDef->GenericParams.empty()) {
                 if (scope->Structs.lookup(structDef->Type.Name))

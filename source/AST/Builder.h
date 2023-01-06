@@ -28,7 +28,7 @@ namespace pepper::ast {
 
         SourceLocation Source;
 
-        [[nodiscard]] virtual Ref<StructDef> findStruct(const Ident& name) const = 0;
+        [[nodiscard]] virtual Ref<StructDef> findStruct(const TypeName& name) const = 0;
         [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Ident& name) const = 0;
         [[nodiscard]] virtual Ref<VariableDef> findVariable(const Ident& name) const = 0;
         [[nodiscard]] virtual Ref<Symbol> findSymbol(const Ident& name) const = 0;

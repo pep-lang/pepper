@@ -91,15 +91,15 @@ namespace pepper::ast {
         : Symbol(type, type.toString()) {
         NewInstance = Ref<FunctionDef>::New(Type, Name);
         // Note that the order of these is important, ctor depends on init, so must be generated after
-        Initializer = Ref<MethodDef>::New(this, TypeName("void"), "__init");
-        Constructor = Ref<MethodDef>::New(this, TypeName("void"), "__ctor");
-        Destructor = Ref<MethodDef>::New(this, TypeName("void"), "__dtor");
+        Initializer = Ref<MethodDef>::New(this, TypeName::Void, "__init");
+        Constructor = Ref<MethodDef>::New(this, TypeName::Void, "__ctor");
+        Destructor = Ref<MethodDef>::New(this, TypeName::Void, "__dtor");
 
         // Add a field at the head for the refcount
         Fields.emplace_back(Ref<FieldDef>::New(this, TypeName{"u32"}, "__refcount", Ref<IntegerLiteral>::New(0)));
 
-        Acquire = Ref<MethodDef>::New(this, TypeName{"void"}, "__acquire", Params{{"ref", Type}});
-        Release = Ref<MethodDef>::New(this, TypeName{"void"}, "__release");
+        Acquire = Ref<MethodDef>::New(this, TypeName::Void, "__acquire", Params{{"ref", Type}});
+        Release = Ref<MethodDef>::New(this, TypeName::Void, "__release");
 
         auto refcount = Ref<MemberRef>::New(Ref<ThisRef>::New(), "__refcount");
         Acquire->Body->Items = {
@@ -112,11 +112,12 @@ namespace pepper::ast {
                                          })),
             // if (ref)
             //     ref.__release()
-            Ref<If>::New(Ref<NotEqual>::New(Ref<VariableRef>::New("ref"), PointerLiteral::Null()),
-                         Ref<Block>::New("if",
-                                         Vector<Ref<Node>>{
-                                             Ref<MethodCall>::New(Ref<VariableRef>::New("ref"), "__release"),
-                                         })),
+            Ref<If>::New(
+                Ref<NotEqual>::New(Ref<VariableRef>::New("ref"), PointerLiteral::Null()),
+                Ref<Block>::New("if",
+                                Vector<Ref<Node>>{
+                                    Ref<MethodCall>::New(TypeName::Void, Ref<VariableRef>::New("ref"), "__release"),
+                                })),
             // this.__refcount += 1
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
         };
@@ -128,7 +129,7 @@ namespace pepper::ast {
             Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
                          Ref<Block>::New("if",
                                          Vector<Ref<Node>>{
-                                             Ref<MethodCall>::New(Ref<ThisRef>::New(), "__dtor"),
+                                             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__dtor"),
                                          })),
         };
     }
@@ -192,7 +193,7 @@ namespace pepper::ast {
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
-            Ref<MethodCall>::New(Ref<ThisRef>::New(), "__ctor"),
+            Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
             Ref<VariableRef>::New("this"),
             Ref<Return>::New(NewInstance->ReturnType, Ref<VariableRef>::New("this")),
         };
@@ -206,7 +207,7 @@ namespace pepper::ast {
 
         // insert initializer as the first instruction in Constructor
         Constructor->Body->Items.insert(Constructor->Body->Items.begin(),
-                                        Ref<MethodCall>::New(Ref<ThisRef>::New(), "__init"));
+                                        Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__init"));
 
         // insert free as the last instruction before return in Destructor
         auto lastExpr = !Destructor->Body->Items.empty() ? Destructor->Body->Items.back() : nullptr;
@@ -222,6 +223,22 @@ namespace pepper::ast {
         Methods.push_back(Destructor);
         Methods.push_back(Acquire);
         Methods.push_back(Release);
+    }
+
+    Ref<FieldDef> StructDef::getField(const Ident& name) const {
+        for (auto field : Fields) {
+            if (field->Name == name)
+                return field;
+        }
+        return nullptr;
+    }
+
+    Ref<MethodDef> StructDef::getMethod(const Ident& name) const {
+        for (auto method : Methods) {
+            if (method->Name == name)
+                return method;
+        }
+        return nullptr;
     }
 
     std::string StructDef::toString() const {

@@ -17,6 +17,10 @@ namespace pepper::ast {
             , RHS(rhs) {
         }
 
+        const TypeName& type() const override {
+            return LHS->type();
+        }
+
         std::string toString() const override {
             auto str = Node::toString();
             if (LHS && RHS) {
@@ -83,6 +87,10 @@ namespace pepper::ast {
         DECLARE_RTTI(Equal, BinaryOp);
         AST_NODE_POD_CLONE(Equal);
 
+        const TypeName& type() const override {
+            return TypeName::Bool;
+        }
+
       public:
         using BinaryOp::BinaryOp;
     };
@@ -90,6 +98,10 @@ namespace pepper::ast {
     struct NotEqual : public BinaryOp {
         DECLARE_RTTI(NotEqual, BinaryOp);
         AST_NODE_POD_CLONE(NotEqual);
+
+        const TypeName& type() const override {
+            return TypeName::Bool;
+        }
 
       public:
         using BinaryOp::BinaryOp;

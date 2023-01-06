@@ -42,7 +42,19 @@ namespace pepper::ast {
             return toString();
         }
 
+        bool operator==(const TypeName& rhs) const {
+            return Name == rhs.Name && GenericTypes == rhs.GenericTypes;
+        }
+
+        bool operator!=(const TypeName& rhs) const {
+            return !(*this == rhs);
+        }
+
         std::string toString() const;
+
+        static const TypeName Void;
+        static const TypeName Auto;
+        static const TypeName Bool;
     };
 
     struct Node {
@@ -110,8 +122,8 @@ namespace pepper::ast {
 
       public:
         virtual const TypeName& type() const {
-            static TypeName Void("void");
-            return Void;
+            static TypeName Auto("__auto");
+            return Auto;
         }
     };
 } // namespace pepper::ast

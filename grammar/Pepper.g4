@@ -180,7 +180,8 @@ typeDeclaration
     ;
 
 variableDeclaration
-    : typeSpecifier Brackets? Identifier (Assign assignmentExpression)? ';'
+    : typeSpecifier Brackets? Identifier (Assign assignmentExpression)? ';' #ExplicitVariableDeclaration
+    | typeQualifier Identifier Assign assignmentExpression ';'              #ImplicitVariableDeclaration
     ;
 
 genericParams
@@ -219,6 +220,7 @@ fieldDeclaration
 
 typeQualifier
 	: Var
+	| Const
 	;
 
 parameterList
