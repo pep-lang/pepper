@@ -210,3 +210,27 @@ int test() {
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Structs, RefLifetime) {
+    const char* source = R"SOURCE(
+struct Test {
+    int x = 0;
+};
+
+struct Foo {
+    Test t;
+    int y;
+
+    new(this.t) {
+        y = t.x;
+    }
+};
+
+int test() {
+    var t = Test();
+    const f = Foo(t);
+    return f.y;
+}
+    )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
