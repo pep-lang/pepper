@@ -865,8 +865,17 @@ namespace pepper {
             rex.getOffendingToken()->getCharPositionInLine(),
         };
         auto text = rex.getOffendingToken()->getText();
-        auto expected = rex.getExpectedTokens().toString();
-        throw CompileError(src, R"({0} "{1}", expected "{2}")", prefix, text, expected);
+        auto rec = rex.getRecognizer();
+        auto expected = rex.getExpectedTokens();
+        auto tokenMap = rec->getTokenTypeMap();
+        auto possibles = Vector<std::string_view>{};
+        for (auto tokenIt : tokenMap) {
+            if (expected.contains(tokenIt.second)) {
+                possibles.emplace_back(tokenIt.first);
+            }
+        }
+        auto expectedTokens = llvm::join(possibles.begin(), possibles.end(), ", ");
+        throw CompileError(src, R"({0} "{1}", expected {2})", prefix, text, expectedTokens);
     }
 
     Ref<AST> Parser::parse(std::istream& stream, const std::string& name) {
