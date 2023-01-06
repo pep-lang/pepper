@@ -32,7 +32,7 @@ namespace pepper {
                 auto hasJump = lastInstr && llvm::isa<llvm::BranchInst>(*lastInstr);
                 if (hasJump)
                     ir()->SetInsertPoint(llvm::cast<llvm::Instruction>(lastInstr.V));
-                for (auto& ref : localRefs) {
+                for (auto& ref : llvm::reverse(localRefs)) {
                     auto type = ref.Ty.template as<StructTypeInfo>();
                     auto release = type->StructDesc->method("__release");
                     release->call({ref});

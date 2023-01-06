@@ -25,11 +25,15 @@ namespace pepper::ast {
         }
 
         void visitStruct(Ref<StructDef> st) {
-            for (auto field : st->Fields) {
+            Vector<Ref<MethodCall>> releases;
+            for (const auto& field : st->Fields) {
                 if (auto fieldType = Structs.lookup(field->Type.toString())) {
-                    st->Destructor->Body->Items.emplace_back(Ref<MethodCall>::New(
+                    releases.emplace_back(Ref<MethodCall>::New(
                         fieldType->Type, Ref<MemberRef>::New(Ref<ThisRef>::New(), field->Name), "__release"));
                 }
+            }
+            for (const auto& release : llvm::reverse(releases)) {
+                st->Destructor->Body->Items.emplace_back(release);
             }
         }
     };
