@@ -81,7 +81,7 @@ namespace pepper {
 
     Value Codegen::emit(Ref<VariableRef> variableRef) {
         auto value = locals()->findSymbol(variableRef->identifier());
-        return value;
+        return read(value);
     }
 
     Value Codegen::emit(Ref<VariableDef> variableDef) {

@@ -229,7 +229,7 @@ struct Foo {
 int test() {
     var t = Test();
     const f = Foo(t);
-    return f.y;
+    return (f.t).x;
 }
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
