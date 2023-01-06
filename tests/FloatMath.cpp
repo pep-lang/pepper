@@ -16,6 +16,16 @@ TEST(FloatMath, Let) {
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(FloatMath, Auto) {
+    const char* source = R"SOURCE(
+        int test() {
+            const x = 1.42;
+            return x > 1;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(FloatMath, Add) {
     const char* source = R"SOURCE(
         int test() {

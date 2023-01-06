@@ -20,6 +20,20 @@ int test() {
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(Structs, Auto) {
+    const char* source = R"SOURCE(
+struct Test {
+    int x = 0;
+};
+
+int test() {
+    const t = Test();
+    return t.x;
+}
+    )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(Structs, Constructor) {
     const char* source = R"SOURCE(
 struct Test {
