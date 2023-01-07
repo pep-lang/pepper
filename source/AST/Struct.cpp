@@ -105,7 +105,7 @@ namespace pepper::ast {
         Acquire->Body->Items = {
             // if (ref == this)
             //     return
-            Ref<If>::New(Ref<Equal>::New(Ref<VariableRef>::New("ref"), Ref<ThisRef>::New()),
+            Ref<If>::New(Ref<Equal>::New(Ref<SymbolRef>::New("ref"), Ref<ThisRef>::New()),
                          Ref<Block>::New("if",
                                          Vector<Ref<Node>>{
                                              Ref<Return>::New(),
@@ -113,10 +113,10 @@ namespace pepper::ast {
             // if (ref)
             //     ref.__release()
             Ref<If>::New(
-                Ref<NotEqual>::New(Ref<VariableRef>::New("ref"), PointerLiteral::Null()),
+                Ref<NotEqual>::New(Ref<SymbolRef>::New("ref"), PointerLiteral::Null()),
                 Ref<Block>::New("if",
                                 Vector<Ref<Node>>{
-                                    Ref<MethodCall>::New(TypeName::Void, Ref<VariableRef>::New("ref"), "__release"),
+                                    Ref<MethodCall>::New(TypeName::Void, Ref<SymbolRef>::New("ref"), "__release"),
                                 })),
             // this.__refcount += 1
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
@@ -192,10 +192,10 @@ namespace pepper::ast {
             Ref<VariableDef>::New(Type,
                                   "this",
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
-                                                         Vector<Ref<Expression>>{Ref<VariableRef>::New("size")})),
+                                                         Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
-            Ref<VariableRef>::New("this"),
-            Ref<Return>::New(NewInstance->ReturnType, Ref<VariableRef>::New("this")),
+            Ref<SymbolRef>::New("this"),
+            Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
         };
         NewInstance->Body->Items = body;
 

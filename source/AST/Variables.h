@@ -51,15 +51,15 @@ namespace pepper::ast {
         using VariableDef::VariableDef;
     };
 
-    struct VariableRef : public Expression {
-        DECLARE_RTTI(VariableRef, Expression);
-        AST_NODE_POD_CLONE(VariableRef);
+    struct SymbolRef : public Expression {
+        DECLARE_RTTI(SymbolRef, Expression);
+        AST_NODE_POD_CLONE(SymbolRef);
 
       private:
         Ident Identifier;
 
       public:
-        VariableRef(const Ident& identifier)
+        SymbolRef(const Ident& identifier)
             : Identifier(identifier) {
         }
 

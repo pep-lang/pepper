@@ -61,19 +61,6 @@ namespace pepper {
         Value call(const Vector<Value>& args) const;
     };
 
-    class ExternFunction : public Function {
-        DECLARE_RTTI(ExternFunction, Function);
-
-      public:
-        using Function::Function;
-
-        static void StaticInit();
-
-      public:
-        static Ref<ExternFunction> Malloc;
-        static Ref<ExternFunction> Free;
-    };
-
     class UserFunction : public Function {
         DECLARE_RTTI(UserFunction, Function);
 

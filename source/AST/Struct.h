@@ -86,18 +86,15 @@ namespace pepper::ast {
         std::string dump(int indent = 0) const override;
     };
 
-    struct MemberRef : public Expression {
-        DECLARE_RTTI(MemberRef, Expression);
+    struct MemberRef : public SymbolRef {
+        DECLARE_RTTI(MemberRef, SymbolRef);
         AST_NODE_POD_CLONE(MemberRef);
 
         Ref<Expression> LHS;
-        Ident MemberName;
-
-        MemberRef() = default;
 
         MemberRef(Ref<Expression> lhs, const Ident& fieldName)
-            : LHS(lhs)
-            , MemberName(fieldName) {
+            : SymbolRef(fieldName)
+            , LHS(lhs) {
         }
 
         const TypeName& type() const override {
@@ -106,11 +103,11 @@ namespace pepper::ast {
 
         std::string toString() const override {
             return Node::toString() +
-                   std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", MemberName));
+                   std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", identifier()));
         }
 
         std::string dump(int indent) const override {
-            return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", MemberName);
+            return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", identifier());
         }
 
         void specialize(const Specialization& spec) override {
@@ -146,12 +143,12 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    struct ThisRef : public VariableRef {
-        DECLARE_RTTI(ThisRef, VariableRef);
+    struct ThisRef : public SymbolRef {
+        DECLARE_RTTI(ThisRef, SymbolRef);
         AST_NODE_POD_CLONE(ThisRef);
 
         ThisRef()
-            : VariableRef("this") {
+            : SymbolRef("this") {
         }
     };
 } // namespace pepper::ast

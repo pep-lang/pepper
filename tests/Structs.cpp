@@ -211,7 +211,7 @@ int test() {
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
-TEST(Structs, RefLifetime) {
+TEST(Structs, RefStorage) {
     const char* source = R"SOURCE(
 struct Test {
     int x = 0;
@@ -219,18 +219,16 @@ struct Test {
 
 struct Foo {
     Test t;
-    int y;
 
     new(this.t) {
-        y = t.x;
     }
 };
 
 int test() {
     var t = Test();
     const f = Foo(t);
-    return (f.t).x;
+    return f.t == t;
 }
     )SOURCE";
-    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }

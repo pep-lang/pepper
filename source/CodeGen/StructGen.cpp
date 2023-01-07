@@ -39,7 +39,7 @@ namespace pepper {
         auto lhs = codegen(memberRef->LHS);
         auto lhsType = lhs.Ty;
         auto structDesc = Struct::get(lhsType->name());
-        auto memberName = memberRef->MemberName;
+        auto memberName = memberRef->identifier();
         auto field =
             Query(structDesc->fields()).find([&memberName](auto f) { return f.ParamName == memberName; }).value();
         auto thisPtr = read(lhs);
@@ -69,7 +69,7 @@ namespace pepper {
             assert(ctorCall && "ctor call not found in new");
             auto ctor = ctorCall.value().as<MethodCall>();
             for (auto& arg : structDef->NewInstance->Parameters) {
-                ctor->Args.emplace_back(Ref<VariableRef>::New(arg.Name));
+                ctor->Args.emplace_back(Ref<SymbolRef>::New(arg.Name));
             }
         }
 
@@ -79,7 +79,6 @@ namespace pepper {
 
         // generate the new struct type
         auto structDesc = Struct::New(structDef->Name, fields, newParams);
-        structDesc->setFields(fields);
 
         // Update Struct()/new function now that the size of the struct is known
         auto sizeVar = Query(structDef->NewInstance->Body->Items)

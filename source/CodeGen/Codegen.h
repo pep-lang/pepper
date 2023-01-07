@@ -47,7 +47,7 @@ namespace pepper {
         Value codegen(Ref<ast::Node> node);
 
         // individual AST -> IR transforms
-        Value emit(Ref<ast::VariableRef> variableRef);
+        Value emit(Ref<ast::SymbolRef> variableRef);
         Value emit(Ref<ast::VariableDef> variableDef);
         Value emit(Ref<ast::PointerLiteral> pointerLiteral);
         Value emit(Ref<ast::StringLiteral> stringLiteral);
@@ -64,6 +64,7 @@ namespace pepper {
         Value emit(Ref<ast::Assign> op);
         Value emit(Ref<ast::CompoundAssign> op);
         Value emit(Ref<ast::BinaryOp> op);
+        Value emit(Ref<ast::UnaryOp> op);
         Value emit(Ref<ast::Branch> branch);
         Value emit(Ref<ast::Ternary> ternary);
         Value emit(Ref<ast::While> loop);

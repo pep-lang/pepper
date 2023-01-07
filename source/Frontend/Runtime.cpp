@@ -19,5 +19,7 @@ namespace pepper {
         Functions["print"] = Functions["puts"];
         Functions["malloc"] = Ref<Function>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
         Functions["free"] = Ref<Function>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
+        Functions["debug_ptr"] = Ref<Function>::New(
+            "debug_ptr", Types::Void, Params{{"ptr", Types::VoidPtr}, {"name", Types::Int8->pointer()}});
     }
 } // namespace pepper

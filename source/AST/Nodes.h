@@ -7,4 +7,5 @@
 #include "AST/Literals.h"
 #include "AST/Loops.h"
 #include "AST/Struct.h"
+#include "AST/UnaryOps.h"
 #include "AST/Variables.h"

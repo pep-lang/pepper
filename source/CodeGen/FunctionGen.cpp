@@ -27,10 +27,12 @@ namespace pepper {
         auto llvmFunction = function->function();
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
+            auto type = param.ParamType;
             auto arg = llvmFunction->getArg(paramIdx);
-            auto addr = ir()->CreateAlloca(*param.ParamType, nullptr, param.ParamName);
-            auto local = Value(param.ParamType, addr, param.ParamName);
-            ir()->CreateStore(arg, local);
+            auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
+            auto local = Value(type, addr, param.ParamName);
+            llvm::Value* value = arg;
+            ir()->CreateStore(value, local);
             locals()->newSymbol(local);
         }
 

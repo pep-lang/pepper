@@ -35,8 +35,6 @@ namespace pepper {
         Builtins = Ref<Runtime>::New();
         Globals = Ref<Scope>::New("Globals", Builtins);
         Locals = Globals;
-
-        ExternFunction::StaticInit();
     }
 
     Context::~Context() {

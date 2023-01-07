@@ -185,4 +185,20 @@ namespace pepper {
         auto result = std::invoke(typeOp, typeOps, lhsOperand, rhsOperand);
         return result;
     }
+
+    Value Codegen::emit(Ref<UnaryOp> op) {
+        assert(op->is<Minus>());
+        if (op->Operand->is<IntegerLiteral>()) {
+            auto intLiteral = op->Operand.as<IntegerLiteral>();
+            return codegen(Ref<IntegerLiteral>::New(-intLiteral->Value));
+        }
+        if (op->Operand->is<FloatLiteral>()) {
+            auto floatLiteral = op->Operand.as<FloatLiteral>();
+            return codegen(Ref<FloatLiteral>::New(-floatLiteral->Value));
+        }
+
+        assert(false); // TODO
+        auto operand = codegen(op->Operand);
+        operand = read(operand);
+    }
 } // namespace pepper

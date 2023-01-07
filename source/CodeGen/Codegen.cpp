@@ -79,9 +79,12 @@ namespace pepper {
         throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 
-    Value Codegen::emit(Ref<VariableRef> variableRef) {
+    Value Codegen::emit(Ref<SymbolRef> variableRef) {
         auto value = locals()->findSymbol(variableRef->identifier());
-        return read(value);
+        if (!value) {
+            throw CompileError(variableRef->Source, "No symbol named {0} could be found", variableRef->identifier());
+        }
+        return value;
     }
 
     Value Codegen::emit(Ref<VariableDef> variableDef) {
@@ -134,6 +137,8 @@ namespace pepper {
         Value value;
         if (node->is<BinaryOp>())
             value = emit(node.as<BinaryOp>());
+        else if (node->is<UnaryOp>())
+            value = emit(node.as<UnaryOp>());
         else if (node->is<Branch>())
             value = emit(node.as<Branch>());
         else if (node->is<Ternary>())
@@ -150,8 +155,8 @@ namespace pepper {
             value = emit(node.as<ThisRef>());
         else if (node->is<MemberRef>())
             value = emit(node.as<MemberRef>());
-        else if (node->is<VariableRef>())
-            value = emit(node.as<VariableRef>());
+        else if (node->is<SymbolRef>())
+            value = emit(node.as<SymbolRef>());
         else if (node->is<FunctionDef>())
             value = emit(node.as<FunctionDef>());
         else if (node->is<Return>())

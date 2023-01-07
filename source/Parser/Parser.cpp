@@ -120,34 +120,10 @@ namespace pepper {
             Super::visitTerminal(terminal);
         }
 
-        Ref<Expression> evalNumericConstant(antlr4::tree::TerminalNode* constant) {
-            auto value = constant->toString();
-            if (value.find('.') != -1) {
-                try {
-                    auto floatVal = std::stold(value);
-                    return builder->New<FloatLiteral>(floatVal);
-                } catch (std::invalid_argument&) {
-                }
-            }
-            try {
-                int64_t intVal = 0;
-                if (llvm::to_integer(value, intVal))
-                    return builder->New<IntegerLiteral>(intVal);
-            } catch (std::invalid_argument&) {
-            }
-
-            throw CompileError(builder->Source, "Unable to parse numeric literal: {0}", value);
-        }
-
-        Ref<Expression> evalBoolConstant(PepperParser::BoolConstantContext* boolConstant) {
-            const bool boolVal = boolConstant->True();
-            return builder->New<BoolLiteral>(boolVal);
-        }
-
-        TypeName parseTypeName(PepperParser::TypeSpecifierContext* typeSpec) {
+        TypeName parseTypeName(PepperParser::TypeNameContext* typeSpec) {
             TypeName type{typeSpec->Identifier()->toString()};
             if (auto genericParams = typeSpec->genericArgs()) {
-                for (auto paramType : genericParams->genericArgsList()->typeSpecifier()) {
+                for (auto paramType : genericParams->genericArgsList()->typeName()) {
                     type.GenericTypes.emplace_back(parseTypeName(paramType));
                 }
             }
@@ -158,8 +134,8 @@ namespace pepper {
             if (expr->type() != TypeName::Auto) {
                 return expr->type();
             }
-            if (expr->is<VariableRef>()) {
-                auto var = expr.as<VariableRef>();
+            if (expr->is<SymbolRef>()) {
+                auto var = expr.as<SymbolRef>();
                 auto symbol = builder->findSymbol(var->identifier());
                 if (!symbol) {
                     throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->identifier());
@@ -174,7 +150,7 @@ namespace pepper {
         }
 
         void enterExplicitVariableDeclaration(PepperParser::ExplicitVariableDeclarationContext* context) override {
-            auto typeName = parseTypeName(context->typeSpecifier());
+            auto typeName = parseTypeName(context->typeName());
             auto identifier = context->Identifier()->toString();
             if (!typeName.GenericTypes.empty()) {
                 builder->specialize(typeName);
@@ -189,7 +165,7 @@ namespace pepper {
 
         void exitExplicitVariableDeclaration(PepperParser::ExplicitVariableDeclarationContext* context) override {
             auto symbol = lvaluePop<VariableDef>();
-            if (context->assignmentExpression()) {
+            if (context->Assign()) {
                 auto defaultValue = rvaluePop<Expression>();
                 symbol->Default = defaultValue;
             }
@@ -229,32 +205,92 @@ namespace pepper {
                 return builder->New<MemberRef>(Ref<ThisRef>::New(), method->Name);
             }
             // anything else can be looked up later, at codegen/pass time
-            return builder->New<VariableRef>(identifier);
+            return builder->New<SymbolRef>(identifier);
         }
 
-        void exitPrimaryExpression(PepperParser::PrimaryExpressionContext* context) override {
-            auto boolConstant = context->boolConstant();
-            if (boolConstant) {
-                rvaluePush(evalBoolConstant(boolConstant));
+        void exitIdentifierExpr(PepperParser::IdentifierExprContext* context) override {
+            auto identifier = context->This() ? "this" : context->Identifier()->toString();
+            auto symbol = resolveLocal(identifier);
+            rvaluePush(symbol);
+        }
+
+        void exitLiteralExpr(PepperParser::LiteralExprContext* context) override {
+            auto literal = context->literal();
+            if (literal->BooleanLiteral()) {
+                bool boolLiteral = literal->BooleanLiteral()->toString() == "true";
+                rvaluePush(builder->New<BoolLiteral>(boolLiteral));
                 return;
             }
-            auto constant = context->Constant();
-            if (constant) {
-                rvaluePush(evalNumericConstant(constant));
-                return;
+
+            if (literal->numericLiteral()) {
+                auto numLiteral = literal->numericLiteral();
+                if (numLiteral->DecimalLiteral()) {
+                    auto decStr = numLiteral->DecimalLiteral()->toString();
+                    if (decStr.find('.') != -1) {
+                        try {
+                            double floatVal = 0.0;
+                            llvm::to_float(decStr, floatVal);
+                            rvaluePush(builder->New<FloatLiteral>(floatVal));
+                            return;
+                        } catch (std::invalid_argument&) {
+                        }
+                    }
+                    try {
+                        int64_t intVal = 0;
+                        if (llvm::to_integer(decStr, intVal)) {
+                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            return;
+                        }
+                    } catch (std::invalid_argument&) {
+                    }
+                }
+
+                if (numLiteral->OctalIntegerLiteral()) {
+                    auto octStr = numLiteral->OctalIntegerLiteral()->toString();
+                    try {
+                        int64_t intVal = 0;
+                        if (llvm::to_integer(octStr, intVal, 8)) {
+                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            return;
+                        }
+                    } catch (std::invalid_argument&) {
+                    }
+                }
+
+                if (numLiteral->HexIntegerLiteral()) {
+                    auto hexStr = numLiteral->HexIntegerLiteral()->toString();
+                    try {
+                        int64_t intVal = 0;
+                        hexStr = hexStr.substr(2); // remove 0x
+                        if (llvm::to_integer(hexStr, intVal, 16)) {
+                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            return;
+                        }
+                    } catch (std::invalid_argument&) {
+                    }
+                }
+
+                if (numLiteral->BinaryIntegerLiteral()) {
+                    auto binStr = numLiteral->BinaryIntegerLiteral()->toString();
+                    try {
+                        int64_t intVal = 0;
+                        if (llvm::to_integer(binStr, intVal, 2)) {
+                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            return;
+                        }
+                    } catch (std::invalid_argument&) {
+                    }
+                }
+
+                throw CompileError(builder->Source, "Unable to parse numeric literal: {0}", numLiteral->toString());
             }
-            auto stringLiterals = context->StringLiteral();
-            if (!stringLiterals.empty()) {
-                std::string strVal;
-                std::for_each(
-                    stringLiterals.begin(), stringLiterals.end(), [&strVal](auto str) { strVal += str->toString(); });
-                rvaluePush(builder->New<StringLiteral>(strVal));
-                return;
-            }
-            auto ident = context->Identifier();
-            if (ident) {
-                auto symbol = resolveLocal(ident->toString());
-                rvaluePush(symbol);
+
+            if (!literal->StringLiteral().empty()) {
+                std::string stringLiteral;
+                for (auto sl : literal->StringLiteral()) {
+                    stringLiteral += trim(sl->toString(), "\"");
+                }
+                rvaluePush(builder->New<StringLiteral>(stringLiteral));
                 return;
             }
         }
@@ -266,7 +302,7 @@ namespace pepper {
         void exitParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
             lvaluePop<VariableDef>();
             auto name = context->Identifier()->toString();
-            auto typeName = parseTypeName(context->typeSpecifier());
+            auto typeName = parseTypeName(context->typeName());
             Ref<Expression> defaultValue;
             if (context->Assign()) {
                 defaultValue = rvaluePop<Expression>();
@@ -277,7 +313,7 @@ namespace pepper {
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
             auto identifier = context->Identifier()->toString();
-            auto returnType = context->typeSpecifier() ? parseTypeName(context->typeSpecifier()) : TypeName("void");
+            auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName("void");
 
             auto function =
                 builder->structTarget()
@@ -348,8 +384,10 @@ namespace pepper {
             builder->endFunction();
         }
 
-        void enterConstructorParam(PepperParser::ConstructorParamContext*) override {
-            lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+        void enterConstructorParam(PepperParser::ConstructorParamContext* context) override {
+            if (context->This()) {
+                lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+            }
         }
 
         void exitConstructorParam(PepperParser::ConstructorParamContext* context) override {
@@ -376,7 +414,7 @@ namespace pepper {
 
                 // Add the assignment to the field to the ctor
                 func->Body->Items.emplace_back(builder->New<Assign>(
-                    builder->New<MemberRef>(Ref<ThisRef>::New(), fieldName), builder->New<VariableRef>(paramName)));
+                    builder->New<MemberRef>(Ref<ThisRef>::New(), fieldName), builder->New<SymbolRef>(paramName)));
             }
         }
 
@@ -401,56 +439,78 @@ namespace pepper {
             builder->endExtension();
         }
 
-        void enterMethodCall(PepperParser::MethodCallContext*) override {
-            auto call = Pending::New<MethodCall>();
-            lvaluePush(call);
-        }
-
-        void exitMethodCall(PepperParser::MethodCallContext* context) override {
-            lvaluePop<MethodCall>();
-            auto providedArgsCount = context->argumentExpressionList()
-                                         ? context->argumentExpressionList()->assignmentExpression().size()
-                                         : 0;
-            Vector<Ref<Expression>> args;
-            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.insert(args.begin(), rvaluePop<Expression>());
-            }
-            auto member = rvaluePop<MemberRef>();
-            assert(member->LHS);
-            auto structType = typeOfExpr(member->LHS);
-            auto structDef = builder->findStruct(structType);
-            assert(structDef);
-            auto method = structDef->getMethod(member->MemberName);
-            if (!method) {
-                throw CompileError(
-                    builder->Source, "No method named {0} in {1}", member->MemberName, structType.toString());
-            }
-            auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->MemberName, args);
-            builder->insert(call);
-        }
-
-        void enterFreeFunctionCall(PepperParser::FreeFunctionCallContext*) override {
+        void beginFunctionCall() {
             auto call = Pending::New<FunctionCall>();
             lvaluePush(call);
         }
 
-        void exitFreeFunctionCall(PepperParser::FreeFunctionCallContext* context) override {
+        template <typename C>
+        void endFunctionCall(C* context) {
             lvaluePop<FunctionCall>();
-            auto functionName = parseTypeName(context->typeSpecifier());
-            auto identifier = functionName.toString();
-            auto func = builder->findFunction(identifier);
-            if (!func) {
-                throw CompileError(builder->Source, "Function {0} not found", identifier);
-            }
-            auto providedArgsCount = context->argumentExpressionList()
-                                         ? context->argumentExpressionList()->assignmentExpression().size()
-                                         : 0;
+
             Vector<Ref<Expression>> args;
-            for (int argIdx = 0; argIdx < providedArgsCount; ++argIdx) {
-                args.insert(args.begin(), rvaluePop<Expression>());
+            auto providedArgs = context->argumentList()->argument();
+            if (!providedArgs.empty()) {
+                // WORKAROUND: there is an issue in the grammar that has argument lists eating null
+                // for some reason. In case that happens, just skip this argument
+                auto first = providedArgs.front();
+                if (first->Identifier() == nullptr && first->expression() == nullptr) {
+                    providedArgs.erase(providedArgs.begin());
+                }
+                for (int argIdx = 0; argIdx < providedArgs.size(); ++argIdx) {
+                    args.insert(args.begin(), rvaluePop<Expression>());
+                }
             }
+
+            auto symbol = rvaluePop<SymbolRef>(); // identifiers are always pushed as rvalues
+
+            if (symbol->is<MemberRef>()) { // method
+                auto member = symbol.as<MemberRef>();
+                assert(member->LHS);
+                auto structType = typeOfExpr(member->LHS);
+                auto structDef = builder->findStruct(structType);
+                if (!structDef) {
+                    throw CompileError(member->LHS->Source, "Expression results in unknown type {0}", structType);
+                }
+                auto method = structDef->getMethod(member->identifier());
+                if (!method) {
+                    throw CompileError(
+                        builder->Source, "No method named {0} in {1}", member->identifier(), structType.toString());
+                }
+
+                auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->identifier(), args);
+                builder->insert(call);
+                return;
+            }
+
+            auto functionName = symbol->identifier();
+            auto func = builder->findFunction(functionName);
+            if (!func) {
+                throw CompileError(builder->Source, "Function {0} not found", functionName);
+            }
+
             auto call = builder->New<FunctionCall>(func, args);
             builder->insert(call);
+        }
+
+        // When a generic class ctor is called, e.g. mystruct<int>() the typename is
+        // the name of the function
+        void enterGenericCtor(PepperParser::GenericCtorContext* context) override {
+            beginFunctionCall();
+            auto typeName = parseTypeName(context->typeName());
+            rvaluePush(builder->New<SymbolRef>(typeName.toString()));
+        }
+
+        void exitGenericCtor(PepperParser::GenericCtorContext* context) override {
+            endFunctionCall(context);
+        }
+
+        void enterFunctionCall(PepperParser::FunctionCallContext*) override {
+            beginFunctionCall();
+        }
+
+        void exitFunctionCall(PepperParser::FunctionCallContext* context) override {
+            endFunctionCall(context);
         }
 
         void enterReturn(PepperParser::ReturnContext*) override {
@@ -469,7 +529,7 @@ namespace pepper {
             builder->insert(ret);
         }
 
-        void enterMemberAccess(PepperParser::MemberAccessContext* context) override {
+        void enterMemberAccess(PepperParser::MemberAccessContext*) override {
             auto memberRef = Pending::New<MemberRef>();
             lvaluePush(memberRef);
         }
@@ -482,28 +542,28 @@ namespace pepper {
             builder->insert(memberRef);
         }
 
-        void enterSelectionStatement(PepperParser::SelectionStatementContext* context) override {
+        void enterIfStatement(PepperParser::IfStatementContext* context) override {
             auto branch = builder->New<If>();
-            if (context->ifStatement()) {
+            if (context->ifBranch()) {
                 branch->Then = Ref<Block>::New("then");
             }
-            if (context->elseStatement()) {
+            if (context->elseBranch()) {
                 branch->Else = Ref<Block>::New("else");
             }
             builder->beginScope("select");
             lvaluePush(branch);
         }
 
-        void exitSelectionStatement(PepperParser::SelectionStatementContext*) override {
+        void exitIfStatement(PepperParser::IfStatementContext*) override {
             auto branch = lvaluePop<Branch>();
             builder->endScope();
             builder->insert(branch);
         }
 
-        void enterIfStatement(PepperParser::IfStatementContext* context) override {
+        void enterIfBranch(PepperParser::IfBranchContext* context) override {
         }
 
-        void exitIfStatement(PepperParser::IfStatementContext*) override {
+        void exitIfBranch(PepperParser::IfBranchContext*) override {
             builder->endBlock();
         }
 
@@ -513,12 +573,12 @@ namespace pepper {
             builder->beginBlock(branch->Then);
         }
 
-        void enterElseStatement(PepperParser::ElseStatementContext*) override {
+        void enterElseBranch(PepperParser::ElseBranchContext*) override {
             auto branch = lvaluePeek<Branch>();
             builder->beginBlock(branch->Else);
         }
 
-        void exitElseStatement(PepperParser::ElseStatementContext*) override {
+        void exitElseBranch(PepperParser::ElseBranchContext*) override {
             builder->endBlock();
         }
 
@@ -581,6 +641,17 @@ namespace pepper {
             branch->TrueResult = rvaluePop<Expression>();
             branch->Condition = rvaluePop<Expression>();
             builder->insert(branch);
+        }
+
+        void enterUnaryMinus(PepperParser::UnaryMinusContext*) override {
+            lvaluePush(Pending::New<Minus>(Ref<Expression>{}));
+        }
+
+        void exitUnaryMinus(PepperParser::UnaryMinusContext*) override {
+            auto minus = lvaluePop<Minus>();
+            auto operand = rvaluePop<Expression>();
+            minus->Operand = operand;
+            rvaluePush(minus);
         }
 
         template <typename Op>
@@ -661,27 +732,27 @@ namespace pepper {
             endBinaryOp<RShift>();
         }
 
-        void enterBitwiseAnd(PepperParser::BitwiseAndContext*) override {
+        void enterBitAnd(PepperParser::BitAndContext*) override {
             beginBinaryOp<BitAnd>();
         }
 
-        void exitBitwiseAnd(PepperParser::BitwiseAndContext*) override {
+        void exitBitAnd(PepperParser::BitAndContext*) override {
             endBinaryOp<BitAnd>();
         }
 
-        void enterBitwiseXor(PepperParser::BitwiseXorContext*) override {
+        void enterBitXor(PepperParser::BitXorContext*) override {
             beginBinaryOp<BitXor>();
         }
 
-        void exitBitwiseXor(PepperParser::BitwiseXorContext*) override {
+        void exitBitXor(PepperParser::BitXorContext*) override {
             endBinaryOp<BitXor>();
         }
 
-        void enterBitwiseOr(PepperParser::BitwiseOrContext*) override {
+        void enterBitOr(PepperParser::BitOrContext*) override {
             beginBinaryOp<BitOr>();
         }
 
-        void exitBitwiseOr(PepperParser::BitwiseOrContext*) override {
+        void exitBitOr(PepperParser::BitOrContext*) override {
             endBinaryOp<BitOr>();
         }
 
@@ -771,84 +842,52 @@ namespace pepper {
             endAssign<Assign>();
         }
 
-        void enterMulAssignment(PepperParser::MulAssignmentContext*) override {
-            beginAssign<MulAssign>();
+        void enterAssignmentOp(PepperParser::AssignmentOpContext* context) override {
+            auto op = context->assignmentOperator();
+            if (op->MulAssign())
+                beginAssign<MulAssign>();
+            else if (op->DivAssign())
+                beginAssign<DivAssign>();
+            else if (op->ModAssign())
+                beginAssign<ModAssign>();
+            else if (op->AddAssign())
+                beginAssign<AddAssign>();
+            else if (op->SubAssign())
+                beginAssign<SubAssign>();
+            else if (op->LShiftAssign())
+                beginAssign<LShiftAssign>();
+            else if (op->RShiftAssign())
+                beginAssign<RShiftAssign>();
+            else if (op->BitAndAssign())
+                beginAssign<BitAndAssign>();
+            else if (op->BitOrAssign())
+                beginAssign<BitOrAssign>();
+            else if (op->BitXorAssign())
+                beginAssign<BitXorAssign>();
         }
 
-        void exitMulAssignment(PepperParser::MulAssignmentContext*) override {
-            endAssign<MulAssign>();
-        }
-
-        void enterDivAssignment(PepperParser::DivAssignmentContext*) override {
-            beginAssign<DivAssign>();
-        }
-
-        void exitDivAssignment(PepperParser::DivAssignmentContext*) override {
-            endAssign<DivAssign>();
-        }
-
-        void enterModAssignment(PepperParser::ModAssignmentContext*) override {
-            beginAssign<ModAssign>();
-        }
-
-        void exitModAssignment(PepperParser::ModAssignmentContext*) override {
-            endAssign<ModAssign>();
-        }
-
-        void enterAddAssignment(PepperParser::AddAssignmentContext*) override {
-            beginAssign<AddAssign>();
-        }
-
-        void exitAddAssignment(PepperParser::AddAssignmentContext*) override {
-            endAssign<AddAssign>();
-        }
-
-        void enterSubAssignment(PepperParser::SubAssignmentContext*) override {
-            beginAssign<SubAssign>();
-        }
-
-        void exitSubAssignment(PepperParser::SubAssignmentContext*) override {
-            endAssign<SubAssign>();
-        }
-
-        void enterLShiftAssignment(PepperParser::LShiftAssignmentContext*) override {
-            beginAssign<LShiftAssign>();
-        }
-
-        void exitLShiftAssignment(PepperParser::LShiftAssignmentContext*) override {
-            endAssign<LShiftAssign>();
-        }
-
-        void enterRShiftAssignment(PepperParser::RShiftAssignmentContext*) override {
-            beginAssign<RShiftAssign>();
-        }
-
-        void exitRShiftAssignment(PepperParser::RShiftAssignmentContext*) override {
-            endAssign<RShiftAssign>();
-        }
-
-        void enterBitAndAssignment(PepperParser::BitAndAssignmentContext*) override {
-            beginAssign<BitAndAssign>();
-        }
-
-        void exitBitAndAssignment(PepperParser::BitAndAssignmentContext*) override {
-            endAssign<BitAndAssign>();
-        }
-
-        void enterBitXorAssignment(PepperParser::BitXorAssignmentContext*) override {
-            beginAssign<BitXorAssign>();
-        }
-
-        void exitBitXorAssignment(PepperParser::BitXorAssignmentContext*) override {
-            endAssign<BitXorAssign>();
-        }
-
-        void enterBitOrAssignment(PepperParser::BitOrAssignmentContext*) override {
-            beginAssign<BitOrAssign>();
-        }
-
-        void exitBitOrAssignment(PepperParser::BitOrAssignmentContext*) override {
-            endAssign<BitOrAssign>();
+        void exitAssignmentOp(PepperParser::AssignmentOpContext* context) override {
+            auto op = context->assignmentOperator();
+            if (op->MulAssign())
+                endAssign<MulAssign>();
+            else if (op->DivAssign())
+                endAssign<DivAssign>();
+            else if (op->ModAssign())
+                endAssign<ModAssign>();
+            else if (op->AddAssign())
+                endAssign<AddAssign>();
+            else if (op->SubAssign())
+                endAssign<SubAssign>();
+            else if (op->LShiftAssign())
+                endAssign<LShiftAssign>();
+            else if (op->RShiftAssign())
+                endAssign<RShiftAssign>();
+            else if (op->BitAndAssign())
+                endAssign<BitAndAssign>();
+            else if (op->BitOrAssign())
+                endAssign<BitOrAssign>();
+            else if (op->BitXorAssign())
+                endAssign<BitXorAssign>();
         }
     };
 

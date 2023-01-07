@@ -69,12 +69,4 @@ namespace pepper {
         auto block = llvm::BasicBlock::Create(Func->getContext(), name, Func, Return);
         return block;
     }
-
-    Ref<ExternFunction> ExternFunction::Malloc;
-    Ref<ExternFunction> ExternFunction::Free;
-
-    void ExternFunction::StaticInit() {
-        Malloc = Ref<ExternFunction>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
-        Free = Ref<ExternFunction>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
-    }
 } // namespace pepper

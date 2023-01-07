@@ -3,7 +3,6 @@
 
 #include "Core/Exceptions.h"
 #include "Frontend/ModuleContext.h"
-#include "Frontend/Runtime.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -15,8 +14,6 @@
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/Host.h"
 
 namespace pepper {
@@ -116,3 +113,11 @@ namespace pepper {
         return OrcExecutor::Create();
     }
 } // namespace pepper
+
+extern "C" {
+    void debug_ptr(const void* ptr, const char* name) {
+        void* ptr2 = *(void**)ptr;
+        void* ptr3 = *(void**)ptr2;
+        printf("%s: %p -> %p -> %p\n", name, ptr, ptr2, ptr3);
+    }
+}

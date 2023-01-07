@@ -1,37 +1,88 @@
 
 grammar Pepper;
 
-primaryExpression
-	: Identifier
-	| Constant
-	| boolConstant
-    | StringLiteral+
-	| '(' expression ')'
+compilationUnit
+	: translationUnit? EOF
 	;
 
-boolConstant
-    : True
-    | False
-    ;
-
-sliceNotation
-    :   expression '..'
-    |   expression '..' expression?
-    |   expression '..' expression? (',' expression)?
-    ;
-
-postfixExpression
-	: primaryExpression (PlusPlus | MinusMinus)*
-	| arrayAccess
-    | functionCall
-    | memberAccess
+translationUnit
+	: externalDeclaration+
 	;
 
-arrayAccess
-    : primaryExpression '[' expression ']'
+externalDeclaration
+    : functionDefinition
+    | structDeclaration
+    | extensionDefinition
+    | useStatement
+    |   ';' // stray ;
     ;
 
-typeSpecifier
+functionDefinition
+    :   typeName? Identifier '(' parameterList? ')' block
+    ;
+
+parameterList
+    :   parameterDeclaration (',' parameterDeclaration)*
+    ;
+
+parameterDeclaration
+	: typeName Identifier (Assign expression)?
+	;
+
+extensionDefinition
+    :   Extend typeDeclaration '{' functionDefinitionList '}'
+    ;
+
+functionDefinitionList
+    :   functionDefinition* {}
+    ;
+
+block
+    :   '{' statementList? '}'
+    ;
+
+statementList
+    :   statement+
+    ;
+
+statement
+    :   variableDeclaration
+    |   block
+    |   structDeclaration
+    |   expressionStatement
+    |   ifStatement
+    |   iterationStatement
+    |   jumpStatement
+    |   functionDefinition
+    ;
+
+useStatement
+    : Use StringLiteral ';'
+    ;
+
+expressionStatement
+    : expression ';'
+    ;
+
+expression
+    : singleExpression
+    ;
+
+variableDeclaration
+    : typeQualifier? typeName Identifier (Assign expression)? ';' #ExplicitVariableDeclaration
+    | typeQualifier Identifier Assign expression ';'              #ImplicitVariableDeclaration
+    ;
+
+storageClassSpecifier
+	: 'static'
+	;
+
+typeQualifier
+	: Var
+	| Const
+	;
+
+typeName
     : Identifier genericArgs?
 	;
 
@@ -40,243 +91,11 @@ genericArgs
     ;
 
 genericArgsList
-    : typeSpecifier (',' typeSpecifier)?
+    : typeName (',' typeName)?
     ;
 
-functionCall
-    : typeSpecifier '(' argumentExpressionList? ')'		# FreeFunctionCall
-	| memberAccess '(' argumentExpressionList? ')'	# MethodCall
-    ;
-
-memberAccess
-    : primaryExpression Dot Identifier
-    ;
-
-argumentExpressionList
-	: assignmentExpression (',' assignmentExpression)*
-	;
-
-unaryExpression
-	: (PlusPlus | MinusMinus | 'typeof')*
-	(postfixExpression
-	| unaryOperator castExpression
-	)
-	;
-
-unaryOperator
-	: '&' | '*' | '+' | '-' | '~' | '!'
-	;
-
-castExpression
-	: unaryExpression
-	| '(' Identifier As Identifier ')'
-	;
-
-binaryOpExpression
-	: castExpression #binaryOpDefault
-    | binaryOpExpression Star binaryOpExpression #Mul
-    | binaryOpExpression Div binaryOpExpression #Div
-    | binaryOpExpression Mod binaryOpExpression #Mod
-    | binaryOpExpression Pow binaryOpExpression #Pow
-    | binaryOpExpression Plus binaryOpExpression #Add
-    | binaryOpExpression Minus binaryOpExpression #Sub
-    | binaryOpExpression LeftShift binaryOpExpression #LShift
-    | binaryOpExpression RightShift binaryOpExpression #RShift
-	;
-
-relationExpression
-	: binaryOpExpression #relationDefault
-    | relationExpression Less relationExpression #Less
-    | relationExpression Greater relationExpression #Greater
-    | relationExpression LessEqual relationExpression #LessEqual
-    | relationExpression GreaterEqual relationExpression #GreaterEqual
-	;
-
-equalExpression
-	: relationExpression #equalDefault
-    | relationExpression Equal relationExpression #Equal
-    | relationExpression NotEqual relationExpression #NotEqual
-	;
-
-bitAndExpression
-	: equalExpression #bitAndDefault
-    | equalExpression BitAnd equalExpression #BitwiseAnd
-	;
-
-bitXorExpression
-	: bitAndExpression #bitXorDefault
-    | bitAndExpression Caret bitAndExpression #BitwiseXor
-	;
-
-bitOrExpression
-	: bitXorExpression #bitOrDefault
-    | bitXorExpression BitOr bitXorExpression #BitwiseOr
-	;
-
-logicalAndExpression
-	: bitOrExpression #logicalAndDefault
-    | bitOrExpression (AndAnd|And) bitOrExpression #LogicalAnd
-	;
-
-logicalOrExpression
-	: logicalAndExpression #logicalOrDefault
-    | logicalAndExpression (OrOr|Or) logicalAndExpression #LogicalOr
-	;
-
-ternaryExpression
-	: logicalOrExpression #ternaryDefault
-    | logicalOrExpression '?' expression ':' ternaryExpression #Ternary
-	;
-
-functionCallExpression
-    : functionCall
-    | ternaryExpression
-    ;
-
-assignmentExpression
-	: functionCallExpression #assignmentDefault
-	| unaryExpression '=' assignmentExpression #Assignment
-    | unaryExpression '*=' assignmentExpression #MulAssignment
-    | unaryExpression '/=' assignmentExpression #DivAssignment
-    | unaryExpression '%=' assignmentExpression #ModAssignment
-    | unaryExpression '+=' assignmentExpression #AddAssignment
-    | unaryExpression '-=' assignmentExpression #SubAssignment
-    | unaryExpression '<<=' assignmentExpression #LShiftAssignment
-    | unaryExpression '>>=' assignmentExpression #RShiftAssignment
-    | unaryExpression '&=' assignmentExpression #BitAndAssignment
-    | unaryExpression '^=' assignmentExpression #BitXorAssignment
-    | unaryExpression '|=' assignmentExpression #BitOrAssignment
-	| DigitSequence #AssignmentDigits
-	;
-
-expression
-    :   assignmentExpression (',' assignmentExpression)*
-    ;
-
-constantExpression
-    :   ternaryExpression
-    ;
-
-declaration
-	: variableDeclaration
-	;
-
-declarationSpecifiers
-	: declarationSpecifier+
-	;
-
-declarationSpecifier
-	: storageClassSpecifier
-	| typeSpecifier
-	| typeQualifier
-	;
-
-storageClassSpecifier
-	: 'static'
-	;
-
-typeDeclaration
-    : Identifier genericParams?
-    ;
-
-variableDeclaration
-    : typeSpecifier Brackets? Identifier (Assign assignmentExpression)? ';' #ExplicitVariableDeclaration
-    | typeQualifier Identifier Assign assignmentExpression ';'              #ImplicitVariableDeclaration
-    ;
-
-genericParams
-    : '<' genericParamsList '>'
-    ;
-
-genericParamsList
-    : Identifier (',' Identifier)?
-    ;
-
-structDeclaration
-	: Struct typeDeclaration '{' structMemberDeclaration* '}'
-	;
-
-structMemberDeclaration
-    :   fieldDeclaration
-    |   constructorDefinition
-    ;
-
-constructorParam
-    : parameterDeclaration
-    | This '.' Identifier (Assign assignmentExpression)?
-    ;
-
-constructorParamList
-    : constructorParam (',' constructorParam)*
-    ;
-
-constructorDefinition
-    :   New '(' constructorParamList? ')' compoundStatement
-    |   Del '(' ')' compoundStatement
-    ;
-
-fieldDeclaration
-	: typeQualifier* variableDeclaration
-;
-
-typeQualifier
-	: Var
-	| Const
-	;
-
-parameterList
-    :   parameterDeclaration (',' parameterDeclaration)*
-    ;
-
-parameterDeclaration
-	: typeSpecifier Identifier (Assign assignmentExpression)?
-	;
-
-initializer
-	: assignmentExpression
-	| '{' initializerList ','? '}'
-	;
-
-initializerList
-	: initializer (',' initializer)*
-	;
-
-statement
-	: labeledStatement
-	| compoundStatement
-	| expressionStatement
-	| selectionStatement
-	| iterationStatement
-	| jumpStatement
-    | '(' (logicalOrExpression (',' logicalOrExpression)*)? (':' (logicalOrExpression (',' logicalOrExpression)*)?)* ')' ';'
-	;
-
-labeledStatement
-    :   Identifier ':' statement
-    |   'case' constantExpression ':' statement
-    |   'default' ':' statement
-    ;
-
-compoundStatement
-    :   '{' blockItemList? '}'
-    ;
-
-blockItemList
-    :   blockItem+
-    ;
-
-blockItem
-    :   statement
-    |   declaration
-    ;
-
-expressionStatement
-    :   expression ';'
-    ;
-
-selectionStatement
-    :   ifStatement elseStatement?
-    //|   Switch '(' expression ')' statement
+ifStatement
+    :   ifBranch elseBranch?
     ;
 
 condition
@@ -287,11 +106,11 @@ ifCondition
     : condition
     ;
 
-ifStatement
+ifBranch
     : If '(' ifCondition ')' statement
     ;
 
-elseStatement
+elseBranch
     : Else statement
     ;
 
@@ -311,12 +130,57 @@ forCondition
 	;
 
 forDeclaration
-    :   declarationSpecifiers? Identifier
+    :   typeQualifier? Identifier
     ;
 
 forExpression
     :   sliceNotation
     |   expression
+    ;
+
+sliceNotation
+    :   expression '..'
+    |   expression '..' expression?
+    |   expression '..' expression? (',' expression)?
+    ;
+
+structDeclaration
+	: Struct typeDeclaration '{' structMemberDeclaration* '}'
+	;
+
+typeDeclaration
+    : Identifier genericParams?
+    ;
+
+genericParams
+    : '<' genericParamsList '>'
+    ;
+
+genericParamsList
+    : Identifier (',' Identifier)?
+    ;
+
+structMemberDeclaration
+    :   fieldDeclaration
+    |   constructorDefinition
+    ;
+
+constructorParam
+    : parameterDeclaration
+    | This '.' Identifier (Assign singleExpression)?
+    ;
+
+constructorParamList
+    : constructorParam (',' constructorParam)*
+    ;
+
+constructorDefinition
+    :   New '(' constructorParamList? ')' block
+    |   Del '(' ')' block
+    ;
+
+fieldDeclaration
+	: typeQualifier* variableDeclaration
     ;
 
 jumpStatement
@@ -325,31 +189,99 @@ jumpStatement
 	|   Return expression? ';'	# Return
     ;
 
-compilationUnit
-	: translationUnit? EOF
-	;
-
-translationUnit
-	: externalDeclaration+
-	;
-
-externalDeclaration
-    : functionDefinition
-    | structDeclaration
-    | extensionDefinition
-    |   ';' // stray ;
+singleExpression
+    :   lambdaFunction                                          #LambdaExpr
+    |   singleExpression '[' singleExpression ']'               #IndexAccess
+    |   singleExpression '.' Identifier                         #MemberAccess
+    |   singleExpression '(' argumentList ')'                   #FunctionCall
+    |   typeName '(' argumentList ')'                           #GenericCtor
+    |   singleExpression '++'                                   #PostIncrement
+    |   singleExpression '--'                                   #PostDecrement
+    |   '++' singleExpression                                   #PreIncrement
+    |   '--' singleExpression                                   #PreDecrement
+    |   '+'  singleExpression                                   #UnaryPlus
+    |   '-'  singleExpression                                   #UnaryMinus
+    |   '~'  singleExpression                                   #BitNot
+    |   '!'  singleExpression                                   #LogicalNot
+    |   <assoc=right> singleExpression '**' singleExpression    #Pow
+    |   singleExpression '*' singleExpression                   #Mul
+    |   singleExpression '/' singleExpression                   #Div
+    |   singleExpression '%' singleExpression                   #Mod
+    |   singleExpression '+' singleExpression                   #Add
+    |   singleExpression '-' singleExpression                   #Sub
+    |   singleExpression '??'  singleExpression                 #Coalesce
+    |   singleExpression '<<' singleExpression                  #LShift
+    |   singleExpression '>>' singleExpression                  #RShift
+    |   singleExpression '<' singleExpression                   #Less
+    |   singleExpression '<=' singleExpression                  #LessEqual
+    |   singleExpression '>' singleExpression                   #Greater
+    |   singleExpression '>=' singleExpression                  #GreaterEqual
+    |   singleExpression '==' singleExpression                  #Equal
+    |   singleExpression '!=' singleExpression                  #NotEqual
+    |   singleExpression '&' singleExpression                   #BitAnd
+    |   singleExpression '|' singleExpression                   #BitOr
+    |   singleExpression '^' singleExpression                   #BitXor
+    |   singleExpression ('&&'|And) singleExpression            #LogicalAnd
+    |   singleExpression ('||'|Or) singleExpression             #LogicalOr
+    |   singleExpression '?' singleExpression ':' singleExpression #Ternary
+    |   <assoc=right> singleExpression '=' singleExpression     #Assignment
+    |   <assoc=right> singleExpression assignmentOperator singleExpression    #AssignmentOp
+    |   (Identifier | This)                                       #IdentifierExpr
+    |   literal                                                 #LiteralExpr
+    |   arrayLiteral                                            #ArrayLiteralExpr
+    |   '(' expression ')'                                      #ParenExpr
     ;
 
-functionDefinition
-    :   typeSpecifier? Identifier '(' parameterList? ')' compoundStatement
+literal
+    : BooleanLiteral
+    | StringLiteral+
+    | numericLiteral
     ;
 
-functionDefinitionList
-    :   functionDefinition* {}
+numericLiteral
+    : DecimalLiteral
+    | HexIntegerLiteral
+    | OctalIntegerLiteral
+    | BinaryIntegerLiteral
     ;
 
-extensionDefinition
-    :   Extend typeDeclaration '{' functionDefinitionList '}'
+arrayLiteral
+    : ('[' elementList ']')
+    ;
+
+elementList
+    : arrayElement? (','+ arrayElement)* ','*
+    ;
+
+arrayElement
+    : singleExpression
+    ;
+
+assignmentOperator
+    : '*='
+    | '/='
+    | '%='
+    | '+='
+    | '-='
+    | '<<='
+    | '>>='
+    | '>>>='
+    | '&='
+    | '^='
+    | '|='
+    | '**='
+    ;
+
+argumentList
+    : argument? (',' argument)* (',' Ellipsis)?
+    ;
+
+argument:
+    | (expression|Identifier)
+    ;
+
+lambdaFunction
+    : '(' parameterList? ')' block
     ;
 
 
@@ -366,7 +298,6 @@ Else : 'else';
 Enum : 'enum';
 Extend : 'extend';
 Extern : 'extern';
-False: 'false';
 For : 'for';
 If : 'if';
 In: 'in';
@@ -377,7 +308,7 @@ Static : 'static';
 Struct : 'struct';
 Switch : 'switch';
 This: 'this';
-True: 'true';
+Use: 'use';
 Var: 'var';
 While : 'while';
 With: 'with';
@@ -420,16 +351,16 @@ Comma : ',';
 
 Assign : '=';
 // '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|='
-StarAssign : '*=';
+MulAssign : '*=';
 DivAssign : '/=';
 ModAssign : '%=';
-PlusAssign : '+=';
-MinusAssign : '-=';
-LeftShiftAssign : '<<=';
-RightShiftAssign : '>>=';
-AndAssign : '&=';
-XorAssign : '^=';
-OrAssign : '|=';
+AddAssign : '+=';
+SubAssign : '-=';
+LShiftAssign : '<<=';
+RShiftAssign : '>>=';
+BitAndAssign : '&=';
+BitXorAssign : '^=';
+BitOrAssign : '|=';
 
 Equal : '==';
 NotEqual : '!=';
@@ -439,6 +370,11 @@ DotDot : '..';
 Dot : '.';
 Ellipsis : '...';
 
+BooleanLiteral
+    : 'true'
+    | 'false'
+    ;
+
 Identifier
     :   IdentifierNondigit
         (   IdentifierNondigit
@@ -446,185 +382,21 @@ Identifier
         )*
     ;
 
-fragment
-IdentifierNondigit
-    :   Nondigit
-    ;
+/// Numeric Literals
 
-fragment
-Nondigit
-    :   [a-zA-Z_]
-    ;
+DecimalLiteral:                 DecimalIntegerLiteral '.' [0-9] [0-9_]* ExponentPart?
+              |                 '.' [0-9] [0-9_]* ExponentPart?
+              |                 DecimalIntegerLiteral ExponentPart?
+              ;
 
-fragment
-Digit
-    :   [0-9]
-    ;
+/// Numeric Literals
 
-Constant
-    :   NumericConstant
-    |   CharacterConstant
-    ;
-
-NumericConstant
-    :   IntegerConstant
-    |   FloatingConstant
-    ;
-
-fragment
-IntegerConstant
-    :   DecimalConstant
-    |   OctalConstant
-    |   HexadecimalConstant
-    |	BinaryConstant
-    ;
-
-fragment
-BinaryConstant
-	:	'0' [bB] [0-1]+
-	;
-
-fragment
-DecimalConstant
-    :   Sign? NonzeroDigit Digit*
-    ;
-
-fragment
-OctalConstant
-    :   '0' OctalDigit*
-    ;
-
-fragment
-HexadecimalConstant
-    :   HexadecimalPrefix HexadecimalDigit+
-    ;
-
-fragment
-HexadecimalPrefix
-    :   '0' [xX]
-    ;
-
-fragment
-NonzeroDigit
-    :   [1-9]
-    ;
-
-fragment
-OctalDigit
-    :   [0-7]
-    ;
-
-fragment
-HexadecimalDigit
-    :   [0-9a-fA-F]
-    ;
-
-fragment
-FloatingConstant
-    :   DecimalFloatingConstant
-    |   HexadecimalFloatingConstant
-    ;
-
-fragment
-DecimalFloatingConstant
-    :   FractionalConstant ExponentPart?
-    |   DigitSequence ExponentPart
-    ;
-
-fragment
-HexadecimalFloatingConstant
-    :   HexadecimalPrefix (HexadecimalFractionalConstant | HexadecimalDigitSequence)
-    ;
-
-fragment
-FractionalConstant
-    :   DigitSequence '.' DigitSequence
-    ;
-
-fragment
-ExponentPart
-    :   [eE] Sign? DigitSequence
-    ;
-
-fragment
-Sign
-    :   [+-]
-    ;
-
-DigitSequence
-    :   Digit+
-    ;
-
-fragment
-HexadecimalFractionalConstant
-    :   HexadecimalDigitSequence? '.' HexadecimalDigitSequence
-    |   HexadecimalDigitSequence '.'
-    ;
-
-fragment
-HexadecimalDigitSequence
-    :   HexadecimalDigit+
-    ;
-
-fragment
-CharacterConstant
-    :   '\'' CCharSequence '\''
-    |   'L\'' CCharSequence '\''
-    |   'u\'' CCharSequence '\''
-    |   'U\'' CCharSequence '\''
-    ;
-
-fragment
-CCharSequence
-    :   CChar+
-    ;
-
-fragment
-CChar
-    :   ~['\\\r\n]
-    |   EscapeSequence
-    ;
-
-fragment
-EscapeSequence
-    :   SimpleEscapeSequence
-    |   OctalEscapeSequence
-    |   HexadecimalEscapeSequence
-    ;
-
-fragment
-SimpleEscapeSequence
-    :   '\\' ['"?abfnrtv\\]
-    ;
-
-fragment
-OctalEscapeSequence
-    :   '\\' OctalDigit OctalDigit? OctalDigit?
-    ;
-
-fragment
-HexadecimalEscapeSequence
-    :   '\\x' HexadecimalDigit+
-    ;
+HexIntegerLiteral:              '0' [xX] [0-9a-fA-F] HexDigit*;
+OctalIntegerLiteral:            '0' [oO] [0-7] [_0-7]*;
+BinaryIntegerLiteral:           '0' [bB] [01] [_01]*;
 
 StringLiteral
-    :   '"' SCharSequence? '"'
-    ;
-
-fragment
-SCharSequence
-    :   SChar+
-    ;
-fragment
-SChar
-    :   ~["\\\r\n]
-    |   EscapeSequence
-    |   '\\\n'   // Added line
-    |   '\\\r\n' // Added line
-    ;
-
-Brackets
-    : LeftBracket RightBracket
+    :   '"' DoubleStringCharacter* '"'
     ;
 
 Whitespace
@@ -648,3 +420,89 @@ LineComment
     :   '#' ~[\r\n]*
         -> skip
     ;
+
+fragment
+IdentifierNondigit
+    :   Nondigit
+    ;
+
+fragment
+Nondigit
+    :   [a-zA-Z_]
+    ;
+
+fragment
+Digit
+    :   [0-9]
+    ;
+
+fragment DoubleStringCharacter
+    : ~["\\\r\n]
+    | '\\' EscapeSequence
+    | LineContinuation
+    ;
+fragment SingleStringCharacter
+    : ~['\\\r\n]
+    | '\\' EscapeSequence
+    | LineContinuation
+    ;
+fragment EscapeSequence
+    : CharacterEscapeSequence
+    | '0' // no digit ahead! TODO
+    | HexEscapeSequence
+    | UnicodeEscapeSequence
+    | ExtendedUnicodeEscapeSequence
+    ;
+fragment CharacterEscapeSequence
+    : SingleEscapeCharacter
+    | NonEscapeCharacter
+    ;
+fragment HexEscapeSequence
+    : 'x' HexDigit HexDigit
+    ;
+fragment UnicodeEscapeSequence
+    : 'u' HexDigit HexDigit HexDigit HexDigit
+    | 'u' '{' HexDigit HexDigit+ '}'
+    ;
+fragment ExtendedUnicodeEscapeSequence
+    : 'u' '{' HexDigit+ '}'
+    ;
+fragment SingleEscapeCharacter
+    : ['"\\bfnrtv]
+    ;
+
+fragment NonEscapeCharacter
+    : ~['"\\bfnrtv0-9xu\r\n]
+    ;
+fragment EscapeCharacter
+    : SingleEscapeCharacter
+    | [0-9]
+    | [xu]
+    ;
+fragment LineContinuation
+    : '\\' [\r\n\u2028\u2029]
+    ;
+fragment HexDigit
+    : [_0-9a-fA-F]
+    ;
+fragment DecimalIntegerLiteral
+    : '0'
+    | [1-9] [0-9_]*
+    ;
+fragment ExponentPart
+    : [eE] [+-]? [0-9_]+
+    ;
+
+//fragment IdentifierPart
+//    : IdentifierStart
+//    | [\p{Mn}]
+//    | [\p{Nd}]
+//    | [\p{Pc}]
+//    | '\u200C'
+//    | '\u200D'
+//    ;
+//fragment IdentifierStart
+//    : [\p{L}]
+//    | [$_]
+//    | '\\' UnicodeEscapeSequence
+//    ;
