@@ -450,16 +450,8 @@ namespace pepper {
 
             Vector<Ref<Expression>> args;
             auto providedArgs = context->argumentList()->argument();
-            if (!providedArgs.empty()) {
-                // WORKAROUND: there is an issue in the grammar that has argument lists eating null
-                // for some reason. In case that happens, just skip this argument
-                auto first = providedArgs.front();
-                if (first->Identifier() == nullptr && first->expression() == nullptr) {
-                    providedArgs.erase(providedArgs.begin());
-                }
-                for (int argIdx = 0; argIdx < providedArgs.size(); ++argIdx) {
-                    args.insert(args.begin(), rvaluePop<Expression>());
-                }
+            for (int argIdx = 0; argIdx < providedArgs.size(); ++argIdx) {
+                args.insert(args.begin(), rvaluePop<Expression>());
             }
 
             auto symbol = rvaluePop<SymbolRef>(); // identifiers are always pushed as rvalues

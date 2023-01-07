@@ -276,8 +276,8 @@ argumentList
     : argument? (',' argument)* (',' Ellipsis)?
     ;
 
-argument:
-    | (expression|Identifier)
+argument
+    : (expression|Identifier)
     ;
 
 lambdaFunction
