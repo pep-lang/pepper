@@ -31,6 +31,8 @@ namespace pepper {
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
             llvm::Value* value = arg;
+            // structs are passed as struct**, dereference one level since it is not legal (by design) to write
+            // back to the parameter pointer
             if (type->isStruct() && param.ParamName != "this") {
                 auto ptr = ir()->CreateLoad(*type, arg);
                 value = ptr;
@@ -61,7 +63,7 @@ namespace pepper {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = read(returnValueExpr);
             auto returnType = Types::get(ret->Type.toString());
-            auto type = TypeOps::get(returnType);
+            auto type = returnType->ops();
             auto rv = type->coerce(returnValue);
             // save the return value to the return value address
             ir()->CreateStore(rv, function->ReturnValue);

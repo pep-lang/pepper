@@ -137,7 +137,7 @@ namespace pepper {
     Value Codegen::emit(Ref<Assign> op) {
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
-        auto typeOps = TypeOps::get(lhs.Ty);
+        auto typeOps = lhs.Ty->ops();
         typeOps->assign(lhs, typeOps->coerce(rhs));
         return lhs;
     }
@@ -152,7 +152,7 @@ namespace pepper {
                                         Types::toString(rhs->getType()),
                                         op->rtti()->name());
         }
-        auto typeOps = TypeOps::get(opType);
+        auto typeOps = opType->ops();
         auto mathOp = compoundOp(op);
         auto lhsOperand = typeOps->coerce(read(lhs));
         auto rhsOperand = typeOps->coerce(read(rhs));
@@ -178,7 +178,7 @@ namespace pepper {
                                         Types::toString(rhs->getType()),
                                         op->rtti()->name());
         }
-        auto typeOps = TypeOps::get(opType);
+        auto typeOps = opType->ops();
         auto lhsOperand = typeOps->coerce(lhs);
         auto rhsOperand = typeOps->coerce(rhs);
         auto typeOp = binaryOp(op);

@@ -66,8 +66,6 @@ namespace pepper {
             auto type = resolveType(value);
             return Value{value.Ty, ir()->CreateLoad(type, value)};
         }
-        if (value.Ty->isStruct() &&) {
-        }
         return value;
     }
 
@@ -101,7 +99,7 @@ namespace pepper {
         if (!defaultValue)
             defaultValue = zeroValue(type);
 
-        auto typeOps = TypeOps::get(type);
+        auto typeOps = type->ops();
         auto coercedValue = typeOps->coerce(defaultValue);
         ir()->CreateStore(coercedValue, value);
         locals()->newSymbol(value);
