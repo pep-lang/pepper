@@ -23,7 +23,7 @@ namespace pepper {
     class UserFunction;
     class Struct;
     class Symbol;
-    class TypeInfo;
+    class Type;
 
     struct Scope {
         std::string Name;

@@ -34,7 +34,7 @@ namespace pepper {
             // struct arguments are passed as struct**, dereference one level since it is not legal (by design) to write
             // back to the parameter pointer
             if (type->isPointer() && param.ParamName != "this") {
-                auto pointee = type.as<PointerTypeInfo>();
+                auto pointee = type.as<PointerType>();
                 if (pointee->isStruct()) {
                     auto ptr = ir()->CreateLoad(*type, arg);
                     value = ptr;

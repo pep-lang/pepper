@@ -26,19 +26,19 @@ namespace pepper {
 
       protected:
         const Ident Identifier;
-        Ref<TypeInfo> ReturnType;
+        Ref<Type> ReturnType;
         const Params Parameters;
         llvm::Function* Func;
-        Ref<TypeInfo> FuncType;
+        Ref<Type> FuncType;
 
       public:
-        Function(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());
+        Function(const Ident& name, Ref<Type> returnType, const Params& params = Params());
 
         const Ident& name() const {
             return Identifier;
         }
 
-        const Ref<TypeInfo> returnType() const {
+        const Ref<Type> returnType() const {
             return ReturnType;
         }
 
@@ -54,7 +54,7 @@ namespace pepper {
             return Func;
         }
 
-        Ref<TypeInfo> type() const {
+        Ref<Type> type() const {
             return FuncType;
         }
 
@@ -70,7 +70,7 @@ namespace pepper {
         Value ReturnValue;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
-        UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params = Params());
+        UserFunction(const Ident& name, Ref<Type> returnType, const Params& params = Params());
 
         llvm::BasicBlock* appendBlock(const Ident& name = {});
     };
@@ -83,7 +83,7 @@ namespace pepper {
         Ref<Struct> This;
 
       public:
-        Method(Ref<Struct> st, const Ident& name, Ref<TypeInfo> returnType, const Params& params = {})
+        Method(Ref<Struct> st, const Ident& name, Ref<Type> returnType, const Params& params = {})
             : UserFunction(name, returnType, params)
             , This(st) {
         }

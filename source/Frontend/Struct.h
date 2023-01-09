@@ -14,12 +14,12 @@
 #include "llvm/IR/Type.h"
 
 namespace pepper {
-    class StructTypeInfo;
+    class StructType;
 
     class Struct : public std::enable_shared_from_this<Struct> {
         Ident Identifier;
-        Ref<StructTypeInfo> StructType;
-        Ref<PointerTypeInfo> RefType;
+        Ref<StructType> StructTy;
+        Ref<PointerType> RefTy;
         Ref<Function> NewInstance;
         std::map<Ident, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
@@ -30,12 +30,12 @@ namespace pepper {
         Struct(const Ident& name, const Params& fields = {}, const Params& newParams = {});
         static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& newParams = {});
 
-        Ref<PointerTypeInfo> refType() const {
-            return RefType;
+        Ref<PointerType> refType() const {
+            return RefTy;
         }
 
-        Ref<StructTypeInfo> structType() const {
-            return StructType;
+        Ref<StructType> structType() const {
+            return StructTy;
         }
 
         const Ident& name() const {
@@ -112,20 +112,20 @@ namespace pepper {
         static Ref<Struct> get(const Ident& name);
     };
 
-    class StructTypeInfo : public TypeInfo {
-        DECLARE_RTTI(StructTypeInfo, TypeInfo);
+    class StructType : public Type {
+        DECLARE_RTTI(StructType, Type);
 
         const Struct* StructDesc;
         Ref<TypeOps> Ops;
 
       public:
-        StructTypeInfo(const Struct* st, const Ident& name, llvm::Type* type);
+        StructType(const Struct* st, const Ident& name, llvm::Type* type);
 
         bool isStruct() const override {
             return true;
         }
 
-        Ref<TypeInfo> refType() const {
+        Ref<Type> refType() const {
             return StructDesc->refType();
         }
 

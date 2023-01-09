@@ -9,7 +9,7 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
-    Function::Function(const Ident& name, Ref<TypeInfo> returnType, const Params& params)
+    Function::Function(const Ident& name, Ref<Type> returnType, const Params& params)
         : Identifier(name)
         , ReturnType(returnType)
         , Parameters(params) {
@@ -17,7 +17,7 @@ namespace pepper {
         std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.ParamType); });
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
         auto sig = Types::toString(llvmType);
-        FuncType = Types::add(Ref<TypeInfo>::New(sig, llvmType));
+        FuncType = Types::add(Ref<Type>::New(sig, llvmType));
         Func =
             llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
     }
@@ -47,7 +47,7 @@ namespace pepper {
                      Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
-    UserFunction::UserFunction(const Ident& name, Ref<TypeInfo> returnType, const Params& params)
+    UserFunction::UserFunction(const Ident& name, Ref<Type> returnType, const Params& params)
         : Function(name, returnType, params) {
         auto& context = Context::get().module()->getContext();
         Body = llvm::BasicBlock::Create(context, "entry", Func);

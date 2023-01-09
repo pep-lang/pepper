@@ -57,12 +57,12 @@ namespace pepper {
         throw InternalCompilerError("Unknown binary op: {0}", op->rtti()->name());
     }
 
-    static Ref<TypeInfo> largestIntType(Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+    static Ref<Type> largestIntType(Ref<Type> lhs, Ref<Type> rhs) {
         auto bits = std::max(lhs->llvmType()->getIntegerBitWidth(), rhs->llvmType()->getIntegerBitWidth());
         return (bits > 32) ? Types::Int64 : Types::Int32;
     }
 
-    static Ref<TypeInfo> largestOperandType(Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+    static Ref<Type> largestOperandType(Ref<Type> lhs, Ref<Type> rhs) {
         if (lhs->llvmType()->isIntegerTy() && rhs->llvmType()->isIntegerTy()) {
             return largestIntType(lhs, rhs);
         }
@@ -73,7 +73,7 @@ namespace pepper {
         return nullptr;
     }
 
-    static Ref<TypeInfo> structOperandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+    static Ref<Type> structOperandType(Ref<BinaryOp> op, Ref<Type> lhs, Ref<Type> rhs) {
         if (op->is<Assign>() && lhs == rhs) {
             return lhs;
         }
@@ -85,12 +85,12 @@ namespace pepper {
             op->Source, "Cannot perform {0} between {1} and {2}", op->rtti()->name(), lhs->name(), rhs->name());
     }
 
-    static Ref<TypeInfo> operandType(Ref<BinaryOp> op, Ref<TypeInfo> lhs, Ref<TypeInfo> rhs) {
+    static Ref<Type> operandType(Ref<BinaryOp> op, Ref<Type> lhs, Ref<Type> rhs) {
         if (lhs->llvmType()->isStructTy() || lhs->llvmType()->isPointerTy()) {
             return structOperandType(op, lhs, rhs);
         }
         if (lhs->llvmType()->isIntegerTy() && lhs->llvmType()->isIntegerTy()) {
-            auto intType = llvm::StringSwitch<Ref<TypeInfo>>(op->rtti()->name())
+            auto intType = llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
                                .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
                                .Cases("LShiftAssign",
                                       "RShiftAssign",
@@ -102,7 +102,7 @@ namespace pepper {
             if (intType)
                 return intType;
         }
-        return llvm::StringSwitch<Ref<TypeInfo>>(op->rtti()->name())
+        return llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
             .Cases("Add", "Sub", "Mul", "Div", "Mod", "Pow", largestOperandType(lhs, rhs))
             .Cases("Equal", "NotEqual", "Less", "LessEqual", "Greater", "GreaterEqual", largestOperandType(lhs, rhs))
             .Cases("LogicalAnd", "LogicalOr", Types::Bool)

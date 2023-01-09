@@ -41,7 +41,7 @@ namespace pepper {
 
         static llvm::Type* resolveType(Value value);
         static Value read(Value value);
-        static Value zeroValue(Ref<TypeInfo> type);
+        static Value zeroValue(Ref<Type> type);
 
         // Entry to polymorphic emit calls, use this to force generation of a node and its children
         Value codegen(Ref<ast::Node> node);

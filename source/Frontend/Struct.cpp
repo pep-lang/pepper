@@ -19,12 +19,12 @@ namespace pepper {
         auto llvmType = llvm::StructType::create(fieldTypes, Identifier);
 
         // Add underlying struct as struct.<struct>
-        StructType = Ref<StructTypeInfo>::New(this, "struct." + name, llvmType);
-        Types::add(StructType);
+        StructTy = Ref<StructType>::New(this, "struct." + name, llvmType);
+        Types::add(StructTy);
         // Add ref type as <struct>
-        RefType = Ref<PointerTypeInfo>::New(name, StructType);
-        Types::add(RefType);
-        NewInstance = Ref<UserFunction>::New(name, RefType, newParams);
+        RefTy = Ref<PointerType>::New(name, StructTy);
+        Types::add(RefTy);
+        NewInstance = Ref<UserFunction>::New(name, RefTy, newParams);
 
         setFields(fields);
 
@@ -62,7 +62,7 @@ namespace pepper {
     }
 
     llvm::Value* Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
-        return Context::ir()->CreateStructGEP(*StructType, instance, idx, field.ParamName);
+        return Context::ir()->CreateStructGEP(*StructTy, instance, idx, field.ParamName);
     }
 
     llvm::Function* Struct::getMethod(const Ident& name) const {
@@ -84,13 +84,13 @@ namespace pepper {
         const Struct* Struct;
 
       public:
-        StructTypeOps(Ref<TypeInfo> type)
+        StructTypeOps(Ref<Type> type)
             : TypeOps(type) {
-            Struct = Type.as<StructTypeInfo>()->StructDesc;
+            Struct = Ty.as<StructType>()->StructDesc;
         }
 
         Value coerce(Value value) const override {
-            if (value.Ty == Type) {
+            if (value.Ty == Ty) {
                 return value;
             }
             throw CompileError("Coercion between structs is not supported");
@@ -113,18 +113,18 @@ namespace pepper {
         }
 
         Value asBool(Value value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*Type);
+            auto zero = llvm::ConstantInt::getFalse(*Ty);
             auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
             return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
         }
     };
 
-    StructTypeInfo::StructTypeInfo(const Struct* st, const Ident& name, llvm::Type* type)
-        : TypeInfo(name, type)
+    StructType::StructType(const Struct* st, const Ident& name, llvm::Type* type)
+        : Type(name, type)
         , StructDesc(st) {
     }
 
-    TypeOps* StructTypeInfo::ops() {
+    TypeOps* StructType::ops() {
         if (!Ops)
             Ops = Ref<StructTypeOps>::New(shared_from_this());
         return Ops.get();

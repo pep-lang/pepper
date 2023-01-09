@@ -13,26 +13,28 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class TypeInfo;
-    class PointerType;
 
     class TypeOps {
         DECLARE_RTTI(TypeOps);
 
       protected:
-        Ref<TypeInfo> Type = nullptr;
+        Ref<Type> Ty = nullptr;
 
       public:
-        explicit TypeOps(Ref<TypeInfo> type)
-            : Type(type) {
+        explicit TypeOps(Ref<Type> type)
+            : Ty(type) {
         }
 
         operator llvm::Type*() const {
-            return Type->llvmType();
+            return Ty->llvmType();
         }
 
-        static Ref<TypeOps> get(Ref<TypeInfo> type);
-        static Ref<TypeOps> get(const TypeInfo* type);
+        Ref<Type> type() const {
+            return Ty;
+        }
+
+        static Ref<TypeOps> get(Ref<Type> type);
+        static Ref<TypeOps> get(const Type* type);
 
         virtual Value coerce(Value value) const = 0;
 

@@ -69,7 +69,7 @@ namespace pepper {
         return value;
     }
 
-    Value Codegen::zeroValue(Ref<TypeInfo> type) {
+    Value Codegen::zeroValue(Ref<Type> type) {
         if (type->llvmType()->isIntegerTy())
             return Value{type, llvm::ConstantInt::get(*type, 0)};
         if (type->llvmType()->isFloatingPointTy())

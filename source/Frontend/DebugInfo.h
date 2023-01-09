@@ -16,7 +16,7 @@
 
 namespace pepper {
     class Struct;
-    class TypeInfo;
+    class Type;
 
     class DebugInfo {
         llvm::Module* Module;
@@ -46,7 +46,7 @@ namespace pepper {
             DI.reset();
         }
 
-        void newBasicType(llvm::StringRef name, Ref<TypeInfo> type);
+        void newBasicType(llvm::StringRef name, Ref<Type> type);
         void newVariable(llvm::StringRef name, llvm::Value* value);
         void newParameter(llvm::StringRef name, int argIndex, llvm::Value* value);
         void newStruct(llvm::StringRef name, Struct* st);

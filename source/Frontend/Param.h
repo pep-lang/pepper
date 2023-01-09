@@ -6,14 +6,14 @@
 #include "Core/Vector.h"
 
 namespace pepper {
-    class TypeInfo;
+    class Type;
 
     struct Param {
-        Ref<TypeInfo> ParamType;
+        Ref<Type> ParamType;
         Ident ParamName;
         Value Default;
 
-        Param(const Ident& name, Ref<TypeInfo> type, Value defaultValue = {})
+        Param(const Ident& name, Ref<Type> type, Value defaultValue = {})
             : ParamName(name)
             , ParamType(type)
             , Default(defaultValue) {
