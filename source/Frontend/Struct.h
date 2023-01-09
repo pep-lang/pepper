@@ -19,7 +19,7 @@ namespace pepper {
     class Struct : public std::enable_shared_from_this<Struct> {
         Ident Identifier;
         Ref<StructTypeInfo> StructType;
-        Ref<StructTypeInfo> RefType;
+        Ref<PointerTypeInfo> RefType;
         Ref<Function> NewInstance;
         std::map<Ident, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
@@ -30,7 +30,7 @@ namespace pepper {
         Struct(const Ident& name, const Params& fields = {}, const Params& newParams = {});
         static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& newParams = {});
 
-        Ref<StructTypeInfo> refType() const {
+        Ref<PointerTypeInfo> refType() const {
             return RefType;
         }
 
@@ -123,6 +123,10 @@ namespace pepper {
 
         bool isStruct() const override {
             return true;
+        }
+
+        Ref<TypeInfo> refType() const {
+            return StructDesc->refType();
         }
 
         TypeOps* ops() override;

@@ -123,8 +123,10 @@ namespace pepper {
         }
 
         codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
-        PEP_TRACE(
-            TraceChannel::Codegen, "StructDef {0} -> {1}", structDef->Name, toString(structDesc->type()->llvmType()));
+        PEP_TRACE(TraceChannel::Codegen,
+                  "StructDef {0} -> {1}",
+                  structDef->Name,
+                  toString(structDesc->structType()->llvmType()));
     }
 
     Value Codegen::emit(Ref<ThisRef>) {

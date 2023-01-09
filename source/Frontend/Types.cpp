@@ -56,7 +56,11 @@ namespace pepper {
     Ref<TypeInfo> Types::Float;
 
     PointerTypeInfo::PointerTypeInfo(Ref<TypeInfo> pointee)
-        : TypeInfo(pointee->name() + "*", pointee->llvmType()->getPointerTo(), false)
+        : PointerTypeInfo(pointee->name() + "*", pointee) {
+    }
+
+    PointerTypeInfo::PointerTypeInfo(const Ident& name, Ref<TypeInfo> pointee)
+        : TypeInfo(name, pointee->llvmType()->getPointerTo(), false)
         , PointeeType(pointee) {
     }
 
@@ -81,12 +85,6 @@ namespace pepper {
     Ref<TypeInfo> Types::addType(Ref<TypeInfo> t, const Vector<Ident>& aliases) {
         if (t->llvmType()->isStructTy()) {
             KnownTypes[t->name()] = t;
-            KnownTypes[t->name() + "*"] = Ref<PointerTypeInfo>::New(t);
-            for (const auto& alias : aliases) {
-                KnownTypes[alias] = t;
-                if (!alias.ends_with('*'))
-                    KnownTypes[alias + "*"] = t;
-            }
         } else {
             // add requested type with aliases
             KnownTypes[t->name()] = t;

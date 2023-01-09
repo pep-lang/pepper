@@ -31,11 +31,14 @@ namespace pepper {
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
             llvm::Value* value = arg;
-            // structs are passed as struct**, dereference one level since it is not legal (by design) to write
+            // struct arguments are passed as struct**, dereference one level since it is not legal (by design) to write
             // back to the parameter pointer
-            if (type->isStruct() && param.ParamName != "this") {
-                auto ptr = ir()->CreateLoad(*type, arg);
-                value = ptr;
+            if (type->isPointer() && param.ParamName != "this") {
+                auto pointee = type.as<PointerTypeInfo>();
+                if (pointee->isStruct()) {
+                    auto ptr = ir()->CreateLoad(*type, arg);
+                    value = ptr;
+                }
             }
             ir()->CreateStore(value, local);
             locals()->newSymbol(local);

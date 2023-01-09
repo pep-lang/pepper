@@ -73,6 +73,7 @@ namespace pepper {
 
       public:
         PointerTypeInfo(Ref<TypeInfo> pointee);
+        PointerTypeInfo(const Ident& name, Ref<TypeInfo> pointee);
 
         Ref<TypeInfo> pointeeType() const {
             return PointeeType;
