@@ -56,7 +56,8 @@ namespace pepper {
     Ref<TypeInfo> Types::Float;
 
     PointerTypeInfo::PointerTypeInfo(Ref<TypeInfo> pointee)
-        : TypeInfo(pointee->name() + "*", pointee->llvmType()->getPointerTo(), false) {
+        : TypeInfo(pointee->name() + "*", pointee->llvmType()->getPointerTo(), false)
+        , PointeeType(pointee) {
     }
 
     Types::Types(llvm::LLVMContext& ctx)

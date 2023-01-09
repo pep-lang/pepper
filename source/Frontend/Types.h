@@ -68,8 +68,15 @@ namespace pepper {
     class PointerTypeInfo : public TypeInfo {
         DECLARE_RTTI(PointerTypeInfo, TypeInfo);
 
+      private:
+        Ref<TypeInfo> PointeeType;
+
       public:
         PointerTypeInfo(Ref<TypeInfo> pointee);
+
+        Ref<TypeInfo> pointeeType() const {
+            return PointeeType;
+        }
     };
 
     class Types {
