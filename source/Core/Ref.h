@@ -18,12 +18,18 @@ namespace pepper {
 
         template <typename U>
         Ref(Ref<U> ref)
+            requires(HasRtti<T>)
             : base(ref.template as<T>()) {
         }
 
         template <typename U>
-        // requires HasRtti<T> && HasRtti<U>
-        Ref<U> as() const {
+        Ref<U> as() const
+            requires(HasRtti<T>)
+        {
+            if (!*this)
+                return nullptr;
+            if (!this->get()->template is<U>())
+                return nullptr;
             return std::static_pointer_cast<U>(*this);
         }
 
