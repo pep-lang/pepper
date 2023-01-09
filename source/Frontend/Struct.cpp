@@ -18,10 +18,10 @@ namespace pepper {
         Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.ParamType; });
         auto llvmType = llvm::StructType::create(fieldTypes, Identifier);
 
-        StructType = Ref<StructTypeInfo>::New(this, "__" + name, llvmType);
-        RefType = Ref<StructTypeInfo>::New(this, name, llvmType->getPointerTo());
-        Types::add(RefType);
-        NewInstance = Ref<UserFunction>::New(name, Types::get(RefType->name()), newParams);
+        StructType = Ref<StructTypeInfo>::New(this, name, llvmType);
+        Types::add(StructType);
+        RefType = Types::get(name + "*");
+        NewInstance = Ref<UserFunction>::New(name, RefType, newParams);
 
         setFields(fields);
 

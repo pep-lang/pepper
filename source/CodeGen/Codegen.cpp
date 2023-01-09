@@ -66,6 +66,8 @@ namespace pepper {
             auto type = resolveType(value);
             return Value{value.Ty, ir()->CreateLoad(type, value)};
         }
+        if (value.Ty->isStruct() &&) {
+        }
         return value;
     }
 

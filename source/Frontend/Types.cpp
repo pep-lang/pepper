@@ -2,11 +2,11 @@
 #include "Frontend/Types.h"
 #include <sstream>
 
-#include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Vector.h"
 #include "Frontend/Context.h"
 #include "Frontend/TypeOps.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
@@ -55,6 +55,10 @@ namespace pepper {
     Ref<TypeInfo> Types::Double;
     Ref<TypeInfo> Types::Float;
 
+    PointerTypeInfo::PointerTypeInfo(Ref<TypeInfo> pointee)
+        : TypeInfo(pointee->name() + "*", pointee->llvmType()->getPointerTo(), false) {
+    }
+
     Types::Types(llvm::LLVMContext& ctx)
         : Ctx(ctx) {
         Void = addType(Ref<TypeInfo>::New("void", llvm::Type::getVoidTy(ctx)));
@@ -76,7 +80,7 @@ namespace pepper {
     Ref<TypeInfo> Types::addType(Ref<TypeInfo> t, const Vector<Ident>& aliases) {
         if (t->llvmType()->isStructTy()) {
             KnownTypes[t->name()] = t;
-            KnownTypes[t->name() + "*"] = t;
+            KnownTypes[t->name() + "*"] = Ref<PointerTypeInfo>::New(t);
             for (const auto& alias : aliases) {
                 KnownTypes[alias] = t;
                 if (!alias.ends_with('*'))
@@ -90,7 +94,7 @@ namespace pepper {
             }
             // add pointer types as well
             if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
-                auto ptrType = Ref<TypeInfo>::New(t->name() + "*", t->llvmType()->getPointerTo());
+                auto ptrType = Ref<PointerTypeInfo>::New(t);
                 KnownTypes[t->name() + "*"] = ptrType;
                 for (const auto& alias : aliases) {
                     KnownTypes[alias + "*"] = ptrType;

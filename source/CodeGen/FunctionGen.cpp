@@ -6,7 +6,6 @@
 #include "Codegen.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
-#include "Frontend/Context.h"
 #include "Frontend/Function.h"
 #include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
@@ -32,6 +31,10 @@ namespace pepper {
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
             llvm::Value* value = arg;
+            if (type->isStruct() && param.ParamName != "this") {
+                auto ptr = ir()->CreateLoad(*type, arg);
+                value = ptr;
+            }
             ir()->CreateStore(value, local);
             locals()->newSymbol(local);
         }

@@ -52,6 +52,10 @@ namespace pepper {
             return IsSigned;
         }
 
+        virtual bool isPointer() const {
+            return false;
+        }
+
         virtual bool isStruct() const {
             return false;
         }
@@ -59,6 +63,13 @@ namespace pepper {
         virtual TypeOps* ops();
 
         Ref<TypeInfo> pointer() const;
+    };
+
+    class PointerTypeInfo : public TypeInfo {
+        DECLARE_RTTI(PointerTypeInfo, TypeInfo);
+
+      public:
+        PointerTypeInfo(Ref<TypeInfo> pointee);
     };
 
     class Types {

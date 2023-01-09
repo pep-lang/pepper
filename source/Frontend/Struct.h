@@ -30,7 +30,7 @@ namespace pepper {
         Struct(const Ident& name, const Params& fields = {}, const Params& newParams = {});
         static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& newParams = {});
 
-        Ref<StructTypeInfo> type() const {
+        Ref<StructTypeInfo> refType() const {
             return RefType;
         }
 

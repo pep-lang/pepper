@@ -220,13 +220,19 @@ struct Test {
 struct Foo {
     Test t;
 
-    new(this.t) {
+    new(Test z) {
+        this.t = z;
+        debug_ptr(this, "this");
+        debug_ptr(z, "z");
+        debug_ptr(this.t, "this.t");
     }
 };
 
 int test() {
     var t = Test();
+    debug_ptr(t, "t");
     const f = Foo(t);
+    debug_ptr(f, "f");
     return f.t == t;
 }
     )SOURCE";
