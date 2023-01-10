@@ -71,12 +71,10 @@ namespace pepper {
     inline Value read(Value value) {
         value = load(value);
         if (value.Ty->isPointer()) {
-            auto type = value.Ty;
-            if (value.Ty->isPointer()) {
-                auto pointee = value.Ty.as<PointerType>()->pointeeType();
-                if (pointee->isStruct()) {
-                    type = pointee;
-                }
+            auto type = value.Ty.as<PointerType>();
+            auto pointee = type->pointeeType();
+            if (pointee->isStruct()) {
+                return Value{pointee, ir()->CreateLoad(*type, value)};
             }
             return Value{type, ir()->CreateLoad(*type, value)};
         }
