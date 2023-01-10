@@ -318,3 +318,22 @@ TEST(IntMath, PostDecrement) {
     )SOURCE";
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(IntMath, BitwiseNot) {
+    const char* source = R"SOURCE(
+        int test() {
+            return ~1;
+        }
+    )SOURCE";
+    EXPECT_EQ(-2, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, LogicalNot) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            return !x;
+        }
+    )SOURCE";
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
+}

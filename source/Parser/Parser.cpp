@@ -696,6 +696,22 @@ namespace pepper {
             endUnaryOp<PostDecrement>();
         }
 
+        void enterBitNot(PepperParser::BitNotContext*) override {
+            beginUnaryOp<BitNot>();
+        }
+
+        void exitBitNot(PepperParser::BitNotContext*) override {
+            endUnaryOp<BitNot>();
+        }
+
+        void enterLogicalNot(PepperParser::LogicalNotContext*) override {
+            beginUnaryOp<LogicalNot>();
+        }
+
+        void exitLogicalNot(PepperParser::LogicalNotContext*) override {
+            endUnaryOp<LogicalNot>();
+        }
+
         template <typename Op>
         void beginBinaryOp() {
             auto op = Pending::New<Op>();
