@@ -143,6 +143,17 @@ TEST(IntMath, RShift) {
     EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(IntMath, Pow) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 4;
+            int y = 3;
+            return x ** y;
+        }
+    )SOURCE";
+    EXPECT_EQ(64, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(IntMath, AddAssign) {
     const char* source = R"SOURCE(
         int test() {

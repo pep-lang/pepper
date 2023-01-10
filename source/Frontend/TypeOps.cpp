@@ -15,111 +15,111 @@
 #include "llvm/IR/Value.h"
 
 namespace pepper {
-    Value TypeOps::add(Value lhs, Value rhs) const {
+    Value TypeOps::add(Value, Value) const {
         throw CompileError("Type {0} does not support addition", Types::toString(Ty));
     }
 
-    Value TypeOps::sub(Value lhs, Value rhs) const {
+    Value TypeOps::sub(Value, Value) const {
         throw CompileError("Type {0} does not support subtraction", Types::toString(Ty));
     }
 
-    Value TypeOps::mul(Value lhs, Value rhs) const {
+    Value TypeOps::mul(Value, Value) const {
         throw CompileError("Type {0} does not support multiplication", Types::toString(Ty));
     }
 
-    Value TypeOps::div(Value lhs, Value rhs) const {
+    Value TypeOps::div(Value, Value) const {
         throw CompileError("Type {0} does not support division", Types::toString(Ty));
     }
 
-    Value TypeOps::mod(Value lhs, Value rhs) const {
+    Value TypeOps::mod(Value, Value) const {
         throw CompileError("Type {0} does not support modulus", Types::toString(Ty));
     }
 
-    Value TypeOps::pow(Value lhs, Value rhs) const {
+    Value TypeOps::pow(Value, Value) const {
         throw CompileError("Type {0} does not support pow", Types::toString(Ty));
     }
 
-    Value TypeOps::less(Value lhs, Value rhs) const {
+    Value TypeOps::less(Value, Value) const {
         throw CompileError("Type {0} does not support <", Types::toString(Ty));
     }
 
-    Value TypeOps::lessEq(Value lhs, Value rhs) const {
+    Value TypeOps::lessEq(Value, Value) const {
         throw CompileError("Type {0} does not support <=", Types::toString(Ty));
     }
 
-    Value TypeOps::greater(Value lhs, Value rhs) const {
+    Value TypeOps::greater(Value, Value) const {
         throw CompileError("Type {0} does not support >", Types::toString(Ty));
     }
 
-    Value TypeOps::greaterEq(Value lhs, Value rhs) const {
+    Value TypeOps::greaterEq(Value, Value) const {
         throw CompileError("Type {0} does not support >=", Types::toString(Ty));
     }
 
-    Value TypeOps::lshift(Value lhs, Value rhs) const {
+    Value TypeOps::lshift(Value, Value) const {
         throw CompileError("Type {0} does not support <<", Types::toString(Ty));
     }
 
-    Value TypeOps::rshift(Value lhs, Value rhs) const {
+    Value TypeOps::rshift(Value, Value) const {
         throw CompileError("Type {0} does not support >>", Types::toString(Ty));
     }
 
-    Value TypeOps::equal(Value lhs, Value rhs) const {
+    Value TypeOps::equal(Value, Value) const {
         throw CompileError("Type {0} does not support equality", Types::toString(Ty));
     }
 
-    Value TypeOps::notEqual(Value lhs, Value rhs) const {
+    Value TypeOps::notEqual(Value, Value) const {
         throw CompileError("Type {0} does not support non-equality", Types::toString(Ty));
     }
 
-    Value TypeOps::assign(Value lhs, Value rhs) const {
+    Value TypeOps::assign(Value, Value) const {
         throw CompileError("Type {0} does not support assignment", Types::toString(Ty));
     }
 
-    Value TypeOps::bitAnd(Value lhs, Value rhs) const {
+    Value TypeOps::bitAnd(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise and", Types::toString(Ty));
     }
 
-    Value TypeOps::bitXor(Value lhs, Value rhs) const {
+    Value TypeOps::bitXor(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise xor", Types::toString(Ty));
     }
 
-    Value TypeOps::bitOr(Value lhs, Value rhs) const {
+    Value TypeOps::bitOr(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise or", Types::toString(Ty));
     }
 
-    Value TypeOps::neg(Value val) const {
+    Value TypeOps::neg(Value) const {
         throw CompileError("Type {0} does not support unary negation", Types::toString(Ty));
     }
 
-    Value TypeOps::pos(Value val) const {
+    Value TypeOps::pos(Value) const {
         throw CompileError("Type {0} does not support unary positive", Types::toString(Ty));
     }
 
-    Value TypeOps::preIncrement(Value val) const {
+    Value TypeOps::preIncrement(Value) const {
         throw CompileError("Type {0} does not support pre-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::preDecrement(Value val) const {
+    Value TypeOps::preDecrement(Value) const {
         throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::postIncrement(Value val) const {
+    Value TypeOps::postIncrement(Value) const {
         throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::postDecrement(Value val) const {
+    Value TypeOps::postDecrement(Value) const {
         throw CompileError("Type {0} does not support post-decrement", Types::toString(Ty));
     }
 
-    Value TypeOps::bitNot(Value val) const {
+    Value TypeOps::bitNot(Value) const {
         throw CompileError("Type {0} does not support bitwise not", Types::toString(Ty));
     }
 
-    Value TypeOps::logicalNot(Value val) const {
+    Value TypeOps::logicalNot(Value) const {
         throw CompileError("Type {0} does not support logical not", Types::toString(Ty));
     }
 
-    Value TypeOps::asBool(Value value) const {
+    Value TypeOps::asBool(Value) const {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Ty));
     }
 
@@ -146,10 +146,6 @@ namespace pepper {
 
     class NativeTypeOps : public TypeOps {
         DECLARE_RTTI(NativeTypeOps, TypeOps)
-      protected:
-        static Ref<llvm::IRBuilderBase> builder() {
-            return Context::get().locals()->builder();
-        }
 
       public:
         NativeTypeOps(Ref<Type> type)
@@ -172,28 +168,28 @@ namespace pepper {
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
+            return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs))};
+            return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs))};
         }
 
         Value assign(Value lhs, Value rhs) const override {
-            builder()->CreateStore(coerce(rhs), lhs);
+            ir()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
         Value asBool(Value value) const override {
             auto zero = llvm::ConstantInt::getFalse(*Ty);
-            auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
-            return Value{Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool")};
+            auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
+            return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
         }
 
         Value logicalNot(Value value) const override {
             auto zero = llvm::ConstantInt::getFalse(*Ty);
-            auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
-            return Value{Types::Bool, builder()->CreateICmpEQ(zero, valAsInt, "not")};
+            auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
+            return Value{Types::Bool, ir()->CreateICmpEQ(zero, valAsInt, "not")};
         }
     };
 
@@ -233,105 +229,113 @@ namespace pepper {
             const bool signedVal = !type->isIntegerTy(1) && isSigned();
 
             if (type->isIntegerTy()) {
-                return Value{Ty, builder()->CreateIntCast(value, *this, signedVal)};
+                return Value{Ty, ir()->CreateIntCast(value, *this, signedVal)};
             }
             if (type->isFloatingPointTy()) {
-                return Value{Ty,
-                             signedVal ? builder()->CreateFPToSI(value, *this) : builder()->CreateFPToUI(value, *this)};
+                return Value{Ty, signedVal ? ir()->CreateFPToSI(value, *this) : ir()->CreateFPToUI(value, *this)};
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Ty));
         }
 
         Value add(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add")};
+            return Value{Ty, ir()->CreateNSWAdd(coerce(lhs), coerce(rhs), "add")};
         }
 
         Value sub(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub")};
+            return Value{Ty, ir()->CreateNSWSub(coerce(lhs), coerce(rhs), "sub")};
         }
 
         Value mul(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul")};
+            return Value{Ty, ir()->CreateNSWMul(coerce(lhs), coerce(rhs), "mul")};
         }
 
         Value div(Value lhs, Value rhs) const override {
             return Value{Ty,
-                         isSigned() ? builder()->CreateSDiv(coerce(lhs), coerce(rhs), "sdiv")
-                                    : builder()->CreateUDiv(coerce(lhs), coerce(rhs), "udiv")};
+                         isSigned() ? ir()->CreateSDiv(coerce(lhs), coerce(rhs), "sdiv")
+                                    : ir()->CreateUDiv(coerce(lhs), coerce(rhs), "udiv")};
         }
 
         Value mod(Value lhs, Value rhs) const override {
             return Value{Ty,
-                         isSigned() ? builder()->CreateSRem(coerce(lhs), coerce(rhs), "srem")
-                                    : builder()->CreateURem(coerce(lhs), coerce(rhs), "urem")};
+                         isSigned() ? ir()->CreateSRem(coerce(lhs), coerce(rhs), "srem")
+                                    : ir()->CreateURem(coerce(lhs), coerce(rhs), "urem")};
         }
 
         Value pow(Value lhs, Value rhs) const override {
-            // auto pow = builder()->
-            // Value::New(
-            //     ref(), builder()->CreateCall())
-            throw InternalCompilerError("Pow not implemented");
+            auto floatOps = Types::Double->ops();
+            auto flhs = floatOps->coerce(lhs);
+            auto frhs = floatOps->coerce(rhs);
+            Vector<llvm::Type*> types = {
+                *Types::Double,
+            };
+            Vector<llvm::Value*> values = {
+                flhs,
+                frhs,
+            };
+
+            auto res = Value{Types::Double, ir()->CreateIntrinsic(llvm::Intrinsic::pow, types, values, nullptr, "pow")};
+            return Value{Ty, coerce(res)};
         }
 
         Value less(Value lhs, Value rhs) const override {
             return Value(Types::Bool,
-                         isSigned() ? builder()->CreateICmpSLT(coerce(lhs), coerce(rhs), "slt")
-                                    : builder()->CreateICmpULT(coerce(lhs), coerce(rhs), "ult"));
+                         isSigned() ? ir()->CreateICmpSLT(coerce(lhs), coerce(rhs), "slt")
+                                    : ir()->CreateICmpULT(coerce(lhs), coerce(rhs), "ult"));
         }
 
         Value lessEq(Value lhs, Value rhs) const override {
             return Value(Types::Bool,
-                         isSigned() ? builder()->CreateICmpSLE(coerce(lhs), coerce(rhs), "sle")
-                                    : builder()->CreateICmpULE(coerce(lhs), coerce(rhs), "ule"));
+                         isSigned() ? ir()->CreateICmpSLE(coerce(lhs), coerce(rhs), "sle")
+                                    : ir()->CreateICmpULE(coerce(lhs), coerce(rhs), "ule"));
         }
 
         Value greater(Value lhs, Value rhs) const override {
             return Value(Types::Bool,
-                         isSigned() ? builder()->CreateICmpSGT(coerce(lhs), coerce(rhs), "sgt")
-                                    : builder()->CreateICmpUGT(coerce(lhs), coerce(rhs), "ugt"));
+                         isSigned() ? ir()->CreateICmpSGT(coerce(lhs), coerce(rhs), "sgt")
+                                    : ir()->CreateICmpUGT(coerce(lhs), coerce(rhs), "ugt"));
         }
 
         Value greaterEq(Value lhs, Value rhs) const override {
             return Value(Types::Bool,
-                         isSigned() ? builder()->CreateICmpSGE(coerce(lhs), coerce(rhs), "sge")
-                                    : builder()->CreateICmpUGE(coerce(lhs), coerce(rhs), "uge"));
+                         isSigned() ? ir()->CreateICmpSGE(coerce(lhs), coerce(rhs), "sge")
+                                    : ir()->CreateICmpUGE(coerce(lhs), coerce(rhs), "uge"));
         }
 
         Value lshift(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateShl(coerce(lhs), coerce(rhs), "shl")};
+            return Value{Ty, ir()->CreateShl(coerce(lhs), coerce(rhs), "shl")};
         }
 
         Value rshift(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateLShr(coerce(lhs), coerce(rhs), "lshr")};
+            return Value{Ty, ir()->CreateLShr(coerce(lhs), coerce(rhs), "lshr")};
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq")};
+            return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs), "eq")};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne")};
+            return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs), "ne")};
         }
 
         Value assign(Value lhs, Value rhs) const override {
-            builder()->CreateStore(coerce(rhs), lhs);
+            ir()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
         Value bitAnd(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateAnd(coerce(lhs), coerce(rhs), "and")};
+            return Value{Ty, ir()->CreateAnd(coerce(lhs), coerce(rhs), "and")};
         }
 
         Value bitXor(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateXor(coerce(lhs), coerce(rhs), "xor")};
+            return Value{Ty, ir()->CreateXor(coerce(lhs), coerce(rhs), "xor")};
         }
 
         Value bitOr(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateOr(coerce(lhs), coerce(rhs), "or")};
+            return Value{Ty, ir()->CreateOr(coerce(lhs), coerce(rhs), "or")};
         }
 
         Value neg(Value val) const override {
-            return Value{Ty, builder()->CreateNeg(coerce(val), "neg")};
+            return Value{Ty, ir()->CreateNeg(coerce(val), "neg")};
         }
 
         Value pos(Value val) const override {
@@ -340,53 +344,53 @@ namespace pepper {
 
         Value preIncrement(Value val) const override {
             auto one = llvm::ConstantInt::get(*Ty, 1);
-            auto newVal = builder()->CreateAdd(read(val), one, "preinc");
-            builder()->CreateStore(newVal, val);
+            auto newVal = ir()->CreateAdd(read(val), one, "preinc");
+            ir()->CreateStore(newVal, val);
             return Value{Ty, newVal};
         }
 
         Value preDecrement(Value val) const override {
             auto one = llvm::ConstantInt::get(*Ty, 1);
-            auto newVal = builder()->CreateSub(read(val), one, "predec");
-            builder()->CreateStore(newVal, val);
+            auto newVal = ir()->CreateSub(read(val), one, "predec");
+            ir()->CreateStore(newVal, val);
             return Value{Ty, newVal};
         }
 
         Value postIncrement(Value val) const override {
             auto one = llvm::ConstantInt::get(*Ty, 1);
-            auto ret = builder()->CreateAlloca(*Ty);
+            auto ret = ir()->CreateAlloca(*Ty);
             auto oldVal = read(val);
-            auto newVal = builder()->CreateAdd(oldVal, one, "postinc");
-            builder()->CreateStore(oldVal, ret);
-            builder()->CreateStore(newVal, val);
+            auto newVal = ir()->CreateAdd(oldVal, one, "postinc");
+            ir()->CreateStore(oldVal, ret);
+            ir()->CreateStore(newVal, val);
             return Value{Ty, ret};
         }
 
         Value postDecrement(Value val) const override {
             auto one = llvm::ConstantInt::get(*Ty, 1);
-            auto ret = builder()->CreateAlloca(*Ty);
+            auto ret = ir()->CreateAlloca(*Ty);
             auto oldVal = read(val);
-            auto newVal = builder()->CreateSub(oldVal, one, "postdec");
-            builder()->CreateStore(oldVal, ret);
-            builder()->CreateStore(newVal, val);
+            auto newVal = ir()->CreateSub(oldVal, one, "postdec");
+            ir()->CreateStore(oldVal, ret);
+            ir()->CreateStore(newVal, val);
             return Value{Ty, ret};
         }
 
         Value bitNot(Value val) const override {
             auto one = llvm::ConstantInt::get(*Ty, 1);
-            auto plusOne = builder()->CreateAdd(val, one);
-            auto negated = builder()->CreateNeg(plusOne, "bitneg");
+            auto plusOne = ir()->CreateAdd(val, one);
+            auto negated = ir()->CreateNeg(plusOne, "bitneg");
             return Value{Ty, negated};
         }
 
         Value logicalNot(Value val) const override {
             auto zero = llvm::ConstantInt::get(*Ty, 0);
-            return Value{Types::Bool, builder()->CreateICmpEQ(read(val), zero, "not")};
+            return Value{Types::Bool, ir()->CreateICmpEQ(read(val), zero, "not")};
         }
 
         Value asBool(Value value) const override {
             auto zero = llvm::ConstantInt::get(*Ty, 0);
-            return Value{Types::Bool, builder()->CreateICmpNE(read(value), zero, "bool")};
+            return Value{Types::Bool, ir()->CreateICmpNE(read(value), zero, "bool")};
         }
     };
 
@@ -406,11 +410,11 @@ namespace pepper {
             auto intType = bits > 32 ? *Types::Int64 : *Types::Int32;
             auto zero = llvm::ConstantInt::get(intType, 0);
             if (type->isIntegerTy()) {
-                return Value{Types::Bool, builder()->CreateICmpNE(value, zero, "bool")};
+                return Value{Types::Bool, ir()->CreateICmpNE(value, zero, "bool")};
             }
             if (type->isFloatingPointTy()) {
-                auto asInt = builder()->CreateFPToSI(value, *this);
-                return Value{Types::Bool, builder()->CreateICmpNE(asInt, zero, "bool")};
+                auto asInt = ir()->CreateFPToSI(value, *this);
+                return Value{Types::Bool, ir()->CreateICmpNE(asInt, zero, "bool")};
             }
             throw CompileError("Cannot convert from {0} to {0}", Types::toString(type), Types::toString(Ty));
         }
@@ -437,14 +441,14 @@ namespace pepper {
                 if (type->isIntegerTy()) {
                     const bool signedInt = true;
                     if (signedInt)
-                        cast = builder()->CreateSIToFP(value, *this);
+                        cast = ir()->CreateSIToFP(value, *this);
                     else
-                        cast = builder()->CreateUIToFP(value, *this);
+                        cast = ir()->CreateUIToFP(value, *this);
                 } else {
                     if (Ty->llvmType()->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
-                        cast = builder()->CreateFPExt(value, *this);
+                        cast = ir()->CreateFPExt(value, *this);
                     else
-                        cast = builder()->CreateFPTrunc(value, *this);
+                        cast = ir()->CreateFPTrunc(value, *this);
                 }
                 return Value{Ty, cast};
             }
@@ -453,64 +457,64 @@ namespace pepper {
         }
 
         Value add(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd")};
+            return Value{Ty, ir()->CreateFAdd(coerce(lhs), coerce(rhs), "fdd")};
         }
 
         Value sub(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateFSub(coerce(lhs), coerce(rhs), "fsub")};
+            return Value{Ty, ir()->CreateFSub(coerce(lhs), coerce(rhs), "fsub")};
         }
 
         Value mul(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateFMul(coerce(lhs), coerce(rhs), "fmul")};
+            return Value{Ty, ir()->CreateFMul(coerce(lhs), coerce(rhs), "fmul")};
         }
 
         Value div(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv")};
+            return Value{Ty, ir()->CreateFDiv(coerce(lhs), coerce(rhs), "fdiv")};
         }
 
         Value mod(Value lhs, Value rhs) const override {
-            return Value{Ty, builder()->CreateFRem(coerce(lhs), coerce(rhs), "frem")};
+            return Value{Ty, ir()->CreateFRem(coerce(lhs), coerce(rhs), "frem")};
         }
 
         Value less(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt")};
+            return Value{Types::Bool, ir()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt")};
         }
 
         Value lessEq(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole")};
+            return Value{Types::Bool, ir()->CreateFCmpOLE(coerce(lhs), coerce(rhs), "ole")};
         }
 
         Value greater(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt")};
+            return Value{Types::Bool, ir()->CreateFCmpOGT(coerce(lhs), coerce(rhs), "ogt")};
         }
 
         Value greaterEq(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge")};
+            return Value{Types::Bool, ir()->CreateFCmpOGE(coerce(lhs), coerce(rhs), "oge")};
         }
 
         Value equal(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq")};
+            return Value{Types::Bool, ir()->CreateFCmpOEQ(coerce(lhs), coerce(rhs), "oeq")};
         }
 
         Value notEqual(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, builder()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one")};
+            return Value{Types::Bool, ir()->CreateFCmpONE(coerce(lhs), coerce(rhs), "one")};
         }
 
         Value assign(Value lhs, Value rhs) const override {
-            builder()->CreateStore(coerce(rhs), lhs);
+            ir()->CreateStore(coerce(rhs), lhs);
             return lhs;
         }
 
         Value neg(Value val) const override {
-            return Value{Ty, builder()->CreateFNeg(coerce(val), "fneg")};
+            return Value{Ty, ir()->CreateFNeg(coerce(val), "fneg")};
         }
 
         Value asBool(Value value) const override {
-            auto intType = Ty->llvmType()->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(builder()->getContext())
-                                                                     : llvm::Type::getInt32Ty(builder()->getContext());
+            auto intType = Ty->llvmType()->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(ir()->getContext())
+                                                                     : llvm::Type::getInt32Ty(ir()->getContext());
             auto zero = llvm::ConstantInt::getFalse(intType);
-            auto valAsInt = builder()->CreateFPToSI(value, intType);
-            return Value{Types::Bool, builder()->CreateICmpNE(valAsInt, zero, "bool")};
+            auto valAsInt = ir()->CreateFPToSI(value, intType);
+            return Value{Types::Bool, ir()->CreateICmpNE(valAsInt, zero, "bool")};
         }
     };
 
