@@ -6,7 +6,7 @@
 
 #include "CodeGen/Value.h"
 #include "Core/Exceptions.h"
-#include "Frontend/Context.h"
+#include "Frontend/LLVMUtils.h"
 #include "Frontend/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Constants.h"
@@ -121,27 +121,6 @@ namespace pepper {
 
     Value TypeOps::asBool(Value) const {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Ty));
-    }
-
-    using llvm::cast;
-    using llvm::isa;
-
-    Ref<llvm::IRBuilderBase> ir() {
-        return Context::get().locals()->builder();
-    }
-
-    static Value read(Value value) {
-        if (isa<llvm::AllocaInst>(*value)) {
-            auto allocaInst = cast<llvm::AllocaInst>(value.V);
-            auto type = allocaInst->getAllocatedType();
-            return Value{value.Ty, ir()->CreateLoad(type, value)};
-        }
-        if (isa<llvm::GetElementPtrInst>(*value)) {
-            auto gep = cast<llvm::GetElementPtrInst>(value.V);
-            auto type = gep->getPointerOperandType();
-            return Value{value.Ty, ir()->CreateLoad(*value.Ty, value)};
-        }
-        return value;
     }
 
     class NativeTypeOps : public TypeOps {
