@@ -31,17 +31,11 @@ namespace pepper {
             return node ? codegen(node) : Value::Null();
         }
 
-        // General builder, normal insertion point
-        static Ref<llvm::IRBuilderBase> ir();
         static Ref<Scope> locals();
         static Ref<Scope> globals();
         static void pushFunction(Ref<UserFunction> function);
         static void pushScope(const Ident& name);
         static void popScope();
-
-        static llvm::Type* resolveType(Value value);
-        static Value read(Value value);
-        static Value zeroValue(Ref<Type> type);
 
         // Entry to polymorphic emit calls, use this to force generation of a node and its children
         Value codegen(Ref<ast::Node> node);

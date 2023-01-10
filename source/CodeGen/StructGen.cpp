@@ -18,7 +18,7 @@ namespace pepper {
     Value Codegen::emit(Ref<FieldDef> fieldDef) {
         auto st = Struct::get(fieldDef->Struct->Name);
         auto instance = locals()->findSymbol("this");
-        instance = read(instance);
+        instance = load(instance);
         auto fieldName = fieldDef->Name;
         auto field = st->getField(instance, fieldName);
         if (!field) {
@@ -41,7 +41,7 @@ namespace pepper {
         auto memberName = memberRef->identifier();
         auto field =
             Query(structDesc->fields()).find([&memberName](auto f) { return f.ParamName == memberName; }).value();
-        auto thisPtr = read(lhs);
+        auto thisPtr = load(lhs);
         auto member = structDesc->getMember(thisPtr, memberName);
         return Value{field.ParamType, member};
     }
@@ -141,7 +141,7 @@ namespace pepper {
             throw CompileError("Method {0} not found", call->Name);
         }
         Vector<Value> args;
-        thisRef = read(thisRef);
+        thisRef = load(thisRef);
         args.push_back(thisRef);
 
         const auto& callArgs = call->Args;

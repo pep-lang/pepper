@@ -4,6 +4,7 @@
 
 #include "AST/Block.h"
 #include "CodeGen/Codegen.h"
+#include "Frontend/LLVMUtils.h"
 #include "Frontend/Struct.h"
 #include "llvm/IR/BasicBlock.h"
 

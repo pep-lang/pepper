@@ -18,10 +18,6 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    Ref<llvm::IRBuilderBase> Codegen::ir() {
-        return Context::get().locals()->builder();
-    }
-
     Ref<Scope> Codegen::locals() {
         return Context::get().locals();
     }
@@ -40,43 +36,6 @@ namespace pepper {
 
     void Codegen::popScope() {
         Context::get().popScope();
-    }
-
-    using llvm::cast;
-    using llvm::isa;
-
-    llvm::Type* Codegen::resolveType(Value value) {
-        if (isa<llvm::AllocaInst>(*value.V)) {
-            auto allocaInst = cast<llvm::AllocaInst>(value.V);
-            return allocaInst->getAllocatedType();
-        }
-        if (isa<llvm::GetElementPtrInst>(*value.V)) {
-            auto gepInst = cast<llvm::GetElementPtrInst>(value.V);
-            return gepInst->getResultElementType();
-        }
-        return value->getType();
-    }
-
-    Value Codegen::read(Value value) {
-        if (isa<llvm::AllocaInst>(*value.V)) {
-            auto type = resolveType(value);
-            return Value{value.Ty, ir()->CreateLoad(type, value)};
-        }
-        if (isa<llvm::GetElementPtrInst>(*value.V)) {
-            auto type = resolveType(value);
-            return Value{value.Ty, ir()->CreateLoad(type, value)};
-        }
-        return value;
-    }
-
-    Value Codegen::zeroValue(Ref<Type> type) {
-        if (type->llvmType()->isIntegerTy())
-            return Value{type, llvm::ConstantInt::get(*type, 0)};
-        if (type->llvmType()->isFloatingPointTy())
-            return Value{type, llvm::ConstantFP::get(*type, 0.0f)};
-        if (type->llvmType()->isPointerTy())
-            return Value{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType()))};
-        throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 
     Value Codegen::emit(Ref<SymbolRef> variableRef) {

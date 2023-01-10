@@ -3,8 +3,9 @@
 //
 
 #include "AST/BinaryOps.h"
-#include "Codegen.h"
+#include "CodeGen/Codegen.h"
 #include "Core/Exceptions.h"
+#include "Frontend/LLVMUtils.h"
 #include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 
@@ -86,7 +87,8 @@ namespace pepper {
     }
 
     static Ref<Type> operandType(Ref<BinaryOp> op, Ref<Type> lhs, Ref<Type> rhs) {
-        if (lhs->llvmType()->isStructTy() || lhs->llvmType()->isPointerTy()) {
+        if ((lhs->isPointer() && lhs.as<PointerType>()->pointeeType()->isStruct()) ||
+            (rhs->isPointer() && rhs.as<PointerType>()->pointeeType()->isStruct())) {
             return structOperandType(op, lhs, rhs);
         }
         if (lhs->llvmType()->isIntegerTy() && lhs->llvmType()->isIntegerTy()) {
@@ -154,8 +156,8 @@ namespace pepper {
         }
         auto typeOps = opType->ops();
         auto mathOp = compoundOp(op);
-        auto lhsOperand = typeOps->coerce(read(lhs));
-        auto rhsOperand = typeOps->coerce(read(rhs));
+        auto lhsOperand = typeOps->coerce(lhs);
+        auto rhsOperand = typeOps->coerce(rhs);
         auto result = std::invoke(mathOp, typeOps, lhsOperand, rhsOperand);
         typeOps->assign(lhs, result);
         return lhs;
@@ -169,8 +171,8 @@ namespace pepper {
 
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
-        lhs = read(lhs);
-        rhs = read(rhs);
+        lhs = load(lhs);
+        rhs = load(rhs);
         auto opType = operandType(op, lhs.Ty, rhs.Ty);
         if (!opType) {
             throw InternalCompilerError("Unable to determine operand types for {0} {2} {1}",

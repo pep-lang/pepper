@@ -3,10 +3,11 @@
 //
 
 #include "AST/Functions.h"
-#include "Codegen.h"
+#include "CodeGen/Codegen.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Frontend/Function.h"
+#include "Frontend/LLVMUtils.h"
 #include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 
@@ -31,15 +32,6 @@ namespace pepper {
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
             llvm::Value* value = arg;
-            // struct arguments are passed as struct**, dereference one level since it is not legal (by design) to write
-            // back to the parameter pointer
-            if (type->isPointer() && param.ParamName != "this") {
-                auto pointee = type.as<PointerType>();
-                if (pointee->isStruct()) {
-                    auto ptr = ir()->CreateLoad(*type, arg);
-                    value = ptr;
-                }
-            }
             ir()->CreateStore(value, local);
             locals()->newSymbol(local);
         }
@@ -64,7 +56,7 @@ namespace pepper {
         auto function = locals()->functionTarget().as<UserFunction>();
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
-            auto returnValue = read(returnValueExpr);
+            auto returnValue = load(returnValueExpr);
             auto returnType = Types::get(ret->Type.toString());
             auto type = returnType->ops();
             auto rv = type->coerce(returnValue);
