@@ -476,6 +476,22 @@ namespace pepper {
             return Value{Ty, ir()->CreateFRem(coerce(lhs), coerce(rhs), "frem")};
         }
 
+        Value pow(Value lhs, Value rhs) const override {
+            auto floatOps = Types::Double->ops();
+            auto flhs = floatOps->coerce(lhs);
+            auto frhs = floatOps->coerce(rhs);
+            Vector<llvm::Type*> types = {
+                *Types::Double,
+            };
+            Vector<llvm::Value*> values = {
+                flhs,
+                frhs,
+            };
+
+            auto res = Value{Types::Double, ir()->CreateIntrinsic(llvm::Intrinsic::pow, types, values, nullptr, "pow")};
+            return Value{Ty, coerce(res)};
+        }
+
         Value less(Value lhs, Value rhs) const override {
             return Value{Types::Bool, ir()->CreateFCmpOLT(coerce(lhs), coerce(rhs), "olt")};
         }

@@ -83,6 +83,18 @@ TEST(FloatMath, Mod) {
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(FloatMath, Pow) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 3;
+            float y = 4.2;
+            float z = x ** y;
+            return z < 100.91 && z > 100.9;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(FloatMath, Negate) {
     const char* source = R"SOURCE(
         int test() {
