@@ -79,7 +79,7 @@ namespace pepper {
         // insert pointer types for all native types
         KnownTypes.erase("bool*");
         // llvm has no void*, use char* intead
-        VoidPtr = addType(Ref<Type>::New("void*", *KnownTypes["i8*"]));
+        VoidPtr = addType(Ref<PointerType>::New("void*", KnownTypes["i8*"]));
     }
 
     Ref<Type> Types::addType(Ref<Type> t, const Vector<Ident>& aliases) {
