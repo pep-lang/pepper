@@ -8,7 +8,6 @@
 #include "Codegen.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Struct.h"
 #include "Frontend/Types.h"
