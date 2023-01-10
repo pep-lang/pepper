@@ -78,6 +78,10 @@ namespace pepper {
         Ref<Type> pointeeType() const {
             return PointeeType;
         }
+
+        bool isPointer() const override {
+            return true;
+        }
     };
 
     class Types {
