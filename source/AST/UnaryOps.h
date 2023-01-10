@@ -48,4 +48,52 @@ namespace pepper::ast {
       public:
         using UnaryOp::UnaryOp;
     };
+
+    struct PreIncrement : public UnaryOp {
+        DECLARE_RTTI(PreIncrement, UnaryOp);
+        AST_NODE_POD_CLONE(PreIncrement);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
+
+    struct PostIncrement : public UnaryOp {
+        DECLARE_RTTI(PostIncrement, UnaryOp);
+        AST_NODE_POD_CLONE(PostIncrement);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
+
+    struct PreDecrement : public UnaryOp {
+        DECLARE_RTTI(PreDecrement, UnaryOp);
+        AST_NODE_POD_CLONE(PreDecrement);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
+
+    struct PostDecrement : public UnaryOp {
+        DECLARE_RTTI(PostDecrement, UnaryOp);
+        AST_NODE_POD_CLONE(PostDecrement);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
+
+    struct LogicalNot : public UnaryOp {
+        DECLARE_RTTI(LogicalNot, UnaryOp);
+        AST_NODE_POD_CLONE(LogicalNot);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
+
+    struct BitNot : public UnaryOp {
+        DECLARE_RTTI(BitNot, UnaryOp);
+        AST_NODE_POD_CLONE(BitNot);
+
+      public:
+        using UnaryOp::UnaryOp;
+    };
 } // namespace pepper::ast

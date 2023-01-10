@@ -186,19 +186,43 @@ namespace pepper {
         return result;
     }
 
+    static auto unaryOp(Ref<UnaryOp> op) {
+        if (op->is<Plus>())
+            return &TypeOps::pos;
+        if (op->is<Minus>())
+            return &TypeOps::neg;
+        if (op->is<PreIncrement>())
+            return &TypeOps::preIncrement;
+        if (op->is<PostIncrement>())
+            return &TypeOps::postIncrement;
+        if (op->is<PreDecrement>())
+            return &TypeOps::preDecrement;
+        if (op->is<PostDecrement>())
+            return &TypeOps::postDecrement;
+        if (op->is<LogicalNot>())
+            return &TypeOps::logicalNot;
+        if (op->is<BitNot>())
+            return &TypeOps::bitNot;
+        throw InternalCompilerError("Unknown unary op: {0}", op->rtti()->name());
+    }
+
     Value Codegen::emit(Ref<UnaryOp> op) {
-        assert(op->is<Minus>());
-        if (op->Operand->is<IntegerLiteral>()) {
-            auto intLiteral = op->Operand.as<IntegerLiteral>();
-            return codegen(Ref<IntegerLiteral>::New(-intLiteral->Value));
-        }
-        if (op->Operand->is<FloatLiteral>()) {
-            auto floatLiteral = op->Operand.as<FloatLiteral>();
-            return codegen(Ref<FloatLiteral>::New(-floatLiteral->Value));
+        if (op->is<Minus>()) {
+            if (op->Operand->is<IntegerLiteral>()) {
+                auto intLiteral = op->Operand.as<IntegerLiteral>();
+                return codegen(Ref<IntegerLiteral>::New(-intLiteral->Value));
+            }
+            if (op->Operand->is<FloatLiteral>()) {
+                auto floatLiteral = op->Operand.as<FloatLiteral>();
+                return codegen(Ref<FloatLiteral>::New(-floatLiteral->Value));
+            }
         }
 
-        assert(false); // TODO
         auto operand = codegen(op->Operand);
-        operand = read(operand);
+        auto type = operand.Ty;
+        auto ops = type->ops();
+        auto typeOp = unaryOp(op);
+        auto result = std::invoke(typeOp, ops, operand);
+        return result;
     }
 } // namespace pepper

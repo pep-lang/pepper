@@ -56,6 +56,14 @@ namespace pepper {
         virtual Value bitAnd(Value lhs, Value rhs) const;
         virtual Value bitXor(Value lhs, Value rhs) const;
         virtual Value bitOr(Value lhs, Value rhs) const;
+        virtual Value neg(Value val) const;
+        virtual Value pos(Value val) const;
+        virtual Value preIncrement(Value val) const;
+        virtual Value preDecrement(Value val) const;
+        virtual Value postIncrement(Value val) const;
+        virtual Value postDecrement(Value val) const;
+        virtual Value bitNot(Value val) const;
+        virtual Value logicalNot(Value val) const;
         virtual Value asBool(Value value) const;
     };
 

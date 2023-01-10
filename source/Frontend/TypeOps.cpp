@@ -87,6 +87,38 @@ namespace pepper {
         throw CompileError("Type {0} does not support bitwise or", Types::toString(Ty));
     }
 
+    Value TypeOps::neg(Value val) const {
+        throw CompileError("Type {0} does not support unary negation", Types::toString(Ty));
+    }
+
+    Value TypeOps::pos(Value val) const {
+        throw CompileError("Type {0} does not support unary positive", Types::toString(Ty));
+    }
+
+    Value TypeOps::preIncrement(Value val) const {
+        throw CompileError("Type {0} does not support pre-increment", Types::toString(Ty));
+    }
+
+    Value TypeOps::preDecrement(Value val) const {
+        throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
+    }
+
+    Value TypeOps::postIncrement(Value val) const {
+        throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
+    }
+
+    Value TypeOps::postDecrement(Value val) const {
+        throw CompileError("Type {0} does not support post-decrement", Types::toString(Ty));
+    }
+
+    Value TypeOps::bitNot(Value val) const {
+        throw CompileError("Type {0} does not support bitwise not", Types::toString(Ty));
+    }
+
+    Value TypeOps::logicalNot(Value val) const {
+        throw CompileError("Type {0} does not support logical not", Types::toString(Ty));
+    }
+
     Value TypeOps::asBool(Value value) const {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Ty));
     }
@@ -156,6 +188,12 @@ namespace pepper {
             auto zero = llvm::ConstantInt::getFalse(*Ty);
             auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
             return Value{Types::Bool, builder()->CreateICmpNE(zero, valAsInt, "bool")};
+        }
+
+        Value logicalNot(Value value) const override {
+            auto zero = llvm::ConstantInt::getFalse(*Ty);
+            auto valAsInt = builder()->CreatePtrToInt(value, *Types::Int64);
+            return Value{Types::Bool, builder()->CreateICmpEQ(zero, valAsInt, "not")};
         }
     };
 
@@ -292,6 +330,60 @@ namespace pepper {
             return Value{Ty, builder()->CreateOr(coerce(lhs), coerce(rhs), "or")};
         }
 
+        Value neg(Value val) const override {
+            return Value{Ty, builder()->CreateNeg(coerce(val), "neg")};
+        }
+
+        Value pos(Value val) const override {
+            return Value{Ty, coerce(val), "pos"};
+        }
+
+        Value preIncrement(Value val) const override {
+            auto one = llvm::ConstantInt::get(*Ty, 1);
+            auto newVal = builder()->CreateAdd(read(val), one, "preinc");
+            builder()->CreateStore(newVal, val);
+            return Value{Ty, newVal};
+        }
+
+        Value preDecrement(Value val) const override {
+            auto one = llvm::ConstantInt::get(*Ty, 1);
+            auto newVal = builder()->CreateSub(read(val), one, "predec");
+            builder()->CreateStore(newVal, val);
+            return Value{Ty, newVal};
+        }
+
+        Value postIncrement(Value val) const override {
+            auto one = llvm::ConstantInt::get(*Ty, 1);
+            auto ret = builder()->CreateAlloca(*Ty);
+            auto oldVal = read(val);
+            auto newVal = builder()->CreateAdd(oldVal, one, "postinc");
+            builder()->CreateStore(oldVal, ret);
+            builder()->CreateStore(newVal, val);
+            return Value{Ty, ret};
+        }
+
+        Value postDecrement(Value val) const override {
+            auto one = llvm::ConstantInt::get(*Ty, 1);
+            auto ret = builder()->CreateAlloca(*Ty);
+            auto oldVal = read(val);
+            auto newVal = builder()->CreateSub(oldVal, one, "postdec");
+            builder()->CreateStore(oldVal, ret);
+            builder()->CreateStore(newVal, val);
+            return Value{Ty, ret};
+        }
+
+        Value bitNot(Value val) const override {
+            auto one = llvm::ConstantInt::get(*Ty, 1);
+            auto plusOne = builder()->CreateAdd(val, one);
+            auto negated = builder()->CreateNeg(plusOne, "bitneg");
+            return Value{Ty, negated};
+        }
+
+        Value logicalNot(Value val) const override {
+            auto zero = llvm::ConstantInt::get(*Ty, 0);
+            return Value{Types::Bool, builder()->CreateICmpEQ(read(val), zero, "not")};
+        }
+
         Value asBool(Value value) const override {
             auto zero = llvm::ConstantInt::get(*Ty, 0);
             return Value{Types::Bool, builder()->CreateICmpNE(read(value), zero, "bool")};
@@ -407,6 +499,10 @@ namespace pepper {
         Value assign(Value lhs, Value rhs) const override {
             builder()->CreateStore(coerce(rhs), lhs);
             return lhs;
+        }
+
+        Value neg(Value val) const override {
+            return Value{Ty, builder()->CreateFNeg(coerce(val), "fneg")};
         }
 
         Value asBool(Value value) const override {

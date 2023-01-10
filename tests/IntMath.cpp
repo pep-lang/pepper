@@ -274,3 +274,47 @@ TEST(IntMath, LogicalOr) {
     )SOURCE";
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(IntMath, PreIncrement) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            int y = ++x;
+            return y == x;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, PreDecrement) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            int y = --x;
+            return y == x;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, PostIncrement) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            int y = x++;
+            return x;
+        }
+    )SOURCE";
+    EXPECT_EQ(65, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(IntMath, PostDecrement) {
+    const char* source = R"SOURCE(
+        int test() {
+            int x = 64;
+            int y = x--;
+            return y - x;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}

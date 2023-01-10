@@ -635,15 +635,65 @@ namespace pepper {
             builder->insert(branch);
         }
 
+        template <typename N>
+        void beginUnaryOp() {
+            lvaluePush(Pending::New<N>());
+        }
+
+        template <typename N>
+        void endUnaryOp() {
+            lvaluePop<N>();
+            auto operand = rvaluePop<Expression>();
+            auto op = builder->New<N>(operand);
+            rvaluePush(op);
+        }
+
+        void enterUnaryPlus(PepperParser::UnaryPlusContext*) override {
+            beginUnaryOp<Plus>();
+        }
+
+        void exitUnaryPlus(PepperParser::UnaryPlusContext*) override {
+            endUnaryOp<Plus>();
+        }
+
         void enterUnaryMinus(PepperParser::UnaryMinusContext*) override {
-            lvaluePush(Pending::New<Minus>(Ref<Expression>{}));
+            beginUnaryOp<Minus>();
         }
 
         void exitUnaryMinus(PepperParser::UnaryMinusContext*) override {
-            auto minus = lvaluePop<Minus>();
-            auto operand = rvaluePop<Expression>();
-            minus->Operand = operand;
-            rvaluePush(minus);
+            endUnaryOp<Minus>();
+        }
+
+        void enterPreIncrement(PepperParser::PreIncrementContext*) override {
+            beginUnaryOp<PreIncrement>();
+        }
+
+        void exitPreIncrement(PepperParser::PreIncrementContext*) override {
+            endUnaryOp<PreIncrement>();
+        }
+
+        void enterPostIncrement(PepperParser::PostIncrementContext*) override {
+            beginUnaryOp<PostIncrement>();
+        }
+
+        void exitPostIncrement(PepperParser::PostIncrementContext*) override {
+            endUnaryOp<PostIncrement>();
+        }
+
+        void enterPreDecrement(PepperParser::PreDecrementContext*) override {
+            beginUnaryOp<PreDecrement>();
+        }
+
+        void exitPreDecrement(PepperParser::PreDecrementContext*) override {
+            endUnaryOp<PreDecrement>();
+        }
+
+        void enterPostDecrement(PepperParser::PostDecrementContext*) override {
+            beginUnaryOp<PostDecrement>();
+        }
+
+        void exitPostDecrement(PepperParser::PostDecrementContext*) override {
+            endUnaryOp<PostDecrement>();
         }
 
         template <typename Op>
