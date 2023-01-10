@@ -46,3 +46,50 @@ TEST(FloatMath, Sub) {
     )SOURCE";
     EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(FloatMath, Mul) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 0.42;
+            float y = 0.1;
+            float z = x * y;
+            return z < 0.043 && z > 0.041;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(FloatMath, Div) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 0.42;
+            float y = 0.1;
+            float z = x / y;
+            return z < 4.2001 && z > 4.1999;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(FloatMath, Mod) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 0.42;
+            float y = 0.05;
+            float z = x % y;
+            return z < 0.021 && z > 0.019;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(FloatMath, Negate) {
+    const char* source = R"SOURCE(
+        int test() {
+            float x = 0.42;
+            float y = -x;
+            return y < 0.41;
+        }
+    )SOURCE";
+    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+}
