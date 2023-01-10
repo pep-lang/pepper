@@ -14,11 +14,10 @@
 #include "llvm/IR/Type.h"
 
 namespace pepper {
-    class StructType;
 
     class Struct : public std::enable_shared_from_this<Struct> {
         Ident Identifier;
-        Ref<StructType> StructTy;
+        Ref<class StructType> StructTy;
         Ref<PointerType> RefTy;
         Ref<Function> NewInstance;
         std::map<Ident, Param> Fields;

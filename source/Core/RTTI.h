@@ -102,7 +102,7 @@ namespace pepper {
     using rtti_type_t = typename RttiType<T>::type;
 
     template <typename T>
-    concept HasRtti = requires(T t) { t.rtti(); };
+    concept HasRtti = requires(T* t) { t->rtti(); };
 
 } // namespace pepper
 
