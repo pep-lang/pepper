@@ -105,32 +105,34 @@ namespace pepper::ast {
         Acquire->Body->Items = {
             // if (ref == this)
             //     return
-            Ref<If>::New(Ref<Equal>::New(Ref<SymbolRef>::New("ref"), Ref<ThisRef>::New()),
-                         Ref<Block>::New("if",
-                                         Vector<Ref<Node>>{
-                                             Ref<Return>::New(),
-                                         })),
-            // if (ref)
-            //     ref.__release()
-            Ref<If>::New(
-                Ref<NotEqual>::New(Ref<SymbolRef>::New("ref"), PointerLiteral::Null()),
-                Ref<Block>::New("if",
-                                Vector<Ref<Node>>{
-                                    Ref<MethodCall>::New(TypeName::Void, Ref<SymbolRef>::New("ref"), "__release"),
-                                })),
-            // this.__refcount += 1
-            Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
+            //            Ref<If>::New(Ref<Equal>::New(Ref<SymbolRef>::New("ref"), Ref<ThisRef>::New()),
+            //                         Ref<Block>::New("if",
+            //                                         Vector<Ref<Node>>{
+            //                                             Ref<Return>::New(),
+            //                                         })),
+            //            // if (ref)
+            //            //     ref.__release()
+            //            Ref<If>::New(
+            //                Ref<NotEqual>::New(Ref<SymbolRef>::New("ref"), PointerLiteral::Null()),
+            //                Ref<Block>::New("if",
+            //                                Vector<Ref<Node>>{
+            //                                    Ref<MethodCall>::New(TypeName::Void, Ref<SymbolRef>::New("ref"),
+            //                                    "__release"),
+            //                                })),
+            //            // this.__refcount += 1
+            //            Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
         };
         Release->Body->Items = {
             // __refcount -= 1
-            Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(-1))),
-            // if (this.__refcount == 0)
-            //     this.__dtor()
-            Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
-                         Ref<Block>::New("if",
-                                         Vector<Ref<Node>>{
-                                             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__dtor"),
-                                         })),
+            //            Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(-1))),
+            //            // if (this.__refcount == 0)
+            //            //     this.__dtor()
+            //            Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
+            //                         Ref<Block>::New("if",
+            //                                         Vector<Ref<Node>>{
+            //                                             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(),
+            //                                             "__dtor"),
+            //                                         })),
         };
     }
 

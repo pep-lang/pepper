@@ -42,8 +42,8 @@ namespace pepper {
         auto field =
             Query(structDesc->fields()).find([&memberName](auto f) { return f.ParamName == memberName; }).value();
         auto thisPtr = load(lhs);
-        auto member = structDesc->getMember(thisPtr, memberName);
-        return Value{field.ParamType, member};
+        auto member = Value{field.ParamType, structDesc->getMember(thisPtr, memberName)};
+        return member;
     }
 
     void Codegen::emit(Ref<StructDef> structDef) {

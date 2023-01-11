@@ -211,6 +211,25 @@ int test() {
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(Structs, RefArgument) {
+    const char* source = R"SOURCE(
+struct Test {
+    int x = 2;
+};
+
+int getX(Test t) {
+    return t.x;
+}
+
+int test() {
+    var t = Test();
+    var x = getX(t);
+    return x;
+}
+    )SOURCE";
+    EXPECT_EQ(2, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(Structs, RefStorage) {
     const char* source = R"SOURCE(
 struct Test {

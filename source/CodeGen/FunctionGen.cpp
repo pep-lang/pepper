@@ -84,7 +84,9 @@ namespace pepper {
 
         const auto& callArgs = call->Args;
         for (const auto& argExpr : callArgs) {
-            args.push_back(codegen(argExpr));
+            auto arg = codegen(argExpr);
+            arg = load(arg);
+            args.push_back(arg);
         }
         return Value{function->returnType(), function->call(args)};
     }

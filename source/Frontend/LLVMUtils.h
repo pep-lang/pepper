@@ -76,7 +76,6 @@ namespace pepper {
             if (pointee->isStruct()) {
                 return Value{pointee, ir()->CreateLoad(*type, value)};
             }
-            return Value{type, ir()->CreateLoad(*type, value)};
         }
         return value;
     }
