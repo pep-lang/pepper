@@ -77,10 +77,6 @@ namespace pepper {
     class StructTypeOps : public TypeOps {
         DECLARE_RTTI(StructTypeOps, TypeOps);
 
-        static Ref<llvm::IRBuilderBase> ir() {
-            return Context::get().locals()->builder();
-        }
-
         const Struct* Struct;
 
       public:
@@ -89,33 +85,8 @@ namespace pepper {
             Struct = Ty.as<StructType>()->StructDesc;
         }
 
-        Value coerce(Value value) const override {
-            if (value.Ty == Ty) {
-                return value;
-            }
+        Value coerce(Value) const override {
             throw CompileError("Coercion between structs is not supported");
-        }
-
-        Value equal(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
-        }
-
-        Value notEqual(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs))};
-        }
-
-        Value assign(Value lhs, Value rhs) const override {
-            auto acquire = Struct->getMethod("__acquire");
-            // rhs.__acquire(lhs), i.e. rhs is being acquired by lhs, lhs may have to release its prior value
-            ir()->CreateCall(acquire->getFunctionType(), acquire, {rhs, lhs});
-            ir()->CreateStore(coerce(rhs), lhs);
-            return lhs;
-        }
-
-        Value asBool(Value value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*Ty);
-            auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
-            return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
         }
     };
 
