@@ -160,8 +160,8 @@ namespace pepper {
         }
 
         Value asBool(Value value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*Ty);
-            auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
+            auto zero = zeroValue(Ty);
+            auto valAsInt = load(value);
             return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
         }
 
