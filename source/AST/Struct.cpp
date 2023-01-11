@@ -196,7 +196,6 @@ namespace pepper::ast {
                                   Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
                                                          Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
-            Ref<SymbolRef>::New("this"),
             Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
         };
         NewInstance->Body->Items = body;
