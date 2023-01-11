@@ -22,7 +22,7 @@ namespace pepper {
     }
 
     void Codegen::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
-        PEP_TRACE(TraceChannel::Codegen, indent(funcDef->toString(), 2));
+        PEP_TRACE(TraceChannel::Codegen, llvm::formatv("Generate {0}...", funcDef->Name));
         pushFunction(function);
 
         // Allocate parameters
