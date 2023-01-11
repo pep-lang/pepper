@@ -140,6 +140,7 @@ namespace pepper {
         }
 
         Value coerce(Value value) const override {
+            value = load(value);
             if (value.Ty->llvmType()->isPointerTy()) {
                 return value;
             }

@@ -33,8 +33,7 @@ namespace pepper {
             auto arg = Value(param.ParamType, llvmFunction->getArg(paramIdx));
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
-            llvm::Value* value = arg;
-            ir()->CreateStore(value, local);
+            ir()->CreateStore(arg, local);
             locals()->newSymbol(local);
         }
 
