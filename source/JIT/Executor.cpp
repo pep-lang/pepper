@@ -113,11 +113,3 @@ namespace pepper {
         return OrcExecutor::Create();
     }
 } // namespace pepper
-
-extern "C" {
-    void debug_ptr(const void* ptr, const char* name) {
-        void* ptr2 = *(void**)ptr;
-        void* ptr3 = *(void**)ptr2;
-        printf("%s: %p -> %p -> %p\n", name, ptr, ptr2, ptr3);
-    }
-}

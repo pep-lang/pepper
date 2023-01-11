@@ -3,16 +3,13 @@
 //
 
 #include "TestUtils.h"
-#include <sstream>
 
 #include "Compiler/Compiler.h"
 #include "Compiler/Options.h"
 #include "Core/Messages.h"
-#include "Frontend/ModuleContext.h"
 #include "JIT/Executor.h"
+#include "Support.h"
 #include "gtest/gtest.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace TestUtils {
@@ -23,6 +20,7 @@ namespace TestUtils {
     }
 
     int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry) {
+        SupportInit();
         Messages::SetTraceChannels(TraceChannel::ALL);
         auto sourceStream = std::make_unique<std::istringstream>(source);
         auto options = Options::Defaults();
