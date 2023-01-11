@@ -93,6 +93,8 @@ namespace pepper {
     }
 
     Value Codegen::codegen(Ref<Node> node) {
+        PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
+
         Value value;
         if (node->is<BinaryOp>())
             value = emit(node.as<BinaryOp>());
