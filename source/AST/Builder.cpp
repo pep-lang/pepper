@@ -47,9 +47,13 @@ namespace pepper::ast {
             auto globals = Ref<Scope>::New("Global");
             ScopeStack.emplace_back(globals); // global scope
             globals->Functions["debug_ptr"] = Ref<ExternFunctionDef>::New(
-                TypeName("void"),
+                TypeName::Void,
                 "debug_ptr",
                 Params{{"ptr", TypeName::VoidPtr}, {"name", TypeName{TypeName::Int8.Name + "*"}}});
+            globals->Functions["test_assert"] =
+                Ref<ExternFunctionDef>::New(TypeName::Void,
+                                            "test_assert",
+                                            Params{{"condition", TypeName::Bool}, {"message", TypeName{"u8*"}}});
         }
 
         [[nodiscard]] Ref<FunctionDef> functionTarget() const override {

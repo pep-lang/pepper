@@ -21,5 +21,7 @@ namespace pepper {
         Functions["free"] = Ref<Function>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
         Functions["debug_ptr"] = Ref<Function>::New(
             "debug_ptr", Types::Void, Params{{"ptr", Types::VoidPtr}, {"name", Types::Int8->pointer()}});
+        Functions["test_assert"] = Ref<Function>::New(
+            "test_assert", Types::Void, Params{{"condition", Types::Bool}, {"message", Types::UInt8->pointer()}});
     }
 } // namespace pepper

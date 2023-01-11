@@ -19,8 +19,12 @@ namespace TestUtils {
         return llvm::formatv("{0}.{1}", ti->test_suite_name(), ti->name());
     }
 
+    void AssertTrap(bool condition, const char* msg) {
+        ASSERT_TRUE(condition) << msg;
+    }
+
     int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry) {
-        SupportInit();
+        SupportInit(AssertTrap);
         Messages::SetTraceChannels(TraceChannel::ALL);
         auto sourceStream = std::make_unique<std::istringstream>(source);
         auto options = Options::Defaults();
