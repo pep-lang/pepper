@@ -67,10 +67,18 @@ namespace pepper {
             return nullptr;
         }
 
-        void rvaluePush(Ref<Node> val) {
+        bool rvaluePush(Ref<Node> val) {
             // Only bother tracking this rvalue if there is a pending l-value on the stack to receive it
-            if (lvaluePeek<Pending>() || lvaluePeek<Node>())
+            if (lvaluePeek<Pending>() || lvaluePeek<Node>()) {
                 builder->pushRValue(std::move(val));
+                return true;
+            }
+            return false;
+        }
+
+        void rvaluePushOrInsert(Ref<Node> val) {
+            if (rvaluePush(val)) return;
+            builder->insert(val);
         }
 
         template <typename N>
@@ -292,6 +300,10 @@ namespace pepper {
                 }
                 rvaluePush(builder->New<StringLiteral>(stringLiteral));
                 return;
+            }
+
+            if (literal->Null()) {
+                rvaluePush(PointerLiteral::Null());
             }
         }
 
@@ -645,7 +657,7 @@ namespace pepper {
             lvaluePop<N>();
             auto operand = rvaluePop<Expression>();
             auto op = builder->New<N>(operand);
-            rvaluePush(op);
+            rvaluePushOrInsert(op);
         }
 
         void enterUnaryPlus(PepperParser::UnaryPlusContext*) override {
@@ -889,7 +901,7 @@ namespace pepper {
             auto op = lvaluePop<Op>();
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
-            builder->insert(builder->New<Op>(lhs, rhs));
+            rvaluePushOrInsert(builder->New<Op>(lhs, rhs));
         }
 
         void enterAssignment(PepperParser::AssignmentContext*) override {

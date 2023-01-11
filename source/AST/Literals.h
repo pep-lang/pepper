@@ -112,7 +112,7 @@ namespace pepper::ast {
 
         const uint64_t Value;
 
-        explicit PointerLiteral(uint64_t value)
+        explicit PointerLiteral(uint64_t value = 0)
             : Value(value) {
         }
 

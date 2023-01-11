@@ -236,6 +236,7 @@ literal
     : BooleanLiteral
     | StringLiteral+
     | numericLiteral
+    | Null
     ;
 
 numericLiteral
@@ -302,6 +303,7 @@ For : 'for';
 If : 'if';
 In: 'in';
 New: 'new';
+Null: '__null';
 Or: 'or';
 Return : 'return';
 Static : 'static';
