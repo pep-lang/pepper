@@ -5,6 +5,7 @@
 #include "AST/Functions.h"
 #include "CodeGen/Codegen.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/Query.h"
 #include "Frontend/Function.h"
 #include "Frontend/LLVMUtils.h"
@@ -21,6 +22,7 @@ namespace pepper {
     }
 
     void Codegen::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
+        PEP_TRACE(TraceChannel::Codegen, indent(funcDef->toString(), 2));
         pushFunction(function);
 
         // Allocate parameters
@@ -28,7 +30,7 @@ namespace pepper {
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
             auto type = param.ParamType;
-            auto arg = llvmFunction->getArg(paramIdx);
+            auto arg = Value(param.ParamType, llvmFunction->getArg(paramIdx));
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
             llvm::Value* value = arg;
