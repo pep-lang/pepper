@@ -14,11 +14,13 @@ namespace pepper {
 
     void Messages::report(Error&& msg) {
         llvm::errs() << msg.message() << "\n";
+        llvm::errs().flush();
         Errors.emplace_back(std::move(msg));
     }
 
     void Messages::report(Warning&& msg) {
         llvm::outs() << msg.message() << "\n";
+        llvm::outs().flush();
         Warnings.emplace_back(std::move(msg));
     }
 
@@ -26,5 +28,6 @@ namespace pepper {
         const auto& indent = Indents[channel];
         auto output = indent + replace_all(msg, "\n", "\n" + indent);
         llvm::outs() << output << "\n";
+        llvm::outs().flush();
     }
 } // namespace pepper
