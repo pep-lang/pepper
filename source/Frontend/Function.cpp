@@ -3,6 +3,7 @@
 
 #include "Core/Exceptions.h"
 #include "Frontend/Context.h"
+#include "Frontend/Struct.h"
 #include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/GlobalValue.h"
@@ -68,5 +69,21 @@ namespace pepper {
     llvm::BasicBlock* UserFunction::appendBlock(const Ident& name) {
         auto block = llvm::BasicBlock::Create(Func->getContext(), name, Func, Return);
         return block;
+    }
+
+    bool UserFunction::countArgRefs() const {
+        return false;
+    }
+
+    bool Method::countArgRefs() const {
+        if (!UserFunction::countArgRefs())
+            return false;
+
+        if (Identifier.find(".__") != std::string::npos)
+            return true;
+        if (Identifier == This->name())
+            return true;
+
+        return true;
     }
 } // namespace pepper

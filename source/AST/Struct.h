@@ -143,6 +143,18 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
+    struct ThisDef : public Symbol {
+        DECLARE_RTTI(ThisDef, Symbol)
+        AST_NODE_POD_CLONE(ThisDef);
+
+        Ref<Expression> Default;
+
+        ThisDef(const TypeName& structType, Ref<Expression> defaultValue = nullptr)
+            : Symbol(structType, "this")
+            , Default(defaultValue) {
+        }
+    };
+
     struct ThisRef : public SymbolRef {
         DECLARE_RTTI(ThisRef, SymbolRef);
         AST_NODE_POD_CLONE(ThisRef);

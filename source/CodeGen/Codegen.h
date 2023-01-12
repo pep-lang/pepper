@@ -43,6 +43,7 @@ namespace pepper {
         // individual AST -> IR transforms
         Value emit(Ref<ast::SymbolRef> variableRef);
         Value emit(Ref<ast::VariableDef> variableDef);
+        Value emit(Ref<ast::ThisDef> thisDef);
         Value emit(Ref<ast::PointerLiteral> pointerLiteral);
         Value emit(Ref<ast::StringLiteral> stringLiteral);
         Value emit(Ref<ast::IntegerLiteral> intLiteral);

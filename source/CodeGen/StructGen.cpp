@@ -10,6 +10,7 @@
 #include "Core/Messages.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Struct.h"
+#include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 
 namespace pepper {
@@ -27,10 +28,13 @@ namespace pepper {
         }
         auto type = Types::get(fieldDef->Type.toString());
         auto value = maybeCodegen(fieldDef->Default);
-        if (!value) {
+        if (value) {
+            type->ops()->init(field, value);
+        } else {
             value = zeroValue(type);
+            ir()->CreateStore(value, field);
         }
-        ir()->CreateStore(value, field);
+
         return Value{type, field};
     }
 
@@ -126,6 +130,22 @@ namespace pepper {
                   "StructDef {0} -> {1}",
                   structDef->Name,
                   toString(structDesc->structType()->llvmType()));
+    }
+
+    Value Codegen::emit(Ref<ThisDef> thisDef) {
+        auto typeName = thisDef->Type;
+        auto type = Types::get(typeName.toString());
+        if (!type) {
+            throw CompileError(thisDef->Source, "Unknown type for this: {0}", typeName.toString());
+        }
+        auto value = Value(type, ir()->CreateAlloca(*type, nullptr, "this"), "this");
+        auto defaultValue = maybeCodegen(thisDef->Default);
+        if (!defaultValue)
+            throw InternalCompilerError("{0} this does not have an initial value", typeName.toString());
+        // Intentionally skip assign/init, to avoid refcount/order shenanigans
+        ir()->CreateStore(defaultValue, value);
+        locals()->newSymbol(value);
+        return value;
     }
 
     Value Codegen::emit(Ref<ThisRef>) {

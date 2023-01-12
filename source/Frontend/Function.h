@@ -72,6 +72,8 @@ namespace pepper {
 
         UserFunction(const Ident& name, Ref<Type> returnType, const Params& params = Params());
 
+        virtual bool countArgRefs() const;
+
         llvm::BasicBlock* appendBlock(const Ident& name = {});
     };
 
@@ -87,6 +89,8 @@ namespace pepper {
             : UserFunction(name, returnType, params)
             , This(st) {
         }
+
+        bool countArgRefs() const override;
     };
 
 } // namespace pepper

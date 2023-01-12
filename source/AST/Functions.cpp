@@ -69,5 +69,7 @@ namespace pepper::ast {
         Ref<ExternFunctionDef>::New(TypeName("void*"), "malloc", Params{{"size", TypeName("u64")}});
     Ref<ExternFunctionDef> ExternFunctionDef::Free =
         Ref<ExternFunctionDef>::New(TypeName("void"), "free", Params{{"ptr", TypeName("void*")}});
+    Ref<ExternFunctionDef> ExternFunctionDef::TraceInt = Ref<ExternFunctionDef>::New(
+        TypeName::Void, "trace_int", Params{{"value", TypeName::Int64}, {"message", TypeName{"u8*"}}});
 
 } // namespace pepper::ast

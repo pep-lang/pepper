@@ -34,8 +34,8 @@ namespace pepper {
                 if (hasJump)
                     ir()->SetInsertPoint(llvm::cast<llvm::Instruction>(lastInstr.V));
                 for (auto& ref : llvm::reverse(localRefs)) {
-                    auto type = ref.Ty.template as<StructType>();
-                    auto release = type->StructDesc->method("__release");
+                    auto type = ref.Ty.template as<RefType>();
+                    auto release = type->structType()->StructDesc->method("__release");
                     release->call({ref});
                 }
             }

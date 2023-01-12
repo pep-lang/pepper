@@ -33,7 +33,13 @@ namespace pepper {
             auto arg = Value(param.ParamType, llvmFunction->getArg(paramIdx));
             auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
             auto local = Value(type, addr, param.ParamName);
-            ir()->CreateStore(arg, local);
+            // Special methods use raw stores to avoid ref-counting getting in the way
+            if (function->countArgRefs()) {
+                type->ops()->init(local, arg);
+            } else {
+                ir()->CreateStore(arg, local);
+            }
+
             locals()->newSymbol(local);
         }
 
@@ -74,13 +80,6 @@ namespace pepper {
             throw CompileError(call->Source, "Function {0} not found", call->Target->Name);
         }
         Vector<Value> args;
-        if (function->is<Method>()) {
-            auto thisRef = locals()->findSymbol("this");
-            assert(thisRef);
-            thisRef = read(thisRef);
-            args.push_back(thisRef);
-        }
-
         const auto& callArgs = call->Args;
         for (const auto& argExpr : callArgs) {
             auto arg = codegen(argExpr);

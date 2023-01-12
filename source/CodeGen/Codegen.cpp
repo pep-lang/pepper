@@ -55,12 +55,14 @@ namespace pepper {
         auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
 
         auto defaultValue = maybeCodegen(variableDef->Default);
-        if (!defaultValue)
+        if (defaultValue) {
+            auto typeOps = type->ops();
+            typeOps->init(value, defaultValue);
+        } else {
             defaultValue = zeroValue(type);
+            ir()->CreateStore(defaultValue, value);
+        }
 
-        auto typeOps = type->ops();
-        auto coercedValue = typeOps->coerce(defaultValue);
-        ir()->CreateStore(coercedValue, value);
         locals()->newSymbol(value);
         return value;
     }
@@ -71,12 +73,14 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<IntegerLiteral> intLiteral) {
-        auto value = Value(Types::Int64, llvm::ConstantInt::get(*Types::Int64, intLiteral->Value));
+        auto type = Types::get(intLiteral->type().Name);
+        auto value = Value(type, llvm::ConstantInt::get(*type, intLiteral->Value));
         return value;
     }
 
     Value Codegen::emit(Ref<FloatLiteral> floatLiteral) {
-        auto value = Value(Types::Double, llvm::ConstantFP::get(*Types::Double, floatLiteral->Value));
+        auto type = Types::get(floatLiteral->type().Name);
+        auto value = Value(type, llvm::ConstantFP::get(*type, floatLiteral->Value));
         return value;
     }
 
@@ -108,6 +112,8 @@ namespace pepper {
             value = emit(node.as<While>());
         else if (node->is<ForRange>())
             value = emit(node.as<ForRange>());
+        else if (node->is<ThisDef>())
+            value = emit(node.as<ThisDef>());
         else if (node->is<FieldDef>())
             value = emit(node.as<FieldDef>());
         else if (node->is<VariableDef>())

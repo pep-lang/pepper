@@ -98,7 +98,7 @@ namespace pepper::ast {
         // Add a field at the head for the refcount
         Fields.emplace_back(Ref<FieldDef>::New(this, TypeName{"u32"}, "__refcount", Ref<IntegerLiteral>::New(0)));
 
-        Acquire = Ref<MethodDef>::New(this, TypeName::Void, "__acquire", Params{{"ref", Type, PointerLiteral::Null()}});
+        Acquire = Ref<MethodDef>::New(this, TypeName::Void, "__acquire");
         Release = Ref<MethodDef>::New(this, TypeName::Void, "__release");
 
         auto refcount = Ref<MemberRef>::New(Ref<ThisRef>::New(), "__refcount");
@@ -108,16 +108,15 @@ namespace pepper::ast {
             // Ref<Assign>::New(refcount, Ref<IntegerLiteral>::New(1)),
             Ref<FunctionCall>::New(ExternFunctionDef::TraceInt,
                                    Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("__refcount")}),
-            // if (ref)
-            //     ref.__release()
-            Ref<If>::New(
-                Ref<NotEqual>::New(Ref<SymbolRef>::New("ref"), PointerLiteral::Null()),
-                Ref<Block>::New("if",
-                                Vector<Ref<Node>>{
-                                    Ref<MethodCall>::New(TypeName::Void, Ref<SymbolRef>::New("ref"), "__release"),
-                                })),
         };
         Release->Body->Items = {
+            // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
+            // if (!this) return
+            Ref<If>::New(Ref<Equal>::New(Ref<ThisRef>::New(), PointerLiteral::Null()),
+                         Ref<Block>::New("if",
+                                         Vector<Ref<Node>>{
+                                             Ref<Return>::New(),
+                                         })),
             // --__refcount
             Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(1))),
             // if (this.__refcount == 0)

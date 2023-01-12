@@ -236,33 +236,20 @@ struct Test {
     int x = 2;
 };
 
-release(Test ref) {
-    --ref.__refcount;
-}
-
-Test acquire(Test ref, Test prev=__null) {
-    if (prev == ref)
-        return ref;
-    if (prev)
-        release(prev);
-    ++ref.__refcount;
-    return ref;
-}
-
 int test() {
-    var t = acquire(Test());
+    var t = Test();
+    trace_int(t.__refcount, "t.__refcount");
     test_assert(t.__refcount == 1, "t.__refcount == 1");
-    var prev = acquire(t);
+    var prev = t;
     test_assert(t == prev, "t == prev");
     test_assert(prev.__refcount == 2, "prev.__refcount == 2");
-    t = acquire(Test(), t);
+    t = Test();
     test_assert(prev.__refcount == 1, "prev.__refcount == 1");
-    release(prev);
-    release(t);
-    return prev.__refcount == 0 && t.__refcount == 0;
+    test_assert(t.__refcount == 1, "t.__refcount == 1");
+    return 0;
 }
     )SOURCE";
-    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
+    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
 TEST(Structs, RefStorage) {
@@ -275,9 +262,9 @@ struct Foo {
     Test t;
 
     new(Test z) {
-        this.t = z;
         debug_ptr(this, "this");
         debug_ptr(z, "z");
+        this.t = z;
         debug_ptr(this.t, "this.t");
     }
 };

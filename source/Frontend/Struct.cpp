@@ -6,9 +6,8 @@
 #include "Core/Query.h"
 #include "Frontend/Context.h"
 #include "Frontend/TypeOps.h"
+#include "LLVMUtils.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 
 namespace pepper {
 
@@ -22,7 +21,7 @@ namespace pepper {
         StructTy = Ref<StructType>::New(this, "struct." + name, llvmType);
         Types::add(StructTy);
         // Add ref type as <struct>
-        RefTy = Ref<PointerType>::New(name, StructTy);
+        RefTy = Ref<RefType>::New(StructTy);
         Types::add(RefTy);
         NewInstance = Ref<UserFunction>::New(name, RefTy, newParams);
 
@@ -46,32 +45,32 @@ namespace pepper {
         return Context::get().globals()->Structs.lookup(name);
     }
 
-    llvm::Value* Struct::getMember(llvm::Value* instance, const Ident& name) const {
+    Value Struct::getMember(llvm::Value* instance, const Ident& name) const {
         if (auto field = getField(instance, name))
             return field;
         return getMethod(name);
     }
 
-    llvm::Value* Struct::getField(llvm::Value* instance, const Ident& name) const {
+    Value Struct::getField(llvm::Value* instance, const Ident& name) const {
         auto fieldIt = Fields.find(name);
         if (fieldIt != Fields.end()) {
             int idx = (int)std::distance(Fields.begin(), fieldIt);
             return getField(instance, idx, fieldIt->second);
         }
-        return nullptr;
+        return Value{};
     }
 
-    llvm::Value* Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
-        return Context::ir()->CreateStructGEP(*StructTy, instance, idx, field.ParamName);
+    Value Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
+        return Value(field.ParamType, ir()->CreateStructGEP(*StructTy, instance, idx, field.ParamName));
     }
 
-    llvm::Function* Struct::getMethod(const Ident& name) const {
+    Value Struct::getMethod(const Ident& name) const {
         auto it = Methods.find(name);
         if (it != Methods.end()) {
             auto method = it->second;
-            return method->function();
+            return Value{method->type(), method->function(), method->name()};
         }
-        return nullptr;
+        return Value{};
     }
 
     class StructTypeOps : public TypeOps {
@@ -95,9 +94,55 @@ namespace pepper {
         , StructDesc(st) {
     }
 
+    Ref<RefType> StructType::refType() const {
+        return StructDesc->refType();
+    }
+
     TypeOps* StructType::ops() {
         if (!Ops)
             Ops = Ref<StructTypeOps>::New(shared_from_this());
         return Ops.get();
     }
+
+    class RefTypeOps : public PointerTypeOps {
+        DECLARE_RTTI(RefTypeOps, PointerTypeOps);
+
+      public:
+        using PointerTypeOps::PointerTypeOps;
+
+        void init(Value lhs, Value rhs) const override {
+            rhs = coerce(rhs);
+            ir()->CreateStore(rhs, lhs);
+            auto st = Ty.as<RefType>()->structType()->StructDesc;
+            auto acquire = st->method("__acquire");
+            acquire->call({rhs});
+        }
+
+        Value assign(Value lhs, Value rhs) const override {
+            rhs = coerce(rhs);
+            auto st = Ty.as<RefType>()->structType()->StructDesc;
+            auto acquire = st->method("__acquire");
+            auto release = st->method("__release");
+            acquire->call({rhs});
+            release->call({lhs});
+            ir()->CreateStore(rhs, lhs);
+            return lhs;
+        }
+    };
+
+    RefType::RefType(Ref<StructType> structType)
+        : PointerType(structType->StructDesc->name(), structType)
+        , StructTy(structType) {
+    }
+
+    Ref<StructType> RefType::structType() const {
+        return pointeeType().as<StructType>();
+    }
+
+    TypeOps* RefType::ops() {
+        if (!Ops)
+            Ops = Ref<RefTypeOps>::New(shared_from_this());
+        return Ops.get();
+    }
+
 } // namespace pepper
