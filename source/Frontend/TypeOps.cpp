@@ -71,6 +71,10 @@ namespace pepper {
         throw CompileError("Type {0} does not support non-equality", Types::toString(Ty));
     }
 
+    void TypeOps::init(Value lhs, Value rhs) const {
+        assign(lhs, rhs);
+    }
+
     Value TypeOps::assign(Value, Value) const {
         throw CompileError("Type {0} does not support assignment", Types::toString(Ty));
     }
@@ -123,55 +127,39 @@ namespace pepper {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Ty));
     }
 
-    class NativeTypeOps : public TypeOps {
-        DECLARE_RTTI(NativeTypeOps, TypeOps)
-
-      public:
-        NativeTypeOps(Ref<Type> type)
-            : TypeOps(type) {
+    Value PointerTypeOps::coerce(Value value) const {
+        value = load(value);
+        if (value.Ty->llvmType()->isPointerTy()) {
+            return value;
         }
-    };
+        throw CompileError("Coercion to pointer is not supported");
+    }
 
-    class PointerTypeOps : public NativeTypeOps {
-        DECLARE_RTTI(PointerTypeOps, NativeTypeOps)
-      public:
-        PointerTypeOps(Ref<Type> type)
-            : NativeTypeOps(type) {
-        }
+    Value PointerTypeOps::equal(Value lhs, Value rhs) const {
+        return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
+    }
 
-        Value coerce(Value value) const override {
-            value = load(value);
-            if (value.Ty->llvmType()->isPointerTy()) {
-                return value;
-            }
-            throw CompileError("Coercion to pointer is not supported");
-        }
+    Value PointerTypeOps::notEqual(Value lhs, Value rhs) const {
+        return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs))};
+    }
 
-        Value equal(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
-        }
+    Value PointerTypeOps::assign(Value lhs, Value rhs) const {
+        rhs = coerce(rhs);
+        ir()->CreateStore(rhs, lhs);
+        return lhs;
+    }
 
-        Value notEqual(Value lhs, Value rhs) const override {
-            return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs))};
-        }
+    Value PointerTypeOps::asBool(Value value) const {
+        auto zero = zeroValue(Ty);
+        auto valAsInt = load(value);
+        return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
+    }
 
-        Value assign(Value lhs, Value rhs) const override {
-            ir()->CreateStore(coerce(rhs), lhs);
-            return lhs;
-        }
-
-        Value asBool(Value value) const override {
-            auto zero = zeroValue(Ty);
-            auto valAsInt = load(value);
-            return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
-        }
-
-        Value logicalNot(Value value) const override {
-            auto zero = llvm::ConstantInt::getFalse(*Ty);
-            auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
-            return Value{Types::Bool, ir()->CreateICmpEQ(zero, valAsInt, "not")};
-        }
-    };
+    Value PointerTypeOps::logicalNot(Value value) const {
+        auto zero = llvm::ConstantInt::getFalse(*Ty);
+        auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
+        return Value{Types::Bool, ir()->CreateICmpEQ(zero, valAsInt, "not")};
+    }
 
     class VoidType : public NativeTypeOps {
         DECLARE_RTTI(VoidType, NativeTypeOps)

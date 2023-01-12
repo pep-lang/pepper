@@ -52,6 +52,7 @@ namespace pepper {
         virtual Value rshift(Value lhs, Value rhs) const;
         virtual Value equal(Value lhs, Value rhs) const;
         virtual Value notEqual(Value lhs, Value rhs) const;
+        virtual void init(Value lhs, Value rhs) const;
         virtual Value assign(Value lhs, Value rhs) const;
         virtual Value bitAnd(Value lhs, Value rhs) const;
         virtual Value bitXor(Value lhs, Value rhs) const;
@@ -67,4 +68,27 @@ namespace pepper {
         virtual Value asBool(Value value) const;
     };
 
+    class NativeTypeOps : public TypeOps {
+        DECLARE_RTTI(NativeTypeOps, TypeOps)
+
+      public:
+        NativeTypeOps(Ref<Type> type)
+            : TypeOps(type) {
+        }
+    };
+
+    class PointerTypeOps : public NativeTypeOps {
+        DECLARE_RTTI(PointerTypeOps, NativeTypeOps)
+      public:
+        PointerTypeOps(Ref<Type> type)
+            : NativeTypeOps(type) {
+        }
+
+        Value coerce(Value value) const override;
+        Value equal(Value lhs, Value rhs) const override;
+        Value notEqual(Value lhs, Value rhs) const override;
+        Value assign(Value lhs, Value rhs) const override;
+        Value asBool(Value value) const override;
+        Value logicalNot(Value value) const override;
+    };
 } // namespace pepper
