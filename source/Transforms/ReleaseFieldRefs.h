@@ -25,16 +25,19 @@ namespace pepper::ast {
         }
 
         void visitStruct(Ref<StructDef> st) {
-            Vector<Ref<MethodCall>> releases;
+            Vector<Ref<Node>> releases;
             for (const auto& field : st->Fields) {
                 if (auto fieldType = Structs.lookup(field->Type.toString())) {
                     releases.emplace_back(Ref<MethodCall>::New(
                         fieldType->Type, Ref<MemberRef>::New(Ref<ThisRef>::New(), field->Name), "__release"));
                 }
             }
+            auto dtorItems = st->Destructor->Body->Items;
+            st->Destructor->Body->Items.clear();
             for (const auto& release : llvm::reverse(releases)) {
                 st->Destructor->Body->Items.emplace_back(release);
             }
+            st->Destructor->Body->Items.append(dtorItems);
         }
     };
 } // namespace pepper::ast
