@@ -20,6 +20,8 @@ namespace TestUtils {
     }
 
     void AssertTrap(bool condition, const char* msg) {
+        printf("ASSERT: %s: %d\n", msg, (int)condition);
+        fflush(stdout);
         ASSERT_TRUE(condition) << msg;
     }
 
