@@ -98,18 +98,16 @@ namespace pepper::ast {
         // Add a field at the head for the refcount
         Fields.emplace_back(Ref<FieldDef>::New(this, TypeName{"u32"}, "__refcount", Ref<IntegerLiteral>::New(0)));
 
-        Acquire = Ref<MethodDef>::New(this, TypeName::Void, "__acquire", Params{{"ref", Type}});
+        Acquire = Ref<MethodDef>::New(this, TypeName::Void, "__acquire", Params{{"ref", Type, PointerLiteral::Null()}});
         Release = Ref<MethodDef>::New(this, TypeName::Void, "__release");
 
         auto refcount = Ref<MemberRef>::New(Ref<ThisRef>::New(), "__refcount");
         Acquire->Body->Items = {
-            // if (ref == this)
-            //     return
-            Ref<If>::New(Ref<Equal>::New(Ref<SymbolRef>::New("ref"), Ref<ThisRef>::New()),
-                         Ref<Block>::New("if",
-                                         Vector<Ref<Node>>{
-                                             Ref<Return>::New(),
-                                         })),
+            // ++this.__refcount
+            Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
+            // Ref<Assign>::New(refcount, Ref<IntegerLiteral>::New(1)),
+            Ref<FunctionCall>::New(ExternFunctionDef::TraceInt,
+                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("__refcount")}),
             // if (ref)
             //     ref.__release()
             Ref<If>::New(
@@ -118,12 +116,10 @@ namespace pepper::ast {
                                 Vector<Ref<Node>>{
                                     Ref<MethodCall>::New(TypeName::Void, Ref<SymbolRef>::New("ref"), "__release"),
                                 })),
-            // this.__refcount += 1
-            Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
         };
         Release->Body->Items = {
-            // __refcount -= 1
-            Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(-1))),
+            // --__refcount
+            Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(1))),
             // if (this.__refcount == 0)
             //     this.__dtor()
             Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
@@ -189,10 +185,9 @@ namespace pepper::ast {
         // Fill in new, needs "size" variable value filled in once it is known at codegen time
         Vector<Ref<Node>> body = {
             Ref<VariableDef>::New(TypeName("u64"), "size"),
-            Ref<VariableDef>::New(Type,
-                                  "this",
-                                  Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
-                                                         Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
+            Ref<ThisDef>::New(Type,
+                              Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
+                                                     Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
             Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
         };
@@ -217,11 +212,11 @@ namespace pepper::ast {
         Destructor->Body->Items.push_back(
             Ref<FunctionCall>::New(ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
 
+        Methods.push_back(Release);
+        Methods.push_back(Acquire);
         Methods.push_back(Initializer);
         Methods.push_back(Constructor);
         Methods.push_back(Destructor);
-        Methods.push_back(Acquire);
-        Methods.push_back(Release);
     }
 
     Ref<FieldDef> StructDef::getField(const Ident& name) const {
