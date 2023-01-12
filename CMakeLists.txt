@@ -56,6 +56,23 @@ if (MSVC)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:pepper>)
 endif ()
 
+set(EXT)
+if (MSVC)
+    set(EXT ".exe")
+endif ()
+
+set(LLVM_BINARIES
+        ${LLVM_BINARIES_DIR}/llvm-config${EXT}
+        ${LLVM_BINARIES_DIR}/lld${EXT})
+
+if (MSVC)
+    list(APPEND LLVM_BINARIES
+            ${LLVM_BINARIES_DIR}/lld-link.exe)
+endif ()
+
+add_custom_command(TARGET pepper POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LLVM_BINARIES} $<TARGET_FILE_DIR:pepper>)
+
 set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 set(PEPPER_LIBRARIES PepperParser PepperCore ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
 

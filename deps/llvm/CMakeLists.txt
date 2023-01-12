@@ -58,7 +58,7 @@ if (NOT LLVM_FOUND)
             -DLLVM_ENABLE_PROJECTS=lld
             -DLLVM_ENABLE_LLD=ON
             -DLLVM_ENABLE_ASSERTIONS=ON
-            -DLLVM_INCLUDE_TOOLS=OFF
+            -DLLVM_INCLUDE_TOOLS=ON
             -DLLVM_INCLUDE_TESTS=OFF
             -DLLVM_INCLUDE_EXAMPLES=OFF
             -DLLVM_INCLUDE_BENCHMARKS=OFF
@@ -76,40 +76,40 @@ if (NOT LLVM_FOUND)
             HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 endif ()
 
-find_package(LLD CONFIG QUIET NO_DEFAULT_PATH
-        HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
-
-if (NOT LLD_FOUND)
-    message(STATUS "Configuring LLD...")
-    file(MAKE_DIRECTORY ${LLVM_BUILD_DIR}/lld)
-    execute_process(
-            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
-            COMMAND_ECHO STDOUT
-            COMMAND ${CMAKE_COMMAND}
-            -G ${CMAKE_GENERATOR}
-            ${LLVM_GENERATOR_TOOLSET}
-            ${LLVM_GENERATOR_PLATFORM}
-            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-            -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
-            -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
-            -DLLVM_ENABLE_RTTI=ON
-            -DLLVM_ENABLE_ASSERTIONS=ON
-            -DLLVM_INCLUDE_TESTS=OFF
-            ${LLVM_LLD_SOURCE_DIR}
-    )
-
-    message(STATUS "Building LLD...")
-    execute_process(
-            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
-            COMMAND_ECHO STDOUT
-            COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} --target install
-            COMMAND_ERROR_IS_FATAL ANY
-    )
-
-    # re-do the find_package now that it should succeed
-    find_package(LLD REQUIRED CONFIG NO_DEFAULT_PATH
-            HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
-endif()
+#find_package(LLD CONFIG QUIET NO_DEFAULT_PATH
+#        HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
+#
+#if (NOT LLD_FOUND)
+#    message(STATUS "Configuring LLD...")
+#    file(MAKE_DIRECTORY ${LLVM_BUILD_DIR}/lld)
+#    execute_process(
+#            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
+#            COMMAND_ECHO STDOUT
+#            COMMAND ${CMAKE_COMMAND}
+#            -G ${CMAKE_GENERATOR}
+#            ${LLVM_GENERATOR_TOOLSET}
+#            ${LLVM_GENERATOR_PLATFORM}
+#            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+#            -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
+#            -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
+#            -DLLVM_ENABLE_RTTI=ON
+#            -DLLVM_ENABLE_ASSERTIONS=ON
+#            -DLLVM_INCLUDE_TESTS=OFF
+#            ${LLVM_LLD_SOURCE_DIR}
+#    )
+#
+#    message(STATUS "Building LLD...")
+#    execute_process(
+#            WORKING_DIRECTORY ${LLVM_BUILD_DIR}/lld
+#            COMMAND_ECHO STDOUT
+#            COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} --target install
+#            COMMAND_ERROR_IS_FATAL ANY
+#    )
+#
+#    # re-do the find_package now that it should succeed
+#    find_package(LLD REQUIRED CONFIG NO_DEFAULT_PATH
+#            HINTS ${LLVM_INSTALL_DIR}/lib/cmake/lld)
+#endif ()
 
 #macro(copy_pdbs)
 #    if (MSVC)
@@ -136,13 +136,15 @@ explicit_map_components_to_libraries(LLVM_LIBRARIES windowsmanifest bitstreamrea
 set(LLVM_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLVM Include Directories")
 set(LLVM_LIBRARY_DIRS ${LLVM_INSTALL_DIR}/lib CACHE STRING "LLVM Library Directories")
 set(LLVM_LIBRARIES ${LLVM_LIBRARIES} CACHE STRING "LLVM libraries selected for linking")
+set(LLVM_BINARIES_DIR ${LLVM_INSTALL_DIR}/bin CACHE STRING "LLVM binaries")
 
 message(STATUS "LLVM includes:  ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
+message(STATUS "LLVM binaries:  ${LLVM_BINARIES_DIR}")
 
-message(STATUS "Found LLD at ${LLD_INSTALL_PREFIX}")
-set(LLD_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLD Include Directories")
-set(LLD_LIBRARIES "lldCommon;lldCOFF;lldELF;lldMachO;lldMinGW;lldWasm" CACHE STRING "LLD libraries")
-
-message(STATUS "LLD includes:   ${LLD_INCLUDE_DIRS}")
-message(STATUS "LLD libraries:  ${LLD_LIBRARIES}")
+#message(STATUS "Found LLD at ${LLD_INSTALL_PREFIX}")
+#set(LLD_INCLUDE_DIRS ${LLVM_INSTALL_DIR}/include CACHE STRING "LLD Include Directories")
+#set(LLD_LIBRARIES "lldCommon;lldCOFF;lldELF;lldMachO;lldMinGW;lldWasm" CACHE STRING "LLD libraries")
+#
+#message(STATUS "LLD includes:   ${LLD_INCLUDE_DIRS}")
+#message(STATUS "LLD libraries:  ${LLD_LIBRARIES}")
