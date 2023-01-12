@@ -42,14 +42,14 @@ namespace pepper {
         }
 
         // used internally to move from one operation to the next
-        explicit QueryInst(QueryInst<T>&& src)
+        explicit QueryInst(QueryInst<T>&& src) noexcept
             : Src(std::move(src))
             , Ref(Src) {
         }
 
       public:
         template <typename U>
-        QueryInst<U> select(std::function<U(const T&)> selector) const {
+        QueryInst<U> select(std::function<U(const T&)> selector = [](auto& e) { return e; }) const {
             Vector<U> results;
             std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
             return QueryInst<U>(std::move(results));
@@ -121,7 +121,11 @@ namespace pepper {
         }
 
         operator Vector<T>() {
-            return Vector<T>(Ref.begin(), Ref.end());
+            return toVector();
+        }
+
+        Vector<T> toVector() {
+            return Vector<T>{Ref.begin(), Ref.end()};
         }
     };
 
