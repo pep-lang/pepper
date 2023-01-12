@@ -9,13 +9,13 @@ namespace pepper {
     class Type;
 
     struct Param {
-        Ref<Type> ParamType;
-        Ident ParamName;
+        Ref<Type> Type;
+        Ident Name;
         Value Default;
 
-        Param(const Ident& name, Ref<Type> type, Value defaultValue = {})
-            : ParamName(name)
-            , ParamType(type)
+        Param(const Ident& name, Ref<pepper::Type> type, Value defaultValue = {})
+            : Name(name)
+            , Type(type)
             , Default(defaultValue) {
         }
     };

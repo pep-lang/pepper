@@ -81,7 +81,7 @@ namespace pepper {
 
         void setFields(const Params& fields) {
             for (auto& field : fields) {
-                Fields.insert_or_assign(field.ParamName, field);
+                Fields.insert_or_assign(field.Name, field);
             }
         }
 

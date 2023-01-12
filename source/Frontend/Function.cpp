@@ -15,7 +15,7 @@ namespace pepper {
         , ReturnType(returnType)
         , Parameters(params) {
         Vector<llvm::Type*> paramTypes;
-        std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.ParamType); });
+        std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.Type); });
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
         auto sig = Types::toString(llvmType);
         FuncType = Types::add(Ref<Type>::New(sig, llvmType));
@@ -28,7 +28,7 @@ namespace pepper {
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;
         for (const auto& arg : args) {
-            auto expectedType = Parameters[idx++].ParamType->ops();
+            auto expectedType = Parameters[idx++].Type->ops();
             coercedArgs.push_back(expectedType->coerce(arg));
         }
 
@@ -38,11 +38,11 @@ namespace pepper {
             if (!param.Default) {
                 throw CompileError("Missing argument {0}({1}) of type {2} to {3}",
                                    argIdx,
-                                   param.ParamName,
-                                   Types::toString(param.ParamType),
+                                   param.Name,
+                                   Types::toString(param.Type),
                                    Identifier);
             }
-            coercedArgs.push_back(param.ParamType->ops()->coerce(param.Default));
+            coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
         }
         return Value{ReturnType,
                      Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};

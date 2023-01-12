@@ -29,10 +29,10 @@ namespace pepper {
         auto llvmFunction = function->function();
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
-            auto type = param.ParamType;
-            auto arg = Value(param.ParamType, llvmFunction->getArg(paramIdx));
-            auto addr = ir()->CreateAlloca(*type, nullptr, param.ParamName);
-            auto local = Value(type, addr, param.ParamName);
+            auto type = param.Type;
+            auto arg = Value(param.Type, llvmFunction->getArg(paramIdx));
+            auto addr = ir()->CreateAlloca(*type, nullptr, param.Name);
+            auto local = Value(type, addr, param.Name);
             // Special methods use raw stores to avoid ref-counting getting in the way
             if (function->countArgRefs()) {
                 type->ops()->init(local, arg);

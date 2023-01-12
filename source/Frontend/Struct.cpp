@@ -14,7 +14,7 @@ namespace pepper {
     Struct::Struct(const Ident& name, const Params& fields, const Params& newParams)
         : Identifier(name) {
         // Create the LLVM struct type out of the field types
-        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.ParamType; });
+        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.Type; });
         auto llvmType = llvm::StructType::create(fieldTypes, Identifier);
 
         // Add underlying struct as struct.<struct>
@@ -61,7 +61,7 @@ namespace pepper {
     }
 
     Value Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
-        return Value(field.ParamType, ir()->CreateStructGEP(*StructTy, instance, idx, field.ParamName));
+        return Value(field.Type, ir()->CreateStructGEP(*StructTy, instance, idx, field.Name));
     }
 
     Value Struct::getMethod(const Ident& name) const {
