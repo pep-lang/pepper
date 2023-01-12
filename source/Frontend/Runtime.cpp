@@ -23,5 +23,7 @@ namespace pepper {
             "debug_ptr", Types::Void, Params{{"ptr", Types::VoidPtr}, {"name", Types::Int8->pointer()}});
         Functions["test_assert"] = Ref<Function>::New(
             "test_assert", Types::Void, Params{{"condition", Types::Bool}, {"message", Types::UInt8->pointer()}});
+        Functions["trace_int"] = Ref<Function>::New(
+            "trace_int", Types::Void, Params{{"value", Types::Int64}, {"message", Types::UInt8->pointer()}});
     }
 } // namespace pepper

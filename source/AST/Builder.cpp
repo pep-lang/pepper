@@ -50,10 +50,10 @@ namespace pepper::ast {
                 TypeName::Void,
                 "debug_ptr",
                 Params{{"ptr", TypeName::VoidPtr}, {"name", TypeName{TypeName::Int8.Name + "*"}}});
-            globals->Functions["test_assert"] =
-                Ref<ExternFunctionDef>::New(TypeName::Void,
-                                            "test_assert",
-                                            Params{{"condition", TypeName::Bool}, {"message", TypeName{"u8*"}}});
+            globals->Functions["test_assert"] = Ref<ExternFunctionDef>::New(
+                TypeName::Void, "test_assert", Params{{"condition", TypeName::Bool}, {"message", TypeName{"u8*"}}});
+            globals->Functions["trace_int"] = Ref<ExternFunctionDef>::New(
+                TypeName::Void, "trace_int", Params{{"value", TypeName::Int64}, {"message", TypeName{"u8*"}}});
         }
 
         [[nodiscard]] Ref<FunctionDef> functionTarget() const override {
