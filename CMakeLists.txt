@@ -62,12 +62,16 @@ if (MSVC)
 endif ()
 
 set(LLVM_BINARIES
-        ${LLVM_BINARIES_DIR}/lld${EXT})
+        ${LLVM_BINARIES_DIR}/lli${EXT})
 
 if (MSVC)
     list(APPEND LLVM_BINARIES
             ${LLVM_BINARIES_DIR}/lld-link.exe
             ${LLVM_BINARIES_DIR}/llvm-lib.exe)
+else ()
+    list(APPEND LLVM_BINARIES
+            ${LLVM_BINARIES_DIR}/ld.lld
+            ${LLVM_BINARIES_DIR}/ld64.lld)
 endif ()
 
 add_custom_command(TARGET pepper POST_BUILD

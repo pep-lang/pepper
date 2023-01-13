@@ -149,9 +149,56 @@ namespace pepper {
             throw CompileError("Link failed: {0}", lldErrors);
     }
 
+    void PosixLink(Ref<Options> opts, Vector<std::string> objFiles) {
+        std::string programPath = opts->ProgramPath;
+        auto outputPath = std::filesystem::path(opts->OutputPath);
+        auto outputDir = outputPath.parent_path();
+        auto outputFilename = outputPath.filename();
+
+        std::string searchPath = std::filesystem::path(programPath).parent_path().string();
+
+        auto triple = GetHostTriple();
+
+        auto lldExe = "ld"; // triple.isMacOSX() ? "ld64.lld" : "ld.lld";
+        // auto lld = sys::findProgramByName(lldExe, {searchPath});
+        auto lld = sys::findProgramByName(lldExe);
+        if (!lld) {
+            throw InternalCompilerError("Cannot find link program {0}: {1}", lldExe, lld.getError().message());
+        }
+        auto lldPath = lld.get();
+
+        // clang-format off
+        Vector<std::string> ldArgs = {
+            "-demangle",
+            "-dynamic",
+            "-arch", "x86_64",
+            "-o", outputPath.string(),
+        };
+        // clang-format on
+        if (triple.isMacOSX()) {
+            // clang-format off
+            ldArgs.append({
+                "-platform_version", "macos", "12.1.0", "12.3",
+                "-syslibroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk",
+                "-lSystem",
+            });
+            // clang-format on
+        }
+
+        ldArgs.append(objFiles);
+
+        auto ldArgsView = Query(ldArgs).select<StringRef>().toVector();
+        std::string lldErrors;
+        auto rc = sys::ExecuteAndWait(lldPath, ldArgsView, llvm::None, llvm::None, 0, 0, &lldErrors);
+        if (rc != 0)
+            throw CompileError("Link failed: {0}", lldErrors);
+    }
+
     void Linker::link(Ref<Options> opts, const Vector<std::string>& objFiles) {
         auto triple = GetHostTriple();
         if (triple.isWindowsMSVCEnvironment())
             WindowsLink(opts, objFiles);
+        else
+            PosixLink(opts, objFiles);
     }
 } // namespace pepper
