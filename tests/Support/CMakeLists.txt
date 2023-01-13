@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.14)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_library(TestSupport SHARED Debug.cpp)
+set(SRC_FILES Debug.cpp)
+
+add_library(TestSupport SHARED ${SRC_FILES})
 
 if (MSVC)
     set(TEST_SUPPORT_SHARED_LIBRARIES ${CMAKE_CURRENT_BINARY_DIR}/TestSupport.lib)

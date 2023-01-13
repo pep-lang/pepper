@@ -31,7 +31,7 @@ add_executable(PepperTests
         Branches.cpp)
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS} ${TEST_SUPPORT_INCLUDE_DIRS})
 target_link_directories(PepperTests PRIVATE ${PEPPER_LIBRARY_DIRS})
-target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES} ${TEST_SUPPORT_LIBRARIES})
+target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES} TestSupport)
 set_target_properties(PepperTests PROPERTIES LINKER_LANGUAGE CXX)
 
 if (MSVC)
