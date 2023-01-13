@@ -6,6 +6,7 @@
 
 #include "AST/AST.h"
 #include "CodeGen/Codegen.h"
+#include "Compiler/Linker.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
@@ -148,6 +149,7 @@ namespace pepper {
             outputFile /= inputFile.filename().replace_extension(".o");
 
             auto objFilePath = outputFile.string();
+
             std::error_code errCode;
             llvm::raw_fd_ostream dest(objFilePath, errCode, llvm::sys::fs::OF_None);
 
@@ -208,18 +210,9 @@ namespace pepper {
         }
 
         void link() override {
-            auto targetTriple = llvm::sys::getDefaultTargetTriple();
-            auto cpu = "generic";
-            auto cpuFeatures = "";
-
-            std::string error;
-            auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-            llvm::TargetOptions opt;
-            auto rm = llvm::Optional<llvm::Reloc::Model>();
-            auto tm = target->createTargetMachine(targetTriple, cpu, cpuFeatures, opt, rm);
-            auto triple = tm->getTargetTriple();
-
             Vector<const char*> args;
+
+            Linker::link(Opts, ObjFiles);
 
             //            if (triple.isOSBinFormatELF()) {
             //                lld::elf::link(args, llvm::outs(), llvm::errs(), false, false);
@@ -243,6 +236,7 @@ namespace pepper {
             Vector<std::string> searchPaths = {
                 "runtime",
                 "../../../../runtime",
+                "../../../runtime",
             };
 
             for (const auto& searchPath : searchPaths) {

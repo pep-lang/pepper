@@ -8,6 +8,7 @@
 
 namespace pepper {
     struct Options {
+        std::string ProgramPath;
         Vector<std::string> SourceFiles;
         std::string OutputPath;
         std::string ExeName;
