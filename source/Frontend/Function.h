@@ -25,7 +25,7 @@ namespace pepper {
         DECLARE_RTTI(Function);
 
       protected:
-        const Ident Identifier;
+        const Ident Name;
         Ref<Type> ReturnType;
         const Params Parameters;
         llvm::Function* Func;
@@ -35,7 +35,7 @@ namespace pepper {
         Function(const Ident& name, Ref<Type> returnType, const Params& params = Params());
 
         const Ident& name() const {
-            return Identifier;
+            return Name;
         }
 
         const Ref<Type> returnType() const {

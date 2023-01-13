@@ -12,10 +12,10 @@
 namespace pepper {
 
     Struct::Struct(const Ident& name, const Params& fields, const Params& newParams)
-        : Identifier(name) {
+        : Name(name) {
         // Create the LLVM struct type out of the field types
         Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.Type; });
-        auto llvmType = llvm::StructType::create(fieldTypes, Identifier);
+        auto llvmType = llvm::StructType::create(fieldTypes, Name);
 
         // Add underlying struct as struct.<struct>
         StructTy = Ref<StructType>::New(this, "struct." + name, llvmType);

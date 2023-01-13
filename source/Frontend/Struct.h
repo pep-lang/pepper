@@ -54,7 +54,7 @@ namespace pepper {
     };
 
     class Struct : public std::enable_shared_from_this<Struct> {
-        Ident Identifier;
+        Ident Name;
         Ref<StructType> StructTy;
         Ref<RefType> RefTy;
         Ref<Function> NewInstance;
@@ -76,7 +76,7 @@ namespace pepper {
         }
 
         const Ident& name() const {
-            return Identifier;
+            return Name;
         }
 
         void setFields(const Params& fields) {

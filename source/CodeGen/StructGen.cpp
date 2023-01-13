@@ -42,7 +42,7 @@ namespace pepper {
         auto lhs = codegen(memberRef->LHS);
         auto lhsType = lhs.Ty;
         auto structDesc = Struct::get(lhsType->name());
-        auto memberName = memberRef->identifier();
+        auto memberName = memberRef->Name;
         auto field = Query(structDesc->fields()).find([&memberName](auto f) { return f.Name == memberName; }).value();
         auto thisPtr = load(lhs);
         auto member = Value{field.Type, structDesc->getMember(thisPtr, memberName)};

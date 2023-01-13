@@ -145,9 +145,9 @@ namespace pepper {
             }
             if (expr->is<SymbolRef>()) {
                 auto var = expr.as<SymbolRef>();
-                auto symbol = builder->findSymbol(var->identifier());
+                auto symbol = builder->findSymbol(var->Name);
                 if (!symbol) {
-                    throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->identifier());
+                    throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->Name);
                 }
                 return symbol->Type;
             }
@@ -477,18 +477,18 @@ namespace pepper {
                 if (!structDef) {
                     throw CompileError(member->LHS->Source, "Expression results in unknown type {0}", structType);
                 }
-                auto method = structDef->getMethod(member->identifier());
+                auto method = structDef->getMethod(member->Name);
                 if (!method) {
                     throw CompileError(
-                        builder->Source, "No method named {0} in {1}", member->identifier(), structType.toString());
+                        builder->Source, "No method named {0} in {1}", member->Name, structType.toString());
                 }
 
-                auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->identifier(), args);
+                auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->Name, args);
                 builder->insert(call);
                 return;
             }
 
-            auto functionName = symbol->identifier();
+            auto functionName = symbol->Name;
             auto func = builder->findFunction(functionName);
             if (!func) {
                 throw CompileError(builder->Source, "Function {0} not found", functionName);

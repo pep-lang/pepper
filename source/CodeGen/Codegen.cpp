@@ -39,9 +39,9 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<SymbolRef> variableRef) {
-        auto value = locals()->findSymbol(variableRef->identifier());
+        auto value = locals()->findSymbol(variableRef->Name);
         if (!value) {
-            throw CompileError(variableRef->Source, "No symbol named {0} could be found", variableRef->identifier());
+            throw CompileError(variableRef->Source, "No symbol named {0} could be found", variableRef->Name);
         }
         return value;
     }

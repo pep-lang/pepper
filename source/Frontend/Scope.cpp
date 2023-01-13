@@ -23,7 +23,7 @@ namespace pepper {
     }
 
     void Scope::newSymbol(const Value& value) {
-        Symbols[value.Identifier] = value;
+        Symbols[value.Name] = value;
     }
 
     const Value& Scope::findSymbol(const std::string& identifier) const {

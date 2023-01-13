@@ -55,24 +55,19 @@ namespace pepper::ast {
         DECLARE_RTTI(SymbolRef, Expression);
         AST_NODE_POD_CLONE(SymbolRef);
 
-      private:
-        Ident Identifier;
+        Ident Name;
 
       public:
         SymbolRef(const Ident& identifier)
-            : Identifier(identifier) {
-        }
-
-        const Ident& identifier() const {
-            return Identifier;
+            : Name(identifier) {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), identifier()));
+            return std::string(llvm::formatv("{0} {1}", Node::toString(), Name));
         }
 
         std::string dump(int indent) const override {
-            return llvm::formatv("{0} {1}", Node::dump(indent), Identifier);
+            return llvm::formatv("{0} {1}", Node::dump(indent), Name);
         }
     };
 } // namespace pepper::ast

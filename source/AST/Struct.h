@@ -102,12 +102,11 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString() +
-                   std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", identifier()));
+            return Node::toString() + std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", Name));
         }
 
         std::string dump(int indent) const override {
-            return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", identifier());
+            return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", Name);
         }
 
         void specialize(const Specialization& spec) override {

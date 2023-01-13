@@ -11,7 +11,7 @@
 
 namespace pepper {
     Function::Function(const Ident& name, Ref<Type> returnType, const Params& params)
-        : Identifier(name)
+        : Name(name)
         , ReturnType(returnType)
         , Parameters(params) {
         Vector<llvm::Type*> paramTypes;
@@ -19,8 +19,7 @@ namespace pepper {
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
         auto sig = Types::toString(llvmType);
         FuncType = Types::add(Ref<Type>::New(sig, llvmType));
-        Func =
-            llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Identifier, Context::get().module());
+        Func = llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Name, Context::get().module());
     }
 
     Value Function::call(const Vector<Value>& args) const {
@@ -40,7 +39,7 @@ namespace pepper {
                                    argIdx,
                                    param.Name,
                                    Types::toString(param.Type),
-                                   Identifier);
+                                   Name);
             }
             coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
         }
@@ -79,9 +78,9 @@ namespace pepper {
         if (!UserFunction::countArgRefs())
             return false;
 
-        if (Identifier.find(".__") != std::string::npos)
+        if (Name.find(".__") != std::string::npos)
             return true;
-        if (Identifier == This->name())
+        if (Name == This->name())
             return true;
 
         return true;

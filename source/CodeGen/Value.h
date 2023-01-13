@@ -10,12 +10,12 @@
 
 namespace pepper {
     struct Value {
-        Ident Identifier;
+        Ident Name;
         llvm::Value* V;
         Ref<Type> Ty;
 
         Value(Ref<Type> type = nullptr, llvm::Value* value = nullptr, const Ident& identifier = "")
-            : Identifier(identifier)
+            : Name(identifier)
             , Ty(type)
             , V(value) {
         }
