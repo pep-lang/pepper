@@ -1,10 +1,9 @@
 
 #pragma once
 
-#include <unordered_map>
-
 #include "Core/Common.h"
 #include "Core/SourceLocation.h"
+#include "Core/Vector.h"
 #include "Frontend/Function.h"
 #include "Frontend/Struct.h"
 #include "llvm/ADT/SmallVector.h"
@@ -23,8 +22,8 @@ namespace pepper {
         Ref<llvm::DIBuilder> DI;
         llvm::DICompileUnit* CompileUnit;
         llvm::DIFile* SourceFile;
-        llvm::SmallVector<llvm::DIScope*> Stack;
-        std::unordered_map<llvm::Type*, llvm::DIType*> Types;
+        Vector<llvm::DIScope*> Stack;
+        llvm::DenseMap<const Type*, llvm::TrackingMDRef> Types;
 
         SourceLocation Source;
 
@@ -41,18 +40,19 @@ namespace pepper {
 
         // void emitSourceLocation(const SourceLocation& source);
 
-        void finalize() {
-            DI->finalize();
-            DI.reset();
-        }
+        void finalize();
 
-        void newBasicType(llvm::StringRef name, Ref<Type> type);
-        void newVariable(llvm::StringRef name, llvm::Value* value);
+        llvm::DIType* newBasicType(llvm::StringRef name, Ref<Type> type);
+        llvm::DIType* newVariable(llvm::StringRef name, llvm::Value* value);
+        llvm::DIType* newStruct(llvm::StringRef name, Struct* st);
+        llvm::DIType* newFunction(llvm::StringRef name, llvm::Function* function);
         void newParameter(llvm::StringRef name, int argIndex, llvm::Value* value);
-        void newStruct(llvm::StringRef name, Struct* st);
-        void newFunction(llvm::StringRef name, llvm::Function* function);
+
         void pushScope(llvm::DIScope* newScope);
         void popScope();
         llvm::DIScope* scope() const;
+
+        llvm::DIType* getOrCreateType(const Type* type);
+        llvm::DIType* insertType(const Type* type, llvm::DIType* diType = nullptr);
     };
 } // namespace pepper

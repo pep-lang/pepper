@@ -4,7 +4,6 @@
 
 #include <memory>
 
-// #include "Frontend/DebugInfo.h"
 #include "Core/Exceptions.h"
 #include "Frontend/ModuleContext.h"
 #include "Frontend/Scope.h"
@@ -43,7 +42,7 @@ namespace pepper {
         : ModuleName(name) {
         Context = std::make_unique<llvm::LLVMContext>();
         Module = std::make_unique<llvm::Module>(name, *Context);
-        // Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
+        Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
 
         Module->setSourceFileName(sourcePath);
 
