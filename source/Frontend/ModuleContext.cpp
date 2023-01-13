@@ -58,11 +58,24 @@ namespace pepper {
         ModuleName = Module->getModuleIdentifier();
     }
 
+    ModuleContext::~ModuleContext() {
+        finalizeDebugInfo();
+    }
+
+    void ModuleContext::finalizeDebugInfo() {
+        if (Debug) {
+            Debug->finalize();
+            Debug.reset();
+        }
+    }
+
     std::unique_ptr<llvm::LLVMContext>&& ModuleContext::takeContext() {
+        finalizeDebugInfo();
         return std::move(Context);
     }
 
     std::unique_ptr<llvm::Module>&& ModuleContext::takeModule() {
+        finalizeDebugInfo();
         return std::move(Module);
     }
 

@@ -26,6 +26,8 @@ namespace pepper {
         ModuleContext(const Ident& name, const std::string& sourcePath);
         ModuleContext(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module);
 
+        ~ModuleContext();
+
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
         std::unique_ptr<llvm::Module>&& takeModule();
 
@@ -48,5 +50,8 @@ namespace pepper {
         llvm::Error verify() const;
 
         std::string toString() const;
+
+      private:
+        void finalizeDebugInfo();
     };
 } // namespace pepper

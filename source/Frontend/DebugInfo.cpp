@@ -23,7 +23,8 @@ namespace pepper {
     }
 
     void DebugInfo::finalize() {
-        // DI->finalize();
+        popScope();
+        DI->finalize();
         DI.reset();
     }
 
