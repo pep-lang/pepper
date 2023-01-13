@@ -108,8 +108,9 @@ namespace pepper {
             return -1;
         }
 
-        void each(std::function<void(const T&)> func) const {
+        QueryInst& each(std::function<void(const T&)> func) {
             std::for_each(Ref.begin(), Ref.end(), func);
+            return *this;
         }
 
         std::optional<T> find(std::function<bool(const T&)> pred) const {
