@@ -25,6 +25,7 @@ namespace pepper {
         Ref<ExecutionSession> ES;
 
         DataLayout DL;
+        const bool IsCOFF;
         MangleAndInterner Mangle;
 
         RTDyldObjectLinkingLayer ObjectLayer;
@@ -35,15 +36,17 @@ namespace pepper {
         ThreadSafeModule Module;
 
       public:
-        OrcExecutor(Ref<ExecutionSession> ES, JITTargetMachineBuilder JTMB, DataLayout layout)
+        OrcExecutor(Ref<ExecutionSession> ES, JITTargetMachineBuilder JTMB, const DataLayout& layout)
             : ES(std::move(ES))
-            , DL(std::move(layout))
+            , DL(layout)
+            , IsCOFF(JTMB.getTargetTriple().isOSBinFormatCOFF())
             , Mangle(*this->ES, this->DL)
             , ObjectLayer(*this->ES, []() { return std::make_unique<SectionMemoryManager>(); })
             , CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB)))
             , Dylib(this->ES->createBareJITDylib("<main>")) {
+            // https://llvm.org/docs/ORCv2.html#how-to-add-process-and-library-symbols-to-jitdylibs
             Dylib.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
-            if (JTMB.getTargetTriple().isOSBinFormatCOFF()) {
+            if (IsCOFF) {
                 ObjectLayer.setOverrideObjectFlagsWithResponsibilityFlags(true);
                 ObjectLayer.setAutoClaimResponsibilityForObjectSymbols(true);
             }
