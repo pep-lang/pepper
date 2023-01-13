@@ -1,6 +1,5 @@
 
 #include "Compiler/Linker.h"
-#include <cstdio>
 #include <filesystem>
 
 #include "Core/Exceptions.h"
@@ -85,7 +84,7 @@ namespace pepper {
         sys::writeFileWithEncoding(responseFile, responseContents, llvm::sys::WEM_UTF16);
     }
 
-    void WindowsLink(Ref<Options> opts, Vector<std::string> objFiles) {
+    void WindowsLink(Ref<Options> opts, const Vector<std::string>& objFiles) {
         std::string programPath = opts->ProgramPath;
         auto outputPath = std::filesystem::path(opts->OutputPath);
         auto outputDir = outputPath.parent_path();
@@ -149,7 +148,7 @@ namespace pepper {
             throw CompileError("Link failed: {0}", lldErrors);
     }
 
-    void PosixLink(Ref<Options> opts, Vector<std::string> objFiles) {
+    void PosixLink(Ref<Options> opts, const Vector<std::string>& objFiles) {
         std::string programPath = opts->ProgramPath;
         auto outputPath = std::filesystem::path(opts->OutputPath);
         auto outputDir = outputPath.parent_path();

@@ -77,7 +77,8 @@ namespace pepper {
         }
 
         void rvaluePushOrInsert(Ref<Node> val) {
-            if (rvaluePush(val)) return;
+            if (rvaluePush(val))
+                return;
             builder->insert(val);
         }
 

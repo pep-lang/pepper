@@ -54,7 +54,7 @@ namespace pepper::ast {
         Ref<Expression> TrueResult;
         Ref<Expression> FalseResult;
 
-        const TypeName& type() const  override {
+        const TypeName& type() const override {
             return TrueResult->type();
         }
 
@@ -63,8 +63,8 @@ namespace pepper::ast {
         }
 
         std::string dump(int) const override {
-            return std::string(llvm::formatv(
-                "({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
+            return std::string(
+                llvm::formatv("({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
         }
     };
 } // namespace pepper::ast
