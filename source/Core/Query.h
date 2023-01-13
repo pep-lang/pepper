@@ -49,7 +49,7 @@ namespace pepper {
 
       public:
         template <typename U>
-        QueryInst<U> select(std::function<U(const T&)> selector = [](auto& e) { return e; }) const {
+        QueryInst<U> select(std::function<U(const T&)> selector = [](const auto& e) { return U{e}; }) const {
             Vector<U> results;
             std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
             return QueryInst<U>(std::move(results));
