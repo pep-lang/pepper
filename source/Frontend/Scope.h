@@ -52,7 +52,7 @@ namespace pepper {
         void newFunction(Ref<Function> function, const std::string& name = "");
 
         [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
-        [[nodiscard]] const Value& findSymbol(const std::string& identifier) const;
+        [[nodiscard]] const Value& findSymbol(const std::string& identifier, bool localOnly = false) const;
         Ref<llvm::IRBuilderBase> builder() const;
         Ref<UserFunction> functionTarget() const;
     };

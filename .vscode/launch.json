@@ -18,7 +18,6 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/out/${fileBasenameNoExtension}",
-      "stopOnEntry": true,
       "preLaunchTask": "Pepper: Compile"
     }
   ]

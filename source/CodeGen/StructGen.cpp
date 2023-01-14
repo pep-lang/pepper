@@ -39,13 +39,20 @@ namespace pepper {
     }
 
     Value Codegen::emit(Ref<MemberRef> memberRef) {
+        auto local = locals()->findSymbol(memberRef->Name, true);
+        if (local)
+            return local;
+
         auto lhs = codegen(memberRef->LHS);
         auto lhsType = lhs.Ty;
         auto structDesc = Struct::get(lhsType->name());
         auto memberName = memberRef->Name;
         auto field = Query(structDesc->fields()).find([&memberName](auto f) { return f.Name == memberName; }).value();
         auto thisPtr = load(lhs);
-        auto member = Value{field.Type, structDesc->getMember(thisPtr, memberName)};
+        auto member = Value{field.Type, structDesc->getMember(thisPtr, memberName), memberName};
+        // LHS may have moved or unset source location, so restore it
+        Module->getDebugInfo()->setSourceLocation(memberRef->Source);
+        locals()->newSymbol(member);
         return member;
     }
 

@@ -4,7 +4,9 @@
 
 #include "Frontend/Scope.h"
 
+#include "Frontend/Context.h"
 #include "Frontend/Function.h"
+#include "Frontend/ModuleContext.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
 
@@ -23,14 +25,16 @@ namespace pepper {
     }
 
     void Scope::newSymbol(const Value& value) {
+        assert(!Symbols.lookup(value.Name));
         Symbols[value.Name] = value;
+        Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
     }
 
-    const Value& Scope::findSymbol(const std::string& identifier) const {
+    const Value& Scope::findSymbol(const std::string& identifier, bool localOnly) const {
         auto it = Symbols.find(identifier);
         if (it != Symbols.end())
             return it->second;
-        return Outer ? Outer->findSymbol(identifier) : Value::Null();
+        return Outer && !localOnly ? Outer->findSymbol(identifier) : Value::Null();
     }
 
     Ref<UserFunction> Scope::functionTarget() const {
