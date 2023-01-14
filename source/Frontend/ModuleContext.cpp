@@ -45,6 +45,7 @@ namespace pepper {
         Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
 
         Module->setSourceFileName(sourcePath);
+        Module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
         Module->setTargetTriple(targetTriple);
