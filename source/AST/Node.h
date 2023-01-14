@@ -79,7 +79,9 @@ namespace pepper::ast {
 
         template <typename N>
         Ref<N> cloneAs() const {
-            return Ref<N>{clone()};
+            auto copy = Ref<N>{clone()};
+            copy->Source = Source;
+            return copy;
         }
 
         virtual Ref<Node> clone() const;
