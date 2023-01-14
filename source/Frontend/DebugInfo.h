@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "CodeGen/Value.h"
 #include "Core/Common.h"
 #include "Core/SourceLocation.h"
 #include "Core/Vector.h"
@@ -16,6 +17,7 @@
 namespace pepper {
     class Struct;
     class Type;
+    class Function;
 
     class DebugInfo {
         llvm::Module* Module;
@@ -34,25 +36,29 @@ namespace pepper {
         DebugInfo(llvm::Module* module, const std::string& sourceFile);
         ~DebugInfo();
 
-        void setSourceLocation(const SourceLocation& source) {
-            Source = source;
-        }
+        void setSourceLocation(const SourceLocation& source);
 
         // void emitSourceLocation(const SourceLocation& source);
 
         void finalize();
 
-        llvm::DIType* newBasicType(llvm::StringRef name, Ref<Type> type);
-        llvm::DIType* newVariable(llvm::StringRef name, llvm::Value* value);
-        llvm::DIType* newStruct(llvm::StringRef name, Struct* st);
-        llvm::DIType* newFunction(llvm::StringRef name, llvm::Function* function);
-        void newParameter(llvm::StringRef name, int argIndex, llvm::Value* value);
+        llvm::DIType* emitBasicType(llvm::StringRef name, const Type* type);
+        llvm::DILocalVariable* emitLocalVariable(const Value& value);
+        llvm::DIType* emitStruct(const Struct* st);
+        llvm::DISubprogram* emitFunction(Function* function);
+        llvm::DILocalVariable* emitParameter(int argIndex, const Value& param);
+        llvm::DIGlobalVariableExpression* emitGlobalVariable(const Value& global);
 
         void pushScope(llvm::DIScope* newScope);
         void popScope();
-        llvm::DIScope* scope() const;
+        llvm::DIScope* localScope() const;
+        llvm::DIScope* globalScope() const;
 
+      private:
         llvm::DIType* getOrCreateType(const Type* type);
         llvm::DIType* insertType(const Type* type, llvm::DIType* diType = nullptr);
+        llvm::DISubroutineType* createFunctionType(Function* function);
+        static Ref<llvm::IRBuilderBase> ir();
+        llvm::DILocation* location() const;
     };
 } // namespace pepper

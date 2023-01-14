@@ -81,6 +81,8 @@ namespace pepper {
 
         // generate the new struct type
         auto structDesc = Struct::New(structDef->Name, fields, newParams);
+        auto structDI = Module->getDebugInfo()->emitStruct(structDesc.get());
+        Module->getDebugInfo()->pushScope(structDI);
 
         // Update Struct()/new function now that the size of the struct is known
         auto sizeVar = Query(structDef->NewInstance->Body->Items)
@@ -124,7 +126,12 @@ namespace pepper {
             codegenFunction(method, methodDef);
         }
 
+        // TODO: move this up to where instanceNew is exported once functions are registered with their prototypes
+        // before their bodies are codegen'ed
         codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
+
+        Module->getDebugInfo()->popScope();
+
         PEP_TRACE(TraceChannel::Codegen,
                   "StructDef {0} -> {1}",
                   structDef->Name,

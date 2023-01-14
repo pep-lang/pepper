@@ -33,9 +33,9 @@ namespace pepper {
 
         static Ref<Scope> locals();
         static Ref<Scope> globals();
-        static void pushFunction(Ref<UserFunction> function);
-        static void pushScope(const Ident& name);
-        static void popScope();
+        void pushFunction(Ref<UserFunction> function);
+        void pushScope(const Ident& name);
+        void popScope();
 
         // Entry to polymorphic emit calls, use this to force generation of a node and its children
         Value codegen(Ref<ast::Node> node);

@@ -79,7 +79,9 @@ namespace pepper {
         return std::move(Module);
     }
 
-    llvm::Error ModuleContext::verify() const {
+    llvm::Error ModuleContext::verify() {
+        finalizeDebugInfo();
+
         std::string verifyOutput;
         llvm::raw_string_ostream vout(verifyOutput);
         bool debugInfoBroken = false;

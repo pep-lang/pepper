@@ -47,7 +47,7 @@ namespace pepper {
             return Debug.get();
         }
 
-        llvm::Error verify() const;
+        llvm::Error verify();
 
         std::string toString() const;
 

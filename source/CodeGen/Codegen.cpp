@@ -28,13 +28,17 @@ namespace pepper {
 
     void Codegen::pushFunction(Ref<UserFunction> function) {
         Context::get().pushFunction(function);
+        auto sp = Module->getDebugInfo()->emitFunction(function.get());
+        Module->getDebugInfo()->pushScope(sp);
     }
 
     void Codegen::pushScope(const Ident& name) {
         Context::get().pushScope(name);
+        // TODO: how to handle anonymous scopes
     }
 
     void Codegen::popScope() {
+        Module->getDebugInfo()->popScope();
         Context::get().popScope();
     }
 
@@ -62,6 +66,8 @@ namespace pepper {
             defaultValue = zeroValue(type);
             ir()->CreateStore(defaultValue, value);
         }
+
+        Module->getDebugInfo()->emitLocalVariable(value);
 
         locals()->newSymbol(value);
         return value;
@@ -98,6 +104,7 @@ namespace pepper {
 
     Value Codegen::codegen(Ref<Node> node) {
         PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
+        Module->getDebugInfo()->setSourceLocation(node->Source);
 
         Value value;
         if (node->is<BinaryOp>())

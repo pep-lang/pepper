@@ -33,6 +33,9 @@ namespace pepper {
             auto arg = Value(param.Type, llvmFunction->getArg(paramIdx));
             auto addr = ir()->CreateAlloca(*type, nullptr, param.Name);
             auto local = Value(type, addr, param.Name);
+
+            Module->getDebugInfo()->emitParameter(paramIdx, local);
+
             // Special methods use raw stores to avoid ref-counting getting in the way
             if (function->countArgRefs()) {
                 type->ops()->init(local, arg);

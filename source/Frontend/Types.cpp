@@ -11,11 +11,11 @@
 
 namespace pepper {
 
-    Type::Type(const Ident& name, llvm::Type* type, bool)
+    Type::Type(const Ident& name, llvm::Type* type, bool isSigned)
         : std::enable_shared_from_this<Type>()
         , TypeName(name)
         , TypeRef(type)
-        , IsSigned(false) {
+        , IsSigned(isSigned) {
     }
 
     TypeOps* Type::ops() {
@@ -67,15 +67,15 @@ namespace pepper {
     Types::Types(llvm::LLVMContext& ctx)
         : Ctx(ctx) {
         Void = addType(Ref<Type>::New("void", llvm::Type::getVoidTy(ctx)));
-        Int8 = addType(Ref<Type>::New("i8", llvm::Type::getInt8Ty(ctx)), {"char"});
+        Int8 = addType(Ref<Type>::New("i8", llvm::Type::getInt8Ty(ctx), true), {"char"});
         UInt8 = addType(Ref<Type>::New("u8", llvm::Type::getInt8Ty(ctx)), {"byte"});
-        Int32 = addType(Ref<Type>::New("i32", llvm::Type::getInt32Ty(ctx)), {"int"});
+        Int32 = addType(Ref<Type>::New("i32", llvm::Type::getInt32Ty(ctx), true), {"int"});
         UInt32 = addType(Ref<Type>::New("u32", llvm::Type::getInt32Ty(ctx)), {"uint"});
-        Int64 = addType(Ref<Type>::New("i64", llvm::Type::getInt64Ty(ctx)), {"long"});
+        Int64 = addType(Ref<Type>::New("i64", llvm::Type::getInt64Ty(ctx), true), {"long"});
         UInt64 = addType(Ref<Type>::New("u64", llvm::Type::getInt64Ty(ctx)), {"ulong"});
         Bool = addType(Ref<Type>::New("bool", llvm::Type::getInt1Ty(ctx)));
-        Double = addType(Ref<Type>::New("f64", llvm::Type::getDoubleTy(ctx)), {"double"});
-        Float = addType(Ref<Type>::New("f32", llvm::Type::getFloatTy(ctx)), {"float"});
+        Double = addType(Ref<Type>::New("f64", llvm::Type::getDoubleTy(ctx), true), {"double"});
+        Float = addType(Ref<Type>::New("f32", llvm::Type::getFloatTy(ctx), true), {"float"});
         // insert pointer types for all native types
         KnownTypes.erase("bool*");
         // llvm has no void*, use char* intead
