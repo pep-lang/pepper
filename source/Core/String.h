@@ -50,9 +50,9 @@ namespace pepper {
         std::string res{s.begin(), s.end()};
         size_t pos = 0;
         while (pos != std::string::npos) {
-            pos = res.find(search, pos);
+            pos = res.find(search.data(), pos);
             if (pos != std::string::npos) {
-                res.replace(pos, search.size(), replacement);
+                res.replace(pos, search.size(), replacement.data());
                 ++pos;
             }
         }
