@@ -9,7 +9,9 @@
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
+#include "Frontend/Context.h"
 #include "Frontend/Scope.h"
+#include "llvm/IR/Mangler.h"
 
 namespace pepper {
 
@@ -25,7 +27,7 @@ namespace pepper {
         static Vector<FunctionProto>& Imports();
 
       public:
-        Runtime();
+        Runtime(Ref<ModuleContext> module);
 
         static void Import(const Ident& returnType,
                            const Ident& name,

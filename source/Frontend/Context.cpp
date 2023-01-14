@@ -32,7 +32,7 @@ namespace pepper {
 
         TypeMap = Ref<Types>::New(*Module->getContext());
 
-        Builtins = Ref<Runtime>::New();
+        Builtins = Ref<Runtime>::New(Module);
         Globals = Ref<Scope>::New("Globals", Builtins);
         Locals = Globals;
     }

@@ -10,6 +10,7 @@
 #include "Frontend/Symbols.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Mangler.h"
 #include "llvm/IR/Type.h"
 
 namespace pepper {
@@ -36,7 +37,7 @@ namespace pepper {
         return imports;
     }
 
-    Runtime::Runtime()
+    Runtime::Runtime(Ref<ModuleContext> module)
         : Scope("Runtime") {
         for (auto& proto : Imports()) {
             auto returnType = Types::get(proto.Return);
@@ -45,7 +46,9 @@ namespace pepper {
                 auto type = Types::get(param.first);
                 params.emplace_back(param.second, type);
             }
-            Functions[proto.Name] = Ref<Function>::New(proto.Name, returnType, params, proto.Vararg);
+            llvm::SmallString<256> mangledName;
+            llvm::Mangler::getNameWithPrefix(mangledName, proto.Name, module->getModule()->getDataLayout());
+            Functions[proto.Name] = Ref<Function>::New(mangledName.c_str(), returnType, params, proto.Vararg);
         }
     }
 } // namespace pepper
