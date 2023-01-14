@@ -2,9 +2,12 @@
 #include "Compiler/Options.h"
 #include <filesystem>
 
-#include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/Query.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/MathExtras.h"
+
+#define BIT_IDX(b) (llvm::countTrailingZeros((unsigned)b))
 
 namespace pepper {
     using namespace llvm;
@@ -17,6 +20,14 @@ namespace pepper {
             "build", cl::desc("Build directory, defaults to ./build"), cl::value_desc("path"));
         static cl::opt<bool> EmitLLVM("emit-llvm", cl::desc("Emit LLVM IR"));
         static cl::opt<bool> Verbose("v", cl::desc("Verbose output"));
+        static cl::bits<TraceChannel> TraceChannels(
+            cl::desc("Trace channels to enable"),
+            cl::values(clEnumValN(BIT_IDX(TraceChannel::Codegen), "Tcodegen", "CodeGen"),
+                       clEnumValN(BIT_IDX(TraceChannel::AST), "Tast", "AST"),
+                       clEnumValN(BIT_IDX(TraceChannel::Parser), "Tparser", "Parser"),
+                       clEnumValN(BIT_IDX(TraceChannel::IR), "Tir", "IR"),
+                       clEnumValN(BIT_IDX(TraceChannel::DebugInfo), "Tdebuginfo", "DebugInfo"),
+                       clEnumValN(BIT_IDX(TraceChannel::ALL), "Tall", "All channels")));
     } // namespace cli
 
     static std::string PathToFilename(const std::string& path) {
@@ -46,6 +57,7 @@ namespace pepper {
 
         opts->EmitLLVM = cli::EmitLLVM;
         opts->Verbose = cli::Verbose;
+        opts->TraceChannels = cli::TraceChannels.getBits();
         return opts;
     }
 

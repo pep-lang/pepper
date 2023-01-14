@@ -53,6 +53,8 @@ namespace pepper {
 
             if (Opts->Verbose)
                 Messages::EnableVerbose();
+            if (Opts->TraceChannels)
+                Messages::SetTraceChannels(Opts->TraceChannels);
         }
 
         Ref<ast::AST> parse(std::istream& inputStream, const std::string& sourceFile) {
