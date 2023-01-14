@@ -1,0 +1,9 @@
+<toolSet name="External Tools">
+  <tool name="Compile debug.pep" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="false" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="$ProjectFileDir$/out/build/mac-llvm-clang-x64/pepper" />
+      <option name="PARAMETERS" value="$ProjectFileDir$/tests/debug.pep -o $ProjectFileDir$/out/debug" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+</toolSet>

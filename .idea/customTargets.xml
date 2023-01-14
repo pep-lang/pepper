@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="d902d9dd-7c8e-4afa-8b20-c6d7ee7386e1" name="debug.pep" defaultType="TOOL">
+      <configuration id="e0d1671d-4ba3-4cfe-bc07-a3405d979d7a" name="debug.pep">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_Compile debug.pep" />
+        </build>
+      </configuration>
+    </target>
+  </component>
+</project>
