@@ -46,9 +46,10 @@ namespace pepper {
                 auto type = Types::get(param.first);
                 params.emplace_back(param.second, type);
             }
-            llvm::SmallString<256> mangledName;
-            llvm::Mangler::getNameWithPrefix(mangledName, proto.Name, module->getModule()->getDataLayout());
-            Functions[proto.Name] = Ref<Function>::New(mangledName.c_str(), returnType, params, proto.Vararg);
+            //            llvm::SmallString<256> mangledName;
+            //            llvm::Mangler::getNameWithPrefix(mangledName, proto.Name,
+            //            module->getModule()->getDataLayout());
+            Functions[proto.Name] = Ref<Function>::New(proto.Name, returnType, params, proto.Vararg);
         }
     }
 } // namespace pepper

@@ -46,6 +46,7 @@ namespace pepper {
 
         Module->setSourceFileName(sourcePath);
         Module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+        Module->addModuleFlag(llvm::Module::Warning, "DWARF Version", llvm::dwarf::DWARF_VERSION);
 
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
         Module->setTargetTriple(targetTriple);

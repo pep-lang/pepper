@@ -80,4 +80,4 @@ add_custom_command(TARGET pepper POST_BUILD
 set(PEPPER_INCLUDE_DIRS source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 set(PEPPER_LIBRARIES PepperParser PepperCore ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES})
 
-add_subdirectory(tests)
+add_subdirectory(unittests)
