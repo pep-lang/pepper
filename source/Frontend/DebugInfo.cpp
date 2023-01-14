@@ -68,8 +68,15 @@ namespace pepper {
     }
 
     llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Value& value) {
-        return DI->createAutoVariable(
+        auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
+        llvm::SmallVector<uint64_t, 13> diExpr;
+        // Allow debugger to use the pointee as the value
+        if (value.Ty->isPointer() && value.Ty.as<PointerType>()->pointeeType()->isStruct()) {
+            diExpr.emplace_back(llvm::dwarf::DW_OP_deref);
+        }
+        DI->insertDeclare(value.V, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
+        return local;
     }
 
     llvm::DIGlobalVariableExpression* DebugInfo::emitGlobalVariable(const Value& global) {
@@ -182,10 +189,13 @@ namespace pepper {
             if (!type->isPointer() && !type->isStruct()) {
                 diType = emitBasicType(type->name(), type);
             } else if (auto ptrType = type->as<PointerType>()) {
-                static auto pointerSize = llvm::PointerType::getVoidTy(Module->getContext())->getPrimitiveSizeInBits();
+                static auto pointerSize = Module->getDataLayout().getTypeSizeInBits(ptrType->llvmType());
                 auto pointee = ptrType->pointeeType();
                 llvm::DIType* pointeeDI = getOrCreateType(pointee.get());
-                diType = DI->createPointerType(pointeeDI, pointerSize, 0, llvm::None, type->name());
+                if (pointee->isStruct())
+                    diType = DI->createObjectPointerType(pointeeDI);
+                else
+                    diType = DI->createPointerType(pointeeDI, pointerSize, 0, llvm::None, ptrType->name());
             } else if (auto structType = type->as<StructType>()) {
                 assert(false && "Structs should be registered with DebugInfo before pointers to them are encountered");
             } else {

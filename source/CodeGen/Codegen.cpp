@@ -57,6 +57,7 @@ namespace pepper {
             throw CompileError(variableDef->Source, "Unknown type {0}", typeName.toString());
         }
         auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
+        Module->getDebugInfo()->emitLocalVariable(value);
 
         auto defaultValue = maybeCodegen(variableDef->Default);
         if (defaultValue) {
@@ -66,8 +67,6 @@ namespace pepper {
             defaultValue = zeroValue(type);
             ir()->CreateStore(defaultValue, value);
         }
-
-        Module->getDebugInfo()->emitLocalVariable(value);
 
         locals()->newSymbol(value);
         return value;
