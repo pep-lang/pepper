@@ -78,10 +78,6 @@ namespace pepper {
         auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
         llvm::SmallVector<uint64_t, 13> diExpr;
-        // Allow debugger to use the pointee as the value
-        if (value.Ty->isPointer() && value.Ty.as<PointerType>()->pointeeType()->isStruct()) {
-            diExpr.emplace_back(llvm::dwarf::DW_OP_deref);
-        }
         DI->insertDeclare(value.V, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
         return local;
     }
