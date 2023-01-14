@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Frontend/Context.h"
 #include "Frontend/Param.h"
 #include "Frontend/Struct.h"
@@ -31,9 +32,11 @@ namespace pepper {
     }
 
     void DebugInfo::setSourceLocation(const SourceLocation& source) {
-        Source = source;
-        if (auto builder = ir())
-            builder->SetCurrentDebugLocation(location());
+        if (!source.File.empty()) {
+            Source = source;
+            if (auto builder = ir())
+                builder->SetCurrentDebugLocation(location());
+        }
     }
 
     Ref<llvm::IRBuilderBase> DebugInfo::ir() {
@@ -70,6 +73,8 @@ namespace pepper {
     }
 
     llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Value& value) {
+        PEP_TRACE(
+            TraceChannel::DebugInfo, "local: {0} {1}: {2}", localScope()->getName(), value.Name, Source.toString());
         auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
         llvm::SmallVector<uint64_t, 13> diExpr;

@@ -66,6 +66,7 @@ namespace pepper {
         Codegen = 1 << 1,
         Parser = 1 << 2,
         IR = 1 << 3,
+        DebugInfo = 1 << 4,
         ALL = 0xffffffff,
         NONE = 0,
     };
