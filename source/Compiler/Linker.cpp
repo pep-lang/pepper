@@ -134,6 +134,9 @@ namespace pepper {
             "/machine:x64",
             "/debug",
             "/entry:main",
+            "/defaultlib:ucrt",
+            //"/verbose",
+            //"/verbose:lib",
         };
         linkArgs.append(objFiles);
 
