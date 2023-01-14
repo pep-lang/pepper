@@ -45,6 +45,7 @@ namespace pepper {
         llvm::DIType* emitBasicType(llvm::StringRef name, const Type* type);
         llvm::DILocalVariable* emitLocalVariable(const Value& value);
         llvm::DIType* emitStruct(const Struct* st);
+        llvm::DIType* emitField(const Struct* st, llvm::DIType* structDI, int fieldIdx);
         llvm::DISubprogram* emitFunction(Function* function);
         llvm::DILocalVariable* emitParameter(int argIndex, const Value& param);
         llvm::DIGlobalVariableExpression* emitGlobalVariable(const Value& global);
@@ -60,5 +61,6 @@ namespace pepper {
         llvm::DISubroutineType* createFunctionType(Function* function);
         static Ref<llvm::IRBuilderBase> ir();
         llvm::DILocation* location() const;
+        uint64_t sizeOf(const Type* type) const;
     };
 } // namespace pepper

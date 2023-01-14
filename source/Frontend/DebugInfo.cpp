@@ -50,11 +50,14 @@ namespace pepper {
         return Stack.front();
     }
 
+    uint64_t DebugInfo::sizeOf(const Type* type) const {
+        return Module->getDataLayout().getTypeSizeInBits(type->llvmType());
+    }
+
     llvm::DIType* DebugInfo::emitBasicType(llvm::StringRef name, const Type* type) {
         if (type->llvmType()->isVoidTy())
             return nullptr;
 
-        auto sizeInBits = Module->getDataLayout().getTypeSizeInBits(*type);
         assert(!type->llvmType()->isArrayTy() && !type->llvmType()->isStructTy());
         auto encoding = llvm::dwarf::DW_ATE_unsigned;
         if (type->llvmType()->isFloatingPointTy())
@@ -63,7 +66,7 @@ namespace pepper {
             encoding = llvm::dwarf::DW_ATE_boolean;
         if (type->llvmType()->isIntegerTy() && type->isSigned())
             encoding = llvm::dwarf::DW_ATE_signed;
-        auto diType = DI->createBasicType(name, sizeInBits, encoding);
+        auto diType = DI->createBasicType(name, sizeOf(type), encoding);
         return insertType(type, diType);
     }
 
@@ -93,11 +96,7 @@ namespace pepper {
     }
 
     llvm::DIType* DebugInfo::emitStruct(const Struct* st) {
-        llvm::SmallVector<llvm::Metadata*> elements;
-        for (const auto& field : st->fields()) {
-            elements.emplace_back(getOrCreateType(field.Type.get()));
-        }
-        auto fields = DI->getOrCreateArray(elements);
+        // Create an empty struct, then enumerate the fields, then swap them in
         auto structDI = DI->createStructType(localScope(),
                                              st->name(),
                                              SourceFile,
@@ -106,10 +105,37 @@ namespace pepper {
                                              st->align() * 8,
                                              llvm::DINode::FlagPublic | llvm::DINode::FlagNonTrivial,
                                              nullptr,
-                                             fields);
+                                             llvm::DINodeArray());
+        // Insert the struct and ref types, in case the struct is self-referential
         insertType(st->structType().get(), structDI);
         insertType(st->refType().get());
+        Vector<llvm::Metadata*> elements;
+        for (int fieldIdx = 0; fieldIdx < st->fields().size(); ++fieldIdx) {
+            auto f = emitField(st, structDI, fieldIdx);
+            elements.emplace_back(f);
+        }
+        auto fields = DI->getOrCreateArray(elements);
+        DI->replaceArrays(structDI, fields);
         return structDI;
+    }
+
+    llvm::DIType* DebugInfo::emitField(const Struct* st, llvm::DIType* structDI, int fieldIdx) {
+        const auto& fields = st->fields();
+        const auto& field = fields[fieldIdx];
+        auto fieldTy = getOrCreateType(field.Type.get());
+        auto structTy = llvm::cast<llvm::StructType>(st->structType()->llvmType());
+        auto structLayout = Module->getDataLayout().getStructLayout(structTy);
+        auto offset = structLayout->getElementOffsetInBits(fieldIdx);
+
+        return DI->createMemberType(localScope(),
+                                    field.Name,
+                                    SourceFile,
+                                    Source.Line,
+                                    sizeOf(field.Type.get()),
+                                    0,
+                                    offset,
+                                    llvm::DINode::FlagPublic,
+                                    structDI);
     }
 
     llvm::DISubroutineType* DebugInfo::createFunctionType(Function* function) {
@@ -189,13 +215,12 @@ namespace pepper {
             if (!type->isPointer() && !type->isStruct()) {
                 diType = emitBasicType(type->name(), type);
             } else if (auto ptrType = type->as<PointerType>()) {
-                static auto pointerSize = Module->getDataLayout().getTypeSizeInBits(ptrType->llvmType());
                 auto pointee = ptrType->pointeeType();
                 llvm::DIType* pointeeDI = getOrCreateType(pointee.get());
                 if (pointee->isStruct())
                     diType = DI->createObjectPointerType(pointeeDI);
                 else
-                    diType = DI->createPointerType(pointeeDI, pointerSize, 0, llvm::None, ptrType->name());
+                    diType = DI->createPointerType(pointeeDI, sizeOf(ptrType), 0, llvm::None, ptrType->name());
             } else if (auto structType = type->as<StructType>()) {
                 assert(false && "Structs should be registered with DebugInfo before pointers to them are encountered");
             } else {
