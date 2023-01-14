@@ -33,8 +33,7 @@ namespace pepper {
     void DebugInfo::setSourceLocation(const SourceLocation& source) {
         Source = source;
         if (auto builder = ir())
-            builder->SetCurrentDebugLocation(
-                llvm::DILocation::get(builder->getContext(), Source.Line, Source.Column, localScope()));
+            builder->SetCurrentDebugLocation(location());
     }
 
     Ref<llvm::IRBuilderBase> DebugInfo::ir() {
@@ -42,7 +41,7 @@ namespace pepper {
     }
 
     llvm::DILocation* DebugInfo::location() const {
-        return llvm::DILocation::get(ir()->getContext(), Source.Line, 0, localScope());
+        return llvm::DILocation::get(ir()->getContext(), Source.Line, Source.Column, localScope());
     }
 
     llvm::DIScope* DebugInfo::globalScope() const {
@@ -184,6 +183,8 @@ namespace pepper {
 
     void DebugInfo::pushScope(llvm::DIScope* newScope) {
         Stack.push_back(newScope);
+        if (Stack.size() > 1)
+            setSourceLocation(Source); // force the source location into the builder
     }
 
     void DebugInfo::popScope() {

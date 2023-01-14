@@ -140,6 +140,8 @@ namespace pepper::ast {
         GenericStruct = std::move(genericStruct);
         GenericArgs = std::move(genericArgs);
 
+        Source = GenericStruct->Source;
+
         Specialization spec{shared_from_this()};
         // map params -> args
         for (int idx = 0; idx < GenericStruct->GenericParams.size(); ++idx) {
@@ -189,12 +191,17 @@ namespace pepper::ast {
             Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
         };
         NewInstance->Body->Items = body;
+        // for debugging purposes, new and ctor are the same, but the parser only gives
+        // ctor a source location (if it's defined by user)
+        NewInstance->Source = Constructor->Source;
 
         // Fill in initializer
         for (auto& field : Fields) {
             Initializer->Body->Items.push_back(field);
         }
         Initializer->Body->Items.push_back(Ref<Return>::New());
+        // for debugging purposes, initializer and ctor are the same
+        Initializer->Source = Constructor->Source;
 
         // insert initializer as the first instruction in Constructor
         Constructor->Body->Items.insert(Constructor->Body->Items.begin(),
@@ -208,6 +215,9 @@ namespace pepper::ast {
 
         Destructor->Body->Items.push_back(
             Ref<FunctionCall>::New(ExternFunctionDef::Find("free"), Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
+
+        Acquire->Source = Source;
+        Release->Source = Source;
 
         Methods.push_back(Release);
         Methods.push_back(Acquire);

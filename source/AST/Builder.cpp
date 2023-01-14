@@ -215,6 +215,7 @@ namespace pepper::ast {
                 scope->Structs[structDef->Type.Name] = structDef;
             }
             scope->Functions[structDef->Name] = structDef->NewInstance;
+            structDef->Source = Source;
 
             beginScope(structDef->Name);
             auto& structScope = ScopeStack.back();
@@ -245,6 +246,7 @@ namespace pepper::ast {
                 throw CompileError(Source, "Cannot redefine existing function {0}", func->Name);
             scope->Functions[func->Name] = func;
             // set the parent to the enclosing function for lambdas, its null otherwise
+            func->Source = Source;
             func->Body = Ref<Block>::New(func->Name);
             beginBlock(func->Body);
             auto& fnScope = ScopeStack.back();

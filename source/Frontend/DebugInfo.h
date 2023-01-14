@@ -38,6 +38,10 @@ namespace pepper {
 
         void setSourceLocation(const SourceLocation& source);
 
+        const SourceLocation& getSourceLocation() const {
+            return Source;
+        }
+
         // void emitSourceLocation(const SourceLocation& source);
 
         void finalize();
