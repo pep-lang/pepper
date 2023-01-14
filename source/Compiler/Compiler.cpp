@@ -50,6 +50,9 @@ namespace pepper {
             llvm::InitializeNativeTarget();
             llvm::InitializeNativeTargetAsmPrinter();
             llvm::InitializeNativeTargetAsmParser();
+
+            if (Opts->Verbose)
+                Messages::EnableVerbose();
         }
 
         Ref<ast::AST> parse(std::istream& inputStream, const std::string& sourceFile) {
