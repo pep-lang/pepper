@@ -167,7 +167,7 @@ namespace pepper {
             pass.run(*(*Module));
             dest.flush();
 
-            llvm::outs() << "Object file written to " << outputFile.string() << "\n";
+            PEP_VERBOSE("Object file written to {0}", outputFile.string());
 
             ObjFiles.emplace_back(objFilePath);
         }
@@ -185,7 +185,7 @@ namespace pepper {
 
             auto module = Module->getModule();
             module->print(out, nullptr, false, false);
-            llvm::outs() << "LLVM IR written to " << outputPath.string() << "\n";
+            PEP_VERBOSE("LLVM IR written to {0}", outputPath.string());
         }
 
         static Ref<ModuleContext> loadIR(const std::string& irFilePath) {

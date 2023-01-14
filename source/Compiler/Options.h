@@ -15,6 +15,7 @@ namespace pepper {
         std::string BuildDir;
         std::unique_ptr<std::istream> InputStream; // used internally for tests/embedding
         bool EmitLLVM = false;
+        bool Verbose = false;
 
         static Ref<Options> FromCommandLine(int argc, const char** argv);
         static Ref<Options> Defaults();

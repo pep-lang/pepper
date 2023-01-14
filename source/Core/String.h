@@ -10,6 +10,8 @@
 #include <locale>
 #include <string>
 
+#include "llvm/ADT/SmallString.h"
+
 namespace pepper {
 #define WHITESPACE " \t\n\r\f\v"
 
@@ -34,7 +36,8 @@ namespace pepper {
 
 #undef WHITESPACE
 
-    inline std::string replace(const std::string& s, const std::string& search, const std::string& replacement) {
+    template <typename S>
+    inline std::string replace(const S& s, llvm::StringRef search, llvm::StringRef replacement) {
         auto res = s;
         auto pos = res.find(search);
         if (pos != -1)
@@ -42,8 +45,9 @@ namespace pepper {
         return res;
     }
 
-    inline std::string replace_all(const std::string& s, const std::string& search, const std::string& replacement) {
-        auto res = s;
+    template <typename S>
+    inline std::string replace_all(const S& s, llvm::StringRef search, llvm::StringRef replacement) {
+        std::string res{s.begin(), s.end()};
         size_t pos = 0;
         while (pos != std::string::npos) {
             pos = res.find(search, pos);
@@ -55,7 +59,7 @@ namespace pepper {
         return res;
     }
 
-    inline std::string repeat(const std::string& str, size_t n) {
+    inline std::string repeat(llvm::StringRef str, size_t n) {
         std::string res;
         for (int idx = 0; idx < n; ++idx) {
             res += str;

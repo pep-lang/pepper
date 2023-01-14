@@ -11,6 +11,7 @@
 #include "Core/String.h"
 #include "Core/Vector.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
     class Message {
@@ -74,6 +75,7 @@ namespace pepper {
         static Vector<Warning> Warnings;
         static uint64_t Channels;
         static std::unordered_map<TraceChannel, std::string> Indents;
+        static bool VerboseOutput;
 
       public:
         template <IsA<Message> M, HasToString Ctx, typename... Args>
@@ -120,7 +122,17 @@ namespace pepper {
             return Channels;
         }
 
-        static void Trace(TraceChannel channel, const std::string& msg);
+        static void Trace(TraceChannel channel, llvm::StringRef msg);
+
+        static void Verbose(llvm::StringRef msg);
+
+        static bool OutputVerbose() {
+            return VerboseOutput;
+        }
+
+        static void EnableVerbose(bool enable = true) {
+            VerboseOutput = enable;
+        }
 
       private:
         static void report(Error&& msg);
@@ -132,8 +144,19 @@ namespace pepper {
 #define PEP_TRACING(channel) (Messages::ShouldTrace(channel))
 
 #define PEP_TRACE(channel, fmt, ...)                                                                                   \
-    if (Messages::ShouldTrace(channel)) {                                                                              \
-        std::string msg(fmt);                                                                                          \
-        __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                             \
-        Messages::Trace(channel, msg);                                                                                 \
-    }
+    do {                                                                                                               \
+        if (Messages::ShouldTrace(channel)) {                                                                          \
+            llvm::SmallString<256> msg(fmt);                                                                           \
+            __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                         \
+            Messages::Trace(channel, msg);                                                                             \
+        }                                                                                                              \
+    } while (false);
+
+#define PEP_VERBOSE(fmt, ...)                                                                                          \
+    do {                                                                                                               \
+        if (Messages::OutputVerbose()) {                                                                               \
+            llvm::SmallString<256> msg(fmt);                                                                           \
+            __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                         \
+            Messages::Verbose(msg);                                                                                    \
+        }                                                                                                              \
+    } while (false);

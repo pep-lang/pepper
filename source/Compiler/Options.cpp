@@ -16,6 +16,7 @@ namespace pepper {
         static cl::opt<string> BuildPath(
             "build", cl::desc("Build directory, defaults to ./build"), cl::value_desc("path"));
         static cl::opt<bool> EmitLLVM("emit-llvm", cl::desc("Emit LLVM IR"));
+        static cl::opt<bool> Verbose("v", cl::desc("Verbose output"));
     } // namespace cli
 
     static std::string PathToFilename(const std::string& path) {
@@ -44,6 +45,7 @@ namespace pepper {
         }
 
         opts->EmitLLVM = cli::EmitLLVM;
+        opts->Verbose = cli::Verbose;
         return opts;
     }
 
