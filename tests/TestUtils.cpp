@@ -7,6 +7,7 @@
 #include "Compiler/Compiler.h"
 #include "Compiler/Options.h"
 #include "Core/Messages.h"
+#include "Frontend/Runtime.h"
 #include "JIT/Executor.h"
 #include "Support.h"
 #include "gtest/gtest.h"
@@ -25,7 +26,14 @@ namespace TestUtils {
         ASSERT_TRUE(condition) << msg;
     }
 
+    void RegisterImports() {
+        Runtime::Import("void", "trace_int", {{"int", "value"}, {"u8*", "message"}});
+        Runtime::Import("void", "trace_ptr", {{"void*", "ptr"}, {"u8*", "message"}});
+        Runtime::Import("void", "test_assert", {{"bool", "condition"}, {"u8*", "message"}});
+    }
+
     int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry) {
+        RegisterImports();
         SupportInit(AssertTrap);
         Messages::SetTraceChannels(TraceChannel::ALL);
         auto sourceStream = std::make_unique<std::istringstream>(source);

@@ -1,7 +1,9 @@
 
 #include "AST/Nodes.h"
 #include "AST/Param.h"
+#include "Core/Exceptions.h"
 #include "Core/Query.h"
+#include "Frontend/Runtime.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
@@ -65,11 +67,18 @@ namespace pepper::ast {
         Type.specialize(spec.TypeMap);
     }
 
-    Ref<ExternFunctionDef> ExternFunctionDef::Malloc =
-        Ref<ExternFunctionDef>::New(TypeName("void*"), "malloc", Params{{"size", TypeName("u64")}});
-    Ref<ExternFunctionDef> ExternFunctionDef::Free =
-        Ref<ExternFunctionDef>::New(TypeName("void"), "free", Params{{"ptr", TypeName("void*")}});
-    Ref<ExternFunctionDef> ExternFunctionDef::TraceInt = Ref<ExternFunctionDef>::New(
-        TypeName::Void, "trace_int", Params{{"value", TypeName::Int64}, {"message", TypeName{"u8*"}}});
+    Ref<ExternFunctionDef> ExternFunctionDef::Find(const Ident& name) {
+        // Put runtime imports into global scope
+        for (const auto& import : Runtime::Imports()) {
+            if (import.Name == name) {
+                Params params;
+                for (const auto& param : import.Params) {
+                    params.emplace_back(param.second, param.first);
+                }
+                return Ref<ExternFunctionDef>::New(import.Return, import.Name, params, import.Vararg);
+            }
+        }
+        return nullptr;
+    }
 
 } // namespace pepper::ast

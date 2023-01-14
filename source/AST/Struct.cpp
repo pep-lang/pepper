@@ -106,8 +106,6 @@ namespace pepper::ast {
             // ++this.__refcount
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
             // Ref<Assign>::New(refcount, Ref<IntegerLiteral>::New(1)),
-            Ref<FunctionCall>::New(ExternFunctionDef::TraceInt,
-                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("__refcount")}),
         };
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
@@ -185,7 +183,7 @@ namespace pepper::ast {
         Vector<Ref<Node>> body = {
             Ref<VariableDef>::New(TypeName("u64"), "size"),
             Ref<ThisDef>::New(Type,
-                              Ref<FunctionCall>::New(ExternFunctionDef::Malloc,
+                              Ref<FunctionCall>::New(ExternFunctionDef::Find("malloc"),
                                                      Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
             Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
             Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
@@ -209,7 +207,7 @@ namespace pepper::ast {
         }
 
         Destructor->Body->Items.push_back(
-            Ref<FunctionCall>::New(ExternFunctionDef::Free, Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
+            Ref<FunctionCall>::New(ExternFunctionDef::Find("free"), Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
 
         Methods.push_back(Release);
         Methods.push_back(Acquire);

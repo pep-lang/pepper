@@ -63,9 +63,7 @@ namespace pepper::ast {
             : FunctionDef(returnType, name, params, varargs) {
         }
 
-        static Ref<ExternFunctionDef> Malloc;
-        static Ref<ExternFunctionDef> Free;
-        static Ref<ExternFunctionDef> TraceInt;
+        static Ref<ExternFunctionDef> Find(const Ident& name);
     };
 
     struct FunctionCall : public Expression {

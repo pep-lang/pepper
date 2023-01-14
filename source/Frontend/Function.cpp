@@ -10,10 +10,11 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
-    Function::Function(const Ident& name, Ref<Type> returnType, const Params& params)
+    Function::Function(const Ident& name, Ref<Type> returnType, const Params& params, bool vararg)
         : Name(name)
         , ReturnType(returnType)
-        , Parameters(params) {
+        , Parameters(params)
+        , Vararg(vararg) {
         Vector<llvm::Type*> paramTypes;
         std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.Type); });
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);

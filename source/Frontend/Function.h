@@ -28,11 +28,12 @@ namespace pepper {
         const Ident Name;
         Ref<Type> ReturnType;
         const Params Parameters;
+        bool Vararg;
         llvm::Function* Func;
         Ref<Type> FuncType;
 
       public:
-        Function(const Ident& name, Ref<Type> returnType, const Params& params = Params());
+        Function(const Ident& name, Ref<Type> returnType, const Params& params = Params(), bool vararg = false);
 
         const Ident& name() const {
             return Name;

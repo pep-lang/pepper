@@ -13,17 +13,39 @@
 #include "llvm/IR/Type.h"
 
 namespace pepper {
+
+    static struct RegisterCRT {
+        RegisterCRT() {
+            Runtime::Import("int", "puts", {{"char*", "str"}});
+            Runtime::Import("void*", "malloc", {{"u64", "size"}});
+            Runtime::Import("void", "free", {{"void*", "ptr"}});
+        }
+    } Registrar;
+
+    void Runtime::Import(
+        const Ident& returnType, const Ident& name, const Vector<std::pair<Ident, Ident>>& params, bool vararg) {
+        for (const auto& import : Imports()) {
+            if (import.Name == name)
+                return;
+        }
+        Imports().emplace_back(FunctionProto{name, returnType, params, vararg});
+    }
+
+    Vector<Runtime::FunctionProto>& Runtime::Imports() {
+        static Vector<FunctionProto> imports;
+        return imports;
+    }
+
     Runtime::Runtime()
         : Scope("Runtime") {
-        Functions["puts"] = Ref<Function>::New("puts", Types::Int32, Params{{"str", Types::get("char*")}});
-        Functions["print"] = Functions["puts"];
-        Functions["malloc"] = Ref<Function>::New("malloc", Types::VoidPtr, Params{{"size", Types::UInt64}});
-        Functions["free"] = Ref<Function>::New("free", Types::Void, Params{{"ptr", Types::VoidPtr}});
-        Functions["debug_ptr"] = Ref<Function>::New(
-            "debug_ptr", Types::Void, Params{{"ptr", Types::VoidPtr}, {"name", Types::Int8->pointer()}});
-        Functions["test_assert"] = Ref<Function>::New(
-            "test_assert", Types::Void, Params{{"condition", Types::Bool}, {"message", Types::UInt8->pointer()}});
-        Functions["trace_int"] = Ref<Function>::New(
-            "trace_int", Types::Void, Params{{"value", Types::Int64}, {"message", Types::UInt8->pointer()}});
+        for (auto& proto : Imports()) {
+            auto returnType = Types::get(proto.Return);
+            auto params = Params{};
+            for (auto& param : proto.Params) {
+                auto type = Types::get(param.first);
+                params.emplace_back(param.second, type);
+            }
+            Functions[proto.Name] = Ref<Function>::New(proto.Name, returnType, params, proto.Vararg);
+        }
     }
 } // namespace pepper

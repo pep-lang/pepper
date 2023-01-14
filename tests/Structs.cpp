@@ -262,18 +262,18 @@ struct Foo {
     Test t;
 
     new(Test z) {
-        debug_ptr(this, "this");
-        debug_ptr(z, "z");
+        trace_ptr(this, "this");
+        trace_ptr(z, "z");
         this.t = z;
-        debug_ptr(this.t, "this.t");
+        trace_ptr(this.t, "this.t");
     }
 };
 
 int test() {
     var t = Test();
-    debug_ptr(t, "t");
+    trace_ptr(t, "t");
     const f = Foo(t);
-    debug_ptr(f, "f");
+    trace_ptr(f, "f");
     return f.t == t;
 }
     )SOURCE";
