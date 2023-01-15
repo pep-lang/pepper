@@ -72,7 +72,7 @@ namespace pepper {
     }
 
     bool UserFunction::countArgRefs() const {
-        return false;
+        return true;
     }
 
     bool Method::countArgRefs() const {
@@ -80,7 +80,7 @@ namespace pepper {
             return false;
 
         if (Name.find(".__") != std::string::npos)
-            return true;
+            return false;
         if (Name == This->name())
             return true;
 
