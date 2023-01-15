@@ -89,10 +89,7 @@ namespace pepper::ast {
 
     StructDef::StructDef(const TypeName& type)
         : Symbol(type, type.toString()) {
-        NewInstance = Ref<FunctionDef>::New(Type, Name);
-        // Note that the order of these is important, ctor depends on init, so must be generated after
-        Initializer = Ref<MethodDef>::New(this, TypeName::Void, "__init");
-        Constructor = Ref<MethodDef>::New(this, TypeName::Void, "__ctor");
+        Constructor = Ref<FunctionDef>::New(Type, Name);
         Destructor = Ref<MethodDef>::New(this, TypeName::Void, "__dtor");
 
         // Add a field at the head for the refcount
@@ -105,7 +102,11 @@ namespace pepper::ast {
         Acquire->Body->Items = {
             // ++this.__refcount
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
-            // Ref<Assign>::New(refcount, Ref<IntegerLiteral>::New(1)),
+            Ref<FunctionCall>::New(
+                ExternFunctionDef::Find("trace_ptr"),
+                Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("acquire: " + Name)}),
+            Ref<FunctionCall>::New(ExternFunctionDef::Find("trace_int"),
+                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
         };
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
@@ -117,11 +118,22 @@ namespace pepper::ast {
                                          })),
             // --__refcount
             Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(1))),
+
+            Ref<FunctionCall>::New(
+                ExternFunctionDef::Find("trace_ptr"),
+                Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("release: " + Name)}),
+            Ref<FunctionCall>::New(ExternFunctionDef::Find("trace_int"),
+                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
+
             // if (this.__refcount == 0)
             //     this.__dtor()
             Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
                          Ref<Block>::New("if",
                                          Vector<Ref<Node>>{
+                                             Ref<FunctionCall>::New(
+                                                 ExternFunctionDef::Find("trace_ptr"),
+                                                 Vector<Ref<Expression>>{Ref<ThisRef>::New(),
+                                                                         Ref<StringLiteral>::New("free: " + Name)}),
                                              Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__dtor"),
                                          })),
         };
@@ -157,11 +169,11 @@ namespace pepper::ast {
             Fields.emplace_back(field);
         }
 
-        // clone and specialize the `new` function
-        NewInstance = GenericStruct->NewInstance->cloneAs<FunctionDef>();
-        NewInstance->Name = spec.Struct->Name;
-        NewInstance->Type = spec.Struct->Type;
-        NewInstance->specialize(spec);
+        // clone and specialize the ctor
+        Constructor = GenericStruct->Constructor->cloneAs<FunctionDef>();
+        Constructor->Name = spec.Struct->Name;
+        Constructor->Type = spec.Struct->Type;
+        Constructor->specialize(spec);
 
         // replace types in method return types and params
         for (const auto& srcMethod : GenericStruct->Methods) {
@@ -170,59 +182,51 @@ namespace pepper::ast {
             method->specialize(spec);
             Methods.emplace_back(method);
 
-            // update Constructor once it's specialized
-            if (method->Name == "__ctor")
-                Constructor = method;
-            if (method->Name == "__init")
-                Initializer = method;
+            // update special methods once specialized
             if (method->Name == "__dtor")
                 Destructor = method;
+            if (method->Name == "__acquire")
+                Acquire = method;
+            if (method->Name == "__release")
+                Release = method;
         }
     }
 
     void StructDef::finish() {
-        // Fill in new, needs "size" variable value filled in once it is known at codegen time
-        Vector<Ref<Node>> body = {
+        // Copy off whatever the user put in the ctor, if anything
+        auto userCtor = Constructor->Body->Items;
+        Constructor->Body->Items.clear();
+
+        // Create the allocation for `this`, needs "size" variable value filled in once it is known at codegen time
+        Vector<Ref<Node>> allocThis = {
             Ref<VariableDef>::New(TypeName("u64"), "size"),
             Ref<ThisDef>::New(Type,
                               Ref<FunctionCall>::New(ExternFunctionDef::Find("malloc"),
                                                      Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
-            Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__ctor"),
-            Ref<Return>::New(NewInstance->ReturnType, Ref<SymbolRef>::New("this")),
+            Ref<FunctionCall>::New(
+                ExternFunctionDef::Find("trace_ptr"),
+                Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("malloc: " + Name)}),
         };
-        NewInstance->Body->Items = body;
-        // for debugging purposes, new and ctor are the same, but the parser only gives
-        // ctor a source location (if it's defined by user)
-        NewInstance->Source = Constructor->Source;
 
-        // Fill in initializer
+        Constructor->Body->Items = allocThis;
+
+        // Fill in initializations
         for (auto& field : Fields) {
-            Initializer->Body->Items.push_back(field);
-        }
-        Initializer->Body->Items.push_back(Ref<Return>::New());
-        // for debugging purposes, initializer and ctor are the same
-        Initializer->Source = Constructor->Source;
-
-        // insert initializer as the first instruction in Constructor
-        Constructor->Body->Items.insert(Constructor->Body->Items.begin(),
-                                        Ref<MethodCall>::New(TypeName::Void, Ref<ThisRef>::New(), "__init"));
-
-        // insert free as the last instruction before return in Destructor
-        auto lastExpr = !Destructor->Body->Items.empty() ? Destructor->Body->Items.back() : nullptr;
-        if (lastExpr && lastExpr->is<Return>()) {
-            Destructor->Body->Items.pop_back();
+            Constructor->Body->Items.push_back(field);
         }
 
+        // Restore user's instructions
+        Constructor->Body->Items.append(userCtor);
+
+        // Finally, ctor returns `this`
+        Constructor->Body->Items.emplace_back(Ref<Return>::New(Constructor->ReturnType, Ref<SymbolRef>::New("this")));
+
+        // insert free as the last instruction in Destructor
         Destructor->Body->Items.push_back(
             Ref<FunctionCall>::New(ExternFunctionDef::Find("free"), Vector<Ref<Expression>>{Ref<ThisRef>::New()}));
 
-        Acquire->Source = Source;
-        Release->Source = Source;
-
         Methods.push_back(Release);
         Methods.push_back(Acquire);
-        Methods.push_back(Initializer);
-        Methods.push_back(Constructor);
         Methods.push_back(Destructor);
     }
 

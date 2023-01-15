@@ -69,30 +69,17 @@ namespace pepper {
             fields.emplace_back(field->Name, type);
         }
 
-        // apply constructor parameters to new
-        if (structDef->Constructor->Parameters.size() > structDef->NewInstance->Parameters.size()) {
-            structDef->NewInstance->Parameters = structDef->Constructor->Parameters;
-            auto ctorCall = Query(structDef->NewInstance->Body->Items).find([](auto instr) {
-                return instr->template is<MethodCall>() && instr.template as<MethodCall>()->Name == "__ctor";
-            });
-            assert(ctorCall && "ctor call not found in new");
-            auto ctor = ctorCall.value().as<MethodCall>();
-            for (auto& arg : structDef->NewInstance->Parameters) {
-                ctor->Args.emplace_back(Ref<SymbolRef>::New(arg.Name));
-            }
-        }
-
-        auto newParams = Query(structDef->NewInstance->Parameters).select<pepper::Param>([this](auto p) {
+        auto ctorParams = Query(structDef->Constructor->Parameters).select<pepper::Param>([this](auto p) {
             return pepper::Param{p.Name, Types::get(p.Type.toString()), maybeCodegen(p.Default)};
         });
 
         // generate the new struct type
-        auto structDesc = Struct::New(structDef->Name, fields, newParams);
+        auto structDesc = Struct::New(structDef->Name, fields, ctorParams);
         auto structDI = Module->getDebugInfo()->emitStruct(structDesc.get());
         Module->getDebugInfo()->pushScope(structDI);
 
         // Update Struct()/new function now that the size of the struct is known
-        auto sizeVar = Query(structDef->NewInstance->Body->Items)
+        auto sizeVar = Query(structDef->Constructor->Body->Items)
                            .find([](auto& local) {
                                if (local->template is<VariableDef>()) {
                                    auto var = local.template as<VariableDef>();
@@ -104,8 +91,9 @@ namespace pepper {
                            .as<VariableDef>();
         sizeVar->Default = Ref<IntegerLiteral>::New(structDesc->size());
 
-        // Export new function to the enclosing scope
-        locals()->newFunction(structDesc->instanceNew());
+        // Export new constructor to the enclosing scope
+        locals()->newFunction(structDesc->constructor());
+        codegenFunction(structDesc->constructor(), structDef->Constructor);
 
         // map method names to mangled free functions while maintaining order
         Vector<Ref<Method>> methods;
@@ -132,10 +120,6 @@ namespace pepper {
             auto& methodDef = structDef->Methods[methodIdx];
             codegenFunction(method, methodDef);
         }
-
-        // TODO: move this up to where instanceNew is exported once functions are registered with their prototypes
-        // before their bodies are codegen'ed
-        codegenFunction(structDesc->instanceNew(), structDef->NewInstance);
 
         Module->getDebugInfo()->popScope();
 

@@ -56,9 +56,7 @@ namespace pepper::ast {
         DECLARE_RTTI(StructDef, Symbol);
         AST_NODE_POD_CLONE(StructDef);
 
-        Ref<FunctionDef> NewInstance;
-        Ref<MethodDef> Initializer;
-        Ref<MethodDef> Constructor;
+        Ref<FunctionDef> Constructor;
         Ref<MethodDef> Destructor;
         Ref<MethodDef> Acquire;
         Ref<MethodDef> Release;

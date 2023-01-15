@@ -11,7 +11,7 @@
 
 namespace pepper {
 
-    Struct::Struct(const Ident& name, const Params& fields, const Params& newParams)
+    Struct::Struct(const Ident& name, const Params& fields, const Params& ctorParams)
         : Name(name) {
         // Create the LLVM struct type out of the field types
         Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.Type; });
@@ -23,7 +23,7 @@ namespace pepper {
         // Add ref type as <struct>
         RefTy = Ref<RefType>::New(StructTy);
         Types::add(RefTy);
-        NewInstance = Ref<UserFunction>::New(name, RefTy, newParams);
+        Constructor = Ref<UserFunction>::New(name, RefTy, ctorParams);
 
         setFields(fields);
 

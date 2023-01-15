@@ -57,15 +57,15 @@ namespace pepper {
         Ident Name;
         Ref<StructType> StructTy;
         Ref<RefType> RefTy;
-        Ref<Function> NewInstance;
+        Ref<Function> Constructor;
         std::map<Ident, Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
         size_t Size;
         size_t Align;
 
       public:
-        Struct(const Ident& name, const Params& fields = {}, const Params& newParams = {});
-        static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& newParams = {});
+        Struct(const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
+        static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
 
         Ref<RefType> refType() const {
             return RefTy;
@@ -122,16 +122,8 @@ namespace pepper {
         Value getField(llvm::Value* instance, int idx, const Param& field) const;
         Value getMethod(const Ident& name) const;
 
-        Ref<Function> instanceNew() const {
-            return NewInstance;
-        }
-
-        Ref<Function> initializer() const {
-            return method("__init");
-        }
-
         Ref<Function> constructor() const {
-            return method("__ctor");
+            return Constructor;
         }
 
         Ref<Function> destructor() const {

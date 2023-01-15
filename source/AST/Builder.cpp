@@ -130,7 +130,7 @@ namespace pepper::ast {
             if (scope->Functions.lookup(name))
                 throw CompileError(Source, "Attempted to redefine constructor {0}", name);
             scope->Structs[name] = specialized;
-            scope->Functions[name] = specialized->NewInstance;
+            scope->Functions[name] = specialized->Constructor;
 
             return specialized;
         }
@@ -214,7 +214,7 @@ namespace pepper::ast {
                     throw CompileError(Source, "Cannot redefine struct {0}", structDef->Type.Name);
                 scope->Structs[structDef->Type.Name] = structDef;
             }
-            scope->Functions[structDef->Name] = structDef->NewInstance;
+            scope->Functions[structDef->Name] = structDef->Constructor;
             structDef->Source = Source;
 
             beginScope(structDef->Name);

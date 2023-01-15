@@ -32,12 +32,11 @@ namespace pepper::ast {
                         fieldType->Type, Ref<MemberRef>::New(Ref<ThisRef>::New(), field->Name), "__release"));
                 }
             }
-            auto dtorItems = st->Destructor->Body->Items;
-            st->Destructor->Body->Items.clear();
+            // Insert the releases in reverse declaration order just before the last dtor instruction (free)
+            auto& dtorItems = st->Destructor->Body->Items;
             for (const auto& release : llvm::reverse(releases)) {
-                st->Destructor->Body->Items.emplace_back(release);
+                dtorItems.insert(dtorItems.end() - 1, release);
             }
-            st->Destructor->Body->Items.append(dtorItems);
         }
     };
 } // namespace pepper::ast
