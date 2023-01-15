@@ -3,11 +3,11 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
+#include "CodeGenModule.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -159,7 +159,7 @@ namespace pepper {
         return value;
     }
 
-    Codegen::Codegen(Ref<ModuleContext> module) {
+    Codegen::Codegen(Ref<CodeGenModule> module) {
         Module = Context::get().moduleContext();
     }
 

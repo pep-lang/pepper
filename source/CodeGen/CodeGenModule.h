@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include "CodeGen/DebugInfo.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
-#include "Frontend/DebugInfo.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
@@ -16,17 +16,17 @@ namespace llvm {
 
 namespace pepper {
 
-    class ModuleContext {
+    class CodeGenModule {
         Ident ModuleName;
         std::unique_ptr<llvm::LLVMContext> Context;
         std::unique_ptr<llvm::Module> Module;
         std::unique_ptr<DebugInfo> Debug;
 
       public:
-        ModuleContext(const Ident& name, const std::string& sourcePath);
-        ModuleContext(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module);
+        CodeGenModule(const Ident& name, const std::string& sourcePath);
+        CodeGenModule(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module);
 
-        ~ModuleContext();
+        ~CodeGenModule();
 
         std::unique_ptr<llvm::LLVMContext>&& takeContext();
         std::unique_ptr<llvm::Module>&& takeModule();

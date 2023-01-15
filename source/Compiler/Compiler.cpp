@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "AST/AST.h"
+#include "CodeGen/CodeGenModule.h"
 #include "CodeGen/Codegen.h"
 #include "Compiler/Linker.h"
 #include "Compiler/Options.h"
@@ -12,7 +13,6 @@
 #include "Core/Messages.h"
 #include "Core/Query.h"
 #include "Frontend/Context.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/Runtime.h"
 #include "Parser/Parser.h"
 #include "Transforms/Transform.h"
@@ -36,7 +36,7 @@ namespace pepper {
         // Re-used internals per module
         std::string ModuleName;
         std::string SourcePath;
-        Ref<ModuleContext> Module;
+        Ref<CodeGenModule> Module;
         std::unique_ptr<Parser> ParserRef;
         std::unique_ptr<Codegen> IR;
 
@@ -62,8 +62,8 @@ namespace pepper {
             return ParserRef->parse(inputStream, sourceFile);
         }
 
-        Vector<Ref<ModuleContext>> compile() override {
-            Vector<Ref<ModuleContext>> modules;
+        Vector<Ref<CodeGenModule>> compile() override {
+            Vector<Ref<CodeGenModule>> modules;
             if (Opts->InputStream) {
                 SourcePath = ModuleName;
                 auto module = compile(*Opts->InputStream);
@@ -79,10 +79,10 @@ namespace pepper {
             return modules;
         }
 
-        Ref<ModuleContext> compile(std::istream& sourceStream) {
+        Ref<CodeGenModule> compile(std::istream& sourceStream) {
             ensureBuildDirExists();
 
-            Module = Ref<ModuleContext>::New(ModuleName, SourcePath);
+            Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
             auto Ctx = Ref<Context>::New(Module);
             ParserRef = std::make_unique<Parser>();
             IR = std::make_unique<Codegen>(Module);
@@ -193,7 +193,7 @@ namespace pepper {
             PEP_VERBOSE("LLVM IR written to {0}", outputPath.string());
         }
 
-        static Ref<ModuleContext> loadIR(const std::string& irFilePath) {
+        static Ref<CodeGenModule> loadIR(const std::string& irFilePath) {
             llvm::SMDiagnostic err;
             auto context = std::make_unique<llvm::LLVMContext>();
             auto module = llvm::parseIRFile(irFilePath, err, *context);
@@ -201,11 +201,11 @@ namespace pepper {
                 throw CompileError("Failed to load IR from {0}: {1}", irFilePath, err.getMessage());
             }
 
-            return Ref<ModuleContext>::New(std::move(context), std::move(module));
+            return Ref<CodeGenModule>::New(std::move(context), std::move(module));
         }
 
-        Vector<Ref<ModuleContext>> loadIR() {
-            Vector<Ref<ModuleContext>> modules;
+        Vector<Ref<CodeGenModule>> loadIR() {
+            Vector<Ref<CodeGenModule>> modules;
             for (const auto& sourceFilePath : Opts->SourceFiles) {
                 auto irFilePath = std::filesystem::path(sourceFilePath).replace_extension(".ll").string();
                 auto module = loadIR(irFilePath);

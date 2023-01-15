@@ -27,7 +27,7 @@ namespace pepper {
         static Vector<FunctionProto>& Imports();
 
       public:
-        Runtime(Ref<ModuleContext> module);
+        Runtime(Ref<CodeGenModule> module);
 
         static void Import(const Ident& returnType,
                            const Ident& name,

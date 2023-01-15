@@ -4,8 +4,8 @@
 
 #include <memory>
 
+#include "CodeGenModule.h"
 #include "Core/Exceptions.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/Scope.h"
 #include "Frontend/Symbols.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
@@ -38,7 +38,7 @@ namespace pepper {
         return DL.get();
     }
 
-    ModuleContext::ModuleContext(const Ident& name, const std::string& sourcePath)
+    CodeGenModule::CodeGenModule(const Ident& name, const std::string& sourcePath)
         : ModuleName(name) {
         Context = std::make_unique<llvm::LLVMContext>();
         Module = std::make_unique<llvm::Module>(name, *Context);
@@ -54,34 +54,34 @@ namespace pepper {
         Module->setDataLayout(getDataLayout());
     }
 
-    ModuleContext::ModuleContext(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module)
+    CodeGenModule::CodeGenModule(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module)
         : Context(std::move(context))
         , Module(std::move(module)) {
         ModuleName = Module->getModuleIdentifier();
     }
 
-    ModuleContext::~ModuleContext() {
+    CodeGenModule::~CodeGenModule() {
         finalizeDebugInfo();
     }
 
-    void ModuleContext::finalizeDebugInfo() {
+    void CodeGenModule::finalizeDebugInfo() {
         if (Debug) {
             Debug->finalize();
             Debug.reset();
         }
     }
 
-    std::unique_ptr<llvm::LLVMContext>&& ModuleContext::takeContext() {
+    std::unique_ptr<llvm::LLVMContext>&& CodeGenModule::takeContext() {
         finalizeDebugInfo();
         return std::move(Context);
     }
 
-    std::unique_ptr<llvm::Module>&& ModuleContext::takeModule() {
+    std::unique_ptr<llvm::Module>&& CodeGenModule::takeModule() {
         finalizeDebugInfo();
         return std::move(Module);
     }
 
-    llvm::Error ModuleContext::verify() {
+    llvm::Error CodeGenModule::verify() {
         finalizeDebugInfo();
 
         std::string verifyOutput;
@@ -93,7 +93,7 @@ namespace pepper {
         return llvm::Error::success();
     }
 
-    std::string ModuleContext::toString() const {
+    std::string CodeGenModule::toString() const {
         std::string ir;
         llvm::raw_string_ostream stream(ir);
         Module->print(stream, nullptr, false, true);

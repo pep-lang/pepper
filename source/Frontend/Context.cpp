@@ -3,8 +3,8 @@
 #include <cassert>
 #include <utility>
 
+#include "CodeGen/CodeGenModule.h"
 #include "Frontend/Function.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/Runtime.h"
 #include "Frontend/Scope.h"
 #include "Frontend/Types.h"
@@ -24,7 +24,7 @@ namespace pepper {
         return get().locals()->builder();
     }
 
-    Context::Context(Ref<ModuleContext> module) {
+    Context::Context(Ref<CodeGenModule> module) {
         assert(Instance == nullptr);
         Instance = this;
 

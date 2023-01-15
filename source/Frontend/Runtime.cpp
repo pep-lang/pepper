@@ -4,8 +4,8 @@
 
 #include "Frontend/Runtime.h"
 
+#include "CodeGen/CodeGenModule.h"
 #include "Frontend/Function.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/Param.h"
 #include "Frontend/Symbols.h"
 #include "Frontend/Types.h"
@@ -37,7 +37,7 @@ namespace pepper {
         return imports;
     }
 
-    Runtime::Runtime(Ref<ModuleContext> module)
+    Runtime::Runtime(Ref<CodeGenModule> module)
         : Scope("Runtime") {
         for (auto& proto : Imports()) {
             auto returnType = Types::get(proto.Return);

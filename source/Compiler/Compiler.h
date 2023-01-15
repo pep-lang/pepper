@@ -4,10 +4,10 @@
 #include <memory>
 #include <string>
 
+#include "CodeGen/CodeGenModule.h"
 #include "Compiler/Options.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
-#include "Frontend/ModuleContext.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace llvm {
@@ -19,7 +19,7 @@ namespace pepper {
       public:
         static Ref<Compiler> Create(Ref<Options> options);
 
-        virtual Vector<Ref<ModuleContext>> compile() = 0;
+        virtual Vector<Ref<CodeGenModule>> compile() = 0;
         virtual void link() = 0;
     };
 } // namespace pepper

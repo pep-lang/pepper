@@ -5,9 +5,9 @@
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
+#include "CodeGenModule.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
-#include "Frontend/ModuleContext.h"
 #include "Frontend/Scope.h"
 #include "Value.h"
 #include "llvm/IR/IRBuilder.h"
@@ -17,10 +17,10 @@
 namespace pepper {
     class Codegen {
       protected:
-        Ref<ModuleContext> Module;
+        Ref<CodeGenModule> Module;
 
       public:
-        Codegen(Ref<ModuleContext> module);
+        Codegen(Ref<CodeGenModule> module);
 
         // entry point to codegen, runs all the roots of the AST and generates them
         void generate(Ref<ast::AST> parseTree);

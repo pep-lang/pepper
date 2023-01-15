@@ -1,8 +1,8 @@
 
 #include "JIT/Executor.h"
 
+#include "CodeGen/CodeGenModule.h"
 #include "Core/Exceptions.h"
-#include "Frontend/ModuleContext.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -93,7 +93,7 @@ namespace pepper {
             return ES->lookup({&Dylib}, Mangle(Name.str()));
         }
 
-        int execute(Ref<ModuleContext> context, const std::string& entry) override {
+        int execute(Ref<CodeGenModule> context, const std::string& entry) override {
             if (auto err = addModule(
                     std::move(ThreadSafeModule(std::move(context->takeModule()), std::move(context->takeContext()))))) {
                 throw InternalCompilerError("Unable to initialize module: {0}", llvm::toString(std::move(err)));

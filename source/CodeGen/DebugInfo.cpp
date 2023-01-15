@@ -1,5 +1,5 @@
 
-#include "Frontend/DebugInfo.h"
+#include "DebugInfo.h"
 #include <filesystem>
 
 #include "Core/Exceptions.h"

@@ -16,7 +16,7 @@ namespace pepper {
     }
     class Executor;
     class Function;
-    class ModuleContext;
+    class CodeGenModule;
     class Types;
     class UserFunction;
     class Method;
@@ -25,7 +25,7 @@ namespace pepper {
     class Context {
         static Context* Instance;
 
-        Ref<ModuleContext> Module;
+        Ref<CodeGenModule> Module;
         Ref<Types> TypeMap;
         Ref<Runtime> Builtins;
         Ref<Scope> Globals;
@@ -35,13 +35,13 @@ namespace pepper {
         static Context& get();
         static Ref<llvm::IRBuilderBase> ir();
 
-        explicit Context(Ref<ModuleContext> module);
+        explicit Context(Ref<CodeGenModule> module);
         ~Context();
 
         [[nodiscard]] llvm::Module* module() const;
         [[nodiscard]] llvm::LLVMContext& llvmContext() const;
 
-        Ref<ModuleContext> moduleContext() const {
+        Ref<CodeGenModule> moduleContext() const {
             return Module;
         }
 
