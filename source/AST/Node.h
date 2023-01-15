@@ -126,11 +126,13 @@ namespace pepper::ast {
 
         TypeName Type;
         Ident Name;
+        bool Hidden = false;
 
       public:
-        Symbol(const TypeName& type, const Ident& name)
+        Symbol(const TypeName& type, const Ident& name, bool hidden = false)
             : Type(type)
-            , Name(name) {
+            , Name(name)
+            , Hidden(hidden) {
         }
 
         void specialize(const Specialization& spec) override;

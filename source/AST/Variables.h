@@ -12,8 +12,9 @@ namespace pepper::ast {
 
         Ref<Expression> Default;
 
-        VariableDef(const TypeName& type, const Ident& identifier, Ref<Expression> defaultValue = nullptr)
-            : Symbol(type, identifier)
+        VariableDef(
+            const TypeName& type, const Ident& identifier, Ref<Expression> defaultValue = nullptr, bool hidden = false)
+            : Symbol(type, identifier, hidden)
             , Default(std::move(defaultValue)) {
         }
 

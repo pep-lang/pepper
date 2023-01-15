@@ -27,7 +27,6 @@ namespace pepper {
     void Scope::newSymbol(const Address& value) {
         assert(!Symbols.lookup(value.Name));
         Symbols[value.Name] = value;
-        Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
     }
 
     const Address& Scope::findSymbol(const std::string& identifier, bool localOnly) const {

@@ -214,7 +214,7 @@ namespace pepper::ast {
 
         // Create the allocation for `this`, needs "size" variable value filled in once it is known at codegen time
         Vector<Ref<Node>> allocThis = {
-            Ref<VariableDef>::New(TypeName("u64"), "size"),
+            Ref<VariableDef>::New(TypeName("u64"), "size", nullptr, true),
             Ref<ThisDef>::New(Type,
                               Ref<FunctionCall>::New(ExternFunctionDef::Find("malloc"),
                                                      Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),

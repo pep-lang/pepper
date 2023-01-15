@@ -57,6 +57,8 @@ namespace pepper {
         }
 
         auto value = Address(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
+        if (!variableDef->Hidden)
+            Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
         locals()->newSymbol(value);
 
         if (auto defaultValue = maybeCodegen(variableDef->Default)) {

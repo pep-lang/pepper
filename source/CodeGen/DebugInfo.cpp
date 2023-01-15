@@ -152,7 +152,7 @@ namespace pepper {
 
     llvm::DISubprogram* DebugInfo::emitFunction(Function* function) {
         if (function->is<Method>() && function->name().ends_with("__acquire") ||
-            function->name().ends_with("__release") || function->name().ends_with("__init"))
+            function->name().ends_with("__release"))
             return nullptr;
 
         auto sp = [&]() {
