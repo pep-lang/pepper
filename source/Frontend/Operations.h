@@ -14,14 +14,14 @@ namespace llvm {
 
 namespace pepper {
 
-    class TypeOps {
-        DECLARE_RTTI(TypeOps);
+    class Operations {
+        DECLARE_RTTI(Operations);
 
       protected:
         Ref<Type> Ty = nullptr;
 
       public:
-        explicit TypeOps(Ref<Type> type)
+        explicit Operations(Ref<Type> type)
             : Ty(type) {
         }
 
@@ -33,8 +33,8 @@ namespace pepper {
             return Ty;
         }
 
-        static Ref<TypeOps> get(Ref<Type> type);
-        static Ref<TypeOps> get(const Type* type);
+        static Ref<Operations> get(Ref<Type> type);
+        static Ref<Operations> get(const Type* type);
 
         virtual Value coerce(Value value) const = 0;
 
@@ -68,20 +68,20 @@ namespace pepper {
         virtual Value asBool(Value value) const;
     };
 
-    class NativeTypeOps : public TypeOps {
-        DECLARE_RTTI(NativeTypeOps, TypeOps)
+    class NativeOperations : public Operations {
+        DECLARE_RTTI(NativeOperations, Operations)
 
       public:
-        NativeTypeOps(Ref<Type> type)
-            : TypeOps(type) {
+        NativeOperations(Ref<Type> type)
+            : Operations(type) {
         }
     };
 
-    class PointerTypeOps : public NativeTypeOps {
-        DECLARE_RTTI(PointerTypeOps, NativeTypeOps)
+    class PointerOperations : public NativeOperations {
+        DECLARE_RTTI(PointerOperations, NativeOperations)
       public:
-        PointerTypeOps(Ref<Type> type)
-            : NativeTypeOps(type) {
+        PointerOperations(Ref<Type> type)
+            : NativeOperations(type) {
         }
 
         Value coerce(Value value) const override;

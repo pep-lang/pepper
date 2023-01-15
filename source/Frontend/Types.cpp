@@ -5,7 +5,7 @@
 #include "Core/Exceptions.h"
 #include "Core/Vector.h"
 #include "Frontend/Context.h"
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -18,9 +18,9 @@ namespace pepper {
         , IsSigned(isSigned) {
     }
 
-    TypeOps* Type::ops() {
+    Operations* Type::ops() {
         if (!Ops)
-            Ops = TypeOps::get(shared_from_this());
+            Ops = Operations::get(shared_from_this());
         return Ops.get();
     }
 

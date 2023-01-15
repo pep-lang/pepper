@@ -8,7 +8,7 @@
 #include "Core/Messages.h"
 #include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"

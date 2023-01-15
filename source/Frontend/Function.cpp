@@ -3,8 +3,8 @@
 
 #include "Core/Exceptions.h"
 #include "Frontend/Context.h"
+#include "Frontend/Operations.h"
 #include "Frontend/Struct.h"
-#include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"

@@ -22,7 +22,7 @@ namespace llvm {
 } // namespace llvm
 
 namespace pepper {
-    class TypeOps;
+    class Operations;
 
     class Type : public std::enable_shared_from_this<Type> {
         DECLARE_RTTI(Type);
@@ -31,7 +31,7 @@ namespace pepper {
         const Ident TypeName;
         llvm::Type* TypeRef;
         const bool IsSigned;
-        Ref<TypeOps> Ops;
+        Ref<Operations> Ops;
 
       public:
         Type(const Ident& name, llvm::Type* type, bool isSigned = false);
@@ -60,7 +60,7 @@ namespace pepper {
             return false;
         }
 
-        virtual TypeOps* ops();
+        virtual Operations* ops();
 
         Ref<Type> pointer() const;
     };

@@ -9,8 +9,8 @@
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Frontend/LLVMUtils.h"
+#include "Frontend/Operations.h"
 #include "Frontend/Struct.h"
-#include "Frontend/TypeOps.h"
 #include "Frontend/Types.h"
 
 namespace pepper {

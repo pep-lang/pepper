@@ -5,7 +5,7 @@
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Frontend/Context.h"
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 #include "LLVMUtils.h"
 #include "llvm/IR/DataLayout.h"
 
@@ -73,14 +73,14 @@ namespace pepper {
         return Value{};
     }
 
-    class StructTypeOps : public TypeOps {
-        DECLARE_RTTI(StructTypeOps, TypeOps);
+    class StructTypeOps : public Operations {
+        DECLARE_RTTI(StructTypeOps, Operations);
 
         const Struct* Struct;
 
       public:
         StructTypeOps(Ref<Type> type)
-            : TypeOps(type) {
+            : Operations(type) {
             Struct = Ty.as<StructType>()->StructDesc;
         }
 
@@ -98,17 +98,17 @@ namespace pepper {
         return StructDesc->refType();
     }
 
-    TypeOps* StructType::ops() {
+    Operations* StructType::ops() {
         if (!Ops)
             Ops = Ref<StructTypeOps>::New(shared_from_this());
         return Ops.get();
     }
 
-    class RefTypeOps : public PointerTypeOps {
-        DECLARE_RTTI(RefTypeOps, PointerTypeOps);
+    class RefTypeOps : public PointerOperations {
+        DECLARE_RTTI(RefTypeOps, PointerOperations);
 
       public:
-        using PointerTypeOps::PointerTypeOps;
+        using PointerOperations::PointerOperations;
 
         void init(Value lhs, Value rhs) const override {
             rhs = coerce(rhs);
@@ -139,7 +139,7 @@ namespace pepper {
         return pointeeType().as<StructType>();
     }
 
-    TypeOps* RefType::ops() {
+    Operations* RefType::ops() {
         if (!Ops)
             Ops = Ref<RefTypeOps>::New(shared_from_this());
         return Ops.get();

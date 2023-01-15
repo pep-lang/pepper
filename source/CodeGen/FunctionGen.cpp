@@ -9,7 +9,7 @@
 #include "Core/Query.h"
 #include "Frontend/Function.h"
 #include "Frontend/LLVMUtils.h"
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 #include "Frontend/Types.h"
 
 namespace pepper {

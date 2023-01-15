@@ -2,7 +2,7 @@
 // Created by Justin Boswell on 12/22/22.
 //
 
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 
 #include "CodeGen/Value.h"
 #include "Core/Exceptions.h"
@@ -15,119 +15,119 @@
 #include "llvm/IR/Value.h"
 
 namespace pepper {
-    Value TypeOps::add(Value, Value) const {
+    Value Operations::add(Value, Value) const {
         throw CompileError("Type {0} does not support addition", Types::toString(Ty));
     }
 
-    Value TypeOps::sub(Value, Value) const {
+    Value Operations::sub(Value, Value) const {
         throw CompileError("Type {0} does not support subtraction", Types::toString(Ty));
     }
 
-    Value TypeOps::mul(Value, Value) const {
+    Value Operations::mul(Value, Value) const {
         throw CompileError("Type {0} does not support multiplication", Types::toString(Ty));
     }
 
-    Value TypeOps::div(Value, Value) const {
+    Value Operations::div(Value, Value) const {
         throw CompileError("Type {0} does not support division", Types::toString(Ty));
     }
 
-    Value TypeOps::mod(Value, Value) const {
+    Value Operations::mod(Value, Value) const {
         throw CompileError("Type {0} does not support modulus", Types::toString(Ty));
     }
 
-    Value TypeOps::pow(Value, Value) const {
+    Value Operations::pow(Value, Value) const {
         throw CompileError("Type {0} does not support pow", Types::toString(Ty));
     }
 
-    Value TypeOps::less(Value, Value) const {
+    Value Operations::less(Value, Value) const {
         throw CompileError("Type {0} does not support <", Types::toString(Ty));
     }
 
-    Value TypeOps::lessEq(Value, Value) const {
+    Value Operations::lessEq(Value, Value) const {
         throw CompileError("Type {0} does not support <=", Types::toString(Ty));
     }
 
-    Value TypeOps::greater(Value, Value) const {
+    Value Operations::greater(Value, Value) const {
         throw CompileError("Type {0} does not support >", Types::toString(Ty));
     }
 
-    Value TypeOps::greaterEq(Value, Value) const {
+    Value Operations::greaterEq(Value, Value) const {
         throw CompileError("Type {0} does not support >=", Types::toString(Ty));
     }
 
-    Value TypeOps::lshift(Value, Value) const {
+    Value Operations::lshift(Value, Value) const {
         throw CompileError("Type {0} does not support <<", Types::toString(Ty));
     }
 
-    Value TypeOps::rshift(Value, Value) const {
+    Value Operations::rshift(Value, Value) const {
         throw CompileError("Type {0} does not support >>", Types::toString(Ty));
     }
 
-    Value TypeOps::equal(Value, Value) const {
+    Value Operations::equal(Value, Value) const {
         throw CompileError("Type {0} does not support equality", Types::toString(Ty));
     }
 
-    Value TypeOps::notEqual(Value, Value) const {
+    Value Operations::notEqual(Value, Value) const {
         throw CompileError("Type {0} does not support non-equality", Types::toString(Ty));
     }
 
-    void TypeOps::init(Value lhs, Value rhs) const {
+    void Operations::init(Value lhs, Value rhs) const {
         assign(lhs, rhs);
     }
 
-    Value TypeOps::assign(Value, Value) const {
+    Value Operations::assign(Value, Value) const {
         throw CompileError("Type {0} does not support assignment", Types::toString(Ty));
     }
 
-    Value TypeOps::bitAnd(Value, Value) const {
+    Value Operations::bitAnd(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise and", Types::toString(Ty));
     }
 
-    Value TypeOps::bitXor(Value, Value) const {
+    Value Operations::bitXor(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise xor", Types::toString(Ty));
     }
 
-    Value TypeOps::bitOr(Value, Value) const {
+    Value Operations::bitOr(Value, Value) const {
         throw CompileError("Type {0} does not support bitwise or", Types::toString(Ty));
     }
 
-    Value TypeOps::neg(Value) const {
+    Value Operations::neg(Value) const {
         throw CompileError("Type {0} does not support unary negation", Types::toString(Ty));
     }
 
-    Value TypeOps::pos(Value) const {
+    Value Operations::pos(Value) const {
         throw CompileError("Type {0} does not support unary positive", Types::toString(Ty));
     }
 
-    Value TypeOps::preIncrement(Value) const {
+    Value Operations::preIncrement(Value) const {
         throw CompileError("Type {0} does not support pre-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::preDecrement(Value) const {
+    Value Operations::preDecrement(Value) const {
         throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::postIncrement(Value) const {
+    Value Operations::postIncrement(Value) const {
         throw CompileError("Type {0} does not support post-increment", Types::toString(Ty));
     }
 
-    Value TypeOps::postDecrement(Value) const {
+    Value Operations::postDecrement(Value) const {
         throw CompileError("Type {0} does not support post-decrement", Types::toString(Ty));
     }
 
-    Value TypeOps::bitNot(Value) const {
+    Value Operations::bitNot(Value) const {
         throw CompileError("Type {0} does not support bitwise not", Types::toString(Ty));
     }
 
-    Value TypeOps::logicalNot(Value) const {
+    Value Operations::logicalNot(Value) const {
         throw CompileError("Type {0} does not support logical not", Types::toString(Ty));
     }
 
-    Value TypeOps::asBool(Value) const {
+    Value Operations::asBool(Value) const {
         throw CompileError("Type {0} does not support conversion to bool", Types::toString(Ty));
     }
 
-    Value PointerTypeOps::coerce(Value value) const {
+    Value PointerOperations::coerce(Value value) const {
         value = load(value);
         if (value.Ty->llvmType()->isPointerTy()) {
             return value;
@@ -135,37 +135,37 @@ namespace pepper {
         throw CompileError("Coercion to pointer is not supported");
     }
 
-    Value PointerTypeOps::equal(Value lhs, Value rhs) const {
+    Value PointerOperations::equal(Value lhs, Value rhs) const {
         return Value{Types::Bool, ir()->CreateICmpEQ(coerce(lhs), coerce(rhs))};
     }
 
-    Value PointerTypeOps::notEqual(Value lhs, Value rhs) const {
+    Value PointerOperations::notEqual(Value lhs, Value rhs) const {
         return Value{Types::Bool, ir()->CreateICmpNE(coerce(lhs), coerce(rhs))};
     }
 
-    Value PointerTypeOps::assign(Value lhs, Value rhs) const {
+    Value PointerOperations::assign(Value lhs, Value rhs) const {
         rhs = coerce(rhs);
         ir()->CreateStore(rhs, lhs);
         return lhs;
     }
 
-    Value PointerTypeOps::asBool(Value value) const {
+    Value PointerOperations::asBool(Value value) const {
         auto zero = zeroValue(Ty);
         auto valAsInt = load(value);
         return Value{Types::Bool, ir()->CreateICmpNE(zero, valAsInt, "bool")};
     }
 
-    Value PointerTypeOps::logicalNot(Value value) const {
+    Value PointerOperations::logicalNot(Value value) const {
         auto zero = llvm::ConstantInt::getFalse(*Ty);
         auto valAsInt = ir()->CreatePtrToInt(value, *Types::Int64);
         return Value{Types::Bool, ir()->CreateICmpEQ(zero, valAsInt, "not")};
     }
 
-    class VoidType : public NativeTypeOps {
-        DECLARE_RTTI(VoidType, NativeTypeOps)
+    class VoidOperations : public NativeOperations {
+        DECLARE_RTTI(VoidOperations, NativeOperations)
       public:
-        VoidType()
-            : NativeTypeOps(Types::Void) {
+        VoidOperations()
+            : NativeOperations(Types::Void) {
         }
 
         Value coerce(Value value) const override {
@@ -173,14 +173,14 @@ namespace pepper {
         }
     };
 
-    class IntegerType : public NativeTypeOps {
-        DECLARE_RTTI(IntegerType, NativeTypeOps)
+    class IntegerOperations : public NativeOperations {
+        DECLARE_RTTI(IntegerOperations, NativeOperations)
         uint32_t Bits;
         bool Signed = false;
 
       public:
-        IntegerType(Ref<Type> type)
-            : NativeTypeOps(type)
+        IntegerOperations(Ref<Type> type)
+            : NativeOperations(type)
             , Bits(type->llvmType()->getIntegerBitWidth()) {
         }
 
@@ -362,10 +362,10 @@ namespace pepper {
         }
     };
 
-    class BoolType : public IntegerType {
+    class BoolOperations : public IntegerOperations {
       public:
-        BoolType(Ref<Type> type)
-            : IntegerType(type) {
+        BoolOperations(Ref<Type> type)
+            : IntegerOperations(type) {
         }
 
         Value coerce(Value value) const override {
@@ -388,14 +388,14 @@ namespace pepper {
         }
     };
 
-    class FloatType : public NativeTypeOps {
-        DECLARE_RTTI(FloatType, NativeTypeOps)
+    class FloatOperations : public NativeOperations {
+        DECLARE_RTTI(FloatOperations, NativeOperations)
       public:
-        FloatType(Ref<Type> type)
-            : NativeTypeOps(type) {
+        FloatOperations(Ref<Type> type)
+            : NativeOperations(type) {
         }
 
-        ~FloatType() = default;
+        ~FloatOperations() = default;
 
         Value coerce(Value value) const override {
             value = read(value);
@@ -502,21 +502,21 @@ namespace pepper {
         }
     };
 
-    Ref<TypeOps> TypeOps::get(Ref<Type> type) {
+    Ref<Operations> Operations::get(Ref<Type> type) {
         auto llvmTy = type->llvmType();
         if (llvmTy->isIntegerTy()) {
             if (llvmTy->getIntegerBitWidth() == 1)
-                return Ref<BoolType>::New(type);
-            return Ref<IntegerType>::New(type);
+                return Ref<BoolOperations>::New(type);
+            return Ref<IntegerOperations>::New(type);
         }
         if (llvmTy->isFloatingPointTy()) {
-            return Ref<FloatType>::New(type);
+            return Ref<FloatOperations>::New(type);
         }
         if (llvmTy->isPointerTy()) {
-            return Ref<PointerTypeOps>::New(type);
+            return Ref<PointerOperations>::New(type);
         }
         if (llvmTy->isVoidTy()) {
-            return Ref<VoidType>::New();
+            return Ref<VoidOperations>::New();
         }
         throw InternalCompilerError("Unknown type {0} found while looking for TypeOps", Types::toString(type));
     }

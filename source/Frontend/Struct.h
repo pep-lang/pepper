@@ -21,7 +21,7 @@ namespace pepper {
         DECLARE_RTTI(StructType, Type);
 
         const Struct* StructDesc;
-        Ref<TypeOps> Ops;
+        Ref<Operations> Ops;
 
       public:
         StructType(const Struct* st, const Ident& name, llvm::Type* type);
@@ -32,14 +32,14 @@ namespace pepper {
 
         Ref<class RefType> refType() const;
 
-        TypeOps* ops() override;
+        Operations* ops() override;
     };
 
     class RefType : public PointerType {
         DECLARE_RTTI(RefType, PointerType);
 
         Ref<StructType> StructTy;
-        Ref<TypeOps> Ops;
+        Ref<Operations> Ops;
 
       public:
         RefType(Ref<StructType> structType);
@@ -50,7 +50,7 @@ namespace pepper {
 
         Ref<StructType> structType() const;
 
-        TypeOps* ops() override;
+        Operations* ops() override;
     };
 
     class Struct : public std::enable_shared_from_this<Struct> {

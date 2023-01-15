@@ -6,7 +6,7 @@
 #include "CodeGen/Codegen.h"
 #include "Core/Exceptions.h"
 #include "Frontend/LLVMUtils.h"
-#include "Frontend/TypeOps.h"
+#include "Frontend/Operations.h"
 #include "Frontend/Types.h"
 
 namespace pepper {
@@ -14,47 +14,47 @@ namespace pepper {
 
     static auto binaryOp(Ref<BinaryOp> op) {
         if (op->is<Assign>())
-            return &TypeOps::assign;
+            return &Operations::assign;
         if (op->is<Add>())
-            return &TypeOps::add;
+            return &Operations::add;
         if (op->is<Sub>())
-            return &TypeOps::sub;
+            return &Operations::sub;
         if (op->is<Mul>())
-            return &TypeOps::mul;
+            return &Operations::mul;
         if (op->is<Div>())
-            return &TypeOps::div;
+            return &Operations::div;
         if (op->is<Mod>())
-            return &TypeOps::mod;
+            return &Operations::mod;
         if (op->is<Pow>())
-            return &TypeOps::pow;
+            return &Operations::pow;
         if (op->is<LShift>())
-            return &TypeOps::lshift;
+            return &Operations::lshift;
         if (op->is<RShift>())
-            return &TypeOps::rshift;
+            return &Operations::rshift;
         if (op->is<Equal>())
-            return &TypeOps::equal;
+            return &Operations::equal;
         if (op->is<NotEqual>())
-            return &TypeOps::notEqual;
+            return &Operations::notEqual;
         if (op->is<Assign>())
-            return &TypeOps::assign;
+            return &Operations::assign;
         if (op->is<Less>())
-            return &TypeOps::less;
+            return &Operations::less;
         if (op->is<LessEqual>())
-            return &TypeOps::lessEq;
+            return &Operations::lessEq;
         if (op->is<Greater>())
-            return &TypeOps::greater;
+            return &Operations::greater;
         if (op->is<GreaterEqual>())
-            return &TypeOps::greaterEq;
+            return &Operations::greaterEq;
         if (op->is<BitAnd>())
-            return &TypeOps::bitAnd;
+            return &Operations::bitAnd;
         if (op->is<BitOr>())
-            return &TypeOps::bitOr;
+            return &Operations::bitOr;
         if (op->is<BitXor>())
-            return &TypeOps::bitXor;
+            return &Operations::bitXor;
         if (op->is<LogicalAnd>())
-            return &TypeOps::bitAnd;
+            return &Operations::bitAnd;
         if (op->is<LogicalOr>())
-            return &TypeOps::bitOr;
+            return &Operations::bitOr;
         throw InternalCompilerError("Unknown binary op: {0}", op->rtti()->name());
     }
 
@@ -114,25 +114,25 @@ namespace pepper {
 
     static auto compoundOp(Ref<CompoundAssign> op) {
         if (op->is<AddAssign>())
-            return &TypeOps::add;
+            return &Operations::add;
         if (op->is<SubAssign>())
-            return &TypeOps::sub;
+            return &Operations::sub;
         if (op->is<MulAssign>())
-            return &TypeOps::mul;
+            return &Operations::mul;
         if (op->is<DivAssign>())
-            return &TypeOps::div;
+            return &Operations::div;
         if (op->is<ModAssign>())
-            return &TypeOps::mod;
+            return &Operations::mod;
         if (op->is<LShiftAssign>())
-            return &TypeOps::lshift;
+            return &Operations::lshift;
         if (op->is<RShiftAssign>())
-            return &TypeOps::rshift;
+            return &Operations::rshift;
         if (op->is<BitAndAssign>())
-            return &TypeOps::bitAnd;
+            return &Operations::bitAnd;
         if (op->is<BitOrAssign>())
-            return &TypeOps::bitOr;
+            return &Operations::bitOr;
         if (op->is<BitXorAssign>())
-            return &TypeOps::bitXor;
+            return &Operations::bitXor;
         throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
     }
 
@@ -190,21 +190,21 @@ namespace pepper {
 
     static auto unaryOp(Ref<UnaryOp> op) {
         if (op->is<Plus>())
-            return &TypeOps::pos;
+            return &Operations::pos;
         if (op->is<Minus>())
-            return &TypeOps::neg;
+            return &Operations::neg;
         if (op->is<PreIncrement>())
-            return &TypeOps::preIncrement;
+            return &Operations::preIncrement;
         if (op->is<PostIncrement>())
-            return &TypeOps::postIncrement;
+            return &Operations::postIncrement;
         if (op->is<PreDecrement>())
-            return &TypeOps::preDecrement;
+            return &Operations::preDecrement;
         if (op->is<PostDecrement>())
-            return &TypeOps::postDecrement;
+            return &Operations::postDecrement;
         if (op->is<LogicalNot>())
-            return &TypeOps::logicalNot;
+            return &Operations::logicalNot;
         if (op->is<BitNot>())
-            return &TypeOps::bitNot;
+            return &Operations::bitNot;
         throw InternalCompilerError("Unknown unary op: {0}", op->rtti()->name());
     }
 
