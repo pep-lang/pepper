@@ -12,7 +12,6 @@
 #include "Frontend/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {
