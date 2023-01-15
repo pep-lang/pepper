@@ -73,6 +73,8 @@ namespace pepper {
     }
 
     llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Value& value) {
+        if (!localScope())
+            return nullptr;
         PEP_TRACE(TraceChannel::DebugInfo,
                   "local: {0} {1} {2}: {3}",
                   localScope()->getName(),
@@ -92,6 +94,8 @@ namespace pepper {
     }
 
     llvm::DILocalVariable* DebugInfo::emitParameter(int argIndex, const Value& value) {
+        if (!localScope())
+            return nullptr;
         // add one to argIndex, DI params are 1-based
         llvm::DILocalVariable* local = DI->createParameterVariable(
             localScope(), value.Name, argIndex + 1, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
@@ -157,6 +161,10 @@ namespace pepper {
     }
 
     llvm::DISubprogram* DebugInfo::emitFunction(Function* function) {
+        if (function->is<Method>() && function->name().ends_with("__acquire") ||
+            function->name().ends_with("__release") || function->name().ends_with("__init"))
+            return nullptr;
+
         auto sp = [&]() {
             // TODO: template parameters when generic functions are supported
             if (function->is<Method>()) {
@@ -194,7 +202,7 @@ namespace pepper {
 
     void DebugInfo::popScope() {
         auto scope = Stack.pop_back_val();
-        if (llvm::isa<llvm::DISubprogram>(scope)) {
+        if (scope && llvm::isa<llvm::DISubprogram>(scope)) {
             auto sp = llvm::cast<llvm::DISubprogram>(scope);
             DI->finalizeSubprogram(sp);
         }
