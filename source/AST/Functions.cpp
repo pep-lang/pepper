@@ -68,7 +68,6 @@ namespace pepper::ast {
     }
 
     Ref<ExternFunctionDef> ExternFunctionDef::Find(const Ident& name) {
-        // Put runtime imports into global scope
         for (const auto& import : Runtime::Imports()) {
             if (import.Name == name) {
                 Params params;
