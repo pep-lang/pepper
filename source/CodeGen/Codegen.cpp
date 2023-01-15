@@ -56,16 +56,14 @@ namespace pepper {
         if (!type) {
             throw CompileError(variableDef->Source, "Unknown type {0}", typeName.toString());
         }
+
         auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
+        ir()->CreateStore(zeroValue(type), value);
         locals()->newSymbol(value);
 
-        auto defaultValue = maybeCodegen(variableDef->Default);
-        if (defaultValue) {
+        if (auto defaultValue = maybeCodegen(variableDef->Default)) {
             auto typeOps = type->ops();
             typeOps->init(value, defaultValue);
-        } else {
-            defaultValue = zeroValue(type);
-            ir()->CreateStore(defaultValue, value);
         }
 
         return value;
