@@ -3,7 +3,7 @@
 //
 
 #include "AST/Block.h"
-#include "CodeGen/Codegen.h"
+#include "CodeGen/CodeGenerator.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Struct.h"
 #include "llvm/IR/BasicBlock.h"
@@ -11,16 +11,16 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    llvm::BasicBlock* Codegen::codegenBlock(
+    llvm::BasicBlock* CodeGenerator::codegenBlock(
         Ref<UserFunction> function, Ref<Block> block, llvm::BasicBlock* basicBlock, llvm::BasicBlock* nextBlock) {
         basicBlock = basicBlock ? basicBlock : function->appendBlock(block->Name);
         ir()->SetInsertPoint(basicBlock);
 
         // codegen all instructions, and ensure that there's a jump the next block
-        Value lastInstr;
+        Address lastInstr;
         if (block) {
             // track any references that only exist in this scope, they will need cleanup at the end
-            Vector<Value> localRefs;
+            Vector<Address> localRefs;
             for (auto& expr : block->Items) {
                 lastInstr = codegen(expr);
                 // if this was the creation of a struct reference, track it
@@ -32,7 +32,7 @@ namespace pepper {
                 // if there's already a jump, cleanup needs to be inserted before it
                 auto hasJump = lastInstr && llvm::isa<llvm::BranchInst>(*lastInstr);
                 if (hasJump)
-                    ir()->SetInsertPoint(llvm::cast<llvm::Instruction>(lastInstr.V));
+                    ir()->SetInsertPoint(llvm::cast<llvm::Instruction>(lastInstr.Value));
                 for (auto& ref : llvm::reverse(localRefs)) {
                     auto type = ref.Ty.template as<RefType>();
                     auto release = type->structType()->StructDesc->method("__release");

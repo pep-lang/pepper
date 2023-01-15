@@ -1,5 +1,5 @@
 
-#include "Codegen.h"
+#include "CodeGenerator.h"
 
 #include "AST/AST.h"
 #include "AST/Nodes.h"
@@ -18,31 +18,31 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    Ref<Scope> Codegen::locals() {
+    Ref<Scope> CodeGenerator::locals() {
         return Context::get().locals();
     }
 
-    Ref<Scope> Codegen::globals() {
+    Ref<Scope> CodeGenerator::globals() {
         return Context::get().globals();
     }
 
-    void Codegen::pushFunction(Ref<UserFunction> function) {
+    void CodeGenerator::pushFunction(Ref<UserFunction> function) {
         Context::get().pushFunction(function);
         auto sp = Module->getDebugInfo()->emitFunction(function.get());
         Module->getDebugInfo()->pushScope(sp);
     }
 
-    void Codegen::pushScope(const Ident& name) {
+    void CodeGenerator::pushScope(const Ident& name) {
         Context::get().pushScope(name);
         // TODO: how to handle anonymous scopes
     }
 
-    void Codegen::popScope() {
+    void CodeGenerator::popScope() {
         Module->getDebugInfo()->popScope();
         Context::get().popScope();
     }
 
-    Value Codegen::emit(Ref<SymbolRef> variableRef) {
+    Address CodeGenerator::emit(Ref<SymbolRef> variableRef) {
         auto value = locals()->findSymbol(variableRef->Name);
         if (!value) {
             throw CompileError(variableRef->Source, "No symbol named {0} could be found", variableRef->Name);
@@ -50,14 +50,14 @@ namespace pepper {
         return value;
     }
 
-    Value Codegen::emit(Ref<VariableDef> variableDef) {
+    Address CodeGenerator::emit(Ref<VariableDef> variableDef) {
         auto typeName = variableDef->Type;
         auto type = Types::get(typeName.toString());
         if (!type) {
             throw CompileError(variableDef->Source, "Unknown type {0}", typeName.toString());
         }
 
-        auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
+        auto value = Address(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
         locals()->newSymbol(value);
 
         if (auto defaultValue = maybeCodegen(variableDef->Default)) {
@@ -70,40 +70,40 @@ namespace pepper {
         return value;
     }
 
-    Value Codegen::emit(Ref<StringLiteral> stringLiteral) {
-        auto value = Value(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->Value));
+    Address CodeGenerator::emit(Ref<StringLiteral> stringLiteral) {
+        auto value = Address(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->Value));
         return value;
     }
 
-    Value Codegen::emit(Ref<IntegerLiteral> intLiteral) {
+    Address CodeGenerator::emit(Ref<IntegerLiteral> intLiteral) {
         auto type = Types::get(intLiteral->type().Name);
-        auto value = Value(type, llvm::ConstantInt::get(*type, intLiteral->Value));
+        auto value = Address(type, llvm::ConstantInt::get(*type, intLiteral->Value));
         return value;
     }
 
-    Value Codegen::emit(Ref<FloatLiteral> floatLiteral) {
+    Address CodeGenerator::emit(Ref<FloatLiteral> floatLiteral) {
         auto type = Types::get(floatLiteral->type().Name);
-        auto value = Value(type, llvm::ConstantFP::get(*type, floatLiteral->Value));
+        auto value = Address(type, llvm::ConstantFP::get(*type, floatLiteral->Value));
         return value;
     }
 
-    Value Codegen::emit(Ref<BoolLiteral> boolLiteral) {
-        auto value = Value(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->Value));
+    Address CodeGenerator::emit(Ref<BoolLiteral> boolLiteral) {
+        auto value = Address(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->Value));
         return value;
     }
 
-    Value Codegen::emit(Ref<PointerLiteral> pointerLiteral) {
+    Address CodeGenerator::emit(Ref<PointerLiteral> pointerLiteral) {
         assert(pointerLiteral->Value == 0);
         auto type = Types::UInt8->pointer();
-        auto value = Value(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
+        auto value = Address(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
         return value;
     }
 
-    Value Codegen::codegen(Ref<Node> node) {
+    Address CodeGenerator::codegen(Ref<Node> node) {
         PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
         Module->getDebugInfo()->setSourceLocation(node->Source);
 
-        Value value;
+        Address value;
         if (node->is<BinaryOp>())
             value = emit(node.as<BinaryOp>());
         else if (node->is<UnaryOp>())
@@ -159,11 +159,11 @@ namespace pepper {
         return value;
     }
 
-    Codegen::Codegen(Ref<CodeGenModule> module) {
+    CodeGenerator::CodeGenerator(Ref<CodeGenModule> module) {
         Module = Context::get().moduleContext();
     }
 
-    void Codegen::generate(Ref<ast::AST> tree) {
+    void CodeGenerator::generate(Ref<ast::AST> tree) {
         PEP_TRACE(TraceChannel::Codegen, "Code generation:")
         for (const auto& root : tree->roots()) {
             try {

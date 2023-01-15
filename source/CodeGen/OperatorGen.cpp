@@ -3,7 +3,7 @@
 //
 
 #include "AST/BinaryOps.h"
-#include "CodeGen/Codegen.h"
+#include "CodeGen/CodeGenerator.h"
 #include "Core/Exceptions.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
@@ -136,7 +136,7 @@ namespace pepper {
         throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
     }
 
-    Value Codegen::emit(Ref<Assign> op) {
+    Address CodeGenerator::emit(Ref<Assign> op) {
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
         auto typeOps = lhs.Ty->ops();
@@ -144,7 +144,7 @@ namespace pepper {
         return lhs;
     }
 
-    Value Codegen::emit(Ref<CompoundAssign> op) {
+    Address CodeGenerator::emit(Ref<CompoundAssign> op) {
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
         auto opType = lhs.Ty;
@@ -163,7 +163,7 @@ namespace pepper {
         return lhs;
     }
 
-    Value Codegen::emit(Ref<BinaryOp> op) {
+    Address CodeGenerator::emit(Ref<BinaryOp> op) {
         if (op->is<CompoundAssign>())
             return emit(op.as<CompoundAssign>());
         if (op->is<Assign>())
@@ -208,7 +208,7 @@ namespace pepper {
         throw InternalCompilerError("Unknown unary op: {0}", op->rtti()->name());
     }
 
-    Value Codegen::emit(Ref<UnaryOp> op) {
+    Address CodeGenerator::emit(Ref<UnaryOp> op) {
         if (op->is<Minus>()) {
             if (op->Operand->is<IntegerLiteral>()) {
                 auto intLiteral = op->Operand.as<IntegerLiteral>();

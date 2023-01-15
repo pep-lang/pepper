@@ -24,17 +24,17 @@ namespace pepper {
         return Outer ? Outer->findFunction(name) : nullptr;
     }
 
-    void Scope::newSymbol(const Value& value) {
+    void Scope::newSymbol(const Address& value) {
         assert(!Symbols.lookup(value.Name));
         Symbols[value.Name] = value;
         Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
     }
 
-    const Value& Scope::findSymbol(const std::string& identifier, bool localOnly) const {
+    const Address& Scope::findSymbol(const std::string& identifier, bool localOnly) const {
         auto it = Symbols.find(identifier);
         if (it != Symbols.end())
             return it->second;
-        return Outer && !localOnly ? Outer->findSymbol(identifier) : Value::Null();
+        return Outer && !localOnly ? Outer->findSymbol(identifier) : Address::Null();
     }
 
     Ref<UserFunction> Scope::functionTarget() const {

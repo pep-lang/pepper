@@ -1,7 +1,7 @@
 
 #include "Frontend/Struct.h"
 
-#include "CodeGen/Value.h"
+#include "CodeGen/Address.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Frontend/Context.h"
@@ -45,32 +45,32 @@ namespace pepper {
         return Context::get().globals()->Structs.lookup(name);
     }
 
-    Value Struct::getMember(llvm::Value* instance, const Ident& name) const {
+    Address Struct::getMember(llvm::Value* instance, const Ident& name) const {
         if (auto field = getField(instance, name))
             return field;
         return getMethod(name);
     }
 
-    Value Struct::getField(llvm::Value* instance, const Ident& name) const {
+    Address Struct::getField(llvm::Value* instance, const Ident& name) const {
         auto fieldIt = Fields.find(name);
         if (fieldIt != Fields.end()) {
             int idx = (int)std::distance(Fields.begin(), fieldIt);
             return getField(instance, idx, fieldIt->second);
         }
-        return Value{};
+        return Address{};
     }
 
-    Value Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
-        return Value(field.Type, ir()->CreateStructGEP(*StructTy, instance, idx, field.Name));
+    Address Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
+        return Address(field.Type, ir()->CreateStructGEP(*StructTy, instance, idx, field.Name));
     }
 
-    Value Struct::getMethod(const Ident& name) const {
+    Address Struct::getMethod(const Ident& name) const {
         auto it = Methods.find(name);
         if (it != Methods.end()) {
             auto method = it->second;
-            return Value{method->type(), method->function(), method->name()};
+            return Address{method->type(), method->function(), method->name()};
         }
-        return Value{};
+        return Address{};
     }
 
     class StructTypeOps : public Operations {
@@ -84,7 +84,7 @@ namespace pepper {
             Struct = Ty.as<StructType>()->StructDesc;
         }
 
-        Value coerce(Value) const override {
+        Address coerce(Address) const override {
             throw CompileError("Coercion between structs is not supported");
         }
     };
@@ -110,7 +110,7 @@ namespace pepper {
       public:
         using PointerOperations::PointerOperations;
 
-        void init(Value lhs, Value rhs) const override {
+        void init(Address lhs, Address rhs) const override {
             rhs = coerce(rhs);
             ir()->CreateStore(rhs, lhs);
             auto st = Ty.as<RefType>()->structType()->StructDesc;
@@ -118,7 +118,7 @@ namespace pepper {
             acquire->call({rhs});
         }
 
-        Value assign(Value lhs, Value rhs) const override {
+        Address assign(Address lhs, Address rhs) const override {
             rhs = coerce(rhs);
             auto st = Ty.as<RefType>()->structType()->StructDesc;
             auto acquire = st->method("__acquire");

@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "CodeGen/Value.h"
+#include "CodeGen/Address.h"
 #include "Core/Common.h"
 #include "Core/SourceLocation.h"
 #include "Core/Vector.h"
@@ -47,12 +47,12 @@ namespace pepper {
         void finalize();
 
         llvm::DIType* emitBasicType(llvm::StringRef name, const Type* type);
-        llvm::DILocalVariable* emitLocalVariable(const Value& value);
+        llvm::DILocalVariable* emitLocalVariable(const Address& value);
         llvm::DIType* emitStruct(const Struct* st);
         llvm::DIType* emitField(const Struct* st, llvm::DIType* structDI, int fieldIdx);
         llvm::DISubprogram* emitFunction(Function* function);
-        llvm::DILocalVariable* emitParameter(int argIndex, const Value& param);
-        llvm::DIGlobalVariableExpression* emitGlobalVariable(const Value& global);
+        llvm::DILocalVariable* emitParameter(int argIndex, const Address& param);
+        llvm::DIGlobalVariableExpression* emitGlobalVariable(const Address& global);
 
         void pushScope(llvm::DIScope* newScope);
         void popScope();

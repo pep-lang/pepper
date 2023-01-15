@@ -72,7 +72,7 @@ namespace pepper {
         return insertType(type, diType);
     }
 
-    llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Value& value) {
+    llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Address& value) {
         if (!localScope())
             return nullptr;
         PEP_TRACE(TraceChannel::DebugInfo,
@@ -84,11 +84,11 @@ namespace pepper {
         auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
         llvm::SmallVector<uint64_t, 3> diExpr;
-        DI->insertDeclare(value.V, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
+        DI->insertDeclare(value.Value, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
         return local;
     }
 
-    llvm::DIGlobalVariableExpression* DebugInfo::emitGlobalVariable(const Value& global) {
+    llvm::DIGlobalVariableExpression* DebugInfo::emitGlobalVariable(const Address& global) {
         return DI->createGlobalVariableExpression(
             globalScope(), global.Name, global.Name, SourceFile, Source.Line, getOrCreateType(global.Ty.get()), true);
     }
@@ -184,7 +184,7 @@ namespace pepper {
         return sp;
     }
 
-    llvm::DILocalVariable* DebugInfo::emitParameter(int argIndex, const Value& value) {
+    llvm::DILocalVariable* DebugInfo::emitParameter(int argIndex, const Address& value) {
         if (!localScope())
             return nullptr;
 
@@ -201,7 +201,7 @@ namespace pepper {
                                                                    getOrCreateType(value.Ty.get()),
                                                                    true,
                                                                    flags);
-        DI->insertDeclare(value.V, local, DI->createExpression(), location(), ir()->GetInsertBlock());
+        DI->insertDeclare(value.Value, local, DI->createExpression(), location(), ir()->GetInsertBlock());
         return local;
     }
 

@@ -6,7 +6,7 @@
 
 #include "AST/AST.h"
 #include "CodeGen/CodeGenModule.h"
-#include "CodeGen/Codegen.h"
+#include "CodeGen/CodeGenerator.h"
 #include "Compiler/Linker.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
@@ -38,7 +38,7 @@ namespace pepper {
         std::string SourcePath;
         Ref<CodeGenModule> Module;
         std::unique_ptr<Parser> ParserRef;
-        std::unique_ptr<Codegen> IR;
+        std::unique_ptr<CodeGenerator> IR;
 
         // Collected obj files for linking
         Vector<std::string> ObjFiles;
@@ -85,7 +85,7 @@ namespace pepper {
             Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
             auto Ctx = Ref<Context>::New(Module);
             ParserRef = std::make_unique<Parser>();
-            IR = std::make_unique<Codegen>(Module);
+            IR = std::make_unique<CodeGenerator>(Module);
 
             auto ast = parse(sourceStream, SourcePath);
             if (!ast || !Messages::errors().empty()) {

@@ -3,18 +3,18 @@
 //
 
 #include "AST/Branches.h"
-#include "Codegen.h"
+#include "Address.h"
+#include "CodeGenerator.h"
 #include "Core/Exceptions.h"
 #include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
 #include "Frontend/Types.h"
-#include "Value.h"
 
 namespace pepper {
     using namespace pepper::ast;
 
-    Value Codegen::emit(Ref<Branch> branch) {
+    Address CodeGenerator::emit(Ref<Branch> branch) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto thenBlock = function->appendBlock("then");
@@ -37,11 +37,11 @@ namespace pepper {
         // set the builder to the head of the merge block for whatever is next
         ir()->SetInsertPoint(mergeBlock);
 
-        return Value{Types::VoidPtr,
-                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType()))};
+        return Address{Types::VoidPtr,
+                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType()))};
     }
 
-    Value Codegen::emit(Ref<Ternary> ternary) {
+    Address CodeGenerator::emit(Ref<Ternary> ternary) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto trueBlock = function->appendBlock("true");
@@ -54,12 +54,12 @@ namespace pepper {
         ir()->CreateCondBr(condBool, trueBlock, falseBlock);
 
         ir()->SetInsertPoint(trueBlock);
-        Value trueValue = codegen(ternary->TrueResult);
+        Address trueValue = codegen(ternary->TrueResult);
         ir()->CreateBr(mergeBlock);
         trueBlock = ir()->GetInsertBlock();
 
         ir()->SetInsertPoint(falseBlock);
-        Value falseValue = codegen(ternary->FalseResult);
+        Address falseValue = codegen(ternary->FalseResult);
         ir()->CreateBr(mergeBlock);
         falseBlock = ir()->GetInsertBlock();
 
@@ -67,6 +67,6 @@ namespace pepper {
         auto phi = ir()->CreatePHI(trueValue->getType(), 2, "ternary");
         phi->addIncoming(trueValue, trueBlock);
         phi->addIncoming(falseValue, falseBlock);
-        return Value{trueValue.Ty, phi};
+        return Address{trueValue.Ty, phi};
     }
 } // namespace pepper

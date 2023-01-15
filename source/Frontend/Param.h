@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "CodeGen/Value.h"
+#include "CodeGen/Address.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
 
@@ -11,9 +11,9 @@ namespace pepper {
     struct Param {
         Ref<Type> Type;
         Ident Name;
-        Value Default;
+        Address Default;
 
-        Param(const Ident& name, Ref<pepper::Type> type, Value defaultValue = {})
+        Param(const Ident& name, Ref<pepper::Type> type, Address defaultValue = {})
             : Name(name)
             , Type(type)
             , Default(defaultValue) {

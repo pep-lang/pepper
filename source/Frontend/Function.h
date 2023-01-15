@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "CodeGen/Value.h"
+#include "CodeGen/Address.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
@@ -59,7 +59,7 @@ namespace pepper {
             return FuncType;
         }
 
-        Value call(const Vector<Value>& args) const;
+        Address call(const Vector<Address>& args) const;
     };
 
     class UserFunction : public Function {
@@ -68,7 +68,7 @@ namespace pepper {
       public:
         llvm::BasicBlock* Body = nullptr;
         llvm::BasicBlock* Return = nullptr;
-        Value ReturnValue;
+        Address ReturnValue;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
         UserFunction(const Ident& name, Ref<Type> returnType, const Params& params = Params());

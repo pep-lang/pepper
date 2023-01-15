@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "CodeGen/Value.h"
+#include "CodeGen/Address.h"
 #include "Core/Common.h"
 
 namespace llvm {
@@ -36,36 +36,36 @@ namespace pepper {
         static Ref<Operations> get(Ref<Type> type);
         static Ref<Operations> get(const Type* type);
 
-        virtual Value coerce(Value value) const = 0;
+        virtual Address coerce(Address value) const = 0;
 
-        virtual Value add(Value lhs, Value rhs) const;
-        virtual Value sub(Value lhs, Value rhs) const;
-        virtual Value mul(Value lhs, Value rhs) const;
-        virtual Value div(Value lhs, Value rhs) const;
-        virtual Value mod(Value lhs, Value rhs) const;
-        virtual Value pow(Value lhs, Value rhs) const;
-        virtual Value less(Value lhs, Value rhs) const;
-        virtual Value lessEq(Value lhs, Value rhs) const;
-        virtual Value greater(Value lhs, Value rhs) const;
-        virtual Value greaterEq(Value lhs, Value rhs) const;
-        virtual Value lshift(Value lhs, Value rhs) const;
-        virtual Value rshift(Value lhs, Value rhs) const;
-        virtual Value equal(Value lhs, Value rhs) const;
-        virtual Value notEqual(Value lhs, Value rhs) const;
-        virtual void init(Value lhs, Value rhs) const;
-        virtual Value assign(Value lhs, Value rhs) const;
-        virtual Value bitAnd(Value lhs, Value rhs) const;
-        virtual Value bitXor(Value lhs, Value rhs) const;
-        virtual Value bitOr(Value lhs, Value rhs) const;
-        virtual Value neg(Value val) const;
-        virtual Value pos(Value val) const;
-        virtual Value preIncrement(Value val) const;
-        virtual Value preDecrement(Value val) const;
-        virtual Value postIncrement(Value val) const;
-        virtual Value postDecrement(Value val) const;
-        virtual Value bitNot(Value val) const;
-        virtual Value logicalNot(Value val) const;
-        virtual Value asBool(Value value) const;
+        virtual Address add(Address lhs, Address rhs) const;
+        virtual Address sub(Address lhs, Address rhs) const;
+        virtual Address mul(Address lhs, Address rhs) const;
+        virtual Address div(Address lhs, Address rhs) const;
+        virtual Address mod(Address lhs, Address rhs) const;
+        virtual Address pow(Address lhs, Address rhs) const;
+        virtual Address less(Address lhs, Address rhs) const;
+        virtual Address lessEq(Address lhs, Address rhs) const;
+        virtual Address greater(Address lhs, Address rhs) const;
+        virtual Address greaterEq(Address lhs, Address rhs) const;
+        virtual Address lshift(Address lhs, Address rhs) const;
+        virtual Address rshift(Address lhs, Address rhs) const;
+        virtual Address equal(Address lhs, Address rhs) const;
+        virtual Address notEqual(Address lhs, Address rhs) const;
+        virtual void init(Address lhs, Address rhs) const;
+        virtual Address assign(Address lhs, Address rhs) const;
+        virtual Address bitAnd(Address lhs, Address rhs) const;
+        virtual Address bitXor(Address lhs, Address rhs) const;
+        virtual Address bitOr(Address lhs, Address rhs) const;
+        virtual Address neg(Address val) const;
+        virtual Address pos(Address val) const;
+        virtual Address preIncrement(Address val) const;
+        virtual Address preDecrement(Address val) const;
+        virtual Address postIncrement(Address val) const;
+        virtual Address postDecrement(Address val) const;
+        virtual Address bitNot(Address val) const;
+        virtual Address logicalNot(Address val) const;
+        virtual Address asBool(Address value) const;
     };
 
     class NativeOperations : public Operations {
@@ -84,11 +84,11 @@ namespace pepper {
             : NativeOperations(type) {
         }
 
-        Value coerce(Value value) const override;
-        Value equal(Value lhs, Value rhs) const override;
-        Value notEqual(Value lhs, Value rhs) const override;
-        Value assign(Value lhs, Value rhs) const override;
-        Value asBool(Value value) const override;
-        Value logicalNot(Value value) const override;
+        Address coerce(Address value) const override;
+        Address equal(Address lhs, Address rhs) const override;
+        Address notEqual(Address lhs, Address rhs) const override;
+        Address assign(Address lhs, Address rhs) const override;
+        Address asBool(Address value) const override;
+        Address logicalNot(Address value) const override;
     };
 } // namespace pepper

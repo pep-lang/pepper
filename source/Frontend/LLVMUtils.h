@@ -42,51 +42,51 @@ namespace pepper {
         return Context::get().locals()->builder();
     }
 
-    inline llvm::Type* resolveType(Value value) {
-        if (llvm::isa<llvm::AllocaInst>(*value.V)) {
-            auto allocaInst = llvm::cast<llvm::AllocaInst>(value.V);
+    inline llvm::Type* resolveType(Address value) {
+        if (llvm::isa<llvm::AllocaInst>(*value.Value)) {
+            auto allocaInst = llvm::cast<llvm::AllocaInst>(value.Value);
             return allocaInst->getAllocatedType();
         }
-        if (llvm::isa<llvm::GetElementPtrInst>(*value.V)) {
-            auto gepInst = llvm::cast<llvm::GetElementPtrInst>(value.V);
+        if (llvm::isa<llvm::GetElementPtrInst>(*value.Value)) {
+            auto gepInst = llvm::cast<llvm::GetElementPtrInst>(value.Value);
             return gepInst->getResultElementType();
         }
         return value->getType();
     }
 
-    inline Value load(Value value) {
-        if (llvm::isa<llvm::AllocaInst>(*value.V)) {
+    inline Address load(Address value) {
+        if (llvm::isa<llvm::AllocaInst>(*value.Value)) {
             auto type = resolveType(value);
-            return Value{value.Ty, ir()->CreateLoad(type, value)};
+            return Address{value.Ty, ir()->CreateLoad(type, value)};
         }
-        if (llvm::isa<llvm::GetElementPtrInst>(*value.V)) {
+        if (llvm::isa<llvm::GetElementPtrInst>(*value.Value)) {
             auto type = resolveType(value);
             // This may be a pointer to a pointer to a struct (e.g. a struct reference), so an additional
             // read pass is necessary here
-            return Value{value.Ty, ir()->CreateLoad(type, value)};
+            return Address{value.Ty, ir()->CreateLoad(type, value)};
         }
         return value;
     }
 
-    inline Value read(Value value) {
+    inline Address read(Address value) {
         value = load(value);
         if (value.Ty->isPointer()) {
             auto type = value.Ty.as<PointerType>();
             auto pointee = type->pointeeType();
             if (pointee->isStruct()) {
-                return Value{pointee, ir()->CreateLoad(*type, value)};
+                return Address{pointee, ir()->CreateLoad(*type, value)};
             }
         }
         return value;
     }
 
-    inline Value zeroValue(Ref<Type> type) {
+    inline Address zeroValue(Ref<Type> type) {
         if (type->llvmType()->isIntegerTy())
-            return Value{type, llvm::ConstantInt::get(*type, 0)};
+            return Address{type, llvm::ConstantInt::get(*type, 0)};
         if (type->llvmType()->isFloatingPointTy())
-            return Value{type, llvm::ConstantFP::get(*type, 0.0f)};
+            return Address{type, llvm::ConstantFP::get(*type, 0.0f)};
         if (type->llvmType()->isPointerTy())
-            return Value{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType()))};
+            return Address{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType()))};
         throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 

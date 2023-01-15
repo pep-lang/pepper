@@ -9,31 +9,31 @@
 #include "llvm/IR/Value.h"
 
 namespace pepper {
-    struct Value {
+    struct Address {
         Ident Name;
-        llvm::Value* V;
+        llvm::Value* Value;
         Ref<Type> Ty;
 
-        Value(Ref<Type> type = nullptr, llvm::Value* value = nullptr, const Ident& identifier = "")
+        Address(Ref<Type> type = nullptr, llvm::Value* value = nullptr, const Ident& identifier = "")
             : Name(identifier)
             , Ty(type)
-            , V(value) {
+            , Value(value) {
         }
 
         operator llvm::Value*() const {
-            return V;
+            return Value;
         }
 
         explicit operator bool() const {
-            return V;
+            return Value;
         }
 
         llvm::Value* operator->() {
-            return V;
+            return Value;
         }
 
-        static const Value& Null() {
-            static Value nullValue;
+        static const Address& Null() {
+            static Address nullValue;
             return nullValue;
         };
     };

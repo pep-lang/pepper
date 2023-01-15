@@ -6,19 +6,19 @@
 //
 
 #include "AST/Loops.h"
-#include "Codegen.h"
+#include "Address.h"
+#include "CodeGenerator.h"
 #include "Core/Exceptions.h"
 #include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
 #include "Frontend/Struct.h"
 #include "Frontend/Types.h"
-#include "Value.h"
 
 namespace pepper {
     using namespace pepper::ast;
 
-    Value Codegen::emit(Ref<While> loop) {
+    Address CodeGenerator::emit(Ref<While> loop) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("while");
@@ -41,11 +41,11 @@ namespace pepper {
         // loop is done, set insertion to the continuation block
         ir()->SetInsertPoint(mergeBlock);
 
-        return Value(Types::VoidPtr,
-                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
+        return Address(Types::VoidPtr,
+                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
 
-    Value Codegen::emit(Ref<ForRange> loop) {
+    Address CodeGenerator::emit(Ref<ForRange> loop) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("for");
@@ -54,7 +54,7 @@ namespace pepper {
         auto end = maybeCodegen(loop->Done);
         auto step = maybeCodegen(loop->Step);
 
-        Vector<Value> args;
+        Vector<Address> args;
         args.emplace_back(init);
         if (end)
             args.emplace_back(end);
@@ -81,8 +81,8 @@ namespace pepper {
         // loop is done, set insertion to the continuation block
         ir()->SetInsertPoint(mergeBlock);
 
-        return Value(Types::VoidPtr,
-                     llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
+        return Address(Types::VoidPtr,
+                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
 
 } // namespace pepper

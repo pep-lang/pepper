@@ -23,7 +23,7 @@ namespace pepper {
         Func = llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Name, Context::get().module());
     }
 
-    Value Function::call(const Vector<Value>& args) const {
+    Address Function::call(const Vector<Address>& args) const {
         // fill in supplied params
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;
@@ -44,8 +44,8 @@ namespace pepper {
             }
             coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
         }
-        return Value{ReturnType,
-                     Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
+        return Address{ReturnType,
+                       Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
     UserFunction::UserFunction(const Ident& name, Ref<Type> returnType, const Params& params)
@@ -59,7 +59,7 @@ namespace pepper {
         auto builder = Ref<llvm::IRBuilder<>>::New(Return);
         builder->SetInsertPoint(Return);
         if (returnType != Types::Void) {
-            ReturnValue = Value{returnType, Builder->CreateAlloca(*returnType, nullptr, "retval")};
+            ReturnValue = Address{returnType, Builder->CreateAlloca(*returnType, nullptr, "retval")};
             builder->CreateRet(builder->CreateLoad(*ReturnType, ReturnValue));
         } else {
             builder->CreateRetVoid();

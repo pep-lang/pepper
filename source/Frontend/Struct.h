@@ -117,10 +117,10 @@ namespace pepper {
             return ms;
         }
 
-        Value getMember(llvm::Value* instance, const Ident& name) const;
-        Value getField(llvm::Value* instance, const Ident& name) const;
-        Value getField(llvm::Value* instance, int idx, const Param& field) const;
-        Value getMethod(const Ident& name) const;
+        Address getMember(llvm::Value* instance, const Ident& name) const;
+        Address getField(llvm::Value* instance, const Ident& name) const;
+        Address getField(llvm::Value* instance, int idx, const Param& field) const;
+        Address getMethod(const Ident& name) const;
 
         Ref<Function> constructor() const {
             return Constructor;

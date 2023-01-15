@@ -3,7 +3,7 @@
 //
 
 #include "AST/Functions.h"
-#include "CodeGen/Codegen.h"
+#include "CodeGen/CodeGenerator.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
@@ -15,13 +15,13 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    Ref<Function> Codegen::resolveFunction(Ref<FunctionCall> call) {
+    Ref<Function> CodeGenerator::resolveFunction(Ref<FunctionCall> call) {
         auto functionName = call->Target->Name;
         auto target = call->Target;
         return locals()->findFunction(functionName);
     }
 
-    void Codegen::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
+    void CodeGenerator::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
         PEP_TRACE(TraceChannel::Codegen, llvm::formatv("Generate {0}...", funcDef->Name));
         Module->getDebugInfo()->setSourceLocation(funcDef->Source);
         pushFunction(function);
@@ -31,9 +31,9 @@ namespace pepper {
         for (int paramIdx = 0; paramIdx < function->params().size(); ++paramIdx) {
             auto param = function->params()[paramIdx];
             auto type = param.Type;
-            auto arg = Value(param.Type, llvmFunction->getArg(paramIdx));
+            auto arg = Address(param.Type, llvmFunction->getArg(paramIdx));
             auto addr = ir()->CreateAlloca(*type, nullptr, param.Name);
-            auto local = Value(type, addr, param.Name);
+            auto local = Address(type, addr, param.Name);
 
             Module->getDebugInfo()->emitParameter(paramIdx, local);
 
@@ -53,17 +53,18 @@ namespace pepper {
         locals()->newFunction(function);
     }
 
-    Value Codegen::emit(Ref<FunctionDef> functionDef) {
+    Address CodeGenerator::emit(Ref<FunctionDef> functionDef) {
         auto returnType = Types::get(functionDef->ReturnType.toString());
         auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
-            return pepper::Param{p.Name, Types::get(p.Type.toString()), p.Default ? codegen(p.Default) : Value::Null()};
+            return pepper::Param{
+                p.Name, Types::get(p.Type.toString()), p.Default ? codegen(p.Default) : Address::Null()};
         });
         auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
         codegenFunction(function, functionDef);
-        return Value{function->type(), function->function()};
+        return Address{function->type(), function->function()};
     }
 
-    Value Codegen::emit(Ref<Return> ret) {
+    Address CodeGenerator::emit(Ref<Return> ret) {
         auto function = locals()->functionTarget().as<UserFunction>();
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
@@ -75,21 +76,21 @@ namespace pepper {
             ir()->CreateStore(rv, function->ReturnValue);
         }
         // jump to the return block
-        return Value{Types::Void, ir()->CreateBr(function->Return)};
+        return Address{Types::Void, ir()->CreateBr(function->Return)};
     }
 
-    Value Codegen::emit(Ref<FunctionCall> call) {
+    Address CodeGenerator::emit(Ref<FunctionCall> call) {
         auto function = resolveFunction(call);
         if (!function) {
             throw CompileError(call->Source, "Function {0} not found", call->Target->Name);
         }
-        Vector<Value> args;
+        Vector<Address> args;
         const auto& callArgs = call->Args;
         for (const auto& argExpr : callArgs) {
             auto arg = codegen(argExpr);
             arg = load(arg);
             args.push_back(arg);
         }
-        return Value{function->returnType(), function->call(args)};
+        return Address{function->returnType(), function->call(args)};
     }
 } // namespace pepper
