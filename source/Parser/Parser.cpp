@@ -514,6 +514,16 @@ namespace pepper {
             }
 
             auto functionName = symbol->Name;
+            if (functionName == "__sizeof") {
+                if (args.size() != 1)
+                    throw CompileError(builder->Source, "__sizeof accepts only a single type parameter");
+                if (auto symbolRef = args[0].as<SymbolRef>()) {
+                    auto sizeOf = builder->New<SizeOf>(symbolRef->Name);
+                    builder->insert(sizeOf);
+                    return;
+                }
+                throw CompileError(builder->Source, "__sizeof called on non-existent type: {0}");
+            }
             auto func = builder->findFunction(functionName);
             if (!func) {
                 throw CompileError(builder->Source, "Function {0} not found", functionName);

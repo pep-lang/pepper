@@ -160,4 +160,19 @@ namespace pepper::ast {
             : SymbolRef("this") {
         }
     };
+
+    struct SizeOf : public Expression {
+        DECLARE_RTTI(SizeOf, Expression);
+        AST_NODE_POD_CLONE(SizeOf);
+
+        TypeName Type;
+
+        SizeOf(const TypeName& type)
+            : Type(type) {
+        }
+
+        void specialize(const Specialization& spec) override {
+            Type.specialize(spec.TypeMap);
+        }
+    };
 } // namespace pepper::ast

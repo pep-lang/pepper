@@ -65,6 +65,7 @@ namespace pepper {
         Address emit(Ref<ast::Ternary> ternary);
         Address emit(Ref<ast::While> loop);
         Address emit(Ref<ast::ForRange> loop);
+        Address emit(Ref<ast::SizeOf> sizeOf);
 
         void instantiate(Ref<ast::StructDef> structDef);
         void instantiate(Ref<ast::FunctionDef> functionDef);

@@ -20,6 +20,39 @@ int test() {
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
 }
 
+TEST(Structs, SizeOf) {
+    const char* source = R"SOURCE(
+struct Test {
+    int x = 0;
+};
+
+int test() {
+    return __sizeof(Test);
+}
+    )SOURCE";
+    EXPECT_EQ(8, CompileAndRun(TestName(test_info_), source));
+}
+
+TEST(Structs, SizeOfGeneric) {
+    const char* source = R"SOURCE(
+struct Test<T> {
+    T x = 0;
+};
+
+extend Test<T> {
+    int size() {
+        return __sizeof(T);
+    }
+}
+
+int test() {
+    Test<int> t = Test<int>();
+    return t.size();
+}
+    )SOURCE";
+    EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
+}
+
 TEST(Structs, Auto) {
     const char* source = R"SOURCE(
 struct Test {

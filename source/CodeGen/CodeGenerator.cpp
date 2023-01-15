@@ -100,6 +100,16 @@ namespace pepper {
         return value;
     }
 
+    Address CodeGenerator::emit(Ref<SizeOf> sizeOf) {
+        auto structDesc = Struct::get(sizeOf->Type.toString());
+        if (structDesc)
+            return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, structDesc->size()));
+        auto type = Types::get(sizeOf->Type.toString());
+        if (!type)
+            throw CompileError(sizeOf->Source, "__sizeof called on non-existent type {0}", sizeOf->Type.toString());
+        return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, type->size()));
+    }
+
     Address CodeGenerator::codegen(Ref<Node> node) {
         PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
         Module->getDebugInfo()->setSourceLocation(node->Source);
@@ -149,6 +159,8 @@ namespace pepper {
             value = emit(node.as<IntegerLiteral>());
         else if (node->is<BoolLiteral>())
             value = emit(node.as<BoolLiteral>());
+        else if (node->is<SizeOf>())
+            value = emit(node.as<SizeOf>());
         else if (node->is<None>())
             ;
         else
