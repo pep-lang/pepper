@@ -83,7 +83,7 @@ namespace pepper {
                   Source.toString());
         auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
-        llvm::SmallVector<uint64_t, 13> diExpr;
+        llvm::SmallVector<uint64_t, 3> diExpr;
         DI->insertDeclare(value.V, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
         return local;
     }
@@ -91,16 +91,6 @@ namespace pepper {
     llvm::DIGlobalVariableExpression* DebugInfo::emitGlobalVariable(const Value& global) {
         return DI->createGlobalVariableExpression(
             globalScope(), global.Name, global.Name, SourceFile, Source.Line, getOrCreateType(global.Ty.get()), true);
-    }
-
-    llvm::DILocalVariable* DebugInfo::emitParameter(int argIndex, const Value& value) {
-        if (!localScope())
-            return nullptr;
-        // add one to argIndex, DI params are 1-based
-        llvm::DILocalVariable* local = DI->createParameterVariable(
-            localScope(), value.Name, argIndex + 1, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
-        DI->insertDeclare(value.V, local, DI->createExpression(), location(), ir()->GetInsertBlock());
-        return local;
     }
 
     llvm::DIType* DebugInfo::emitStruct(const Struct* st) {
@@ -194,6 +184,27 @@ namespace pepper {
         return sp;
     }
 
+    llvm::DILocalVariable* DebugInfo::emitParameter(int argIndex, const Value& value) {
+        if (!localScope())
+            return nullptr;
+
+        llvm::DINode::DIFlags flags = llvm::DINode::FlagZero;
+        if (argIndex == 0 && value.Ty->isPointer() && value.Name == "this")
+            flags |= llvm::DINode::FlagObjectPointer;
+
+        // add one to argIndex, DI params are 1-based to account for return type at 0
+        llvm::DILocalVariable* local = DI->createParameterVariable(localScope(),
+                                                                   value.Name,
+                                                                   argIndex + 1,
+                                                                   SourceFile,
+                                                                   Source.Line,
+                                                                   getOrCreateType(value.Ty.get()),
+                                                                   true,
+                                                                   flags);
+        DI->insertDeclare(value.V, local, DI->createExpression(), location(), ir()->GetInsertBlock());
+        return local;
+    }
+
     void DebugInfo::pushScope(llvm::DIScope* newScope) {
         Stack.push_back(newScope);
         if (Stack.size() > 1)
@@ -219,9 +230,7 @@ namespace pepper {
             return diTy ? cast<llvm::DIType>(diTy) : nullptr;
         }
 
-        llvm::DIType* newTy = insertType(type);
-        Types[type].reset(newTy);
-        return newTy;
+        return insertType(type);
     }
 
     llvm::DIType* DebugInfo::insertType(const Type* type, llvm::DIType* diType) {
@@ -232,8 +241,6 @@ namespace pepper {
                 auto pointee = ptrType->pointeeType();
                 llvm::DIType* pointeeDI = getOrCreateType(pointee.get());
                 diType = DI->createPointerType(pointeeDI, sizeOf(ptrType));
-            } else if (auto structType = type->as<StructType>()) {
-                assert(false && "Structs should be registered with DebugInfo before pointers to them are encountered");
             } else {
                 // TODO create new type and insert it
                 throw InternalCompilerError("Unable to map type for debugging: {0}", type->name());

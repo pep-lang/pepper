@@ -50,9 +50,6 @@ namespace pepper {
         auto field = Query(structDesc->fields()).find([&memberName](auto f) { return f.Name == memberName; }).value();
         auto thisPtr = load(lhs);
         auto member = Value{field.Type, structDesc->getMember(thisPtr, memberName), memberName};
-        // LHS may have moved or unset source location, so restore it
-        Module->getDebugInfo()->setSourceLocation(memberRef->Source);
-        locals()->newSymbol(member);
         return member;
     }
 
