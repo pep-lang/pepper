@@ -14,7 +14,7 @@ extern "C" {
     }
 
     void trace_int(int64_t value, const char* name) {
-        printf("%s: %lld\n\n", name, value);
+        printf("%s: %lld\n", name, value);
         fflush(stdout);
     }
 
