@@ -147,6 +147,8 @@ namespace pepper {
             value = emit(node.as<IntegerLiteral>());
         else if (node->is<BoolLiteral>())
             value = emit(node.as<BoolLiteral>());
+        else if (node->is<None>())
+            ;
         else
             throw InternalCompilerError("Unknown AST node");
 

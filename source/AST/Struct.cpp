@@ -87,6 +87,14 @@ namespace pepper::ast {
             "{0} {1}.{2}({3})", Node::dump(indent), This->dump(), Name, llvm::join(args.begin(), args.end(), ", "));
     }
 
+    template <typename N, typename... Args>
+    static Ref<Node> Conditional(bool condition, Args&&... args) {
+        if (condition) {
+            return Ref<N>::New(std::forward<Args>(args)...);
+        }
+        return Ref<None>::New();
+    }
+
     StructDef::StructDef(const TypeName& type)
         : Symbol(type, type.toString()) {
         Constructor = Ref<FunctionDef>::New(Type, Name);
@@ -102,11 +110,14 @@ namespace pepper::ast {
         Acquire->Body->Items = {
             // ++this.__refcount
             Ref<Assign>::New(refcount, Ref<Add>::New(refcount, Ref<IntegerLiteral>::New(1))),
-            Ref<FunctionCall>::New(
+            Conditional<FunctionCall>(
+                ExternFunctionDef::Find("trace_ptr") != nullptr,
                 ExternFunctionDef::Find("trace_ptr"),
                 Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("acquire: " + Name)}),
-            Ref<FunctionCall>::New(ExternFunctionDef::Find("trace_int"),
-                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
+            Conditional<FunctionCall>(
+                ExternFunctionDef::Find("trace_int") != nullptr,
+                ExternFunctionDef::Find("trace_int"),
+                Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
         };
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
@@ -119,18 +130,22 @@ namespace pepper::ast {
             // --__refcount
             Ref<Assign>::New(refcount, Ref<Sub>::New(refcount, Ref<IntegerLiteral>::New(1))),
 
-            Ref<FunctionCall>::New(
+            Conditional<FunctionCall>(
+                ExternFunctionDef::Find("trace_ptr") != nullptr,
                 ExternFunctionDef::Find("trace_ptr"),
                 Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("release: " + Name)}),
-            Ref<FunctionCall>::New(ExternFunctionDef::Find("trace_int"),
-                                   Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
+            Conditional<FunctionCall>(
+                ExternFunctionDef::Find("trace_int") != nullptr,
+                ExternFunctionDef::Find("trace_int"),
+                Vector<Ref<Expression>>{refcount, Ref<StringLiteral>::New("  refcount: " + Name)}),
 
             // if (this.__refcount == 0)
             //     this.__dtor()
             Ref<If>::New(Ref<Equal>::New(refcount, Ref<IntegerLiteral>::New(0)),
                          Ref<Block>::New("if",
                                          Vector<Ref<Node>>{
-                                             Ref<FunctionCall>::New(
+                                             Conditional<FunctionCall>(
+                                                 ExternFunctionDef::Find("trace_ptr") != nullptr,
                                                  ExternFunctionDef::Find("trace_ptr"),
                                                  Vector<Ref<Expression>>{Ref<ThisRef>::New(),
                                                                          Ref<StringLiteral>::New("free: " + Name)}),
@@ -203,7 +218,8 @@ namespace pepper::ast {
             Ref<ThisDef>::New(Type,
                               Ref<FunctionCall>::New(ExternFunctionDef::Find("malloc"),
                                                      Vector<Ref<Expression>>{Ref<SymbolRef>::New("size")})),
-            Ref<FunctionCall>::New(
+            Conditional<FunctionCall>(
+                ExternFunctionDef::Find("trace_ptr") != nullptr,
                 ExternFunctionDef::Find("trace_ptr"),
                 Vector<Ref<Expression>>{Ref<ThisRef>::New(), Ref<StringLiteral>::New("malloc: " + Name)}),
         };

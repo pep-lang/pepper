@@ -94,6 +94,11 @@ namespace pepper::ast {
         [[nodiscard]] virtual std::string dump(int indent = 0) const;
     };
 
+    // NOOP
+    struct None : public Node {
+        DECLARE_RTTI(None, Node);
+    };
+
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
     // in the stack to cause r-values to be collected
     struct Pending : public Node {
