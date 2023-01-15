@@ -60,6 +60,12 @@ namespace pepper {
             return false;
         }
 
+        virtual unsigned size() const;
+
+        virtual unsigned align() const {
+            return 0;
+        }
+
         virtual Operations* ops();
 
         Ref<Type> pointer() const;
@@ -82,6 +88,8 @@ namespace pepper {
         bool isPointer() const override {
             return true;
         }
+
+        virtual unsigned size() const override;
     };
 
     class Types {

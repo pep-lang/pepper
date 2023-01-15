@@ -32,6 +32,8 @@ namespace pepper {
 
         Ref<class RefType> refType() const;
 
+        unsigned size() const override;
+
         Operations* ops() override;
     };
 

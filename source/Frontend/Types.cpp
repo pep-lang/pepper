@@ -43,6 +43,10 @@ namespace pepper {
         return Types::get(TypeName + "*");
     }
 
+    unsigned Type::size() const {
+        return TypeRef->getPrimitiveSizeInBits() / 8;
+    }
+
     Ref<Type> Types::Bool;
     Ref<Type> Types::Void;
     Ref<Type> Types::VoidPtr;
@@ -62,6 +66,10 @@ namespace pepper {
     PointerType::PointerType(const Ident& name, Ref<Type> pointee)
         : Type(name, pointee->llvmType()->getPointerTo(), false)
         , PointeeType(pointee) {
+    }
+
+    unsigned PointerType::size() const {
+        return llvmType()->getPrimitiveSizeInBits() / 8;
     }
 
     Types::Types(llvm::LLVMContext& ctx)

@@ -98,6 +98,10 @@ namespace pepper {
         return StructDesc->refType();
     }
 
+    unsigned StructType::size() const {
+        return StructDesc->size();
+    }
+
     Operations* StructType::ops() {
         if (!Ops)
             Ops = Ref<StructTypeOps>::New(shared_from_this());
