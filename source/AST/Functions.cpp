@@ -65,6 +65,7 @@ namespace pepper::ast {
 
     void Return::specialize(const Specialization& spec) {
         Type.specialize(spec.TypeMap);
+        Value->specialize(spec);
     }
 
     Ref<ExternFunctionDef> ExternFunctionDef::Find(const Ident& name) {
