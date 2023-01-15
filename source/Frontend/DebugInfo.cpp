@@ -73,8 +73,12 @@ namespace pepper {
     }
 
     llvm::DILocalVariable* DebugInfo::emitLocalVariable(const Value& value) {
-        PEP_TRACE(
-            TraceChannel::DebugInfo, "local: {0} {1}: {2}", localScope()->getName(), value.Name, Source.toString());
+        PEP_TRACE(TraceChannel::DebugInfo,
+                  "local: {0} {1} {2}: {3}",
+                  localScope()->getName(),
+                  value.Ty->name(),
+                  value.Name,
+                  Source.toString());
         auto local = DI->createAutoVariable(
             localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
         llvm::SmallVector<uint64_t, 13> diExpr;
@@ -219,10 +223,7 @@ namespace pepper {
             } else if (auto ptrType = type->as<PointerType>()) {
                 auto pointee = ptrType->pointeeType();
                 llvm::DIType* pointeeDI = getOrCreateType(pointee.get());
-                if (pointee->isStruct())
-                    diType = DI->createObjectPointerType(pointeeDI);
-                else
-                    diType = DI->createPointerType(pointeeDI, sizeOf(ptrType), 0, llvm::None, ptrType->name());
+                diType = DI->createPointerType(pointeeDI, sizeOf(ptrType));
             } else if (auto structType = type->as<StructType>()) {
                 assert(false && "Structs should be registered with DebugInfo before pointers to them are encountered");
             } else {
