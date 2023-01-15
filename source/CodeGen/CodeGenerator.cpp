@@ -167,11 +167,25 @@ namespace pepper {
     }
 
     void CodeGenerator::generate(Ref<ast::AST> tree) {
-        PEP_TRACE(TraceChannel::Codegen, "Code generation:")
+        PEP_TRACE(TraceChannel::Codegen, "Code generation:");
+        PEP_TRACE(TraceChannel::Codegen, "Instantiation pass:");
         for (const auto& root : tree->roots()) {
             try {
                 if (root->is<StructDef>())
-                    emit(root.as<StructDef>());
+                    instantiate(root.as<StructDef>());
+                else
+                    instantiate(root.as<FunctionDef>());
+            } catch (CompileError& ce) {
+                Messages::Report<Error>(ce.what());
+            } catch (InternalCompilerError& ice) {
+                Messages::Report<Error>(ice.what());
+            }
+        }
+        PEP_TRACE(TraceChannel::Codegen, "Codegen pass:")
+        for (const auto& root : tree->roots()) {
+            try {
+                if (root->is<StructDef>())
+                    codegenStruct(root.as<StructDef>());
                 else
                     codegen(root);
             } catch (CompileError& ce) {

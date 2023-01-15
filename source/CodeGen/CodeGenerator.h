@@ -66,7 +66,10 @@ namespace pepper {
         Address emit(Ref<ast::While> loop);
         Address emit(Ref<ast::ForRange> loop);
 
-        void emit(Ref<ast::StructDef> structDef);
+        void instantiate(Ref<ast::StructDef> structDef);
+        void instantiate(Ref<ast::FunctionDef> functionDef);
+
+        void codegenStruct(Ref<ast::StructDef> structDef);
 
         void codegenFunction(Ref<class UserFunction> function, Ref<ast::FunctionDef> funcDef);
         llvm::BasicBlock* codegenBlock(Ref<UserFunction> function,

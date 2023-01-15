@@ -59,6 +59,8 @@ namespace pepper {
         llvm::DIScope* localScope() const;
         llvm::DIScope* globalScope() const;
 
+        llvm::DIType* getStruct(const Struct* st);
+
       private:
         llvm::DIType* getOrCreateType(const Type* type);
         llvm::DIType* insertType(const Type* type, llvm::DIType* diType = nullptr);

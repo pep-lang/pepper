@@ -223,6 +223,15 @@ namespace pepper {
         return Stack.back();
     }
 
+    llvm::DIType* DebugInfo::getStruct(const Struct* st) {
+        auto it = Types.find(st->structType().get());
+        if (it != Types.end()) {
+            auto& diTy = it->getSecond();
+            return diTy ? cast<llvm::DIType>(diTy) : nullptr;
+        }
+        return nullptr;
+    }
+
     llvm::DIType* DebugInfo::getOrCreateType(const Type* type) {
         auto it = Types.find(type);
         if (it != Types.end()) {

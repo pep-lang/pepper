@@ -53,7 +53,7 @@ namespace pepper {
         return member;
     }
 
-    void CodeGenerator::emit(Ref<StructDef> structDef) {
+    void CodeGenerator::instantiate(Ref<ast::StructDef> structDef) {
         // Generic struct bases are effectively abstract, so can't be instantiated
         if (!structDef->GenericParams.empty()) {
             return;
@@ -90,7 +90,6 @@ namespace pepper {
 
         // Export new constructor to the enclosing scope
         locals()->newFunction(structDesc->constructor());
-        codegenFunction(structDesc->constructor(), structDef->Constructor);
 
         // map method names to mangled free functions while maintaining order
         Vector<Ref<Method>> methods;
@@ -112,18 +111,37 @@ namespace pepper {
             structDesc->addMethod(newMethod, realName);
         }
 
-        for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
-            auto& method = methods[methodIdx];
-            auto& methodDef = structDef->Methods[methodIdx];
-            codegenFunction(method, methodDef);
-        }
-
         Module->getDebugInfo()->popScope();
 
         PEP_TRACE(TraceChannel::Codegen,
                   "StructDef {0} -> {1}",
                   structDef->Name,
                   toString(structDesc->structType()->llvmType()));
+    }
+
+    void CodeGenerator::codegenStruct(Ref<StructDef> structDef) {
+        // Generic struct bases are effectively abstract, so can't be instantiated
+        if (!structDef->GenericParams.empty()) {
+            return;
+        }
+
+        auto structDesc = Struct::get(structDef->Name);
+
+        auto structDI = Module->getDebugInfo()->getStruct(structDesc.get());
+        assert(structDI && "emit called without first calling instantiate");
+        Module->getDebugInfo()->pushScope(structDI);
+
+        codegenFunction(structDesc->constructor(), structDef->Constructor);
+
+        const auto& methods = structDef->Methods;
+        for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
+            const auto& methodDef = methods[methodIdx];
+            auto method = structDesc->method(methodDef->Name);
+            assert(method && "MethodDef was not instantiated before codegen");
+            codegenFunction(method, methodDef);
+        }
+
+        Module->getDebugInfo()->popScope();
     }
 
     Address CodeGenerator::emit(Ref<ThisDef> thisDef) {

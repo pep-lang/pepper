@@ -50,27 +50,30 @@ namespace pepper {
         codegenBlock(function, funcDef->Body, function->Body, function->Return);
 
         popScope();
-        locals()->newFunction(function);
     }
 
-    Address CodeGenerator::emit(Ref<FunctionDef> functionDef) {
+    void CodeGenerator::instantiate(Ref<ast::FunctionDef> functionDef) {
         auto returnType = Types::get(functionDef->ReturnType.toString());
         auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
             return pepper::Param{
                 p.Name, Types::get(p.Type.toString()), p.Default ? codegen(p.Default) : Address::Null()};
         });
-        auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
+        auto function = [&]() -> Ref<Function> {
+            if (functionDef->is<ExternFunctionDef>())
+                return Ref<Function>::New(functionDef->Name, returnType, params);
+            return Ref<UserFunction>::New(functionDef->Name, returnType, params);
+        }();
+        locals()->newFunction(function);
+    }
+
+    Address CodeGenerator::emit(Ref<FunctionDef> functionDef) {
+        auto function = locals()->findFunction(functionDef->Name);
         codegenFunction(function, functionDef);
         return Address{function->type(), function->function(), function->name()};
     }
 
     Address CodeGenerator::emit(Ref<ExternFunctionDef> functionDecl) {
-        auto returnType = Types::get(functionDecl->ReturnType.toString());
-        auto params = Query(functionDecl->Parameters).select<pepper::Param>([](auto p) {
-            return pepper::Param{p.Name, Types::get(p.Type.toString())};
-        });
-        auto function = Ref<Function>::New(functionDecl->Name, returnType, params, functionDecl->Vararg);
-        locals()->newFunction(function);
+        auto function = locals()->findFunction(functionDecl->Name);
         return Address{function->type(), function->function(), function->name()};
     }
 
