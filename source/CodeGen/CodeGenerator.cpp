@@ -129,6 +129,8 @@ namespace pepper {
             value = emit(node.as<MemberRef>());
         else if (node->is<SymbolRef>())
             value = emit(node.as<SymbolRef>());
+        else if (node->is<ExternFunctionDef>())
+            value = emit(node.as<ExternFunctionDef>());
         else if (node->is<FunctionDef>())
             value = emit(node.as<FunctionDef>());
         else if (node->is<Return>())

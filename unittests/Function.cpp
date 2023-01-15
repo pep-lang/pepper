@@ -47,3 +47,14 @@ TEST(Function, DefaultParams) {
         )SOURCE";
     EXPECT_EQ(65, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Function, Extern) {
+    const char* source = R"SOURCE(
+        @extern int strlen(char* str);
+
+        int test() {
+            return strlen("test");
+        }
+        )SOURCE";
+    EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
+}

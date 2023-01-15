@@ -11,6 +11,7 @@ translationUnit
 
 externalDeclaration
     : functionDefinition
+    | externFunction
     | structDeclaration
     | extensionDefinition
     | useStatement
@@ -54,6 +55,22 @@ statement
     |   iterationStatement
     |   jumpStatement
     |   functionDefinition
+    ;
+
+externFunction
+    : '@' 'extern' externTypeName Identifier '(' externParameterList? ')'
+    ;
+
+externTypeName
+    :   Identifier '*'?
+    ;
+
+externParameterList
+    :   externParameter (',' externParameter)* (',' Ellipsis)?
+    ;
+
+externParameter
+    : externTypeName Identifier?
     ;
 
 useStatement

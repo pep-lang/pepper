@@ -61,7 +61,17 @@ namespace pepper {
         });
         auto function = Ref<UserFunction>::New(functionDef->Name, returnType, params);
         codegenFunction(function, functionDef);
-        return Address{function->type(), function->function()};
+        return Address{function->type(), function->function(), function->name()};
+    }
+
+    Address CodeGenerator::emit(Ref<ExternFunctionDef> functionDecl) {
+        auto returnType = Types::get(functionDecl->ReturnType.toString());
+        auto params = Query(functionDecl->Parameters).select<pepper::Param>([](auto p) {
+            return pepper::Param{p.Name, Types::get(p.Type.toString())};
+        });
+        auto function = Ref<Function>::New(functionDecl->Name, returnType, params, functionDecl->Vararg);
+        locals()->newFunction(function);
+        return Address{function->type(), function->function(), function->name()};
     }
 
     Address CodeGenerator::emit(Ref<Return> ret) {

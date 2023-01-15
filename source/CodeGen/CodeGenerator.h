@@ -52,6 +52,7 @@ namespace pepper {
         Address emit(Ref<ast::FieldDef> fieldDef);
         Address emit(Ref<ast::MemberRef> memberRef);
         Address emit(Ref<ast::ThisRef> thisRef);
+        Address emit(Ref<ast::ExternFunctionDef> externFuncDef);
         Address emit(Ref<ast::FunctionDef> functionDef);
         Address emit(Ref<ast::Return> ret);
         Address emit(Ref<ast::FunctionCall> call);

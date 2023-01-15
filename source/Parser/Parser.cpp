@@ -345,6 +345,31 @@ namespace pepper {
             }
         }
 
+        void exitExternParameter(PepperParser::ExternParameterContext* context) override {
+            auto func = builder->functionTarget();
+            auto name = context->Identifier()->toString();
+            auto typeName = context->externTypeName()->Identifier()->toString();
+            if (context->externTypeName()->Star())
+                typeName += "*";
+            func->Parameters.emplace_back(name, TypeName{typeName});
+        }
+
+        void enterExternFunction(PepperParser::ExternFunctionContext* context) override {
+            auto returnType = context->externTypeName()->Identifier()->toString();
+            if (context->externTypeName()->Star())
+                returnType += "*";
+            auto identifier = context->Identifier()->toString();
+            auto vararg = context->externParameterList()->Ellipsis() != nullptr;
+            auto function = builder->New<ExternFunctionDef>(TypeName{returnType}, identifier);
+            lvaluePush(function);
+            builder->beginFunction(function);
+        }
+
+        void exitExternFunction(PepperParser::ExternFunctionContext* context) override {
+            builder->endFunction();
+            auto function = lvaluePop<ExternFunctionDef>();
+        }
+
         TypeName parseTypeDeclaration(PepperParser::TypeDeclarationContext* typeDecl) {
             TypeName type{typeDecl->Identifier()->toString()};
             if (auto genericParams = typeDecl->genericParams()) {

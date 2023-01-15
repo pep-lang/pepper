@@ -59,7 +59,7 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(ExternFunctionDef);
 
         ExternFunctionDef(
-            const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
+            const TypeName& returnType, const Ident& name, const Params& params = {}, bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {
         }
 
