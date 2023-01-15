@@ -58,12 +58,13 @@ namespace pepper {
         }
 
         auto value = Value(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
-        ir()->CreateStore(zeroValue(type), value);
         locals()->newSymbol(value);
 
         if (auto defaultValue = maybeCodegen(variableDef->Default)) {
             auto typeOps = type->ops();
             typeOps->init(value, defaultValue);
+        } else {
+            ir()->CreateStore(zeroValue(type), value);
         }
 
         return value;
