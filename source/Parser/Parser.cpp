@@ -162,7 +162,7 @@ namespace pepper {
             auto typeName = parseTypeName(context->typeName());
             auto identifier = context->Identifier()->toString();
             if (!typeName.GenericTypes.empty()) {
-                builder->specialize(typeName);
+                builder->specializeStruct(typeName);
             }
 
             if (builder->structTarget()) {
@@ -325,13 +325,17 @@ namespace pepper {
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
-            auto identifier = context->Identifier()->toString();
+            const TypeName nameAndGenerics = parseTypeDeclaration(context->functionName()->typeDeclaration());
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName("void");
+            auto identifier = nameAndGenerics.Name;
 
             auto function =
                 builder->structTarget()
                     ? builder->New<MethodDef>(builder->structTarget().get(), returnType, identifier).as<FunctionDef>()
                     : builder->New<FunctionDef>(returnType, identifier);
+            for (const auto& genericParam : nameAndGenerics.GenericTypes) {
+                function->GenericParams.emplace_back(genericParam.Name);
+            }
             lvaluePush(function);
             builder->beginFunction(function);
         }
@@ -465,7 +469,7 @@ namespace pepper {
             // If the target is generic, but hasn't been specialized yet, do it now
             if (!structType.GenericTypes.empty()) {
                 if (builder->findStruct(structType.Name)) {
-                    auto specialized = builder->specialize(structType);
+                    auto specialized = builder->specializeStruct(structType);
                     builder->beginExtension(specialized);
                     return;
                 }
@@ -526,6 +530,13 @@ namespace pepper {
             }
             auto func = builder->findFunction(functionName);
             if (!func) {
+                // Function wasn't found, if it has generic args, specialize it now
+                auto functionSpec = symbol->Type;
+                if (!functionSpec.GenericTypes.empty()) {
+                    func = builder->specializeFunction(functionSpec);
+                }
+            }
+            if (!func) {
                 throw CompileError(builder->Source, "Function {0} not found", functionName);
             }
 
@@ -538,7 +549,7 @@ namespace pepper {
         void enterGenericCtor(PepperParser::GenericCtorContext* context) override {
             beginFunctionCall();
             auto typeName = parseTypeName(context->typeName());
-            rvaluePush(builder->New<SymbolRef>(typeName.toString()));
+            rvaluePush(builder->New<SymbolRef>(typeName));
         }
 
         void exitGenericCtor(PepperParser::GenericCtorContext* context) override {

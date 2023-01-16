@@ -53,6 +53,10 @@ namespace pepper {
     }
 
     void CodeGenerator::instantiate(Ref<ast::FunctionDef> functionDef) {
+        // generic functions don't get instantiated, they're abstract
+        if (!functionDef->GenericParams.empty())
+            return;
+
         auto returnType = Types::get(functionDef->ReturnType.toString());
         auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
             return pepper::Param{
@@ -67,6 +71,10 @@ namespace pepper {
     }
 
     Address CodeGenerator::emit(Ref<FunctionDef> functionDef) {
+        // generic functions don't get generated, they're abstract
+        if (!functionDef->GenericParams.empty())
+            return Address::Null();
+
         auto function = locals()->findFunction(functionDef->Name);
         codegenFunction(function, functionDef);
         return Address{function->type(), function->function(), function->name()};

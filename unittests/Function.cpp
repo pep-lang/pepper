@@ -58,3 +58,16 @@ TEST(Function, Extern) {
         )SOURCE";
     EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
 }
+
+TEST(Function, Generic) {
+    const char* source = R"SOURCE(
+        T sum<T>(T x, T y) {
+            return x + y;
+        }
+
+        int test() {
+            return sum<int>(64, 1);
+        }
+        )SOURCE";
+    EXPECT_EQ(65, CompileAndRun(TestName(test_info_), source));
+}

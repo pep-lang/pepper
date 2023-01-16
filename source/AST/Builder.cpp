@@ -113,7 +113,7 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        Ref<StructDef> specialize(const TypeName& spec) override {
+        Ref<StructDef> specializeStruct(const TypeName& spec) override {
             auto& scope = ScopeStack.back();
             auto genericStruct = findStruct(spec.Name);
             if (!genericStruct) {
@@ -131,6 +131,40 @@ namespace pepper::ast {
                 throw CompileError(Source, "Attempted to redefine constructor {0}", name);
             scope->Structs[name] = specialized;
             scope->Functions[name] = specialized->Constructor;
+
+            return specialized;
+        }
+
+        Ref<FunctionDef> specializeFunction(const TypeName& spec) override {
+            auto& scope = ScopeStack.back();
+            auto baseFunction = findFunction(spec.Name);
+            if (!baseFunction) {
+                throw CompileError(Source, "Cannot specialize non-existent function {0}", spec.Name);
+            }
+            auto name = spec.toString();
+            if (scope->Functions.lookup(name)) {
+                throw CompileError(Source, "Attempted to redefine function {0}", name);
+            }
+
+            Ref<FunctionDef> specialized;
+            if (baseFunction->is<MethodDef>())
+                specialized = baseFunction->cloneAs<MethodDef>();
+            else
+                specialized = baseFunction->cloneAs<FunctionDef>();
+
+            FunctionSpecialization functionSpec{baseFunction};
+            // map params -> args
+            for (int idx = 0; idx < baseFunction->GenericParams.size(); ++idx) {
+                const auto& param = baseFunction->GenericParams[idx];
+                const auto& type = spec.GenericTypes[idx];
+                functionSpec.TypeMap[param] = type;
+            }
+
+            specialized->specialize(functionSpec);
+            scope->Functions[name] = specialized;
+
+            if (!specialized->is<MethodDef>())
+                ast.newRoot(specialized);
 
             return specialized;
         }
@@ -244,7 +278,19 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             if (scope->Functions.lookup(func->Name))
                 throw CompileError(Source, "Cannot redefine existing function {0}", func->Name);
-            scope->Functions[func->Name] = func;
+            // Figure out if this is a generic function or an instantiation/normal function
+            TypeName funcType;
+            if (!func->GenericParams.empty())
+                funcType = {func->Name, Query(func->GenericParams).select<TypeName>()};
+            else
+                funcType = {func->Name, func->GenericArgs};
+            scope->Functions[funcType.toString()] = func;
+            // if the function is generic, alias F -> F<...>
+            if (!func->GenericParams.empty()) {
+                if (scope->Functions.lookup(func->Name))
+                    throw CompileError(Source, "Cannot redefine function {0}", func->Type.Name);
+                scope->Functions[func->Name] = func;
+            }
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Source = Source;
             func->Body = Ref<Block>::New(func->Name);

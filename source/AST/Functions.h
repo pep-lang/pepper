@@ -19,6 +19,13 @@ namespace pepper::ast {
     struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
+        // type parameters in function decl
+        Vector<Ident> GenericParams;
+        // generic struct that this struct is a specialization of
+        Ref<FunctionDef> GenericFunction;
+        // generic args for this specialization
+        Vector<TypeName> GenericArgs;
+
         TypeName ReturnType;
         Params Parameters;
         const bool Vararg;
@@ -33,7 +40,6 @@ namespace pepper::ast {
 
     struct FunctionDef : public FunctionNode {
         DECLARE_RTTI(FunctionDef, FunctionNode);
-        AST_NODE_POD_CLONE(FunctionDef);
 
         Ref<Block> Body;
 
@@ -42,6 +48,8 @@ namespace pepper::ast {
             : FunctionNode(returnType, name, params, varargs) {
             Body = Ref<Block>::New(name);
         }
+
+        Ref<Node> clone() const override;
 
         std::string toString() const override {
             const char* sep = "\n";

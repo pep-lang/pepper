@@ -33,7 +33,8 @@ namespace pepper::ast {
 
     void FieldDef::specialize(const Specialization& spec) {
         VariableDef::specialize(spec);
-        Struct = spec.Struct.get();
+        assert(spec.is<StructSpecialization>() && "Cannot specialize a field with a FunctionSpecialization");
+        Struct = spec.as<StructSpecialization>()->Struct.get();
     }
 
     MethodDef::MethodDef(
@@ -73,7 +74,8 @@ namespace pepper::ast {
 
     void MethodDef::specialize(const Specialization& spec) {
         FunctionDef::specialize(spec);
-        Struct = spec.Struct.get();
+        if (auto structSpec = spec.as<StructSpecialization>())
+            Struct = structSpec->Struct.get();
     }
 
     void MethodCall::specialize(const Specialization& spec) {
@@ -169,7 +171,7 @@ namespace pepper::ast {
 
         Source = GenericStruct->Source;
 
-        Specialization spec{shared_from_this()};
+        StructSpecialization spec{shared_from_this()};
         // map params -> args
         for (int idx = 0; idx < GenericStruct->GenericParams.size(); ++idx) {
             const auto& param = GenericStruct->GenericParams[idx];

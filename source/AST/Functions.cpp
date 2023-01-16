@@ -44,10 +44,24 @@ namespace pepper::ast {
     }
 
     void FunctionNode::specialize(const Specialization& spec) {
+        if (auto functionSpec = spec.as<FunctionSpecialization>()) {
+            GenericFunction = functionSpec->Function;
+            for (const auto& kv : spec.TypeMap) {
+                const auto& arg = kv.getValue();
+                GenericArgs.emplace_back(arg);
+            }
+            Name = TypeName(Name, GenericArgs).toString();
+        }
         ReturnType.specialize(spec.TypeMap);
         for (auto& param : Parameters) {
             param.Type.specialize(spec.TypeMap);
         }
+    }
+
+    Ref<Node> FunctionDef::clone() const {
+        auto function = Ref<FunctionDef>::New(ReturnType, Name, Parameters, Vararg);
+        function->Body = Body->cloneAs<Block>();
+        return function;
     }
 
     void FunctionDef::specialize(const Specialization& spec) {

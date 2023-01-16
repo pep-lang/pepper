@@ -17,9 +17,30 @@ namespace llvm {
 namespace pepper::ast {
 
     struct Specialization {
+        DECLARE_RTTI(Specialization);
         using GenericTypeMap = llvm::StringMap<struct TypeName>;
-        Ref<struct StructDef> Struct;
         GenericTypeMap TypeMap;
+
+      protected:
+        Specialization() = default;
+    };
+
+    struct StructSpecialization : public Specialization {
+        DECLARE_RTTI(StructSpecialization, Specialization);
+        Ref<struct StructDef> Struct;
+
+        StructSpecialization(Ref<struct StructDef> structDef)
+            : Struct(structDef) {
+        }
+    };
+
+    struct FunctionSpecialization : public Specialization {
+        DECLARE_RTTI(FunctionSpecialization, Specialization);
+        Ref<struct FunctionDef> Function;
+
+        FunctionSpecialization(Ref<struct FunctionDef> function)
+            : Function(function) {
+        }
     };
 
     struct TypeName {

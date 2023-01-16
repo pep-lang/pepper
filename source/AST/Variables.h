@@ -57,10 +57,26 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(SymbolRef);
 
         Ident Name;
+        TypeName Type;
 
       public:
-        SymbolRef(const Ident& identifier)
+        explicit SymbolRef(const Ident& identifier)
             : Name(identifier) {
+            Type.Name.clear();
+        }
+
+        explicit SymbolRef(const TypeName& typeName)
+            : Type(typeName)
+            , Name(typeName.toString()) {
+            if (Type.GenericTypes.empty()) {
+                Type.Name.clear();
+            }
+        }
+
+        const TypeName& type() const override {
+            if (!Type.Name.empty())
+                return Type;
+            return Expression::type();
         }
 
         std::string toString() const override {

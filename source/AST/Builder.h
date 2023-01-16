@@ -62,7 +62,8 @@ namespace pepper::ast {
         virtual Ref<Node> popLValue() = 0;
         virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
 
-        virtual Ref<StructDef> specialize(const TypeName& structSpec) = 0;
+        virtual Ref<StructDef> specializeStruct(const TypeName& structSpec) = 0;
+        virtual Ref<FunctionDef> specializeFunction(const TypeName& functionSpec) = 0;
         virtual void symbol(Ref<VariableDef> var) = 0;
         virtual void insert(Ref<Node> expr) = 0;
 

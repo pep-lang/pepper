@@ -19,7 +19,11 @@ externalDeclaration
     ;
 
 functionDefinition
-    :   typeName? Identifier '(' parameterList? ')' block
+    :   typeName? functionName '(' parameterList? ')' block
+    ;
+
+functionName
+    : typeDeclaration
     ;
 
 parameterList
