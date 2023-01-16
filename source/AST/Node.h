@@ -14,6 +14,11 @@ namespace llvm {
     class Type;
 }
 
+#define AST_NODE_POD_CLONE(N)                                                                                          \
+    inline Ref<Node> clone() const override {                                                                          \
+        return Ref<Node>{static_cast<const RttiInstance<N>*>(rtti())->clone(this)};                                    \
+    }
+
 namespace pepper::ast {
 
     struct Specialization {
@@ -95,7 +100,6 @@ namespace pepper::ast {
 
         SourceLocation Source;
 
-        Node() = default;
         virtual ~Node() = default;
 
         template <typename N>
@@ -113,11 +117,15 @@ namespace pepper::ast {
         [[nodiscard]] std::string source(int width = -1, int indent = 0, const char* sep = "") const;
         [[nodiscard]] virtual std::string toString() const;
         [[nodiscard]] virtual std::string dump(int indent = 0) const;
+
+      protected:
+        Node() = default;
     };
 
     // NOOP
     struct None : public Node {
         DECLARE_RTTI(None, Node);
+        AST_NODE_POD_CLONE(None);
     };
 
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
@@ -169,8 +177,3 @@ namespace pepper::ast {
         }
     };
 } // namespace pepper::ast
-
-#define AST_NODE_POD_CLONE(N)                                                                                          \
-    inline Ref<Node> clone() const override {                                                                          \
-        return Ref<Node>{static_cast<const RttiInstance<N>*>(rtti())->clone(this)};                                    \
-    }
