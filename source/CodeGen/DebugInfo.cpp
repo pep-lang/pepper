@@ -151,9 +151,11 @@ namespace pepper {
     }
 
     llvm::DISubprogram* DebugInfo::emitFunction(Function* function) {
+        llvm::DINode::DIFlags flags = llvm::DINode::FlagZero;
+
         if (function->is<Method>() && function->name().ends_with("__acquire") ||
             function->name().ends_with("__release"))
-            return nullptr;
+            flags |= llvm::DINode::FlagArtificial;
 
         auto sp = [&]() {
             // TODO: template parameters when generic functions are supported
@@ -167,7 +169,7 @@ namespace pepper {
                                         -1,
                                         0,
                                         nullptr,
-                                        llvm::DINode::FlagPrototyped,
+                                        llvm::DINode::FlagPrototyped | flags,
                                         llvm::DISubprogram::SPFlagDefinition | llvm::DISubprogram::SPFlagNonvirtual);
             }
             return DI->createFunction(localScope(),
@@ -177,7 +179,7 @@ namespace pepper {
                                       Source.Line,
                                       createFunctionType(function),
                                       Source.Line,
-                                      llvm::DINode::FlagPrototyped,
+                                      llvm::DINode::FlagPrototyped | flags,
                                       llvm::DISubprogram::SPFlagDefinition);
         }();
         function->function()->setSubprogram(sp);
