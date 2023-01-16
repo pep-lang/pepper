@@ -37,8 +37,6 @@ namespace pepper {
         std::string ModuleName;
         std::string SourcePath;
         Ref<CodeGenModule> Module;
-        std::unique_ptr<Parser> ParserRef;
-        std::unique_ptr<CodeGenerator> IR;
 
         // Collected obj files for linking
         Vector<std::string> ObjFiles;
@@ -55,11 +53,6 @@ namespace pepper {
                 Messages::EnableVerbose();
             if (Opts->TraceChannels)
                 Messages::SetTraceChannels(Opts->TraceChannels);
-        }
-
-        Ref<ast::AST> parse(std::istream& inputStream, const std::string& sourceFile) {
-            SourcePath = sourceFile;
-            return ParserRef->parse(inputStream, sourceFile);
         }
 
         Vector<Ref<CodeGenModule>> compile() override {
@@ -82,12 +75,12 @@ namespace pepper {
         Ref<CodeGenModule> compile(std::istream& sourceStream) {
             ensureBuildDirExists();
 
+            // TODO: promote the context/main module up to top level, create temp modules to link for each source file
             Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
             auto Ctx = Ref<Context>::New(Module);
-            ParserRef = std::make_unique<Parser>();
-            IR = std::make_unique<CodeGenerator>(Module);
 
-            auto ast = parse(sourceStream, SourcePath);
+            Parser parser;
+            auto ast = parser.parse(sourceStream, SourcePath);
             if (!ast || !Messages::errors().empty()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
@@ -100,7 +93,8 @@ namespace pepper {
                 ast->dump();
             }
 
-            IR->generate(ast);
+            CodeGenerator codeGen(Module);
+            codeGen.generate(ast);
 
             if (!Messages::errors().empty()) {
                 Query(Messages::errors()).each([](auto e) { llvm::errs() << e.message() << "\n"; });
