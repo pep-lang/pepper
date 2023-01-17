@@ -14,10 +14,8 @@
 namespace llvm {
     class BasicBlock;
     class Function;
-    class FunctionType;
     class IRBuilderBase;
     class Type;
-    class Value;
 } // namespace llvm
 
 namespace pepper {
@@ -33,7 +31,11 @@ namespace pepper {
         Ref<Type> FuncType;
 
       public:
-        Function(const Ident& name, Ref<Type> returnType, const Params& params = Params(), bool vararg = false);
+        Function(llvm::Module& module,
+                 const Ident& name,
+                 Ref<Type> returnType,
+                 const Params& params = Params(),
+                 bool vararg = false);
 
         const Ident& name() const {
             return Name;
@@ -71,7 +73,7 @@ namespace pepper {
         Address ReturnValue;
         Ref<llvm::IRBuilderBase> Builder = nullptr;
 
-        UserFunction(const Ident& name, Ref<Type> returnType, const Params& params = Params());
+        UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params = Params());
 
         virtual bool countArgRefs() const;
 
@@ -86,8 +88,8 @@ namespace pepper {
         Ref<Struct> This;
 
       public:
-        Method(Ref<Struct> st, const Ident& name, Ref<Type> returnType, const Params& params = {})
-            : UserFunction(name, returnType, params)
+        Method(llvm::Module& module, Ref<Struct> st, const Ident& name, Ref<Type> returnType, const Params& params = {})
+            : UserFunction(module, name, returnType, params)
             , This(st) {
         }
 

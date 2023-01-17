@@ -66,8 +66,9 @@ namespace pepper {
         size_t Align;
 
       public:
-        Struct(const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
-        static Ref<Struct> New(const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
+        Struct(llvm::Module& module, const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
+        static Ref<Struct> New(
+            llvm::Module& module, const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
 
         Ref<RefType> refType() const {
             return RefTy;

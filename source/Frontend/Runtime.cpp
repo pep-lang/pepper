@@ -49,7 +49,8 @@ namespace pepper {
             //            llvm::SmallString<256> mangledName;
             //            llvm::Mangler::getNameWithPrefix(mangledName, proto.Name,
             //            module->getModule()->getDataLayout());
-            Functions[proto.Name] = Ref<Function>::New(proto.Name, returnType, params, proto.Vararg);
+            Functions[proto.Name] =
+                Ref<Function>::New(module->getModule(), proto.Name, returnType, params, proto.Vararg);
         }
     }
 } // namespace pepper

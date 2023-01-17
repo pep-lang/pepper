@@ -64,8 +64,8 @@ namespace pepper {
         });
         auto function = [&]() -> Ref<Function> {
             if (functionDef->is<ExternFunctionDef>())
-                return Ref<Function>::New(functionDef->Name, returnType, params);
-            return Ref<UserFunction>::New(functionDef->Name, returnType, params);
+                return Ref<Function>::New(Module->getModule(), functionDef->Name, returnType, params);
+            return Ref<UserFunction>::New(Module->getModule(), functionDef->Name, returnType, params);
         }();
         locals()->newFunction(function);
     }

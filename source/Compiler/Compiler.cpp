@@ -181,8 +181,8 @@ namespace pepper {
                 throw CompileError("Unable to write to {0}: {1}", outputPath.string(), EC.message());
             }
 
-            auto module = Module->getModule();
-            module->print(out, nullptr, false, false);
+            const auto& module = Module->getModule();
+            module.print(out, nullptr, false, false);
             PEP_VERBOSE("LLVM IR written to {0}", outputPath.string());
         }
 

@@ -38,8 +38,6 @@ namespace pepper {
         explicit Context(Ref<CodeGenModule> module);
         ~Context();
 
-        [[nodiscard]] llvm::Module* module() const;
-
         [[nodiscard]] Ref<Types> types() const {
             return TypeMap;
         }

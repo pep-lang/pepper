@@ -35,12 +35,12 @@ namespace pepper {
             return Module.get();
         }
 
-        llvm::Module* getModule() const {
-            return Module.get();
+        llvm::Module& getModule() const {
+            return *Module.get();
         }
 
-        llvm::LLVMContext* getContext() const {
-            return Context.get();
+        llvm::LLVMContext& getContext() const {
+            return *Context.get();
         }
 
         DebugInfo* getDebugInfo() const {

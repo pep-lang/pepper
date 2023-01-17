@@ -10,7 +10,7 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
-    Function::Function(const Ident& name, Ref<Type> returnType, const Params& params, bool vararg)
+    Function::Function(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params, bool vararg)
         : Name(name)
         , ReturnType(returnType)
         , Parameters(params)
@@ -20,7 +20,7 @@ namespace pepper {
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
         auto sig = Types::toString(llvmType);
         FuncType = Types::add(Ref<Type>::New(sig, llvmType));
-        Func = llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Name, Context::get().module());
+        Func = llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Name, module);
     }
 
     Address Function::call(const Vector<Address>& args) const {
@@ -48,14 +48,13 @@ namespace pepper {
                        Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
-    UserFunction::UserFunction(const Ident& name, Ref<Type> returnType, const Params& params)
-        : Function(name, returnType, params) {
-        auto& context = Context::get().module()->getContext();
-        Body = llvm::BasicBlock::Create(context, "entry", Func);
+    UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params)
+        : Function(module, name, returnType, params) {
+        Body = llvm::BasicBlock::Create(module.getContext(), "entry", Func);
         Builder = Ref<llvm::IRBuilder<>>::New(Body);
 
         // Set up return block and return instruction
-        Return = llvm::BasicBlock::Create(context, "return", Func);
+        Return = llvm::BasicBlock::Create(module.getContext(), "return", Func);
         auto builder = Ref<llvm::IRBuilder<>>::New(Return);
         builder->SetInsertPoint(Return);
         if (returnType != Types::Void) {

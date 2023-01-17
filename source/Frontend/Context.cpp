@@ -30,7 +30,7 @@ namespace pepper {
 
         Module = std::move(module);
 
-        TypeMap = Ref<Types>::New(*Module->getContext());
+        TypeMap = Ref<Types>::New(Module->getContext());
 
         Builtins = Ref<Runtime>::New(Module);
         Globals = Ref<Scope>::New("Globals", Builtins);
@@ -56,10 +56,6 @@ namespace pepper {
 
     void Context::popScope() {
         Locals = Locals->Outer == Globals ? Globals : Locals->Outer;
-    }
-
-    llvm::Module* Context::module() const {
-        return *Module;
     }
 
 } // namespace pepper

@@ -11,7 +11,7 @@
 
 namespace pepper {
 
-    Struct::Struct(const Ident& name, const Params& fields, const Params& ctorParams)
+    Struct::Struct(llvm::Module& module, const Ident& name, const Params& fields, const Params& ctorParams)
         : Name(name) {
         // Create the LLVM struct type out of the field types
         Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.Type; });
@@ -23,20 +23,19 @@ namespace pepper {
         // Add ref type as <struct>
         RefTy = Ref<RefType>::New(StructTy);
         Types::add(RefTy);
-        Constructor = Ref<UserFunction>::New(name, RefTy, ctorParams);
+        Constructor = Ref<UserFunction>::New(module, name, RefTy, ctorParams);
 
         setFields(fields);
 
         // compute size from data layout
-        auto module = Context::get().module();
-        auto dataLayout = module->getDataLayout();
+        auto dataLayout = module.getDataLayout();
         auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(llvmType));
         Size = structLayout->getSizeInBytes();
         Align = structLayout->getAlignment().value();
     }
 
-    Ref<Struct> Struct::New(const Ident& name, const Params& fields, const Params& newParams) {
-        Ref<Struct> newStruct = Ref<Struct>::New(name, fields, newParams);
+    Ref<Struct> Struct::New(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
+        Ref<Struct> newStruct = Ref<Struct>::New(module, name, fields, newParams);
         Context::get().globals()->Structs[name] = newStruct;
         return newStruct;
     }

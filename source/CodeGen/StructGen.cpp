@@ -71,7 +71,7 @@ namespace pepper {
         });
 
         // generate the new struct type
-        auto structDesc = Struct::New(structDef->Name, fields, ctorParams);
+        auto structDesc = Struct::New(Module->getModule(), structDef->Name, fields, ctorParams);
         auto structDI = Module->getDebugInfo()->emitStruct(structDesc.get());
         Module->getDebugInfo()->pushScope(structDI);
 
@@ -106,7 +106,7 @@ namespace pepper {
             // TODO: mangle these properly
             auto mangledName = structDef->Name + "." + realName;
             auto returnType = Types::get(method->ReturnType.toString());
-            auto newMethod = Ref<Method>::New(structDesc, mangledName, returnType, params);
+            auto newMethod = Ref<Method>::New(Module->getModule(), structDesc, mangledName, returnType, params);
             methods.push_back(newMethod);
             structDesc->addMethod(newMethod, realName);
         }
