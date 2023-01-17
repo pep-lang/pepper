@@ -53,9 +53,12 @@ namespace pepper {
                 Messages::EnableVerbose();
             if (Opts->TraceChannels)
                 Messages::SetTraceChannels(Opts->TraceChannels);
+
+            Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
         }
 
         Vector<Ref<CodeGenModule>> compile() override {
+            auto Ctx = Ref<Context>::New(Module);
             Vector<Ref<CodeGenModule>> modules;
             if (Opts->InputStream) {
                 SourcePath = ModuleName;
@@ -74,10 +77,6 @@ namespace pepper {
 
         Ref<CodeGenModule> compile(std::istream& sourceStream) {
             ensureBuildDirExists();
-
-            // TODO: promote the context/main module up to top level, create temp modules to link for each source file
-            Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
-            auto Ctx = Ref<Context>::New(Module);
 
             Parser parser;
             auto ast = parser.parse(sourceStream, SourcePath);

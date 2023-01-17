@@ -39,14 +39,6 @@ namespace pepper {
         ~Context();
 
         [[nodiscard]] llvm::Module* module() const;
-        [[nodiscard]] llvm::LLVMContext& llvmContext() const;
-
-        Ref<CodeGenModule> moduleContext() const {
-            return Module;
-        }
-
-        std::unique_ptr<llvm::Module>&& takeModule();
-        std::unique_ptr<llvm::LLVMContext>&& takeContext();
 
         [[nodiscard]] Ref<Types> types() const {
             return TypeMap;

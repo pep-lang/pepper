@@ -41,14 +41,6 @@ namespace pepper {
         Instance = nullptr;
     }
 
-    std::unique_ptr<llvm::Module>&& Context::takeModule() {
-        return std::move(Module->takeModule());
-    }
-
-    std::unique_ptr<llvm::LLVMContext>&& Context::takeContext() {
-        return std::move(Module->takeContext());
-    }
-
     void Context::pushFunction(Ref<UserFunction> function) {
         pushScope(function->name(), function->Builder);
         Locals->FunctionTarget = function;
@@ -68,10 +60,6 @@ namespace pepper {
 
     llvm::Module* Context::module() const {
         return *Module;
-    }
-
-    llvm::LLVMContext& Context::llvmContext() const {
-        return module()->getContext();
     }
 
 } // namespace pepper

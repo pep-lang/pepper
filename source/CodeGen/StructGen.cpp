@@ -152,7 +152,7 @@ namespace pepper {
         }
         auto value = Address(type, ir()->CreateAlloca(*type, nullptr, "this"), "this");
         if (!thisDef->Hidden)
-            Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
+            Module->getDebugInfo()->emitLocalVariable(value);
         auto defaultValue = maybeCodegen(thisDef->Default);
         if (!defaultValue)
             throw InternalCompilerError("{0} this does not have an initial value", typeName.toString());

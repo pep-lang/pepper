@@ -58,7 +58,7 @@ namespace pepper {
 
         auto value = Address(type, ir()->CreateAlloca(*type, nullptr, variableDef->Name), variableDef->Name);
         if (!variableDef->Hidden)
-            Context::get().moduleContext()->getDebugInfo()->emitLocalVariable(value);
+            Module->getDebugInfo()->emitLocalVariable(value);
         locals()->newSymbol(value);
 
         if (auto defaultValue = maybeCodegen(variableDef->Default)) {
@@ -175,7 +175,7 @@ namespace pepper {
     }
 
     CodeGenerator::CodeGenerator(Ref<CodeGenModule> module) {
-        Module = Context::get().moduleContext();
+        Module = module;
     }
 
     void CodeGenerator::generate(Ref<ast::AST> tree) {
