@@ -29,10 +29,11 @@ add_executable(PepperTests
         RTTI.cpp
         Structs.cpp
         Branches.cpp
-        ListTests.cpp)
+        ListTests.cpp
+        main.cpp)
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS} ${TEST_SUPPORT_INCLUDE_DIRS})
 target_link_directories(PepperTests PRIVATE ${PEPPER_LIBRARY_DIRS})
-target_link_libraries(PepperTests GTest::gtest_main ${PEPPER_LIBRARIES} TestSupport)
+target_link_libraries(PepperTests GTest::gtest ${PEPPER_LIBRARIES} TestSupport)
 set_target_properties(PepperTests PROPERTIES LINKER_LANGUAGE CXX)
 
 if (MSVC)
@@ -46,6 +47,10 @@ endif ()
 
 add_custom_command(TARGET PepperTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/Support/TestSupport.pep $<TARGET_FILE_DIR:PepperTests>
+        COMMAND_EXPAND_LISTS)
+
+add_custom_command(TARGET PepperTests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../tests $<TARGET_FILE_DIR:PepperTests>/tests
         COMMAND_EXPAND_LISTS)
 
 include(GoogleTest)
