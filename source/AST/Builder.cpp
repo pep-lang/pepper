@@ -9,33 +9,25 @@
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Core/Query.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringSet.h"
 
 namespace pepper::ast {
     class BuilderImpl : public Builder {
         struct Scope {
             const Ident Name;
 
-            llvm::StringMap<Ref<VariableDef>> Locals;
-            llvm::StringMap<Ref<Symbol>> Symbols;
+            Resolvable<StructDef> StructTarget;
+            ExtensionDef* ExtensionTarget = nullptr;
+            FunctionDef* FunctionTarget = nullptr;
 
-            llvm::StringMap<Ref<StructDef>> Structs;
-            Ref<StructDef> StructTarget = nullptr;
-
-            llvm::StringMap<Ref<FunctionDef>> Functions;
-            Ref<FunctionDef> FunctionTarget = nullptr;
-
-            Ref<Node> Parent;
-            Ref<Block> Block;
-            Vector<Ref<Node>> LValueStack;
-            Vector<Ref<Node>> RValueStack;
+            Node* Parent = nullptr;
+            Block* Block = nullptr;
+            Vector<Node*> LValueStack;
+            Vector<Node*> RValueStack;
 
             explicit Scope(Ident name = "Anonymous")
-                : Name(std::move(name)) {
-            }
+                : Name(std::move(name)) {}
         };
 
         AST& ast;
@@ -48,7 +40,7 @@ namespace pepper::ast {
             ScopeStack.emplace_back(globals); // global scope
         }
 
-        [[nodiscard]] Ref<FunctionDef> functionTarget() const override {
+        [[nodiscard]] FunctionDef* functionTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget)
                     return scope->FunctionTarget;
@@ -56,120 +48,23 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        [[nodiscard]] Ref<StructDef> structTarget() const override {
+        [[nodiscard]] Resolvable<StructDef> structTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->StructTarget)
                     return scope->StructTarget;
             }
-            return nullptr;
+            return {};
         }
 
-        [[nodiscard]] Ref<StructDef> findStruct(const TypeName& name) const override {
+        ExtensionDef* extensionTarget() const override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (auto st = scope->Structs.lookup(name.toString()))
-                    return st;
+                if (scope->ExtensionTarget)
+                    return scope->ExtensionTarget;
             }
             return nullptr;
         }
 
-        [[nodiscard]] Ref<VariableDef> findVariable(const Ident& name) const override {
-            for (const auto& scope : llvm::reverse(ScopeStack)) {
-                auto var = scope->Locals.lookup(name);
-                if (var) {
-                    return var;
-                }
-            }
-            if (auto st = structTarget()) {
-                auto field = Query(st->Fields).find([&](auto f) { return f->Name == name; });
-                if (field) {
-                    return field.value();
-                }
-            }
-            return nullptr;
-        }
-
-        [[nodiscard]] Ref<FunctionDef> findFunction(const Ident& name) const override {
-            for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (auto var = scope->Functions.lookup(name)) {
-                    return var;
-                }
-            }
-            if (auto st = structTarget()) {
-                auto method = Query(st->Methods).find([&](auto m) { return m->Name == name; });
-                if (method) {
-                    return method.value();
-                }
-            }
-            return ExternFunctionDef::Find(name);
-        }
-
-        [[nodiscard]] Ref<Symbol> findSymbol(const Ident& name) const override {
-            if (auto var = findVariable(name)) {
-                return var.as<ast::Symbol>();
-            }
-            if (auto func = findFunction(name)) {
-                return func.as<ast::Symbol>();
-            }
-            return nullptr;
-        }
-
-        Ref<StructDef> specializeStruct(const TypeName& spec) override {
-            auto& scope = ScopeStack.back();
-            auto genericStruct = findStruct(spec.Name);
-            if (!genericStruct) {
-                throw CompileError(Source, "Cannot specialize non-existent struct {0}", spec.Name);
-            }
-            auto specialized = StructDef::New(spec);
-            specialized->specialize(genericStruct, {spec.GenericTypes.begin(), spec.GenericTypes.end()});
-            // specialized->finish();
-            ast.newRoot(specialized);
-
-            auto name = spec.toString();
-            if (scope->Structs.lookup(name))
-                throw CompileError(Source, "Attempted to redefine struct {0}", name);
-            if (scope->Functions.lookup(name))
-                throw CompileError(Source, "Attempted to redefine constructor {0}", name);
-            scope->Structs[name] = specialized;
-            scope->Functions[name] = specialized->Constructor;
-
-            return specialized;
-        }
-
-        Ref<FunctionDef> specializeFunction(const TypeName& spec) override {
-            auto& scope = ScopeStack.back();
-            auto baseFunction = findFunction(spec.Name);
-            if (!baseFunction) {
-                throw CompileError(Source, "Cannot specialize non-existent function {0}", spec.Name);
-            }
-            auto name = spec.toString();
-            if (scope->Functions.lookup(name)) {
-                throw CompileError(Source, "Attempted to redefine function {0}", name);
-            }
-
-            Ref<FunctionDef> specialized;
-            if (baseFunction->is<MethodDef>())
-                specialized = baseFunction->cloneAs<MethodDef>();
-            else
-                specialized = baseFunction->cloneAs<FunctionDef>();
-
-            FunctionSpecialization functionSpec{baseFunction};
-            // map params -> args
-            for (int idx = 0; idx < baseFunction->GenericParams.size(); ++idx) {
-                const auto& param = baseFunction->GenericParams[idx];
-                const auto& type = spec.GenericTypes[idx];
-                functionSpec.TypeMap[param] = type;
-            }
-
-            specialized->specialize(functionSpec);
-            scope->Functions[name] = specialized;
-
-            if (!specialized->is<MethodDef>())
-                ast.newRoot(specialized);
-
-            return specialized;
-        }
-
-        Ref<ast::FunctionDef> functionTarget() {
+        FunctionDef* functionTarget() {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
                 if (scope->FunctionTarget) {
                     return scope->FunctionTarget;
@@ -178,13 +73,13 @@ namespace pepper::ast {
             return nullptr;
         }
 
-        void pushRValue(Ref<Node> value) override {
+        void pushRValue(Node* value) override {
             auto& scope = ScopeStack.back();
             //            std::cout << "rpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->RValueStack.push_back(value);
         }
 
-        Ref<Node> popRValue() override {
+        Node* popRValue() override {
             auto& scope = ScopeStack.back();
             if (scope->RValueStack.empty()) {
                 Messages::Report<Warning>(Source, "Attempted to pop empty r-value stack");
@@ -195,7 +90,7 @@ namespace pepper::ast {
             return val;
         }
 
-        Ref<Node> peekRValue(unsigned int idx = 0) const override {
+        Node* peekRValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
             const int maxDepth = (int)scope->RValueStack.size() - 1;
             if (idx > maxDepth) {
@@ -208,13 +103,13 @@ namespace pepper::ast {
             return val;
         }
 
-        void pushLValue(Ref<Node> value) override {
+        void pushLValue(Node* value) override {
             auto& scope = ScopeStack.back();
             //            std::cout << "lpush: " << scope->Ident << ": " << value->toString() << std::endl;
             scope->LValueStack.push_back(value);
         }
 
-        Ref<Node> popLValue() override {
+        Node* popLValue() override {
             auto& scope = ScopeStack.back();
             if (scope->LValueStack.empty()) {
                 throw InternalCompilerError(Source, "Attempted to pop empty l-value stack");
@@ -224,7 +119,7 @@ namespace pepper::ast {
             return val;
         }
 
-        Ref<Node> peekLValue(unsigned int idx = 0) const override {
+        Node* peekLValue(unsigned int idx = 0) const override {
             const auto& scope = ScopeStack.back();
             const int maxDepth = (int)scope->LValueStack.size() - 1;
             if (int(idx) > maxDepth) {
@@ -237,20 +132,9 @@ namespace pepper::ast {
             return val;
         }
 
-        void beginStruct(Ref<StructDef> structDef) override {
+        void beginStruct(StructDef* structDef) override {
             auto& scope = ScopeStack.back();
-            if (scope->Structs.lookup(structDef->Name))
-                throw CompileError(Source, "Attempted to redefine struct {0}", structDef->Name);
-            scope->Structs[structDef->Type.toString()] = structDef;
-            // If the struct is generic, alias SomeStruct -> SomeStruct<...>
-            if (!structDef->GenericParams.empty()) {
-                if (scope->Structs.lookup(structDef->Type.Name))
-                    throw CompileError(Source, "Cannot redefine struct {0}", structDef->Type.Name);
-                scope->Structs[structDef->Type.Name] = structDef;
-            }
-            scope->Functions[structDef->Name] = structDef->Constructor;
             structDef->Source = Source;
-
             beginScope(structDef->Name);
             auto& structScope = ScopeStack.back();
             structScope->StructTarget = structDef;
@@ -260,56 +144,51 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             auto& structDef = scope->StructTarget;
             structDef->finish();
-            ast.newRoot(structDef);
+            ast.insert(structDef.value());
             endScope();
         }
 
-        void beginExtension(Ref<StructDef> structDef) override {
-            beginScope(structDef->Name);
-            auto& structScope = ScopeStack.back();
-            structScope->StructTarget = structDef;
+        void beginExtension(ExtensionDef* ext) override {
+            beginScope(ext->Target.toString());
+            auto& extScope = ScopeStack.back();
+            extScope->ExtensionTarget = ext;
         }
 
         void endExtension() override {
+            auto& scope = ScopeStack.back();
+            auto extension = scope->ExtensionTarget;
+            ast.insert(extension);
             endScope();
         }
 
-        void beginFunction(Ref<FunctionDef> func) override {
+        void beginFunction(FunctionDef* func) override {
             auto& scope = ScopeStack.back();
-            if (scope->Functions.lookup(func->Name))
-                throw CompileError(Source, "Cannot redefine existing function {0}", func->Name);
             // Figure out if this is a generic function or an instantiation/normal function
             TypeName funcType;
-            if (!func->GenericParams.empty())
+            if (func->isGeneric())
                 funcType = {func->Name, Query(func->GenericParams).select<TypeName>()};
             else
-                funcType = {func->Name, func->GenericArgs};
-            scope->Functions[funcType.toString()] = func;
-            // if the function is generic, alias F -> F<...>
-            if (!func->GenericParams.empty()) {
-                if (scope->Functions.lookup(func->Name))
-                    throw CompileError(Source, "Cannot redefine function {0}", func->Type.Name);
-                scope->Functions[func->Name] = func;
-            }
+                funcType = func->Type;
+
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Source = Source;
-            func->Body = Ref<Block>::New(func->Name);
+            func->Body->Source = func->Source;
             beginBlock(func->Body);
             auto& fnScope = ScopeStack.back();
             fnScope->FunctionTarget = func;
-            fnScope->StructTarget = func->is<MethodDef>() ? findStruct(func.as<MethodDef>()->Struct->Name) : nullptr;
+            fnScope->StructTarget = func->is<MethodDef>() ? func->as<MethodDef>()->Struct : Resolvable<StructDef>{};
         }
 
         void endFunction() override {
             auto& scope = ScopeStack.back();
             auto function = scope->FunctionTarget;
             endBlock();
-            if (!structTarget()) {
-                ast.newRoot(function);
+            if (!structTarget() && !extensionTarget()) {
+                ast.insert(function);
             }
         }
 
-        void beginBlock(Ref<Block> block) override {
+        void beginBlock(Block* block) override {
             beginScope(block->Name);
             auto scope = ScopeStack.back();
             scope->Block = block;
@@ -319,7 +198,7 @@ namespace pepper::ast {
             endScope();
         }
 
-        Ref<Block> block() const override {
+        Block* block() const override {
             const auto& scope = ScopeStack.back();
             return scope->Block;
         }
@@ -330,23 +209,20 @@ namespace pepper::ast {
             ScopeStack.emplace_back(Ref<Scope>::New(newScopeName));
             PEP_TRACE(TraceChannel::Parser, "Scope({0}) {{", name);
             Messages::Indent(TraceChannel::Parser);
-            // std::cout << "begin: " << name << std::endl;
         }
 
         void endScope() override {
             auto scope = ScopeStack.pop_back_val();
-            // std::cout << "end:   " << scope->Ident << std::endl;
             Messages::Outdent(TraceChannel::Parser);
             PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Name);
         }
 
-        void symbol(Ref<VariableDef> var) override {
+        void symbol(VariableDef* var) override {
             auto& scope = ScopeStack.back();
             if (var->is<FieldDef>()) {
-                auto field = var.as<FieldDef>();
-                structTarget()->Fields.push_back(field);
+                auto field = var->as<FieldDef>();
+                structTarget().value()->Fields.push_back(field);
             } else {
-                scope->Locals[var->Name] = var;
                 if (block()) {
                     block()->Items.push_back(var);
                 }
@@ -354,17 +230,22 @@ namespace pepper::ast {
             trace(var);
         }
 
-        void insert(Ref<ast::Node> expr) override {
+        void insert(Node* expr) override {
             // If there's an l-value waiting for an expression value, it'll pull it
             // off the stack when its terminal completes
             if (peekLValue()) {
-                pushRValue(expr.as<Expression>());
+                pushRValue(expr->as<Expression>());
             } else {
                 block()->Items.push_back(expr);
+                trace(expr);
             }
         }
 
-        void trace(const Ref<Node>& node) const override {
+        void import(Import* import) override {
+            ast.insert(import);
+        }
+
+        void trace(const Node* node) const override {
             PEP_TRACE(TraceChannel::Parser, node->toString());
         }
     };

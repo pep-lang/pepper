@@ -8,7 +8,7 @@
 
 #include "Core/Exceptions.h"
 #include "Core/String.h"
-#include "Frontend/Context.h"
+#include "Frontend/PepContext.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -39,7 +39,7 @@ namespace pepper {
     }
 
     inline Ref<llvm::IRBuilderBase> ir() {
-        return Context::get().locals()->builder();
+        return PepContext::get().locals()->builder();
     }
 
     inline llvm::Type* resolveType(Address value) {

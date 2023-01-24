@@ -20,80 +20,135 @@ namespace pepper::ast {
     struct FieldDef : public VariableDef {
         DECLARE_RTTI(FieldDef, VariableDef);
 
-        StructDef* Struct;
+        Resolvable<StructDef> Struct;
 
-        FieldDef(StructDef* st, const TypeName& type, const Ident& name, Ref<Expression> defaultValue = nullptr);
+        FieldDef(const Resolvable<StructDef>& st,
+                 const TypeName& type,
+                 const Ident& name,
+                 Expression* defaultValue = nullptr);
 
-        Ref<Node> clone() const override;
-        void specialize(const Specialization& spec) override;
+        Node* clone() const override;
 
         std::string toString() const override;
         std::string dump(int indent) const override;
+    };
+
+    struct ConstructorDef : public FunctionDef {
+        DECLARE_RTTI(ConstructorDef, FunctionDef);
+        using FunctionDef::FunctionDef;
     };
 
     struct MethodDef : public FunctionDef {
         DECLARE_RTTI(MethodDef, FunctionDef);
 
-        StructDef* Struct;
+        Resolvable<StructDef> Struct;
 
       public:
-        MethodDef(StructDef* st,
+        MethodDef(const TypeName& structName,
                   const TypeName& returnType,
                   const Ident& name,
                   const Params& params = Params(),
                   bool vararg = false);
 
-        Ref<Node> clone() const override;
-        void specialize(const Specialization& spec) override;
+        Node* clone() const override;
+
+        std::string signature() const override;
+        std::string toString() const override;
+        std::string dump(int indent) const override;
+    };
+
+    struct StructDef : public Symbol {
+        DECLARE_RTTI(StructDef, Symbol);
+
+        TNodeRef<FunctionDef> Constructor;
+        TNodeRef<MethodDef> Destructor;
+        TNodeRef<MethodDef> Acquire;
+        TNodeRef<MethodDef> Release;
+        NodeList<FieldDef> Fields;
+        NodeList<MethodDef> Methods;
+        // type parameters in struct decl
+        Vector<Ident, 0> GenericParams;
+
+        explicit StructDef(const TypeName& type, const Ident& name);
+        StructDef(const StructDef& rhs) = default;
+        void finish();
+
+        FieldDef* getField(const Ident& name) const;
+        MethodDef* getMethod(const Ident& name) const;
+
+        bool isGeneric() const {
+            return !GenericParams.empty();
+        }
+
+        bool isConcrete() const {
+            return !isGeneric();
+        }
+
+        Node* clone() const override;
+
+        std::string toString() const override;
+        std::string dump(int indent = 0) const override;
+
+        void visit(Visitor& visitor) override {
+            Symbol::visit(visitor);
+            visitor.visit(Constructor);
+            for (auto& field : Fields)
+                visitor.visit(field);
+            for (auto& method : Methods)
+                visitor.visit(method);
+        }
+    };
+
+    struct StructSpec : public Symbol {
+        DECLARE_RTTI(StructSpec, Symbol);
+        AST_NODE_POD_CLONE(StructSpec);
+
+        StructSpec(const TypeName& type)
+            : Symbol(type, type.toString()) {}
 
         std::string toString() const override;
         std::string dump(int indent) const override;
     };
 
-    struct StructDef
-        : public Symbol
-        , public std::enable_shared_from_this<StructDef> {
-        DECLARE_RTTI(StructDef, Symbol);
-        AST_NODE_POD_CLONE(StructDef);
+    struct ExtensionDef : public Node {
+        DECLARE_RTTI(ExtensionDef, Node);
+        AST_NODE_POD_CLONE(ExtensionDef);
 
-        Ref<FunctionDef> Constructor;
-        Ref<MethodDef> Destructor;
-        Ref<MethodDef> Acquire;
-        Ref<MethodDef> Release;
-        Vector<Ref<FieldDef>> Fields;
-        Vector<Ref<MethodDef>> Methods;
-        // type parameters in struct decl
-        Vector<Ident> GenericParams;
-        // generic struct that this struct is a specialization of
-        Ref<StructDef> GenericStruct;
-        // generic args for this specialization
-        Vector<TypeName> GenericArgs;
+        Resolvable<StructDef> Target;
+        NodeList<MethodDef> Methods;
 
-        explicit StructDef(const TypeName& type);
-        StructDef(const StructDef& rhs);
+        ExtensionDef(const TypeName& target)
+            : Target(target) {}
 
-        void specialize(Ref<StructDef> genericStruct, Vector<TypeName> genericArgs);
-        void finish();
+        ExtensionDef(const ExtensionDef& ext)
+            : Target(ext.Target) {
+            Methods.clone(ext.Methods);
+        }
 
-        static Ref<StructDef> New(const TypeName& type);
-
-        Ref<FieldDef> getField(const Ident& name) const;
-        Ref<MethodDef> getMethod(const Ident& name) const;
+        void visit(Visitor& visitor) override {
+            Node::visit(visitor);
+            visitor.visit(Target);
+            for (auto& method : Methods)
+                visitor.visit(method);
+        }
 
         std::string toString() const override;
-        std::string dump(int indent = 0) const override;
+        std::string dump(int indent) const override;
     };
 
     struct MemberRef : public SymbolRef {
         DECLARE_RTTI(MemberRef, SymbolRef);
         AST_NODE_POD_CLONE(MemberRef);
 
-        Ref<Expression> LHS;
+        TNodeRef<Expression> LHS;
 
-        MemberRef(Ref<Expression> lhs, const Ident& fieldName)
+        MemberRef(Expression* lhs, const Ident& fieldName)
             : SymbolRef(fieldName)
-            , LHS(lhs) {
-        }
+            , LHS(lhs) {}
+
+        MemberRef(const MemberRef& ref)
+            : SymbolRef(ref)
+            , LHS(ref.LHS->cloneAs<Expression>()) {}
 
         const TypeName& type() const override {
             return LHS->type();
@@ -107,8 +162,9 @@ namespace pepper::ast {
             return llvm::formatv("{0} ({1}).{2}", Node::dump(indent), LHS ? LHS->dump() : "unknown", Name);
         }
 
-        void specialize(const Specialization& spec) override {
-            LHS->specialize(spec);
+        void visit(Visitor& visitor) override {
+            SymbolRef::visit(visitor);
+            visitor.visit(LHS);
         }
     };
 
@@ -117,39 +173,45 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(MethodCall);
 
         TypeName Type;
-        Ref<Expression> This;
+        TNodeRef<Expression> This;
         const Ident Name;
-        Vector<Ref<Expression>> Args;
+        ExprList Args;
 
-        MethodCall(const TypeName& type,
-                   Ref<Expression> thisRef,
-                   const Ident& methodName,
-                   const Vector<Ref<Expression>>& args = {})
-            : Type(type)
-            , This(thisRef)
-            , Name(methodName)
-            , Args(args) {
+        MethodCall(Expression* thisRef, const Ident& methodName, const ExprList& args = {})
+            : This(thisRef)
+            , Name(methodName) {
+            Args.clone(args);
+        }
+
+        MethodCall(const MethodCall& m)
+            : Expression(m)
+            , Type(m.Type)
+            , This(m.This->cloneAs<Expression>())
+            , Name(m.Name) {
+            Args.clone(m.Args);
         }
 
         const TypeName& type() const override {
             return Type;
         }
 
-        void specialize(const Specialization& spec) override;
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Type);
+            visitor.visit(This);
+            for (auto& arg : Args)
+                visitor.visit(arg);
+        }
 
         std::string dump(int indent) const override;
     };
 
-    struct ThisDef : public Symbol {
-        DECLARE_RTTI(ThisDef, Symbol)
+    struct ThisDef : public VariableDef {
+        DECLARE_RTTI(ThisDef, VariableDef)
         AST_NODE_POD_CLONE(ThisDef);
 
-        Ref<Expression> Default;
-
-        ThisDef(const TypeName& structType, Ref<Expression> defaultValue = nullptr)
-            : Symbol(structType, "this")
-            , Default(defaultValue) {
-        }
+        ThisDef(const TypeName& structType, Expression* defaultValue)
+            : VariableDef(structType, "this", defaultValue) {}
     };
 
     struct ThisRef : public SymbolRef {
@@ -157,8 +219,7 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(ThisRef);
 
         ThisRef()
-            : SymbolRef("this") {
-        }
+            : SymbolRef("this") {}
     };
 
     struct SizeOf : public Expression {
@@ -168,11 +229,19 @@ namespace pepper::ast {
         TypeName Type;
 
         SizeOf(const TypeName& type)
-            : Type(type) {
+            : Type(type) {}
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Type);
         }
 
-        void specialize(const Specialization& spec) override {
-            Type.specialize(spec.TypeMap);
+        std::string toString() const override {
+            return llvm::formatv("{0} {1}", Node::toString(), Type.toString());
+        }
+
+        std::string dump(int) const override {
+            return toString();
         }
     };
 } // namespace pepper::ast

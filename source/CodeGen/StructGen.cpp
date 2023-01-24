@@ -14,10 +14,10 @@
 #include "Frontend/Types.h"
 
 namespace pepper {
-    using namespace pepper::ast;
 
-    Address CodeGenerator::emit(Ref<FieldDef> fieldDef) {
-        auto st = Struct::get(fieldDef->Struct->Name);
+    Address CodeGenerator::emit(const ast::FieldDef* fieldDef) {
+        auto st = Struct::get(fieldDef->Struct.name());
+        assert(st && "Field attached to non-existent struct");
         auto instance = locals()->findSymbol("this");
         instance = load(instance);
         auto fieldName = fieldDef->Name;
@@ -38,7 +38,7 @@ namespace pepper {
         return Address{type, field};
     }
 
-    Address CodeGenerator::emit(Ref<MemberRef> memberRef) {
+    Address CodeGenerator::emit(const ast::MemberRef* memberRef) {
         auto local = locals()->findSymbol(memberRef->Name, true);
         if (local)
             return local;
@@ -53,11 +53,13 @@ namespace pepper {
         return member;
     }
 
-    void CodeGenerator::instantiate(Ref<ast::StructDef> structDef) {
+    void CodeGenerator::instantiate(const ast::StructDef* structDef) {
         // Generic struct bases are effectively abstract, so can't be instantiated
-        if (!structDef->GenericParams.empty()) {
+        if (structDef->isGeneric()) {
             return;
         }
+
+        PEP_TRACE(TraceChannel::Codegen, "  Instantiating {0}", structDef->Name);
 
         // convert fields to symbols before type gen
         pepper::Params fields;
@@ -76,17 +78,15 @@ namespace pepper {
         Module->getDebugInfo()->pushScope(structDI);
 
         // Update Struct()/new function now that the size of the struct is known
-        auto sizeVar = Query(structDef->Constructor->Body->Items)
-                           .find([](auto& local) {
-                               if (local->template is<VariableDef>()) {
-                                   auto var = local.template as<VariableDef>();
-                                   return var->Name == "size";
-                               }
-                               return false;
-                           })
-                           .value()
-                           .as<VariableDef>();
-        sizeVar->Default = Ref<IntegerLiteral>::New(structDesc->size());
+        for (auto& local : structDef->Constructor->Body->Items) {
+            if (local->template is<ast::VariableDef>()) {
+                auto var = local->template as<ast::VariableDef>();
+                if (var->Name == "size") {
+                    var->Default = new ast::IntegerLiteral(structDesc->size());
+                    break;
+                }
+            }
+        }
 
         // Export new constructor to the enclosing scope
         locals()->newFunction(structDesc->constructor());
@@ -119,9 +119,9 @@ namespace pepper {
                   toString(structDesc->structType()->llvmType()));
     }
 
-    void CodeGenerator::codegenStruct(Ref<StructDef> structDef) {
+    void CodeGenerator::codegenStruct(const ast::StructDef* structDef) {
         // Generic struct bases are effectively abstract, so can't be instantiated
-        if (!structDef->GenericParams.empty()) {
+        if (structDef->isGeneric()) {
             return;
         }
 
@@ -133,9 +133,7 @@ namespace pepper {
 
         codegenFunction(structDesc->constructor(), structDef->Constructor);
 
-        const auto& methods = structDef->Methods;
-        for (int methodIdx = 0; methodIdx < methods.size(); ++methodIdx) {
-            const auto& methodDef = methods[methodIdx];
+        for (const auto& methodDef : structDef->Methods) {
             auto method = structDesc->method(methodDef->Name);
             assert(method && "MethodDef was not instantiated before codegen");
             codegenFunction(method, methodDef);
@@ -144,7 +142,7 @@ namespace pepper {
         Module->getDebugInfo()->popScope();
     }
 
-    Address CodeGenerator::emit(Ref<ThisDef> thisDef) {
+    Address CodeGenerator::emit(const ast::ThisDef* thisDef) {
         auto typeName = thisDef->Type;
         auto type = Types::get(typeName.toString());
         if (!type) {
@@ -162,12 +160,12 @@ namespace pepper {
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<ThisRef>) {
+    Address CodeGenerator::emit(const ast::ThisRef*) {
         auto thisPtr = locals()->findSymbol("this");
         return thisPtr;
     }
 
-    Address CodeGenerator::emit(Ref<MethodCall> call) {
+    Address CodeGenerator::emit(const ast::MethodCall* call) {
         auto thisRef = codegen(call->This);
         auto st = Struct::get(thisRef.Ty->name());
         auto method = st->method(call->Name).as<Method>();

@@ -3,11 +3,11 @@
 //
 
 #include "TestUtils.h"
+#include <filesystem>
 
 #include "Compiler/Compiler.h"
 #include "Compiler/Options.h"
 #include "Core/Messages.h"
-#include "Frontend/Runtime.h"
 #include "JIT/Executor.h"
 #include "Support/Support.h"
 #include "gtest/gtest.h"
@@ -26,24 +26,23 @@ namespace TestUtils {
         ASSERT_TRUE(condition) << msg;
     }
 
-    void RegisterImports() {
-        Runtime::Import("void", "trace_int", {{"int", "value"}, {"u8*", "message"}});
-        Runtime::Import("void", "trace_ptr", {{"void*", "ptr"}, {"u8*", "message"}});
-        Runtime::Import("void", "test_assert", {{"bool", "condition"}, {"u8*", "message"}});
+    std::string SupportModulePath() {
+        return absolute(std::filesystem::current_path() / "TestSupport.pep").string();
     }
 
-    int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry) {
-        RegisterImports();
+    int CompileAndRun(
+        const std::string& name, const std::string& source, const std::string& entry, bool compileRuntime) {
         SupportInit(AssertTrap);
         Messages::SetTraceChannels(TraceChannel::ALL);
         auto sourceStream = std::make_unique<std::istringstream>(source);
         auto options = Options::Defaults();
         options->ExeName = name;
-        options->SourceFiles.emplace_back(name);
         options->InputStream = std::move(sourceStream);
+        options->CompileRuntime = compileRuntime;
+        options->SourceFiles.emplace_back(SupportModulePath());
+        options->UnitTest = true;
         auto compiler = Compiler::Create(options);
-        auto modules = compiler->compile();
-        auto module = modules[0];
+        auto module = compiler->compile();
         auto executor = Executor::Create();
         return executor->execute(module, entry);
     }

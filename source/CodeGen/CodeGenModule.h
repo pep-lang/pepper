@@ -7,24 +7,26 @@
 #include "CodeGen/DebugInfo.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
+#include "Frontend/PepContext.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
     class LLVMContext;
     class Module;
+    class TargetMachine;
 } // namespace llvm
 
 namespace pepper {
 
     class CodeGenModule {
         Ident ModuleName;
-        std::unique_ptr<llvm::LLVMContext> Context;
+        PepContext& Context;
         std::unique_ptr<llvm::Module> Module;
+        std::unique_ptr<llvm::TargetMachine> TM;
         std::unique_ptr<DebugInfo> Debug;
 
       public:
-        CodeGenModule(const Ident& name, const std::string& sourcePath);
-        CodeGenModule(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module);
+        CodeGenModule(PepContext& context, const Ident& name, const std::string& sourcePath = "");
 
         ~CodeGenModule();
 
@@ -40,12 +42,14 @@ namespace pepper {
         }
 
         llvm::LLVMContext& getContext() const {
-            return *Context.get();
+            return Context.getContext();
         }
 
         DebugInfo* getDebugInfo() const {
             return Debug.get();
         }
+
+        void initTargetMachine(const std::string& triple);
 
         llvm::Error verify();
 

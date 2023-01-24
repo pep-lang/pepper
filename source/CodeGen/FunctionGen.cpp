@@ -15,16 +15,19 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    Ref<Function> CodeGenerator::resolveFunction(Ref<FunctionCall> call) {
-        auto functionName = call->Target->Name;
+    Ref<Function> CodeGenerator::resolveFunction(const FunctionCall* call) {
+        auto functionName = call->Target.name();
         auto target = call->Target;
         return locals()->findFunction(functionName);
     }
 
-    void CodeGenerator::codegenFunction(Ref<UserFunction> function, Ref<FunctionDef> funcDef) {
-        PEP_TRACE(TraceChannel::Codegen, llvm::formatv("Generate {0}...", funcDef->Name));
+    void CodeGenerator::codegenFunction(Ref<UserFunction> function, const FunctionDef* funcDef) {
+        PEP_TRACE(TraceChannel::Codegen, llvm::formatv("Generate {0}...", funcDef->signature()));
         Module->getDebugInfo()->setSourceLocation(funcDef->Source);
         pushFunction(function);
+
+        // track any references that only exist in this scope, they will need cleanup at the end
+        Vector<Address> localRefs;
 
         // Allocate parameters
         auto llvmFunction = function->function();
@@ -40,6 +43,8 @@ namespace pepper {
             // Special methods use raw stores to avoid ref-counting getting in the way
             if (function->countArgRefs()) {
                 type->ops()->init(local, arg);
+                if (local.Ty->is<RefType>())
+                    localRefs.emplace_back(local);
             } else {
                 ir()->CreateStore(arg, local);
             }
@@ -47,20 +52,30 @@ namespace pepper {
             locals()->newSymbol(local);
         }
 
-        codegenBlock(function, funcDef->Body, function->Body, function->Return);
+        codegenBlock(function, funcDef->Body, function->Body, function->Return, localRefs);
 
         popScope();
     }
 
-    void CodeGenerator::instantiate(Ref<ast::FunctionDef> functionDef) {
+    void CodeGenerator::instantiate(const ast::FunctionDef* functionDef) {
         // generic functions don't get instantiated, they're abstract
-        if (!functionDef->GenericParams.empty())
+        if (functionDef->isGeneric())
             return;
 
+        PEP_TRACE(TraceChannel::Codegen, "  Instantiating {0}", functionDef->Name);
+
         auto returnType = Types::get(functionDef->ReturnType.toString());
-        auto params = Query(functionDef->Parameters).select<pepper::Param>([this](auto p) {
-            return pepper::Param{
-                p.Name, Types::get(p.Type.toString()), p.Default ? codegen(p.Default) : Address::Null()};
+        if (!returnType)
+            throw CompileError(functionDef->Source,
+                               "Unknown return type in {0}: {1}",
+                               functionDef->Type.toString(),
+                               functionDef->ReturnType.toString());
+        auto params = Query(functionDef->Parameters).select<pepper::Param>([&](auto p) {
+            auto type = Types::get(p.Type.toString());
+            if (!type)
+                throw CompileError(
+                    functionDef->Source, "Unknown type for parameter {0}: {1}", p.Name, p.Type.toString());
+            return pepper::Param{p.Name, type, p.Default ? codegen(p.Default) : Address::Null()};
         });
         auto function = [&]() -> Ref<Function> {
             if (functionDef->is<ExternFunctionDef>())
@@ -70,9 +85,9 @@ namespace pepper {
         locals()->newFunction(function);
     }
 
-    Address CodeGenerator::emit(Ref<FunctionDef> functionDef) {
+    Address CodeGenerator::emit(const FunctionDef* functionDef) {
         // generic functions don't get generated, they're abstract
-        if (!functionDef->GenericParams.empty())
+        if (functionDef->isGeneric())
             return Address::Null();
 
         auto function = locals()->findFunction(functionDef->Name);
@@ -80,12 +95,12 @@ namespace pepper {
         return Address{function->type(), function->function(), function->name()};
     }
 
-    Address CodeGenerator::emit(Ref<ExternFunctionDef> functionDecl) {
+    Address CodeGenerator::emit(const ExternFunctionDef* functionDecl) {
         auto function = locals()->findFunction(functionDecl->Name);
         return Address{function->type(), function->function(), function->name()};
     }
 
-    Address CodeGenerator::emit(Ref<Return> ret) {
+    Address CodeGenerator::emit(const Return* ret) {
         auto function = locals()->functionTarget().as<UserFunction>();
         if (ret->Value) {
             auto returnValueExpr = codegen(ret->Value);
@@ -100,10 +115,10 @@ namespace pepper {
         return Address{Types::Void, ir()->CreateBr(function->Return)};
     }
 
-    Address CodeGenerator::emit(Ref<FunctionCall> call) {
+    Address CodeGenerator::emit(const FunctionCall* call) {
         auto function = resolveFunction(call);
         if (!function) {
-            throw CompileError(call->Source, "Function {0} not found", call->Target->Name);
+            throw CompileError(call->Source, "Function {0} not found", call->Target.name());
         }
         Vector<Address> args;
         const auto& callArgs = call->Args;

@@ -10,12 +10,17 @@ namespace pepper {
     struct Options {
         std::string ProgramPath;
         Vector<std::string> SourceFiles;
+        Vector<std::string> ImportPaths;
+        Vector<std::string> ForcedImports;
         std::string OutputPath;
         std::string ExeName;
         std::string BuildDir;
         std::unique_ptr<std::istream> InputStream; // used internally for tests/embedding
         bool EmitLLVM = false;
         bool Verbose = false;
+        bool CompileRuntime = true;
+        bool EmitDebugInfo = false;
+        bool UnitTest = false;
         unsigned TraceChannels = 0;
 
         static Ref<Options> FromCommandLine(int argc, const char** argv);

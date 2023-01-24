@@ -20,11 +20,7 @@ namespace pepper::ast {
         DECLARE_RTTI(FunctionNode, Node);
 
         // type parameters in function decl
-        Vector<Ident> GenericParams;
-        // generic struct that this struct is a specialization of
-        Ref<FunctionDef> GenericFunction;
-        // generic args for this specialization
-        Vector<TypeName> GenericArgs;
+        Vector<Ident, 0> GenericParams;
 
         TypeName ReturnType;
         Params Parameters;
@@ -35,21 +31,32 @@ namespace pepper::ast {
         std::string toString() const override;
         std::string dump(int indent) const override;
 
-        void specialize(const Specialization& spec) override;
+        bool isGeneric() const {
+            return !GenericParams.empty();
+        }
+
+        virtual std::string signature() const;
+
+        void visit(Visitor& visitor) override {
+            Symbol::visit(visitor);
+            visitor.visit(ReturnType);
+            for (auto& param : Parameters)
+                visitor.visit(param.Type);
+        }
     };
 
     struct FunctionDef : public FunctionNode {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
-        Ref<Block> Body;
+        TNodeRef<Block> Body;
 
         FunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
-            Body = Ref<Block>::New(name);
+            Body.reset(new Block(name));
         }
 
-        Ref<Node> clone() const override;
+        Node* clone() const override;
 
         std::string toString() const override {
             const char* sep = "\n";
@@ -59,7 +66,26 @@ namespace pepper::ast {
 
         std::string dump(int indent) const override;
 
-        void specialize(const Specialization& spec) override;
+        void visit(Visitor& visitor) override {
+            FunctionNode::visit(visitor);
+            visitor.visit(Body);
+        }
+    };
+
+    struct FunctionSpec : public Symbol {
+        DECLARE_RTTI(FunctionSpec, Symbol);
+        AST_NODE_POD_CLONE(FunctionSpec);
+
+        FunctionSpec(const TypeName& spec)
+            : Symbol(spec, spec.toString()) {}
+
+        std::string toString() const override {
+            return llvm::formatv("{0} {1}", Symbol::toString(), Name);
+        }
+
+        std::string dump(int) const override {
+            return toString();
+        }
     };
 
     struct ExternFunctionDef : public FunctionDef {
@@ -68,22 +94,23 @@ namespace pepper::ast {
 
         ExternFunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = {}, bool varargs = false)
-            : FunctionDef(returnType, name, params, varargs) {
-        }
-
-        static Ref<ExternFunctionDef> Find(const Ident& name);
+            : FunctionDef(returnType, name, params, varargs) {}
     };
 
     struct FunctionCall : public Expression {
         DECLARE_RTTI(FunctionCall, Expression);
         AST_NODE_POD_CLONE(FunctionCall);
 
-        Ref<FunctionDef> Target;
-        const Vector<Ref<Expression>> Args;
+        Resolvable<FunctionDef> Target;
+        ExprList Args;
 
-        FunctionCall(Ref<FunctionDef> target, const Vector<Ref<Expression>>& args = {})
-            : Target(std::move(target))
-            , Args(args) {
+        FunctionCall(const TypeName& target, ExprList&& args = {})
+            : Target(target)
+            , Args(std::move(args)) {}
+
+        FunctionCall(const FunctionCall& call)
+            : Target(call.Target) {
+            Args.clone(call.Args);
         }
 
         const TypeName& type() const override {
@@ -91,18 +118,27 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->toString(); });
+            Vector<std::string> argsStr = Query(Args).select<std::string>([](const auto& a) { return a->toString(); });
             return trim(
-                Node::toString() +
-                std::string(llvm::formatv("{0}({1})", Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "))));
+                Node::toString() + std::string(llvm::formatv(
+                                       "{0}({1})", Target.name(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
         }
 
         std::string dump(int indent) const override {
-            Vector<std::string> argsStr = Query(Args).select<std::string>([](auto a) { return a->dump(); });
+            Vector<std::string> argsStr = Query(Args).select<std::string>([](const auto& a) { return a->dump(); });
             return
 
-                llvm::formatv(
-                    "{0} {1}({2})", Node::dump(indent), Target->Name, llvm::join(argsStr.begin(), argsStr.end(), ", "));
+                llvm::formatv("{0} {1}({2})",
+                              Node::dump(indent),
+                              Target.name(),
+                              llvm::join(argsStr.begin(), argsStr.end(), ", "));
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Target);
+            for (auto& arg : Args)
+                visitor.visit(arg);
         }
     };
 
@@ -111,12 +147,11 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(Return);
 
         TypeName Type;
-        Ref<Expression> Value;
+        TNodeRef<Expression> Value;
 
-        Return(TypeName type = {"void"}, Ref<Expression> value = nullptr)
+        Return(TypeName type = {"void"}, Expression* value = nullptr)
             : Type(std::move(type))
-            , Value(std::move(value)) {
-        }
+            , Value(value) {}
 
         const TypeName& type() const override {
             return Type;
@@ -130,6 +165,11 @@ namespace pepper::ast {
             return llvm::formatv("{0} {1}", Node::dump(indent), Value ? Value->dump() : "void");
         }
 
-        void specialize(const Specialization& spec) override;
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Type);
+            if (Value)
+                visitor.visit(Value);
+        }
     };
 } // namespace pepper::ast

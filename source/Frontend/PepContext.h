@@ -6,37 +6,28 @@
 
 #include "Core/Common.h"
 #include "Frontend/Scope.h"
-#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 
 namespace pepper {
-    namespace ast {
-        class AST;
-    }
-    class Executor;
-    class Function;
-    class CodeGenModule;
     class Types;
     class UserFunction;
-    class Method;
-    class Runtime;
 
-    class Context {
-        static Context* Instance;
+    class PepContext {
+        static PepContext* Instance;
 
-        Ref<CodeGenModule> Module;
+        std::unique_ptr<llvm::LLVMContext> Context;
         Ref<Types> TypeMap;
-        Ref<Runtime> Builtins;
         Ref<Scope> Globals;
         Ref<Scope> Locals;
+        bool UnitTest = false;
 
       public:
-        static Context& get();
+        static PepContext& get();
         static Ref<llvm::IRBuilderBase> ir();
 
-        explicit Context(Ref<CodeGenModule> module);
-        ~Context();
+        explicit PepContext();
+        ~PepContext();
 
         [[nodiscard]] Ref<Types> types() const {
             return TypeMap;
@@ -50,13 +41,29 @@ namespace pepper {
             return Locals;
         }
 
-        [[nodiscard]] Ref<Runtime> runtime() const {
-            return Builtins;
+        llvm::LLVMContext& getContext() {
+            return *Context;
+        }
+
+        std::unique_ptr<llvm::LLVMContext>&& takeContext() {
+            Locals.reset();
+            Globals.reset();
+            TypeMap.reset();
+            Instance = nullptr;
+            return std::move(Context);
         }
 
         void pushFunction(Ref<UserFunction> function);
         void pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder = nullptr);
         void popScope();
+
+        void enableUnitTesting(bool enable) {
+            UnitTest = enable;
+        }
+
+        bool unitTestingEnabled() const {
+            return UnitTest;
+        }
     };
 
 } // namespace pepper

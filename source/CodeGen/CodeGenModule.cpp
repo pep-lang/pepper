@@ -14,50 +14,26 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 
 namespace pepper {
-    static llvm::DataLayout getDataLayout() {
-        auto EPC = llvm::orc::SelfExecutorProcessControl::Create();
-        if (!EPC) {
-            throw InternalCompilerError("Failed to initialize process control: {}", llvm::toString(EPC.takeError()));
-        }
-        auto ES = Ref<llvm::orc::ExecutionSession>::New(std::move(EPC.get()));
-
-        llvm::orc::JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
-        auto DL = JTMB.getDefaultDataLayoutForTarget();
-
-        if (auto err = ES->endSession()) {
-            throw InternalCompilerError("Failed to end temporary execution session: {0}",
-                                        llvm::toString(std::move(err)));
-        }
-        if (!DL) {
-            throw InternalCompilerError("Unable to get default layout for target: {0}", llvm::toString(DL.takeError()));
-        }
-        return DL.get();
-    }
-
-    CodeGenModule::CodeGenModule(const Ident& name, const std::string& sourcePath)
-        : ModuleName(name) {
-        Context = std::make_unique<llvm::LLVMContext>();
-        Module = std::make_unique<llvm::Module>(name, *Context);
+    CodeGenModule::CodeGenModule(PepContext& context, const Ident& name, const std::string& sourcePath)
+        : ModuleName(name)
+        , Context(context) {
+        Module = std::make_unique<llvm::Module>(name, Context.getContext());
         Debug = std::make_unique<DebugInfo>(Module.get(), sourcePath);
+
+        auto targetTriple = llvm::sys::getDefaultTargetTriple();
+        initTargetMachine(targetTriple);
 
         Module->setSourceFileName(sourcePath);
         Module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
         Module->addModuleFlag(llvm::Module::Warning, "DWARF Version", llvm::dwarf::DWARF_VERSION);
-
-        auto targetTriple = llvm::sys::getDefaultTargetTriple();
         Module->setTargetTriple(targetTriple);
-
-        Module->setDataLayout(getDataLayout());
-    }
-
-    CodeGenModule::CodeGenModule(std::unique_ptr<llvm::LLVMContext> context, std::unique_ptr<llvm::Module> module)
-        : Context(std::move(context))
-        , Module(std::move(module)) {
-        ModuleName = Module->getModuleIdentifier();
+        Module->setDataLayout(TM->createDataLayout());
     }
 
     CodeGenModule::~CodeGenModule() {
@@ -71,9 +47,27 @@ namespace pepper {
         }
     }
 
+    void CodeGenModule::initTargetMachine(const std::string& triple) {
+        // Create `Target`
+        std::string error;
+        const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple, error);
+        assert(target && "Failed to create Target");
+
+        // Create `TargetMachine`
+        llvm::CodeGenOpt::Level OptLevel = llvm::CodeGenOpt::Level::None;
+        TM.reset(target->createTargetMachine(triple,
+                                             /*CPU=*/"",
+                                             /*Features=*/"",
+                                             llvm::TargetOptions(),
+                                             /*Reloc::Model=*/llvm::None,
+                                             /*CodeModel::Model=*/llvm::None,
+                                             OptLevel));
+        assert(TM && "Failed to create TargetMachine");
+    }
+
     std::unique_ptr<llvm::LLVMContext>&& CodeGenModule::takeContext() {
         finalizeDebugInfo();
-        return std::move(Context);
+        return std::move(Context.takeContext());
     }
 
     std::unique_ptr<llvm::Module>&& CodeGenModule::takeModule() {

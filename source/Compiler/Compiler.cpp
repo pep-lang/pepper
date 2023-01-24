@@ -7,18 +7,18 @@
 #include "AST/AST.h"
 #include "CodeGen/CodeGenModule.h"
 #include "CodeGen/CodeGenerator.h"
+#include "Compiler/ImportResolver.h"
 #include "Compiler/Linker.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
-#include "Frontend/Context.h"
-#include "Frontend/Runtime.h"
+#include "Frontend/PepContext.h"
 #include "Parser/Parser.h"
 #include "Transforms/Transform.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
@@ -35,8 +35,7 @@ namespace pepper {
 
         // Re-used internals per module
         std::string ModuleName;
-        std::string SourcePath;
-        Ref<CodeGenModule> Module;
+        std::unique_ptr<PepContext> Context;
 
         // Collected obj files for linking
         Vector<std::string> ObjFiles;
@@ -54,46 +53,75 @@ namespace pepper {
             if (Opts->TraceChannels)
                 Messages::SetTraceChannels(Opts->TraceChannels);
 
-            Module = Ref<CodeGenModule>::New(ModuleName, SourcePath);
+            Context = std::make_unique<PepContext>();
+            if (Opts->UnitTest)
+                Context->enableUnitTesting(true);
         }
 
-        Vector<Ref<CodeGenModule>> compile() override {
-            auto Ctx = Ref<Context>::New(Module);
-            Vector<Ref<CodeGenModule>> modules;
-            if (Opts->InputStream) {
-                SourcePath = ModuleName;
-                auto module = compile(*Opts->InputStream);
-                modules.emplace_back(module);
-            } else {
-                for (const auto& sourceFile : Opts->SourceFiles) {
-                    std::ifstream sourceStream(sourceFile, std::ios_base::in);
-                    SourcePath = std::filesystem::path(sourceFile).string();
-                    auto module = compile(sourceStream);
-                    modules.emplace_back(module);
-                }
-            }
-            return modules;
-        }
-
-        Ref<CodeGenModule> compile(std::istream& sourceStream) {
+        Ref<CodeGenModule> compile() override {
             ensureBuildDirExists();
 
+            Ref<ast::AST> parseTree = Ref<ast::AST>::New();
+            ImportResolver importer(Opts->ImportPaths);
+
+            llvm::StringSet seenFiles;
+            auto sourceFiles = Opts->SourceFiles;
+            seenFiles.insert(sourceFiles.begin(), sourceFiles.end());
+
+            auto collectImports = [&](const std::string& sourceFile, Ref<ast::AST> ast) {
+                const auto& importNodes = ast->imports();
+                for (const auto& import : importNodes) {
+                    auto importPath = importer.resolve(sourceFile, import->Module, import->Local);
+                    if (importPath.empty())
+                        throw CompileError(import->Source, "Cannot resolve import {0}", import->Module);
+                    if (!seenFiles.contains(importPath)) {
+                        sourceFiles.emplace_back(importPath);
+                        seenFiles.insert(llvm::StringRef{importPath});
+                    }
+                }
+            };
+
+            if (Opts->InputStream) {
+                auto ast = parse(*Opts->InputStream, ModuleName);
+                parseTree->merge(ast);
+                collectImports(ModuleName, ast);
+            }
+
+            while (!sourceFiles.empty()) {
+                const auto& sourceFile = sourceFiles.pop_back_val();
+                std::ifstream sourceStream(sourceFile, std::ios_base::in);
+                auto ast = parse(sourceStream, sourceFile);
+                parseTree->merge(ast);
+
+                // Resolve all imports and add them to the list to process if necessary
+                collectImports(sourceFile, ast);
+            }
+
+            ast::TransformPass transform(parseTree);
+            parseTree = transform.run();
+
+            if (PEP_TRACING(TraceChannel::AST)) {
+                PEP_TRACE(TraceChannel::AST, "Parse tree:");
+                parseTree->dump();
+            }
+
+            return codegen(parseTree);
+        }
+
+        Ref<ast::AST> parse(std::istream& sourceStream, const std::string& sourcePath) {
             Parser parser;
-            auto ast = parser.parse(sourceStream, SourcePath);
+            auto ast = parser.parse(sourceStream, sourcePath);
             if (!ast || !Messages::errors().empty()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
-            ast::TransformPass transform(ast);
-            ast = transform.run();
+            return ast;
+        }
 
-            if (PEP_TRACING(TraceChannel::AST)) {
-                PEP_TRACE(TraceChannel::AST, "Parse tree:");
-                ast->dump();
-            }
-
-            CodeGenerator codeGen(Module);
-            codeGen.generate(ast);
+        Ref<CodeGenModule> codegen(Ref<ast::AST> parseTree) {
+            auto module = Ref<CodeGenModule>::New(*Context, ModuleName);
+            CodeGenerator codeGen(module);
+            codeGen.generate(parseTree);
 
             if (!Messages::errors().empty()) {
                 Query(Messages::errors()).each([](auto e) { llvm::errs() << e.message() << "\n"; });
@@ -102,28 +130,36 @@ namespace pepper {
 
             if (PEP_TRACING(TraceChannel::IR)) {
                 PEP_TRACE(TraceChannel::IR, "LLVM IR:");
-                PEP_TRACE(TraceChannel::IR, Module->toString());
+                PEP_TRACE(TraceChannel::IR, module->toString());
             }
 
-            if (auto err = Module->verify()) {
+            if (auto err = module->verify()) {
                 throw CompileError("Module Verification failed: {0}", llvm::toString(std::move(err)));
             }
 
             if (Opts->EmitLLVM) {
-                emitIR();
+                emitIR(module->getModule());
             }
 
             if (!Opts->OutputPath.empty()) {
-                emitObjFile();
+                emitObjFile(module->getModule());
             }
 
             llvm::outs().flush();
             llvm::errs().flush();
 
-            return Module;
+            return module;
         }
 
-        void emitObjFile() {
+        static std::string ModuleFilename(const llvm::Module& module) {
+            const auto& moduleSource = module.getSourceFileName();
+            if (!moduleSource.empty()) {
+                return std::filesystem::path(moduleSource).filename().replace_extension().string();
+            }
+            return module.getModuleIdentifier();
+        }
+
+        void emitObjFile(llvm::Module& module) {
             auto targetTriple = llvm::sys::getDefaultTargetTriple();
             auto cpu = "generic";
             auto cpuFeatures = "";
@@ -143,7 +179,7 @@ namespace pepper {
             auto targetMachine = target->createTargetMachine(targetTriple, cpu, cpuFeatures, opt, rm);
 
             std::filesystem::path outputFile(Opts->BuildDir);
-            std::filesystem::path inputFile(SourcePath);
+            std::filesystem::path inputFile(ModuleFilename(module));
             outputFile /= inputFile.filename().replace_extension(".o");
 
             auto objFilePath = outputFile.string();
@@ -162,7 +198,7 @@ namespace pepper {
                 throw CompileError("TargetMachine can't emit a file of this type");
             }
 
-            pass.run(*(*Module));
+            pass.run(module);
             dest.flush();
 
             PEP_VERBOSE("Object file written to {0}", outputFile.string());
@@ -170,9 +206,9 @@ namespace pepper {
             ObjFiles.emplace_back(objFilePath);
         }
 
-        void emitIR() {
+        void emitIR(const llvm::Module& module) {
             std::filesystem::path outputPath(Opts->BuildDir);
-            std::filesystem::path sourceFile(SourcePath);
+            std::filesystem::path sourceFile(ModuleFilename(module));
             outputPath /= sourceFile.filename().replace_extension(".ll");
 
             std::error_code EC;
@@ -181,30 +217,8 @@ namespace pepper {
                 throw CompileError("Unable to write to {0}: {1}", outputPath.string(), EC.message());
             }
 
-            const auto& module = Module->getModule();
             module.print(out, nullptr, false, false);
             PEP_VERBOSE("LLVM IR written to {0}", outputPath.string());
-        }
-
-        static Ref<CodeGenModule> loadIR(const std::string& irFilePath) {
-            llvm::SMDiagnostic err;
-            auto context = std::make_unique<llvm::LLVMContext>();
-            auto module = llvm::parseIRFile(irFilePath, err, *context);
-            if (!module) {
-                throw CompileError("Failed to load IR from {0}: {1}", irFilePath, err.getMessage());
-            }
-
-            return Ref<CodeGenModule>::New(std::move(context), std::move(module));
-        }
-
-        Vector<Ref<CodeGenModule>> loadIR() {
-            Vector<Ref<CodeGenModule>> modules;
-            for (const auto& sourceFilePath : Opts->SourceFiles) {
-                auto irFilePath = std::filesystem::path(sourceFilePath).replace_extension(".ll").string();
-                auto module = loadIR(irFilePath);
-                modules.emplace_back(module);
-            }
-            return modules;
         }
 
         void link() override {
@@ -257,77 +271,19 @@ namespace pepper {
             return sources;
         }
 
-        static Vector<std::string> findRuntimeModuleObjects(const std::string& runtimeDir) {
-            Vector<std::string> objs;
-            std::filesystem::path path(runtimeDir);
-            for (const auto& file : std::filesystem::directory_iterator(path)) {
-                if (file.path().extension() == ".o" || file.path().extension() == ".obj") {
-                    objs.emplace_back(absolute(file.path()).string());
-                }
+        void importRuntime() {
+            if (Opts->CompileRuntime) {
+                auto runtimePath = findRuntimePath();
+                auto runtimeSources = findRuntimeModuleSources(runtimePath);
+                Opts->ImportPaths.insert(Opts->ImportPaths.begin(), runtimePath);
+                Opts->SourceFiles.insert(Opts->SourceFiles.begin(), runtimeSources.begin(), runtimeSources.end());
             }
-            return objs;
-        }
-
-        static Vector<std::string> findNewerRuntimeSources(const Vector<std::string>& moduleSources,
-                                                           const Vector<std::string>& moduleObjects) {
-            Vector<std::string> outdatedSources;
-            for (const auto& source : moduleSources) {
-                std::filesystem::path sourcePath(source);
-                auto maybeObject = Query(moduleObjects).find([&](auto& obj) {
-                    return std::filesystem::path(obj).filename().replace_extension() ==
-                           sourcePath.filename().replace_extension();
-                });
-                if (!maybeObject) {
-                    outdatedSources.emplace_back(source);
-                    break;
-                }
-                auto objectPath = std::filesystem::path(maybeObject.value());
-                auto sourceWriteTime = std::filesystem::last_write_time(sourcePath);
-                auto objectWriteTime = std::filesystem::last_write_time(objectPath);
-                if (sourceWriteTime > objectWriteTime) {
-                    outdatedSources.emplace_back(source);
-                    break;
-                }
-            }
-            return outdatedSources;
-        }
-
-        void compileRuntime() {
-            auto savedOptions = Opts;
-            auto savedTraceChannels = Messages::GetTraceChannels();
-
-            Opts = Options::Defaults();
-            // Messages::SetTraceChannels(TraceChannel::NONE);
-            ensureBuildDirExists();
-            auto runtimePath = findRuntimePath();
-            auto runtimeSources = findRuntimeModuleSources(runtimePath);
-            auto runtimeObjects = findRuntimeModuleObjects(Opts->BuildDir);
-            auto newerSources = findNewerRuntimeSources(runtimeSources, runtimeObjects);
-
-            if (!newerSources.empty()) {
-                Opts->SourceFiles = newerSources;
-                Opts->EmitLLVM = true;
-                Opts->OutputPath = runtimePath;
-                llvm::outs() << "Runtime modules outdated, compiling"
-                             << "\n";
-                compile();
-            }
-
-            // load all IR
-            auto irFiles = Query(runtimeSources).map([&](auto& src) {
-                return (std::filesystem::path(Opts->BuildDir) / std::filesystem::path(src).filename()).string();
-            });
-            Opts->SourceFiles = irFiles;
-            loadIR();
-
-            Opts = savedOptions;
-            Messages::SetTraceChannels(savedTraceChannels);
         }
     };
 
     Ref<Compiler> Compiler::Create(Ref<Options> options) {
         auto compiler = Ref<PepperCompiler>::New(options);
-        compiler->compileRuntime();
+        compiler->importRuntime();
         return compiler;
     }
 

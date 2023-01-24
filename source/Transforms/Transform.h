@@ -9,7 +9,17 @@
 #include "AST/AST.h"
 
 namespace pepper::ast {
+    struct SymbolTable {
+        llvm::StringMap<FunctionDef*> Functions;
+        llvm::StringMap<StructDef*> Structs;
+
+        SymbolTable() = default;
+        SymbolTable(const AST& ast);
+        Symbol* find(const Ident& name) const;
+    };
+
     struct Transformer {
+        DECLARE_RTTI(Transformer);
         virtual ~Transformer() = default;
         virtual void run(Ref<AST> parseTree) = 0;
     };

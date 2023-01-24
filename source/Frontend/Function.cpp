@@ -2,8 +2,8 @@
 #include "Frontend/Function.h"
 
 #include "Core/Exceptions.h"
-#include "Frontend/Context.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "Frontend/Struct.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/GlobalValue.h"
@@ -44,8 +44,9 @@ namespace pepper {
             }
             coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
         }
-        return Address{ReturnType,
-                       Context::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
+        return Address{
+            ReturnType,
+            PepContext::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
     UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params)
@@ -80,8 +81,6 @@ namespace pepper {
 
         if (Name.find(".__") != std::string::npos)
             return false;
-        if (Name == This->name())
-            return true;
 
         return true;
     }

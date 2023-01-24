@@ -9,11 +9,11 @@
 #include "llvm/ADT/SmallVector.h"
 
 namespace pepper {
-    template <typename T>
-    struct Vector : public llvm::SmallVector<T> {
-        using Super = llvm::SmallVector<T>;
-        using llvm::SmallVector<T>::SmallVector;
-        using llvm::SmallVector<T>::operator=;
+    template <typename T, unsigned int N = 0>
+    struct Vector : public llvm::SmallVector<T, N> {
+        using Super = llvm::SmallVector<T, N>;
+        using llvm::SmallVector<T, N>::SmallVector;
+        using llvm::SmallVector<T, N>::operator=;
 
         void remove(const T& item) {
             auto it = std::remove(this->begin(), this->end(), item);

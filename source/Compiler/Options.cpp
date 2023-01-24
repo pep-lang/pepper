@@ -15,19 +15,25 @@ namespace pepper {
 
     namespace cli {
         static cl::list<string> SourceFiles(cl::Sink, cl::Required, cl::desc("<input files>"));
+        static cl::list<string> ImportPaths("I", cl::Prefix, cl::desc("Import search path(s)"));
+        static cl::list<string> ForcedImports("import", cl::desc("Forced import for all modules"));
         static cl::opt<string> OutputPath("o", cl::desc("Output binary"), cl::value_desc("filename"));
         static cl::opt<string> BuildPath(
             "build", cl::desc("Build directory, defaults to ./build"), cl::value_desc("path"));
         static cl::opt<bool> EmitLLVM("emit-llvm", cl::desc("Emit LLVM IR"));
+        static cl::opt<bool> EmitDebugInfo("g", "emit-debug", cl::desc("Emit debugging information into binary"));
         static cl::opt<bool> Verbose("v", cl::desc("Verbose output"));
+        static cl::opt<bool> NoRuntime("no-runtime", cl::desc("Skip runtime compilation"));
         static cl::bits<TraceChannel> TraceChannels(
+            "T",
+            cl::Prefix,
             cl::desc("Trace channels to enable"),
-            cl::values(clEnumValN(BIT_IDX(TraceChannel::Codegen), "Tcodegen", "CodeGen"),
-                       clEnumValN(BIT_IDX(TraceChannel::AST), "Tast", "AST"),
-                       clEnumValN(BIT_IDX(TraceChannel::Parser), "Tparser", "Parser"),
-                       clEnumValN(BIT_IDX(TraceChannel::IR), "Tir", "IR"),
-                       clEnumValN(BIT_IDX(TraceChannel::DebugInfo), "Tdebuginfo", "DebugInfo"),
-                       clEnumValN(BIT_IDX(TraceChannel::ALL), "Tall", "All channels")));
+            cl::values(clEnumValN(BIT_IDX(TraceChannel::Codegen), "codegen", "CodeGen"),
+                       clEnumValN(BIT_IDX(TraceChannel::AST), "ast", "AST"),
+                       clEnumValN(BIT_IDX(TraceChannel::Parser), "parser", "Parser"),
+                       clEnumValN(BIT_IDX(TraceChannel::IR), "ir", "IR"),
+                       clEnumValN(BIT_IDX(TraceChannel::DebugInfo), "debuginfo", "DebugInfo"),
+                       clEnumValN(BIT_IDX(TraceChannel::ALL), "all", "All channels")));
     } // namespace cli
 
     static std::string PathToFilename(const std::string& path) {
@@ -55,8 +61,12 @@ namespace pepper {
             opts->ExeName = PathToFilename(cli::OutputPath);
         }
 
+        opts->ImportPaths.assign(cli::ImportPaths.begin(), cli::ImportPaths.end());
+
         opts->EmitLLVM = cli::EmitLLVM;
         opts->Verbose = cli::Verbose;
+        opts->CompileRuntime = !cli::NoRuntime;
+        opts->EmitDebugInfo = cli::EmitDebugInfo;
         opts->TraceChannels = cli::TraceChannels.getBits();
         return opts;
     }
@@ -64,6 +74,10 @@ namespace pepper {
     Ref<Options> Options::Defaults() {
         auto opts = Ref<Options>::New();
         opts->BuildDir = (std::filesystem::current_path() / ".pep" / "build").string();
+        opts->ForcedImports = {
+            "internals",
+            "range",
+        };
         return opts;
     }
 

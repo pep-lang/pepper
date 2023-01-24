@@ -26,8 +26,7 @@ namespace pepper {
         void generate(Ref<ast::AST> parseTree);
 
       protected:
-        template <typename N>
-        Address maybeCodegen(Ref<N> node) {
+        Address maybeCodegen(ast::Node* node) {
             return node ? codegen(node) : Address::Null();
         }
 
@@ -38,46 +37,47 @@ namespace pepper {
         void popScope();
 
         // Entry to polymorphic emit calls, use this to force generation of a node and its children
-        Address codegen(Ref<ast::Node> node);
+        Address codegen(const ast::Node* node);
 
         // individual AST -> IR transforms
-        Address emit(Ref<ast::SymbolRef> variableRef);
-        Address emit(Ref<ast::VariableDef> variableDef);
-        Address emit(Ref<ast::ThisDef> thisDef);
-        Address emit(Ref<ast::PointerLiteral> pointerLiteral);
-        Address emit(Ref<ast::StringLiteral> stringLiteral);
-        Address emit(Ref<ast::IntegerLiteral> intLiteral);
-        Address emit(Ref<ast::FloatLiteral> floatLiteral);
-        Address emit(Ref<ast::BoolLiteral> boolLiteral);
-        Address emit(Ref<ast::FieldDef> fieldDef);
-        Address emit(Ref<ast::MemberRef> memberRef);
-        Address emit(Ref<ast::ThisRef> thisRef);
-        Address emit(Ref<ast::ExternFunctionDef> externFuncDef);
-        Address emit(Ref<ast::FunctionDef> functionDef);
-        Address emit(Ref<ast::Return> ret);
-        Address emit(Ref<ast::FunctionCall> call);
-        Address emit(Ref<ast::MethodCall> call);
-        Address emit(Ref<ast::Assign> op);
-        Address emit(Ref<ast::CompoundAssign> op);
-        Address emit(Ref<ast::BinaryOp> op);
-        Address emit(Ref<ast::UnaryOp> op);
-        Address emit(Ref<ast::Branch> branch);
-        Address emit(Ref<ast::Ternary> ternary);
-        Address emit(Ref<ast::While> loop);
-        Address emit(Ref<ast::ForRange> loop);
-        Address emit(Ref<ast::SizeOf> sizeOf);
+        Address emit(const ast::SymbolRef* symbol);
+        Address emit(const ast::VariableDef* variableDef);
+        Address emit(const ast::ThisDef* thisDef);
+        Address emit(const ast::PointerLiteral* pointerLiteral);
+        Address emit(const ast::StringLiteral* stringLiteral);
+        Address emit(const ast::IntegerLiteral* intLiteral);
+        Address emit(const ast::FloatLiteral* floatLiteral);
+        Address emit(const ast::BoolLiteral* boolLiteral);
+        Address emit(const ast::FieldDef* fieldDef);
+        Address emit(const ast::MemberRef* memberRef);
+        Address emit(const ast::ThisRef* thisRef);
+        Address emit(const ast::ExternFunctionDef* externFuncDef);
+        Address emit(const ast::FunctionDef* functionDef);
+        Address emit(const ast::Return* ret);
+        Address emit(const ast::FunctionCall* call);
+        Address emit(const ast::MethodCall* call);
+        Address emit(const ast::Assign* op);
+        Address emit(const ast::CompoundAssign* op);
+        Address emit(const ast::BinaryOp* op);
+        Address emit(const ast::UnaryOp* op);
+        Address emit(const ast::Branch* branch);
+        Address emit(const ast::Ternary* ternary);
+        Address emit(const ast::While* loop);
+        Address emit(const ast::ForRange* loop);
+        Address emit(const ast::SizeOf* sizeOf);
 
-        void instantiate(Ref<ast::StructDef> structDef);
-        void instantiate(Ref<ast::FunctionDef> functionDef);
+        void instantiate(const ast::StructDef* structDef);
+        void instantiate(const ast::FunctionDef* functionDef);
 
-        void codegenStruct(Ref<ast::StructDef> structDef);
+        void codegenStruct(const ast::StructDef* structDef);
 
-        void codegenFunction(Ref<class UserFunction> function, Ref<ast::FunctionDef> funcDef);
+        void codegenFunction(Ref<class UserFunction> function, const ast::FunctionDef* funcDef);
         llvm::BasicBlock* codegenBlock(Ref<UserFunction> function,
-                                       Ref<ast::Block> block,
+                                       const ast::Block* block,
                                        llvm::BasicBlock* basicBlock = nullptr,
-                                       llvm::BasicBlock* nextBlock = nullptr);
-        Ref<Function> resolveFunction(Ref<ast::FunctionCall> call);
+                                       llvm::BasicBlock* nextBlock = nullptr,
+                                       Vector<Address> localRefs = {});
+        Ref<Function> resolveFunction(const ast::FunctionCall* call);
     };
 
 } // namespace pepper

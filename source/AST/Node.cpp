@@ -6,6 +6,7 @@
 #include <regex>
 
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/Query.h"
 
 namespace pepper::ast {
@@ -42,7 +43,7 @@ namespace pepper::ast {
             {"f64", {&TypeName::Double, 64, true, true}},
         };
 
-        assert(lhs.GenericTypes.empty() && rhs.GenericTypes.empty());
+        assert(!lhs.isGeneric() && !rhs.isGeneric());
 
         const auto lhsName = lhs.Name == "bool" ? "i1" : lhs.Name;
         const auto rhsName = rhs.Name == "bool" ? "i1" : rhs.Name;
@@ -74,27 +75,12 @@ namespace pepper::ast {
 
     std::string TypeName::toString() const {
         std::string genericTypes;
-        if (!GenericTypes.empty()) {
+        if (isGeneric()) {
             Vector<std::string> genericStrings =
                 Query(GenericTypes).select<std::string>([](auto& a) { return a.toString(); });
             genericTypes = "<" + llvm::join(genericStrings.begin(), genericStrings.end(), ", ") + ">";
         }
         return Name + genericTypes;
-    }
-
-    void TypeName::replace(const Ident& genericParam, const TypeName& genericArg) {
-        if (Name == genericParam) {
-            Name = genericArg;
-        }
-        for (auto& arg : GenericTypes) {
-            arg.replace(genericParam, genericArg);
-        }
-    }
-
-    void TypeName::specialize(const Specialization::GenericTypeMap& map) {
-        for (const auto& generic : map) {
-            replace(generic.getKey().str(), generic.getValue());
-        }
     }
 
     std::string Node::source(int width, int indent, const char* sep) const {
@@ -116,11 +102,50 @@ namespace pepper::ast {
         return llvm::formatv("{0}{1}", repeat(" ", indent), rtti()->name());
     }
 
-    Ref<Node> Node::clone() const {
-        return Ref<Node>{((const RttiInstance<Node>*)rtti())->clone(this)};
+    Node* Node::clone() const {
+        return ((const RttiInstance<Node>*)rtti())->clone(this);
     }
 
-    void Symbol::specialize(const Specialization& spec) {
-        Type.specialize(spec.TypeMap);
+    void Node::visit(struct Visitor& visitor) {}
+
+    SourceLocation Node::TokenSource;
+
+    Node::Node()
+        : Source(TokenSource) {
+        NodeHeap::Track(this);
     }
+
+    Node::~Node() {
+        // PEP_TRACE(TraceChannel::AST, "~Node: {0}", this);
+    }
+
+    std::list<std::unique_ptr<Node>> NodeHeap::FloatingNodes;
+
+    void NodeHeap::Track(Node* node) {
+        FloatingNodes.emplace_back(node);
+    }
+
+    void NodeHeap::Clear() {
+        FloatingNodes.clear();
+    }
+
+    void Visitor::visit(struct TypeName& type) {
+        visitType(type);
+    }
+
+    void Visitor::visit(NodeRef& ref) {
+        if (!ref || Visited.contains(ref))
+            return;
+        Visited.insert(ref);
+        enterNode(ref);
+        visitNode(ref);
+        ref->visit(*this);
+        exitNode(ref);
+    }
+
+    void Visitor::visit(Node* node) {
+        auto ref = NodeRef::Temp(node);
+        visit(ref);
+    }
+
 } // namespace pepper::ast

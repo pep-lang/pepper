@@ -129,8 +129,9 @@ namespace pepper::ast {
             return llvm::formatv("{0} {1}", Node::dump(indent), Value);
         }
 
-        static Ref<PointerLiteral> Null() {
-            return Ref<PointerLiteral>::New(0);
+        static PointerLiteral* Null() {
+            static PointerLiteral* nullRef = new PointerLiteral(0);
+            return nullRef;
         }
     };
 } // namespace pepper::ast

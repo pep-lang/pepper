@@ -15,22 +15,24 @@ namespace pepper::ast {
         DECLARE_RTTI(Block, Node);
 
         std::string Name;
-        Vector<Ref<Node>> Items;
+        NodeList<Node> Items;
 
-        Block(std::string name = "block", Vector<Ref<Node>> body = {})
+        Block(std::string name = "block", NodeList<Node> body = {})
             : Name(std::move(name))
-            , Items(std::move(body)) {
-        }
+            , Items(std::move(body)) {}
 
         Block(const Block& block)
             : Block(block.Name) {
-            for (const auto& node : block.Items) {
-                Items.emplace_back(node->clone());
-            }
+            Items.clone(block.Items);
         }
 
         Block(Block&&) = default;
-        Block& operator=(const Block&) = default;
+
+        Block& operator=(const Block& block) {
+            Name = block.Name;
+            Items.clone(block.Items);
+            return *this;
+        };
 
         std::string toString() const override {
             static int indent = 0;
@@ -54,18 +56,16 @@ namespace pepper::ast {
             return llvm::join(items, "\n");
         }
 
-        Ref<Node> clone() const override {
-            auto block = Ref<Block>::New(Name);
-            for (const auto& node : Items) {
-                auto clone = node->clone();
-                block->Items.emplace_back(clone);
-            }
+        Node* clone() const override {
+            auto block = new Block(Name);
+            block->Items.clone(Items);
             return block;
         }
 
-        void specialize(const Specialization& spec) override {
+        void visit(Visitor& visitor) override {
+            Node::visit(visitor);
             for (auto& node : Items) {
-                node->specialize(spec);
+                visitor.visit(node);
             }
         }
     };

@@ -6,50 +6,48 @@
 #include "CodeGenModule.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "Frontend/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {
-    using namespace pepper::ast;
-
     Ref<Scope> CodeGenerator::locals() {
-        return Context::get().locals();
+        return PepContext::get().locals();
     }
 
     Ref<Scope> CodeGenerator::globals() {
-        return Context::get().globals();
+        return PepContext::get().globals();
     }
 
     void CodeGenerator::pushFunction(Ref<UserFunction> function) {
-        Context::get().pushFunction(function);
+        PepContext::get().pushFunction(function);
         auto sp = Module->getDebugInfo()->emitFunction(function.get());
         Module->getDebugInfo()->pushScope(sp);
     }
 
     void CodeGenerator::pushScope(const Ident& name) {
-        Context::get().pushScope(name);
+        PepContext::get().pushScope(name);
         // TODO: how to handle anonymous scopes
     }
 
     void CodeGenerator::popScope() {
         Module->getDebugInfo()->popScope();
-        Context::get().popScope();
+        PepContext::get().popScope();
     }
 
-    Address CodeGenerator::emit(Ref<SymbolRef> variableRef) {
-        auto value = locals()->findSymbol(variableRef->Name);
+    Address CodeGenerator::emit(const ast::SymbolRef* symbol) {
+        auto value = locals()->findSymbol(symbol->Name);
         if (!value) {
-            throw CompileError(variableRef->Source, "No symbol named {0} could be found", variableRef->Name);
+            throw CompileError(symbol->Source, "No symbol named {0} could be found", symbol->Name);
         }
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<VariableDef> variableDef) {
+    Address CodeGenerator::emit(const ast::VariableDef* variableDef) {
         auto typeName = variableDef->Type;
         auto type = Types::get(typeName.toString());
         if (!type) {
@@ -71,36 +69,36 @@ namespace pepper {
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<StringLiteral> stringLiteral) {
+    Address CodeGenerator::emit(const ast::StringLiteral* stringLiteral) {
         auto value = Address(Types::Int8->pointer(), ir()->CreateGlobalString(stringLiteral->Value));
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<IntegerLiteral> intLiteral) {
+    Address CodeGenerator::emit(const ast::IntegerLiteral* intLiteral) {
         auto type = Types::get(intLiteral->type().Name);
         auto value = Address(type, llvm::ConstantInt::get(*type, intLiteral->Value));
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<FloatLiteral> floatLiteral) {
+    Address CodeGenerator::emit(const ast::FloatLiteral* floatLiteral) {
         auto type = Types::get(floatLiteral->type().Name);
         auto value = Address(type, llvm::ConstantFP::get(*type, floatLiteral->Value));
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<BoolLiteral> boolLiteral) {
+    Address CodeGenerator::emit(const ast::BoolLiteral* boolLiteral) {
         auto value = Address(Types::Bool, llvm::ConstantInt::getBool(*Types::Bool, boolLiteral->Value));
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<PointerLiteral> pointerLiteral) {
+    Address CodeGenerator::emit(const ast::PointerLiteral* pointerLiteral) {
         assert(pointerLiteral->Value == 0);
         auto type = Types::UInt8->pointer();
         auto value = Address(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
         return value;
     }
 
-    Address CodeGenerator::emit(Ref<SizeOf> sizeOf) {
+    Address CodeGenerator::emit(const ast::SizeOf* sizeOf) {
         auto structDesc = Struct::get(sizeOf->Type.toString());
         if (structDesc)
             return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, structDesc->size()));
@@ -110,58 +108,58 @@ namespace pepper {
         return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, type->size()));
     }
 
-    Address CodeGenerator::codegen(Ref<Node> node) {
+    Address CodeGenerator::codegen(const ast::Node* node) {
         PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
         Module->getDebugInfo()->setSourceLocation(node->Source);
 
         Address value;
-        if (node->is<BinaryOp>())
-            value = emit(node.as<BinaryOp>());
-        else if (node->is<UnaryOp>())
-            value = emit(node.as<UnaryOp>());
-        else if (node->is<Branch>())
-            value = emit(node.as<Branch>());
-        else if (node->is<Ternary>())
-            value = emit(node.as<Ternary>());
-        else if (node->is<While>())
-            value = emit(node.as<While>());
-        else if (node->is<ForRange>())
-            value = emit(node.as<ForRange>());
-        else if (node->is<ThisDef>())
-            value = emit(node.as<ThisDef>());
-        else if (node->is<FieldDef>())
-            value = emit(node.as<FieldDef>());
-        else if (node->is<VariableDef>())
-            value = emit(node.as<VariableDef>());
-        else if (node->is<ThisRef>())
-            value = emit(node.as<ThisRef>());
-        else if (node->is<MemberRef>())
-            value = emit(node.as<MemberRef>());
-        else if (node->is<SymbolRef>())
-            value = emit(node.as<SymbolRef>());
-        else if (node->is<ExternFunctionDef>())
-            value = emit(node.as<ExternFunctionDef>());
-        else if (node->is<FunctionDef>())
-            value = emit(node.as<FunctionDef>());
-        else if (node->is<Return>())
-            value = emit(node.as<Return>());
-        else if (node->is<MethodCall>())
-            value = emit(node.as<MethodCall>());
-        else if (node->is<FunctionCall>())
-            value = emit(node.as<FunctionCall>());
-        else if (node->is<PointerLiteral>())
-            value = emit(node.as<PointerLiteral>());
-        else if (node->is<StringLiteral>())
-            value = emit(node.as<StringLiteral>());
-        else if (node->is<FloatLiteral>())
-            value = emit(node.as<FloatLiteral>());
-        else if (node->is<IntegerLiteral>())
-            value = emit(node.as<IntegerLiteral>());
-        else if (node->is<BoolLiteral>())
-            value = emit(node.as<BoolLiteral>());
-        else if (node->is<SizeOf>())
-            value = emit(node.as<SizeOf>());
-        else if (node->is<None>())
+        if (node->is<ast::BinaryOp>())
+            value = emit(node->as<ast::BinaryOp>());
+        else if (node->is<ast::UnaryOp>())
+            value = emit(node->as<ast::UnaryOp>());
+        else if (node->is<ast::Branch>())
+            value = emit(node->as<ast::Branch>());
+        else if (node->is<ast::Ternary>())
+            value = emit(node->as<ast::Ternary>());
+        else if (node->is<ast::While>())
+            value = emit(node->as<ast::While>());
+        else if (node->is<ast::ForRange>())
+            value = emit(node->as<ast::ForRange>());
+        else if (node->is<ast::ThisDef>())
+            value = emit(node->as<ast::ThisDef>());
+        else if (node->is<ast::FieldDef>())
+            value = emit(node->as<ast::FieldDef>());
+        else if (node->is<ast::VariableDef>())
+            value = emit(node->as<ast::VariableDef>());
+        else if (node->is<ast::ThisRef>())
+            value = emit(node->as<ast::ThisRef>());
+        else if (node->is<ast::MemberRef>())
+            value = emit(node->as<ast::MemberRef>());
+        else if (node->is<ast::SymbolRef>())
+            value = emit(node->as<ast::SymbolRef>());
+        else if (node->is<ast::ExternFunctionDef>())
+            value = emit(node->as<ast::ExternFunctionDef>());
+        else if (node->is<ast::FunctionDef>())
+            value = emit(node->as<ast::FunctionDef>());
+        else if (node->is<ast::Return>())
+            value = emit(node->as<ast::Return>());
+        else if (node->is<ast::MethodCall>())
+            value = emit(node->as<ast::MethodCall>());
+        else if (node->is<ast::FunctionCall>())
+            value = emit(node->as<ast::FunctionCall>());
+        else if (node->is<ast::PointerLiteral>())
+            value = emit(node->as<ast::PointerLiteral>());
+        else if (node->is<ast::StringLiteral>())
+            value = emit(node->as<ast::StringLiteral>());
+        else if (node->is<ast::FloatLiteral>())
+            value = emit(node->as<ast::FloatLiteral>());
+        else if (node->is<ast::IntegerLiteral>())
+            value = emit(node->as<ast::IntegerLiteral>());
+        else if (node->is<ast::BoolLiteral>())
+            value = emit(node->as<ast::BoolLiteral>());
+        else if (node->is<ast::SizeOf>())
+            value = emit(node->as<ast::SizeOf>());
+        else if (node->is<ast::None>())
             ;
         else
             throw InternalCompilerError("Unknown AST node");
@@ -181,30 +179,27 @@ namespace pepper {
     void CodeGenerator::generate(Ref<ast::AST> tree) {
         PEP_TRACE(TraceChannel::Codegen, "Code generation:");
         PEP_TRACE(TraceChannel::Codegen, "Instantiation pass:");
-        for (const auto& root : tree->roots()) {
-            try {
-                if (root->is<StructDef>())
-                    instantiate(root.as<StructDef>());
-                else
-                    instantiate(root.as<FunctionDef>());
-            } catch (CompileError& ce) {
-                Messages::Report<Error>(ce.what());
-            } catch (InternalCompilerError& ice) {
-                Messages::Report<Error>(ice.what());
-            }
+        try {
+            for (const auto& st : tree->structs())
+                instantiate(st);
+            for (const auto& fn : tree->functions())
+                instantiate(fn);
+        } catch (CompileError& ce) {
+            Messages::Report<Error>(ce.what());
+        } catch (InternalCompilerError& ice) {
+            Messages::Report<Error>(ice.what());
         }
+
         PEP_TRACE(TraceChannel::Codegen, "Codegen pass:")
-        for (const auto& root : tree->roots()) {
-            try {
-                if (root->is<StructDef>())
-                    codegenStruct(root.as<StructDef>());
-                else
-                    codegen(root);
-            } catch (CompileError& ce) {
-                Messages::Report<Error>(ce.what());
-            } catch (InternalCompilerError& ice) {
-                Messages::Report<Error>(ice.what());
-            }
+        try {
+            for (auto& st : tree->structs())
+                codegenStruct(st);
+            for (auto& fn : tree->functions())
+                codegen(fn);
+        } catch (CompileError& ce) {
+            Messages::Report<Error>(ce.what());
+        } catch (InternalCompilerError& ice) {
+            Messages::Report<Error>(ice.what());
         }
     }
 } // namespace pepper

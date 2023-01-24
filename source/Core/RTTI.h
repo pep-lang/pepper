@@ -6,8 +6,8 @@
 namespace pepper {
 
     class RTTI {
-        const char* Name;
         const RTTI* Base;
+        const char* Name;
 
       protected:
         constexpr RTTI(const RTTI* base = nullptr, const char* name = nullptr)

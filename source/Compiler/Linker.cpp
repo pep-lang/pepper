@@ -135,6 +135,7 @@ namespace pepper {
             "/debug",
             "/entry:main",
             "/defaultlib:ucrt",
+            "/subsystem:console",
             //"/verbose",
             //"/verbose:lib",
         };

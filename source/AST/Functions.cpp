@@ -1,9 +1,7 @@
 
 #include "AST/Nodes.h"
 #include "AST/Param.h"
-#include "Core/Exceptions.h"
 #include "Core/Query.h"
-#include "Frontend/Runtime.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper::ast {
@@ -23,13 +21,17 @@ namespace pepper::ast {
         : Symbol(functionTy(returnType, params, vararg), name)
         , ReturnType(returnType)
         , Parameters(params)
-        , Vararg(vararg) {
+        , Vararg(vararg) {}
+
+    std::string FunctionNode::signature() const {
+        Vector<std::string> types = Query(Parameters).select<std::string>([](auto& p) { return p.Type.toString(); });
+        std::string sig =
+            llvm::formatv("{0} {1}({2:$[, ]})", ReturnType, Name, llvm::make_range(types.begin(), types.end()));
+        return sig;
     }
 
     std::string FunctionNode::toString() const {
-        Vector<std::string> types = Query(Parameters).select<std::string>([](auto p) { return p.Type.toString(); });
-        std::string sig = llvm::formatv(
-            "{0} {1} {2}({3})", Node::toString(), ReturnType, Name, llvm::join(types.begin(), types.end(), ", "));
+        std::string sig = llvm::formatv("{0} {1}", Node::toString(), signature());
         return sig;
     }
 
@@ -43,56 +45,18 @@ namespace pepper::ast {
                              llvm::join(types.begin(), types.end(), ", "));
     }
 
-    void FunctionNode::specialize(const Specialization& spec) {
-        if (auto functionSpec = spec.as<FunctionSpecialization>()) {
-            GenericFunction = functionSpec->Function;
-            for (const auto& kv : spec.TypeMap) {
-                const auto& arg = kv.getValue();
-                GenericArgs.emplace_back(arg);
-            }
-            Name = TypeName(Name, GenericArgs).toString();
-        }
-        ReturnType.specialize(spec.TypeMap);
-        for (auto& param : Parameters) {
-            param.Type.specialize(spec.TypeMap);
-        }
-    }
-
-    Ref<Node> FunctionDef::clone() const {
-        auto function = Ref<FunctionDef>::New(ReturnType, Name, Parameters, Vararg);
+    Node* FunctionDef::clone() const {
+        auto function = new FunctionDef(ReturnType, Name, Parameters, Vararg);
+        function->GenericParams = GenericParams;
         function->Body = Body->cloneAs<Block>();
         return function;
-    }
-
-    void FunctionDef::specialize(const Specialization& spec) {
-        FunctionNode::specialize(spec);
-        Body->specialize(spec);
     }
 
     std::string FunctionDef::dump(int indent) const {
         const char* sep = "\n";
         auto indentStr = repeat(" ", indent);
-        auto contents =
-            llvm::join_items(sep, FunctionNode::dump(indent) + " {", Body->dump(indent + 2), indentStr + "}");
-        return contents;
-    }
-
-    void Return::specialize(const Specialization& spec) {
-        Type.specialize(spec.TypeMap);
-        Value->specialize(spec);
-    }
-
-    Ref<ExternFunctionDef> ExternFunctionDef::Find(const Ident& name) {
-        for (const auto& import : Runtime::Imports()) {
-            if (import.Name == name) {
-                Params params;
-                for (const auto& param : import.Params) {
-                    params.emplace_back(param.second, param.first);
-                }
-                return Ref<ExternFunctionDef>::New(import.Return, import.Name, params, import.Vararg);
-            }
-        }
-        return nullptr;
+        auto contents = Body->Items.size() ? llvm::join_items(sep, " {", Body->dump(indent + 2), indentStr + "}") : "";
+        return FunctionNode::dump(indent) + contents;
     }
 
 } // namespace pepper::ast

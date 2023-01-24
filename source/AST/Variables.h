@@ -10,18 +10,16 @@ namespace pepper::ast {
         DECLARE_RTTI(VariableDef, Symbol);
         AST_NODE_POD_CLONE(VariableDef);
 
-        Ref<Expression> Default;
+        TNodeRef<Expression> Default;
 
         VariableDef(
-            const TypeName& type, const Ident& identifier, Ref<Expression> defaultValue = nullptr, bool hidden = false)
+            const TypeName& type, const Ident& identifier, Expression* defaultValue = nullptr, bool hidden = false)
             : Symbol(type, identifier, hidden)
-            , Default(std::move(defaultValue)) {
-        }
+            , Default(defaultValue) {}
 
         VariableDef(const VariableDef& rhs)
             : Symbol(rhs)
-            , Default{rhs.Default ? rhs.Default->cloneAs<Expression>() : Ref<Expression>()} {
-        }
+            , Default{rhs.Default ? rhs.Default->cloneAs<Expression>() : nullptr} {}
 
         std::string toString() const override {
             auto str = std::string(llvm::formatv("{0} {1} {2}", Node::toString(), Type, Name));
@@ -37,10 +35,10 @@ namespace pepper::ast {
             return llvm::formatv("{0} {1} {2}{3}", Node::dump(indent), Type, Name, def);
         }
 
-        void specialize(const Specialization& spec) override {
-            Symbol::specialize(spec);
+        void visit(Visitor& visitor) override {
+            Symbol::visit(visitor);
             if (Default)
-                Default->specialize(spec);
+                visitor.visit(Default);
         }
     };
 
@@ -68,9 +66,9 @@ namespace pepper::ast {
         explicit SymbolRef(const TypeName& typeName)
             : Type(typeName)
             , Name(typeName.toString()) {
-            if (Type.GenericTypes.empty()) {
-                Type.Name.clear();
-            }
+            //            if (Type.GenericTypes.empty()) {
+            //                Type.Name.clear();
+            //            }
         }
 
         const TypeName& type() const override {
@@ -85,6 +83,11 @@ namespace pepper::ast {
 
         std::string dump(int indent) const override {
             return llvm::formatv("{0} {1}", Node::dump(indent), Name);
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Type);
         }
     };
 } // namespace pepper::ast

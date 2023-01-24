@@ -4,8 +4,8 @@
 
 #include "Core/Exceptions.h"
 #include "Core/Vector.h"
-#include "Frontend/Context.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -132,10 +132,10 @@ namespace pepper {
     }
 
     Ref<Type> Types::add(Ref<Type> type, const Vector<Ident>& aliases) {
-        return Context::get().types()->addType(type, aliases);
+        return PepContext::get().types()->addType(type, aliases);
     }
 
     Ref<Type> Types::get(const Ident& name) {
-        return Context::get().types()->getType(name);
+        return PepContext::get().types()->getType(name);
     }
 } // namespace pepper

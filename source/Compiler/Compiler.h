@@ -18,8 +18,8 @@ namespace pepper {
     class Compiler {
       public:
         static Ref<Compiler> Create(Ref<Options> options);
-
-        virtual Vector<Ref<CodeGenModule>> compile() = 0;
+        
+        virtual Ref<CodeGenModule> compile() = 0;
         virtual void link() = 0;
     };
 } // namespace pepper

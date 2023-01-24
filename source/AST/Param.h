@@ -13,13 +13,12 @@ namespace pepper::ast {
     struct Param {
         TypeName Type;
         Ident Name;
-        Ref<Expression> Default;
+        Expression* Default = nullptr;
 
-        Param(Ident identifier, TypeName type, Ref<Expression> defaultValue = nullptr)
+        Param(Ident identifier, TypeName type, Expression* defaultValue = nullptr)
             : Name(std::move(identifier))
             , Type(std::move(type))
-            , Default(std::move(defaultValue)) {
-        }
+            , Default(defaultValue) {}
 
         Param(const Param& rhs) = default;
         Param(Param&& rhs) = default;

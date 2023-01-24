@@ -78,7 +78,7 @@ externParameter
     ;
 
 useStatement
-    : Use StringLiteral ';'
+    : Use (StringLiteral|Identifier) (As Identifier)? ';'
     ;
 
 expressionStatement

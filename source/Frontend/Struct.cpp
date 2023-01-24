@@ -4,8 +4,8 @@
 #include "CodeGen/Address.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
-#include "Frontend/Context.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "LLVMUtils.h"
 #include "llvm/IR/DataLayout.h"
 
@@ -14,7 +14,7 @@ namespace pepper {
     Struct::Struct(llvm::Module& module, const Ident& name, const Params& fields, const Params& ctorParams)
         : Name(name) {
         // Create the LLVM struct type out of the field types
-        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return *f.Type; });
+        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return f.Type->llvmType(); });
         auto llvmType = llvm::StructType::create(fieldTypes, Name);
 
         // Add underlying struct as struct.<struct>
@@ -36,12 +36,14 @@ namespace pepper {
 
     Ref<Struct> Struct::New(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
         Ref<Struct> newStruct = Ref<Struct>::New(module, name, fields, newParams);
-        Context::get().globals()->Structs[name] = newStruct;
+        auto globals = PepContext::get().globals();
+        globals->Structs[name] = newStruct;
+        globals->Functions[newStruct->Constructor->name()] = newStruct->Constructor;
         return newStruct;
     }
 
     Ref<Struct> Struct::get(const Ident& name) {
-        return Context::get().globals()->Structs.lookup(name);
+        return PepContext::get().globals()->Structs.lookup(name);
     }
 
     Address Struct::getMember(llvm::Value* instance, const Ident& name) const {
@@ -90,8 +92,7 @@ namespace pepper {
 
     StructType::StructType(const Struct* st, const Ident& name, llvm::Type* type)
         : Type(name, type)
-        , StructDesc(st) {
-    }
+        , StructDesc(st) {}
 
     Ref<RefType> StructType::refType() const {
         return StructDesc->refType();
@@ -135,8 +136,7 @@ namespace pepper {
 
     RefType::RefType(Ref<StructType> structType)
         : PointerType(structType->StructDesc->name(), structType)
-        , StructTy(structType) {
-    }
+        , StructTy(structType) {}
 
     Ref<StructType> RefType::structType() const {
         return pointeeType().as<StructType>();

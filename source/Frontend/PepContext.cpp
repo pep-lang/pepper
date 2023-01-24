@@ -1,47 +1,42 @@
 
-#include "Frontend/Context.h"
+#include "Frontend/PepContext.h"
 #include <cassert>
-#include <utility>
 
 #include "CodeGen/CodeGenModule.h"
 #include "Frontend/Function.h"
-#include "Frontend/Runtime.h"
 #include "Frontend/Scope.h"
 #include "Frontend/Types.h"
-#include "JIT/Executor.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 
 namespace pepper {
-    Context* Context::Instance = nullptr;
+    PepContext* PepContext::Instance = nullptr;
 
-    Context& Context::get() {
+    PepContext& PepContext::get() {
         assert(Instance);
         return *Instance;
     }
 
-    Ref<llvm::IRBuilderBase> Context::ir() {
+    Ref<llvm::IRBuilderBase> PepContext::ir() {
         return get().locals()->builder();
     }
 
-    Context::Context(Ref<CodeGenModule> module) {
+    PepContext::PepContext() {
         assert(Instance == nullptr);
         Instance = this;
 
-        Module = std::move(module);
+        Context = std::make_unique<llvm::LLVMContext>();
 
-        TypeMap = Ref<Types>::New(Module->getContext());
+        TypeMap = Ref<Types>::New(*Context);
 
-        Builtins = Ref<Runtime>::New(Module);
-        Globals = Ref<Scope>::New("Globals", Builtins);
+        // Builtins = Ref<Runtime>::New(Module);
+        Globals = Ref<Scope>::New("Globals");
         Locals = Globals;
     }
 
-    Context::~Context() {
+    PepContext::~PepContext() {
         Instance = nullptr;
     }
 
-    void Context::pushFunction(Ref<UserFunction> function) {
+    void PepContext::pushFunction(Ref<UserFunction> function) {
         pushScope(function->name(), function->Builder);
         Locals->FunctionTarget = function;
         if (function->is<Method>()) {
@@ -49,12 +44,12 @@ namespace pepper {
         }
     }
 
-    void Context::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
+    void PepContext::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
         Locals = Ref<Scope>::New(name, Locals);
         Locals->Builder = builder;
     }
 
-    void Context::popScope() {
+    void PepContext::popScope() {
         Locals = Locals->Outer == Globals ? Globals : Locals->Outer;
     }
 

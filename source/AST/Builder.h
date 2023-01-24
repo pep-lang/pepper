@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "AST/AST.h"
 #include "AST/Nodes.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
@@ -13,60 +12,41 @@
 namespace pepper::ast {
     class Builder {
       public:
-        template <typename N, typename... Args>
-        Ref<N> NewAt(const SourceLocation& source, Args&&... args) {
-            auto node = Ref<N>::New(std::forward<decltype(args)>(args)...);
-            node->Source = source;
-            trace(node);
-            return node;
-        }
-
-        template <typename N, typename... Args>
-        Ref<N> New(Args&&... args) {
-            return NewAt<N>(Source, std::forward<decltype(args)>(args)...);
-        }
-
         SourceLocation Source;
 
         virtual ~Builder() = default;
 
-        [[nodiscard]] virtual Ref<StructDef> findStruct(const TypeName& name) const = 0;
-        [[nodiscard]] virtual Ref<FunctionDef> findFunction(const Ident& name) const = 0;
-        [[nodiscard]] virtual Ref<VariableDef> findVariable(const Ident& name) const = 0;
-        [[nodiscard]] virtual Ref<Symbol> findSymbol(const Ident& name) const = 0;
-
-        virtual void beginStruct(Ref<StructDef> st) = 0;
+        virtual void beginStruct(StructDef* st) = 0;
         virtual void endStruct() = 0;
+        virtual Resolvable<StructDef> structTarget() const = 0;
 
-        virtual void beginExtension(Ref<StructDef> structDef) = 0;
+        virtual void beginExtension(ExtensionDef* ext) = 0;
         virtual void endExtension() = 0;
+        virtual ExtensionDef* extensionTarget() const = 0;
 
-        virtual Ref<StructDef> structTarget() const = 0;
-
-        virtual void beginFunction(Ref<FunctionDef> func) = 0;
+        virtual void beginFunction(FunctionDef* func) = 0;
         virtual void endFunction() = 0;
-        virtual Ref<FunctionDef> functionTarget() const = 0;
+        virtual FunctionDef* functionTarget() const = 0;
 
-        virtual void beginBlock(Ref<Block> block) = 0;
+        virtual void beginBlock(Block* block) = 0;
         virtual void endBlock() = 0;
-        virtual Ref<Block> block() const = 0;
+        virtual Block* block() const = 0;
 
         virtual void beginScope(const Ident& name = "Anonymous") = 0;
         virtual void endScope() = 0;
 
-        virtual void pushRValue(Ref<Node> value) = 0;
-        virtual Ref<Node> popRValue() = 0;
-        virtual Ref<Node> peekRValue(unsigned int idx) const = 0;
+        virtual void pushRValue(Node* value) = 0;
+        virtual Node* popRValue() = 0;
+        virtual Node* peekRValue(unsigned int idx) const = 0;
 
-        virtual void pushLValue(Ref<Node> value) = 0;
-        virtual Ref<Node> popLValue() = 0;
-        virtual Ref<Node> peekLValue(unsigned int idx) const = 0;
+        virtual void pushLValue(Node* value) = 0;
+        virtual Node* popLValue() = 0;
+        virtual Node* peekLValue(unsigned int idx) const = 0;
 
-        virtual Ref<StructDef> specializeStruct(const TypeName& structSpec) = 0;
-        virtual Ref<FunctionDef> specializeFunction(const TypeName& functionSpec) = 0;
-        virtual void symbol(Ref<VariableDef> var) = 0;
-        virtual void insert(Ref<Node> expr) = 0;
+        virtual void symbol(VariableDef* var) = 0;
+        virtual void insert(Node* expr) = 0;
+        virtual void import(Import* import) = 0;
 
-        virtual void trace(const Ref<Node>& node) const = 0;
+        virtual void trace(const Node* node) const = 0;
     };
 } // namespace pepper::ast

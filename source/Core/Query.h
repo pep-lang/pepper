@@ -6,116 +6,130 @@
 
 #include <optional>
 
+#include "Core/PolyIList.h"
 #include "Core/Vector.h"
-#include "llvm/ADT/ArrayRef.h"
 
 namespace pepper {
-    template <typename T>
-    struct QueryInst;
 
-    template <typename T>
-    QueryInst<T> Query(llvm::ArrayRef<T> arr);
+    template <typename T, typename It = decltype(std::declval<const Vector<T, 0>>().begin())>
+    struct Query {
+        Vector<T, 0> Src;
+        It Begin;
+        It End;
 
-    template <typename T>
-    QueryInst<T> Query(const Vector<T>& arr);
-
-    template <typename T>
-    QueryInst<T> Query(const std::vector<T>& arr);
-
-    template <typename T>
-    struct QueryInst {
-        Vector<T> Src;
-        llvm::ArrayRef<T> Ref;
-
-        friend QueryInst<T> Query<T>(llvm::ArrayRef<T>);
-        friend QueryInst<T> Query<T>(const Vector<T>&);
-        friend QueryInst<T> Query<T>(const std::vector<T>&);
-
-        /* implicit */ QueryInst(llvm::ArrayRef<T> ref)
-            : Ref(ref) {
+        Query(It beginIt, It endIt)
+            : Begin(beginIt)
+            , End(endIt) {
         }
 
-        // used internally to movce from one operation to the next
-        explicit QueryInst(Vector<T>&& src)
-            : Src(std::move(src))
-            , Ref(Src) {
+        // Construct from Vector
+        template <unsigned int N>
+        explicit Query(const Vector<T, N>& src)
+            : Query(src.begin(), src.end()) {
+        }
+
+        // Construct from poly_ilist
+        template <typename N>
+        explicit Query(const poly_ilist<T, N>& src)
+            : Query(src.begin(), src.end()) {
+        }
+
+        // construct from std::vector
+        explicit Query(const std::vector<T>& src)
+            : Query(src.begin(), src.end()) {
         }
 
         // used internally to move from one operation to the next
-        explicit QueryInst(QueryInst<T>&& src) noexcept
+        template <unsigned int N>
+        explicit Query(Vector<T, N>&& src)
             : Src(std::move(src))
-            , Ref(Src) {
+            , Begin(Src.begin())
+            , End(Src.end()) {
+        }
+
+        // used internally to move from one operation to the next
+        explicit Query(Query&& src) noexcept
+            : Src(std::move(src))
+            , Begin(Src.begin())
+            , End(Src.end()) {
         }
 
       public:
+        It begin() const {
+            return Begin;
+        }
+
+        It end() const {
+            return End;
+        }
+
         template <typename U>
-        QueryInst<U> select(std::function<U(const T&)> selector = [](const auto& e) { return U{e}; }) const {
+        Query<U> select(std::function<U(const T&)> selector = [](const auto& e) { return U{e}; }) const {
             Vector<U> results;
-            std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
-            return QueryInst<U>(std::move(results));
+            std::transform(begin(), end(), std::back_inserter(results), selector);
+            return Query<U>(std::move(results));
         }
 
-        QueryInst map(std::function<T(const T&)> func) {
+        Query map(std::function<T(const T&)> func) {
             Vector<T> results;
-            std::transform(Ref.begin(), Ref.end(), std::back_inserter(results), func);
-            return QueryInst(std::move(results));
+            std::transform(begin(), end(), std::back_inserter(results), func);
+            return Query(std::move(results));
         }
 
-        QueryInst where(std::function<bool(const T&)> selector) const {
+        Query where(std::function<bool(const T&)> selector) const {
             Vector<T> results;
-            std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), selector);
-            return QueryInst(std::move(results));
+            std::copy_if(begin(), end(), std::back_inserter(results), selector);
+            return Query(std::move(results));
         }
 
-        QueryInst without(std::function<bool(const T&)> selector) const {
+        Query without(std::function<bool(const T&)> selector) const {
             Vector<T> results;
-            std::copy_if(Ref.begin(), Ref.end(), std::back_inserter(results), [&selector](const T& item) {
-                return !selector(item);
-            });
-            return QueryInst(std::move(results));
+            std::copy_if(
+                begin(), end(), std::back_inserter(results), [&selector](const T& item) { return !selector(item); });
+            return std::move(results);
         }
 
-        QueryInst range(size_t start, ssize_t len = -1) const {
+        Query range(size_t start, ssize_t len = -1) const {
             Vector<T> results;
-            auto startIt = Ref.begin() + start;
-            len = (len == -1) ? std::distance(startIt, Ref.end()) : len;
+            auto startIt = begin() + start;
+            len = (len == -1) ? std::distance(startIt, end()) : len;
             std::copy_n(startIt, len, std::back_inserter(results));
-            return QueryInst(std::move(results));
+            return std::move(results);
         }
 
-        QueryInst& concat(llvm::ArrayRef<T> rhs) {
-            if (Ref.size() != Src.size()) {
-                std::copy(Ref.begin(), Ref.end(), std::back_inserter(Src));
-                Ref = Src;
-            }
-            std::copy(rhs.begin(), rhs.end(), std::back_inserter(Ref));
+        Query& concat(It beginIt, It endIt) {
+            std::copy(beginIt, endIt, std::back_inserter(Src));
             return *this;
         }
 
+        Query& concat(llvm::ArrayRef<T> rhs) {
+            return concat(rhs.begin(), rhs.end());
+        }
+
         ssize_t indexOf(const T& item, size_t startIndex = 0) const {
-            auto it = std::find(Ref.begin() + startIndex, Ref.end(), item);
-            if (it != Ref.end()) {
-                return std::distance(Ref.begin(), it);
+            auto it = std::find(begin() + startIndex, end(), item);
+            if (it != end()) {
+                return std::distance(begin(), it);
             }
             return -1;
         }
 
         ssize_t indexOf(std::function<bool(const T&)> pred, size_t startIndex = 0) const {
-            auto it = std::find_if(Ref.begin() + startIndex, Ref.end(), pred);
-            if (it != Ref.end()) {
-                return std::distance(Ref.begin(), it);
+            auto it = std::find_if(begin() + startIndex, end(), pred);
+            if (it != end()) {
+                return std::distance(begin(), it);
             }
             return -1;
         }
 
-        QueryInst& each(std::function<void(const T&)> func) {
-            std::for_each(Ref.begin(), Ref.end(), func);
+        Query& each(std::function<void(const T&)> func) {
+            std::for_each(begin(), end(), func);
             return *this;
         }
 
         std::optional<T> find(std::function<bool(const T&)> pred) const {
-            auto it = std::find_if(Ref.begin(), Ref.end(), pred);
-            if (it != Ref.end()) {
+            auto it = std::find_if(begin(), end(), pred);
+            if (it != end()) {
                 return *it;
             }
             return {};
@@ -126,22 +140,19 @@ namespace pepper {
         }
 
         Vector<T> toVector() {
-            return Vector<T>{Ref.begin(), Ref.end()};
+            return Vector<T>{begin(), end()};
         }
     };
 
     template <typename T>
-    QueryInst<T> Query(llvm::ArrayRef<T> arr) {
-        return arr;
-    }
+    Query(const std::vector<T>& v) -> Query<T, decltype(v.begin())>;
 
     template <typename T>
-    QueryInst<T> Query(const Vector<T>& arr) {
-        return llvm::ArrayRef<T>(arr);
-    }
+    Query(const Vector<T>& v) -> Query<T, decltype(v.begin())>;
 
     template <typename T>
-    QueryInst<T> Query(const std::vector<T>& arr) {
-        return llvm::ArrayRef<T>(arr);
-    }
+    Query(Vector<T>&& v) -> Query<T, decltype(v.begin())>;
+
+    template <typename T, typename N>
+    Query(const poly_ilist<T, N>& list) -> Query<T, decltype(list.begin())>;
 } // namespace pepper

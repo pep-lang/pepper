@@ -25,7 +25,7 @@ namespace pepper {
 
       public:
         ParserListener()
-            : Tree(Ref<AST>::New()) {
+            : Tree(Ref<AST>::New(AST::TreeType::SourceFile)) {
             builder = Tree->builder();
         }
 
@@ -33,60 +33,68 @@ namespace pepper {
             return Tree;
         }
 
-        void lvaluePush(Ref<Node> val) {
+        void lvaluePush(Node* val) {
             // std::cout << "lpush: " << val->toString() << std::endl;
-            builder->pushLValue(std::move(val));
+            builder->pushLValue(val);
         }
 
         template <typename N>
-        Ref<N> lvaluePop() {
+        N* lvaluePop() {
             auto val = builder->popLValue();
             // unwrap pending node if found
-            if (val->is<Pending>() && val.as<Pending>()->Type->is(RTTI::of<N>()))
-                return val.as<Pending>()->Value.as<N>();
-            // std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
-            if (val->is<N>()) {
-                return std::static_pointer_cast<N>(val);
+            if (val) {
+                if (val->is<Pending>() && val->as<Pending>()->Type->is(RTTI::of<N>())) {
+                    auto value = val->as<Pending>()->Value;
+                    return value ? value->as<N>() : nullptr;
+                }
+
+                // std::cout << "lpop:  " << (val ? val->toString() : "null") << std::endl;
+                if (val->is<N>()) {
+                    return val->as<N>();
+                }
             }
+
             throw InternalCompilerError("Attempted to pop {0} from AST l-value stack, found {1} instead",
                                         RTTI::of<N>()->name(),
                                         RTTI::of(*val)->name());
         }
 
         template <typename N>
-        Ref<N> lvaluePeek(unsigned int idx = 0) {
+        N* lvaluePeek(unsigned int idx = 0) {
             auto val = builder->peekLValue(idx);
             // unwrap pending node if found
             if constexpr (!std::is_same_v<N, Pending>) {
-                if (val && val->is<Pending>() && val.as<Pending>()->Type->is(RTTI::of<N>()))
-                    return val.as<Pending>()->Value.as<N>();
+                if (val && val->is<Pending>() && val->as<Pending>()->Type->is(RTTI::of<N>())) {
+                    auto value = val->as<Pending>()->Value;
+                    return value ? value->as<N>() : nullptr;
+                }
             }
             if (val && val->is<N>()) {
-                return std::static_pointer_cast<N>(val);
+                return val->as<N>();
             }
             return nullptr;
         }
 
-        bool rvaluePush(Ref<Node> val) {
+        bool rvaluePush(Node* val) {
             // Only bother tracking this rvalue if there is a pending l-value on the stack to receive it
             if (lvaluePeek<Pending>() || lvaluePeek<Node>()) {
-                builder->pushRValue(std::move(val));
+                builder->pushRValue(val);
                 return true;
             }
             return false;
         }
 
-        void rvaluePushOrInsert(Ref<Node> val) {
+        void rvaluePushOrInsert(Node* val) {
             if (rvaluePush(val))
                 return;
             builder->insert(val);
         }
 
         template <typename N>
-        Ref<N> rvaluePop() {
+        N* rvaluePop() {
             auto val = builder->popRValue();
             if (val->is<N>()) {
-                return std::static_pointer_cast<N>(val);
+                return val->as<N>();
             }
             throw InternalCompilerError("Attempted to pop {0} from AST r-value stack, found {1} instead",
                                         RTTI::of<N>()->name(),
@@ -94,10 +102,10 @@ namespace pepper {
         }
 
         template <typename N>
-        Ref<N> rvaluePeek(unsigned int idx) {
+        N* rvaluePeek(unsigned int idx) {
             auto val = builder->peekRValue(idx);
             if (val && val->is<N>()) {
-                return val.as<N>();
+                return val->as<N>();
             }
             throw InternalCompilerError("Attempted to peek a {0} in AST r-value stack at slot {1}, found {2} instead",
                                         RTTI::of<N>()->name(),
@@ -114,7 +122,7 @@ namespace pepper {
         }
 
         void recordSourceLocation(const antlr4::ParserRuleContext* context) {
-            builder->Source = sourceLocation(context);
+            Node::TokenSource = builder->Source = sourceLocation(context);
         }
 
         void enterEveryRule(antlr4::ParserRuleContext* context) override {
@@ -139,36 +147,50 @@ namespace pepper {
             return type;
         }
 
-        TypeName typeOfExpr(Ref<Expression> expr) const {
-            if (expr->type() != TypeName::Auto) {
-                return expr->type();
+        //        TypeName typeOfExpr(Ref<Expression> expr) const {
+        //            if (expr->type() != TypeName::Auto) {
+        //                return expr->type();
+        //            }
+        //            if (expr->is<SymbolRef>()) {
+        //                auto var = expr.as<SymbolRef>();
+        //                auto symbol = builder->findSymbol(var->Name);
+        //                if (!symbol) {
+        //                    throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->Name);
+        //                }
+        //                return symbol->Type;
+        //            }
+        //            if (expr->is<MemberRef>()) {
+        //                auto ref = expr.as<MemberRef>();
+        //                return typeOfExpr(ref->LHS);
+        //            }
+        //            throw CompileError(builder->Source, "Unknown expression type in {0}", expr->rtti()->name());
+        //        }
+
+        void exitUseStatement(PepperParser::UseStatementContext* context) override {
+            bool local = false;
+            std::string import;
+            std::string alias;
+            if (context->StringLiteral()) {
+                local = true;
+                import = trim(context->StringLiteral()->toString(), "\"");
+                alias = context->Identifier().size() ? context->Identifier()[0]->toString() : "";
+            } else {
+                import = context->Identifier()[0]->toString();
+                alias = context->Identifier().size() > 1 ? context->Identifier()[1]->toString() : "";
             }
-            if (expr->is<SymbolRef>()) {
-                auto var = expr.as<SymbolRef>();
-                auto symbol = builder->findSymbol(var->Name);
-                if (!symbol) {
-                    throw CompileError(builder->Source, "Unknown symbol referenced: {0}", var->Name);
-                }
-                return symbol->Type;
-            }
-            if (expr->is<MemberRef>()) {
-                auto ref = expr.as<MemberRef>();
-                return typeOfExpr(ref->LHS);
-            }
-            throw CompileError(builder->Source, "Unknown expression type in {0}", expr->rtti()->name());
+
+            auto importNode = new Import(import, local, alias);
+            builder->import(importNode);
         }
 
         void enterExplicitVariableDeclaration(PepperParser::ExplicitVariableDeclarationContext* context) override {
             auto typeName = parseTypeName(context->typeName());
             auto identifier = context->Identifier()->toString();
-            if (!typeName.GenericTypes.empty()) {
-                builder->specializeStruct(typeName);
-            }
 
             if (builder->structTarget()) {
-                lvaluePush(builder->New<FieldDef>(builder->structTarget().get(), typeName, identifier));
+                lvaluePush(new FieldDef(builder->structTarget(), typeName, identifier));
             } else {
-                lvaluePush(builder->New<VariableDef>(typeName, identifier));
+                lvaluePush(new VariableDef(typeName, identifier));
             }
         }
 
@@ -188,9 +210,9 @@ namespace pepper {
             auto identifier = context->Identifier()->toString();
             const auto& typeName = TypeName::Auto;
             if (builder->structTarget()) {
-                lvaluePush(builder->New<FieldDef>(builder->structTarget().get(), typeName, identifier));
+                lvaluePush(new FieldDef(builder->structTarget(), typeName, identifier));
             } else {
-                lvaluePush(builder->New<VariableDef>(typeName, identifier));
+                lvaluePush(new VariableDef(typeName, identifier));
             }
         }
 
@@ -198,28 +220,13 @@ namespace pepper {
             auto symbol = lvaluePop<VariableDef>();
             auto defaultValue = rvaluePop<Expression>();
             symbol->Default = defaultValue;
-            symbol->Type = typeOfExpr(symbol->Default);
             builder->symbol(symbol);
             rvaluePush(symbol);
         }
 
-        Ref<Expression> resolveLocal(const Ident& identifier) {
-            auto symbol = builder->findSymbol(identifier);
-            if (symbol && symbol->is<FieldDef>()) {
-                auto field = symbol.as<FieldDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(), field->Name);
-            }
-            if (symbol && symbol->is<MethodDef>()) {
-                auto method = symbol.as<MethodDef>();
-                return builder->New<MemberRef>(Ref<ThisRef>::New(), method->Name);
-            }
-            // anything else can be looked up later, at codegen/pass time
-            return builder->New<SymbolRef>(identifier);
-        }
-
         void exitIdentifierExpr(PepperParser::IdentifierExprContext* context) override {
             auto identifier = context->This() ? "this" : context->Identifier()->toString();
-            auto symbol = resolveLocal(identifier);
+            auto symbol = new SymbolRef(identifier);
             rvaluePush(symbol);
         }
 
@@ -227,7 +234,7 @@ namespace pepper {
             auto literal = context->literal();
             if (literal->BooleanLiteral()) {
                 bool boolLiteral = literal->BooleanLiteral()->toString() == "true";
-                rvaluePush(builder->New<BoolLiteral>(boolLiteral));
+                rvaluePush(new BoolLiteral(boolLiteral));
                 return;
             }
 
@@ -235,23 +242,21 @@ namespace pepper {
                 auto numLiteral = literal->numericLiteral();
                 if (numLiteral->DecimalLiteral()) {
                     auto decStr = numLiteral->DecimalLiteral()->toString();
-                    if (decStr.find('.') != -1) {
+                    if (decStr.find('.') != std::string::npos) {
                         try {
                             double floatVal = 0.0;
                             llvm::to_float(decStr, floatVal);
-                            rvaluePush(builder->New<FloatLiteral>(floatVal));
+                            rvaluePush(new FloatLiteral(floatVal));
                             return;
-                        } catch (std::invalid_argument&) {
-                        }
+                        } catch (std::invalid_argument&) {}
                     }
                     try {
                         int64_t intVal = 0;
                         if (llvm::to_integer(decStr, intVal)) {
-                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            rvaluePush(new IntegerLiteral(intVal));
                             return;
                         }
-                    } catch (std::invalid_argument&) {
-                    }
+                    } catch (std::invalid_argument&) {}
                 }
 
                 if (numLiteral->OctalIntegerLiteral()) {
@@ -259,11 +264,10 @@ namespace pepper {
                     try {
                         int64_t intVal = 0;
                         if (llvm::to_integer(octStr, intVal, 8)) {
-                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            rvaluePush(new IntegerLiteral(intVal));
                             return;
                         }
-                    } catch (std::invalid_argument&) {
-                    }
+                    } catch (std::invalid_argument&) {}
                 }
 
                 if (numLiteral->HexIntegerLiteral()) {
@@ -272,11 +276,10 @@ namespace pepper {
                         int64_t intVal = 0;
                         hexStr = hexStr.substr(2); // remove 0x
                         if (llvm::to_integer(hexStr, intVal, 16)) {
-                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            rvaluePush(new IntegerLiteral(intVal));
                             return;
                         }
-                    } catch (std::invalid_argument&) {
-                    }
+                    } catch (std::invalid_argument&) {}
                 }
 
                 if (numLiteral->BinaryIntegerLiteral()) {
@@ -284,11 +287,10 @@ namespace pepper {
                     try {
                         int64_t intVal = 0;
                         if (llvm::to_integer(binStr, intVal, 2)) {
-                            rvaluePush(builder->New<IntegerLiteral>(intVal));
+                            rvaluePush(new IntegerLiteral(intVal));
                             return;
                         }
-                    } catch (std::invalid_argument&) {
-                    }
+                    } catch (std::invalid_argument&) {}
                 }
 
                 throw CompileError(builder->Source, "Unable to parse numeric literal: {0}", numLiteral->toString());
@@ -299,7 +301,7 @@ namespace pepper {
                 for (auto sl : literal->StringLiteral()) {
                     stringLiteral += trim(sl->toString(), "\"");
                 }
-                rvaluePush(builder->New<StringLiteral>(stringLiteral));
+                rvaluePush(new StringLiteral(stringLiteral));
                 return;
             }
 
@@ -309,14 +311,14 @@ namespace pepper {
         }
 
         void enterParameterDeclaration(PepperParser::ParameterDeclarationContext*) override {
-            lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+            lvaluePush(Pending::New<VariableDef>());
         }
 
         void exitParameterDeclaration(PepperParser::ParameterDeclarationContext* context) override {
             lvaluePop<VariableDef>();
             auto name = context->Identifier()->toString();
             auto typeName = parseTypeName(context->typeName());
-            Ref<Expression> defaultValue;
+            Expression* defaultValue = nullptr;
             if (context->Assign()) {
                 defaultValue = rvaluePop<Expression>();
             }
@@ -329,10 +331,14 @@ namespace pepper {
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName("void");
             auto identifier = nameAndGenerics.Name;
 
-            auto function =
-                builder->structTarget()
-                    ? builder->New<MethodDef>(builder->structTarget().get(), returnType, identifier).as<FunctionDef>()
-                    : builder->New<FunctionDef>(returnType, identifier);
+            FunctionDef* function = nullptr;
+            if (auto st = builder->structTarget())
+                function = new MethodDef(st->Type, returnType, identifier);
+            if (auto ext = builder->extensionTarget())
+                function = new MethodDef(ext->Target, returnType, identifier);
+            else
+                function = new FunctionDef(returnType, identifier);
+
             for (const auto& genericParam : nameAndGenerics.GenericTypes) {
                 function->GenericParams.emplace_back(genericParam.Name);
             }
@@ -345,7 +351,10 @@ namespace pepper {
 
             auto function = lvaluePop<FunctionDef>();
             if (function->is<MethodDef>()) {
-                builder->structTarget()->Methods.push_back(function.as<MethodDef>());
+                if (builder->structTarget())
+                    builder->structTarget()->Methods.push_back(function->as<MethodDef>());
+                else
+                    builder->extensionTarget()->Methods.push_back(function->as<MethodDef>());
             }
         }
 
@@ -364,12 +373,12 @@ namespace pepper {
                 returnType += "*";
             auto identifier = context->Identifier()->toString();
             auto vararg = context->externParameterList()->Ellipsis() != nullptr;
-            auto function = builder->New<ExternFunctionDef>(TypeName{returnType}, identifier);
+            auto function = new ExternFunctionDef(TypeName{returnType}, identifier);
             lvaluePush(function);
             builder->beginFunction(function);
         }
 
-        void exitExternFunction(PepperParser::ExternFunctionContext* context) override {
+        void exitExternFunction(PepperParser::ExternFunctionContext*) override {
             builder->endFunction();
             auto function = lvaluePop<ExternFunctionDef>();
         }
@@ -384,21 +393,9 @@ namespace pepper {
             return type;
         }
 
-        Ref<StructDef> findStructOrGeneric(const TypeName& typeName) {
-            if (auto st = builder->findStruct(typeName)) {
-                return st;
-            }
-            if (!typeName.GenericTypes.empty()) {
-                if (auto st = builder->findStruct(typeName.Name)) {
-                    return st;
-                }
-            }
-            return nullptr;
-        }
-
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
             const TypeName type = parseTypeDeclaration(context->typeDeclaration());
-            auto structDef = StructDef::New(type);
+            auto structDef = new StructDef(type, type.Name);
             if (auto genericParams = context->typeDeclaration()->genericParams()) {
                 for (auto param : genericParams->genericParamsList()->Identifier()) {
                     structDef->GenericParams.emplace_back(param->toString());
@@ -428,7 +425,7 @@ namespace pepper {
 
         void enterConstructorParam(PepperParser::ConstructorParamContext* context) override {
             if (context->This()) {
-                lvaluePush(Ref<Pending>::New(Ref<VariableDef>()));
+                lvaluePush(Pending::New<VariableDef>());
             }
         }
 
@@ -437,14 +434,14 @@ namespace pepper {
             if (context->This()) {
                 lvaluePop<VariableDef>();
                 auto fieldName = context->Identifier()->toString();
-                Ref<Expression> defaultValue;
+                Expression* defaultValue = nullptr;
                 if (context->Assign()) {
                     defaultValue = rvaluePop<Expression>();
                 }
 
                 // lookup the desired field
                 auto st = builder->structTarget();
-                auto field = Query(st->Fields).find([&](auto f) { return f->Name == fieldName; });
+                auto field = Query(st->Fields).find([&](auto& f) { return f->Name == fieldName; });
                 if (!field) {
                     throw CompileError(builder->Source, "Unknown field {0} found during this initializer", fieldName);
                 }
@@ -455,26 +452,15 @@ namespace pepper {
                 func->Parameters.emplace_back(paramName, field.value()->Type, defaultValue);
 
                 // Add the assignment to the field to the ctor
-                func->Body->Items.emplace_back(builder->New<Assign>(
-                    builder->New<MemberRef>(Ref<ThisRef>::New(), fieldName), builder->New<SymbolRef>(paramName)));
+                func->Body->Items.push_back(
+                    new Assign(new MemberRef(new ThisRef(), fieldName), new SymbolRef(paramName)));
             }
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
             auto structType = parseTypeDeclaration(context->typeDeclaration());
-            if (auto structDef = builder->findStruct(structType)) {
-                builder->beginExtension(structDef);
-                return;
-            }
-            // If the target is generic, but hasn't been specialized yet, do it now
-            if (!structType.GenericTypes.empty()) {
-                if (builder->findStruct(structType.Name)) {
-                    auto specialized = builder->specializeStruct(structType);
-                    builder->beginExtension(specialized);
-                    return;
-                }
-            }
-            throw CompileError(builder->Source, "Unable to extend unknown type {0}", structType.toString());
+            auto ext = new ExtensionDef(structType);
+            builder->beginExtension(ext);
         }
 
         void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext*) override {
@@ -490,7 +476,7 @@ namespace pepper {
         void endFunctionCall(C* context) {
             lvaluePop<FunctionCall>();
 
-            Vector<Ref<Expression>> args;
+            ExprList args;
             auto providedArgs = context->argumentList()->argument();
             for (int argIdx = 0; argIdx < providedArgs.size(); ++argIdx) {
                 args.insert(args.begin(), rvaluePop<Expression>());
@@ -499,48 +485,27 @@ namespace pepper {
             auto symbol = rvaluePop<SymbolRef>(); // identifiers are always pushed as rvalues
 
             if (symbol->is<MemberRef>()) { // method
-                auto member = symbol.as<MemberRef>();
-                assert(member->LHS);
-                auto structType = typeOfExpr(member->LHS);
-                auto structDef = builder->findStruct(structType);
-                if (!structDef) {
-                    throw CompileError(member->LHS->Source, "Expression results in unknown type {0}", structType);
-                }
-                auto method = structDef->getMethod(member->Name);
-                if (!method) {
-                    throw CompileError(
-                        builder->Source, "No method named {0} in {1}", member->Name, structType.toString());
-                }
+                auto member = symbol->as<MemberRef>();
+                assert(member->LHS && "MemberRef created without an object reference");
 
-                auto call = builder->New<MethodCall>(method->ReturnType, member->LHS, member->Name, args);
+                auto call = new MethodCall(member->LHS, member->Name, args);
                 builder->insert(call);
                 return;
             }
 
+            // TODO: Move this into a pass on the AST
             auto functionName = symbol->Name;
             if (functionName == "__sizeof") {
                 if (args.size() != 1)
                     throw CompileError(builder->Source, "__sizeof accepts only a single type parameter");
-                if (auto symbolRef = args[0].as<SymbolRef>()) {
-                    auto sizeOf = builder->New<SizeOf>(symbolRef->Name);
+                if (auto symbolRef = args.front()->as<SymbolRef>()) {
+                    auto sizeOf = new SizeOf(symbolRef->Name);
                     builder->insert(sizeOf);
-                    return;
                 }
-                throw CompileError(builder->Source, "__sizeof called on non-existent type: {0}");
+                return;
             }
-            auto func = builder->findFunction(functionName);
-            if (!func) {
-                // Function wasn't found, if it has generic args, specialize it now
-                auto functionSpec = symbol->Type;
-                if (!functionSpec.GenericTypes.empty()) {
-                    func = builder->specializeFunction(functionSpec);
-                }
-            }
-            if (!func) {
-                throw CompileError(builder->Source, "Function {0} not found", functionName);
-            }
-
-            auto call = builder->New<FunctionCall>(func, args);
+            auto functionSpec = !symbol->Type.empty() ? symbol->Type : functionName;
+            auto call = new FunctionCall(functionSpec, std::move(args));
             builder->insert(call);
         }
 
@@ -549,7 +514,7 @@ namespace pepper {
         void enterGenericCtor(PepperParser::GenericCtorContext* context) override {
             beginFunctionCall();
             auto typeName = parseTypeName(context->typeName());
-            rvaluePush(builder->New<SymbolRef>(typeName));
+            rvaluePush(new SymbolRef(typeName));
         }
 
         void exitGenericCtor(PepperParser::GenericCtorContext* context) override {
@@ -572,11 +537,11 @@ namespace pepper {
         void exitReturn(PepperParser::ReturnContext* context) override {
             lvaluePop<Return>();
             auto function = builder->functionTarget();
-            Ref<Expression> returnValue;
+            Expression* returnValue = nullptr;
             if (context->expression()) {
                 returnValue = rvaluePop<Expression>();
             }
-            auto ret = builder->New<Return>(function->ReturnType, returnValue);
+            auto ret = new Return(function->ReturnType, returnValue);
             builder->insert(ret);
         }
 
@@ -589,17 +554,17 @@ namespace pepper {
             auto lhs = rvaluePop<Expression>();
             auto rhs = context->Identifier()->toString();
             lvaluePop<MemberRef>();
-            auto memberRef = builder->New<MemberRef>(lhs, rhs);
+            auto memberRef = new MemberRef(lhs, rhs);
             builder->insert(memberRef);
         }
 
         void enterIfStatement(PepperParser::IfStatementContext* context) override {
-            auto branch = builder->New<If>();
+            auto branch = new If();
             if (context->ifBranch()) {
-                branch->Then = Ref<Block>::New("then");
+                branch->Then = new Block("then");
             }
             if (context->elseBranch()) {
-                branch->Else = Ref<Block>::New("else");
+                branch->Else = new Block("else");
             }
             builder->beginScope("select");
             lvaluePush(branch);
@@ -611,8 +576,7 @@ namespace pepper {
             builder->insert(branch);
         }
 
-        void enterIfBranch(PepperParser::IfBranchContext* context) override {
-        }
+        void enterIfBranch(PepperParser::IfBranchContext* context) override {}
 
         void exitIfBranch(PepperParser::IfBranchContext*) override {
             builder->endBlock();
@@ -634,13 +598,13 @@ namespace pepper {
         }
 
         void enterTernary(PepperParser::TernaryContext*) override {
-            auto branch = builder->New<Ternary>();
+            auto branch = new Ternary();
             lvaluePush(branch);
         }
 
         void enterWhileLoop(PepperParser::WhileLoopContext*) override {
-            auto loop = builder->New<While>();
-            loop->Body = builder->New<Block>();
+            auto loop = new While();
+            loop->Body = new Block();
             lvaluePush(loop);
         }
 
@@ -657,8 +621,8 @@ namespace pepper {
         }
 
         void enterForLoop(PepperParser::ForLoopContext*) override {
-            auto loop = builder->New<ForRange>();
-            loop->Body = builder->New<Block>();
+            auto loop = new ForRange();
+            loop->Body = new Block();
             lvaluePush(loop);
         }
 
@@ -683,8 +647,7 @@ namespace pepper {
             }
         }
 
-        void exitForLoop(PepperParser::ForLoopContext* context) override {
-        }
+        void exitForLoop(PepperParser::ForLoopContext* context) override {}
 
         void exitTernary(PepperParser::TernaryContext*) override {
             auto branch = lvaluePop<Ternary>();
@@ -703,7 +666,7 @@ namespace pepper {
         void endUnaryOp() {
             lvaluePop<N>();
             auto operand = rvaluePop<Expression>();
-            auto op = builder->New<N>(operand);
+            auto op = new N(operand);
             rvaluePushOrInsert(op);
         }
 
@@ -782,7 +745,7 @@ namespace pepper {
             lvaluePop<Op>();
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
-            builder->insert(builder->New<Op>(lhs, rhs));
+            builder->insert(new Op(lhs, rhs));
         }
 
         void enterAdd(PepperParser::AddContext*) override {
@@ -939,7 +902,7 @@ namespace pepper {
 
         template <typename Op>
         void beginAssign() {
-            auto op = builder->New<Op>();
+            auto op = new Op();
             lvaluePush(op);
         }
 
@@ -948,7 +911,7 @@ namespace pepper {
             auto op = lvaluePop<Op>();
             auto rhs = rvaluePop<Expression>();
             auto lhs = rvaluePop<Expression>();
-            rvaluePushOrInsert(builder->New<Op>(lhs, rhs));
+            rvaluePushOrInsert(new Op(lhs, rhs));
         }
 
         void enterAssignment(PepperParser::AssignmentContext*) override {
@@ -1039,10 +1002,11 @@ namespace pepper {
         // parser.setTrace(true);
 
         try {
+            Node::TokenSource = {};
             antlr4::tree::ParseTree* tree = parser.compilationUnit();
             ParserListener listener;
             antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
-
+            Node::TokenSource = {};
             return listener.ast();
         } catch (const antlr4::ParseCancellationException& pex) {
             try {

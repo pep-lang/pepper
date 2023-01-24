@@ -10,5 +10,6 @@ namespace TestUtils {
 
     std::string TestName(::testing::TestInfo* ti);
 
-    int CompileAndRun(const std::string& name, const std::string& source, const std::string& entry = "test");
+    int CompileAndRun(
+        const std::string& name, const std::string& source, const std::string& entry = "test", bool runtime = true);
 } // namespace TestUtils

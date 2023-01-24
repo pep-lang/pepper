@@ -10,11 +10,14 @@ namespace pepper::ast {
     struct UnaryOp : public Expression {
         DECLARE_RTTI(UnaryOp, Expression);
 
-        Ref<Expression> Operand;
+        TNodeRef<Expression> Operand;
 
-        UnaryOp(Ref<Expression> operand)
-            : Operand(operand) {
-        }
+        UnaryOp(Expression* operand)
+            : Operand(operand) {}
+
+        UnaryOp(const UnaryOp& op)
+            : Expression(op)
+            , Operand(op.Operand->cloneAs<Expression>()) {}
 
         const TypeName& type() const override {
             return Operand->type();
@@ -30,6 +33,11 @@ namespace pepper::ast {
 
         std::string dump(int indent) const override {
             return Node::dump(indent) + std::string(llvm::formatv("({0})", Operand ? Operand->dump() : "empty"));
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Operand);
         }
     };
 

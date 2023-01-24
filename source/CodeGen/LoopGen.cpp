@@ -9,16 +9,14 @@
 #include "Address.h"
 #include "CodeGenerator.h"
 #include "Core/Exceptions.h"
-#include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "Frontend/Struct.h"
 #include "Frontend/Types.h"
 
 namespace pepper {
-    using namespace pepper::ast;
-
-    Address CodeGenerator::emit(Ref<While> loop) {
+    Address CodeGenerator::emit(const ast::While* loop) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("while");
@@ -45,7 +43,7 @@ namespace pepper {
                        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
     }
 
-    Address CodeGenerator::emit(Ref<ForRange> loop) {
+    Address CodeGenerator::emit(const ast::ForRange* loop) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto bodyBlock = function->appendBlock("for");

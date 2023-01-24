@@ -1,68 +1,42 @@
 
 #pragma once
 
+#include <list>
 #include <string>
 
 #include "Core/Common.h"
 #include "Core/Ident.h"
+#include "Core/PolyIList.h"
 #include "Core/SourceLocation.h"
 #include "Core/String.h"
 #include "Core/Vector.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace llvm {
-    class Type;
-}
-
 #define AST_NODE_POD_CLONE(N)                                                                                          \
-    inline Ref<Node> clone() const override {                                                                          \
-        return Ref<Node>{static_cast<const RttiInstance<N>*>(rtti())->clone(this)};                                    \
+    inline Node* clone() const override {                                                                              \
+        return static_cast<const RttiInstance<N>*>(rtti())->clone(this);                                               \
     }
 
 namespace pepper::ast {
-
-    struct Specialization {
-        DECLARE_RTTI(Specialization);
-        using GenericTypeMap = llvm::StringMap<struct TypeName>;
-        GenericTypeMap TypeMap;
-
-      protected:
-        Specialization() = default;
-    };
-
-    struct StructSpecialization : public Specialization {
-        DECLARE_RTTI(StructSpecialization, Specialization);
-        Ref<struct StructDef> Struct;
-
-        StructSpecialization(Ref<struct StructDef> structDef)
-            : Struct(structDef) {
-        }
-    };
-
-    struct FunctionSpecialization : public Specialization {
-        DECLARE_RTTI(FunctionSpecialization, Specialization);
-        Ref<struct FunctionDef> Function;
-
-        FunctionSpecialization(Ref<struct FunctionDef> function)
-            : Function(function) {
-        }
-    };
 
     struct TypeName {
         Ident Name;
         std::vector<TypeName> GenericTypes;
 
-        TypeName(Ident name = "default", const Vector<TypeName>& types = {})
-            : Name(std::move(name))
-            , GenericTypes(types.begin(), types.end()) {
-        }
+        TypeName(const Ident& name = {}, const Vector<TypeName, 0>& types = {})
+            : Name(name)
+            , GenericTypes(types.begin(), types.end()) {}
 
         TypeName(const TypeName&) = default;
         TypeName(TypeName&&) = default;
         TypeName& operator=(const TypeName&) = default;
 
-        void replace(const Ident& genericParam, const TypeName& genericArg);
-        void specialize(const Specialization::GenericTypeMap& map);
+        bool empty() const {
+            return Name.empty() && GenericTypes.empty();
+        }
 
         operator std::string() const {
             return toString();
@@ -74,6 +48,10 @@ namespace pepper::ast {
 
         bool operator!=(const TypeName& rhs) const {
             return !(*this == rhs);
+        }
+
+        bool isGeneric() const {
+            return !GenericTypes.empty();
         }
 
         std::string toString() const;
@@ -98,28 +76,156 @@ namespace pepper::ast {
     struct Node {
         DECLARE_RTTI(Node);
 
+        static SourceLocation TokenSource;
         SourceLocation Source;
 
-        virtual ~Node() = default;
+        virtual ~Node();
 
         template <typename N>
-        Ref<N> cloneAs() const {
-            auto copy = Ref<N>{clone()};
+        N* cloneAs() const {
+            assert(is<N>() && "Cannot cloneAs on unrelated types");
+            auto copy = clone();
             copy->Source = Source;
-            return copy;
+            return copy->as<N>();
         }
 
-        virtual Ref<Node> clone() const;
+        virtual Node* clone() const;
 
-        virtual void specialize(const Specialization& spec) {
-        }
+        virtual void visit(struct Visitor& visitor);
 
-        [[nodiscard]] std::string source(int width = -1, int indent = 0, const char* sep = "") const;
-        [[nodiscard]] virtual std::string toString() const;
-        [[nodiscard]] virtual std::string dump(int indent = 0) const;
+        std::string source(int width = -1, int indent = 0, const char* sep = "") const;
+        virtual std::string toString() const;
+        virtual std::string dump(int indent = 0) const;
 
       protected:
-        Node() = default;
+        Node();
+    };
+
+    template <typename N>
+    concept TNode = std::is_base_of_v<Node, N>;
+
+    // Nodes are stored in NodeRefs so they can be replaced by AST passes
+    struct NodeRef {
+        llvm::PointerIntPair<Node*, 1, bool> Ref;
+
+        NodeRef(Node* node = nullptr, bool temp = false) {
+            Ref.setPointerAndInt(node, temp);
+        }
+
+        NodeRef(const NodeRef& rhs) = delete;
+        NodeRef(NodeRef&& rhs) = default;
+        NodeRef& operator=(const NodeRef& rhs) = delete;
+
+        NodeRef& operator=(Node* node) {
+            reset(node);
+            return *this;
+        }
+
+        void reset(Node* node = nullptr) {
+            assert(attached() && "Assignment to an unattached NodeLink is a no-op");
+            Ref.setPointer(node);
+        }
+
+        bool attached() const {
+            return !Ref.getInt();
+        }
+
+        operator bool() const {
+            return Ref.getPointer() != nullptr;
+        }
+
+        operator Node*() const {
+            return Ref.getPointer();
+        }
+
+        Node* operator->() const {
+            return Ref.getPointer();
+        }
+
+        Node* node() const {
+            return Ref.getPointer();
+        }
+
+        static NodeRef Temp(Node* node) {
+            return NodeRef(node, true);
+        }
+    };
+
+    template <TNode N>
+    struct TNodeRef : public NodeRef {
+        TNodeRef(N* node = nullptr, bool temp = false)
+            : NodeRef(node, temp) {}
+
+        TNodeRef(const TNodeRef& ref) {
+            *this = ref;
+        }
+
+        TNodeRef(TNodeRef&&) noexcept = default;
+
+        TNodeRef& operator=(const TNodeRef& rhs) {
+            Ref.initWithPointer(rhs.node() ? rhs.node()->template cloneAs<N>() : nullptr);
+            return *this;
+        }
+
+        N* operator->() const {
+            return static_cast<N*>(node());
+        }
+
+        N& operator*() const {
+            return *static_cast<N*>(node());
+        }
+
+        operator N*() const {
+            return static_cast<N*>(node());
+        }
+    };
+
+    // All nodes, when created, get inserted into the NodeHeap. If they are attached to another list, that list
+    // takes ownership of them. Single and orphaned nodes remain in the NodeHeap, and can be cleared after codegen.
+    class NodeHeap {
+      private:
+        static std::list<std::unique_ptr<Node>> FloatingNodes;
+
+      public:
+        static void Track(Node* node);
+        static void Clear();
+    };
+
+    template <TNode N>
+    struct NodeList : public Vector<TNodeRef<N>> {
+        using base = Vector<TNodeRef<N>>;
+        using Vector<TNodeRef<N>>::Vector;
+
+        using iterator = typename base::iterator;
+        using const_iterator = typename base::const_iterator;
+
+        NodeList(std::initializer_list<N*> nodes) {
+            for (auto n : nodes)
+                push_back(n);
+        }
+
+        void insert(iterator it, N* node) {
+            base::insert(it, TNodeRef{node});
+        }
+
+        void push_back(N* node) {
+            base::push_back(TNodeRef{node});
+        }
+
+        void clone(const NodeList& src) {
+            base::clear();
+            for (auto& link : src) {
+                push_back(link->template cloneAs<N>());
+            }
+        }
+
+        // Just alias the merged nodes
+        template <TNode T>
+        void merge(const NodeList<T>& other) {
+            for (const auto& n : other) {
+                push_back(&*n);
+            }
+        }
     };
 
     // NOOP
@@ -128,25 +234,134 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(None);
     };
 
+    class Visitor {
+        llvm::DenseSet<Node*> Visited;
+
+      protected:
+        virtual void visitType(struct TypeName& type) {}
+
+        virtual void enterNode(NodeRef& node) {}
+
+        virtual void visitNode(NodeRef& node) {}
+
+        virtual void exitNode(NodeRef& node) {}
+
+      public:
+        void visit(struct TypeName& type);
+
+        void visit(NodeRef& ref);
+
+        void visit(Node* node);
+    };
+
+    template <typename T>
+    class Resolvable {
+        TypeName Target;
+        T* Value = nullptr;
+
+      public:
+        Resolvable(const TypeName& name = {})
+            : Target(name)
+            , Value(nullptr) {
+            Instances().insert(this);
+        }
+
+        explicit Resolvable(T* value)
+            : Value(value)
+            , Target(value->Name) {}
+
+        Resolvable(const Resolvable& rhs) {
+            Instances().insert(this);
+            *this = rhs;
+        }
+
+        Resolvable(Resolvable&& rhs) noexcept {
+            Instances().insert(this);
+            std::swap(*this, rhs);
+        }
+
+        ~Resolvable() {
+            Instances().erase(this);
+        }
+
+        Resolvable& operator=(const Resolvable& rhs) {
+            Target = rhs.Target;
+            Value = rhs.Value;
+            return *this;
+        }
+
+        Resolvable& operator=(T* value) {
+            Value = value;
+            Target = value->Name;
+            return *this;
+        }
+
+        Resolvable& operator=(const TypeName& name) {
+            assert(!Value && "Attempted to overwrite already resolved Resolvable with name");
+            Target = name;
+            return *this;
+        }
+
+        const std::string name() const {
+            return (Value) ? Value->Name : Target;
+        }
+
+        T* value() const {
+            return Value;
+        }
+
+        void resolve(T* val) {
+            Value = val;
+        }
+
+        const std::string toString() const {
+            return Target.toString();
+        }
+
+        operator bool() const {
+            return !Target.empty() || !!Value;
+        }
+
+        operator TypeName() const {
+            return Target;
+        };
+
+        operator T*() const {
+            return Value;
+        }
+
+        T* operator->() const {
+            assert(Value && "Value is not resolved yet");
+            return Value;
+        }
+
+        void visit(Visitor& visitor) {
+            visitor.visit(Target);
+        }
+
+        static llvm::DenseSet<Resolvable*>& Instances() {
+            static llvm::DenseSet<Resolvable*> instances;
+            return instances;
+        }
+    };
+
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
     // in the stack to cause r-values to be collected
     struct Pending : public Node {
         DECLARE_RTTI(Pending, Node);
 
         const RTTI* Type;
-        Ref<Node> Value;
+        Node* Value;
 
         template <typename N>
-        explicit Pending(Ref<N> node) {
+        Pending(N* node = nullptr) {
             Value = node;
             Type = RTTI::of<N>();
         }
 
-        template <typename N, typename... Args>
-        static Ref<Pending> New(Args&&... args) {
-            if constexpr ((sizeof...(args)))
-                return Ref<Pending>::New(Ref<N>::New(std::forward<Args>(args)...));
-            return Ref<Pending>::New(Ref<N>());
+        template <typename N>
+        static Pending* New(N* node = nullptr) {
+            return new Pending(node);
         }
     };
 
@@ -161,10 +376,12 @@ namespace pepper::ast {
         Symbol(const TypeName& type, const Ident& name, bool hidden = false)
             : Type(type)
             , Name(name)
-            , Hidden(hidden) {
-        }
+            , Hidden(hidden) {}
 
-        void specialize(const Specialization& spec) override;
+        void visit(Visitor& visitor) override {
+            Node::visit(visitor);
+            visitor.visit(Type);
+        }
     };
 
     class Expression : public Node {
@@ -176,4 +393,41 @@ namespace pepper::ast {
             return Auto;
         }
     };
+
+    using ExprList = NodeList<Expression>;
+
+    class Import : public Node {
+        DECLARE_RTTI(Import, Node);
+
+        std::string Module;
+        std::string Alias;
+        bool Local;
+
+      public:
+        Import(const std::string& import, bool local = false, const Ident& alias = "")
+            : Module(import)
+            , Alias(alias)
+            , Local(local) {}
+    };
 } // namespace pepper::ast
+
+namespace llvm {
+    template <>
+    struct DenseMapInfo<pepper::ast::TypeName> {
+        static inline pepper::ast::TypeName getEmptyKey() {
+            return pepper::ast::TypeName{"__EMPTY"};
+        }
+
+        static inline pepper::ast::TypeName getTombstoneKey() {
+            return pepper::ast::TypeName{"__TOMBSTONE"};
+        }
+
+        static unsigned getHashValue(const pepper::ast::TypeName& Val) {
+            return hash_value(Val.toString());
+        }
+
+        static bool isEqual(const pepper::ast::TypeName& LHS, const pepper::ast::TypeName& RHS) {
+            return LHS == RHS;
+        }
+    };
+} // namespace llvm

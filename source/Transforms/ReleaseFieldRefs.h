@@ -8,32 +8,29 @@
 
 namespace pepper::ast {
     struct ReleaseFieldRefs : public Transformer {
-        llvm::StringMap<Ref<StructDef>> Structs;
+        DECLARE_RTTI(ReleaseFieldRefs, Transformer);
+
+        SymbolTable Symbols;
 
         void run(Ref<AST> parseTree) override {
-            for (auto root : parseTree->roots()) {
-                if (root->is<StructDef>()) {
-                    auto st = root.as<StructDef>();
-                    Structs[st->Type.toString()] = st;
-                }
-            }
-            for (const auto& st : Structs) {
-                visitStruct(st.getValue());
+            Symbols = SymbolTable(*parseTree);
+            for (const auto& st : parseTree->structs()) {
+                visitStruct(st);
             }
         }
 
-        void visitStruct(Ref<StructDef> st) {
-            Vector<Ref<Node>> releases;
+        void visitStruct(StructDef* st) {
+            Vector<Node*> releases;
             for (const auto& field : st->Fields) {
-                if (auto fieldType = Structs.lookup(field->Type.toString())) {
-                    releases.emplace_back(Ref<MethodCall>::New(
-                        fieldType->Type, Ref<MemberRef>::New(Ref<ThisRef>::New(), field->Name), "__release"));
+                if (auto fieldType = Symbols.Structs.lookup(field->Type.toString())) {
+                    releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->Name), "__release"));
                 }
             }
             // Insert the releases in reverse declaration order just before the last dtor instruction (free)
             auto& dtorItems = st->Destructor->Body->Items;
-            for (const auto& release : llvm::reverse(releases)) {
-                dtorItems.insert(dtorItems.end() - 1, release);
+            for (auto& release : llvm::reverse(releases)) {
+                auto beforeFree = std::prev(dtorItems.end());
+                dtorItems.insert(beforeFree, release);
             }
         }
     };

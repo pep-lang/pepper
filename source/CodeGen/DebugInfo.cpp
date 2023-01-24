@@ -4,8 +4,8 @@
 
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Frontend/Context.h"
 #include "Frontend/Param.h"
+#include "Frontend/PepContext.h"
 #include "Frontend/Struct.h"
 #include "llvm/IR/LLVMContext.h"
 
@@ -40,7 +40,7 @@ namespace pepper {
     }
 
     Ref<llvm::IRBuilderBase> DebugInfo::ir() {
-        return Context::ir();
+        return PepContext::ir();
     }
 
     llvm::DILocation* DebugInfo::location() const {

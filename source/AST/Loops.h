@@ -12,8 +12,10 @@ namespace pepper::ast {
         DECLARE_RTTI(While, Node);
         AST_NODE_POD_CLONE(While);
 
-        Ref<Expression> Condition;
-        Ref<Block> Body;
+        TNodeRef<Expression> Condition;
+        TNodeRef<Block> Body;
+
+        While() = default;
 
         std::string toString() const override {
             return Node::toString();
@@ -24,9 +26,10 @@ namespace pepper::ast {
                    Body->dump(indent + 2) + "\n" + repeat(" ", indent) + "}";
         }
 
-        void specialize(const Specialization& spec) override {
-            Condition->specialize(spec);
-            Body->specialize(spec);
+        void visit(Visitor& visitor) override {
+            Node::visit(visitor);
+            visitor.visit(Condition);
+            visitor.visit(Body);
         }
     };
 
@@ -34,11 +37,11 @@ namespace pepper::ast {
         DECLARE_RTTI(ForRange, Node);
         AST_NODE_POD_CLONE(ForRange);
 
-        Ref<VariableDef> Var;
-        Ref<Expression> Init;
-        Ref<Expression> Step;
-        Ref<Expression> Done;
-        Ref<Block> Body;
+        TNodeRef<VariableDef> Var;
+        TNodeRef<Expression> Init;
+        TNodeRef<Expression> Step;
+        TNodeRef<Expression> Done;
+        TNodeRef<Block> Body;
 
         std::string toString() const override {
             return Node::toString();
@@ -51,12 +54,13 @@ namespace pepper::ast {
                    Body->dump(indent);
         }
 
-        void specialize(const Specialization& spec) override {
-            Var->specialize(spec);
-            Init->specialize(spec);
-            Step->specialize(spec);
-            Done->specialize(spec);
-            Body->specialize(spec);
+        void visit(Visitor& visitor) override {
+            Node::visit(visitor);
+            visitor.visit(Var);
+            visitor.visit(Init);
+            visitor.visit(Step);
+            visitor.visit(Done);
+            visitor.visit(Body);
         }
     };
 } // namespace pepper::ast

@@ -12,7 +12,7 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    static auto binaryOp(Ref<BinaryOp> op) {
+    static auto binaryOp(const BinaryOp* op) {
         if (op->is<Assign>())
             return &Operations::assign;
         if (op->is<Add>())
@@ -74,7 +74,7 @@ namespace pepper {
         return nullptr;
     }
 
-    static Ref<Type> structOperandType(Ref<BinaryOp> op, Ref<Type> lhs, Ref<Type> rhs) {
+    static Ref<Type> structOperandType(const BinaryOp* op, Ref<Type> lhs, Ref<Type> rhs) {
         if (op->is<Assign>() && lhs == rhs) {
             return lhs;
         }
@@ -86,7 +86,7 @@ namespace pepper {
             op->Source, "Cannot perform {0} between {1} and {2}", op->rtti()->name(), lhs->name(), rhs->name());
     }
 
-    static Ref<Type> operandType(Ref<BinaryOp> op, Ref<Type> lhs, Ref<Type> rhs) {
+    static Ref<Type> operandType(const BinaryOp* op, Ref<Type> lhs, Ref<Type> rhs) {
         if ((lhs->isPointer() && lhs.as<PointerType>()->pointeeType()->isStruct()) ||
             (rhs->isPointer() && rhs.as<PointerType>()->pointeeType()->isStruct())) {
             return structOperandType(op, lhs, rhs);
@@ -112,7 +112,7 @@ namespace pepper {
             .Case("Assign", lhs);
     }
 
-    static auto compoundOp(Ref<CompoundAssign> op) {
+    static auto compoundOp(const CompoundAssign* op) {
         if (op->is<AddAssign>())
             return &Operations::add;
         if (op->is<SubAssign>())
@@ -136,7 +136,7 @@ namespace pepper {
         throw InternalCompilerError("Unknown compound assignment op: {0}", op->rtti()->name());
     }
 
-    Address CodeGenerator::emit(Ref<Assign> op) {
+    Address CodeGenerator::emit(const Assign* op) {
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
         auto typeOps = lhs.Ty->ops();
@@ -144,7 +144,7 @@ namespace pepper {
         return lhs;
     }
 
-    Address CodeGenerator::emit(Ref<CompoundAssign> op) {
+    Address CodeGenerator::emit(const CompoundAssign* op) {
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
         auto opType = lhs.Ty;
@@ -163,11 +163,11 @@ namespace pepper {
         return lhs;
     }
 
-    Address CodeGenerator::emit(Ref<BinaryOp> op) {
+    Address CodeGenerator::emit(const BinaryOp* op) {
         if (op->is<CompoundAssign>())
-            return emit(op.as<CompoundAssign>());
+            return emit(op->as<CompoundAssign>());
         if (op->is<Assign>())
-            return emit(op.as<Assign>());
+            return emit(op->as<Assign>());
 
         auto rhs = codegen(op->RHS);
         auto lhs = codegen(op->LHS);
@@ -188,7 +188,7 @@ namespace pepper {
         return result;
     }
 
-    static auto unaryOp(Ref<UnaryOp> op) {
+    static auto unaryOp(const UnaryOp* op) {
         if (op->is<Plus>())
             return &Operations::pos;
         if (op->is<Minus>())
@@ -208,15 +208,15 @@ namespace pepper {
         throw InternalCompilerError("Unknown unary op: {0}", op->rtti()->name());
     }
 
-    Address CodeGenerator::emit(Ref<UnaryOp> op) {
+    Address CodeGenerator::emit(const UnaryOp* op) {
         if (op->is<Minus>()) {
             if (op->Operand->is<IntegerLiteral>()) {
-                auto intLiteral = op->Operand.as<IntegerLiteral>();
-                return codegen(Ref<IntegerLiteral>::New(-intLiteral->Value));
+                auto intLiteral = op->Operand->as<IntegerLiteral>();
+                return codegen(new IntegerLiteral(-intLiteral->Value));
             }
             if (op->Operand->is<FloatLiteral>()) {
-                auto floatLiteral = op->Operand.as<FloatLiteral>();
-                return codegen(Ref<FloatLiteral>::New(-floatLiteral->Value));
+                auto floatLiteral = op->Operand->as<FloatLiteral>();
+                return codegen(new FloatLiteral(-floatLiteral->Value));
             }
         }
 

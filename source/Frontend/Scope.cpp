@@ -5,8 +5,8 @@
 #include "Frontend/Scope.h"
 
 #include "CodeGen/CodeGenModule.h"
-#include "Frontend/Context.h"
 #include "Frontend/Function.h"
+#include "Frontend/PepContext.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
 

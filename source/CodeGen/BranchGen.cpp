@@ -6,15 +6,15 @@
 #include "Address.h"
 #include "CodeGenerator.h"
 #include "Core/Exceptions.h"
-#include "Frontend/Context.h"
 #include "Frontend/LLVMUtils.h"
 #include "Frontend/Operations.h"
+#include "Frontend/PepContext.h"
 #include "Frontend/Types.h"
 
 namespace pepper {
     using namespace pepper::ast;
 
-    Address CodeGenerator::emit(Ref<Branch> branch) {
+    Address CodeGenerator::emit(const Branch* branch) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto thenBlock = function->appendBlock("then");
@@ -41,7 +41,7 @@ namespace pepper {
                        llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType()))};
     }
 
-    Address CodeGenerator::emit(Ref<Ternary> ternary) {
+    Address CodeGenerator::emit(const Ternary* ternary) {
         auto function = locals()->functionTarget();
         auto& context = function->function()->getContext();
         auto trueBlock = function->appendBlock("true");

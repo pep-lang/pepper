@@ -9,13 +9,17 @@ namespace pepper::ast {
     struct BinaryOp : public Expression {
         DECLARE_RTTI(BinaryOp, Expression);
 
-        Ref<Expression> LHS;
-        Ref<Expression> RHS;
+        TNodeRef<Expression> LHS;
+        TNodeRef<Expression> RHS;
 
-        BinaryOp(Ref<Expression> lhs, Ref<Expression> rhs)
+        BinaryOp(Expression* lhs, Expression* rhs)
             : LHS(lhs)
-            , RHS(rhs) {
-        }
+            , RHS(rhs) {}
+
+        BinaryOp(const BinaryOp& rhs)
+            : Expression(rhs)
+            , LHS(rhs.LHS->cloneAs<Expression>())
+            , RHS(rhs.RHS->cloneAs<Expression>()) {}
 
         const TypeName& type() const override {
             return TypeName::Widest(LHS->type(), RHS->type());
@@ -32,6 +36,12 @@ namespace pepper::ast {
         std::string dump(int indent) const override {
             return Node::dump(indent) +
                    std::string(llvm::formatv("({0}), ({1})", LHS ? LHS->dump() : "empty", RHS ? RHS->dump() : "empty"));
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(LHS);
+            visitor.visit(RHS);
         }
     };
 
@@ -200,9 +210,8 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(Assign);
 
       public:
-        Assign(Ref<Expression> lhs = nullptr, Ref<Expression> rhs = nullptr)
-            : BinaryOp(lhs, rhs) {
-        }
+        Assign(Expression* lhs = nullptr, Expression* rhs = nullptr)
+            : BinaryOp(lhs, rhs) {}
     };
 
     struct CompoundAssign : public Assign {

@@ -16,14 +16,27 @@ namespace pepper::ast {
     struct Branch : public Expression {
         DECLARE_RTTI(Branch, Expression);
 
-        Ref<Expression> Condition;
-        Ref<Block> Then;
-        Ref<Block> Else;
+        TNodeRef<Expression> Condition;
+        TNodeRef<Block> Then;
+        TNodeRef<Block> Else;
 
-        Branch(Ref<Expression> condition = {}, Ref<Block> thenBlock = {}, Ref<Block> elseBlock = {})
+        Branch(Expression* condition = nullptr, Block* thenBlock = nullptr, Block* elseBlock = nullptr)
             : Condition(condition)
             , Then(thenBlock)
-            , Else(elseBlock) {
+            , Else(elseBlock) {}
+
+        Branch(const Branch& br)
+            : Condition(br.Condition->cloneAs<Expression>())
+            , Then(br.Then->cloneAs<Block>())
+            , Else(br.Else ? br.Else->cloneAs<Block>() : nullptr) {}
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Condition);
+            visitor.visit(Then);
+            if (Else) {
+                visitor.visit(Else);
+            }
         }
     };
 
@@ -50,9 +63,16 @@ namespace pepper::ast {
         DECLARE_RTTI(Ternary, Expression);
         AST_NODE_POD_CLONE(Ternary);
 
-        Ref<Expression> Condition;
-        Ref<Expression> TrueResult;
-        Ref<Expression> FalseResult;
+        TNodeRef<Expression> Condition;
+        TNodeRef<Expression> TrueResult;
+        TNodeRef<Expression> FalseResult;
+
+        Ternary() = default;
+
+        Ternary(const Ternary& t)
+            : Condition(t.Condition->cloneAs<Expression>())
+            , TrueResult(t.TrueResult->cloneAs<Expression>())
+            , FalseResult(t.FalseResult->cloneAs<Expression>()) {}
 
         const TypeName& type() const override {
             return TrueResult->type();
@@ -65,6 +85,13 @@ namespace pepper::ast {
         std::string dump(int) const override {
             return std::string(
                 llvm::formatv("({0}) ? {1} : {2}", Condition->dump(), TrueResult->dump(), FalseResult->dump()));
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(Condition);
+            visitor.visit(TrueResult);
+            visitor.visit(FalseResult);
         }
     };
 } // namespace pepper::ast
