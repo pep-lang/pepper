@@ -3,6 +3,8 @@
 #include <filesystem>
 
 #include "gtest/gtest.h"
+#include "TestUtils.h"
+#include "llvm/Support/FileSystem.h"
 
 class CompileTest : public testing::Test {
     std::filesystem::path SourceFile;
@@ -11,7 +13,19 @@ class CompileTest : public testing::Test {
     explicit CompileTest(const std::filesystem::path& sourceFile)
         : SourceFile(sourceFile) {}
 
-    void TestBody() override {}
+    void TestBody() override {
+        using namespace llvm::sys;
+        int fd = 0;
+        auto opened = fs::openFileForRead(SourceFile.string(), fd);
+        ASSERT_TRUE(!opened) << "Failed to open source file: " << opened.message();
+        llvm::SmallString<fs::DefaultReadChunkSize> buffer;
+        auto file = fs::convertFDToNativeFile(fd);
+        auto read = fs::readNativeFile(file, buffer);
+        ASSERT_TRUE(!!read) << "Failed to read source file: " << llvm::toString(read.takeError());
+
+        auto exitCode = TestUtils::CompileAndRun(SourceFile.string(), (std::string)buffer);
+        EXPECT_EQ(0, exitCode);
+    }
 };
 
 void RegisterTests() {
