@@ -2,9 +2,10 @@
 
 #include <filesystem>
 
-#include "gtest/gtest.h"
+#include "Core/Vector.h"
 #include "TestUtils.h"
-#include "llvm/Support/FileSystem.h"
+#include "gtest/gtest.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 class CompileTest : public testing::Test {
     std::filesystem::path SourceFile;
@@ -14,16 +15,20 @@ class CompileTest : public testing::Test {
         : SourceFile(sourceFile) {}
 
     void TestBody() override {
-        using namespace llvm::sys;
-        int fd = 0;
-        auto opened = fs::openFileForRead(SourceFile.string(), fd);
-        ASSERT_TRUE(!opened) << "Failed to open source file: " << opened.message();
-        llvm::SmallString<fs::DefaultReadChunkSize> buffer;
-        auto file = fs::convertFDToNativeFile(fd);
-        auto read = fs::readNativeFile(file, buffer);
-        ASSERT_TRUE(!!read) << "Failed to read source file: " << llvm::toString(read.takeError());
+        using namespace llvm;
 
-        auto exitCode = TestUtils::CompileAndRun(SourceFile.string(), (std::string)buffer);
+        auto bufOrErr = MemoryBuffer::getFile(SourceFile.string());
+        if (auto ec = bufOrErr.getError()) {
+            ASSERT_TRUE(false) << "cannot open/read " << SourceFile << ": " + ec.message();
+            return;
+        }
+
+        std::unique_ptr<MemoryBuffer>& mb = *bufOrErr;
+        std::string buffer;
+        buffer.reserve(mb->getBufferSize());
+        buffer.assign(mb->getBufferStart(), mb->getBufferSize());
+
+        auto exitCode = TestUtils::CompileAndRun(SourceFile.string(), (std::string)buffer, "main");
         EXPECT_EQ(0, exitCode);
     }
 };
