@@ -11,8 +11,11 @@
 namespace pepper {
     using namespace pepper::ast;
 
-    llvm::BasicBlock* CodeGenerator::codegenBlock(
-        Ref<UserFunction> function, const Block* block, llvm::BasicBlock* basicBlock, llvm::BasicBlock* nextBlock, Vector<Address> localRefs) {
+    llvm::BasicBlock* CodeGenerator::codegenBlock(Ref<UserFunction> function,
+                                                  const Block* block,
+                                                  llvm::BasicBlock* basicBlock,
+                                                  llvm::BasicBlock* nextBlock,
+                                                  Vector<Address> localRefs) {
         basicBlock = basicBlock ? basicBlock : function->appendBlock(block->Name);
         ir()->SetInsertPoint(basicBlock);
 
@@ -23,7 +26,7 @@ namespace pepper {
                 lastInstr = codegen(expr);
                 // if this was the creation of a struct reference, track it
                 // Creation of `this` is ignored
-                if (expr->is<VariableDef>() && !expr->is<ThisDef>()) {
+                if (expr->is<VariableDef>() && !expr->is<ThisDef>() && !expr->is<FieldDef>()) {
                     auto var = expr->as<VariableDef>();
                     if (lastInstr.Ty->is<RefType>())
                         localRefs.emplace_back(lastInstr);
