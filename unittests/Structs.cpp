@@ -27,7 +27,7 @@ struct Test {
 };
 
 int test() {
-    return __sizeof(Test);
+    return sizeof<Test>();
 }
     )SOURCE";
     EXPECT_EQ(8, CompileAndRun(TestName(test_info_), source));
@@ -41,7 +41,7 @@ struct Test<T> {
 
 extend Test<T> {
     int size() {
-        return __sizeof(T);
+        return sizeof<T>();
     }
 }
 

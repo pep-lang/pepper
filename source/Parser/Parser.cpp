@@ -494,18 +494,16 @@ namespace pepper {
             }
 
             // TODO: Move this into a pass on the AST
-            auto functionName = symbol->Name;
-            if (functionName == "__sizeof") {
-                if (args.size() != 1)
-                    throw CompileError(builder->Source, "__sizeof accepts only a single type parameter");
-                if (auto symbolRef = args.front()->as<SymbolRef>()) {
-                    auto sizeOf = new SizeOf(symbolRef->Name);
-                    builder->insert(sizeOf);
-                }
+            auto spec = !symbol->Type.empty() ? symbol->Type : symbol->Name;
+            if (spec.Name == "sizeof") {
+                if (spec.GenericTypes.size() != 1)
+                    throw CompileError(builder->Source, "sizeof<T>() accepts only a single generic type argument");
+                auto typeName = spec.GenericTypes.front();
+                auto sizeOf = new SizeOf(typeName);
+                builder->insert(sizeOf);
                 return;
             }
-            auto functionSpec = !symbol->Type.empty() ? symbol->Type : functionName;
-            auto call = new FunctionCall(functionSpec, std::move(args));
+            auto call = new FunctionCall(spec, std::move(args));
             builder->insert(call);
         }
 
