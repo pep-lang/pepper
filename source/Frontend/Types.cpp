@@ -13,10 +13,9 @@ namespace pepper {
 
     Type::Type(const Ident& name, llvm::Type* type, bool isSigned)
         : std::enable_shared_from_this<Type>()
-        , TypeName(name)
-        , TypeRef(type)
-        , IsSigned(isSigned) {
-    }
+        , Name(name)
+        , IRType(type)
+        , IsSigned(isSigned) {}
 
     Operations* Type::ops() {
         if (!Ops)
@@ -34,17 +33,17 @@ namespace pepper {
     //    }
 
     Ref<Type> Type::pointer() const {
-        if (TypeName.ends_with('*')) {
+        if (Name.ends_with('*')) {
             throw CompileError("Pointers to pointers are not supported");
         }
-        if (TypeRef->isPointerTy()) {
+        if (IRType->isPointerTy()) {
             throw CompileError("Explicit pointers to structs are not supported");
         }
-        return Types::get(TypeName + "*");
+        return Types::get(Name + "*");
     }
 
     unsigned Type::size() const {
-        return TypeRef->getPrimitiveSizeInBits() / 8;
+        return IRType->getPrimitiveSizeInBits() / 8;
     }
 
     Ref<Type> Types::Bool;
@@ -60,13 +59,11 @@ namespace pepper {
     Ref<Type> Types::Float;
 
     PointerType::PointerType(Ref<Type> pointee)
-        : PointerType(pointee->name() + "*", pointee) {
-    }
+        : PointerType(pointee->name() + "*", pointee) {}
 
     PointerType::PointerType(const Ident& name, Ref<Type> pointee)
         : Type(name, pointee->llvmType()->getPointerTo(), false)
-        , PointeeType(pointee) {
-    }
+        , PointeeType(pointee) {}
 
     unsigned PointerType::size() const {
         return llvmType()->getPrimitiveSizeInBits() / 8;

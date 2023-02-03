@@ -17,6 +17,7 @@
       "name": "(lldb) Pepper",
       "type": "lldb",
       "request": "launch",
+      "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/out/${fileBasenameNoExtension}",
       "preLaunchTask": "Pepper: Compile"
     }

@@ -19,21 +19,17 @@ namespace pepper::ast {
     struct FunctionNode : public Symbol {
         DECLARE_RTTI(FunctionNode, Node);
 
-        // type parameters in function decl
-        Vector<Ident, 0> GenericParams;
-
         TypeName ReturnType;
         Params Parameters;
         const bool Vararg;
+        bool Generic;
 
-        FunctionNode(const TypeName& returnType, const Ident& name, const Params& params, bool vararg = false);
+        FunctionNode(const TypeName& returnType, const TypeName& name, const Params& params, bool vararg = false);
 
         std::string toString() const override;
         std::string dump(int indent) const override;
 
-        bool isGeneric() const {
-            return !GenericParams.empty();
-        }
+        bool isGeneric() const;
 
         virtual std::string signature() const;
 
@@ -51,7 +47,7 @@ namespace pepper::ast {
         TNodeRef<Block> Body;
 
         FunctionDef(
-            const TypeName& returnType, const Ident& name, const Params& params = Params(), bool varargs = false)
+            const TypeName& returnType, const TypeName& name, const Params& params = Params(), bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {
             Body.reset(new Block(name));
         }
@@ -92,6 +88,8 @@ namespace pepper::ast {
         DECLARE_RTTI(ExternFunctionDef, FunctionDef);
         AST_NODE_POD_CLONE(ExternFunctionDef);
 
+        bool Weak = false;
+
         ExternFunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = {}, bool varargs = false)
             : FunctionDef(returnType, name, params, varargs) {}
@@ -117,29 +115,9 @@ namespace pepper::ast {
             return Target->ReturnType;
         }
 
-        std::string toString() const override {
-            Vector<std::string> argsStr = Query(Args).select<std::string>([](const auto& a) { return a->toString(); });
-            return trim(
-                Node::toString() + std::string(llvm::formatv(
-                                       "{0}({1})", Target.name(), llvm::join(argsStr.begin(), argsStr.end(), ", "))));
-        }
-
-        std::string dump(int indent) const override {
-            Vector<std::string> argsStr = Query(Args).select<std::string>([](const auto& a) { return a->dump(); });
-            return
-
-                llvm::formatv("{0} {1}({2})",
-                              Node::dump(indent),
-                              Target.name(),
-                              llvm::join(argsStr.begin(), argsStr.end(), ", "));
-        }
-
-        void visit(Visitor& visitor) override {
-            Expression::visit(visitor);
-            visitor.visit(Target);
-            for (auto& arg : Args)
-                visitor.visit(arg);
-        }
+        std::string toString() const override;
+        std::string dump(int indent) const override;
+        void visit(Visitor& visitor) override;
     };
 
     struct Return : public Expression {

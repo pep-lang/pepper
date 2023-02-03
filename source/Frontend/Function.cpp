@@ -10,17 +10,23 @@
 #include "llvm/IR/IRBuilder.h"
 
 namespace pepper {
-    Function::Function(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params, bool vararg)
+    Function::Function(llvm::Module& module,
+                       const Ident& name,
+                       Ref<Type> returnType,
+                       const Params& params,
+                       bool vararg,
+                       LinkageType linkage)
         : Name(name)
         , ReturnType(returnType)
         , Parameters(params)
-        , Vararg(vararg) {
+        , Vararg(vararg)
+        , Linkage(linkage) {
         Vector<llvm::Type*> paramTypes;
         std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.Type); });
         auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
         auto sig = Types::toString(llvmType);
         FuncType = Types::add(Ref<Type>::New(sig, llvmType));
-        Func = llvm::Function::Create(llvmType, llvm::GlobalValue::ExternalLinkage, Name, module);
+        Func = llvm::Function::Create(llvmType, Linkage, Name, module);
     }
 
     Address Function::call(const Vector<Address>& args) const {

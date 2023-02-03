@@ -27,6 +27,9 @@ namespace pepper {
                 fieldDef->Source, "struct {0} does not contain a field named {1}", st->name(), fieldName);
         }
         auto type = Types::get(fieldDef->Type.toString());
+        if (!type)
+            throw CompileError(
+                fieldDef->Source, "Unknown type for field {0}: {1}", fieldDef->Name, fieldDef->Type.toString());
         auto value = maybeCodegen(fieldDef->Default);
         if (value) {
             type->ops()->init(field, value);
@@ -65,6 +68,9 @@ namespace pepper {
         pepper::Params fields;
         for (auto& field : structDef->Fields) {
             auto type = Types::get(field->Type.toString());
+            if (!type)
+                throw CompileError(
+                    field->Source, "Field {0} has unknown type {1}", field->Name, field->Type.toString());
             fields.emplace_back(field->Name, type);
         }
 

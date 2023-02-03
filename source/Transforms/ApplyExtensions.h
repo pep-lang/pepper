@@ -43,6 +43,7 @@ namespace pepper::ast {
                 applied().insert(ext);
                 auto target = ext->Target.value();
                 for (const auto& srcMethod : ext->Methods) {
+                    PEP_TRACE_AST("Method: {0}.{1}", target->Name, srcMethod->Name);
                     auto method = srcMethod->cloneAs<MethodDef>();
                     method->Struct = target;
                     target->Methods.push_back(method);

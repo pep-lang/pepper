@@ -8,6 +8,7 @@
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
+#include "llvm/ADT/StringSet.h"
 
 namespace pepper::ast {
     const TypeName TypeName::Void = TypeName{"void"};
@@ -22,6 +23,32 @@ namespace pepper::ast {
     const TypeName TypeName::UInt64 = TypeName{"u64"};
     const TypeName TypeName::Double = TypeName{"f64"};
     const TypeName TypeName::Float = TypeName{"f32"};
+
+    // clang-format off
+    llvm::StringSet<> TypeName::IntegralTypes = {
+        Void.Name,
+        Auto.Name,
+        Bool.Name,
+
+        VoidPtr.Name,
+        Int8.Name,
+        "char",
+        UInt8.Name,
+        "byte",
+        Int32.Name,
+        "int",
+        UInt32.Name,
+        "uint",
+        Int64.Name,
+        "long",
+        UInt64.Name,
+        "ulong",
+        Double.Name,
+        "double",
+        Float.Name,
+        "float",
+    };
+    // clang-format on
 
     const TypeName& TypeName::Widest(const TypeName& lhs, const TypeName& rhs) {
         struct NumericTypeName {
@@ -73,14 +100,27 @@ namespace pepper::ast {
             "Incomparable types encountered while computing width: {0}, {1}", lhs.toString(), rhs.toString());
     }
 
+    bool TypeName::isPointer() const {
+        return isScalar() && Name.ends_with('*');
+    }
+
+    bool TypeName::isIntegral() const {
+        return isScalar() && IntegralTypes.contains(Name);
+    }
+
+    bool TypeName::isStruct() const {
+        return (isScalar() && !isIntegral());
+    }
+
     std::string TypeName::toString() const {
         std::string genericTypes;
         if (isGeneric()) {
             Vector<std::string> genericStrings =
-                Query(GenericTypes).select<std::string>([](auto& a) { return a.toString(); });
+                Query(SubTypes).select<std::string>([](auto& a) { return a.toString(); });
             genericTypes = "<" + llvm::join(genericStrings.begin(), genericStrings.end(), ", ") + ">";
         }
-        return Name + genericTypes;
+        std::string ptr = isArray() ? "*" : "";
+        return Name + genericTypes + ptr;
     }
 
     std::string Node::source(int width, int indent, const char* sep) const {

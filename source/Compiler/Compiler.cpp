@@ -82,6 +82,7 @@ namespace pepper {
             };
 
             if (Opts->InputStream) {
+                PEP_TRACE(TraceChannel::Parser, "Parsing InputStream");
                 auto ast = parse(*Opts->InputStream, ModuleName);
                 parseTree->merge(ast);
                 collectImports(ModuleName, ast);
@@ -90,6 +91,7 @@ namespace pepper {
             while (!sourceFiles.empty()) {
                 const auto& sourceFile = sourceFiles.pop_back_val();
                 std::ifstream sourceStream(sourceFile, std::ios_base::in);
+                PEP_TRACE(TraceChannel::Parser, "Parsing {0}...", sourceFile);
                 auto ast = parse(sourceStream, sourceFile);
                 parseTree->merge(ast);
 
@@ -119,7 +121,7 @@ namespace pepper {
         }
 
         Ref<CodeGenModule> codegen(Ref<ast::AST> parseTree) {
-            auto module = Ref<CodeGenModule>::New(*Context, ModuleName);
+            auto module = Ref<CodeGenModule>::New(*Context, ModuleName, Opts->PrimarySourceFile);
             CodeGenerator codeGen(module);
             codeGen.generate(parseTree);
 
@@ -247,9 +249,13 @@ namespace pepper {
         static std::string findRuntimePath() {
             Vector<std::string> searchPaths = {
                 "runtime",
-                "../../../../runtime",
-                "../../../runtime",
+                ".pep/runtime",
+                ".pep/build/runtime",
             };
+
+            for (int idx = 1; idx < 6; ++idx) {
+                searchPaths.emplace_back(repeat("../", idx) + "runtime");
+            }
 
             for (const auto& searchPath : searchPaths) {
                 std::filesystem::path path(searchPath);
@@ -271,10 +277,30 @@ namespace pepper {
             return sources;
         }
 
+        static Vector<std::string> findRuntimeLibraries(const std::string& runtimeDir) {
+            auto triple = llvm::Triple{llvm::sys::getDefaultTargetTriple()};
+            Vector<std::string> libs;
+            std::filesystem::path path(runtimeDir);
+            for (const auto& file : std::filesystem::directory_iterator(path)) {
+                if (triple.isOSWindows()) {
+                    if (file.path().extension() == ".lib") {
+                        libs.emplace_back(absolute(file.path()).string());
+                    }
+                } else {
+                    if (file.path().extension() == ".a") {
+                        libs.emplace_back(absolute(file.path()).string());
+                    }
+                }
+            }
+            return libs;
+        }
+
         void importRuntime() {
             if (Opts->CompileRuntime) {
                 auto runtimePath = findRuntimePath();
                 auto runtimeSources = findRuntimeModuleSources(runtimePath);
+                auto runtimeLibs = findRuntimeLibraries(runtimePath);
+                Opts->Libraries.append(runtimeLibs);
                 Opts->ImportPaths.insert(Opts->ImportPaths.begin(), runtimePath);
                 Opts->SourceFiles.insert(Opts->SourceFiles.begin(), runtimeSources.begin(), runtimeSources.end());
             }

@@ -1,0 +1,5 @@
+*.lib
+*.o
+*.a
+*.dylib
+*.dll

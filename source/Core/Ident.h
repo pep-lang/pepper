@@ -15,36 +15,25 @@ namespace pepper {
 
       public:
         Ident()
-            : std::string() {
-        }
+            : std::string() {}
 
         Ident(const std::string& str)
-            : super(str) {
-        }
+            : super(str) {}
 
         Ident(const char* str)
-            : super(str) {
-        }
+            : super(str) {}
 
         Ident(const Ident& name)
-            : super(name) {
-        }
+            : super(name) {}
 
         Ident(Ident&& name)
-            : super(std::forward<Ident>(name)) {
-        }
+            : super(std::forward<Ident>(name)) {}
 
         Ident(std::string&& str)
-            : super(std::forward<std::string>(str)) {
-        }
+            : super(std::forward<std::string>(str)) {}
 
         Ident& operator=(const Ident& name) {
             super::assign(name);
-            return *this;
-        }
-
-        Ident& operator=(const std::string str) {
-            super::assign(str);
             return *this;
         }
     };

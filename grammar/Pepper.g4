@@ -24,6 +24,8 @@ functionDefinition
 
 functionName
     : typeDeclaration
+    | binaryOperator
+    | unaryOperator
     ;
 
 parameterList
@@ -62,7 +64,7 @@ statement
     ;
 
 externFunction
-    : '@' 'extern' externTypeName Identifier '(' externParameterList? ')'
+    : '@' 'extern' 'weak'? externTypeName Identifier '(' externParameterList? ')'
     ;
 
 externTypeName
@@ -104,7 +106,7 @@ typeQualifier
 	;
 
 typeName
-    : Identifier genericArgs?
+    : Identifier genericArgs? Brackets?
 	;
 
 genericArgs
@@ -287,11 +289,18 @@ assignmentOperator
     | '-='
     | '<<='
     | '>>='
-    | '>>>='
     | '&='
     | '^='
     | '|='
     | '**='
+    ;
+
+binaryOperator
+    : '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<<' | '>>'
+    ;
+
+unaryOperator
+    : '++' | '--' | '[]'
     ;
 
 argumentList
@@ -333,6 +342,7 @@ Switch : 'switch';
 This: 'this';
 Use: 'use';
 Var: 'var';
+Weak: 'weak';
 While : 'while';
 With: 'with';
 
@@ -340,6 +350,7 @@ LeftParen : '(';
 RightParen : ')';
 LeftBracket : '[';
 RightBracket : ']';
+Brackets: '[]';
 LeftBrace : '{';
 RightBrace : '}';
 

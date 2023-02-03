@@ -34,7 +34,7 @@ class CompileTest : public testing::Test {
 };
 
 void RegisterTests() {
-    auto sourceDir = absolute(std::filesystem::current_path() / "tests");
+    auto sourceDir = absolute(std::filesystem::current_path());
     if (!exists(sourceDir))
         return;
     for (auto entry : std::filesystem::directory_iterator(sourceDir)) {

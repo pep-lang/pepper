@@ -1,0 +1,24 @@
+{
+  "platformSettings.autoLoad": true,
+  "platformSettings.platforms": {
+    "windows": {},
+    "osx": {
+      "lldb.library": "/usr/local/Cellar/llvm/15.0.6/lib/liblldb.15.0.6.dylib"
+    }
+  },
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "out/**": true
+  },
+  "editor.formatOnSave": true,
+  "cmake.configureArgs": ["-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"],
+  "debug.allowBreakpointsEverywhere": true,
+  "debug.showBreakpointsInOverviewRuler": true,
+  "lldb.displayFormat": "auto",
+  "lldb.showDisassembly": "auto",
+  "lldb.dereferencePointers": false,
+  "lldb.consoleMode": "commands",
+  "lldb.library": "",
+  "lldb.evaluateForHovers": false,
+  "lldb.verboseLogging": false
+}

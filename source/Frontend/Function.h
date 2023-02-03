@@ -10,6 +10,7 @@
 #include "Core/Ident.h"
 #include "Core/Vector.h"
 #include "Frontend/Param.h"
+#include "llvm/IR/Function.h"
 
 namespace llvm {
     class BasicBlock;
@@ -22,6 +23,9 @@ namespace pepper {
     class Function : public std::enable_shared_from_this<Function> {
         DECLARE_RTTI(Function);
 
+      public:
+        using LinkageType = llvm::GlobalValue::LinkageTypes;
+
       protected:
         const Ident Name;
         Ref<Type> ReturnType;
@@ -29,13 +33,16 @@ namespace pepper {
         bool Vararg;
         llvm::Function* Func;
         Ref<Type> FuncType;
+        LinkageType Linkage = LinkageType::ExternalLinkage;
 
       public:
+
         Function(llvm::Module& module,
                  const Ident& name,
                  Ref<Type> returnType,
                  const Params& params = Params(),
-                 bool vararg = false);
+                 bool vararg = false,
+                 LinkageType linkage = LinkageType::ExternalLinkage);
 
         const Ident& name() const {
             return Name;
@@ -90,8 +97,7 @@ namespace pepper {
       public:
         Method(llvm::Module& module, Ref<Struct> st, const Ident& name, Ref<Type> returnType, const Params& params = {})
             : UserFunction(module, name, returnType, params)
-            , This(st) {
-        }
+            , This(st) {}
 
         bool countArgRefs() const override;
     };

@@ -46,7 +46,7 @@ namespace pepper::ast {
       public:
         MethodDef(const TypeName& structName,
                   const TypeName& returnType,
-                  const Ident& name,
+                  const TypeName& name,
                   const Params& params = Params(),
                   bool vararg = false);
 
@@ -150,10 +150,6 @@ namespace pepper::ast {
             : SymbolRef(ref)
             , LHS(ref.LHS->cloneAs<Expression>()) {}
 
-        const TypeName& type() const override {
-            return LHS->type();
-        }
-
         std::string toString() const override {
             return Node::toString() + std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", Name));
         }
@@ -220,28 +216,5 @@ namespace pepper::ast {
 
         ThisRef()
             : SymbolRef("this") {}
-    };
-
-    struct SizeOf : public Expression {
-        DECLARE_RTTI(SizeOf, Expression);
-        AST_NODE_POD_CLONE(SizeOf);
-
-        TypeName Type;
-
-        SizeOf(const TypeName& type)
-            : Type(type) {}
-
-        void visit(Visitor& visitor) override {
-            Expression::visit(visitor);
-            visitor.visit(Type);
-        }
-
-        std::string toString() const override {
-            return llvm::formatv("{0} {1}", Node::toString(), Type.toString());
-        }
-
-        std::string dump(int) const override {
-            return toString();
-        }
     };
 } // namespace pepper::ast

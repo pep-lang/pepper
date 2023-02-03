@@ -12,10 +12,12 @@ namespace pepper::ast {
     struct SymbolTable {
         llvm::StringMap<FunctionDef*> Functions;
         llvm::StringMap<StructDef*> Structs;
+        llvm::StringSet<> Types;
 
-        SymbolTable() = default;
+        SymbolTable();
         SymbolTable(const AST& ast);
         Symbol* find(const Ident& name) const;
+        TypeName find(const TypeName& name) const;
     };
 
     struct Transformer {

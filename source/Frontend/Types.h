@@ -28,8 +28,8 @@ namespace pepper {
         DECLARE_RTTI(Type);
 
       private:
-        const Ident TypeName;
-        llvm::Type* TypeRef;
+        const Ident Name;
+        llvm::Type* IRType;
         const bool IsSigned;
         Ref<Operations> Ops;
 
@@ -37,15 +37,15 @@ namespace pepper {
         Type(const Ident& name, llvm::Type* type, bool isSigned = false);
 
         llvm::Type* llvmType() const {
-            return TypeRef;
+            return IRType;
         }
 
         const Ident& name() const {
-            return TypeName;
+            return Name;
         }
 
         operator llvm::Type*() const {
-            return TypeRef;
+            return IRType;
         }
 
         bool isSigned() const {

@@ -163,18 +163,13 @@ namespace pepper::ast {
 
         void beginFunction(FunctionDef* func) override {
             auto& scope = ScopeStack.back();
-            // Figure out if this is a generic function or an instantiation/normal function
-            TypeName funcType;
-            if (func->isGeneric())
-                funcType = {func->Name, Query(func->GenericParams).select<TypeName>()};
-            else
-                funcType = func->Type;
 
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Source = Source;
             func->Body->Source = func->Source;
-            beginBlock(func->Body);
+            beginScope(func->Type.toString());
             auto& fnScope = ScopeStack.back();
+            fnScope->Block = func->Body;
             fnScope->FunctionTarget = func;
             fnScope->StructTarget = func->is<MethodDef>() ? func->as<MethodDef>()->Struct : Resolvable<StructDef>{};
         }
@@ -182,7 +177,7 @@ namespace pepper::ast {
         void endFunction() override {
             auto& scope = ScopeStack.back();
             auto function = scope->FunctionTarget;
-            endBlock();
+            endScope();
             if (!structTarget() && !extensionTarget()) {
                 ast.insert(function);
             }
@@ -214,7 +209,7 @@ namespace pepper::ast {
         void endScope() override {
             auto scope = ScopeStack.pop_back_val();
             Messages::Outdent(TraceChannel::Parser);
-            PEP_TRACE(TraceChannel::Parser, "}} // end Scope({0})", scope->Name);
+            PEP_TRACE(TraceChannel::Parser, "} // end Scope({0})", scope->Name);
         }
 
         void symbol(VariableDef* var) override {
@@ -243,6 +238,7 @@ namespace pepper::ast {
 
         void import(Import* import) override {
             ast.insert(import);
+            trace(import);
         }
 
         void trace(const Node* node) const override {

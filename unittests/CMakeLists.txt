@@ -36,22 +36,23 @@ target_link_directories(PepperTests PRIVATE ${PEPPER_LIBRARY_DIRS})
 target_link_libraries(PepperTests GTest::gtest ${PEPPER_LIBRARIES} TestSupport)
 set_target_properties(PepperTests PROPERTIES LINKER_LANGUAGE CXX)
 
+add_dependencies(PepperTests TestSupport)
+
+set(TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../tests)
+
 if (MSVC)
+    set_target_properties(TestSupport PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:PepperTests>)
     add_custom_command(TARGET PepperTests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:PepperTests>
-            COMMAND_EXPAND_LISTS)
-    add_custom_command(TARGET PepperTests POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TEST_SUPPORT_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:PepperTests>
+            MAIN_DEPENDENCY ${ANTLR4_RUNTIME_LIBRARIES}
             COMMAND_EXPAND_LISTS)
 endif ()
 
 add_custom_command(TARGET PepperTests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/Support/TestSupport.pep $<TARGET_FILE_DIR:PepperTests>
-        COMMAND_EXPAND_LISTS)
-
-add_custom_command(TARGET PepperTests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../tests $<TARGET_FILE_DIR:PepperTests>/tests
-        COMMAND_EXPAND_LISTS)
+        MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/Support/TestSupport.pep
+        BYPRODUCTS ${TESTS_DIR}/TestSupport.pep
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/Support/TestSupport.pep ${TESTS_DIR})
 
 include(GoogleTest)
-gtest_discover_tests(PepperTests)
+gtest_discover_tests(PepperTests WORKING_DIRECTORY ${TESTS_DIR})

@@ -3,14 +3,15 @@
 #include <filesystem>
 
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/Query.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Host.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+
+#define PEP_TRACE_LINK(fmt, ...) PEP_TRACE(TraceChannel::Link, fmt, __VA_ARGS__)
 
 namespace pepper {
     using namespace llvm;
@@ -62,16 +63,7 @@ namespace pepper {
 
     Triple GetHostTriple() {
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
-        auto cpu = "generic";
-        auto cpuFeatures = "";
-
-        std::string error;
-        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-        llvm::TargetOptions opt;
-        auto rm = llvm::Optional<llvm::Reloc::Model>();
-        auto tm = target->createTargetMachine(targetTriple, cpu, cpuFeatures, opt, rm);
-        auto triple = tm->getTargetTriple();
-        return triple;
+        return Triple{targetTriple};
     }
 
     void WriteResponseFile(const std::string& responseFile, const Vector<std::string>& objFiles) {
@@ -127,19 +119,28 @@ namespace pepper {
         std::string pdbPath = outputPath.replace_extension(".pdb").string();
         Vector<std::string> linkArgs = {
             //"@" + libResponseFile,
-            "/out:" + opts->OutputPath,
             //"/implib:" + libPath,
+            //"/verbose",
+            //"/verbose:lib",
             "/pdb:" + pdbPath,
             "/version:0.0",
             "/machine:x64",
             "/debug",
             "/entry:main",
-            "/defaultlib:ucrt",
+            "/defaultlib:msvcrt",
             "/subsystem:console",
-            //"/verbose",
-            //"/verbose:lib",
+            "ucrt.lib",
+            "libcmt.lib",
+            "kernel32.lib",
+            "user32.lib",
+            "shell32.lib",
+            "vcruntime.lib",
         };
+        linkArgs.append(opts->Libraries);
+        linkArgs.emplace_back("/out:" + opts->OutputPath);
         linkArgs.append(objFiles);
+
+        PEP_VERBOSE("lld-link.exe {0}", llvm::join(linkArgs, " "));
 
         auto linkArgsView = Query(linkArgs).select<StringRef>().toVector();
         std::string lldErrors;
@@ -188,7 +189,13 @@ namespace pepper {
             // clang-format on
         }
 
+        for (auto& lib : opts->Libraries) {
+            ldArgs.emplace_back("-l" + lib);
+        }
+
         ldArgs.append(objFiles);
+
+        PEP_VERBOSE("ld {0}", llvm::join(ldArgs, " "));
 
         auto ldArgsView = Query(ldArgs).select<StringRef>().toVector();
         std::string lldErrors;

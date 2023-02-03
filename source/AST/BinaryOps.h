@@ -300,4 +300,39 @@ namespace pepper::ast {
       public:
         using CompoundAssign::CompoundAssign;
     };
+
+    struct Index : public Expression {
+        DECLARE_RTTI(Index, Expression);
+        AST_NODE_POD_CLONE(Index);
+
+        TNodeRef<Expression> LHS;
+        TNodeRef<Expression> IndexExpr;
+
+      public:
+        Index(Expression* lhs = nullptr, Expression* indexExpr = nullptr)
+            : LHS(lhs)
+            , IndexExpr(indexExpr) {}
+
+        const TypeName& type() const override {
+            return LHS->type();
+        }
+
+        std::string toString() const override {
+            return llvm::formatv("{0} {1}[{2}]",
+                                 Node::toString(),
+                                 LHS ? LHS->toString() : "None",
+                                 IndexExpr ? IndexExpr->toString() : "??");
+        }
+
+        std::string dump(int indent) const override {
+            return llvm::formatv(
+                "{0} {1}[{2}]", Node::dump(indent), LHS ? LHS->dump() : "None", IndexExpr ? IndexExpr->dump() : "??");
+        }
+
+        void visit(Visitor& visitor) override {
+            Expression::visit(visitor);
+            visitor.visit(LHS);
+            visitor.visit(IndexExpr);
+        }
+    };
 } // namespace pepper::ast

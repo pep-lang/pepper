@@ -9,9 +9,11 @@
 namespace pepper {
     struct Options {
         std::string ProgramPath;
+        std::string PrimarySourceFile;
         Vector<std::string> SourceFiles;
         Vector<std::string> ImportPaths;
         Vector<std::string> ForcedImports;
+        Vector<std::string> Libraries;
         std::string OutputPath;
         std::string ExeName;
         std::string BuildDir;

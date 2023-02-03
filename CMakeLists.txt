@@ -26,6 +26,7 @@ find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat native remarks orcjit option support core)
 
+add_subdirectory(support)
 add_subdirectory(grammar)
 
 file(GLOB_RECURSE PEPPER_CORE_SOURCE LIST_DIRECTORIES false source/**)
@@ -46,7 +47,7 @@ set(PEPPER_LIBRARIES ${LLD_LIBRARIES} ${LLVM_LIBRARIES} ${ANTLR_LIBRARIES} Peppe
 set(PEPPER_LIBRARY_DIRS ${LLVM_LIBRARY_DIRS})
 
 add_executable(pepper source/main.cpp)
-add_dependencies(pepper PepperParser PepperCore)
+add_dependencies(pepper PepperParser PepperCore Support)
 target_link_directories(pepper PRIVATE ${PEPPER_LIBRARY_DIRS})
 target_link_libraries(pepper ${PEPPER_LIBRARIES})
 target_compile_definitions(pepper PRIVATE ${LLVM_DEFINITIONS_LIST})

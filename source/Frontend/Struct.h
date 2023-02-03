@@ -60,7 +60,7 @@ namespace pepper {
         Ref<StructType> StructTy;
         Ref<RefType> RefTy;
         Ref<Function> Constructor;
-        std::map<Ident, Param> Fields;
+        Vector<Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
         size_t Size;
         size_t Align;
@@ -83,17 +83,11 @@ namespace pepper {
         }
 
         void setFields(const Params& fields) {
-            for (auto& field : fields) {
-                Fields.insert_or_assign(field.Name, field);
-            }
+            Fields = fields;
         }
 
         Params fields() const {
-            Params fs;
-            for (auto& field : Fields) {
-                fs.push_back(field.second);
-            }
-            return fs;
+            return Fields;
         }
 
         void setMethods(const Vector<Ref<Method>>& methods) {

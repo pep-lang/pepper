@@ -35,7 +35,7 @@ namespace pepper::ast {
                         resolvable->resolve(fn);
                         continue;
                     }
-                    if (ReportMissing)
+                    if (ReportMissing && !resolvable->name().starts_with("__"))
                         throw CompileError("Unable to resolve function {0}", resolvable->name());
                 }
             }

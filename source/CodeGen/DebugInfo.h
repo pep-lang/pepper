@@ -23,9 +23,9 @@ namespace pepper {
         llvm::Module* Module;
         Ref<llvm::DIBuilder> DI;
         llvm::DICompileUnit* CompileUnit;
-        llvm::DIFile* SourceFile;
         Vector<llvm::DIScope*> Stack;
         llvm::DenseMap<const Type*, llvm::TrackingMDRef> Types;
+        llvm::StringMap<llvm::DIFile*> SourceFiles;
 
         SourceLocation Source;
 
@@ -41,6 +41,8 @@ namespace pepper {
         const SourceLocation& getSourceLocation() const {
             return Source;
         }
+
+        llvm::DIFile* getSourceFile(const std::string& sourceFile = {});
 
         // void emitSourceLocation(const SourceLocation& source);
 

@@ -4,6 +4,7 @@
 #include "AST/Block.h"
 #include "AST/Branches.h"
 #include "AST/Functions.h"
+#include "AST/Intrinsics.h"
 #include "AST/Literals.h"
 #include "AST/Loops.h"
 #include "AST/Struct.h"

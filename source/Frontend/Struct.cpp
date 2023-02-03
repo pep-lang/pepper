@@ -23,6 +23,8 @@ namespace pepper {
         // Add ref type as <struct>
         RefTy = Ref<RefType>::New(StructTy);
         Types::add(RefTy);
+        auto pointerTy = Ref<PointerType>::New(RefTy);
+        Types::add(pointerTy);
         Constructor = Ref<UserFunction>::New(module, name, RefTy, ctorParams);
 
         setFields(fields);
@@ -53,10 +55,9 @@ namespace pepper {
     }
 
     Address Struct::getField(llvm::Value* instance, const Ident& name) const {
-        auto fieldIt = Fields.find(name);
-        if (fieldIt != Fields.end()) {
-            int idx = (int)std::distance(Fields.begin(), fieldIt);
-            return getField(instance, idx, fieldIt->second);
+        auto idx = Query(Fields).indexOf([&](auto& f) { return f.Name == name; });
+        if (idx != -1) {
+            return getField(instance, (int)idx, Fields[idx]);
         }
         return Address{};
     }

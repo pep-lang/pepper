@@ -13,9 +13,8 @@ namespace pepper {
     DebugInfo::DebugInfo(llvm::Module* module, const std::string& sourceFile)
         : Module(module) {
         DI = Ref<llvm::DIBuilder>::New(*module);
-        auto sourcePath = std::filesystem::path(sourceFile);
-        SourceFile = DI->createFile(sourcePath.filename().string(), sourcePath.parent_path().string());
-        CompileUnit = DI->createCompileUnit(llvm::dwarf::DW_LANG_C, SourceFile, "Pepper Compiler", false, {}, 0);
+        auto primarySourceFile = getSourceFile(sourceFile);
+        CompileUnit = DI->createCompileUnit(llvm::dwarf::DW_LANG_C, primarySourceFile, "Pepper Compiler", false, {}, 0);
         pushScope(CompileUnit);
     }
 
@@ -34,9 +33,24 @@ namespace pepper {
     void DebugInfo::setSourceLocation(const SourceLocation& source) {
         if (!source.File.empty()) {
             Source = source;
+            if (!SourceFiles.lookup(Source.File)) {
+                auto sourcePath = std::filesystem::path(Source.File);
+                SourceFiles[Source.File] =
+                    DI->createFile(sourcePath.filename().string(), sourcePath.parent_path().string());
+            }
             if (auto builder = ir())
                 builder->SetCurrentDebugLocation(location());
         }
+    }
+
+    llvm::DIFile* DebugInfo::getSourceFile(const std::string& sourceFile) {
+        auto source = (sourceFile.empty()) ? Source.File : sourceFile;
+        if (auto diFile = SourceFiles.lookup(source))
+            return diFile;
+        auto sourcePath = std::filesystem::path(source);
+        auto diFile = SourceFiles[Source.File] =
+            DI->createFile(sourcePath.filename().string(), sourcePath.parent_path().string());
+        return diFile;
     }
 
     Ref<llvm::IRBuilderBase> DebugInfo::ir() {
@@ -82,22 +96,27 @@ namespace pepper {
                   value.Name,
                   Source.toString());
         auto local = DI->createAutoVariable(
-            localScope(), value.Name, SourceFile, Source.Line, getOrCreateType(value.Ty.get()), true);
+            localScope(), value.Name, getSourceFile(), Source.Line, getOrCreateType(value.Ty.get()), true);
         llvm::SmallVector<uint64_t, 3> diExpr;
         DI->insertDeclare(value.Value, local, DI->createExpression(diExpr), location(), ir()->GetInsertBlock());
         return local;
     }
 
     llvm::DIGlobalVariableExpression* DebugInfo::emitGlobalVariable(const Address& global) {
-        return DI->createGlobalVariableExpression(
-            globalScope(), global.Name, global.Name, SourceFile, Source.Line, getOrCreateType(global.Ty.get()), true);
+        return DI->createGlobalVariableExpression(globalScope(),
+                                                  global.Name,
+                                                  global.Name,
+                                                  getSourceFile(),
+                                                  Source.Line,
+                                                  getOrCreateType(global.Ty.get()),
+                                                  true);
     }
 
     llvm::DIType* DebugInfo::emitStruct(const Struct* st) {
         // Create an empty struct, then enumerate the fields, then swap them in
         auto structDI = DI->createStructType(localScope(),
                                              st->name(),
-                                             SourceFile,
+                                             getSourceFile(),
                                              Source.Line,
                                              st->size() * 8,
                                              st->align() * 8,
@@ -123,15 +142,17 @@ namespace pepper {
         auto fieldTy = getOrCreateType(field.Type.get());
         auto structTy = llvm::cast<llvm::StructType>(st->structType()->llvmType());
         auto structLayout = Module->getDataLayout().getStructLayout(structTy);
-        auto offset = structLayout->getElementOffsetInBits(fieldIdx);
+        auto sizeInBits = sizeOf(field.Type.get());
+        auto alignInBits = 0;
+        auto offsetInBits = structLayout->getElementOffsetInBits(fieldIdx);
 
         return DI->createMemberType(localScope(),
                                     field.Name,
-                                    SourceFile,
+                                    getSourceFile(),
                                     Source.Line,
-                                    sizeOf(field.Type.get()),
-                                    0,
-                                    offset,
+                                    sizeInBits,
+                                    alignInBits,
+                                    offsetInBits,
                                     llvm::DINode::FlagPublic,
                                     structDI);
     }
@@ -163,7 +184,7 @@ namespace pepper {
                 return DI->createMethod(localScope(),
                                         function->name(),
                                         function->name(),
-                                        SourceFile,
+                                        getSourceFile(),
                                         Source.Line,
                                         createFunctionType(function),
                                         -1,
@@ -175,7 +196,7 @@ namespace pepper {
             return DI->createFunction(localScope(),
                                       function->name(),
                                       function->name(),
-                                      SourceFile,
+                                      getSourceFile(),
                                       Source.Line,
                                       createFunctionType(function),
                                       Source.Line,
@@ -198,7 +219,7 @@ namespace pepper {
         llvm::DILocalVariable* local = DI->createParameterVariable(localScope(),
                                                                    value.Name,
                                                                    argIndex + 1,
-                                                                   SourceFile,
+                                                                   getSourceFile(),
                                                                    Source.Line,
                                                                    getOrCreateType(value.Ty.get()),
                                                                    true,

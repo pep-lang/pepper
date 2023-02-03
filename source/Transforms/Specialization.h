@@ -25,7 +25,7 @@ namespace pepper::ast {
             // map params -> args
             for (int idx = 0; idx < Struct->GenericParams.size(); ++idx) {
                 const auto& param = Struct->GenericParams[idx];
-                const auto& type = spec->Type.GenericTypes[idx];
+                const auto& type = spec->Type.SubTypes[idx];
                 TypeMap[param] = type;
             }
         }
@@ -38,16 +38,16 @@ namespace pepper::ast {
         FunctionSpecialization(FunctionDef* base, const FunctionSpec* spec)
             : Function(base) {
             Name = spec->Type;
-            if (base->GenericParams.size() != spec->Type.GenericTypes.size())
+            if (base->Type.SubTypes.size() != spec->Type.SubTypes.size())
                 throw CompileError(spec->Source,
                                    "Incorrect number of generic types in specialization of {0}: got {1}, expected {2}",
                                    base->Name,
-                                   spec->Type.GenericTypes.size(),
-                                   base->GenericParams.size());
+                                   spec->Type.SubTypes.size(),
+                                   base->Type.SubTypes.size());
             // map params -> args
-            for (int idx = 0; idx < base->GenericParams.size(); ++idx) {
-                const auto& param = base->GenericParams[idx];
-                const auto& type = spec->Type.GenericTypes[idx];
+            for (int idx = 0; idx < base->Type.SubTypes.size(); ++idx) {
+                const auto& param = base->Type.SubTypes[idx].Name;
+                const auto& type = spec->Type.SubTypes[idx];
                 TypeMap[param] = type;
             }
         }
@@ -61,9 +61,9 @@ namespace pepper::ast {
 
         static void replace(TypeName& type, const Ident& genericParam, const TypeName& genericArg) {
             if (type.Name == genericParam) {
-                type.Name = genericArg;
+                type = genericArg;
             }
-            for (auto& arg : type.GenericTypes) {
+            for (auto& arg : type.SubTypes) {
                 replace(arg, genericParam, genericArg);
             }
         }

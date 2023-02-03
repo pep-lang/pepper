@@ -12,8 +12,7 @@ namespace pepper {
       protected:
         constexpr RTTI(const RTTI* base = nullptr, const char* name = nullptr)
             : Base(base)
-            , Name(name) {
-        }
+            , Name(name) {}
 
       public:
         constexpr const char* name() const {
@@ -102,7 +101,7 @@ namespace pepper {
     using rtti_type_t = typename RttiType<T>::type;
 
     template <typename T>
-    concept HasRtti = requires(T* t) { t->rtti(); };
+    concept HasRtti = requires(std::remove_pointer_t<T> t) { t.rtti(); };
 
 } // namespace pepper
 

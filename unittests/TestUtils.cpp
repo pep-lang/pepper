@@ -9,7 +9,7 @@
 #include "Compiler/Options.h"
 #include "Core/Messages.h"
 #include "JIT/Executor.h"
-#include "Support/Support.h"
+#include "Support/TestSupport.h"
 #include "gtest/gtest.h"
 #include "llvm/Support/FormatVariadic.h"
 

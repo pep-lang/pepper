@@ -98,14 +98,14 @@ namespace pepper {
         return value;
     }
 
-    Address CodeGenerator::emit(const ast::SizeOf* sizeOf) {
-        auto structDesc = Struct::get(sizeOf->Type.toString());
-        if (structDesc)
-            return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, structDesc->size()));
-        auto type = Types::get(sizeOf->Type.toString());
-        if (!type)
-            throw CompileError(sizeOf->Source, "__sizeof called on non-existent type {0}", sizeOf->Type.toString());
-        return Address(Types::UInt64, llvm::ConstantInt::get(*Types::UInt64, type->size()));
+    Address CodeGenerator::emit(const ast::Index* index) {
+        auto lhs = codegen(index->LHS);
+        auto idx = codegen(index->IndexExpr);
+        auto lhsType = lhs.Ty;
+        lhs = load(lhs);
+        auto element = Address{
+            lhs.Ty, ir()->CreateInBoundsGEP(*lhs.Ty, lhs, {llvm::ConstantInt::get(*Types::Int32, uint64_t(0)), idx})};
+        return element;
     }
 
     Address CodeGenerator::codegen(const ast::Node* node) {
@@ -157,8 +157,10 @@ namespace pepper {
             value = emit(node->as<ast::IntegerLiteral>());
         else if (node->is<ast::BoolLiteral>())
             value = emit(node->as<ast::BoolLiteral>());
-        else if (node->is<ast::SizeOf>())
-            value = emit(node->as<ast::SizeOf>());
+        else if (node->is<ast::Intrinsic>())
+            value = emit(node->as<ast::Intrinsic>());
+        else if (node->is<ast::Index>())
+            value = emit(node->as<ast::Index>());
         else if (node->is<ast::None>())
             ;
         else

@@ -23,6 +23,7 @@ namespace pepper {
 
     void CodeGenerator::codegenFunction(Ref<UserFunction> function, const FunctionDef* funcDef) {
         PEP_TRACE(TraceChannel::Codegen, llvm::formatv("Generate {0}...", funcDef->signature()));
+        Messages::Indent(TraceChannel::Codegen);
         Module->getDebugInfo()->setSourceLocation(funcDef->Source);
         pushFunction(function);
 
@@ -54,6 +55,7 @@ namespace pepper {
 
         codegenBlock(function, funcDef->Body, function->Body, function->Return, localRefs);
 
+        Messages::Outdent(TraceChannel::Codegen);
         popScope();
     }
 
@@ -78,8 +80,15 @@ namespace pepper {
             return pepper::Param{p.Name, type, p.Default ? codegen(p.Default) : Address::Null()};
         });
         auto function = [&]() -> Ref<Function> {
-            if (functionDef->is<ExternFunctionDef>())
-                return Ref<Function>::New(Module->getModule(), functionDef->Name, returnType, params);
+            if (auto extFunction = functionDef->as<ExternFunctionDef>()) {
+                return Ref<Function>::New(Module->getModule(),
+                                          functionDef->Name,
+                                          returnType,
+                                          params,
+                                          extFunction->Vararg,
+                                          extFunction->Weak ? Function::LinkageType::ExternalWeakLinkage
+                                                            : Function::LinkageType::ExternalLinkage);
+            }
             return Ref<UserFunction>::New(Module->getModule(), functionDef->Name, returnType, params);
         }();
         locals()->newFunction(function);
@@ -106,6 +115,8 @@ namespace pepper {
             auto returnValueExpr = codegen(ret->Value);
             auto returnValue = load(returnValueExpr);
             auto returnType = Types::get(ret->Type.toString());
+            if (!returnType)
+                throw CompileError(ret->Source, "Unknown return type {0}", ret->Type.toString());
             auto type = returnType->ops();
             auto rv = type->coerce(returnValue);
             // save the return value to the return value address

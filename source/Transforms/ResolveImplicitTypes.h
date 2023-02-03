@@ -15,9 +15,11 @@ namespace pepper::ast {
             struct Scope {
                 Ident Name;
                 llvm::StringMap<Symbol*> Symbols;
+                FunctionDef* Function;
 
-                Scope(const Ident& name)
-                    : Name(name) {}
+                Scope(const Ident& name, FunctionDef* function = nullptr)
+                    : Name(name)
+                    , Function(function) {}
             };
 
             Vector<Scope> Stack;
@@ -27,8 +29,8 @@ namespace pepper::ast {
                 Stack.emplace_back("Globals");
             }
 
-            void pushScope(const Ident& name) {
-                Stack.emplace_back(name);
+            void pushScope(const Ident& name, FunctionDef* function = nullptr) {
+                Stack.emplace_back(name, function);
             }
 
             void popScope() {
@@ -47,21 +49,45 @@ namespace pepper::ast {
                 return nullptr;
             }
 
+            TypeName findSymbolType(const Ident& name) const {
+                if (name == "this") {
+                    auto function = getFunction();
+                    if (auto method = function->as<MethodDef>())
+                        return method->Struct->Type;
+                }
+                for (const auto& scope : llvm::reverse(Stack)) {
+                    if (auto sym = scope.Symbols.lookup(name))
+                        return sym->Type;
+                    if (auto function = scope.Function) {
+                        for (auto& param : function->Parameters) {
+                            if (param.Name == name)
+                                return param.Type;
+                        }
+                    }
+                }
+                return {};
+            }
+
+            FunctionDef* getFunction() const {
+                for (const auto& scope : llvm::reverse(Stack)) {
+                    if (scope.Function)
+                        return scope.Function;
+                }
+                return nullptr;
+            }
+
             StructDef* findStruct(const Ident& name) const {
                 return Structs.lookup(name);
             }
 
             TypeName typeOfExpr(Expression* expr) const {
-                if (expr->type() != TypeName::Auto) {
+                if (!expr->type().empty() && expr->type() != TypeName::Auto) {
                     return expr->type();
                 }
                 if (expr->is<SymbolRef>()) {
+                    // symbol lookup is best-effort, sometimes type can't be known yet
                     auto var = expr->as<SymbolRef>();
-                    auto symbol = findSymbol(var->Name);
-                    if (!symbol) {
-                        throw CompileError(expr->Source, "Unknown symbol referenced: {0}", var->Name);
-                    }
-                    return symbol->Type;
+                    return findSymbolType(var->Name);
                 }
                 if (expr->is<MemberRef>()) {
                     auto ref = expr->as<MemberRef>();
@@ -72,11 +98,15 @@ namespace pepper::ast {
 
             void enterNode(NodeRef& node) override {
                 if (auto function = node->as<FunctionDef>())
-                    pushScope(function->Name);
+                    pushScope(function->Name, function);
                 if (auto block = node->as<Block>())
                     pushScope("block");
-                if (auto st = node->as<StructDef>())
+                if (auto st = node->as<StructDef>()) {
                     pushScope(st->Name);
+                    for (auto& field : st->Fields) {
+                        locals().Symbols[field->Name] = field;
+                    }
+                }
             }
 
             void exitNode(NodeRef& node) override {
@@ -85,12 +115,23 @@ namespace pepper::ast {
             }
 
             void visitNode(NodeRef& node) override {
+                // Record all local symbols as they come into existence
                 if (auto sym = node->as<Symbol>()) {
                     locals().Symbols[sym->Name] = sym;
                 }
+
+                // Update all variable declarations
                 if (auto var = node->as<VariableDef>()) {
                     if (var->Type == TypeName::Auto) {
                         var->Type = typeOfExpr(var->Default);
+                    }
+                }
+                // Update variable references
+                if (auto symRef = node->as<SymbolRef>()) {
+                    if (symRef->Type.empty() || symRef->Type == TypeName::Auto) {
+                        auto symType = typeOfExpr(symRef);
+                        if (!symType.empty())
+                            symRef->Type = symType;
                     }
                 }
             }

@@ -14,13 +14,20 @@ namespace pepper::ast {
         llvm::StringMap<StructDef*> Structs;
 
         void run(Ref<AST> parseTree) override {
+            llvm::DenseSet<TypeName> done;
             for (auto& st : parseTree->structs()) {
                 Structs[st->Name] = st;
+                done.insert(st->Type);
             }
+
             for (const auto& spec : parseTree->structSpecs()) {
+                if (done.contains(spec->Type))
+                    continue;
+
                 auto specialized = specialize(spec);
                 parseTree->insert(specialized);
                 parseTree->insert(specialized->Constructor);
+                done.insert(spec->Type);
             }
         }
 
@@ -49,7 +56,7 @@ namespace pepper::ast {
                 , Struct(st) {}
 
             void visitNode(NodeRef& node) override {
-                TypeSwitch<Node>(node)
+                TypeSwitch<Node*>(node)
                     .Case<FieldDef>([this](FieldDef* field) {
                         assert(true);
                         field->Struct = Struct;

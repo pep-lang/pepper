@@ -14,6 +14,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
 
 #define AST_NODE_POD_CLONE(N)                                                                                          \
     inline Node* clone() const override {                                                                              \
@@ -23,19 +24,26 @@
 namespace pepper::ast {
 
     struct TypeName {
-        Ident Name;
-        std::vector<TypeName> GenericTypes;
+        enum TypeFlags {
+            Scalar = 0,
+            Array = 1,
+            Function = 2,
+        } Flags;
 
-        TypeName(const Ident& name = {}, const Vector<TypeName, 0>& types = {})
-            : Name(name)
-            , GenericTypes(types.begin(), types.end()) {}
+        Ident Name;
+        std::vector<TypeName> SubTypes;
+
+        TypeName(const Ident& name = {}, const Vector<TypeName, 0>& types = {}, TypeFlags flags = Scalar)
+            : Flags(flags)
+            , Name(name)
+            , SubTypes(types.begin(), types.end()) {}
 
         TypeName(const TypeName&) = default;
         TypeName(TypeName&&) = default;
         TypeName& operator=(const TypeName&) = default;
 
         bool empty() const {
-            return Name.empty() && GenericTypes.empty();
+            return Name.empty() && SubTypes.empty();
         }
 
         operator std::string() const {
@@ -43,18 +51,52 @@ namespace pepper::ast {
         }
 
         bool operator==(const TypeName& rhs) const {
-            return Name == rhs.Name && GenericTypes == rhs.GenericTypes;
+            return Flags == rhs.Flags && Name == rhs.Name && SubTypes == rhs.SubTypes;
         }
 
         bool operator!=(const TypeName& rhs) const {
             return !(*this == rhs);
         }
 
+        bool isScalar() const {
+            return Flags == Scalar;
+        }
+
+        bool isArray() const {
+            return Flags == Array;
+        }
+
+        bool isFunction() const {
+            return Flags == Function;
+        }
+
         bool isGeneric() const {
-            return !GenericTypes.empty();
+            return (Flags != Array && !SubTypes.empty());
+        }
+
+        bool isStruct() const;
+        bool isIntegral() const;
+        bool isPointer() const;
+
+        const TypeName& elementType() const {
+            assert(Flags == Array);
+            assert(SubTypes.empty());
+            return *this;
         }
 
         std::string toString() const;
+
+        static TypeName MakeArray(const Ident& arrayTypeName, const TypeName& elementType) {
+            return {arrayTypeName, {elementType}, Array};
+        }
+
+        static TypeName MakeStruct(const Ident& structTypeName, const Vector<TypeName>& subTypes = {}) {
+            return {structTypeName, subTypes};
+        }
+
+        static TypeName MakeFunction(const Ident& name, const Vector<TypeName>& genericArgs = {}) {
+            return {name, genericArgs, Function};
+        }
 
         static const TypeName& Widest(const TypeName& lhs, const TypeName& rhs);
 
@@ -71,6 +113,8 @@ namespace pepper::ast {
         static const TypeName UInt64;
         static const TypeName Double;
         static const TypeName Float;
+
+        static llvm::StringSet<> IntegralTypes;
     };
 
     struct Node {
@@ -119,6 +163,11 @@ namespace pepper::ast {
         NodeRef& operator=(Node* node) {
             reset(node);
             return *this;
+        }
+
+        const RTTI* rtti() const {
+            assert(Ref.getPointer());
+            return Ref.getPointer()->rtti();
         }
 
         void reset(Node* node = nullptr) {
@@ -180,8 +229,8 @@ namespace pepper::ast {
         }
     };
 
-    // All nodes, when created, get inserted into the NodeHeap. If they are attached to another list, that list
-    // takes ownership of them. Single and orphaned nodes remain in the NodeHeap, and can be cleared after codegen.
+    // All nodes, when created, get inserted into the NodeHeap. Single and orphaned nodes remain in the NodeHeap,
+    // and can be safely cleared after codegen.
     class NodeHeap {
       private:
         static std::list<std::unique_ptr<Node>> FloatingNodes;
@@ -234,6 +283,9 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(None);
     };
 
+    template <typename T>
+    class Resolvable;
+
     class Visitor {
         llvm::DenseSet<Node*> Visited;
 
@@ -252,10 +304,15 @@ namespace pepper::ast {
         void visit(NodeRef& ref);
 
         void visit(Node* node);
+
+        template <typename T>
+        void visit(Resolvable<T>& target);
     };
 
     template <typename T>
     class Resolvable {
+        friend class Visitor;
+
         TypeName Target;
         T* Value = nullptr;
 
@@ -310,6 +367,10 @@ namespace pepper::ast {
             return Value;
         }
 
+        const TypeName& target() const {
+            return Target;
+        }
+
         void resolve(T* val) {
             Value = val;
         }
@@ -344,6 +405,11 @@ namespace pepper::ast {
             return instances;
         }
     };
+
+    template <typename T>
+    inline void Visitor::visit(Resolvable<T>& target) {
+        visit(target.Target);
+    }
 
     // Placeholder in the l-value stack for nodes that haven't been constructed yet, but need to be
     // in the stack to cause r-values to be collected
@@ -408,6 +474,14 @@ namespace pepper::ast {
             : Module(import)
             , Alias(alias)
             , Local(local) {}
+
+        std::string toString() const override {
+            return llvm::formatv("{0} {1}{2}{1} {3}", Node::toString(), Local ? "\"" : "", Module, Alias);
+        }
+
+        std::string dump(int) const override {
+            return toString();
+        }
     };
 } // namespace pepper::ast
 

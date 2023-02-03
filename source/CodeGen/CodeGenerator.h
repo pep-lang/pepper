@@ -64,19 +64,23 @@ namespace pepper {
         Address emit(const ast::Ternary* ternary);
         Address emit(const ast::While* loop);
         Address emit(const ast::ForRange* loop);
-        Address emit(const ast::SizeOf* sizeOf);
+        Address emit(const ast::Intrinsic* intrinsic);
+        Address emit(const ast::Index* index);
 
         void instantiate(const ast::StructDef* structDef);
         void instantiate(const ast::FunctionDef* functionDef);
 
         void codegenStruct(const ast::StructDef* structDef);
-
         void codegenFunction(Ref<class UserFunction> function, const ast::FunctionDef* funcDef);
         llvm::BasicBlock* codegenBlock(Ref<UserFunction> function,
                                        const ast::Block* block,
                                        llvm::BasicBlock* basicBlock = nullptr,
                                        llvm::BasicBlock* nextBlock = nullptr,
                                        Vector<Address> localRefs = {});
+        Address emitSizeOf(const ast::SizeOf* sizeOf);
+        Address emitArrayIndex(const ast::ArrayIndex* index);
+        Address emitIsPod(const ast::IsPod* isPod);
+        Address emitDefault(const ast::Default* defaultVal);
         Ref<Function> resolveFunction(const ast::FunctionCall* call);
     };
 
