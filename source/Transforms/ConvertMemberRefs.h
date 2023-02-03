@@ -18,8 +18,7 @@ namespace pepper::ast {
 
             ReplaceMemberRefs(StructDef* st, const llvm::StringSet<>& locals = {})
                 : Struct(st)
-                , Locals(locals) {
-            }
+                , Locals(locals) {}
 
             void visitNode(NodeRef& node) override {
                 if (auto varDef = node->as<VariableDef>()) {
@@ -36,6 +35,13 @@ namespace pepper::ast {
                             throw CompileError(symRef->Source, "Unable to resolve symbol {0}", symRef->Name);
                         }
                         node = new MemberRef(new ThisRef(), symRef->Name);
+                    }
+                }
+                if (auto call = node->as<FunctionCall>()) {
+                    // convert function calls that are actually method calls
+                    if (auto method = Struct->getMethod(call->Target.name())) {
+                        PEP_TRACE_AST("Convert {0} to this.{0}", call->toString());
+                        node = new MethodCall(new SymbolRef("this"), method->Name, call->Args);
                     }
                 }
             }
