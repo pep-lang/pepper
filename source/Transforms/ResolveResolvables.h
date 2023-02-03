@@ -10,10 +10,6 @@ namespace pepper::ast {
         DECLARE_RTTI(ResolveResolvables, Transformer);
 
         SymbolTable Symbols;
-        const bool ReportMissing = true;
-
-        ResolveResolvables(bool reportMissing)
-            : ReportMissing(reportMissing) {}
 
         void run(Ref<AST> parseTree) override {
             Symbols = SymbolTable(*parseTree);
@@ -24,8 +20,6 @@ namespace pepper::ast {
                         resolvable->resolve(st);
                         continue;
                     }
-                    if (ReportMissing)
-                        throw CompileError("Unable to resolve struct {0}", resolvable->name());
                 }
             }
 
@@ -35,8 +29,6 @@ namespace pepper::ast {
                         resolvable->resolve(fn);
                         continue;
                     }
-                    if (ReportMissing && !resolvable->name().starts_with("__"))
-                        throw CompileError("Unable to resolve function {0}", resolvable->name());
                 }
             }
         }
