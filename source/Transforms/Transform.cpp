@@ -76,15 +76,17 @@ namespace pepper::ast {
         }
         for (auto& st : ast.structs()) {
             Structs[st->Name] = st;
-            PEP_TRACE_AST("Struct: {0}", st->Name);
-            Messages::Indent(TraceChannel::AST);
             if (st->isGeneric()) {
                 Structs[st->Type.toString()] = st;
                 PEP_TRACE_AST("Struct: {0} -> {1}", st->Name, st->Type.toString());
+            } else {
+                PEP_TRACE_AST("Struct: {0}", st->Name);
             }
 
+            Messages::Indent(TraceChannel::AST);
+
             Functions[st->Constructor->Name] = st->Constructor;
-            PEP_TRACE_AST("Struct: Constructor {0}: {1}", st->Name, st->Constructor->Name);
+            PEP_TRACE_AST("Constructor {0}: {1}", st->Name, st->Constructor->Name);
 
             for (auto& method : st->Methods) {
                 PEP_TRACE_AST("{0}.{1}", st->Name, method->Name);
