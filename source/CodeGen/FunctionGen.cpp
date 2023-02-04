@@ -64,7 +64,8 @@ namespace pepper {
         if (functionDef->isGeneric())
             return;
 
-        PEP_TRACE(TraceChannel::Codegen, "  Instantiating {0}", functionDef->Name);
+        Messages::Indent(TraceChannel::Codegen);
+        PEP_TRACE(TraceChannel::Codegen, "Instantiating {0}", functionDef->Name);
 
         auto returnType = Types::get(functionDef->ReturnType.toString());
         if (!returnType)
@@ -72,7 +73,7 @@ namespace pepper {
                                "Unknown return type in {0}: {1}",
                                functionDef->Type.toString(),
                                functionDef->ReturnType.toString());
-        auto params = Query(functionDef->Parameters).select<pepper::Param>([&](auto p) {
+        auto params = Query(functionDef->Parameters).select<pepper::Param>([&](const auto& p) {
             auto type = Types::get(p.Type.toString());
             if (!type)
                 throw CompileError(
@@ -92,6 +93,7 @@ namespace pepper {
             return Ref<UserFunction>::New(Module->getModule(), functionDef->Name, returnType, params);
         }();
         locals()->newFunction(function);
+        Messages::Outdent(TraceChannel::Codegen);
     }
 
     Address CodeGenerator::emit(const FunctionDef* functionDef) {

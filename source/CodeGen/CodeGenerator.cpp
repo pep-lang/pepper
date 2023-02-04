@@ -109,7 +109,9 @@ namespace pepper {
     }
 
     Address CodeGenerator::codegen(const ast::Node* node) {
-        PEP_TRACE(TraceChannel::Codegen, indent(node->toString(), 2));
+        Messages::Indent(TraceChannel::Codegen);
+        PEP_TRACE(TraceChannel::Codegen, node->toString());
+        Messages::Indent(TraceChannel::Codegen);
         Module->getDebugInfo()->setSourceLocation(node->Source);
 
         Address value;
@@ -168,9 +170,11 @@ namespace pepper {
 
         auto src = node->source();
         auto at = src.empty() ? "" : "@";
-        std::string const output =
-            llvm::formatv("{0} -> {1} {2}{3}", rpad(node->rtti()->name(), 20), rpad(toString(value), 80), at, src);
-        PEP_TRACE(TraceChannel::Codegen, indent(output, 2));
+        PEP_TRACE(
+            TraceChannel::Codegen,
+            llvm::formatv("{0} -> {1} {2}{3}", rpad(node->rtti()->name(), 20), rpad(toString(value), 80), at, src));
+        Messages::Outdent(TraceChannel::Codegen);
+        Messages::Outdent(TraceChannel::Codegen);
         return value;
     }
 

@@ -19,42 +19,35 @@ namespace pepper {
 
         Query(It beginIt, It endIt)
             : Begin(beginIt)
-            , End(endIt) {
-        }
+            , End(endIt) {}
 
         // Construct from Vector
         template <unsigned int N>
         explicit Query(const Vector<T, N>& src)
-            : Query(src.begin(), src.end()) {
-        }
+            : Query(src.begin(), src.end()) {}
 
         // Construct from poly_ilist
         template <typename N>
         explicit Query(const poly_ilist<T, N>& src)
-            : Query(src.begin(), src.end()) {
-        }
+            : Query(src.begin(), src.end()) {}
 
         // construct from std::vector
         explicit Query(const std::vector<T>& src)
-            : Query(src.begin(), src.end()) {
-        }
+            : Query(src.begin(), src.end()) {}
 
         // used internally to move from one operation to the next
         template <unsigned int N>
-        explicit Query(Vector<T, N>&& src)
+        Query(Vector<T, N>&& src)
             : Src(std::move(src))
             , Begin(Src.begin())
-            , End(Src.end()) {
-        }
+            , End(Src.end()) {}
 
         // used internally to move from one operation to the next
-        explicit Query(Query&& src) noexcept
-            : Src(std::move(src))
+        Query(Query&& src) noexcept
+            : Src(std::move(src.Src))
             , Begin(Src.begin())
-            , End(Src.end()) {
-        }
+            , End(Src.end()) {}
 
-      public:
         It begin() const {
             return Begin;
         }
@@ -64,10 +57,17 @@ namespace pepper {
         }
 
         template <typename U>
-        Query<U> select(std::function<U(const T&)> selector = [](const auto& e) { return U{e}; }) const {
+        Query<U> select(std::function<U(const T&)>&& selector) const {
             Vector<U> results;
             std::transform(begin(), end(), std::back_inserter(results), selector);
-            return Query<U>(std::move(results));
+            return {std::move(results)};
+        }
+
+        template <typename U>
+        Query<U> select() const {
+            Vector<U> results;
+            std::transform(begin(), end(), std::back_inserter(results), [](const T& e) { return U{e}; });
+            return {std::move(results)};
         }
 
         Query map(std::function<T(const T&)> func) {
@@ -147,11 +147,11 @@ namespace pepper {
     template <typename T>
     Query(const std::vector<T>& v) -> Query<T, decltype(v.begin())>;
 
-    template <typename T>
-    Query(const Vector<T>& v) -> Query<T, decltype(v.begin())>;
+    template <typename T, unsigned int N>
+    Query(const Vector<T, N>& v) -> Query<T, decltype(v.begin())>;
 
-    template <typename T>
-    Query(Vector<T>&& v) -> Query<T, decltype(v.begin())>;
+    template <typename T, unsigned int N>
+    Query(Vector<T, N>&& v) -> Query<T, decltype(v.begin())>;
 
     template <typename T, typename N>
     Query(const poly_ilist<T, N>& list) -> Query<T, decltype(list.begin())>;
