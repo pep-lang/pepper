@@ -12,6 +12,15 @@ struct array<T> {
     }
 
     del() {
+        clear();
+        _pep_free(Data);
+    }
+}
+
+extend array<T> {
+    ulong count() { return Size; }
+
+    void clear() {
         if (!__is_pod<T>()) {
             var idx = 0;
             while (idx < Size) {
@@ -20,12 +29,8 @@ struct array<T> {
             }
             trace_region(Data, Capacity * sizeof<T>(), "array.dtor");
         }
-        _pep_free(Data);
+        Size = 0;
     }
-}
-
-extend array<T> {
-    ulong count() { return Size; }
 
     T [](int idx) {
         return Data[idx];
