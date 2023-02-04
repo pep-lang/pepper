@@ -1,6 +1,5 @@
 
 use internals;
-use support;
 
 struct array<T> {
     __ptr<T> Data;
