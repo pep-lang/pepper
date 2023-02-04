@@ -184,16 +184,27 @@ namespace pepper {
             ldArgs.append({
                 "-platform_version", "macos", "12.1.0", "12.3",
                 "-syslibroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk",
-                "-lSystem",
             });
             // clang-format on
         }
 
+        ldArgs.append(objFiles);
+
         for (auto& lib : opts->Libraries) {
-            ldArgs.emplace_back("-l" + lib);
+            auto path = std::filesystem::path(lib);
+            if (llvm::is_contained(lib, std::filesystem::path::preferred_separator)) {
+                auto libDir = absolute(path).parent_path().string();
+                ldArgs.emplace_back("-L" + libDir);
+            }
         }
 
-        ldArgs.append(objFiles);
+        ldArgs.emplace_back("-lSystem");
+        for (auto& lib : opts->Libraries) {
+            auto libName = std::filesystem::path(lib).filename().replace_extension().string();
+            if (libName.starts_with("lib"))
+                libName = libName.substr(3);
+            ldArgs.emplace_back("-l" + libName);
+        }
 
         PEP_VERBOSE("ld {0}", llvm::join(ldArgs, " "));
 
