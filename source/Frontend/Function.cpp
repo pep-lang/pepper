@@ -82,12 +82,6 @@ namespace pepper {
     }
 
     bool Method::countArgRefs() const {
-        if (!UserFunction::countArgRefs())
-            return false;
-
-        if (Name.find(".__") != std::string::npos)
-            return false;
-
-        return true;
+        return false;
     }
 } // namespace pepper
