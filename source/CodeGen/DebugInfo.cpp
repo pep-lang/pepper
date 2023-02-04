@@ -213,7 +213,7 @@ namespace pepper {
 
         llvm::DINode::DIFlags flags = llvm::DINode::FlagZero;
         if (argIndex == 0 && value.Ty->isPointer() && value.Name == "this")
-            flags |= llvm::DINode::FlagObjectPointer;
+            flags |= llvm::DINode::FlagObjectPointer | llvm::DINode::FlagArtificial;
 
         // add one to argIndex, DI params are 1-based to account for return type at 0
         llvm::DILocalVariable* local = DI->createParameterVariable(localScope(),
