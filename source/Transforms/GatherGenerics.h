@@ -66,6 +66,7 @@ namespace pepper::ast {
                         continue;
                     PEP_TRACE_AST("Generic struct {0}", structSpec.toString());
                     parseTree->insert(new StructSpec(structSpec));
+                    structSpecs.insert(structSpec);
                 }
             }
 
@@ -74,7 +75,7 @@ namespace pepper::ast {
                     continue;
                 // if the function call is actually a constructor
                 if (auto st = Symbols.Structs.lookup(type.Name)) {
-                    if (st->Type == type)
+                    if (st->Type == type || structSpecs.contains(type))
                         continue;
                     PEP_TRACE_AST("Generic struct {0}", type.toString());
                     parseTree->insert(new StructSpec(type));
