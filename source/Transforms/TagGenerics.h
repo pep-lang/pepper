@@ -22,7 +22,8 @@ namespace pepper::ast {
                 // this is a specialization
                 if (fn->Type.SubTypes.size() > 0) {
                     fn->Generic = false;
-                    PEP_TRACE_AST("Specialization: {0}", fn->Type.toString());
+                    fn->Name = fn->Type.toString();
+                    PEP_TRACE_AST("Specialization: {0}", fn->Name);
                 }
             }
         }
