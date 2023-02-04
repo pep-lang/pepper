@@ -85,6 +85,10 @@ namespace pepper::ast {
 
             Functions[st->Constructor->Name] = st->Constructor;
             PEP_TRACE_AST("Struct: Constructor {0}: {1}", st->Name, st->Constructor->Name);
+
+            for (auto& method : st->Methods) {
+                PEP_TRACE_AST("{0}.{1}", st->Name, method->Name);
+            }
             Messages::Outdent(TraceChannel::AST);
         }
         Messages::Outdent(TraceChannel::AST);
