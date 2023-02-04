@@ -288,10 +288,14 @@ namespace pepper {
 
             if (!literal->StringLiteral().empty()) {
                 std::string stringLiteral;
+                bool raw = false;
                 for (auto sl : literal->StringLiteral()) {
-                    stringLiteral += trim(sl->toString(), "\"");
+                    auto str = sl->toString();
+                    if (str.starts_with('@'))
+                        raw = true;
+                    stringLiteral += trim(str, "@\"");
                 }
-                rvaluePush(new StringLiteral(stringLiteral));
+                rvaluePush(new StringLiteral(stringLiteral, raw));
                 return;
             }
 

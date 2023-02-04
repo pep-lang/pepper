@@ -1,12 +1,10 @@
 
 use support;
 
-@extern void* malloc(ulong size);
-@extern void* realloc(void* ptr, ulong size);
-@extern void free(void* ptr);
+@extern void memcpy(void* dest, void* src, ulong size);
 
 void release<T>(T t) {
-    trace_ptr(t, "release<T>");
+    trace_ptr(t, @"release<T>");
     t.__release();
 }
 

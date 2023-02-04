@@ -17,8 +17,7 @@ namespace pepper::ast {
         const bool Value;
 
         explicit BoolLiteral(bool value)
-            : Value(value) {
-        }
+            : Value(value) {}
 
         const TypeName& type() const override {
             static TypeName Bool("bool");
@@ -41,8 +40,7 @@ namespace pepper::ast {
         const int64_t Value;
 
         explicit IntegerLiteral(int64_t value)
-            : Value(value) {
-        }
+            : Value(value) {}
 
         [[nodiscard]] const TypeName& type() const override {
             static TypeName Long("long");
@@ -65,8 +63,7 @@ namespace pepper::ast {
         const double Value;
 
         FloatLiteral(double value)
-            : Value(value) {
-        }
+            : Value(value) {}
 
         const TypeName& type() const override {
             static TypeName Double("double");
@@ -87,10 +84,11 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(StringLiteral);
 
         const std::string Value;
+        bool Raw;
 
-        StringLiteral(const std::string& value)
-            : Value(value) {
-        }
+        StringLiteral(const std::string& value, bool raw = false)
+            : Value(value)
+            , Raw(raw) {}
 
         const TypeName& type() const override {
             static TypeName String("string");
@@ -98,7 +96,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0}(\"{1}\")", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1}\"{2}\")", Node::toString(), Raw ? "@" : "", Value));
         }
 
         std::string dump(int indent) const override {
@@ -113,8 +111,7 @@ namespace pepper::ast {
         const uint64_t Value;
 
         explicit PointerLiteral(uint64_t value = 0)
-            : Value(value) {
-        }
+            : Value(value) {}
 
         [[nodiscard]] const TypeName& type() const override {
             static TypeName Ptr("ptr");

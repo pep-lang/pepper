@@ -101,10 +101,10 @@ namespace pepper::ast {
             new Assign(refcount(), new Add(refcount(), new IntegerLiteral(1))),
             Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
                                       TypeName{"trace_ptr"},
-                                      ExprList({new ThisRef(), new StringLiteral("acquire: " + Name)})),
+                                      ExprList({new ThisRef(), new StringLiteral("acquire: " + Name, true)})),
             Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
                                       TypeName{"trace_int"},
-                                      ExprList({refcount(), new StringLiteral("  refcount: " + Name)})),
+                                      ExprList({refcount(), new StringLiteral("  refcount: " + Name, true)})),
         };
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
@@ -119,21 +119,22 @@ namespace pepper::ast {
 
             Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
                                       TypeName{"trace_ptr"},
-                                      ExprList{new ThisRef(), new StringLiteral("release: " + Name)}),
+                                      ExprList{new ThisRef(), new StringLiteral("release: " + Name, true)}),
             Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
                                       TypeName{"trace_int"},
-                                      ExprList{refcount(), new StringLiteral("  refcount: " + Name)}),
+                                      ExprList{refcount(), new StringLiteral("  refcount: " + Name, true)}),
 
             // if (this.__refcount == 0)
             //     this.__dtor()
             new If(new Equal(refcount(), new IntegerLiteral(0)),
-                   new Block("if",
-                             NodeList<Node>{
-                                 Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                                           TypeName{"trace_ptr"},
-                                                           ExprList{new ThisRef(), new StringLiteral("free: " + Name)}),
-                                 new MethodCall(new ThisRef(), "__dtor"),
-                             })),
+                   new Block(
+                       "if",
+                       NodeList<Node>{
+                           Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
+                                                     TypeName{"trace_ptr"},
+                                                     ExprList{new ThisRef(), new StringLiteral("free: " + Name, true)}),
+                           new MethodCall(new ThisRef(), "__dtor"),
+                       })),
         };
     }
 
@@ -153,10 +154,10 @@ namespace pepper::ast {
         // Create the allocation for `this`, needs "size" variable value filled in once it is known at codegen time
         NodeList<Node> allocThis = {
             new VariableDef(TypeName("u64"), "size", nullptr, true),
-            new ThisDef(Type, new FunctionCall(TypeName{"malloc"}, {new SymbolRef("size")})),
+            new ThisDef(Type, new FunctionCall(TypeName{"_pep_malloc"}, {new SymbolRef("size")})),
             Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
                                       TypeName{"trace_ptr"},
-                                      ExprList{new ThisRef(), new StringLiteral("malloc: " + Name)}),
+                                      ExprList{new ThisRef(), new StringLiteral("malloc: " + Name, true)}),
         };
 
         Constructor->Body->Items = std::move(allocThis);
@@ -173,7 +174,7 @@ namespace pepper::ast {
         Constructor->Body->Items.push_back(new Return(Constructor->ReturnType, new SymbolRef("this")));
 
         // insert free as the last instruction in Destructor
-        Destructor->Body->Items.push_back(new FunctionCall(TypeName{"free"}, ExprList{new ThisRef()}));
+        Destructor->Body->Items.push_back(new FunctionCall(TypeName{"_pep_free"}, ExprList{new ThisRef()}));
 
         Methods.push_back(Release);
         Methods.push_back(Acquire);

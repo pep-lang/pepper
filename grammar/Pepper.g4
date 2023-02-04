@@ -431,7 +431,7 @@ OctalIntegerLiteral:            '0' [oO] [0-7] [_0-7]*;
 BinaryIntegerLiteral:           '0' [bB] [01] [_01]*;
 
 StringLiteral
-    :   '"' DoubleStringCharacter* '"'
+    :   '@'? '"' DoubleStringCharacter* '"'
     ;
 
 Whitespace

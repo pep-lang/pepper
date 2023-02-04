@@ -53,7 +53,7 @@ TEST(Function, Extern) {
         @extern int strlen(char* str);
 
         int test() {
-            return strlen("test");
+            return strlen(@"test");
         }
         )SOURCE";
     EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));

@@ -8,6 +8,7 @@
 #include "Transforms/ApplyExtensions.h"
 #include "Transforms/ConvertIntrinsics.h"
 #include "Transforms/ConvertMemberRefs.h"
+#include "Transforms/ConvertStringLiterals.h"
 #include "Transforms/GatherGenerics.h"
 #include "Transforms/ReleaseFieldRefs.h"
 #include "Transforms/ResolveImplicitTypes.h"
@@ -22,6 +23,7 @@ namespace pepper::ast {
         : ParseTree(parseTree) {
         // First pass
         Transformers.emplace_back(new TagGenerics());
+        Transformers.emplace_back(new ConvertStringLiterals());
         Transformers.emplace_back(new GatherGenerics());
         Transformers.emplace_back(new ResolveResolvables());   // resolve as much as possible
         Transformers.emplace_back(new ApplyExtensions(false)); // apply generic/concrete extensions

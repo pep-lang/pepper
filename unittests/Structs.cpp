@@ -271,14 +271,14 @@ struct Test {
 
 int test() {
     var t = Test();
-    trace_int(t.__refcount, "t.__refcount");
-    test_assert(t.__refcount == 1, "t.__refcount == 1");
+    trace_int(t.__refcount, @"t.__refcount");
+    test_assert(t.__refcount == 1, @"t.__refcount == 1");
     var prev = t;
-    test_assert(t == prev, "t == prev");
-    test_assert(prev.__refcount == 2, "prev.__refcount == 2");
+    test_assert(t == prev, @"t == prev");
+    test_assert(prev.__refcount == 2, @"prev.__refcount == 2");
     t = Test();
-    test_assert(prev.__refcount == 1, "prev.__refcount == 1");
-    test_assert(t.__refcount == 1, "t.__refcount == 1");
+    test_assert(prev.__refcount == 1, @"prev.__refcount == 1");
+    test_assert(t.__refcount == 1, @"t.__refcount == 1");
     return 0;
 }
     )SOURCE";
@@ -295,18 +295,18 @@ struct Foo {
     Test t;
 
     new(Test z) {
-        trace_ptr(this, "this");
-        trace_ptr(z, "z");
+        trace_ptr(this, @"this");
+        trace_ptr(z, @"z");
         this.t = z;
-        trace_ptr(this.t, "this.t");
+        trace_ptr(this.t, @"this.t");
     }
 };
 
 int test() {
     var t = Test();
-    trace_ptr(t, "t");
+    trace_ptr(t, @"t");
     const f = Foo(t);
-    trace_ptr(f, "f");
+    trace_ptr(f, @"f");
     return f.t == t;
 }
     )SOURCE";

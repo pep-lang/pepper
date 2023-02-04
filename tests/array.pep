@@ -28,12 +28,12 @@ struct array<T> {
     }
 
     T [](ulong idx) {
-        assert(idx < Size, "array index read out of bounds");
+        assert(idx < Size, @"array index read out of bounds");
         return Data[idx];
     }
 
     T [](ulong idx, T value) {
-        assert(idx < Size, "array index write out of bounds");
+        assert(idx < Size, @"array index write out of bounds");
         Data[idx] = value;
         return Data[idx];
     }
