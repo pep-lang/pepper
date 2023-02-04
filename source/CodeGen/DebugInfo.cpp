@@ -154,7 +154,7 @@ namespace pepper {
                                     alignInBits,
                                     offsetInBits,
                                     llvm::DINode::FlagPublic,
-                                    structDI);
+                                    fieldTy);
     }
 
     llvm::DISubroutineType* DebugInfo::createFunctionType(Function* function) {
