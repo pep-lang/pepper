@@ -26,7 +26,6 @@ namespace pepper::ast {
 
                 auto specialized = specialize(spec);
                 parseTree->insert(specialized);
-                parseTree->insert(specialized->Constructor);
                 done.insert(spec->Type);
             }
         }
