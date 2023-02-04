@@ -10,7 +10,7 @@ struct array<T> {
         Capacity = Size;
     }
 
-    del() {
+    destruct {
         clear();
         _pep_free(Data);
     }

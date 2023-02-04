@@ -186,6 +186,7 @@ genericParamsList
 structMemberDeclaration
     :   fieldDeclaration
     |   constructorDefinition
+    |   functionDefinition
     ;
 
 constructorParam
@@ -198,8 +199,8 @@ constructorParamList
     ;
 
 constructorDefinition
-    :   New '(' constructorParamList? ')' block
-    |   Del '(' ')' block
+    :   New ('(' constructorParamList? ')')? block
+    |   Destruct block
     ;
 
 fieldDeclaration
@@ -323,7 +324,7 @@ Case : 'case';
 Const : 'const';
 Continue : 'continue';
 Default : 'default';
-Del : 'del';
+Destruct : 'destruct';
 Do : 'do';
 Else : 'else';
 Enum : 'enum';
