@@ -70,8 +70,8 @@ namespace pepper::ast {
                 Functions[function->Name] = function;
                 PEP_TRACE_AST("Function: {0} -> {1}", function->Name, function->Type.toString());
             } else {
-                Functions[function->Type.toString()] = function;
-                PEP_TRACE_AST("Function: {0} -> {1}", function->Type.toString(), function->Type.toString());
+                Functions[function->Name] = function;
+                PEP_TRACE_AST("Function: {0} -> {1}", function->Name, function->Type.toString());
             }
         }
         for (auto& st : ast.structs()) {
