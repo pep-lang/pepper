@@ -41,8 +41,11 @@ namespace pepper {
 
             Module->getDebugInfo()->emitParameter(paramIdx, local);
 
-            // Special methods use raw stores to avoid ref-counting getting in the way
-            if (function->countArgRefs()) {
+            const bool isThis = paramIdx == 0 && param.Name == "this";
+
+            // Methods should never alter the refcount of `this`, and special methods do not alter ref counts
+            // at all (they don't have arguments anyway)
+            if (!isThis && function->countArgRefs()) {
                 type->ops()->init(local, arg);
                 if (local.Ty->is<RefType>())
                     localRefs.emplace_back(local);
