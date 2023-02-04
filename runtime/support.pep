@@ -5,3 +5,4 @@
 @extern void* _pep_malloc(ulong size);
 @extern void _pep_free(void* ptr);
 @extern void* _pep_realloc(void* ptr, ulong prevSize, ulong newSize);
+@extern void panic(char* msg);

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(SRC_FILES TestSupport.cpp)
 
 add_library(TestSupport SHARED ${SRC_FILES})
-target_include_directories(TestSupport PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../support)
+target_include_directories(TestSupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../support)
 
 if (MSVC)
     set(TEST_SUPPORT_SHARED_LIBRARIES ${CMAKE_CURRENT_BINARY_DIR}/TestSupport.lib)

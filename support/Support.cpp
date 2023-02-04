@@ -58,6 +58,14 @@ extern "C" {
         free(ptr);
     }
 
+    void panic(const char* msg) {
+        if (msg) {
+            fprintf(stderr, "%s\n", msg);
+            fflush(stderr);
+        }
+        abort();
+    }
+
     void SupportInit(void (*assertFn)(bool, const char*)) {
         AssertFn = assertFn;
     }
