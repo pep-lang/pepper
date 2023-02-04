@@ -331,11 +331,11 @@ namespace pepper {
             FunctionDef* function = nullptr;
             if (auto st = builder->structTarget())
                 function = new MethodDef(st->Type, returnType, fnSpec);
-            if (auto ext = builder->extensionTarget())
+            else if (auto ext = builder->extensionTarget())
                 function = new MethodDef(ext->Target, returnType, fnSpec);
             else
                 function = new FunctionDef(returnType, fnSpec);
-            
+
             lvaluePush(function);
             builder->beginFunction(function);
         }
@@ -345,12 +345,12 @@ namespace pepper {
 
             auto function = lvaluePop<FunctionDef>();
             if (auto method = function->as<MethodDef>()) {
+                if (method->Name == "[]") { // special case indexer
+                    method->Name = method->Parameters.size() == 2 ? "__index_set" : "__index_get";
+                }
                 if (builder->structTarget())
                     builder->structTarget()->Methods.push_back(method);
                 else {
-                    if (method->Name == "[]") { // special case indexer
-                        method->Name = method->Parameters.size() == 2 ? "__index_set" : "__index_get";
-                    }
                     builder->extensionTarget()->Methods.push_back(method);
                 }
             }
