@@ -22,7 +22,7 @@ extend array<T> {
 
     void clear() {
         if (!__is_pod<T>()) {
-            var idx = 0;
+            ulong idx = 0;
             while (idx < Size) {
                 trace_region(Data, Capacity* sizeof<T>(), "array.clear");
                 release<T>(Data[idx++]);
@@ -32,11 +32,13 @@ extend array<T> {
         Size = 0;
     }
 
-    T [](int idx) {
+    T [](ulong idx) {
+        assert(idx < Size, "array index read out of bounds");
         return Data[idx];
     }
 
-    T [](int idx, T value) {
+    T [](ulong idx, T value) {
+        assert(idx < Size, "array index write out of bounds");
         Data[idx] = value;
         return Data[idx];
     }
