@@ -3,8 +3,8 @@
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
-#include "Transforms/Specialization.h"
-#include "Transforms/Transform.h"
+#include "Specialization.h"
+#include "Transform.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {

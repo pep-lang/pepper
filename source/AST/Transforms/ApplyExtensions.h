@@ -4,9 +4,10 @@
 
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
+#include "Core/Messages.h"
 #include "Core/TypeSwitch.h"
-#include "Transforms/Specialization.h"
-#include "Transforms/Transform.h"
+#include "Specialization.h"
+#include "Transform.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {

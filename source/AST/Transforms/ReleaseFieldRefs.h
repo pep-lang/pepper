@@ -3,7 +3,7 @@
 #pragma once
 
 #include "AST/Nodes.h"
-#include "Transforms/Transform.h"
+#include "Transform.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {

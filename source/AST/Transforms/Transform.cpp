@@ -2,21 +2,21 @@
 // Created by Justin Boswell on 1/5/23.
 //
 
-#include "Transforms/Transform.h"
+#include "Transform.h"
 
+#include "ApplyExtensions.h"
+#include "ConvertIntrinsics.h"
+#include "ConvertMemberRefs.h"
+#include "ConvertStringLiterals.h"
 #include "Core/Messages.h"
-#include "Transforms/ApplyExtensions.h"
-#include "Transforms/ConvertIntrinsics.h"
-#include "Transforms/ConvertMemberRefs.h"
-#include "Transforms/ConvertStringLiterals.h"
-#include "Transforms/GatherGenerics.h"
-#include "Transforms/ReleaseFieldRefs.h"
-#include "Transforms/ResolveImplicitTypes.h"
-#include "Transforms/ResolveOperators.h"
-#include "Transforms/ResolveResolvables.h"
-#include "Transforms/SpecializeFunctions.h"
-#include "Transforms/SpecializeStructs.h"
-#include "Transforms/TagGenerics.h"
+#include "GatherGenerics.h"
+#include "ReleaseFieldRefs.h"
+#include "ResolveImplicitTypes.h"
+#include "ResolveOperators.h"
+#include "ResolveResolvables.h"
+#include "SpecializeFunctions.h"
+#include "SpecializeStructs.h"
+#include "TagGenerics.h"
 
 namespace pepper::ast {
     TransformPass::TransformPass(Ref<AST> parseTree)
