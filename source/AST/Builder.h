@@ -32,7 +32,7 @@ namespace pepper::ast {
         virtual void beginExtension(ExtensionDef* ext) = 0;
         virtual void endExtension() = 0;
 
-        virtual void beginFunction(FunctionDef* func) = 0;
+        virtual void beginFunction(FunctionNode* func) = 0;
         virtual void endFunction() = 0;
 
         virtual void beginBlock(Block* block) = 0;

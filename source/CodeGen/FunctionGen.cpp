@@ -62,38 +62,35 @@ namespace pepper {
         popScope();
     }
 
-    void CodeGenerator::instantiate(const ast::FunctionDef* functionDef) {
+    void CodeGenerator::instantiate(const ast::FunctionNode* fn) {
         // generic functions don't get instantiated, they're abstract
-        if (functionDef->isGeneric())
+        if (fn->isGeneric())
             return;
 
         Messages::Indent(TraceChannel::Codegen);
-        PEP_TRACE(TraceChannel::Codegen, "Instantiating {0}", functionDef->Name);
+        PEP_TRACE(TraceChannel::Codegen, "Instantiating {0}", fn->Name);
 
-        auto returnType = Types::get(functionDef->ReturnType.toString());
+        auto returnType = Types::get(fn->ReturnType.toString());
         if (!returnType)
-            throw CompileError(functionDef->Source,
-                               "Unknown return type in {0}: {1}",
-                               functionDef->Type.toString(),
-                               functionDef->ReturnType.toString());
-        auto params = Query(functionDef->Parameters).select<pepper::Param>([&](const auto& p) {
+            throw CompileError(
+                fn->Source, "Unknown return type in {0}: {1}", fn->Type.toString(), fn->ReturnType.toString());
+        auto params = Query(fn->Parameters).select<pepper::Param>([&](const auto& p) {
             auto type = Types::get(p.Type.toString());
             if (!type)
-                throw CompileError(
-                    functionDef->Source, "Unknown type for parameter {0}: {1}", p.Name, p.Type.toString());
+                throw CompileError(fn->Source, "Unknown type for parameter {0}: {1}", p.Name, p.Type.toString());
             return pepper::Param{p.Name, type, p.Default ? codegen(p.Default) : Address::Null()};
         });
         auto function = [&]() -> Ref<Function> {
-            if (auto extFunction = functionDef->as<ExternFunctionDef>()) {
+            if (auto extFunction = fn->as<ExternFunctionDef>()) {
                 return Ref<Function>::New(Module->getModule(),
-                                          functionDef->Name,
+                                          fn->Name,
                                           returnType,
                                           params,
                                           extFunction->Vararg,
                                           extFunction->Weak ? Function::LinkageType::ExternalWeakLinkage
                                                             : Function::LinkageType::ExternalLinkage);
             }
-            return Ref<UserFunction>::New(Module->getModule(), functionDef->Name, returnType, params);
+            return Ref<UserFunction>::New(Module->getModule(), fn->Name, returnType, params);
         }();
         locals()->newFunction(function);
         Messages::Outdent(TraceChannel::Codegen);

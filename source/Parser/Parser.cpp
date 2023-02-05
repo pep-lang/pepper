@@ -314,8 +314,8 @@ namespace pepper {
             if (context->Assign()) {
                 defaultValue = rvaluePop<Expression>();
             }
-            assert(builder->targetAs<FunctionDef>());
-            auto func = builder->targetAs<FunctionDef>();
+            assert(builder->targetAs<FunctionNode>());
+            auto func = builder->targetAs<FunctionNode>();
             func->Parameters.emplace_back(name, typeName, defaultValue);
         }
 
@@ -355,13 +355,11 @@ namespace pepper {
                 if (method->Name == "[]") { // special case indexer
                     method->Name = method->Parameters.size() == 2 ? "__index_set" : "__index_get";
                 }
-
-                builder->target()->addFunction(method);
             }
         }
 
         void exitExternParameter(PepperParser::ExternParameterContext* context) override {
-            auto func = builder->targetAs<FunctionDef>();
+            auto func = builder->targetAs<ExternFunctionDef>();
             assert(func && "Extern parameters only belong in function declarations");
             auto name = context->Identifier()->toString();
             auto typeName = context->externTypeName()->Identifier()->toString();
@@ -467,6 +465,29 @@ namespace pepper {
                 func->Body->Items.push_back(
                     new Assign(new MemberRef(new ThisRef(), fieldName), new SymbolRef(paramName)));
             }
+        }
+
+        void enterTraitDeclaration(PepperParser::TraitDeclarationContext* context) override {
+            auto spec = parseTypeName(context->typeName());
+            auto trait = new TraitDecl(spec);
+            builder->beginTrait(trait);
+        }
+
+        void exitTraitDeclaration(PepperParser::TraitDeclarationContext*) override {
+            builder->endTrait();
+        }
+
+        void enterFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
+            auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName{"this"};
+            auto identifier = context->functionName()->toString();
+            auto function = new MethodDecl(returnType, {identifier}, {});
+            lvaluePush(function);
+            builder->beginFunction(function);
+        }
+
+        void exitFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
+            builder->endFunction();
+            lvaluePop<FunctionDef>();
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {

@@ -139,23 +139,28 @@ namespace pepper::ast {
             endScope();
         }
 
-        void beginFunction(FunctionDef* func) override {
+        void beginFunction(FunctionNode* func) override {
             auto& scope = ScopeStack.back();
 
             // set the parent to the enclosing function for lambdas, its null otherwise
             func->Source = Source;
-            func->Body->Source = func->Source;
             beginScope(func->Type.toString());
             auto& fnScope = ScopeStack.back();
-            fnScope->Block = func->Body;
             fnScope->Target = func;
+
+            if (auto funcDef = func->as<FunctionDef>()) {
+                funcDef->Body->Source = func->Source;
+                fnScope->Block = funcDef->Body;
+            }
         }
 
         void endFunction() override {
             auto& scope = ScopeStack.back();
-            FunctionDef* function = scope->Target->to<FunctionDef>();
+            auto* function = scope->Target->to<FunctionNode>();
             endScope();
-            if (!target()) {
+            if (target()) {
+                target()->addFunction(function->as<FunctionDef>());
+            } else {
                 ast.insert(function);
             }
         }

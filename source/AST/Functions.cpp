@@ -28,6 +28,7 @@ namespace pepper::ast {
 
     FunctionNode::FunctionNode(const TypeName& returnType, const TypeName& name, const Params& params, bool vararg)
         : Symbol(name, name.Name)
+        , ScopeTarget(this)
         , ReturnType(returnType)
         , Parameters(params)
         , Vararg(vararg) {

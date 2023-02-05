@@ -21,12 +21,16 @@ namespace pepper::ast {
             Imports.push_back(root->as<Import>());
         } else if (root->is<StructDef>()) {
             Structs.push_back(root->as<StructDef>());
+        } else if (root->is<TraitDecl>()) {
+            Traits.push_back(root->as<TraitDecl>());
         } else if (root->is<StructSpec>()) {
             StructSpecs.push_back(root->as<StructSpec>());
         } else if (root->is<ExtensionDef>()) {
             Extensions.push_back(root->as<ExtensionDef>());
         } else if (root->is<FunctionDef>()) {
             Functions.push_back(root->as<FunctionDef>());
+        } else if (root->is<ExternFunctionDef>()) {
+            Externs.push_back(root->as<ExternFunctionDef>());
         } else if (root->is<FunctionSpec>()) {
             FunctionSpecs.push_back(root->as<FunctionSpec>());
         } else {
@@ -37,26 +41,32 @@ namespace pepper::ast {
     void AST::merge(Ref<AST> source) {
         Imports.merge(source->Imports);
         Structs.merge(source->Structs);
+        Traits.merge(source->Traits);
         StructSpecs.merge(source->StructSpecs);
         Extensions.merge(source->Extensions);
         Functions.merge(source->Functions);
+        Externs.merge(source->Externs);
         FunctionSpecs.merge(source->FunctionSpecs);
     }
 
     NodeList<Node> AST::roots() const {
         NodeList<Node> all;
-        for (auto i = imports_begin(); i != imports_end(); ++i)
-            all.emplace_back(*i);
-        for (auto s = structs_begin(); s != structs_end(); ++s)
-            all.emplace_back(*s);
-        for (auto sspec = sspecs_begin(); sspec != sspecs_end(); ++sspec)
-            all.emplace_back(*sspec);
-        for (auto ext = extensions_begin(); ext != extensions_end(); ++ext)
-            all.emplace_back(*ext);
-        for (auto fn = functions_begin(); fn != functions_end(); ++fn)
-            all.emplace_back(*fn);
-        for (auto fs = fspecs_begin(); fs != fspecs_end(); ++fs)
-            all.emplace_back(*fs);
+        for (auto& i : Imports)
+            all.emplace_back(i);
+        for (auto& s : Structs)
+            all.emplace_back(s);
+        for (auto& t : Traits)
+            all.emplace_back(t);
+        for (auto& s : StructSpecs)
+            all.emplace_back(s);
+        for (auto& ext : Extensions)
+            all.emplace_back(ext);
+        for (auto& fn : Functions)
+            all.emplace_back(fn);
+        for (auto& fn : Externs)
+            all.emplace_back(fn);
+        for (auto& fs : FunctionSpecs)
+            all.emplace_back(fs);
 
         return all;
     }

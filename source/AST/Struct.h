@@ -86,6 +86,10 @@ namespace pepper::ast {
         void finish();
 
         void addFunction(FunctionDef* function) override {
+            // Don't need to double-add these
+            if (function == Constructor || function == Destructor) {
+                return;
+            }
             if (auto method = function->as<MethodDef>())
                 Methods.emplace_back(method);
             // TODO: static functions

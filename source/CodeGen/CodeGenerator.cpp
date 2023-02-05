@@ -188,6 +188,8 @@ namespace pepper {
         try {
             for (const auto& st : tree->structs())
                 instantiate(st);
+            for (const auto& fn : tree->externs())
+                instantiate(fn);
             for (const auto& fn : tree->functions())
                 instantiate(fn);
         } catch (CompileError& ce) {

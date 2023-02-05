@@ -16,7 +16,9 @@
 #include "Core/Vector.h"
 
 namespace pepper::ast {
-    struct FunctionNode : public Symbol {
+    struct FunctionNode
+        : public Symbol
+        , public ScopeTarget {
         DECLARE_RTTI(FunctionNode, Node);
 
         TypeName ReturnType;
@@ -41,17 +43,14 @@ namespace pepper::ast {
         }
     };
 
-    struct FunctionDef
-        : public FunctionNode
-        , public ScopeTarget {
+    struct FunctionDef : public FunctionNode {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
         TNodeRef<Block> Body;
 
         FunctionDef(
             const TypeName& returnType, const TypeName& name, const Params& params = Params(), bool varargs = false)
-            : FunctionNode(returnType, name, params, varargs)
-            , ScopeTarget(this) {
+            : FunctionNode(returnType, name, params, varargs) {
             Body.reset(new Block(name));
         }
 
@@ -87,15 +86,15 @@ namespace pepper::ast {
         }
     };
 
-    struct ExternFunctionDef : public FunctionDef {
-        DECLARE_RTTI(ExternFunctionDef, FunctionDef);
+    struct ExternFunctionDef : public FunctionNode {
+        DECLARE_RTTI(ExternFunctionDef, FunctionNode);
         AST_NODE_POD_CLONE(ExternFunctionDef);
 
         bool Weak = false;
 
         ExternFunctionDef(
             const TypeName& returnType, const Ident& name, const Params& params = {}, bool varargs = false)
-            : FunctionDef(returnType, name, params, varargs) {}
+            : FunctionNode(returnType, name, params, varargs) {}
     };
 
     struct FunctionCall : public Expression {
