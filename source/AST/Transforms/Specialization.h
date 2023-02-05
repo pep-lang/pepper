@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AST/Nodes.h"
-#include "Core/RTTI.h"
+#include "Core/Exceptions.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {

@@ -36,7 +36,6 @@ namespace pepper {
         LinkageType Linkage = LinkageType::ExternalLinkage;
 
       public:
-
         Function(llvm::Module& module,
                  const Ident& name,
                  Ref<Type> returnType,

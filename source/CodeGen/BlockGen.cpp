@@ -1,6 +1,4 @@
-//
-// Created by justi on 1/5/2023.
-//
+
 
 #include "AST/Block.h"
 #include "CodeGen/CodeGenerator.h"

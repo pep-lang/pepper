@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/22/22.
-//
+
 
 #include "Frontend/Operations.h"
 
@@ -165,8 +163,7 @@ namespace pepper {
         DECLARE_RTTI(VoidOperations, NativeOperations)
       public:
         VoidOperations()
-            : NativeOperations(Types::Void) {
-        }
+            : NativeOperations(Types::Void) {}
 
         Address coerce(Address value) const override {
             throw CompileError("Cannot convert {0} to void", Types::toString(value->getType()));
@@ -181,8 +178,7 @@ namespace pepper {
       public:
         IntegerOperations(Ref<Type> type)
             : NativeOperations(type)
-            , Bits(type->llvmType()->getIntegerBitWidth()) {
-        }
+            , Bits(type->llvmType()->getIntegerBitWidth()) {}
 
         bool isSigned() const {
             return Signed;
@@ -366,8 +362,7 @@ namespace pepper {
     class BoolOperations : public IntegerOperations {
       public:
         BoolOperations(Ref<Type> type)
-            : IntegerOperations(type) {
-        }
+            : IntegerOperations(type) {}
 
         Address coerce(Address value) const override {
             value = read(value);
@@ -393,8 +388,7 @@ namespace pepper {
         DECLARE_RTTI(FloatOperations, NativeOperations)
       public:
         FloatOperations(Ref<Type> type)
-            : NativeOperations(type) {
-        }
+            : NativeOperations(type) {}
 
         ~FloatOperations() = default;
 

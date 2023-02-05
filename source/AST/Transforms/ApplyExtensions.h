@@ -3,12 +3,10 @@
 #include <cassert>
 
 #include "AST/Nodes.h"
+#include "AST/Transforms/Specialization.h"
+#include "AST/Transforms/Transform.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Core/TypeSwitch.h"
-#include "Specialization.h"
-#include "Transform.h"
-#include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {
     struct ApplyExtensions : public Transformer {

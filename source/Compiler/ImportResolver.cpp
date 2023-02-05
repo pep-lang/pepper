@@ -1,6 +1,3 @@
-//
-// Created by justi on 1/17/2023.
-//
 
 #include <filesystem>
 
@@ -15,8 +12,7 @@
 namespace pepper {
 
     ImportResolver::ImportResolver(const Vector<std::string>& searchPaths)
-        : SearchPaths(searchPaths) {
-    }
+        : SearchPaths(searchPaths) {}
 
     void ImportResolver::addImport(const std::string& modulePath, const std::string& importName) {
         Imports[modulePath].emplace_back(importName);

@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 1/21/23.
-//
+
 
 #pragma once
 
@@ -67,28 +65,23 @@ namespace pepper {
 
       public:
         explicit poly_ilist_iterator(node_reference n)
-            : It(&n) {
-        }
+            : It(&n) {}
 
         explicit poly_ilist_iterator(node_type_pointer pt)
-            : It(pt) {
-        }
+            : It(pt) {}
 
         explicit poly_ilist_iterator(reference rt)
-            : It(&rt) {
-        }
+            : It(&rt) {}
 
         explicit poly_ilist_iterator(const poly_ilist_sentinel<N>& rs)
-            : It(const_cast<node_pointer>(static_cast<const_node_pointer>(&rs))) {
-        }
+            : It(const_cast<node_pointer>(static_cast<const_node_pointer>(&rs))) {}
 
         poly_ilist_iterator() = default;
 
         template <bool RhsConst>
         poly_ilist_iterator(const poly_ilist_iterator<T, N, IsReverse, RhsConst>& rhs,
                             std::enable_if_t<IsConst || !RhsConst, void*> = nullptr)
-            : It(rhs.It) {
-        }
+            : It(rhs.It) {}
 
         template <bool RhsConst>
         std::enable_if_t<IsConst || !RhsConst, poly_ilist_iterator&> operator=(
@@ -98,8 +91,7 @@ namespace pepper {
         }
 
         explicit poly_ilist_iterator(const poly_ilist_iterator<T, N, !IsReverse, IsConst>& rhs)
-            : poly_ilist_iterator(++rhs.reverse()) {
-        }
+            : poly_ilist_iterator(++rhs.reverse()) {}
 
         poly_ilist_iterator<T, N, !IsReverse, IsConst> reverse() const {
             if (It)

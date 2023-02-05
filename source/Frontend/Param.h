@@ -16,8 +16,7 @@ namespace pepper {
         Param(const Ident& name, Ref<pepper::Type> type, Address defaultValue = {})
             : Name(name)
             , Type(type)
-            , Default(defaultValue) {
-        }
+            , Default(defaultValue) {}
     };
 
     using Params = Vector<Param>;

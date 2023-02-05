@@ -18,7 +18,6 @@
 #include "Parser/Parser.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"

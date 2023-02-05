@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/21/22.
-//
+
 
 #pragma once
 
@@ -45,8 +43,7 @@ namespace pepper {
 
         explicit Scope(const std::string& name = "Anonymous", Ref<Scope> outer = nullptr)
             : Name(name)
-            , Outer(std::move(outer)) {
-        }
+            , Outer(std::move(outer)) {}
 
         void newSymbol(const Address& value);
         void newFunction(Ref<Function> function, const std::string& name = "");

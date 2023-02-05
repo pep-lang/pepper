@@ -1,6 +1,3 @@
-//
-// Created by Justin Boswell on 1/5/23.
-//
 
 #include "Transform.h"
 

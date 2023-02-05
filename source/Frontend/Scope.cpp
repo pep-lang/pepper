@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/21/22.
-//
+
 
 #include "Frontend/Scope.h"
 

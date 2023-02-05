@@ -1,6 +1,4 @@
-//
-// Created by justi on 1/4/2023.
-//
+
 
 #include "Core/Messages.h"
 

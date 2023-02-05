@@ -1,6 +1,3 @@
-//
-// Created by justi on 12/27/2022.
-//
 
 #pragma once
 

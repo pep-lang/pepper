@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/22/22.
-//
+
 
 #pragma once
 
@@ -22,8 +20,7 @@ namespace pepper {
 
       public:
         explicit Operations(Ref<Type> type)
-            : Ty(type) {
-        }
+            : Ty(type) {}
 
         operator llvm::Type*() const {
             return Ty->llvmType();
@@ -73,16 +70,14 @@ namespace pepper {
 
       public:
         NativeOperations(Ref<Type> type)
-            : Operations(type) {
-        }
+            : Operations(type) {}
     };
 
     class PointerOperations : public NativeOperations {
         DECLARE_RTTI(PointerOperations, NativeOperations)
       public:
         PointerOperations(Ref<Type> type)
-            : NativeOperations(type) {
-        }
+            : NativeOperations(type) {}
 
         Address coerce(Address value) const override;
         Address equal(Address lhs, Address rhs) const override;

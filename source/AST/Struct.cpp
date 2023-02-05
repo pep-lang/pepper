@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/26/22.
-//
+
 
 #include "AST/Struct.h"
 

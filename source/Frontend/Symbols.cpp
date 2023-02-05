@@ -1,14 +1,11 @@
-//
-// Created by Justin Boswell on 1/1/23.
-//
+
 
 #include "Frontend/Symbols.h"
 
 #include "Frontend/Scope.h"
 
 namespace pepper {
-    Symbols::Symbols() {
-    }
+    Symbols::Symbols() {}
 
     Ref<Symbols> Symbols::FromScope(Ref<Scope> scope) {
         auto symbols = Ref<Symbols>::New();

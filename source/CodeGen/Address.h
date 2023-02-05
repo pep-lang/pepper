@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/27/22.
-//
+
 
 #pragma once
 
@@ -17,8 +15,7 @@ namespace pepper {
         Address(Ref<Type> type = nullptr, llvm::Value* value = nullptr, const Ident& identifier = "")
             : Name(identifier)
             , Ty(type)
-            , Value(value) {
-        }
+            , Value(value) {}
 
         operator llvm::Value*() const {
             return Value;

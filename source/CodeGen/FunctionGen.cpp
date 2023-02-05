@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/26/22.
-//
+
 
 #include "AST/Functions.h"
 #include "CodeGen/CodeGenerator.h"

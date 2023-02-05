@@ -1,6 +1,4 @@
-//
-// Created by Justin Boswell on 12/23/22.
-//
+
 
 #include <memory>
 

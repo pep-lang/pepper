@@ -1,6 +1,3 @@
-//
-// Created by Justin Boswell on 12/21/22.
-//
 
 #pragma once
 
@@ -13,13 +10,11 @@ namespace pepper {
         using std::shared_ptr<T>::shared_ptr;
 
         Ref(std::shared_ptr<T>&& ptr)
-            : base(ptr) {
-        }
+            : base(ptr) {}
 
         template <typename U>
         Ref(Ref<U> ref)
-            : base(ref.template as<T>()) {
-        }
+            : base(ref.template as<T>()) {}
 
         template <typename U>
         Ref<U> as() const {

@@ -3,6 +3,7 @@
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
+#include "Core/TypeSwitch.h"
 #include "Specialization.h"
 #include "Transform.h"
 #include "llvm/ADT/StringMap.h"
