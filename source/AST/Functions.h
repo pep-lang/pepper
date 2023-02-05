@@ -41,14 +41,17 @@ namespace pepper::ast {
         }
     };
 
-    struct FunctionDef : public FunctionNode {
+    struct FunctionDef
+        : public FunctionNode
+        , public ScopeTarget {
         DECLARE_RTTI(FunctionDef, FunctionNode);
 
         TNodeRef<Block> Body;
 
         FunctionDef(
             const TypeName& returnType, const TypeName& name, const Params& params = Params(), bool varargs = false)
-            : FunctionNode(returnType, name, params, varargs) {
+            : FunctionNode(returnType, name, params, varargs)
+            , ScopeTarget(this) {
             Body.reset(new Block(name));
         }
 

@@ -170,13 +170,12 @@ namespace pepper {
             auto typeName = parseTypeName(context->typeName());
             auto identifier = context->Identifier()->toString();
 
-            if (builder->functionTarget()) {
-                lvaluePush(new VariableDef(typeName, identifier));
+            if (auto st = builder->targetAs<StructDef>()) {
+                auto structType = st->Type;
+                lvaluePush(new FieldDef(structType, typeName, identifier));
+
             } else {
-                if (!builder->structTarget())
-                    throw InternalCompilerError(
-                        builder->Source, "Attempted to parse an explicit struct field while not in struct scope");
-                lvaluePush(new FieldDef(builder->structTarget(), typeName, identifier));
+                lvaluePush(new VariableDef(typeName, identifier));
             }
         }
 
@@ -196,13 +195,12 @@ namespace pepper {
             auto identifier = context->Identifier()->toString();
             const auto& typeName = TypeName::Auto;
 
-            if (builder->functionTarget()) {
-                lvaluePush(new VariableDef(typeName, identifier));
+            if (auto st = builder->targetAs<StructDef>()) {
+                auto structType = st->Type;
+                lvaluePush(new FieldDef(structType, typeName, identifier));
+
             } else {
-                if (!builder->structTarget())
-                    throw InternalCompilerError(
-                        builder->Source, "Attempted to parse an implicit struct field while not in struct scope");
-                lvaluePush(new FieldDef(builder->structTarget(), typeName, identifier));
+                lvaluePush(new VariableDef(typeName, identifier));
             }
         }
 
@@ -316,7 +314,8 @@ namespace pepper {
             if (context->Assign()) {
                 defaultValue = rvaluePop<Expression>();
             }
-            auto func = builder->functionTarget();
+            assert(builder->targetAs<FunctionDef>());
+            auto func = builder->targetAs<FunctionDef>();
             func->Parameters.emplace_back(name, typeName, defaultValue);
         }
 
@@ -333,12 +332,16 @@ namespace pepper {
             auto identifier = fnSpec.Name;
 
             FunctionDef* function = nullptr;
-            if (auto st = builder->structTarget())
-                function = new MethodDef(st->Type, returnType, fnSpec);
-            else if (auto ext = builder->extensionTarget())
-                function = new MethodDef(ext->Target, returnType, fnSpec);
-            else
+            if (builder->target()) {
+                if (auto st = builder->targetAs<StructDef>())
+                    function = new MethodDef(st->Type, returnType, fnSpec);
+                else if (auto ext = builder->targetAs<ExtensionDef>())
+                    function = new MethodDef(ext->Target, returnType, fnSpec);
+            }
+
+            if (!function) {
                 function = new FunctionDef(returnType, fnSpec);
+            }
 
             lvaluePush(function);
             builder->beginFunction(function);
@@ -352,16 +355,14 @@ namespace pepper {
                 if (method->Name == "[]") { // special case indexer
                     method->Name = method->Parameters.size() == 2 ? "__index_set" : "__index_get";
                 }
-                if (builder->structTarget())
-                    builder->structTarget()->Methods.push_back(method);
-                else {
-                    builder->extensionTarget()->Methods.push_back(method);
-                }
+
+                builder->target()->addFunction(method);
             }
         }
 
         void exitExternParameter(PepperParser::ExternParameterContext* context) override {
-            auto func = builder->functionTarget();
+            auto func = builder->targetAs<FunctionDef>();
+            assert(func && "Extern parameters only belong in function declarations");
             auto name = context->Identifier()->toString();
             auto typeName = context->externTypeName()->Identifier()->toString();
             if (context->externTypeName()->Star())
@@ -413,7 +414,7 @@ namespace pepper {
         }
 
         void enterConstructorDefinition(PepperParser::ConstructorDefinitionContext* context) override {
-            auto st = builder->structTarget();
+            auto st = builder->targetAs<StructDef>();
             if (context->New()) {
                 lvaluePush(st->Constructor);
                 builder->beginFunction(st->Constructor);
@@ -444,7 +445,15 @@ namespace pepper {
                 }
 
                 // lookup the desired field
-                auto st = builder->structTarget();
+                StructDef* st = nullptr;
+                FunctionDef* func = nullptr;
+                if (auto ctor = builder->targetAs<ConstructorDef>()) {
+                    func = ctor;
+                    st = ctor->Struct;
+                } else if (auto method = builder->targetAs<MethodDef>()) {
+                    func = method;
+                    st = method->Struct.value();
+                }
                 auto field = Query(st->Fields).find([&](auto& f) { return f->Name == fieldName; });
                 if (!field) {
                     throw CompileError(builder->Source, "Unknown field {0} found during this initializer", fieldName);
@@ -452,7 +461,6 @@ namespace pepper {
 
                 // generate a parameter to receive the argument value/establish defaults
                 auto paramName = "__this__" + fieldName;
-                auto func = builder->functionTarget();
                 func->Parameters.emplace_back(paramName, field.value()->Type, defaultValue);
 
                 // Add the assignment to the field to the ctor
@@ -538,7 +546,7 @@ namespace pepper {
 
         void exitReturn(PepperParser::ReturnContext* context) override {
             lvaluePop<Return>();
-            auto function = builder->functionTarget();
+            auto function = builder->targetAs<FunctionDef>();
             Expression* returnValue = nullptr;
             if (context->expression()) {
                 returnValue = rvaluePop<Expression>();

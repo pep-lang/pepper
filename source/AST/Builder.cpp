@@ -17,9 +17,7 @@ namespace pepper::ast {
         struct Scope {
             const Ident Name;
 
-            Resolvable<StructDef> StructTarget;
-            ExtensionDef* ExtensionTarget = nullptr;
-            FunctionDef* FunctionTarget = nullptr;
+            ScopeTarget* Target = nullptr;
 
             Node* Parent = nullptr;
             Block* Block = nullptr;
@@ -40,34 +38,10 @@ namespace pepper::ast {
             ScopeStack.emplace_back(globals); // global scope
         }
 
-        [[nodiscard]] FunctionDef* functionTarget() const override {
+        ScopeTarget* target() override {
             for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (scope->FunctionTarget)
-                    return scope->FunctionTarget;
-            }
-            return nullptr;
-        }
-
-        [[nodiscard]] Resolvable<StructDef> structTarget() const override {
-            for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (scope->StructTarget)
-                    return scope->StructTarget;
-            }
-            return {};
-        }
-
-        ExtensionDef* extensionTarget() const override {
-            for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (scope->ExtensionTarget)
-                    return scope->ExtensionTarget;
-            }
-            return nullptr;
-        }
-
-        FunctionDef* functionTarget() {
-            for (const auto& scope : llvm::reverse(ScopeStack)) {
-                if (scope->FunctionTarget) {
-                    return scope->FunctionTarget;
+                if (scope->Target) {
+                    return scope->Target;
                 }
             }
             return nullptr;
@@ -137,26 +111,30 @@ namespace pepper::ast {
             structDef->Source = Source;
             beginScope(structDef->Name);
             auto& structScope = ScopeStack.back();
-            structScope->StructTarget = structDef;
+            structScope->Target = structDef;
         }
 
         void endStruct() override {
             auto& scope = ScopeStack.back();
-            auto& structDef = scope->StructTarget;
+            auto structDef = scope->Target->to<StructDef>();
             structDef->finish();
-            ast.insert(structDef.value());
+            ast.insert(structDef);
             endScope();
         }
+
+        void beginTrait(TraitDecl* trait) override {}
+
+        void endTrait() override {}
 
         void beginExtension(ExtensionDef* ext) override {
             beginScope(ext->Target.toString());
             auto& extScope = ScopeStack.back();
-            extScope->ExtensionTarget = ext;
+            extScope->Target = ext;
         }
 
         void endExtension() override {
             auto& scope = ScopeStack.back();
-            auto extension = scope->ExtensionTarget;
+            auto extension = scope->Target->to<ExtensionDef>();
             ast.insert(extension);
             endScope();
         }
@@ -170,15 +148,14 @@ namespace pepper::ast {
             beginScope(func->Type.toString());
             auto& fnScope = ScopeStack.back();
             fnScope->Block = func->Body;
-            fnScope->FunctionTarget = func;
-            fnScope->StructTarget = func->is<MethodDef>() ? func->as<MethodDef>()->Struct : Resolvable<StructDef>{};
+            fnScope->Target = func;
         }
 
         void endFunction() override {
             auto& scope = ScopeStack.back();
-            auto function = scope->FunctionTarget;
+            FunctionDef* function = scope->Target->to<FunctionDef>();
             endScope();
-            if (!structTarget() && !extensionTarget()) {
+            if (!target()) {
                 ast.insert(function);
             }
         }
@@ -214,14 +191,13 @@ namespace pepper::ast {
 
         void symbol(VariableDef* var) override {
             auto& scope = ScopeStack.back();
-            if (var->is<FieldDef>()) {
-                auto field = var->as<FieldDef>();
-                structTarget().value()->Fields.push_back(field);
+            if (block()) {
+                block()->Items.push_back(var);
             } else {
-                if (block()) {
-                    block()->Items.push_back(var);
-                }
+                assert(target());
+                target()->addVariable(var);
             }
+
             trace(var);
         }
 

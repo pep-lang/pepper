@@ -69,7 +69,7 @@ namespace pepper::ast {
             specialized->Fields.clone(base->Fields);
 
             // clone the ctor
-            specialized->Constructor = base->Constructor->cloneAs<FunctionDef>();
+            specialized->Constructor = base->Constructor->cloneAs<ConstructorDef>();
 
             // replace types in method return types and params
             for (const auto& srcMethod : base->Methods) {

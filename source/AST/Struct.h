@@ -35,7 +35,17 @@ namespace pepper::ast {
 
     struct ConstructorDef : public FunctionDef {
         DECLARE_RTTI(ConstructorDef, FunctionDef);
-        using FunctionDef::FunctionDef;
+        AST_NODE_POD_CLONE(ConstructorDef);
+
+        class StructDef* Struct;
+
+        ConstructorDef(class StructDef* st,
+                       const TypeName& returnType,
+                       const TypeName& name,
+                       const Params& params = Params(),
+                       bool varargs = false)
+            : FunctionDef(returnType, name, params, varargs)
+            , Struct(st) {}
     };
 
     struct MethodDef : public FunctionDef {
@@ -57,10 +67,12 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    struct StructDef : public Symbol {
+    struct StructDef
+        : public Symbol
+        , public ScopeTarget {
         DECLARE_RTTI(StructDef, Symbol);
 
-        TNodeRef<FunctionDef> Constructor;
+        TNodeRef<ConstructorDef> Constructor;
         TNodeRef<MethodDef> Destructor;
         TNodeRef<MethodDef> Acquire;
         TNodeRef<MethodDef> Release;
@@ -72,6 +84,18 @@ namespace pepper::ast {
         explicit StructDef(const TypeName& type, const Ident& name);
         StructDef(const StructDef& rhs) = default;
         void finish();
+
+        void addFunction(FunctionDef* function) override {
+            if (auto method = function->as<MethodDef>())
+                Methods.emplace_back(method);
+            // TODO: static functions
+        }
+
+        void addVariable(VariableDef* var) override {
+            assert(var->is<FieldDef>() && "structs only contain fields");
+            if (auto field = var->as<FieldDef>())
+                Fields.emplace_back(field);
+        }
 
         FieldDef* getField(const Ident& name) const;
         MethodDef* getMethod(const Ident& name) const;
@@ -110,7 +134,9 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    struct ExtensionDef : public Node {
+    struct ExtensionDef
+        : public Node
+        , public ScopeTarget {
         DECLARE_RTTI(ExtensionDef, Node);
         AST_NODE_POD_CLONE(ExtensionDef);
 
@@ -118,11 +144,19 @@ namespace pepper::ast {
         NodeList<MethodDef> Methods;
 
         ExtensionDef(const TypeName& target)
-            : Target(target) {}
+            : ScopeTarget(this)
+            , Target(target) {}
 
         ExtensionDef(const ExtensionDef& ext)
-            : Target(ext.Target) {
+            : ScopeTarget(this)
+            , Target(ext.Target) {
             Methods.clone(ext.Methods);
+        }
+
+        void addFunction(FunctionDef* function) override {
+            if (auto method = function->as<MethodDef>())
+                Methods.emplace_back(method);
+            // TODO: static functions
         }
 
         void visit(Visitor& visitor) override {

@@ -13,13 +13,18 @@ externalDeclaration
     : functionDefinition
     | externFunction
     | structDeclaration
+    | traitDeclaration
     | extensionDefinition
     | useStatement
-    |   ';' // stray ;
+    | ';' // stray ;
     ;
 
 functionDefinition
     :   typeName? functionName '(' parameterList? ')' block
+    ;
+
+functionDefinitionList
+    :   functionDefinition*
     ;
 
 functionName
@@ -40,8 +45,16 @@ extensionDefinition
     :   Extend typeDeclaration '{' functionDefinitionList '}'
     ;
 
-functionDefinitionList
-    :   functionDefinition* {}
+functionDeclaration
+    :   (typeName|This)? functionName '(' parameterList? ')' ';'
+    ;
+
+functionDeclarationList
+    :   functionDeclaration*
+    ;
+
+traitDeclaration
+    : Trait typeName '{' functionDeclarationList '}'
     ;
 
 block
@@ -341,6 +354,7 @@ Static : 'static';
 Struct : 'struct';
 Switch : 'switch';
 This: 'this';
+Trait: 'trait';
 Use: 'use';
 Var: 'var';
 Weak: 'weak';

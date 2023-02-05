@@ -483,6 +483,35 @@ namespace pepper::ast {
             return toString();
         }
     };
+
+    struct ScopeTarget {
+        Node* This;
+
+        ScopeTarget(Node* thisNode)
+            : This(thisNode) {}
+
+        template <typename N>
+        N* to() {
+            return This->as<N>();
+        }
+
+        template <typename N>
+        bool is() const {
+            return This->is<N>();
+        }
+
+        virtual void addMethod(class MethodDecl* method) {
+            assert(!"ScopeTarget does not accept MethodDecls");
+        }
+
+        virtual void addFunction(class FunctionDef* function) {
+            assert(!"ScopeTarget does not accept Methods");
+        }
+
+        virtual void addVariable(class VariableDef* var) {
+            assert(!"ScopeTarget does not accept fields");
+        }
+    };
 } // namespace pepper::ast
 
 namespace llvm {

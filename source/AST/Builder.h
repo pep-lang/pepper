@@ -16,17 +16,24 @@ namespace pepper::ast {
 
         virtual ~Builder() = default;
 
+        template <typename T>
+        T* targetAs() {
+            return target() ? target()->to<T>() : nullptr;
+        }
+
+        virtual ScopeTarget* target() = 0;
+
         virtual void beginStruct(StructDef* st) = 0;
         virtual void endStruct() = 0;
-        virtual Resolvable<StructDef> structTarget() const = 0;
+
+        virtual void beginTrait(TraitDecl* trait) = 0;
+        virtual void endTrait() = 0;
 
         virtual void beginExtension(ExtensionDef* ext) = 0;
         virtual void endExtension() = 0;
-        virtual ExtensionDef* extensionTarget() const = 0;
 
         virtual void beginFunction(FunctionDef* func) = 0;
         virtual void endFunction() = 0;
-        virtual FunctionDef* functionTarget() const = 0;
 
         virtual void beginBlock(Block* block) = 0;
         virtual void endBlock() = 0;

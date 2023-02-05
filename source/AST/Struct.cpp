@@ -83,15 +83,14 @@ namespace pepper::ast {
     }
 
     StructDef::StructDef(const TypeName& type, const Ident& name)
-        : Symbol(type, name) {
-        Constructor = new ConstructorDef(Type, Name);
-        Destructor = new MethodDef(Type, TypeName::Void, {"__dtor"});
-
+        : Symbol(type, name)
+        , ScopeTarget(this)
+        , Constructor(new ConstructorDef(this, Type, Name))
+        , Destructor(new MethodDef(Type, TypeName::Void, {"__dtor"}))
+        , Acquire(new MethodDef(Type, TypeName::Void, {"__acquire"}))
+        , Release(new MethodDef(Type, TypeName::Void, {"__release"})) {
         // Add a field at the head for the refcount
         Fields.push_back(new FieldDef(Type, TypeName{"u32"}, "__refcount", new IntegerLiteral(0)));
-
-        Acquire = new MethodDef(Type, TypeName::Void, {"__acquire"});
-        Release = new MethodDef(Type, TypeName::Void, {"__release"});
 
         auto refcount = []() {
             return new MemberRef(new ThisRef(), "__refcount");
