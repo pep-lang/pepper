@@ -29,8 +29,8 @@ namespace pepper::ast {
             Extensions.push_back(root->as<ExtensionDef>());
         } else if (root->is<FunctionDef>()) {
             Functions.push_back(root->as<FunctionDef>());
-        } else if (root->is<ExternFunctionDef>()) {
-            Externs.push_back(root->as<ExternFunctionDef>());
+        } else if (root->is<ExternFunctionRef>()) {
+            Externs.push_back(root->as<ExternFunctionRef>());
         } else if (root->is<FunctionSpec>()) {
             FunctionSpecs.push_back(root->as<FunctionSpec>());
         } else {

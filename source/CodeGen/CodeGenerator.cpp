@@ -139,8 +139,8 @@ namespace pepper {
             value = emit(node->as<ast::MemberRef>());
         else if (node->is<ast::SymbolRef>())
             value = emit(node->as<ast::SymbolRef>());
-        else if (node->is<ast::ExternFunctionDef>())
-            value = emit(node->as<ast::ExternFunctionDef>());
+        else if (node->is<ast::ExternFunctionRef>())
+            value = emit(node->as<ast::ExternFunctionRef>());
         else if (node->is<ast::FunctionDef>())
             value = emit(node->as<ast::FunctionDef>());
         else if (node->is<ast::Return>())

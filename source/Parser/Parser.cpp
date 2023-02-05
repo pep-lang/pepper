@@ -359,7 +359,7 @@ namespace pepper {
         }
 
         void exitExternParameter(PepperParser::ExternParameterContext* context) override {
-            auto func = builder->targetAs<ExternFunctionDef>();
+            auto func = builder->targetAs<ExternFunctionRef>();
             assert(func && "Extern parameters only belong in function declarations");
             auto name = context->Identifier()->toString();
             auto typeName = context->externTypeName()->Identifier()->toString();
@@ -374,7 +374,7 @@ namespace pepper {
                 returnType += "*";
             auto identifier = context->Identifier()->toString();
             auto vararg = context->externParameterList()->Ellipsis() != nullptr;
-            auto function = new ExternFunctionDef(TypeName{returnType}, identifier);
+            auto function = new ExternFunctionRef(TypeName{returnType}, identifier);
             if (context->Weak())
                 function->Weak = true;
             lvaluePush(function);
@@ -383,7 +383,7 @@ namespace pepper {
 
         void exitExternFunction(PepperParser::ExternFunctionContext*) override {
             builder->endFunction();
-            auto function = lvaluePop<ExternFunctionDef>();
+            auto function = lvaluePop<ExternFunctionRef>();
         }
 
         TypeName parseTypeDeclaration(PepperParser::TypeDeclarationContext* typeDecl) {

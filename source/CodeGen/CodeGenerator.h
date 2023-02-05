@@ -51,7 +51,7 @@ namespace pepper {
         Address emit(const ast::FieldDef* fieldDef);
         Address emit(const ast::MemberRef* memberRef);
         Address emit(const ast::ThisRef* thisRef);
-        Address emit(const ast::ExternFunctionDef* externFuncDef);
+        Address emit(const ast::ExternFunctionRef* externFuncDef);
         Address emit(const ast::FunctionDef* functionDef);
         Address emit(const ast::Return* ret);
         Address emit(const ast::FunctionCall* call);

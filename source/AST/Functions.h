@@ -86,13 +86,13 @@ namespace pepper::ast {
         }
     };
 
-    struct ExternFunctionDef : public FunctionNode {
-        DECLARE_RTTI(ExternFunctionDef, FunctionNode);
-        AST_NODE_POD_CLONE(ExternFunctionDef);
+    struct ExternFunctionRef : public FunctionNode {
+        DECLARE_RTTI(ExternFunctionRef, FunctionNode);
+        AST_NODE_POD_CLONE(ExternFunctionRef);
 
         bool Weak = false;
 
-        ExternFunctionDef(
+        ExternFunctionRef(
             const TypeName& returnType, const Ident& name, const Params& params = {}, bool varargs = false)
             : FunctionNode(returnType, name, params, varargs) {}
     };

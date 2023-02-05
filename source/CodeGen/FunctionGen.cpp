@@ -81,7 +81,7 @@ namespace pepper {
             return pepper::Param{p.Name, type, p.Default ? codegen(p.Default) : Address::Null()};
         });
         auto function = [&]() -> Ref<Function> {
-            if (auto extFunction = fn->as<ExternFunctionDef>()) {
+            if (auto extFunction = fn->as<ExternFunctionRef>()) {
                 return Ref<Function>::New(Module->getModule(),
                                           fn->Name,
                                           returnType,
@@ -106,7 +106,7 @@ namespace pepper {
         return Address{function->type(), function->function(), function->name()};
     }
 
-    Address CodeGenerator::emit(const ExternFunctionDef* functionDecl) {
+    Address CodeGenerator::emit(const ExternFunctionRef* functionDecl) {
         auto function = locals()->findFunction(functionDecl->Name);
         return Address{function->type(), function->function(), function->name()};
     }

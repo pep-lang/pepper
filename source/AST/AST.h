@@ -26,7 +26,7 @@ namespace pepper::ast {
         NodeList<StructSpec> StructSpecs;
         NodeList<ExtensionDef> Extensions;
         NodeList<FunctionDef> Functions;
-        NodeList<ExternFunctionDef> Externs;
+        NodeList<ExternFunctionRef> Externs;
         NodeList<FunctionSpec> FunctionSpecs;
         std::unique_ptr<Builder> TreeBuilder;
         TreeType Type;
@@ -86,7 +86,7 @@ namespace pepper::ast {
             return FunctionSpecs;
         }
 
-        const NodeList<ExternFunctionDef>& externs() const {
+        const NodeList<ExternFunctionRef>& externs() const {
             return Externs;
         }
 
