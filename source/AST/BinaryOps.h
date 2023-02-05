@@ -2,6 +2,7 @@
 #pragma once
 
 #include "AST/Node.h"
+#include "AST/Visitor.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 

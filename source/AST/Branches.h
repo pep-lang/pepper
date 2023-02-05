@@ -5,6 +5,7 @@
 #pragma once
 
 #include "AST/Block.h"
+#include "AST/Visitor.h"
 #include "Core/Query.h"
 #include "Core/String.h"
 #include "Core/Vector.h"

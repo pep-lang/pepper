@@ -5,6 +5,7 @@
 #pragma once
 
 #include "AST/Node.h"
+#include "AST/Visitor.h"
 #include "Core/Query.h"
 
 namespace pepper::ast {
