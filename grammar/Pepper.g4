@@ -42,7 +42,7 @@ parameterDeclaration
 	;
 
 extensionDefinition
-    :   Extend typeDeclaration '{' functionDefinitionList '}'
+    :   Extend typeDeclaration (With typeDeclaration)? '{' functionDefinitionList '}'
     ;
 
 functionDeclaration

@@ -137,7 +137,7 @@ namespace pepper {
             Super::visitTerminal(terminal);
         }
 
-        TypeName parseTypeName(PepperParser::TypeNameContext* typeSpec) {
+        static TypeName parseTypeName(PepperParser::TypeNameContext* typeSpec) {
             TypeName type{typeSpec->Identifier()->toString()};
             if (auto genericParams = typeSpec->genericArgs()) {
                 for (auto paramType : genericParams->genericArgsList()->typeName()) {
@@ -147,6 +147,27 @@ namespace pepper {
             if (typeSpec->Brackets())
                 type.Flags = TypeName::Array;
             return type;
+        }
+
+        static TypeName parseTypeDeclaration(PepperParser::TypeDeclarationContext* typeDecl) {
+            TypeName type{typeDecl->Identifier()->toString()};
+            if (auto genericParams = typeDecl->genericParams()) {
+                for (auto param : genericParams->genericParamsList()->Identifier()) {
+                    type.SubTypes.emplace_back(param->toString());
+                }
+            }
+            return type;
+        }
+
+        static TypeName parseFunctionSpec(PepperParser::FunctionNameContext* context) {
+            TypeName fnSpec;
+            if (auto op = context->unaryOperator()) {
+                if (context->unaryOperator()->Brackets())
+                    fnSpec = {"[]"};
+            } else {
+                fnSpec = parseTypeDeclaration(context->typeDeclaration());
+            }
+            return fnSpec;
         }
 
         void exitUseStatement(PepperParser::UseStatementContext* context) override {
@@ -320,13 +341,7 @@ namespace pepper {
         }
 
         void enterFunctionDefinition(PepperParser::FunctionDefinitionContext* context) override {
-            TypeName fnSpec;
-            if (auto op = context->functionName()->unaryOperator()) {
-                if (context->functionName()->unaryOperator()->Brackets())
-                    fnSpec = {"[]"};
-            } else {
-                fnSpec = parseTypeDeclaration(context->functionName()->typeDeclaration());
-            }
+            TypeName fnSpec = parseFunctionSpec(context->functionName());
 
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName::Void;
             auto identifier = fnSpec.Name;
@@ -384,16 +399,6 @@ namespace pepper {
         void exitExternFunction(PepperParser::ExternFunctionContext*) override {
             builder->endFunction();
             auto function = lvaluePop<ExternFunctionRef>();
-        }
-
-        TypeName parseTypeDeclaration(PepperParser::TypeDeclarationContext* typeDecl) {
-            TypeName type{typeDecl->Identifier()->toString()};
-            if (auto genericParams = typeDecl->genericParams()) {
-                for (auto param : genericParams->genericParamsList()->Identifier()) {
-                    type.SubTypes.emplace_back(param->toString());
-                }
-            }
-            return type;
         }
 
         void enterStructDeclaration(PepperParser::StructDeclarationContext* context) override {
@@ -479,21 +484,27 @@ namespace pepper {
 
         void enterFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName{"this"};
-            auto identifier = context->functionName()->toString();
-            auto function = new MethodDecl(returnType, {identifier}, {});
+            auto identifier = parseFunctionSpec(context->functionName());
+            auto function = new MethodDecl(returnType, identifier, {});
             lvaluePush(function);
             builder->beginFunction(function);
         }
 
         void exitFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
             builder->endFunction();
-            lvaluePop<FunctionDef>();
+            lvaluePop<MethodDecl>();
         }
 
         void enterExtensionDefinition(PepperParser::ExtensionDefinitionContext* context) override {
-            auto structType = parseTypeDeclaration(context->typeDeclaration());
-            auto ext = new ExtensionDef(structType);
-            builder->beginExtension(ext);
+            auto structType = parseTypeDeclaration(context->typeDeclaration()[0]);
+            if (context->With()) {
+                auto traitDecl = parseTypeDeclaration(context->typeDeclaration()[1]);
+                auto traitDef = new TraitDef(traitDecl, structType);
+                builder->beginExtension(traitDef);
+            } else {
+                auto ext = new ExtensionDef(structType);
+                builder->beginExtension(ext);
+            }
         }
 
         void exitExtensionDefinition(PepperParser::ExtensionDefinitionContext*) override {

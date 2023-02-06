@@ -47,6 +47,9 @@ namespace pepper::ast {
                     method->Struct = target;
                     target->Methods.push_back(method);
                 }
+                if (auto trait = ext->as<TraitDef>()) {
+                    target->Traits.emplace_back(trait);
+                }
             }
         }
     };
