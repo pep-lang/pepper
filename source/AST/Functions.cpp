@@ -1,5 +1,6 @@
 
-#include "AST/Nodes.h"
+#include "AST/Functions.h"
+
 #include "AST/Param.h"
 #include "Core/Query.h"
 #include "llvm/Support/FormatVariadic.h"

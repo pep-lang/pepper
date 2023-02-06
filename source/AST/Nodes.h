@@ -3,6 +3,7 @@
 #include "AST/BinaryOps.h"
 #include "AST/Block.h"
 #include "AST/Branches.h"
+#include "AST/Extension.h"
 #include "AST/Functions.h"
 #include "AST/Intrinsics.h"
 #include "AST/Literals.h"

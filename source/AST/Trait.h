@@ -1,19 +1,17 @@
 
 #pragma once
 
-#pragma once
-
-#include "AST/Functions.h"
+#include "AST/Extension.h"
 
 namespace pepper::ast {
-    class MethodDecl : public FunctionNode {
+    struct MethodDecl : public FunctionNode {
         DECLARE_RTTI(MethodDecl, FunctionNode);
         AST_NODE_POD_CLONE(MethodDecl);
 
         using FunctionNode::FunctionNode;
     };
 
-    class TraitDecl
+    struct TraitDecl
         : public Symbol
         , public ScopeTarget {
         DECLARE_RTTI(TraitDecl, Symbol);
@@ -28,5 +26,16 @@ namespace pepper::ast {
         void addMethod(MethodDecl* method) override {
             Methods.emplace_back(method);
         }
+    };
+
+    struct TraitDef : public ExtensionDef {
+        DECLARE_RTTI(TraitDef, ExtensionDef);
+        AST_NODE_POD_CLONE(TraitDef);
+
+        Resolvable<TraitDecl> Decl;
+
+        TraitDef(const TypeName& traitDecl, const TypeName& structTarget)
+            : ExtensionDef(structTarget)
+            , Decl(traitDecl) {}
     };
 } // namespace pepper::ast

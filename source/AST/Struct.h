@@ -4,7 +4,9 @@
 #include <string>
 
 #include "AST/Functions.h"
+#include "AST/Method.h"
 #include "AST/Node.h"
+#include "AST/Trait.h"
 #include "AST/Variables.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
@@ -30,44 +32,12 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    struct ConstructorDef : public FunctionDef {
-        DECLARE_RTTI(ConstructorDef, FunctionDef);
-        AST_NODE_POD_CLONE(ConstructorDef);
-
-        class StructDef* Struct;
-
-        ConstructorDef(class StructDef* st,
-                       const TypeName& returnType,
-                       const TypeName& name,
-                       const Params& params = Params(),
-                       bool varargs = false)
-            : FunctionDef(returnType, name, params, varargs)
-            , Struct(st) {}
-    };
-
-    struct MethodDef : public FunctionDef {
-        DECLARE_RTTI(MethodDef, FunctionDef);
-
-        Resolvable<StructDef> Struct;
-
-      public:
-        MethodDef(const TypeName& structName,
-                  const TypeName& returnType,
-                  const TypeName& name,
-                  const Params& params = Params(),
-                  bool vararg = false);
-
-        Node* clone() const override;
-
-        std::string signature() const override;
-        std::string toString() const override;
-        std::string dump(int indent) const override;
-    };
-
     struct StructDef
         : public Symbol
         , public ScopeTarget {
         DECLARE_RTTI(StructDef, Symbol);
+
+        NodeList<TraitDef> Traits;
 
         TNodeRef<ConstructorDef> Constructor;
         TNodeRef<MethodDef> Destructor;
@@ -135,42 +105,6 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
     };
 
-    struct ExtensionDef
-        : public Node
-        , public ScopeTarget {
-        DECLARE_RTTI(ExtensionDef, Node);
-        AST_NODE_POD_CLONE(ExtensionDef);
-
-        Resolvable<StructDef> Target;
-        NodeList<MethodDef> Methods;
-
-        ExtensionDef(const TypeName& target)
-            : ScopeTarget(this)
-            , Target(target) {}
-
-        ExtensionDef(const ExtensionDef& ext)
-            : ScopeTarget(this)
-            , Target(ext.Target) {
-            Methods.clone(ext.Methods);
-        }
-
-        void addFunction(FunctionDef* function) override {
-            if (auto method = function->as<MethodDef>())
-                Methods.emplace_back(method);
-            // TODO: static functions
-        }
-
-        void visit(Visitor& visitor) override {
-            Node::visit(visitor);
-            visitor.visit(Target);
-            for (auto& method : Methods)
-                visitor.visit(method);
-        }
-
-        std::string toString() const override;
-        std::string dump(int indent) const override;
-    };
-
     struct MemberRef : public SymbolRef {
         DECLARE_RTTI(MemberRef, SymbolRef);
         AST_NODE_POD_CLONE(MemberRef);
@@ -197,44 +131,6 @@ namespace pepper::ast {
             SymbolRef::visit(visitor);
             visitor.visit(LHS);
         }
-    };
-
-    struct MethodCall : public Expression {
-        DECLARE_RTTI(MethodCall, Expression);
-        AST_NODE_POD_CLONE(MethodCall);
-
-        TypeName Type;
-        TNodeRef<Expression> This;
-        const Ident Name;
-        ExprList Args;
-
-        MethodCall(Expression* thisRef, const Ident& methodName, const ExprList& args = {})
-            : This(thisRef)
-            , Name(methodName) {
-            Args.clone(args);
-        }
-
-        MethodCall(const MethodCall& m)
-            : Expression(m)
-            , Type(m.Type)
-            , This(m.This->cloneAs<Expression>())
-            , Name(m.Name) {
-            Args.clone(m.Args);
-        }
-
-        const TypeName& type() const override {
-            return Type;
-        }
-
-        void visit(Visitor& visitor) override {
-            Expression::visit(visitor);
-            visitor.visit(Type);
-            visitor.visit(This);
-            for (auto& arg : Args)
-                visitor.visit(arg);
-        }
-
-        std::string dump(int indent) const override;
     };
 
     struct ThisDef : public VariableDef {
