@@ -14,7 +14,7 @@
 #include "PepperParser.h"
 
 namespace pepper {
-    using namespace Pepper::Parser;
+    using namespace pepper::parser;
     using namespace pepper::ast;
 
     class ParserListener : public PepperBaseListener {
