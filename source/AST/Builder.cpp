@@ -120,9 +120,18 @@ namespace pepper::ast {
             endScope();
         }
 
-        void beginTrait(TraitDecl* trait) override {}
+        void beginTrait(TraitDecl* trait) override {
+            beginScope(trait->Name);
+            auto& traitScope = ScopeStack.back();
+            traitScope->Target = trait;
+        }
 
-        void endTrait() override {}
+        void endTrait() override {
+            auto& scope = ScopeStack.back();
+            auto trait = scope->Target->to<TraitDecl>();
+            ast.insert(trait);
+            endScope();
+        }
 
         void beginExtension(ExtensionDef* ext) override {
             beginScope(ext->Target.toString());
@@ -156,8 +165,12 @@ namespace pepper::ast {
             auto& scope = ScopeStack.back();
             auto* function = scope->Target->to<FunctionNode>();
             endScope();
-            if (target()) {
-                target()->addFunction(function->as<FunctionDef>());
+            if (auto tgt = target()) {
+                if (auto method = function->as<MethodDecl>()) {
+                    tgt->addMethod(method);
+                }else {
+                    tgt->addFunction(function->as<FunctionDef>());
+                }
             } else {
                 ast.insert(function);
             }
