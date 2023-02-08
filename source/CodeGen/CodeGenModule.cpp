@@ -3,12 +3,8 @@
 #include <memory>
 
 #include "CodeGenModule.h"
-#include "Core/Exceptions.h"
-#include "Frontend/Scope.h"
-#include "Frontend/Symbols.h"
+#include "Sema/Scope.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
-#include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
-#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
@@ -18,7 +14,7 @@
 #include "llvm/Target/TargetMachine.h"
 
 namespace pepper {
-    CodeGenModule::CodeGenModule(PepContext& context, const Ident& name, const std::string& sourcePath)
+    CodeGenModule::CodeGenModule(SemaContext& context, const Ident& name, const std::string& sourcePath)
         : ModuleName(name)
         , Context(context) {
         Module = std::make_unique<llvm::Module>(name, Context.getContext());

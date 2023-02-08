@@ -2,8 +2,8 @@
 #include "AST/Intrinsics.h"
 #include "CodeGen/CodeGenerator.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/TypeSwitch.h"
-#include "Frontend/LLVMUtils.h"
 
 namespace pepper {
     Address CodeGenerator::emitSizeOf(const ast::SizeOf* sizeOf) {

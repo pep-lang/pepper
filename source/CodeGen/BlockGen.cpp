@@ -2,8 +2,8 @@
 
 #include "AST/Block.h"
 #include "CodeGen/CodeGenerator.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Struct.h"
+#include "Core/LLVMUtils.h"
+#include "Sema/Struct.h"
 #include "llvm/IR/BasicBlock.h"
 
 namespace pepper {

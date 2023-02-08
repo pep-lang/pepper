@@ -4,7 +4,7 @@
 
 #include "AST/BinaryOps.h"
 #include "AST/Literals.h"
-#include "Frontend/PepContext.h"
+#include "Sema/SemaContext.h"
 
 namespace pepper::ast {
     FieldDef::FieldDef(

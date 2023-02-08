@@ -13,8 +13,8 @@
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
-#include "Frontend/PepContext.h"
 #include "Parser/Parser.h"
+#include "Sema/SemaContext.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -34,7 +34,7 @@ namespace pepper {
 
         // Re-used internals per module
         std::string ModuleName;
-        std::unique_ptr<PepContext> Context;
+        std::unique_ptr<SemaContext> Context;
 
         // Collected obj files for linking
         Vector<std::string> ObjFiles;
@@ -52,7 +52,7 @@ namespace pepper {
             if (Opts->TraceChannels)
                 Messages::SetTraceChannels(Opts->TraceChannels);
 
-            Context = std::make_unique<PepContext>();
+            Context = std::make_unique<SemaContext>();
         }
 
         Ref<CodeGenModule> compile() override {

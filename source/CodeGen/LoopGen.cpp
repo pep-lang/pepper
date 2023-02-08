@@ -4,11 +4,11 @@
 #include "Address.h"
 #include "CodeGenerator.h"
 #include "Core/Exceptions.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/PepContext.h"
-#include "Frontend/Struct.h"
-#include "Frontend/Types.h"
+#include "Core/LLVMUtils.h"
+#include "Sema/Operations.h"
+#include "Sema/SemaContext.h"
+#include "Sema/Struct.h"
+#include "Sema/Types.h"
 
 namespace pepper {
     Address CodeGenerator::emit(const ast::While* loop) {

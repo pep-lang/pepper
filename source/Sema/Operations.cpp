@@ -1,11 +1,11 @@
 
 
-#include "Frontend/Operations.h"
+#include "Operations.h"
 
 #include "CodeGen/Address.h"
 #include "Core/Exceptions.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Types.h"
+#include "Core/LLVMUtils.h"
+#include "Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"

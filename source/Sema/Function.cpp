@@ -1,11 +1,11 @@
 
-#include "Frontend/Function.h"
+#include "Function.h"
 
 #include "Core/Exceptions.h"
-#include "Frontend/Operations.h"
-#include "Frontend/PepContext.h"
-#include "Frontend/Struct.h"
-#include "Frontend/Types.h"
+#include "Operations.h"
+#include "SemaContext.h"
+#include "Struct.h"
+#include "Types.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
 
@@ -52,7 +52,7 @@ namespace pepper {
         }
         return Address{
             ReturnType,
-            PepContext::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
+            SemaContext::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
     }
 
     UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params)

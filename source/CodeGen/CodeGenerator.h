@@ -9,7 +9,7 @@
 #include "CodeGenModule.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
-#include "Frontend/Scope.h"
+#include "Sema/Scope.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"

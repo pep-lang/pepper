@@ -1,25 +1,25 @@
 
-#include "Frontend/PepContext.h"
 #include <cassert>
 
 #include "CodeGen/CodeGenModule.h"
-#include "Frontend/Function.h"
-#include "Frontend/Scope.h"
-#include "Frontend/Types.h"
+#include "Function.h"
+#include "Scope.h"
+#include "SemaContext.h"
+#include "Types.h"
 
 namespace pepper {
-    PepContext* PepContext::Instance = nullptr;
+    SemaContext* SemaContext::Instance = nullptr;
 
-    PepContext& PepContext::get() {
+    SemaContext& SemaContext::get() {
         assert(Instance);
         return *Instance;
     }
 
-    Ref<llvm::IRBuilderBase> PepContext::ir() {
+    Ref<llvm::IRBuilderBase> SemaContext::ir() {
         return get().locals()->builder();
     }
 
-    PepContext::PepContext() {
+    SemaContext::SemaContext() {
         assert(Instance == nullptr);
         Instance = this;
 
@@ -32,11 +32,11 @@ namespace pepper {
         Locals = Globals;
     }
 
-    PepContext::~PepContext() {
+    SemaContext::~SemaContext() {
         Instance = nullptr;
     }
 
-    void PepContext::pushFunction(Ref<UserFunction> function) {
+    void SemaContext::pushFunction(Ref<UserFunction> function) {
         pushScope(function->name(), function->Builder);
         Locals->FunctionTarget = function;
         if (function->is<Method>()) {
@@ -44,12 +44,12 @@ namespace pepper {
         }
     }
 
-    void PepContext::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
+    void SemaContext::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
         Locals = Ref<Scope>::New(name, Locals);
         Locals->Builder = builder;
     }
 
-    void PepContext::popScope() {
+    void SemaContext::popScope() {
         Locals = Locals->Outer == Globals ? Globals : Locals->Outer;
     }
 

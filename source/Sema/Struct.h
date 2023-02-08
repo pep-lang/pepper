@@ -6,9 +6,9 @@
 
 #include "Core/Common.h"
 #include "Core/Ident.h"
-#include "Frontend/Function.h"
-#include "Frontend/Param.h"
-#include "Frontend/Types.h"
+#include "Function.h"
+#include "Param.h"
+#include "Types.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"

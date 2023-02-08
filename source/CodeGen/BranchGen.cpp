@@ -4,10 +4,10 @@
 #include "Address.h"
 #include "CodeGenerator.h"
 #include "Core/Exceptions.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/PepContext.h"
-#include "Frontend/Types.h"
+#include "Core/LLVMUtils.h"
+#include "Sema/Operations.h"
+#include "Sema/SemaContext.h"
+#include "Sema/Types.h"
 
 namespace pepper {
     using namespace pepper::ast;

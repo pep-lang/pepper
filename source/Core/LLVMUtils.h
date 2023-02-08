@@ -6,7 +6,7 @@
 
 #include "Core/Exceptions.h"
 #include "Core/String.h"
-#include "Frontend/PepContext.h"
+#include "Sema/SemaContext.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -37,7 +37,7 @@ namespace pepper {
     }
 
     inline Ref<llvm::IRBuilderBase> ir() {
-        return PepContext::get().locals()->builder();
+        return SemaContext::get().locals()->builder();
     }
 
     inline llvm::Type* resolveType(Address value) {

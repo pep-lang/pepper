@@ -5,7 +5,7 @@
 #include "CodeGen/DebugInfo.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
-#include "Frontend/PepContext.h"
+#include "Sema/SemaContext.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
@@ -18,13 +18,13 @@ namespace pepper {
 
     class CodeGenModule {
         Ident ModuleName;
-        PepContext& Context;
+        SemaContext& Context;
         std::unique_ptr<llvm::Module> Module;
         std::unique_ptr<llvm::TargetMachine> TM;
         std::unique_ptr<DebugInfo> Debug;
 
       public:
-        CodeGenModule(PepContext& context, const Ident& name, const std::string& sourcePath = "");
+        CodeGenModule(SemaContext& context, const Ident& name, const std::string& sourcePath = "");
 
         ~CodeGenModule();
 

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "Core/Ident.h"
-#include "Frontend/Types.h"
+#include "Sema/Types.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {

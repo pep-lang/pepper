@@ -3,12 +3,12 @@
 #include "AST/Functions.h"
 #include "CodeGen/CodeGenerator.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
-#include "Frontend/Function.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/Types.h"
+#include "Sema/Function.h"
+#include "Sema/Operations.h"
+#include "Sema/Types.h"
 
 namespace pepper {
     using namespace pepper::ast;

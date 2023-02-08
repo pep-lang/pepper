@@ -5,11 +5,11 @@
 #include "AST/Struct.h"
 #include "CodeGenerator.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/Messages.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/Struct.h"
-#include "Frontend/Types.h"
+#include "Sema/Operations.h"
+#include "Sema/Struct.h"
+#include "Sema/Types.h"
 
 namespace pepper {
 

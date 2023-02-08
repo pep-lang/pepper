@@ -3,9 +3,9 @@
 #include "AST/BinaryOps.h"
 #include "CodeGen/CodeGenerator.h"
 #include "Core/Exceptions.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/Types.h"
+#include "Core/LLVMUtils.h"
+#include "Sema/Operations.h"
+#include "Sema/Types.h"
 
 namespace pepper {
     using namespace pepper::ast;

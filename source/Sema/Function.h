@@ -9,7 +9,7 @@
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
-#include "Frontend/Param.h"
+#include "Param.h"
 #include "llvm/IR/Function.h"
 
 namespace llvm {

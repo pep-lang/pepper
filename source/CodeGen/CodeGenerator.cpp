@@ -5,38 +5,38 @@
 #include "AST/Nodes.h"
 #include "CodeGenModule.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/Messages.h"
-#include "Frontend/LLVMUtils.h"
-#include "Frontend/Operations.h"
-#include "Frontend/PepContext.h"
-#include "Frontend/Types.h"
+#include "Sema/Operations.h"
+#include "Sema/SemaContext.h"
+#include "Sema/Types.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
 
 namespace pepper {
     Ref<Scope> CodeGenerator::locals() {
-        return PepContext::get().locals();
+        return SemaContext::get().locals();
     }
 
     Ref<Scope> CodeGenerator::globals() {
-        return PepContext::get().globals();
+        return SemaContext::get().globals();
     }
 
     void CodeGenerator::pushFunction(Ref<UserFunction> function) {
-        PepContext::get().pushFunction(function);
+        SemaContext::get().pushFunction(function);
         auto sp = Module->getDebugInfo()->emitFunction(function.get());
         Module->getDebugInfo()->pushScope(sp);
     }
 
     void CodeGenerator::pushScope(const Ident& name) {
-        PepContext::get().pushScope(name);
+        SemaContext::get().pushScope(name);
         // TODO: how to handle anonymous scopes
     }
 
     void CodeGenerator::popScope() {
         Module->getDebugInfo()->popScope();
-        PepContext::get().popScope();
+        SemaContext::get().popScope();
     }
 
     Address CodeGenerator::emit(const ast::SymbolRef* symbol) {

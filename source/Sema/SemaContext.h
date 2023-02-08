@@ -5,7 +5,7 @@
 #include <string>
 
 #include "Core/Common.h"
-#include "Frontend/Scope.h"
+#include "Scope.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 
@@ -13,8 +13,8 @@ namespace pepper {
     class Types;
     class UserFunction;
 
-    class PepContext {
-        static PepContext* Instance;
+    class SemaContext {
+        static SemaContext* Instance;
 
         std::unique_ptr<llvm::LLVMContext> Context;
         Ref<Types> TypeMap;
@@ -23,11 +23,11 @@ namespace pepper {
         bool UnitTest = false;
 
       public:
-        static PepContext& get();
+        static SemaContext& get();
         static Ref<llvm::IRBuilderBase> ir();
 
-        explicit PepContext();
-        ~PepContext();
+        explicit SemaContext();
+        ~SemaContext();
 
         [[nodiscard]] Ref<Types> types() const {
             return TypeMap;

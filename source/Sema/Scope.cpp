@@ -1,10 +1,10 @@
 
 
-#include "Frontend/Scope.h"
+#include "Scope.h"
 
 #include "CodeGen/CodeGenModule.h"
-#include "Frontend/Function.h"
-#include "Frontend/PepContext.h"
+#include "Function.h"
+#include "SemaContext.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
 

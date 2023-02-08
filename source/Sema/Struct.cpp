@@ -1,12 +1,12 @@
 
-#include "Frontend/Struct.h"
+#include "Struct.h"
 
 #include "CodeGen/Address.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/Query.h"
-#include "Frontend/Operations.h"
-#include "Frontend/PepContext.h"
-#include "LLVMUtils.h"
+#include "Operations.h"
+#include "SemaContext.h"
 #include "llvm/IR/DataLayout.h"
 
 namespace pepper {
@@ -38,14 +38,14 @@ namespace pepper {
 
     Ref<Struct> Struct::New(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
         Ref<Struct> newStruct = Ref<Struct>::New(module, name, fields, newParams);
-        auto globals = PepContext::get().globals();
+        auto globals = SemaContext::get().globals();
         globals->Structs[name] = newStruct;
         globals->Functions[newStruct->Constructor->name()] = newStruct->Constructor;
         return newStruct;
     }
 
     Ref<Struct> Struct::get(const Ident& name) {
-        return PepContext::get().globals()->Structs.lookup(name);
+        return SemaContext::get().globals()->Structs.lookup(name);
     }
 
     Address Struct::getMember(llvm::Value* instance, const Ident& name) const {
