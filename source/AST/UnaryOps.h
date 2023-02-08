@@ -21,7 +21,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            auto str = Node::toString();
+            auto str = nodeName();
             if (Operand) {
                 str += std::string(llvm::formatv("({0})", Operand->toString()));
             }

@@ -345,6 +345,7 @@ namespace pepper {
 
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName::Void;
             auto identifier = fnSpec.Name;
+            auto storageClass = context->storageClass() && context->storageClass()->Static() ? FunctionNode::StorageClassType::Static : FunctionNode::StorageClassType::Default;
 
             FunctionDef* function = nullptr;
             if (builder->target()) {
@@ -357,6 +358,8 @@ namespace pepper {
             if (!function) {
                 function = new FunctionDef(returnType, fnSpec);
             }
+
+            function->StorageClass = storageClass;
 
             lvaluePush(function);
             builder->beginFunction(function);
@@ -485,12 +488,14 @@ namespace pepper {
         void enterFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName{"this"};
             auto identifier = parseFunctionSpec(context->functionName());
+            auto storageClass = context->storageClass() && context->storageClass()->Static() ? FunctionNode::StorageClassType::Static : FunctionNode::StorageClassType::Default;
             auto function = new MethodDecl(returnType, identifier, {});
+            function->StorageClass = storageClass;
             lvaluePush(function);
             builder->beginFunction(function);
         }
 
-        void exitFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
+        void exitFunctionDeclaration(PepperParser::FunctionDeclarationContext*) override {
             builder->endFunction();
             lvaluePop<MethodDecl>();
         }

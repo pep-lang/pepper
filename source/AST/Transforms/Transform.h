@@ -7,8 +7,9 @@
 
 namespace pepper::ast {
     struct SymbolTable {
-        llvm::StringMap<FunctionDef*> Functions;
+        llvm::StringMap<FunctionNode*> Functions;
         llvm::StringMap<StructDef*> Structs;
+        llvm::StringMap<TraitDecl*> TraitDecls;
         llvm::StringSet<> Types;
 
         SymbolTable();

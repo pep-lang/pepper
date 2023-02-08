@@ -32,8 +32,12 @@ namespace pepper::ast {
         return llvm::formatv("{0}{1}{2}", src, sep, padding);
     }
 
+    std::string Node::nodeName() const {
+        return rtti()->name();
+    }
+
     std::string Node::toString() const {
-        return llvm::formatv("{0}: ", rtti()->name());
+        return llvm::formatv("{0}", rtti()->name());
     }
 
     std::string Node::dump(int indent) const {

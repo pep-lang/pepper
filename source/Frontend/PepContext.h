@@ -56,14 +56,6 @@ namespace pepper {
         void pushFunction(Ref<UserFunction> function);
         void pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder = nullptr);
         void popScope();
-
-        void enableUnitTesting(bool enable) {
-            UnitTest = enable;
-        }
-
-        bool unitTestingEnabled() const {
-            return UnitTest;
-        }
     };
 
 } // namespace pepper

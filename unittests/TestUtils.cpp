@@ -40,7 +40,6 @@ namespace TestUtils {
         options->InputStream = std::move(sourceStream);
         options->CompileRuntime = compileRuntime;
         options->SourceFiles.emplace_back(SupportModulePath());
-        options->UnitTest = true;
         auto compiler = Compiler::Create(options);
         auto module = compiler->compile();
         auto executor = Executor::Create();

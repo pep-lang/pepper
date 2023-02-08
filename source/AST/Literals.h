@@ -25,7 +25,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}: {1}", nodeName(), Value));
         }
 
         std::string dump(int indent) const override {
@@ -48,7 +48,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1})", nodeName(), Value));
         }
 
         std::string dump(int indent) const override {
@@ -71,7 +71,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1})", nodeName(), Value));
         }
 
         std::string dump(int indent) const override {
@@ -96,7 +96,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0}({1}\"{2}\")", Node::toString(), Raw ? "@" : "", Value));
+            return std::string(llvm::formatv("{0}({1}\"{2}\")", nodeName(), Raw ? "@" : "", Value));
         }
 
         std::string dump(int indent) const override {
@@ -119,7 +119,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0}({1})", Node::toString(), Value));
+            return std::string(llvm::formatv("{0}({1})", nodeName(), Value));
         }
 
         std::string dump(int indent) const override {

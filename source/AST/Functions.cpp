@@ -48,8 +48,7 @@ namespace pepper::ast {
     }
 
     std::string FunctionNode::toString() const {
-        std::string sig = llvm::formatv("{0} {1}", Node::toString(), signature());
-        return sig;
+        return llvm::formatv("{0}: {1}", nodeName(), signature());
     }
 
     std::string FunctionNode::dump(int indent) const {
@@ -77,10 +76,8 @@ namespace pepper::ast {
 
     std::string FunctionCall::toString() const {
         Vector<std::string> argsStr = Query(Args).select<std::string>([](const auto& a) { return a->toString(); });
-        return trim(llvm::formatv("{0} {1}({2:$[, ]})",
-                                  Node::toString(),
-                                  Target.toString(),
-                                  llvm::make_range(argsStr.begin(), argsStr.end())));
+        return trim(llvm::formatv(
+            "{0}: {1}({2:$[, ]})", nodeName(), Target.toString(), llvm::make_range(argsStr.begin(), argsStr.end())));
     }
 
     std::string FunctionCall::dump(int indent) const {

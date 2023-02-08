@@ -13,7 +13,7 @@ namespace pepper::ast {
         , Struct(st) {}
 
     std::string FieldDef::toString() const {
-        return Node::toString() + std::string(llvm::formatv("{0} {1}.{2}", Type, Struct.toString(), Name));
+        return std::string(llvm::formatv("{0}: {1} {2}.{3}", nodeName(), Type, Struct.toString(), Name));
     }
 
     std::string FieldDef::dump(int indent) const {
@@ -34,16 +34,16 @@ namespace pepper::ast {
         : FunctionDef(returnType, name, params, vararg)
         , Struct(structName) {}
 
+    void MethodDef::visit(Visitor& visitor) {
+        FunctionDef::visit(visitor);
+        visitor.visit(Struct);
+    }
+
     std::string MethodDef::signature() const {
         Vector<std::string> types = Query(Parameters).select<std::string>([](auto& p) { return p.Type.toString(); });
         std::string sig = llvm::formatv(
-            "{0} {1}.{2}({3:$[, ]})", ReturnType, Struct->Name, Name, llvm::make_range(types.begin(), types.end()));
+            "{0} {1}.{2}({3:$[, ]})", ReturnType, Struct.name(), Name, llvm::make_range(types.begin(), types.end()));
         return sig;
-    }
-
-    std::string MethodDef::toString() const {
-        const char* sep = "\n    ";
-        return std::string(llvm::formatv("{0} {1}", Node::toString(), signature())) + sep + Body->toString();
     }
 
     std::string MethodDef::dump(int indent) const {
@@ -62,14 +62,27 @@ namespace pepper::ast {
 
     Node* MethodDef::clone() const {
         auto method = new MethodDef(Struct, ReturnType, Name, Parameters, Vararg);
+        method->StorageClass = StorageClass;
         method->Body = Body->cloneAs<Block>();
         return method;
     }
 
+    std::string MethodCall::toString() const {
+        Vector<std::string> args = Query(Args).select<std::string>([](const auto& a) { return a->toString(); });
+        return llvm::formatv("{0}: {1}.{2}({3:$[, ]})",
+                             nodeName(),
+                             This->toString(),
+                             Target.toString(),
+                             llvm::make_range(args.begin(), args.end()));
+    }
+
     std::string MethodCall::dump(int indent) const {
         Vector<std::string> args = Query(Args).select<std::string>([](const auto& a) { return a->dump(); });
-        return llvm::formatv(
-            "{0} {1}.{2}({3})", Node::dump(indent), This->dump(), Name, llvm::join(args.begin(), args.end(), ", "));
+        return llvm::formatv("{0} {1}.{2}({3})",
+                             Node::dump(indent),
+                             This->dump(),
+                             Target.toString(),
+                             llvm::join(args.begin(), args.end(), ", "));
     }
 
     template <typename N, typename... Args>
@@ -96,12 +109,10 @@ namespace pepper::ast {
         Acquire->Body->Items = {
             // ++this.__refcount
             new Assign(refcount(), new Add(refcount(), new IntegerLiteral(1))),
-            Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                      TypeName{"trace_ptr"},
-                                      ExprList({new ThisRef(), new StringLiteral("acquire: " + Name, true)})),
-            Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                      TypeName{"trace_int"},
-                                      ExprList({refcount(), new StringLiteral("  refcount: " + Name, true)})),
+            new FunctionCall(TypeName{"trace_ptr"},
+                             ExprList({new ThisRef(), new StringLiteral("acquire: " + Name, true)})),
+            new FunctionCall(TypeName{"trace_int"},
+                             ExprList({refcount(), new StringLiteral("  refcount: " + Name, true)})),
         };
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
@@ -114,24 +125,20 @@ namespace pepper::ast {
             // --__refcount
             new Assign(refcount(), new Sub(refcount(), new IntegerLiteral(1))),
 
-            Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                      TypeName{"trace_ptr"},
-                                      ExprList{new ThisRef(), new StringLiteral("release: " + Name, true)}),
-            Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                      TypeName{"trace_int"},
-                                      ExprList{refcount(), new StringLiteral("  refcount: " + Name, true)}),
+            new FunctionCall(TypeName{"trace_ptr"},
+                             ExprList{new ThisRef(), new StringLiteral("release: " + Name, true)}),
+            new FunctionCall(TypeName{"trace_int"},
+                             ExprList{refcount(), new StringLiteral("  refcount: " + Name, true)}),
 
             // if (this.__refcount == 0)
             //     this.__dtor()
             new If(new Equal(refcount(), new IntegerLiteral(0)),
-                   new Block(
-                       "if",
-                       NodeList<Node>{
-                           Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                                     TypeName{"trace_ptr"},
-                                                     ExprList{new ThisRef(), new StringLiteral("free: " + Name, true)}),
-                           new MethodCall(new ThisRef(), "__dtor"),
-                       })),
+                   new Block("if",
+                             NodeList<Node>{
+                                 new FunctionCall(TypeName{"trace_ptr"},
+                                                  ExprList{new ThisRef(), new StringLiteral("free: " + Name, true)}),
+                                 new MethodCall(new ThisRef(), {"__dtor"}),
+                             })),
         };
     }
 
@@ -152,9 +159,8 @@ namespace pepper::ast {
         NodeList<Node> allocThis = {
             new VariableDef(TypeName("u64"), "size", nullptr, true),
             new ThisDef(Type, new FunctionCall(TypeName{"_pep_malloc"}, {new SymbolRef("size")})),
-            Conditional<FunctionCall>(PepContext::get().unitTestingEnabled(),
-                                      TypeName{"trace_ptr"},
-                                      ExprList{new ThisRef(), new StringLiteral("malloc: " + Name, true)}),
+            new FunctionCall(TypeName{"trace_ptr"},
+                             ExprList{new ThisRef(), new StringLiteral("malloc: " + Name, true)}),
         };
 
         Constructor->Body->Items = std::move(allocThis);
@@ -195,7 +201,7 @@ namespace pepper::ast {
     }
 
     std::string StructDef::toString() const {
-        return Node::toString() + Type.toString();
+        return llvm::formatv("{0}: {1}", nodeName(), Type.toString());
     }
 
     std::string StructDef::dump(int indent) const {
@@ -213,7 +219,7 @@ namespace pepper::ast {
     }
 
     std::string StructSpec::toString() const {
-        return Node::toString() + Name;
+        return llvm::formatv("{0}: {1}", nodeName(), Name);
     }
 
     std::string StructSpec::dump(int indent) const {
@@ -222,7 +228,7 @@ namespace pepper::ast {
     }
 
     std::string ExtensionDef::toString() const {
-        return Node::toString() + Target.name();
+        return llvm::formatv("{0}: {1}", nodeName(), Target.name());
     }
 
     std::string ExtensionDef::dump(int indent) const {

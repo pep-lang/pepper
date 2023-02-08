@@ -27,7 +27,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            auto str = Node::toString();
+            auto str = nodeName();
             if (LHS && RHS) {
                 str += std::string(llvm::formatv("({0}), ({1})", LHS->toString(), RHS->toString()));
             }
@@ -319,10 +319,8 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return llvm::formatv("{0} {1}[{2}]",
-                                 Node::toString(),
-                                 LHS ? LHS->toString() : "None",
-                                 IndexExpr ? IndexExpr->toString() : "??");
+            return llvm::formatv(
+                "{0} {1}[{2}]", nodeName(), LHS ? LHS->toString() : "None", IndexExpr ? IndexExpr->toString() : "??");
         }
 
         std::string dump(int indent) const override {

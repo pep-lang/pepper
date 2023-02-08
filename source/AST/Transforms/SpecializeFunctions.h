@@ -30,7 +30,7 @@ namespace pepper::ast {
                 return nullptr;
             }
             PEP_TRACE_AST("  Specializing {0}", functionSpec->Type.toString());
-            auto base = Symbols.Functions.lookup(functionSpec->Type.Name);
+            auto base = Symbols.Functions.lookup(functionSpec->Type.Name)->as<FunctionDef>();
             if (!base) {
                 throw CompileError(functionSpec->Source,
                                    "Unable to specialize non-existent function {0} to {1}",

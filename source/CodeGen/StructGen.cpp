@@ -95,14 +95,36 @@ namespace pepper {
         // Export new constructor to the enclosing scope
         locals()->newFunction(structDesc->constructor());
 
+        Module->getDebugInfo()->popScope();
+
+        PEP_TRACE(TraceChannel::Codegen,
+                  "StructDef {0} -> {1}",
+                  structDef->Name,
+                  toString(structDesc->structType()->llvmType()));
+    }
+
+    void CodeGenerator::instantiateMethods(const ast::StructDef* structDef) {
+        // Generic struct bases are effectively abstract, so can't be instantiated
+        if (structDef->isGeneric()) {
+            return;
+        }
+
+        auto structDesc = Struct::get(structDef->Name);
+        auto structDI = Module->getDebugInfo()->getStruct(structDesc.get());
+        Module->getDebugInfo()->pushScope(structDI);
+
+        Messages::Indent(TraceChannel::Codegen);
+
         // map method names to mangled free functions while maintaining order
         Vector<Ref<Method>> methods;
         for (auto& method : structDef->Methods) {
             auto realName = method->Name;
             pepper::Params params;
-            // inject this pointer
-            auto thisType = Types::get(structDef->Name);
-            params.emplace_back("this", thisType);
+            if (!method->isStatic()) {
+                // inject this pointer
+                auto thisType = Types::get(structDef->Name);
+                params.emplace_back("this", thisType);
+            }
             for (auto& paramDef : method->Parameters) {
                 auto type = Types::get(paramDef.Type.toString());
                 params.emplace_back(paramDef.Name, type, maybeCodegen(paramDef.Default));
@@ -110,17 +132,17 @@ namespace pepper {
             // TODO: mangle these properly
             auto mangledName = structDef->Name + "." + realName;
             auto returnType = Types::get(method->ReturnType.toString());
+
+            PEP_TRACE(TraceChannel::Codegen, method->toString());
+
             auto newMethod = Ref<Method>::New(Module->getModule(), structDesc, mangledName, returnType, params);
             methods.push_back(newMethod);
             structDesc->addMethod(newMethod, realName);
         }
 
-        Module->getDebugInfo()->popScope();
+        Messages::Outdent(TraceChannel::Codegen);
 
-        PEP_TRACE(TraceChannel::Codegen,
-                  "StructDef {0} -> {1}",
-                  structDef->Name,
-                  toString(structDesc->structType()->llvmType()));
+        Module->getDebugInfo()->popScope();
     }
 
     void CodeGenerator::codegenStruct(const ast::StructDef* structDef) {
@@ -170,15 +192,19 @@ namespace pepper {
     }
 
     Address CodeGenerator::emit(const ast::MethodCall* call) {
-        auto thisRef = codegen(call->This);
-        auto st = Struct::get(thisRef.Ty->name());
-        auto method = st->method(call->Name).as<Method>();
-        if (!method) {
-            throw CompileError("Method {0} not found", call->Name);
-        }
         Vector<Address> args;
-        thisRef = load(thisRef);
-        args.push_back(thisRef);
+
+        if (!call->Target->isStatic()) {
+            auto thisRef = codegen(call->This);
+            thisRef = load(thisRef);
+            args.push_back(thisRef);
+        }
+
+        auto st = Struct::get(call->Target->Struct->Name);
+        auto method = st->method(call->Target.toString());
+        if (!method) {
+            throw CompileError("Method {0} not found", call->Target.toString());
+        }
 
         const auto& callArgs = call->Args;
         for (const auto& argExpr : callArgs) {

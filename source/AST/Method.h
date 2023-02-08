@@ -35,8 +35,8 @@ namespace pepper::ast {
 
         Node* clone() const override;
 
+        void visit(Visitor& visitor) override;
         std::string signature() const override;
-        std::string toString() const override;
         std::string dump(int indent) const override;
     };
 
@@ -44,37 +44,36 @@ namespace pepper::ast {
         DECLARE_RTTI(MethodCall, Expression);
         AST_NODE_POD_CLONE(MethodCall);
 
-        TypeName Type;
         TNodeRef<Expression> This;
-        const Ident Name;
+        Resolvable<MethodDef> Target;
         ExprList Args;
 
-        MethodCall(Expression* thisRef, const Ident& methodName, const ExprList& args = {})
+        MethodCall(Expression* thisRef, const TypeName& methodName, const ExprList& args = {})
             : This(thisRef)
-            , Name(methodName) {
+            , Target(methodName) {
             Args.clone(args);
         }
 
         MethodCall(const MethodCall& m)
             : Expression(m)
-            , Type(m.Type)
             , This(m.This->cloneAs<Expression>())
-            , Name(m.Name) {
+            , Target(m.Target) {
             Args.clone(m.Args);
         }
 
         const TypeName& type() const override {
-            return Type;
+            return Target.value() ? Target->ReturnType : TypeName::Empty;
         }
 
         void visit(Visitor& visitor) override {
             Expression::visit(visitor);
-            visitor.visit(Type);
             visitor.visit(This);
+            visitor.visit(Target);
             for (auto& arg : Args)
                 visitor.visit(arg);
         }
 
+        std::string toString() const override;
         std::string dump(int indent) const override;
     };
 } // namespace pepper::ast

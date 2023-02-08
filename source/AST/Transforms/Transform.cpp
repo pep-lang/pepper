@@ -22,6 +22,7 @@ namespace pepper::ast {
         Transformers.emplace_back(new TagGenerics());
         Transformers.emplace_back(new ConvertStringLiterals());
         Transformers.emplace_back(new GatherGenerics());
+        Transformers.emplace_back(new ResolveImplicitTypes());
         Transformers.emplace_back(new ResolveResolvables());   // resolve as much as possible
         Transformers.emplace_back(new ApplyExtensions(false)); // apply generic/concrete extensions
         Transformers.emplace_back(new SpecializeStructs());
@@ -43,6 +44,8 @@ namespace pepper::ast {
 
         // final pass
         Transformers.emplace_back(new ReleaseFieldRefs());
+        Transformers.emplace_back(new ResolveImplicitTypes());
+        Transformers.emplace_back(new ResolveResolvables(true));
     }
 
     Ref<AST> TransformPass::run() const {
@@ -59,41 +62,55 @@ namespace pepper::ast {
     SymbolTable::SymbolTable()
         : Types(TypeName::IntegralTypes) {}
 
+#define TRACE_SYMBOL(...)
+
+    // #define TRACE_SYMBOL PEP_TRACE_AST
+
     SymbolTable::SymbolTable(const AST& ast)
         : SymbolTable() {
-        PEP_TRACE_AST("### Symbol Table Begin ###");
+        TRACE_SYMBOL("### Symbol Table Begin ###");
         Messages::Indent(TraceChannel::AST);
         for (auto& function : ast.functions()) {
             if (!Functions.lookup(function->Name)) {
                 // First function with any given name is the generic base (if it's generic)
                 Functions[function->Name] = function;
-                PEP_TRACE_AST("Function: {0} -> {1}", function->Name, function->Type.toString());
+                TRACE_SYMBOL("Function: {0} -> {1}", function->Name, function->Type.toString());
             } else {
                 Functions[function->Name] = function;
-                PEP_TRACE_AST("Function: {0} -> {1}", function->Name, function->Type.toString());
+                TRACE_SYMBOL("Function: {0} -> {1}", function->Name, function->Type.toString());
             }
         }
+
+        for (auto& externFunction : ast.externs()) {
+            Functions[externFunction->Name] = externFunction;
+        }
+
         for (auto& st : ast.structs()) {
             Structs[st->Name] = st;
             if (st->isGeneric()) {
                 Structs[st->Type.toString()] = st;
-                PEP_TRACE_AST("Struct: {0} -> {1}", st->Name, st->Type.toString());
+                TRACE_SYMBOL("Struct: {0} -> {1}", st->Name, st->Type.toString());
             } else {
-                PEP_TRACE_AST("Struct: {0}", st->Name);
+                TRACE_SYMBOL("Struct: {0}", st->Name);
             }
 
             Messages::Indent(TraceChannel::AST);
 
             Functions[st->Constructor->Name] = st->Constructor;
-            PEP_TRACE_AST("Constructor {0}: {1}", st->Name, st->Constructor->Name);
+            TRACE_SYMBOL("Constructor {0}: {1}", st->Name, st->Constructor->Name);
 
             for (auto& method : st->Methods) {
-                PEP_TRACE_AST("{0}.{1}", st->Name, method->Name);
+                TRACE_SYMBOL("{0}.{1}", st->Name, method->Name);
             }
             Messages::Outdent(TraceChannel::AST);
         }
+
+        for (auto& trait : ast.traits()) {
+            TraitDecls[trait->Name] = trait;
+        }
+
         Messages::Outdent(TraceChannel::AST);
-        PEP_TRACE_AST("### Symbol Table End ###");
+        TRACE_SYMBOL("### Symbol Table End ###");
     }
 
     Symbol* SymbolTable::find(const Ident& name) const {

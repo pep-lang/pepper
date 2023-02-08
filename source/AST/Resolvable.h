@@ -6,70 +6,61 @@
 #include "llvm/ADT/DenseSet.h"
 
 namespace pepper::ast {
-    template <typename T>
-    class Resolvable {
+    class ResolvableBase {
         friend class Visitor;
 
         TypeName Target;
-        T* Value = nullptr;
+        const RTTI* Type;
+        Node* Value;
 
       public:
-        Resolvable(const TypeName& name = {})
+        ResolvableBase(const RTTI* type = nullptr, const TypeName& name = {})
             : Target(name)
-            , Value(nullptr) {
-            Instances().insert(this);
-        }
+            , Type(type)
+            , Value(nullptr) {}
 
-        explicit Resolvable(T* value)
-            : Value(value)
-            , Target(value->Name) {}
+        ResolvableBase(const ResolvableBase&) = default;
+        ResolvableBase(ResolvableBase&&) = default;
+        ResolvableBase& operator=(const ResolvableBase& rhs) = default;
 
-        Resolvable(const Resolvable& rhs) {
-            Instances().insert(this);
-            *this = rhs;
-        }
-
-        Resolvable(Resolvable&& rhs) noexcept {
-            Instances().insert(this);
-            std::swap(*this, rhs);
-        }
-
-        ~Resolvable() {
-            Instances().erase(this);
-        }
-
-        Resolvable& operator=(const Resolvable& rhs) {
-            Target = rhs.Target;
-            Value = rhs.Value;
-            return *this;
-        }
-
-        Resolvable& operator=(T* value) {
+        ResolvableBase& operator=(Node* value) {
+            assert(value->rtti()->is(Type) && "Assigned value type does not match expected type");
             Value = value;
-            Target = value->Name;
             return *this;
         }
 
-        Resolvable& operator=(const TypeName& name) {
+        ResolvableBase& operator=(const TypeName& name) {
             assert(!Value && "Attempted to overwrite already resolved Resolvable with name");
             Target = name;
             return *this;
         }
 
-        const std::string name() const {
-            return (Value) ? Value->Name : Target;
+        Node* value() const {
+            return Value;
         }
 
-        T* value() const {
-            return Value;
+        template <typename N>
+        N* valueAs() const {
+            if (auto val = value())
+                return val->as<N>();
+            return nullptr;
+        }
+
+        void resolve(Node* value) {
+            assert(value->rtti()->is(Type) && "Resolved value type does not match expected type");
+            Value = value;
+        }
+
+        const RTTI* type() const {
+            return Type;
+        }
+
+        const std::string name() const {
+            return Target;
         }
 
         const TypeName& target() const {
             return Target;
-        }
-
-        void resolve(T* val) {
-            Value = val;
         }
 
         const std::string toString() const {
@@ -84,27 +75,53 @@ namespace pepper::ast {
             return Target;
         };
 
-        operator T*() const {
-            return Value;
-        }
-
-        T* operator->() const {
-            assert(Value && "Value is not resolved yet");
-            return Value;
-        }
-
         void visit(Visitor& visitor) {
             visitor.visit(Target);
         }
+    };
 
-        static llvm::DenseSet<Resolvable*>& Instances() {
-            static llvm::DenseSet<Resolvable*> instances;
-            return instances;
+    template <typename T>
+    class Resolvable : public ResolvableBase {
+        friend class Visitor;
+
+        using Base = ResolvableBase;
+
+      public:
+        Resolvable(const TypeName& name = {})
+            : ResolvableBase(RTTI::of<T>(), name) {}
+
+        explicit Resolvable(T* value)
+            : ResolvableBase(RTTI::of<T>(), value->Name) {
+            resolve(value);
+        }
+
+        T* value() const {
+            return Base::valueAs<T>();
+        }
+
+        Resolvable& operator=(T* value) {
+            Base::operator=(static_cast<Node*>(value));
+            return *this;
+        }
+
+        operator T*() const {
+            assert(value() && "Value is not resolved yet");
+            return value();
+        }
+
+        T* operator->() const {
+            assert(value() && "Value is not resolved yet");
+            return value();
         }
     };
 
     template <typename T>
     inline void Visitor::visit(Resolvable<T>& target) {
         visit(target.Target);
+        visitResolvable(target);
     }
+
+    struct Resolver : public Visitor {
+        virtual void visitResolvable(ResolvableBase& target) = 0;
+    };
 } // namespace pepper::ast

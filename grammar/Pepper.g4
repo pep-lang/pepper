@@ -20,7 +20,7 @@ externalDeclaration
     ;
 
 functionDefinition
-    :   typeName? functionName '(' parameterList? ')' block
+    :   storageClass? typeName? functionName '(' parameterList? ')' block
     ;
 
 functionDefinitionList
@@ -46,7 +46,7 @@ extensionDefinition
     ;
 
 functionDeclaration
-    :   (typeName|This)? functionName '(' parameterList? ')' ';'
+    :   storageClass? (typeName|This)? functionName '(' parameterList? ')' ';'
     ;
 
 functionDeclarationList
@@ -109,7 +109,7 @@ variableDeclaration
     | typeQualifier Identifier Assign expression ';'              #ImplicitVariableDeclaration
     ;
 
-storageClassSpecifier
+storageClass
 	: 'static'
 	;
 

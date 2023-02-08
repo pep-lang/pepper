@@ -22,7 +22,6 @@ namespace pepper {
         bool Verbose = false;
         bool CompileRuntime = true;
         bool EmitDebugInfo = false;
-        bool UnitTest = false;
         unsigned TraceChannels = 0;
 
         static Ref<Options> FromCommandLine(int argc, const char** argv);

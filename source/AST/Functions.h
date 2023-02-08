@@ -19,8 +19,15 @@ namespace pepper::ast {
         , public ScopeTarget {
         DECLARE_RTTI(FunctionNode, Node);
 
+        enum class StorageClassType {
+            Default = 0,
+            Static = 1,
+        };
+
         TypeName ReturnType;
         Params Parameters;
+
+        StorageClassType StorageClass = StorageClassType::Default;
         const bool Vararg;
         bool Generic;
 
@@ -30,6 +37,10 @@ namespace pepper::ast {
         std::string dump(int indent) const override;
 
         bool isGeneric() const;
+
+        bool isStatic() const {
+            return StorageClass == StorageClassType::Static;
+        }
 
         virtual std::string signature() const;
 
@@ -54,12 +65,6 @@ namespace pepper::ast {
 
         Node* clone() const override;
 
-        std::string toString() const override {
-            const char* sep = "\n";
-            auto contents = llvm::join_items(sep, FunctionNode::toString(), Body->toString());
-            return contents;
-        }
-
         std::string dump(int indent) const override;
 
         void visit(Visitor& visitor) override {
@@ -76,7 +81,7 @@ namespace pepper::ast {
             : Symbol(spec, spec.toString()) {}
 
         std::string toString() const override {
-            return llvm::formatv("{0} {1}", Symbol::toString(), Name);
+            return llvm::formatv("{0}: {1}", nodeName(), Name);
         }
 
         std::string dump(int) const override {
@@ -99,7 +104,7 @@ namespace pepper::ast {
         DECLARE_RTTI(FunctionCall, Expression);
         AST_NODE_POD_CLONE(FunctionCall);
 
-        Resolvable<FunctionDef> Target;
+        Resolvable<FunctionNode> Target;
         ExprList Args;
 
         FunctionCall(const TypeName& target, ExprList&& args = {})
@@ -107,12 +112,10 @@ namespace pepper::ast {
             , Args(std::move(args)) {}
 
         FunctionCall(const FunctionCall& call)
-            : Target(call.Target) {
-            Args.clone(call.Args);
-        }
+            : FunctionCall(call.Target, call.Args.clone()) {}
 
         const TypeName& type() const override {
-            return Target->ReturnType;
+            return Target.value() ? Target->ReturnType : Expression::type();
         }
 
         std::string toString() const override;
@@ -136,7 +139,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return llvm::formatv("{0} {1}", Node::toString(), Value ? Value->toString() : "void");
+            return llvm::formatv("{0}: {1}", nodeName(), Value ? Value->toString() : "void");
         }
 
         std::string dump(int indent) const override {

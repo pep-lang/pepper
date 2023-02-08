@@ -45,7 +45,7 @@ namespace pepper::ast {
         using Branch::Branch;
 
         std::string toString() const override {
-            return Node::toString();
+            return nodeName();
         }
 
         std::string dump(int indent) const override {
@@ -77,7 +77,7 @@ namespace pepper::ast {
         }
 
         std::string toString() const override {
-            return Node::toString();
+            return nodeName();
         }
 
         std::string dump(int) const override {

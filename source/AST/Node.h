@@ -46,6 +46,7 @@ namespace pepper::ast {
         virtual void visit(struct Visitor& visitor);
 
         std::string source(int width = -1, int indent = 0, const char* sep = "") const;
+        std::string nodeName() const;
         virtual std::string toString() const;
         virtual std::string dump(int indent = 0) const;
 
@@ -176,6 +177,14 @@ namespace pepper::ast {
             }
         }
 
+        NodeList clone() const {
+            NodeList cloned;
+            for (auto& node : *this) {
+                cloned.push_back(node->template cloneAs<N>());
+            }
+            return cloned;
+        }
+
         // Just alias the merged nodes
         template <TNode T>
         void merge(const NodeList<T>& other) {
@@ -253,7 +262,7 @@ namespace pepper::ast {
             , Local(local) {}
 
         std::string toString() const override {
-            return llvm::formatv("{0} {1}{2}{1} {3}", Node::toString(), Local ? "\"" : "", Module, Alias);
+            return llvm::formatv("{0}: {1}{2}{1} {3}", nodeName(), Local ? "\"" : "", Module, Alias);
         }
 
         std::string dump(int) const override {

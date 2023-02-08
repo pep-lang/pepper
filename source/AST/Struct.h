@@ -28,6 +28,11 @@ namespace pepper::ast {
 
         Node* clone() const override;
 
+        void visit(Visitor& visitor) override {
+            VariableDef::visit(visitor);
+            visitor.visit(Struct);
+        }
+
         std::string toString() const override;
         std::string dump(int indent) const override;
     };
@@ -120,7 +125,7 @@ namespace pepper::ast {
             , LHS(ref.LHS->cloneAs<Expression>()) {}
 
         std::string toString() const override {
-            return Node::toString() + std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", Name));
+            return nodeName() + std::string(llvm::formatv("({0}).{1}", LHS ? LHS->toString() : "unknown", Name));
         }
 
         std::string dump(int indent) const override {

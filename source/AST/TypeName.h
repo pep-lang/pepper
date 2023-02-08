@@ -84,6 +84,8 @@ namespace pepper::ast {
 
         static const TypeName& Widest(const TypeName& lhs, const TypeName& rhs);
 
+        static const TypeName Empty;
+
         static const TypeName Void;
         static const TypeName Auto;
         static const TypeName Bool;

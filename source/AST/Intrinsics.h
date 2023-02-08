@@ -23,7 +23,7 @@ namespace pepper::ast {
         Intrinsic& operator=(const Intrinsic&) = default;
 
         std::string toString() const override {
-            return llvm::formatv("{0}: {1}", Node::toString(), Target.toString());
+            return llvm::formatv("{0}: {1}", nodeName(), Target.toString());
         }
 
         std::string dump(int indent) const override {

@@ -5,6 +5,7 @@
 #include "Core/Query.h"
 
 namespace pepper::ast {
+    const TypeName TypeName::Empty;
     const TypeName TypeName::Void = TypeName{"void"};
     const TypeName TypeName::Auto = TypeName{"__auto"};
     const TypeName TypeName::Bool = TypeName{"bool"};

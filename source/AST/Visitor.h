@@ -5,6 +5,8 @@
 #include "llvm/ADT/DenseSet.h"
 
 namespace pepper::ast {
+    class ResolvableBase;
+
     template <typename T>
     class Resolvable;
 
@@ -13,6 +15,8 @@ namespace pepper::ast {
 
       protected:
         virtual void visitType(struct TypeName& type) {}
+
+        virtual void visitResolvable(ResolvableBase& res) {}
 
         virtual void enterNode(NodeRef& node) {}
 

@@ -134,7 +134,10 @@ namespace pepper::ast {
         }
 
         void beginExtension(ExtensionDef* ext) override {
-            beginScope(ext->Target.toString());
+            auto name = ext->Target.toString();
+            if (auto traitDef = ext->as<TraitDef>())
+                name += llvm::formatv(": {0}", traitDef->Decl.toString());
+            beginScope(name);
             auto& extScope = ScopeStack.back();
             extScope->Target = ext;
         }
@@ -168,7 +171,7 @@ namespace pepper::ast {
             if (auto tgt = target()) {
                 if (auto method = function->as<MethodDecl>()) {
                     tgt->addMethod(method);
-                }else {
+                } else {
                     tgt->addFunction(function->as<FunctionDef>());
                 }
             } else {

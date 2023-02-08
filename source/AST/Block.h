@@ -35,7 +35,7 @@ namespace pepper::ast {
         std::string toString() const override {
             static int indent = 0;
 
-            std::string str = std::string(llvm::formatv("{0}: {1}", Node::toString(), Name));
+            std::string str = std::string(llvm::formatv("{0}: {1}", nodeName(), Name));
             Vector<std::string> items = Query(Items).select<std::string>([](auto& item) { return item->toString(); });
             if (items.size()) {
                 indent += 2;

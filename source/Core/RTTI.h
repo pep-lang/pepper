@@ -31,6 +31,11 @@ namespace pepper {
             return false;
         }
 
+        template <typename T>
+        constexpr bool is() const {
+            return is(RTTI::of<T>());
+        }
+
         struct None {
             static constexpr const RTTI* _rtti() {
                 return nullptr;

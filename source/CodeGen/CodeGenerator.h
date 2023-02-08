@@ -68,6 +68,7 @@ namespace pepper {
         Address emit(const ast::Index* index);
 
         void instantiate(const ast::StructDef* structDef);
+        void instantiateMethods(const ast::StructDef* structDef);
         void instantiate(const ast::FunctionNode* fn);
 
         void codegenStruct(const ast::StructDef* structDef);

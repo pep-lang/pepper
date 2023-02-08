@@ -15,10 +15,6 @@ namespace pepper::ast {
 
         While() = default;
 
-        std::string toString() const override {
-            return Node::toString();
-        }
-
         std::string dump(int indent = 0) const override {
             return Node::dump(indent) + std::string(llvm::formatv(" ({0}) {{\n", Condition->dump())) +
                    Body->dump(indent + 2) + "\n" + repeat(" ", indent) + "}";
@@ -40,10 +36,6 @@ namespace pepper::ast {
         TNodeRef<Expression> Step;
         TNodeRef<Expression> Done;
         TNodeRef<Block> Body;
-
-        std::string toString() const override {
-            return Node::toString();
-        }
 
         std::string dump(int indent = 0) const override {
             return Node::dump(indent) +

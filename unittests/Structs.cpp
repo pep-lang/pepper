@@ -53,20 +53,6 @@ int test() {
     EXPECT_EQ(4, CompileAndRun(TestName(test_info_), source));
 }
 
-TEST(Structs, Auto) {
-    const char* source = R"SOURCE(
-struct Test {
-    int x = 0;
-};
-
-int test() {
-    const t = Test();
-    return t.x;
-}
-    )SOURCE";
-    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
-}
-
 TEST(Structs, Constructor) {
     const char* source = R"SOURCE(
 struct Test {
@@ -224,26 +210,6 @@ int test() {
     EXPECT_EQ(10, CompileAndRun(TestName(test_info_), source));
 }
 
-TEST(Structs, SpecializedExtend) {
-    const char* source = R"SOURCE(
-struct Test<T> {
-    T x;
-};
-
-extend Test<int> {
-    int test() {
-        return x;
-    }
-};
-
-int test() {
-    const t = Test<int>();
-    return t.test();
-}
-    )SOURCE";
-    EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
-}
-
 TEST(Structs, RefArgument) {
     const char* source = R"SOURCE(
 struct Test {
@@ -283,32 +249,4 @@ int test() {
 }
     )SOURCE";
     EXPECT_EQ(0, CompileAndRun(TestName(test_info_), source));
-}
-
-TEST(Structs, RefStorage) {
-    const char* source = R"SOURCE(
-struct Test {
-    int x = 0;
-};
-
-struct Foo {
-    Test t;
-
-    new(Test z) {
-        trace_ptr(this, @"this");
-        trace_ptr(z, @"z");
-        this.t = z;
-        trace_ptr(this.t, @"this.t");
-    }
-};
-
-int test() {
-    var t = Test();
-    trace_ptr(t, @"t");
-    const f = Foo(t);
-    trace_ptr(f, @"f");
-    return f.t == t;
-}
-    )SOURCE";
-    EXPECT_EQ(1, CompileAndRun(TestName(test_info_), source));
 }

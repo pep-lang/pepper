@@ -23,7 +23,7 @@ namespace pepper::ast {
             Vector<Node*> releases;
             for (const auto& field : st->Fields) {
                 if (auto fieldType = Symbols.Structs.lookup(field->Type.toString())) {
-                    releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->Name), "__release"));
+                    releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->Name), {"__release"}));
                 }
             }
             // Insert the releases in reverse declaration order just before the last dtor instruction (free)

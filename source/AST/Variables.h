@@ -22,7 +22,7 @@ namespace pepper::ast {
             , Default{rhs.Default ? rhs.Default->cloneAs<Expression>() : nullptr} {}
 
         std::string toString() const override {
-            auto str = std::string(llvm::formatv("{0} {1} {2}", Node::toString(), Type, Name));
+            auto str = std::string(llvm::formatv("{0}: {1} {2}", nodeName(), Type, Name));
             if (Default)
                 str += std::string(llvm::formatv(" = {0}", Default->toString()));
             return str;
@@ -55,34 +55,26 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(SymbolRef);
 
         Ident Name;
-        TypeName Type;
+        TypeName Type = TypeName::Auto;
 
       public:
         explicit SymbolRef(const Ident& identifier)
-            : Name(identifier) {
-            Type.Name.clear();
-        }
+            : Name(identifier) {}
 
         explicit SymbolRef(const TypeName& typeName)
             : Type(typeName)
-            , Name(typeName.toString()) {
-            //            if (Type.GenericTypes.empty()) {
-            //                Type.Name.clear();
-            //            }
-        }
+            , Name(typeName.toString()) {}
 
         const TypeName& type() const override {
-            if (!Type.Name.empty())
-                return Type;
-            return Expression::type();
+            return Type;
         }
 
         std::string toString() const override {
-            return std::string(llvm::formatv("{0} {1}", Node::toString(), Name));
+            return std::string(llvm::formatv("{0}: {1} {2}", nodeName(), Type.toString(), Name));
         }
 
         std::string dump(int indent) const override {
-            return llvm::formatv("{0} {1}", Node::dump(indent), Name);
+            return llvm::formatv("{0} {1} {2}", Node::dump(indent), Type.toString(), Name);
         }
 
         void visit(Visitor& visitor) override {

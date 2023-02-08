@@ -33,7 +33,7 @@ namespace pepper::ast {
                         auto st = Symbols.Structs.lookup(container->type().toString());
                         if (st) {
                             // replace x[y] = z with x.__index_set(y, z)
-                            binOp = new MethodCall(container, "__index_set", {indexSet->IndexExpr, assign->RHS});
+                            binOp = new MethodCall(container, {"__index_set"}, {indexSet->IndexExpr, assign->RHS});
                         }
                         // if the LHS indexed type isn't a struct, then this must be an indexed access or POD type
                         // and resolveIndex will fix it up
@@ -50,7 +50,7 @@ namespace pepper::ast {
                 if (st) {
                     if (auto method = st->getMethod("__index_get")) {
                         // Replace the idx op with a call to the index method
-                        idxOp = new MethodCall(lhs, "__index_get", {op->IndexExpr});
+                        idxOp = new MethodCall(lhs, {"__index_get"}, {op->IndexExpr});
                         return;
                     }
                     throw CompileError(idxOp->Source, "No index operator `[]` found for type {0}", st->Name);

@@ -41,6 +41,11 @@ namespace pepper::ast {
                 return Stack.back();
             }
 
+            std::string scopePath() const {
+                auto names = Query(Stack).range(1).select<std::string>([](const auto& s) { return s.Name; });
+                return llvm::formatv("{0:$[/]}", llvm::make_range(names.begin(), names.end()));
+            }
+
             Symbol* findSymbol(const Ident& name) const {
                 for (const auto& scope : llvm::reverse(Stack)) {
                     if (auto sym = scope.Symbols.lookup(name))
@@ -53,7 +58,8 @@ namespace pepper::ast {
                 if (name == "this") {
                     auto function = getFunction();
                     if (auto method = function->as<MethodDef>())
-                        return method->Struct->Type;
+                        if (auto st = method->Struct)
+                            return st.value() ? st->Type : st.target();
                 }
                 for (const auto& scope : llvm::reverse(Stack)) {
                     if (auto sym = scope.Symbols.lookup(name))
@@ -64,6 +70,10 @@ namespace pepper::ast {
                                 return param.Type;
                         }
                     }
+                }
+                // If the symbol is actually the name of a struct, resolve that instead
+                if (auto st = Structs.lookup(name)) {
+                    return st->Name;
                 }
                 return {};
             }
@@ -93,7 +103,14 @@ namespace pepper::ast {
                     auto ref = expr->as<MemberRef>();
                     return typeOfExpr(ref->LHS);
                 }
-                throw CompileError(expr->Source, "Unknown expression type in {0}", expr->rtti()->name());
+                if (auto call = expr->as<MethodCall>()) {
+                    if (auto st = findStruct(typeOfExpr(call->This).toString())) {
+                        if (auto method = call->Target.value())
+                            return method->ReturnType;
+                    }
+                }
+                return TypeName::Auto;
+                // throw CompileError(expr->Source, "Unknown expression type in {0}", expr->rtti()->name());
             }
 
             void enterNode(NodeRef& node) override {
@@ -123,15 +140,30 @@ namespace pepper::ast {
                 // Update all variable declarations
                 if (auto var = node->as<VariableDef>()) {
                     if (var->Type == TypeName::Auto) {
-                        var->Type = typeOfExpr(var->Default);
+                        auto varType = typeOfExpr(var->Default);
+                        if (!varType.empty()) {
+                            var->Type = varType;
+                            PEP_TRACE_AST("Resolved {0}/{1} -> {2}", scopePath(), var->Name, var->Type);
+                            return;
+                        }
+
+                        PEP_TRACE_AST(
+                            "Unable to resolve type for var {0}/{1}, resolution pending", scopePath(), var->Name);
                     }
                 }
+
                 // Update variable references
                 if (auto symRef = node->as<SymbolRef>()) {
-                    if (symRef->Type.empty() || symRef->Type == TypeName::Auto) {
+                    if (symRef->type() == TypeName::Auto) {
                         auto symType = typeOfExpr(symRef);
-                        if (!symType.empty())
+                        if (!symType.empty()) {
                             symRef->Type = symType;
+                            PEP_TRACE_AST("Resolved {0}/{1} -> {2}", scopePath(), symRef->Name, symRef->Type);
+                            return;
+                        }
+
+                        PEP_TRACE_AST(
+                            "Unable to resolve type for ref {0}/{1}, resolution pending", scopePath(), symRef->Name);
                     }
                 }
             }

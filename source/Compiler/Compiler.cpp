@@ -53,8 +53,6 @@ namespace pepper {
                 Messages::SetTraceChannels(Opts->TraceChannels);
 
             Context = std::make_unique<PepContext>();
-            if (Opts->UnitTest)
-                Context->enableUnitTesting(true);
         }
 
         Ref<CodeGenModule> compile() override {
