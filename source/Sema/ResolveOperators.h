@@ -4,8 +4,8 @@
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Core/TypeSwitch.h"
-#include "Specialization.h"
-#include "Transform.h"
+#include "Sema/Specialization.h"
+#include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
 namespace pepper::ast {

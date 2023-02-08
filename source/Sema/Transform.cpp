@@ -1,19 +1,19 @@
 
 #include "Transform.h"
 
-#include "ApplyExtensions.h"
-#include "ConvertIntrinsics.h"
-#include "ConvertMemberRefs.h"
-#include "ConvertStringLiterals.h"
 #include "Core/Messages.h"
-#include "GatherGenerics.h"
-#include "ReleaseFieldRefs.h"
-#include "ResolveImplicitTypes.h"
-#include "ResolveOperators.h"
-#include "ResolveResolvables.h"
-#include "SpecializeFunctions.h"
-#include "SpecializeStructs.h"
-#include "TagGenerics.h"
+#include "Sema/ApplyExtensions.h"
+#include "Sema/ConvertIntrinsics.h"
+#include "Sema/ConvertMemberRefs.h"
+#include "Sema/ConvertStringLiterals.h"
+#include "Sema/GatherGenerics.h"
+#include "Sema/ReleaseFieldRefs.h"
+#include "Sema/ResolveImplicitTypes.h"
+#include "Sema/ResolveOperators.h"
+#include "Sema/ResolveResolvables.h"
+#include "Sema/SpecializeFunctions.h"
+#include "Sema/SpecializeStructs.h"
+#include "Sema/TagGenerics.h"
 
 namespace pepper::ast {
     TransformPass::TransformPass(Ref<AST> parseTree)

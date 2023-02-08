@@ -3,7 +3,7 @@
 
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
-#include "Transform.h"
+#include "Sema/Transform.h"
 
 namespace pepper::ast {
     struct GatherGenerics : public Transformer {

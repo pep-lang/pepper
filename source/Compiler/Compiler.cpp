@@ -5,7 +5,6 @@
 #include <iostream>
 
 #include "AST/AST.h"
-#include "AST/Transforms/Transform.h"
 #include "CodeGen/CodeGenModule.h"
 #include "CodeGen/CodeGenerator.h"
 #include "Compiler/ImportResolver.h"
@@ -16,6 +15,7 @@
 #include "Core/Query.h"
 #include "Frontend/PepContext.h"
 #include "Parser/Parser.h"
+#include "Sema/Transform.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"

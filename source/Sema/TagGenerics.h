@@ -4,7 +4,7 @@
 #include "AST/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
-#include "Transform.h"
+#include "Sema/Transform.h"
 
 namespace pepper::ast {
     struct TagGenerics : public Transformer {
