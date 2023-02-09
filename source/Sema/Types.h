@@ -12,7 +12,9 @@
 #include "Core/Ident.h"
 #include "Core/RTTI.h"
 #include "Core/Vector.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/TypeSize.h"
 
 namespace llvm {
     class Type;
@@ -27,18 +29,23 @@ namespace pepper {
     class Type : public std::enable_shared_from_this<Type> {
         DECLARE_RTTI(Type);
 
+        friend class Types;
+        friend class PointerType;
+        using Size = llvm::TypeSize;
+
       private:
         const Ident Name;
         llvm::Type* IRType;
         const bool IsSigned;
         Ref<Operations> Ops;
 
-      public:
-        Type(const Ident& name, llvm::Type* type, bool isSigned = false);
-
+      protected:
         llvm::Type* llvmType() const {
             return IRType;
         }
+
+      public:
+        Type(const Ident& name, llvm::Type* type, bool isSigned = false);
 
         const Ident& name() const {
             return Name;
@@ -60,10 +67,15 @@ namespace pepper {
             return false;
         }
 
-        virtual unsigned size() const;
+        virtual Size size() const;
+        virtual Size sizeInBits() const;
 
-        virtual unsigned align() const {
-            return 0;
+        virtual Size align() const {
+            return Size::Fixed(0);
+        }
+
+        virtual Size alignInBits() const {
+            return Size::Fixed(0);
         }
 
         virtual Operations* ops();
@@ -88,16 +100,18 @@ namespace pepper {
         bool isPointer() const override {
             return true;
         }
-
-        virtual unsigned size() const override;
     };
 
     class Types {
         llvm::LLVMContext& Ctx;
         llvm::StringMap<Ref<Type>> KnownTypes;
+        llvm::DenseMap<Type*, llvm::Type*> CanonicalTypes;
 
         Ref<Type> addType(Ref<Type> t, const Vector<Ident>& aliases = {});
+        void aliasType(Type* t, const Ident& alias);
+        void aliasType(Type* t, const Vector<Ident>& aliases);
         Ref<Type> getType(const Ident& name) const;
+        llvm::Type* getType(const Type* ty) const;
 
       public:
         explicit Types(llvm::LLVMContext& ctx);
@@ -106,6 +120,7 @@ namespace pepper {
         static std::string toString(llvm::Type* ty);
         static std::string toString(Ref<Type> ty);
         static Ref<Type> get(const Ident& name);
+        static llvm::Type* get(const Type* ty);
         static Ref<Type> add(Ref<Type> type, const Vector<Ident>& aliases = {});
 
         static Ref<Type> Void;

@@ -100,7 +100,7 @@ namespace pepper {
         PEP_TRACE(TraceChannel::Codegen,
                   "StructDef {0} -> {1}",
                   structDef->Name,
-                  toString(structDesc->structType()->llvmType()));
+                  toString(Types::get(structDesc->structType().get())));
     }
 
     void CodeGenerator::instantiateMethods(const ast::StructDef* structDef) {

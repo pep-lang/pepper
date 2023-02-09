@@ -127,7 +127,7 @@ namespace pepper {
 
     Address PointerOperations::coerce(Address value) const {
         value = load(value);
-        if (value.Ty->llvmType()->isPointerTy()) {
+        if (value.Ty->is<PointerType>()) {
             return value;
         }
         throw CompileError("Coercion to pointer is not supported");
@@ -177,8 +177,10 @@ namespace pepper {
 
       public:
         IntegerOperations(Ref<Type> type)
-            : NativeOperations(type)
-            , Bits(type->llvmType()->getIntegerBitWidth()) {}
+            : NativeOperations(type) {
+            auto llvmType = Types::get(type.get());
+            Bits = llvmType->getIntegerBitWidth();
+        }
 
         bool isSigned() const {
             return Signed;
@@ -408,7 +410,8 @@ namespace pepper {
                     else
                         cast = ir()->CreateUIToFP(value, *this);
                 } else {
-                    if (Ty->llvmType()->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
+                    auto llvmType = Types::get(Ty.get());
+                    if (llvmType->getPrimitiveSizeInBits() > type->getPrimitiveSizeInBits())
                         cast = ir()->CreateFPExt(value, *this);
                     else
                         cast = ir()->CreateFPTrunc(value, *this);
@@ -490,8 +493,9 @@ namespace pepper {
         }
 
         Address asBool(Address value) const override {
-            auto intType = Ty->llvmType()->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(ir()->getContext())
-                                                                     : llvm::Type::getInt32Ty(ir()->getContext());
+            auto llvmType = Types::get(Ty.get());
+            auto intType = llvmType->getIntegerBitWidth() > 32 ? llvm::Type::getInt64Ty(ir()->getContext())
+                                                               : llvm::Type::getInt32Ty(ir()->getContext());
             auto zero = llvm::ConstantInt::getFalse(intType);
             auto valAsInt = ir()->CreateFPToSI(value, intType);
             return Address{Types::Bool, ir()->CreateICmpNE(valAsInt, zero, "bool")};
@@ -499,7 +503,7 @@ namespace pepper {
     };
 
     Ref<Operations> Operations::get(Ref<Type> type) {
-        auto llvmTy = type->llvmType();
+        auto llvmTy = Types::get(type.get());
         if (llvmTy->isIntegerTy()) {
             if (llvmTy->getIntegerBitWidth() == 1)
                 return Ref<BoolOperations>::New(type);

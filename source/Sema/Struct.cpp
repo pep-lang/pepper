@@ -12,9 +12,12 @@
 namespace pepper {
 
     Struct::Struct(llvm::Module& module, const Ident& name, const Params& fields, const Params& ctorParams)
-        : Name(name) {
+        : Name(name)
+        , Size(Type::Size::Fixed(0))
+        , Align(Type::Size::Fixed(0)) {
         // Create the LLVM struct type out of the field types
-        Vector<llvm::Type*> fieldTypes = Query(fields).select<llvm::Type*>([](auto& f) { return f.Type->llvmType(); });
+        Vector<llvm::Type*> fieldTypes =
+            Query(fields).select<llvm::Type*>([](auto& f) { return Types::get(f.Type.get()); });
         auto llvmType = llvm::StructType::create(fieldTypes, Name);
 
         // Add underlying struct as struct.<struct>
@@ -32,8 +35,8 @@ namespace pepper {
         // compute size from data layout
         auto dataLayout = module.getDataLayout();
         auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(llvmType));
-        Size = structLayout->getSizeInBytes();
-        Align = structLayout->getAlignment().value();
+        Size = Type::Size::Fixed(structLayout->getSizeInBits() / 8);
+        Align = Type::Size::Fixed(structLayout->getAlignment().value());
     }
 
     Ref<Struct> Struct::New(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
@@ -99,8 +102,8 @@ namespace pepper {
         return StructDesc->refType();
     }
 
-    unsigned StructType::size() const {
-        return StructDesc->size();
+    Type::Size StructType::sizeInBits() const {
+        return StructDesc->sizeInBits();
     }
 
     Operations* StructType::ops() {

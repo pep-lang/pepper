@@ -94,7 +94,8 @@ namespace pepper {
     Address CodeGenerator::emit(const ast::PointerLiteral* pointerLiteral) {
         assert(pointerLiteral->Value == 0);
         auto type = Types::UInt8->pointer();
-        auto value = Address(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType())));
+        auto llvmType = Types::get(type.get());
+        auto value = Address(type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(llvmType)));
         return value;
     }
 

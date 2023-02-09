@@ -57,16 +57,20 @@ namespace pepper {
     }
 
     static Ref<Type> largestIntType(Ref<Type> lhs, Ref<Type> rhs) {
-        auto bits = std::max(lhs->llvmType()->getIntegerBitWidth(), rhs->llvmType()->getIntegerBitWidth());
+        auto lhsType = Types::get(lhs.get());
+        auto rhsType = Types::get(rhs.get());
+        auto bits = std::max(lhsType->getIntegerBitWidth(), rhsType->getIntegerBitWidth());
         return (bits > 32) ? Types::Int64 : Types::Int32;
     }
 
     static Ref<Type> largestOperandType(Ref<Type> lhs, Ref<Type> rhs) {
-        if (lhs->llvmType()->isIntegerTy() && rhs->llvmType()->isIntegerTy()) {
+        auto lhsType = Types::get(lhs.get());
+        auto rhsType = Types::get(rhs.get());
+        if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
             return largestIntType(lhs, rhs);
         }
-        if (lhs->llvmType()->isFloatingPointTy() || rhs->llvmType()->isFloatingPointTy()) {
-            auto bits = std::max(lhs->llvmType()->getPrimitiveSizeInBits(), rhs->llvmType()->getPrimitiveSizeInBits());
+        if (lhsType->isFloatingPointTy() || rhsType->isFloatingPointTy()) {
+            auto bits = std::max(lhsType->getPrimitiveSizeInBits(), rhsType->getPrimitiveSizeInBits());
             return (bits > 32) ? Types::Double : Types::Float;
         }
         return nullptr;
@@ -76,8 +80,9 @@ namespace pepper {
         if (op->is<Assign>() && lhs == rhs) {
             return lhs;
         }
-        if ((op->is<Equal>() || op->is<NotEqual>()) && lhs->llvmType()->isPointerTy() &&
-            rhs->llvmType()->isPointerTy()) {
+        auto lhsType = Types::get(lhs.get());
+        auto rhsType = Types::get(rhs.get());
+        if ((op->is<Equal>() || op->is<NotEqual>()) && lhsType->isPointerTy() && rhsType->isPointerTy()) {
             return Types::VoidPtr;
         }
         throw CompileError(
@@ -89,7 +94,9 @@ namespace pepper {
             (rhs->isPointer() && rhs.as<PointerType>()->pointeeType()->isStruct())) {
             return structOperandType(op, lhs, rhs);
         }
-        if (lhs->llvmType()->isIntegerTy() && lhs->llvmType()->isIntegerTy()) {
+        auto lhsType = Types::get(lhs.get());
+        auto rhsType = Types::get(rhs.get());
+        if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
             auto intType = llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
                                .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
                                .Cases("LShiftAssign",

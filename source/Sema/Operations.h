@@ -23,7 +23,7 @@ namespace pepper {
             : Ty(type) {}
 
         operator llvm::Type*() const {
-            return Ty->llvmType();
+            return Types::get(Ty.get());
         }
 
         Ref<Type> type() const {

@@ -79,12 +79,13 @@ namespace pepper {
     }
 
     inline Address zeroValue(Ref<Type> type) {
-        if (type->llvmType()->isIntegerTy())
+        auto llvmType = Types::get(type.get());
+        if (llvmType->isIntegerTy())
             return Address{type, llvm::ConstantInt::get(*type, 0)};
-        if (type->llvmType()->isFloatingPointTy())
+        if (llvmType->isFloatingPointTy())
             return Address{type, llvm::ConstantFP::get(*type, 0.0f)};
-        if (type->llvmType()->isPointerTy())
-            return Address{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(type->llvmType()))};
+        if (llvmType->isPointerTy())
+            return Address{type, llvm::ConstantPointerNull::get(cast<llvm::PointerType>(llvmType))};
         throw InternalCompilerError("No known default value for type {0}", Types::toString(type));
     }
 

@@ -67,20 +67,22 @@ namespace pepper {
     }
 
     uint64_t DebugInfo::sizeOf(const Type* type) const {
-        return Module->getDataLayout().getTypeSizeInBits(type->llvmType());
+        auto llvmType = Types::get(type);
+        return Module->getDataLayout().getTypeSizeInBits(llvmType);
     }
 
     llvm::DIType* DebugInfo::emitBasicType(llvm::StringRef name, const Type* type) {
-        if (type->llvmType()->isVoidTy())
+        auto llvmType = Types::get(type);
+        if (llvmType->isVoidTy())
             return nullptr;
 
-        assert(!type->llvmType()->isArrayTy() && !type->llvmType()->isStructTy());
+        assert(!llvmType->isArrayTy() && !llvmType->isStructTy());
         auto encoding = llvm::dwarf::DW_ATE_unsigned;
-        if (type->llvmType()->isFloatingPointTy())
+        if (llvmType->isFloatingPointTy())
             encoding = llvm::dwarf::DW_ATE_float;
-        if (type->llvmType()->isIntegerTy(1))
+        if (llvmType->isIntegerTy(1))
             encoding = llvm::dwarf::DW_ATE_boolean;
-        if (type->llvmType()->isIntegerTy() && type->isSigned())
+        if (llvmType->isIntegerTy() && type->isSigned())
             encoding = llvm::dwarf::DW_ATE_signed;
         auto diType = DI->createBasicType(name, sizeOf(type), encoding);
         return insertType(type, diType);
@@ -140,7 +142,8 @@ namespace pepper {
         const auto& fields = st->fields();
         const auto& field = fields[fieldIdx];
         auto fieldTy = getOrCreateType(field.Type.get());
-        auto structTy = llvm::cast<llvm::StructType>(st->structType()->llvmType());
+        auto llvmType = Types::get(st->structType().get());
+        auto structTy = llvm::cast<llvm::StructType>(llvmType);
         auto structLayout = Module->getDataLayout().getStructLayout(structTy);
         auto sizeInBits = sizeOf(field.Type.get());
         auto alignInBits = 0;

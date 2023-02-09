@@ -32,7 +32,7 @@ namespace pepper {
 
         Ref<class RefType> refType() const;
 
-        unsigned size() const override;
+        Type::Size sizeInBits() const override;
 
         Operations* ops() override;
     };
@@ -62,8 +62,8 @@ namespace pepper {
         Ref<Function> Constructor;
         Vector<Param> Fields;
         llvm::StringMap<Ref<Method>> Methods;
-        size_t Size;
-        size_t Align;
+        Type::Size Size;
+        Type::Size Align;
 
       public:
         Struct(llvm::Module& module, const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
@@ -127,12 +127,20 @@ namespace pepper {
             return method("__dtor");
         }
 
-        size_t size() const {
+        Type::Size size() const {
             return Size;
         }
 
-        size_t align() const {
+        Type::Size sizeInBits() const {
+            return Size * 8;
+        }
+
+        Type::Size align() const {
             return Align;
+        }
+
+        Type::Size alignInBits() const {
+            return Align * 8;
         }
 
         static Ref<Struct> get(const Ident& name);

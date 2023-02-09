@@ -42,8 +42,12 @@ namespace pepper {
         return Types::get(Name + "*");
     }
 
-    unsigned Type::size() const {
-        return IRType->getPrimitiveSizeInBits() / 8;
+    Type::Size Type::size() const {
+        return Size::Fixed(sizeInBits() / 8);
+    }
+
+    Type::Size Type::sizeInBits() const {
+        return IRType->getPrimitiveSizeInBits();
     }
 
     Ref<Type> Types::Bool;
@@ -65,10 +69,6 @@ namespace pepper {
         : Type(name, pointee->llvmType()->getPointerTo(), false)
         , PointeeType(pointee) {}
 
-    unsigned PointerType::size() const {
-        return llvmType()->getPrimitiveSizeInBits() / 8;
-    }
-
     Types::Types(llvm::LLVMContext& ctx)
         : Ctx(ctx) {
         Void = addType(Ref<Type>::New("void", llvm::Type::getVoidTy(ctx)));
@@ -88,21 +88,23 @@ namespace pepper {
     }
 
     Ref<Type> Types::addType(Ref<Type> t, const Vector<Ident>& aliases) {
-        if (t->llvmType()->isStructTy()) {
-            KnownTypes[t->name()] = t;
-        } else {
-            // add requested type with aliases
-            KnownTypes[t->name()] = t;
+        auto llvmType = t->llvmType();
+        bool generatePointerType = !llvmType->isStructTy() && !llvmType->isPointerTy() && !llvmType->isVoidTy();
+
+        // add requested type with aliases
+        KnownTypes[t->name()] = t;
+        CanonicalTypes[t.get()] = t->llvmType();
+        for (const auto& alias : aliases) {
+            KnownTypes[alias] = t;
+        }
+        // add pointer types as well
+
+        if (generatePointerType) {
+            auto ptrType = Ref<PointerType>::New(t);
+            KnownTypes[t->name() + "*"] = ptrType;
+            CanonicalTypes[ptrType.get()] = ptrType->llvmType();
             for (const auto& alias : aliases) {
-                KnownTypes[alias] = t;
-            }
-            // add pointer types as well
-            if (!t->llvmType()->isPointerTy() && !t->llvmType()->isVoidTy()) {
-                auto ptrType = Ref<PointerType>::New(t);
-                KnownTypes[t->name() + "*"] = ptrType;
-                for (const auto& alias : aliases) {
-                    KnownTypes[alias + "*"] = ptrType;
-                }
+                KnownTypes[alias + "*"] = ptrType;
             }
         }
 
@@ -115,6 +117,10 @@ namespace pepper {
             return it->second;
         }
         return nullptr;
+    }
+
+    llvm::Type* Types::getType(const Type* ty) const {
+        return CanonicalTypes.lookup(ty);
     }
 
     std::string Types::toString(Ref<Type> ty) {
@@ -134,5 +140,9 @@ namespace pepper {
 
     Ref<Type> Types::get(const Ident& name) {
         return SemaContext::get().types()->getType(name);
+    }
+
+    llvm::Type* Types::get(const Type* ty) {
+        return SemaContext::get().types()->getType(ty);
     }
 } // namespace pepper

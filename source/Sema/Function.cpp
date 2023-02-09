@@ -50,9 +50,8 @@ namespace pepper {
             }
             coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
         }
-        return Address{
-            ReturnType,
-            SemaContext::get().ir()->CreateCall((llvm::FunctionType*)FuncType->llvmType(), Func, coercedArgs)};
+        auto functionType = llvm::cast<llvm::FunctionType>(Types::get(FuncType.get()));
+        return Address{ReturnType, SemaContext::get().ir()->CreateCall(functionType, Func, coercedArgs)};
     }
 
     UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params)

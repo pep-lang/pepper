@@ -35,7 +35,7 @@ namespace pepper {
         ir()->SetInsertPoint(mergeBlock);
 
         return Address(Types::VoidPtr,
-                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
+                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::get(Types::VoidPtr.get()))));
     }
 
     Address CodeGenerator::emit(const ast::ForRange* loop) {
@@ -75,7 +75,7 @@ namespace pepper {
         ir()->SetInsertPoint(mergeBlock);
 
         return Address(Types::VoidPtr,
-                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::VoidPtr->llvmType())));
+                       llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(Types::get(Types::VoidPtr.get()))));
     }
 
 } // namespace pepper
