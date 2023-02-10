@@ -14,12 +14,20 @@
       "MIMode": "lldb"
     },
     {
-      "name": "(lldb) Pepper",
+      "name": "(lldb) Pepper Run",
       "type": "lldb",
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/out/${fileBasenameNoExtension}",
       "preLaunchTask": "Pepper: Compile"
-    }
+    },
+    {
+      "name": "(lldb) Pepper Compile",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/pepper",
+      "args": ["-Tall", "-g", "-emit-llvm", "-o", "${workspaceFolder}/out/test", "${file}"],
+      "cwd": "${workspaceFolder}"
+     }
   ]
 }
