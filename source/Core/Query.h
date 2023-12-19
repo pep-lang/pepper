@@ -4,7 +4,6 @@
 
 #include <optional>
 
-#include "Core/PolyIList.h"
 #include "Core/Vector.h"
 
 namespace pepper {
@@ -22,11 +21,6 @@ namespace pepper {
         // Construct from Vector
         template <unsigned int N>
         explicit Query(const Vector<T, N>& src)
-            : Query(src.begin(), src.end()) {}
-
-        // Construct from poly_ilist
-        template <typename N>
-        explicit Query(const poly_ilist<T, N>& src)
             : Query(src.begin(), src.end()) {}
 
         // construct from std::vector
@@ -150,7 +144,4 @@ namespace pepper {
 
     template <typename T, unsigned int N>
     Query(Vector<T, N>&& v) -> Query<T, decltype(v.begin())>;
-
-    template <typename T, typename N>
-    Query(const poly_ilist<T, N>& list) -> Query<T, decltype(list.begin())>;
 } // namespace pepper
