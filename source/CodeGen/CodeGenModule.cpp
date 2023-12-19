@@ -53,8 +53,8 @@ namespace pepper {
                                              /*CPU=*/"",
                                              /*Features=*/"",
                                              llvm::TargetOptions(),
-                                             /*Reloc::Model=*/llvm::None,
-                                             /*CodeModel::Model=*/llvm::None,
+                                             /*Reloc::Model=*/std::nullopt,
+                                             /*CodeModel::Model=*/std::nullopt,
                                              OptLevel));
         assert(TM && "Failed to create TargetMachine");
     }

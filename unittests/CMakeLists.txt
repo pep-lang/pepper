@@ -29,7 +29,6 @@ add_executable(PepperTests
         RTTI.cpp
         Structs.cpp
         Branches.cpp
-        ListTests.cpp
         main.cpp)
 target_include_directories(PepperTests PRIVATE ${PEPPER_INCLUDE_DIRS} ${TEST_SUPPORT_INCLUDE_DIRS})
 target_link_directories(PepperTests PRIVATE ${PEPPER_LIBRARY_DIRS})

@@ -1,15 +1,17 @@
 
 #include "Compiler/Linker.h"
-#include <filesystem>
 
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
+
+#include <filesystem>
+#include <optional>
 
 #define PEP_TRACE_LINK(fmt, ...) PEP_TRACE(TraceChannel::Link, fmt, __VA_ARGS__)
 
@@ -23,9 +25,9 @@ namespace pepper {
         SmallString<sys::fs::DefaultReadChunkSize> tmpFile;
         fs::createUniquePath(std::string(exePath) + ".%%%%%%%.tmp", tmpFile, true);
 
-        const Optional<StringRef> Redirects[] = {/*STDIN=*/None, /*STDOUT=*/StringRef{tmpFile}, /*STDERR=*/None};
+        const std::optional<StringRef> Redirects[] = {/*STDIN=*/std::nullopt, /*STDOUT=*/StringRef{tmpFile}, /*STDERR=*/std::nullopt};
         std::string errors;
-        int rc = ExecuteAndWait(exePath, argv, /*env=*/llvm::None, Redirects, 0, 0, &errors);
+        int rc = ExecuteAndWait(exePath, argv, /*env=*/std::nullopt, Redirects, 0, 0, &errors);
         if (rc != 0) {
             throw InternalCompilerError("Failed to capture output from {0}: {1}", exePath, errors);
         }
@@ -147,7 +149,7 @@ namespace pepper {
         // link.exe is weird and will only output to the working directory, so switch it just for the link invocation
         auto cwd = std::filesystem::current_path();
         std::filesystem::current_path(outputDir);
-        auto rc = sys::ExecuteAndWait(lld.get(), linkArgsView, llvm::None, llvm::None, 0, 0, &lldErrors);
+        auto rc = sys::ExecuteAndWait(lld.get(), linkArgsView, std::nullopt, std::nullopt, 0, 0, &lldErrors);
         std::filesystem::current_path(cwd);
         if (rc != 0)
             throw CompileError("Link failed: {0}", lldErrors);
@@ -210,7 +212,7 @@ namespace pepper {
 
         auto ldArgsView = Query(ldArgs).select<StringRef>().toVector();
         std::string lldErrors;
-        auto rc = sys::ExecuteAndWait(lldPath, ldArgsView, llvm::None, llvm::None, 0, 0, &lldErrors);
+        auto rc = sys::ExecuteAndWait(lldPath, ldArgsView, std::nullopt, std::nullopt, 0, 0, &lldErrors);
         if (rc != 0)
             throw CompileError("Link failed: {0}", lldErrors);
     }

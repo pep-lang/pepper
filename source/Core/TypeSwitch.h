@@ -2,7 +2,7 @@
 #pragma once
 
 #include "Core/RTTI.h"
-#include "llvm/ADT/Optional.h"
+#include <optional>
 
 namespace pepper {
     // Version of llvm's TypeSwitch that uses pepper's RTTI
@@ -45,7 +45,7 @@ namespace pepper {
 
     template <HasRtti T, typename TResult = void>
     class TypeSwitch : public detail::TypeSwitchBase<TypeSwitch<T, TResult>, T> {
-        llvm::Optional<TResult> Result;
+        std::optional<TResult> Result;
 
       public:
         using Base = detail::TypeSwitchBase<TypeSwitch<T, TResult>, T>;

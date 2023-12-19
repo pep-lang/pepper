@@ -16,7 +16,6 @@
 #include "Parser/Parser.h"
 #include "Sema/SemaContext.h"
 #include "Sema/Transform.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
@@ -27,6 +26,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+
+#include <optional>
 
 namespace pepper {
     class PepperCompiler : public Compiler {
@@ -174,7 +175,7 @@ namespace pepper {
             }
 
             llvm::TargetOptions opt;
-            auto rm = llvm::Optional<llvm::Reloc::Model>();
+            auto rm = std::optional<llvm::Reloc::Model>();
             auto targetMachine = target->createTargetMachine(targetTriple, cpu, cpuFeatures, opt, rm);
 
             std::filesystem::path outputFile(Opts->BuildDir);

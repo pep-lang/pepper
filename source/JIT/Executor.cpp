@@ -89,7 +89,7 @@ namespace pepper {
             return CompileLayer.add(RT, std::move(TSM));
         }
 
-        Expected<JITEvaluatedSymbol> lookup(StringRef Name) {
+        auto lookup(StringRef Name) {
             return ES->lookup({&Dylib}, Mangle(Name.str()));
         }
 
@@ -107,7 +107,7 @@ namespace pepper {
                                             llvm::toString(std::move(err)));
             }
 
-            auto fn = (int (*)())(intptr_t)entryFn->getAddress();
+            auto fn = entryFn->getAddress().toPtr<int()>();
             return fn();
         }
     };

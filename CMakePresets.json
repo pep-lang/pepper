@@ -20,7 +20,7 @@
       }
     },
     {
-      "name": "x64-debug",
+      "name": "win-msvc-x64-debug",
       "displayName": "x64 Debug",
       "description": "Target Windows (64-bit) with the Visual Studio development environment. (Debug)",
       "inherits": "windows-base",
@@ -34,38 +34,30 @@
       }
     },
     {
-      "name": "x64-release",
+      "name": "win-msvc-x64-release",
       "displayName": "x64 Release",
       "description": "Target Windows (64-bit) with the Visual Studio development environment. (RelWithDebInfo)",
-      "inherits": "x64-debug",
+      "inherits": "win-msvc-x64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
-      "name": "x86-debug",
-      "displayName": "x86 Debug",
-      "description": "Target Windows (32-bit) with the Visual Studio development environment. (Debug)",
+      "name": "win-clang-x64-debug",
+      "displayName": "Clang Windows x64 Debug",
       "inherits": "windows-base",
       "architecture": {
-        "value": "x86",
+        "value": "x64",
         "strategy": "external"
       },
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "clang-cl.exe",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "x86-release",
-      "displayName": "x86 Release",
-      "description": "Target Windows (32-bit) with the Visual Studio development environment. (RelWithDebInfo)",
-      "inherits": "x86-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "mac-apple-clang-x64",
+      "name": "mac-apple-clang-x64-debug",
       "displayName": "Clang 13.1.6 x86_64-apple-darwin21.2.0",
       "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -78,7 +70,7 @@
       }
     },
     {
-      "name": "mac-llvm-clang-x64",
+      "name": "mac-llvm-clang-x64-debug",
       "displayName": "Clang 15.x x86_64",
       "description": "Using compilers: C = /usr/local/opt/llvm/bin/clang, CXX = /usr/local/opt/llvm/bin/clang++",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -96,7 +88,7 @@
   "testPresets": [
     {
       "name": "mac",
-      "configurePreset": "mac-llvm-clang-x64",
+      "configurePreset": "mac-llvm-clang-x64-debug",
       "output": {
         "outputOnFailure": true
       },
@@ -107,7 +99,7 @@
     },
     {
       "name": "windows",
-      "configurePreset": "x64-debug",
+      "configurePreset": "win-msvc-x64-debug",
       "output": {
         "outputOnFailure": true
       },

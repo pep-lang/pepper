@@ -4,10 +4,11 @@
 
 #include "Core/Messages.h"
 #include "Core/Query.h"
+#include "llvm/ADT/bit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MathExtras.h"
 
-#define BIT_IDX(b) (llvm::countTrailingZeros((unsigned)b))
+#define BIT_IDX(b) (llvm::countr_zero((unsigned)b))
 
 namespace pepper {
     using namespace llvm;
