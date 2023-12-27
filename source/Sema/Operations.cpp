@@ -130,7 +130,28 @@ namespace pepper {
         if (value.Ty->is<PointerType>()) {
             return value;
         }
-        throw CompileError("Coercion to pointer is not supported");
+        if (value.Ty->isInteger()) {
+            return value;
+        }
+        throw CompileError("Coercion from {} to pointer is not supported", value.Ty->name());
+    }
+
+    Address PointerOperations::add(Address lhs, Address rhs) const {
+        if (!lhs.Ty->isPointer() || !rhs.Ty->isInteger()) {
+            throw CompileError("{0} + {1} is not supported, addition is only supported between pointer and integer",
+                               lhs.Ty->name(),
+                               rhs.Ty->name());
+        }
+        if ( lhs.Ty == Types::VoidPtr ) {
+            throw CompileError("Addition is not supported for void pointers");
+        }
+        lhs = load(lhs);
+        rhs = load(rhs);
+        auto idx = Types::UInt64->ops()->coerce(rhs);
+        auto ptr = ir()->CreatePtrToInt(lhs, *Types::UInt64, "ptr");
+        auto sum = ir()->CreateNUWAdd(ptr, idx, "sum");
+        auto res = ir()->CreateIntToPtr(sum, *lhs.Ty, "res");
+        return Address(lhs.Ty, res);
     }
 
     Address PointerOperations::equal(Address lhs, Address rhs) const {

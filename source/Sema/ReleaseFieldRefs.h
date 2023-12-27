@@ -23,7 +23,10 @@ namespace pepper::ast {
             Vector<Node*> releases;
             for (const auto& field : st->Fields) {
                 if (auto fieldType = Symbols.Structs.lookup(field->Type.toString())) {
+                    // Set the release source location to be the location of the final dtor instruction
+                    Node::PushSource(st->Destructor->Body->Items.back()->Source);
                     releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->Name), {"__release"}));
+                    Node::PopSource();
                 }
             }
             // Insert the releases in reverse declaration order just before the last dtor instruction (free)

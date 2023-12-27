@@ -1,33 +1,41 @@
 {
   "version": "0.2.0",
   "configurations": [
-    {
-      "name": "(lldb) All Tests",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/tests/PepperTests",
-      "args": [],
-      "stopAtEntry": false,
-      "cwd": "${fileDirname}",
-      "environment": [],
-      "externalConsole": false,
-      "MIMode": "lldb"
-    },
-    {
-      "name": "(lldb) Pepper Run",
-      "type": "lldb",
-      "request": "launch",
-      "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/out/${fileBasenameNoExtension}",
-      "preLaunchTask": "Pepper: Compile"
-    },
-    {
-      "name": "(lldb) Pepper Compile",
-      "type": "lldb",
-      "request": "launch",
-      "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/pepper",
-      "args": ["-Tall", "-g", "-emit-llvm", "-o", "${workspaceFolder}/out/test", "${file}"],
-      "cwd": "${workspaceFolder}"
-     }
+      {
+          "name": "(lldb) All Tests",
+          "type": "cppdbg",
+          "request": "launch",
+          "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/tests/PepperTests",
+          "args": [],
+          "stopAtEntry": false,
+          "cwd": "${fileDirname}",
+          "environment": [],
+          "externalConsole": false,
+          "MIMode": "lldb"
+      },
+      {
+          "name": "(lldb) Pepper Run",
+          "type": "lldb",
+          "request": "launch",
+          "cwd": "${workspaceFolder}",
+          "program": "${workspaceFolder}/out/${fileBasenameNoExtension}",
+          "preLaunchTask": "Pepper: Compile"
+      },
+      {
+          "name": "(lldb) Pepper Compile",
+          "type": "lldb",
+          "request": "launch",
+          "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/pepper",
+          "args": ["-Tall", "-g", "-emit-llvm", "-o", "${workspaceFolder}/out/test", "${file}"],
+          "cwd": "${workspaceFolder}"
+      },
+      {
+          "name": "(lldb) test",
+          "type": "lldb",
+          "request": "launch",
+          "program": "${workspaceFolder}/out/test.exe",
+          "cwd": "${workspaceFolder}",
+          "preLaunchTask": "Pepper: Compile test"
+      }
   ]
 }

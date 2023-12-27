@@ -29,7 +29,7 @@ namespace pepper {
             return &Operations::lshift;
         if (op->is<RShift>())
             return &Operations::rshift;
-        if (op->is<Equal>())
+        if (op->is<Equal>() || op->is<Identical>())
             return &Operations::equal;
         if (op->is<NotEqual>())
             return &Operations::notEqual;
@@ -82,7 +82,8 @@ namespace pepper {
         }
         auto lhsType = Types::get(lhs.get());
         auto rhsType = Types::get(rhs.get());
-        if ((op->is<Equal>() || op->is<NotEqual>()) && lhsType->isPointerTy() && rhsType->isPointerTy()) {
+        const bool isEq = op->is<Equal>() || op->is<NotEqual>() || op->is<Identical>();
+        if (isEq && lhsType->isPointerTy() && rhsType->isPointerTy()) {
             return Types::VoidPtr;
         }
         throw CompileError(
@@ -96,6 +97,10 @@ namespace pepper {
         }
         auto lhsType = Types::get(lhs.get());
         auto rhsType = Types::get(rhs.get());
+
+        if (lhsType->isPointerTy() && rhsType->isIntegerTy()) {
+            return lhs;
+        }
         if (lhsType->isIntegerTy() && rhsType->isIntegerTy()) {
             auto intType = llvm::StringSwitch<Ref<Type>>(op->rtti()->name())
                                .Cases("LShift", "RShift", "BitAnd", "BitOr", "BitXor", largestIntType(lhs, rhs))
@@ -214,17 +219,6 @@ namespace pepper {
     }
 
     Address CodeGenerator::emit(const UnaryOp* op) {
-        if (op->is<Minus>()) {
-            if (op->Operand->is<IntegerLiteral>()) {
-                auto intLiteral = op->Operand->as<IntegerLiteral>();
-                return codegen(new IntegerLiteral(-intLiteral->Value));
-            }
-            if (op->Operand->is<FloatLiteral>()) {
-                auto floatLiteral = op->Operand->as<FloatLiteral>();
-                return codegen(new FloatLiteral(-floatLiteral->Value));
-            }
-        }
-
         auto operand = codegen(op->Operand);
         auto type = operand.Ty;
         auto ops = type->ops();

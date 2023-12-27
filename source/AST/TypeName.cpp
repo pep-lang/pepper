@@ -56,22 +56,33 @@ namespace pepper::ast {
 
         static llvm::StringMap<NumericTypeName> NumericTypes = {
             {"i1", {&TypeName::Bool, 1}},
+            {"bool", {&TypeName::Bool, 1}},
             {"i8", {&TypeName::Int8, 8}},
+            {"char", {&TypeName::Int8, 8}},
             {"u8", {&TypeName::UInt8, 8, false}},
+            {"byte", {&TypeName::UInt8, 8, false}},
             {"i32", {&TypeName::Int32, 32}},
+            {"int", {&TypeName::Int32, 32}},
             {"u32", {&TypeName::UInt32, 32, false}},
+            {"uint", {&TypeName::UInt32, 32, false}},
             {"i64", {&TypeName::Int64, 64}},
-            {"u64", {&TypeName::UInt64, 64}},
+            {"long", {&TypeName::Int64, 64}},
+            {"u64", {&TypeName::UInt64, 64, false}},
+            {"ulong", {&TypeName::UInt64, 64, false}},
             {"f32", {&TypeName::Float, 32, true, true}},
+            {"float", {&TypeName::Float, 32, true, true}},
             {"f64", {&TypeName::Double, 64, true, true}},
+            {"double", {&TypeName::Double, 64, true, true}},
         };
 
         assert(!lhs.isGeneric() && !rhs.isGeneric());
 
-        const auto lhsName = lhs.Name == "bool" ? "i1" : lhs.Name;
-        const auto rhsName = rhs.Name == "bool" ? "i1" : rhs.Name;
-        assert(NumericTypes.find(lhsName) != NumericTypes.end());
-        assert(NumericTypes.find(rhsName) != NumericTypes.end());
+        const auto lhsName = lhs.Name;
+        const auto rhsName = rhs.Name;
+
+        const bool lhsNumeric = NumericTypes.find(lhsName) != NumericTypes.end();
+        const bool rhsNumeric = NumericTypes.find(rhsName) != NumericTypes.end();
+        assert(lhsNumeric && rhsNumeric);
 
         const auto& lhsType = NumericTypes.lookup(lhsName);
         const auto& rhsType = NumericTypes.lookup(rhsName);

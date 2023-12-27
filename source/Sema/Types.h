@@ -3,6 +3,7 @@
 
 #include <format>
 #include <functional>
+#include <llvm/IR/Type.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -57,6 +58,10 @@ namespace pepper {
 
         bool isSigned() const {
             return IsSigned;
+        }
+
+        bool isInteger() const {
+            return IRType->isIntegerTy();
         }
 
         virtual bool isPointer() const {

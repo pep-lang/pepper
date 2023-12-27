@@ -20,5 +20,10 @@ extern "C" {
     SUPPORT_API void* _pep_malloc(size_t size);
     SUPPORT_API void* _pep_realloc(void* ptr, size_t prevSize, size_t newSize);
     SUPPORT_API void _pep_free(void* ptr);
+
+    SUPPORT_API size_t _pep_utf8_length(const char* str);
+    SUPPORT_API size_t _pep_utf8_size(const char* str, uint32_t chars);
+    SUPPORT_API bool _pep_utf8_compare(const char* a, const char* b, size_t size);
+
     SUPPORT_API void panic(const char* msg);
 }

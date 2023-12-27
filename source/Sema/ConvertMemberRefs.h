@@ -34,14 +34,18 @@ namespace pepper::ast {
                         if (!field) {
                             throw CompileError(symRef->Source, "Unable to resolve symbol {0}", symRef->Name);
                         }
+                        Node::PushSource(node->Source);
                         node = new MemberRef(new ThisRef(), symRef->Name);
+                        Node::PopSource();
                     }
                 }
                 if (auto call = node->as<FunctionCall>()) {
                     // convert function calls that are actually method calls
                     if (auto method = Struct->getMethod(call->Target.name())) {
                         PEP_TRACE_AST("Convert {0} to this.{0}", call->toString());
+                        Node::PushSource(node->Source);
                         node = new MethodCall(new SymbolRef("this"), method->Name, call->Args);
+                        Node::PopSource();
                     }
                 }
             }

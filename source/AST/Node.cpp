@@ -3,6 +3,7 @@
 #include "AST/Node.h"
 #include <regex>
 
+#include "AST/Block.h"
 #include "AST/Visitor.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
@@ -11,6 +12,19 @@
 
 namespace pepper::ast {
     SourceLocation Node::TokenSource;
+    Vector<SourceLocation> Node::SourceStack;
+
+    void Node::PushSource(const SourceLocation& source) {
+        TokenSource = source;
+        SourceStack.emplace_back(source);
+    }
+
+    void Node::PopSource() {
+        assert(SourceStack.size() > 0);
+
+        SourceStack.pop_back();
+        TokenSource = SourceStack.size() ? SourceStack.back() : SourceLocation{};
+    }
 
     Node::Node()
         : Source(TokenSource) {
@@ -73,10 +87,20 @@ namespace pepper::ast {
         if (!ref || Visited.contains(ref))
             return;
         Visited.insert(ref);
+
+        if (auto block = ref->as<Block>()) {
+            Blocks.emplace_back(block);
+        }
+
         enterNode(ref);
         visitNode(ref);
         ref->visit(*this);
         exitNode(ref);
+
+        if (auto block = ref->as<Block>()) {
+            assert(Blocks.back() == block && "Mismatched Block stack in Visitor");
+            Blocks.pop_back();
+        }
     }
 
     void Visitor::visit(Node* node) {

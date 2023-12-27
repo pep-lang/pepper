@@ -13,7 +13,7 @@ namespace pepper::ast {
     struct Param {
         TypeName Type;
         Ident Name;
-        Expression* Default = nullptr;
+        TNodeRef<Expression> Default = nullptr;
 
         Param(Ident identifier, TypeName type, Expression* defaultValue = nullptr)
             : Name(std::move(identifier))

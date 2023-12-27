@@ -240,7 +240,7 @@ int test() {
     trace_int(t.__refcount, @"t.__refcount");
     test_assert(t.__refcount == 1, @"t.__refcount == 1");
     var prev = t;
-    test_assert(t == prev, @"t == prev");
+    test_assert(t === prev, @"t === prev");
     test_assert(prev.__refcount == 2, @"prev.__refcount == 2");
     t = Test();
     test_assert(prev.__refcount == 1, @"prev.__refcount == 1");

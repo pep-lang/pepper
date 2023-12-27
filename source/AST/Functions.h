@@ -47,8 +47,12 @@ namespace pepper::ast {
         void visit(Visitor& visitor) override {
             Symbol::visit(visitor);
             visitor.visit(ReturnType);
-            for (auto& param : Parameters)
+            for (auto& param : Parameters) {
                 visitor.visit(param.Type);
+                if (param.Default) {
+                    visitor.visit(param.Default);
+                }
+            }
         }
     };
 

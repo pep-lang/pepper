@@ -28,8 +28,10 @@ namespace pepper::ast {
     struct Node {
         DECLARE_RTTI(Node);
 
-        static SourceLocation TokenSource;
         SourceLocation Source;
+
+        static void PushSource(const SourceLocation& source);
+        static void PopSource();
 
         virtual ~Node();
 
@@ -52,6 +54,9 @@ namespace pepper::ast {
 
       protected:
         Node();
+
+        static SourceLocation TokenSource;
+        static Vector<SourceLocation> SourceStack;
     };
 
     template <typename N>
@@ -59,10 +64,12 @@ namespace pepper::ast {
 
     // Nodes are stored in NodeRefs so they can be replaced by AST passes
     struct NodeRef {
-        llvm::PointerIntPair<Node*, 1, bool> Ref;
+        Node* Ref;
+        bool Detached = false;
 
         NodeRef(Node* node = nullptr, bool temp = false) {
-            Ref.setPointerAndInt(node, temp);
+            Ref = node;
+            Detached = temp;
         }
 
         NodeRef(const NodeRef& rhs) = delete;
@@ -75,33 +82,39 @@ namespace pepper::ast {
         }
 
         const RTTI* rtti() const {
-            assert(Ref.getPointer());
-            return Ref.getPointer()->rtti();
+            assert(Ref);
+            return Ref->rtti();
         }
 
         void reset(Node* node = nullptr) {
-            assert(attached() && "Assignment to an unattached NodeLink is a no-op");
-            Ref.setPointer(node);
+            assert(attached() && "Assignment to an unattached NodeRef is a no-op");
+            if (node->Source.File.empty()) {
+                if (Ref) {
+                    node->Source = Ref->Source;
+                }
+            }
+
+            Ref = node;
         }
 
         bool attached() const {
-            return !Ref.getInt();
+            return !Detached;
         }
 
         operator bool() const {
-            return Ref.getPointer() != nullptr;
+            return Ref != nullptr;
         }
 
         operator Node*() const {
-            return Ref.getPointer();
+            return Ref;
         }
 
         Node* operator->() const {
-            return Ref.getPointer();
+            return Ref;
         }
 
         Node* node() const {
-            return Ref.getPointer();
+            return Ref;
         }
 
         static NodeRef Temp(Node* node) {
@@ -121,7 +134,7 @@ namespace pepper::ast {
         TNodeRef(TNodeRef&&) noexcept = default;
 
         TNodeRef& operator=(const TNodeRef& rhs) {
-            Ref.initWithPointer(rhs.node() ? rhs.node()->template cloneAs<N>() : nullptr);
+            Ref = rhs.node() ? rhs.node()->template cloneAs<N>() : nullptr;
             return *this;
         }
 
@@ -135,6 +148,10 @@ namespace pepper::ast {
 
         operator N*() const {
             return static_cast<N*>(node());
+        }
+
+        N* node() const {
+            return static_cast<N*>(NodeRef::node());
         }
     };
 
@@ -150,7 +167,7 @@ namespace pepper::ast {
     };
 
     template <TNode N>
-    struct NodeList : public Vector<TNodeRef<N>> {
+    struct NodeList : Vector<TNodeRef<N>> {
         using base = Vector<TNodeRef<N>>;
         using Vector<TNodeRef<N>>::Vector;
 
@@ -164,6 +181,20 @@ namespace pepper::ast {
 
         void insert(iterator it, N* node) {
             base::insert(it, TNodeRef{node});
+        }
+
+        void insert_after(const Node* insertNode, Node* newNode) {
+            auto it = std::find(this->begin(), this->end(), insertNode);
+            if (it != this->end()) {
+                insert(it + 1, newNode);
+            }
+        }
+
+        void insert_before(const Node* insertNode, Node* newNode) {
+            auto it = std::find(this->begin(), this->end(), insertNode);
+            if (it != this->end()) {
+                insert(it, newNode);
+            }
         }
 
         void push_back(N* node) {

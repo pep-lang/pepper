@@ -80,6 +80,7 @@ namespace pepper {
             : NativeOperations(type) {}
 
         Address coerce(Address value) const override;
+        Address add(Address lhs, Address rhs) const override;
         Address equal(Address lhs, Address rhs) const override;
         Address notEqual(Address lhs, Address rhs) const override;
         Address assign(Address lhs, Address rhs) const override;

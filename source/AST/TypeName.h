@@ -58,6 +58,10 @@ namespace pepper::ast {
             return (Flags != Array && !SubTypes.empty());
         }
 
+        bool isNumeric() const {
+            return isIntegral() && *this != Auto && *this != Void;
+        }
+
         bool isStruct() const;
         bool isIntegral() const;
         bool isPointer() const;

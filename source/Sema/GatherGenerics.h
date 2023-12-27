@@ -65,7 +65,9 @@ namespace pepper::ast {
                     if (st->Type == structSpec)
                         continue;
                     PEP_TRACE_AST("Generic struct {0}", structSpec.toString());
+                    Node::PushSource(st->Source);
                     parseTree->insert(new StructSpec(structSpec));
+                    Node::PopSource();
                     structSpecs.insert(structSpec);
                 }
             }

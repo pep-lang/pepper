@@ -102,18 +102,18 @@ namespace pepper {
     Address CodeGenerator::emit(const ast::Index* index) {
         auto lhs = codegen(index->LHS);
         auto idx = codegen(index->IndexExpr);
-        auto lhsType = lhs.Ty;
-        lhs = load(lhs);
-        auto element = Address{
-            lhs.Ty, ir()->CreateInBoundsGEP(*lhs.Ty, lhs, {llvm::ConstantInt::get(*Types::Int32, uint64_t(0)), idx})};
-        return element;
+        return lhs.Ty->ops()->add(lhs, idx);
     }
 
     Address CodeGenerator::codegen(const ast::Node* node) {
         Messages::Indent(TraceChannel::Codegen);
         PEP_TRACE(TraceChannel::Codegen, node->toString());
         Messages::Indent(TraceChannel::Codegen);
+
+        assert(node->Source.Line != 0);
+
         Module->getDebugInfo()->setSourceLocation(node->Source);
+        CompileError::Source = node->Source;
 
         Address value;
         if (node->is<ast::BinaryOp>())

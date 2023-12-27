@@ -29,6 +29,7 @@ functionDefinitionList
 
 functionName
     : typeDeclaration
+    | assignmentOperator
     | binaryOperator
     | unaryOperator
     ;
@@ -253,6 +254,7 @@ singleExpression
     |   singleExpression '<=' singleExpression                  #LessEqual
     |   singleExpression '>' singleExpression                   #Greater
     |   singleExpression '>=' singleExpression                  #GreaterEqual
+    |   singleExpression '===' singleExpression                 #Identical
     |   singleExpression '==' singleExpression                  #Equal
     |   singleExpression '!=' singleExpression                  #NotEqual
     |   singleExpression '&' singleExpression                   #BitAnd
@@ -411,6 +413,7 @@ BitAndAssign : '&=';
 BitXorAssign : '^=';
 BitOrAssign : '|=';
 
+Identical: '===';
 Equal : '==';
 NotEqual : '!=';
 

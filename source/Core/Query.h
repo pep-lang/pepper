@@ -10,7 +10,8 @@ namespace pepper {
 
     template <typename T, typename It = decltype(std::declval<const Vector<T, 0>>().begin())>
     struct Query {
-        Vector<T, 0> Src;
+        Vector<T, 0> Storage;
+        const Vector<T, 0>* Src;
         It Begin;
         It End;
 
@@ -21,24 +22,31 @@ namespace pepper {
         // Construct from Vector
         template <unsigned int N>
         explicit Query(const Vector<T, N>& src)
-            : Query(src.begin(), src.end()) {}
+            : Src(&src)
+            , Begin(Src->begin())
+            , End(Src->end()) {}
 
         // construct from std::vector
         explicit Query(const std::vector<T>& src)
-            : Query(src.begin(), src.end()) {}
+            : Storage(src.begin(), src.end())
+            , Src(&Storage)
+            , Begin(Storage.begin())
+            , End(Storage.end()) {}
 
         // used internally to move from one operation to the next
         template <unsigned int N>
         Query(Vector<T, N>&& src)
-            : Src(std::move(src))
-            , Begin(Src.begin())
-            , End(Src.end()) {}
+            : Storage(std::move(src))
+            , Src(&Storage)
+            , Begin(Storage.begin())
+            , End(Storage.end()) {}
 
         // used internally to move from one operation to the next
         Query(Query&& src) noexcept
-            : Src(std::move(src.Src))
-            , Begin(Src.begin())
-            , End(Src.end()) {}
+            : Storage(std::move(src.Src))
+            , Src(&Storage)
+            , Begin(Src->begin())
+            , End(Src->end()) {}
 
         It begin() const {
             return Begin;
@@ -90,7 +98,7 @@ namespace pepper {
         }
 
         Query& concat(It beginIt, It endIt) {
-            std::copy(beginIt, endIt, std::back_inserter(Src));
+            std::copy(beginIt, endIt, std::back_inserter(*Src));
             return *this;
         }
 
@@ -132,12 +140,12 @@ namespace pepper {
         }
 
         Vector<T> toVector() {
-            return Vector<T>{begin(), end()};
+            return std::move(Storage);
         }
     };
 
     template <typename T>
-    Query(const std::vector<T>& v) -> Query<T, decltype(v.begin())>;
+    Query(const std::vector<T>& v) -> Query<T>;
 
     template <typename T, unsigned int N>
     Query(const Vector<T, N>& v) -> Query<T, decltype(v.begin())>;

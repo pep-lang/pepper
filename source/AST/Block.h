@@ -62,7 +62,10 @@ namespace pepper::ast {
 
         void visit(Visitor& visitor) override {
             Node::visit(visitor);
-            for (auto& node : Items) {
+            // It is possible for the body list to be modified during traversal,
+            // so the position in iteration must be maintained without an invalidating iterator
+            for (size_t idx = 0; idx < Items.size(); ++idx) {
+                auto& node = Items[idx];
                 visitor.visit(node);
             }
         }

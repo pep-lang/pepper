@@ -15,7 +15,9 @@ namespace pepper::ast {
                 if (auto str = node->as<StringLiteral>()) {
                     if (str->Raw)
                         return;
+                    Node::PushSource(node->Source);
                     node = new FunctionCall({"string"}, {str, new IntegerLiteral(str->Value.length())});
+                    Node::PopSource();
                 }
             }
         };

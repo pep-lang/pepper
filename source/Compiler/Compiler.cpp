@@ -133,12 +133,12 @@ namespace pepper {
                 PEP_TRACE(TraceChannel::IR, module->toString());
             }
 
-            if (auto err = module->verify()) {
-                throw CompileError("Module Verification failed: {0}", llvm::toString(std::move(err)));
-            }
-
             if (Opts->EmitLLVM) {
                 emitIR(module->getModule());
+            }
+
+            if (auto err = module->verify()) {
+                throw CompileError("Module Verification failed: {0}", llvm::toString(std::move(err)));
             }
 
             if (!Opts->OutputPath.empty()) {
@@ -218,7 +218,7 @@ namespace pepper {
             }
 
             module.print(out, nullptr, false, false);
-            PEP_VERBOSE("LLVM IR written to {0}", outputPath.string());
+            llvm::outs() << llvm::formatv("LLVM IR written to {0}\n", outputPath.string());
         }
 
         void link() override {

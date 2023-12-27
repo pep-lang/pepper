@@ -56,22 +56,22 @@ namespace pepper::ast {
 
             void resolveStruct(ResolvableBase& res) {
                 if (auto structDef = Symbols.Structs.lookup(res.name())) {
-                    PEP_TRACE_AST("Resolved {0}/{1} -> {2}", current()->toString(), res.name(), structDef->Name);
+                    PEP_TRACE_AST("Resolved Struct {0}/{1} -> {2}", current()->toString(), res.name(), structDef->Name);
                     res.resolve(structDef);
                     return;
                 }
                 if (ReportMissing)
-                    throw CompileError("Unable to resolve {0}", res.name());
+                    throw CompileError("Unable to resolve Struct {0}", res.name());
             }
 
             void resolveFunction(ResolvableBase& res) {
                 if (auto funcDef = Symbols.Functions.lookup(res.name())) {
-                    PEP_TRACE_AST("Resolved {0}/{1} -> {2}", current()->toString(), res.name(), funcDef->Name);
+                    PEP_TRACE_AST("Resolved Function {0}/{1} -> {2}", current()->toString(), res.name(), funcDef->Name);
                     res.resolve(funcDef);
                     return;
                 }
                 if (ReportMissing)
-                    throw CompileError("Unable to resolve {0}", res.name());
+                    throw CompileError("Unable to resolve Function {0}", res.name());
             }
 
             void resolveMethod(MethodCall* methodCall) {
@@ -86,15 +86,17 @@ namespace pepper::ast {
                 if (!structType.empty()) {
                     if (auto st = Symbols.Structs.lookup(structType.toString())) {
                         if (auto method = st->getMethod(methodCall->Target.name())) {
-                            PEP_TRACE_AST("Resolved {0} -> {1}.{2}", methodCall->toString(), st->Name, method->Name);
+                            PEP_TRACE_AST(
+                                "Resolved Method {0} -> {1}.{2}", methodCall->toString(), st->Name, method->Name);
                             methodCall->Target.resolve(method);
                             return;
                         }
                     }
                 }
-                PEP_TRACE_AST("Unable to resolve {0}", methodCall->Target.name());
+                PEP_TRACE_AST(
+                    "Unable to resolve Method {0} @ {1}", methodCall->toString(), methodCall->Source.toString());
                 if (ReportMissing)
-                    throw CompileError("Unable to resolve {0}", methodCall->Target.name());
+                    throw CompileError("Unable to resolve Method {0}", methodCall->Target.name());
             }
         };
 

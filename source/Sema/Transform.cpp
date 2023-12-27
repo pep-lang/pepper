@@ -9,6 +9,7 @@
 #include "Sema/GatherGenerics.h"
 #include "Sema/ReleaseFieldRefs.h"
 #include "Sema/ResolveImplicitTypes.h"
+#include "Sema/ResolveLiterals.h"
 #include "Sema/ResolveOperators.h"
 #include "Sema/ResolveResolvables.h"
 #include "Sema/SpecializeFunctions.h"
@@ -19,6 +20,7 @@ namespace pepper::ast {
     TransformPass::TransformPass(Ref<AST> parseTree)
         : ParseTree(parseTree) {
         // First pass
+        Transformers.emplace_back(new ResolveLiterals());
         Transformers.emplace_back(new TagGenerics());
         Transformers.emplace_back(new ConvertStringLiterals());
         Transformers.emplace_back(new GatherGenerics());
@@ -45,6 +47,7 @@ namespace pepper::ast {
         // final pass
         Transformers.emplace_back(new ReleaseFieldRefs());
         Transformers.emplace_back(new ResolveImplicitTypes());
+        Transformers.emplace_back(new ResolveOperators()); // Once implicit types are resolved, operator overloading may exist
         Transformers.emplace_back(new ResolveResolvables(true));
     }
 

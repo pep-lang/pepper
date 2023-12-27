@@ -94,14 +94,22 @@ namespace pepper::ast {
                 if (!expr->type().empty() && expr->type() != TypeName::Auto) {
                     return expr->type();
                 }
-                if (expr->is<SymbolRef>()) {
-                    // symbol lookup is best-effort, sometimes type can't be known yet
-                    auto var = expr->as<SymbolRef>();
-                    return findSymbolType(var->Name);
+                if (auto memRef = expr->as<MemberRef>()) {
+                    auto lhsType = typeOfExpr(memRef->LHS);
+                    if (lhsType != TypeName::Auto) {
+                        if (auto st = findStruct(lhsType.toString())) {
+                            for (const auto& field : st->Fields) {
+                                if (field->Name == memRef->Name) {
+                                    return field->Type;
+                                }
+                            }
+                        }
+                        PEP_TRACE_AST("Failed to resolve member {0}.{1}", lhsType.toString(), memRef->Name);
+                    }
                 }
-                if (expr->is<MemberRef>()) {
-                    auto ref = expr->as<MemberRef>();
-                    return typeOfExpr(ref->LHS);
+                if (auto symRef = expr->as<SymbolRef>()) {
+                    // symbol lookup is best-effort, sometimes type can't be known yet
+                    return findSymbolType(symRef->Name);
                 }
                 if (auto call = expr->as<MethodCall>()) {
                     if (auto st = findStruct(typeOfExpr(call->This).toString())) {
@@ -143,7 +151,7 @@ namespace pepper::ast {
                         auto varType = typeOfExpr(var->Default);
                         if (!varType.empty()) {
                             var->Type = varType;
-                            PEP_TRACE_AST("Resolved {0}/{1} -> {2}", scopePath(), var->Name, var->Type);
+                            PEP_TRACE_AST("Resolved var {0}/{1} -> {2}", scopePath(), var->Name, var->Type);
                             return;
                         }
 
@@ -158,7 +166,7 @@ namespace pepper::ast {
                         auto symType = typeOfExpr(symRef);
                         if (!symType.empty()) {
                             symRef->Type = symType;
-                            PEP_TRACE_AST("Resolved {0}/{1} -> {2}", scopePath(), symRef->Name, symRef->Type);
+                            PEP_TRACE_AST("Resolved ref {0}/{1} -> {2}", scopePath(), symRef->Name, symRef->Type);
                             return;
                         }
 

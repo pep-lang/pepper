@@ -23,6 +23,7 @@ namespace pepper {
         bool CompileRuntime = true;
         bool EmitDebugInfo = false;
         unsigned TraceChannels = 0;
+        bool MSVC = false;
 
         static Ref<Options> FromCommandLine(int argc, const char** argv);
         static Ref<Options> Defaults();

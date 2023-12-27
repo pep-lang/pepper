@@ -100,6 +100,8 @@ namespace pepper::ast {
         , Destructor(new MethodDef(Type, TypeName::Void, {"__dtor"}))
         , Acquire(new MethodDef(Type, TypeName::Void, {"__acquire"}))
         , Release(new MethodDef(Type, TypeName::Void, {"__release"})) {
+        Node::PushSource(Source);
+
         // Add a field at the head for the refcount
         Fields.push_back(new FieldDef(Type, TypeName{"u32"}, "__refcount", new IntegerLiteral(0)));
 
@@ -117,7 +119,7 @@ namespace pepper::ast {
         Release->Body->Items = {
             // NOTE: release gets called blindly on the LHS of any assignment. The LHS can be a null-initialized ref.
             // if (!this) return
-            new If(new Equal(new ThisRef(), PointerLiteral::Null()),
+            new If(new Identical(new ThisRef(), PointerLiteral::Null()),
                    new Block("if",
                              {
                                  new Return(),
@@ -136,10 +138,11 @@ namespace pepper::ast {
                    new Block("if",
                              NodeList<Node>{
                                  new FunctionCall(TypeName{"trace_ptr"},
-                                                  ExprList{new ThisRef(), new StringLiteral("free: " + Name, true)}),
+                                                  ExprList{new ThisRef(), new StringLiteral("dtor: " + Name, true)}),
                                  new MethodCall(new ThisRef(), {"__dtor"}),
                              })),
         };
+        Node::PopSource();
     }
 
     Node* StructDef::clone() const {
@@ -156,12 +159,14 @@ namespace pepper::ast {
         Constructor->Body->Items.clear();
 
         // Create the allocation for `this`, needs "size" variable value filled in once it is known at codegen time
+        Node::PushSource(Source);
         NodeList<Node> allocThis = {
             new VariableDef(TypeName("u64"), "size", nullptr, true),
             new ThisDef(Type, new FunctionCall(TypeName{"_pep_malloc"}, {new SymbolRef("size")})),
             new FunctionCall(TypeName{"trace_ptr"},
-                             ExprList{new ThisRef(), new StringLiteral("malloc: " + Name, true)}),
+                             ExprList{new ThisRef(), new StringLiteral("ctor: " + Name, true)}),
         };
+        Node::PopSource();
 
         Constructor->Body->Items = std::move(allocThis);
 

@@ -18,5 +18,5 @@ int main() {
     trace_ptr(t, @"t");
     const f = Foo(t);
     trace_ptr(f, @"f");
-    return !(f.t == t);
+    return !(f.t === t);
 }

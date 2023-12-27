@@ -38,7 +38,9 @@ namespace pepper::ast {
                     structSpec->Source, "Unable to specialize non-existent struct {0}", structSpec->Type.Name);
             }
 
+            Node::PushSource(structSpec->Source);
             auto specialized = new StructDef(structSpec->Type, structSpec->Type.toString());
+            Node::PopSource();
             specialized->GenericParams.clear();
             StructSpecialization spec{base, structSpec};
 

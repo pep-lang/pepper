@@ -62,7 +62,7 @@ namespace pepper::ast {
         }
 
         const TypeName& type() const override {
-            return Target.value() ? Target->ReturnType : TypeName::Empty;
+            return Target.value() ? Target->ReturnType : TypeName::Auto;
         }
 
         void visit(Visitor& visitor) override {

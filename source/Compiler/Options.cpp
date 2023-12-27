@@ -7,6 +7,8 @@
 #include "llvm/ADT/bit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 
 #define BIT_IDX(b) (llvm::countr_zero((unsigned)b))
 
@@ -37,6 +39,7 @@ namespace pepper {
                        clEnumValN(BIT_IDX(TraceChannel::DebugInfo), "debuginfo", "DebugInfo"),
                        clEnumValN(BIT_IDX(TraceChannel::Link), "link", "Link")));
         static cl::opt<bool> TraceAll("Tall");
+        static cl::opt<bool> MSVC("MSVC");
     } // namespace cli
 
     static std::string PathToFilename(const std::string& path) {
@@ -45,6 +48,19 @@ namespace pepper {
 
     static std::string Normalize(const std::string& path) {
         return absolute(std::filesystem::path(path)).string();
+    }
+
+    static Triple GetHostTriple() {
+        auto targetTriple = llvm::sys::getDefaultTargetTriple();
+        return Triple{targetTriple};
+    }
+
+    static std::string_view ExecutableExt() {
+        auto triple = GetHostTriple();
+        if (triple.isWindowsMSVCEnvironment()) {
+            return ".exe";
+        }
+        return "";
     }
 
     Ref<Options> Options::FromCommandLine(int argc, const char** argv) {
@@ -63,6 +79,10 @@ namespace pepper {
         if (cli::OutputPath != "") {
             opts->OutputPath = Normalize(cli::OutputPath);
             opts->ExeName = PathToFilename(cli::OutputPath);
+        } else {
+            auto primarySourceName =
+                std::filesystem::path(opts->PrimarySourceFile).filename().replace_extension(ExecutableExt());
+            opts->OutputPath = (std::filesystem::current_path() / primarySourceName).string();
         }
 
         opts->ImportPaths.append(cli::ImportPaths.begin(), cli::ImportPaths.end());
@@ -76,6 +96,7 @@ namespace pepper {
         opts->TraceChannels = cli::TraceChannels.getBits();
         if (cli::TraceAll)
             opts->TraceChannels = (unsigned int)TraceChannel::ALL;
+        opts->MSVC = cli::MSVC;
         return opts;
     }
 

@@ -30,6 +30,10 @@ namespace pepper {
     }
 
     Address Function::call(const Vector<Address>& args) const {
+        if (Parameters.size() < args.size()) {
+            throw CompileError(
+                "Too many arguments to call of {0}: expected: {1}, got: {2}", name(), Parameters.size(), args.size());
+        }
         // fill in supplied params
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;

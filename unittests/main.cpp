@@ -57,6 +57,7 @@ void RegisterTests() {
 int main(int argc, char** argv) {
     testing::InitGoogleTest(&argc, argv);
 
+    GTEST_FLAG_SET(catch_exceptions, false);
     RegisterTests();
 
     return RUN_ALL_TESTS();

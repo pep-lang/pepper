@@ -121,16 +121,16 @@ namespace pepper {
             };
         }
 
-        void recordSourceLocation(const antlr4::ParserRuleContext* context) {
-            Node::TokenSource = builder->Source = sourceLocation(context);
+        void pushSourceLocation(const antlr4::ParserRuleContext* context) {
+            Node::PushSource(builder->Source = sourceLocation(context));
         }
 
         void enterEveryRule(antlr4::ParserRuleContext* context) override {
-            recordSourceLocation(context);
+            pushSourceLocation(context);
         }
 
         void exitEveryRule(antlr4::ParserRuleContext* context) override {
-            recordSourceLocation(context);
+            Node::PopSource();
         }
 
         void visitTerminal(antlr4::tree::TerminalNode* terminal) override {
@@ -162,8 +162,12 @@ namespace pepper {
         static TypeName parseFunctionSpec(PepperParser::FunctionNameContext* context) {
             TypeName fnSpec;
             if (auto op = context->unaryOperator()) {
-                if (context->unaryOperator()->Brackets())
+                if (op->Brackets())
                     fnSpec = {"[]"};
+            } else if (auto op = context->binaryOperator()) {
+                fnSpec = {op->getText()};
+            } else if (auto assign = context->assignmentOperator()) {
+                fnSpec = {assign->getText()};
             } else {
                 fnSpec = parseTypeDeclaration(context->typeDeclaration());
             }
@@ -345,7 +349,9 @@ namespace pepper {
 
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName::Void;
             auto identifier = fnSpec.Name;
-            auto storageClass = context->storageClass() && context->storageClass()->Static() ? FunctionNode::StorageClassType::Static : FunctionNode::StorageClassType::Default;
+            auto storageClass = context->storageClass() && context->storageClass()->Static()
+                                    ? FunctionNode::StorageClassType::Static
+                                    : FunctionNode::StorageClassType::Default;
 
             FunctionDef* function = nullptr;
             if (builder->target()) {
@@ -488,7 +494,9 @@ namespace pepper {
         void enterFunctionDeclaration(PepperParser::FunctionDeclarationContext* context) override {
             auto returnType = context->typeName() ? parseTypeName(context->typeName()) : TypeName{"this"};
             auto identifier = parseFunctionSpec(context->functionName());
-            auto storageClass = context->storageClass() && context->storageClass()->Static() ? FunctionNode::StorageClassType::Static : FunctionNode::StorageClassType::Default;
+            auto storageClass = context->storageClass() && context->storageClass()->Static()
+                                    ? FunctionNode::StorageClassType::Static
+                                    : FunctionNode::StorageClassType::Default;
             auto function = new MethodDecl(returnType, identifier, {});
             function->StorageClass = storageClass;
             lvaluePush(function);
@@ -928,6 +936,14 @@ namespace pepper {
             endBinaryOp<GreaterEqual>();
         }
 
+        void enterIdentical(PepperParser::IdenticalContext*) override {
+            beginBinaryOp<Identical>();
+        }
+
+        void exitIdentical(PepperParser::IdenticalContext*) override {
+            endBinaryOp<Identical>();
+        }
+
         void enterEqual(PepperParser::EqualContext*) override {
             beginBinaryOp<Equal>();
         }
@@ -1062,11 +1078,11 @@ namespace pepper {
         // parser.setTrace(true);
 
         try {
-            Node::TokenSource = {};
+            Node::PushSource(SourceLocation(name, 0, 0));
             antlr4::tree::ParseTree* tree = parser.compilationUnit();
             ParserListener listener;
             antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
-            Node::TokenSource = {};
+            Node::PopSource();
             return listener.ast();
         } catch (const antlr4::ParseCancellationException& pex) {
             try {

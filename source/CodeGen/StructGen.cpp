@@ -86,7 +86,9 @@ namespace pepper {
             if (local->template is<ast::VariableDef>()) {
                 auto var = local->template as<ast::VariableDef>();
                 if (var->Name == "size") {
+                    ast::Node::PushSource(structDef->Source);
                     var->Default = new ast::IntegerLiteral(structDesc->size());
+                    ast::Node::PopSource();
                     break;
                 }
             }

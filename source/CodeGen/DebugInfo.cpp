@@ -68,7 +68,7 @@ namespace pepper {
 
     uint64_t DebugInfo::sizeOf(const Type* type) const {
         auto llvmType = Types::get(type);
-        return Module->getDataLayout().getTypeSizeInBits(llvmType);
+        return std::max<uint64_t>(8, Module->getDataLayout().getTypeSizeInBits(llvmType));
     }
 
     llvm::DIType* DebugInfo::emitBasicType(llvm::StringRef name, const Type* type) {

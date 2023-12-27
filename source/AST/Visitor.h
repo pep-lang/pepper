@@ -12,6 +12,12 @@ namespace pepper::ast {
 
     class Visitor {
         llvm::DenseSet<Node*> Visited;
+        Vector<class Block*> Blocks;
+
+      protected:
+        Block* block() const {
+            return !Blocks.empty() ? Blocks.back() : nullptr;
+        }
 
       protected:
         virtual void visitType(struct TypeName& type) {}
@@ -25,6 +31,9 @@ namespace pepper::ast {
         virtual void exitNode(NodeRef& node) {}
 
       public:
+        Visitor() = default;
+        virtual ~Visitor() = default;
+
         void visit(struct TypeName& type);
 
         void visit(NodeRef& ref);

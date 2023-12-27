@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
+
+cmake_policy(SET CMP0091 NEW)
+
 project(Pepper VERSION 0.1.0)
 
 option(BUILD_DEPS "Build dependencies, should only need to be done once" OFF)
@@ -9,10 +12,20 @@ set(GLOBAL PROPERTY USE_FOLDERS ON)
 enable_testing()
 
 if (MSVC)
+    #set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+    #set(CMAKE_EXE_LINKER_FLAGS "/fsanitize=address")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /wd4624 /Zc:__cplusplus")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_SIMULATE_ID MATCHES "MSVC")
+
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:preprocessor")
+    endif()
+    message(STATUS "CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 else ()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fsanitize=undefined -fsanitize=address")
 endif ()
+
+
 
 add_subdirectory(deps)
 

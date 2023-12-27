@@ -29,6 +29,9 @@ namespace pepper {
         Ident(std::string&& str)
             : super(std::forward<std::string>(str)) {}
 
+        Ident(std::string_view sv)
+            : super(sv) {}
+
         Ident& operator=(const Ident& name) {
             super::assign(name);
             return *this;

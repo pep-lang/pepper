@@ -4,6 +4,7 @@
 #include "AST/Node.h"
 #include "AST/Visitor.h"
 #include "Core/Common.h"
+#include "Core/Exceptions.h"
 #include "Core/Ident.h"
 
 namespace pepper::ast {
@@ -23,7 +24,18 @@ namespace pepper::ast {
             , RHS(rhs.RHS->cloneAs<Expression>()) {}
 
         const TypeName& type() const override {
-            return TypeName::Widest(LHS->type(), RHS->type());
+            if (LHS->type().isNumeric() && RHS->type().isNumeric())
+                return TypeName::Widest(LHS->type(), RHS->type());
+            if (LHS->type() == RHS->type())
+                return LHS->type();
+            if (LHS->type() == TypeName::Auto && RHS->type() != TypeName::Auto)
+                return RHS->type();
+            if (RHS->type() == TypeName::Auto && LHS->type() != TypeName::Auto)
+                return LHS->type();
+            throw CompileError("Unable to resolve operator {0} between {1} and {2}",
+                               opName().empty() ? rtti()->name() : opName(),
+                               LHS->type(),
+                               RHS->type());
         }
 
         std::string toString() const override {
@@ -36,7 +48,7 @@ namespace pepper::ast {
 
         std::string dump(int indent) const override {
             return Node::dump(indent) +
-                   std::string(llvm::formatv("({0}), ({1})", LHS ? LHS->dump() : "empty", RHS ? RHS->dump() : "empty"));
+                   std::string(llvm::formatv("({0}, {1})", LHS ? LHS->dump() : "empty", RHS ? RHS->dump() : "empty"));
         }
 
         void visit(Visitor& visitor) override {
@@ -44,6 +56,8 @@ namespace pepper::ast {
             visitor.visit(LHS);
             visitor.visit(RHS);
         }
+
+        virtual std::string_view opName() const { return {}; }
     };
 
     struct Add : public BinaryOp {
@@ -52,6 +66,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "+"; }
     };
 
     struct Sub : public BinaryOp {
@@ -60,6 +76,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "-"; }
     };
 
     struct Mul : public BinaryOp {
@@ -68,6 +86,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "*"; }
     };
 
     struct Div : public BinaryOp {
@@ -76,6 +95,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "/"; }
     };
 
     struct Mod : public BinaryOp {
@@ -84,6 +104,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "%"; }
     };
 
     struct Pow : public BinaryOp {
@@ -91,6 +112,20 @@ namespace pepper::ast {
         AST_NODE_POD_CLONE(Pow);
 
       public:
+        using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "**"; }
+    };
+
+    // Special override of Equal that will not be replaced by operator overloads
+    struct Identical : public BinaryOp {
+        DECLARE_RTTI(Identical, BinaryOp);
+        AST_NODE_POD_CLONE(Identical);
+
+        const TypeName& type() const override {
+            return TypeName::Bool;
+        }
+
+    public:
         using BinaryOp::BinaryOp;
     };
 
@@ -104,6 +139,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "=="; }
     };
 
     struct NotEqual : public BinaryOp {
@@ -116,6 +153,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "!="; }
     };
 
     struct Less : public BinaryOp {
@@ -124,6 +163,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "<"; }
     };
 
     struct LessEqual : public BinaryOp {
@@ -132,6 +173,8 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+
+        std::string_view opName() const override { return "<="; }
     };
 
     struct Greater : public BinaryOp {
@@ -140,6 +183,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return ">"; }
     };
 
     struct GreaterEqual : public BinaryOp {
@@ -148,6 +192,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return ">="; }
     };
 
     struct LShift : public BinaryOp {
@@ -156,6 +201,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "<<"; }
     };
 
     struct RShift : public BinaryOp {
@@ -164,6 +210,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return ">>"; }
     };
 
     struct BitAnd : public BinaryOp {
@@ -172,6 +219,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "&"; }
     };
 
     struct BitOr : public BinaryOp {
@@ -180,6 +228,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "|"; }
     };
 
     struct BitXor : public BinaryOp {
@@ -188,6 +237,7 @@ namespace pepper::ast {
 
       public:
         using BinaryOp::BinaryOp;
+        std::string_view opName() const override { return "^"; }
     };
 
     struct LogicalAnd : public BinaryOp {
@@ -228,6 +278,10 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return "+=";
+        }
     };
 
     struct SubAssign : public CompoundAssign {
@@ -236,6 +290,10 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return "-=";
+        }
     };
 
     struct MulAssign : public CompoundAssign {
@@ -244,6 +302,10 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return "*=";
+        }
     };
 
     struct DivAssign : public CompoundAssign {
@@ -252,6 +314,10 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return "/=";
+        }
     };
 
     struct ModAssign : public CompoundAssign {
@@ -260,6 +326,8 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override { return "%="; }
     };
 
     struct LShiftAssign : public CompoundAssign {
@@ -268,6 +336,9 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return "<<="; }
     };
 
     struct RShiftAssign : public CompoundAssign {
@@ -276,6 +347,9 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override {
+            return ">>="; }
     };
 
     struct BitAndAssign : public CompoundAssign {
@@ -284,6 +358,8 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override { return "&="; }
     };
 
     struct BitOrAssign : public CompoundAssign {
@@ -292,6 +368,8 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override { return "|="; }
     };
 
     struct BitXorAssign : public CompoundAssign {
@@ -300,6 +378,8 @@ namespace pepper::ast {
 
       public:
         using CompoundAssign::CompoundAssign;
+
+        std::string_view opName() const override { return "^="; }
     };
 
     struct Index : public Expression {

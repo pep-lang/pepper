@@ -13,16 +13,18 @@ set(LLVM_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/install)
 find_package(LLVM CONFIG QUIET NO_DEFAULT_PATH HINTS ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 
 if (NOT LLVM_FOUND)
-    message(STATUS "Syncing LLVM source...")
-    FetchContent_Declare(
-            llvm_source
-            GIT_REPOSITORY ${LLVM_GIT_REPO}
-            GIT_TAG ${LLVM_GIT_TAG}
-            GIT_PROGRESS 1
-            GIT_SHALLOW 1
-            SOURCE_DIR ${LLVM_SOURCE_DIR}
-    )
-    FetchContent_MakeAvailable(llvm_source)
+    if (NOT EXISTS ${LLVM_SOURCE_DIR})
+        message(STATUS "Syncing LLVM source...")
+        FetchContent_Declare(
+                llvm_source
+                GIT_REPOSITORY ${LLVM_GIT_REPO}
+                GIT_TAG ${LLVM_GIT_TAG}
+                GIT_PROGRESS 1
+                GIT_SHALLOW 1
+                SOURCE_DIR ${LLVM_SOURCE_DIR}
+        )
+        FetchContent_MakeAvailable(llvm_source)
+    endif()
 
     if (CMAKE_GENERATOR_TOOLSET)
         set(LLVM_GENERATOR_TOOLSET "-Thost=${CMAKE_GENERATOR_TOOLSET}")
@@ -41,7 +43,9 @@ if (NOT LLVM_FOUND)
             -G ${CMAKE_GENERATOR}
             ${LLVM_GENERATOR_TOOLSET}
             ${LLVM_GENERATOR_PLATFORM}
-            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
             -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
             -DCMAKE_INSTALL_PREFIX=${LLVM_INSTALL_DIR}
             -DLLVM_OPTIMIZED_TABLEGEN=ON
