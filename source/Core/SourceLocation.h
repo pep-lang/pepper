@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "Core/Vector.h"
 #include "llvm/Support/FormatVariadic.h"
 
 namespace pepper {
@@ -27,5 +28,17 @@ namespace pepper {
         bool operator!=(const SourceLocation& other) const {
             return !(*this == other);
         }
+    };
+
+    struct SourceFile {
+        std::string Name;
+        Vector<std::string> Lines;
+    };
+
+    struct Sources {
+        static void add(const SourceFile& sourceFile);
+        static const SourceFile& get(const std::string& name);
+        static const std::string& getLine(const SourceLocation& source);
+        static const std::string& getLine(const std::string& name, size_t line);
     };
 } // namespace pepper

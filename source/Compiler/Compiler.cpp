@@ -108,7 +108,23 @@ namespace pepper {
             return codegen(parseTree);
         }
 
-        Ref<ast::AST> parse(std::istream& sourceStream, const std::string& sourcePath) {
+        static Vector<std::string> readLines(std::istream& stream) {
+            std::string source(std::istreambuf_iterator<char>(stream), {});
+            stream.seekg(0);
+            const char* eol = "\n";
+            auto idx = source.find("\n");
+            if (idx != std::string::npos) {
+                if (idx > 0 && source[idx - 1] == '\r') {
+                    eol = "\r\n";
+                }
+            }
+            const auto lines = llvm::split(source, eol);
+            return {lines.begin(), lines.end()};
+        }
+
+        static Ref<ast::AST> parse(std::istream& sourceStream, const std::string& sourcePath) {
+            auto lines = readLines(sourceStream);
+            Sources::add({sourcePath, lines});
             Parser parser;
             auto ast = parser.parse(sourceStream, sourcePath);
             if (!ast || !Messages::errors().empty()) {

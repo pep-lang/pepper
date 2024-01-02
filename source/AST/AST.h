@@ -2,13 +2,10 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
 #include "AST/Builder.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/ilist.h"
 
 namespace pepper::ast {
 

@@ -15,20 +15,19 @@ namespace pepper {
       private:
         std::string Message;
 
+        static std::string format(const SourceLocation& source, const std::string& msg);
+
       public:
         CompileError(const std::string& msg)
-            : Message(std::string(llvm::formatv("{0}: {1}", Source.toString(), msg))) {}
+            : Message(format(Source, msg)) {}
 
         template <typename... Args>
         CompileError(std::string_view fmt, Args&&... args)
-            : Message(std::string(llvm::formatv("{0}: ", Source.toString())) +
-                      std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {}
+            : Message(format(Source, llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {}
 
-        template <typename Ctx, typename... Args>
-            requires HasToString<Ctx>
-        CompileError(const Ctx& ctx, std::string_view fmt, Args&&... args)
-            : Message(std::string(llvm::formatv("{0}: ", ctx.toString())) +
-                      std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {}
+        template <typename... Args>
+        CompileError(const SourceLocation& source, std::string_view fmt, Args&&... args)
+            : Message(format(source, llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {}
 
         const char* what() const noexcept override {
             return Message.c_str();

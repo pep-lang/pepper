@@ -58,6 +58,7 @@ namespace pepper {
 
     inline std::string repeat(llvm::StringRef str, size_t n) {
         std::string res;
+        res.reserve(n);
         for (size_t idx = 0; idx < n; ++idx) {
             res += str;
         }

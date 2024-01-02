@@ -92,6 +92,7 @@ namespace pepper::ast {
         void visit(Visitor& visitor) override {
             Symbol::visit(visitor);
             visitor.visit(Constructor);
+            visitor.visit(Destructor);
             for (auto& field : Fields)
                 visitor.visit(field);
             for (auto& method : Methods)

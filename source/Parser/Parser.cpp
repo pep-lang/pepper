@@ -125,12 +125,16 @@ namespace pepper {
             Node::PushSource(builder->Source = sourceLocation(context));
         }
 
+        void popSourceLocation() {
+            Node::PopSource();
+        }
+
         void enterEveryRule(antlr4::ParserRuleContext* context) override {
             pushSourceLocation(context);
         }
 
-        void exitEveryRule(antlr4::ParserRuleContext* context) override {
-            Node::PopSource();
+        void exitEveryRule(antlr4::ParserRuleContext*) override {
+            popSourceLocation();
         }
 
         void visitTerminal(antlr4::tree::TerminalNode* terminal) override {

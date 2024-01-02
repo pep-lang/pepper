@@ -11,7 +11,7 @@ struct array<T> {
     }
 
     destruct {
-        clear();
+        this.clear();
         _pep_free(Data);
     }
 
@@ -29,11 +29,21 @@ struct array<T> {
 
     T [](ulong idx) {
         assert(idx < Size, @"array index read out of bounds");
+        # allow negative indices to index from the end
+        while (idx < 0 && Size > 0) {
+            idx += Size;
+        }
+
         return Data[idx];
     }
 
     T [](ulong idx, T value) {
         assert(idx < Size, @"array index write out of bounds");
+        # allow negative indices to index from the end
+        while (idx < 0 && Size > 0) {
+            idx += Size;
+        }
+
         Data[idx] = value;
         return Data[idx];
     }
