@@ -49,8 +49,9 @@ add_dependencies(PepperCore PepperParser)
 target_compile_definitions(PepperCore
         PRIVATE ${LLVM_DEFINITIONS_LIST})
 target_include_directories(PepperCore
-        PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS} ${LLD_INCLUDE_DIRS}
+  PUBLIC source ${PARSER_INCLUDE_DIRS} ${ANTLR4_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS} ${LLD_INCLUDE_DIRS} 
         )
+target_link_libraries(PepperCore fmt::fmt)
 
 source_group(
         TREE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -70,13 +71,8 @@ if (MSVC)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANTLR4_RUNTIME_LIBRARIES} $<TARGET_FILE_DIR:pepper>)
 endif ()
 
-set(EXT)
-if (MSVC)
-    set(EXT ".exe")
-endif ()
-
 set(LLVM_BINARIES
-        ${LLVM_BINARIES_DIR}/lli${EXT})
+  ${LLVM_BINARIES_DIR}/lli${CMAKE_EXECUTABLE_SUFFIX})
 
 if (MSVC)
     list(APPEND LLVM_BINARIES

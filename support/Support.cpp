@@ -92,7 +92,7 @@ namespace {
     };
     const MemTrackMode MemTrack = [] {
         const char* track = GetEnv("PEP_MEMTRACK");
-        uint32_t value = track ? std::to_integer<uint32_t>(static_cast<std::byte>(track[0])) : 0;
+        uint32_t value = track ? std::stoul(track) : 0;
         value = std::min(value, uint32_t(MemTrackMode::Max));
         return MemTrackMode(value);
     }();
@@ -105,6 +105,9 @@ namespace {
             abort();
         }
         return mem;
+#else
+        void* mem = malloc(size);
+        return mem;
 #endif
     }
 
@@ -115,6 +118,8 @@ namespace {
             PrintLastError("VirtualFree failed");
             panic("Memory corruption or Alloc/Free mismatch detected");
         }
+#else
+        free(mem);
 #endif
     }
 

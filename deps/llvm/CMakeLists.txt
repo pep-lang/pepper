@@ -84,5 +84,3 @@ set(LLVM_BINARIES_DIR ${LLVM_INSTALL_DIR}/bin CACHE STRING "LLVM binaries")
 message(STATUS "LLVM includes:  ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
 message(STATUS "LLVM binaries:  ${LLVM_BINARIES_DIR}")
-message(STATUS "Found LLD at ${LLD_INSTALL_PREFIX}")
-
