@@ -8,9 +8,9 @@
 #include "Core/Query.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/TargetParser/Host.h"
 
 #define PEP_TRACE_LINK(fmt, ...) PEP_TRACE(TraceChannel::Link, fmt, __VA_ARGS__)
 
