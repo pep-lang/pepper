@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <cassert>
 #include <cinttypes>
 #include <cstdint>
@@ -92,7 +93,8 @@ namespace {
     };
     const MemTrackMode MemTrack = [] {
         const char* track = GetEnv("PEP_MEMTRACK");
-        uint32_t value = track ? std::stoul(track) : 0;
+        char* end{};
+        uint32_t value = track ? std::strtol(track, &end, 10) : 0;
         value = std::min(value, uint32_t(MemTrackMode::Max));
         return MemTrackMode(value);
     }();
