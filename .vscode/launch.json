@@ -5,7 +5,7 @@
           "name": "(lldb) All Tests",
           "type": "cppdbg",
           "request": "launch",
-          "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/tests/PepperTests",
+          "program": "${workspaceFolder}/out/build/${command:cmake.activeConfigurePresetName}/tests/PepperTests",
           "args": [],
           "stopAtEntry": false,
           "cwd": "${fileDirname}",
