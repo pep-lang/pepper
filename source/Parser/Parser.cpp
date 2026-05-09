@@ -13,6 +13,13 @@
 #include "PepperLexer.h"
 #include "PepperParser.h"
 
+// clang-format off
+#include "PepperBaseListener.cpp"
+#include "PepperLexer.cpp"
+#include "PepperListener.cpp"
+#include "PepperParser.cpp"
+// clang-format on
+
 namespace pepper {
     using namespace pepper::parser;
     using namespace pepper::ast;
