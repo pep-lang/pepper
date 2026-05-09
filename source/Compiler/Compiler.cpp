@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 
 #include "AST/AST.h"
 #include "CodeGen/CodeGenModule.h"
@@ -11,6 +12,7 @@
 #include "Compiler/Linker.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
+#include "Core/LLVMUtils.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
 #include "Parser/Parser.h"
@@ -20,14 +22,12 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/TargetParser/Host.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
-
-#include <optional>
+#include "llvm/TargetParser/Host.h"
 
 namespace pepper {
     class PepperCompiler : public Compiler {
@@ -44,9 +44,7 @@ namespace pepper {
         explicit PepperCompiler(Ref<Options> options)
             : Opts(options)
             , ModuleName(options->ExeName) {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            llvm::InitializeNativeTargetAsmParser();
+            //llvm::InitializeNativeTarget();
 
             if (Opts->Verbose)
                 Messages::EnableVerbose();

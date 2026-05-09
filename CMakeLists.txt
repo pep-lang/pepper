@@ -37,7 +37,7 @@ endif ()
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat native remarks orcjit option support core)
+explicit_map_components_to_libraries(LLVM_LIBRARIES bitstreamreader binaryformat native remarks orcjit option support core X86CodeGen)
 
 add_subdirectory(support)
 add_subdirectory(grammar)
