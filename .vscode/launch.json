@@ -3,15 +3,11 @@
   "configurations": [
       {
           "name": "(lldb) All Tests",
-          "type": "cppdbg",
+          "type": "lldb",
           "request": "launch",
-          "program": "${workspaceFolder}/out/build/${command:cmake.activeConfigurePresetName}/tests/PepperTests",
+          "program": "${workspaceFolder}/out/build/${command:cmake.activeConfigurePresetName}/unittests/PepperTests",
           "args": [],
-          "stopAtEntry": false,
-          "cwd": "${fileDirname}",
-          "environment": [],
-          "externalConsole": false,
-          "MIMode": "lldb"
+          "cwd": "${fileDirname}"
       },
       {
           "name": "(lldb) Pepper Run",
