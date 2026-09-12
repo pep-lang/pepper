@@ -48,7 +48,7 @@ int y = x as int;
 
 ```
 var x = 1;
-# parentheses are optional
+# parentheses are optional, braces are not
 if x > 0 {
     print("Greater than 0");
 }
@@ -148,19 +148,26 @@ void print_container<C>(C container) {
 
 ## Traits
 
-### Extensions
+## Extensions
 
 ## Accessing C Functions
 
-Calling C functions from Pepper just requires that the function is declared using `@extern`, and that a library
+Calling C functions from Pepper just requires that the function is declared using `extern`, and that a library
 containing the function is linked (using the `-l` flag to `pepper` when building or by adding a library to the
 `[link]` section in `pepper.toml`):
 
 ```
-@extern char getchar();
-@extern void printf(char* fmt, ...);
+extern char getchar();
+extern void printf(char* fmt, ...);
 ```
 
+## Exporting functions
+
+The `[export]` attribute attached to any global function will create a C linkage exported function. Types used
+in the function signature are automatically lowered to C types, with object references becoming opaque handles
+(effectively `void*` from C's perspective).
+
+## Linking
 ### Default System Libraries/Linking
 
 By default, executables will link the following libraries when built by `pepper`:

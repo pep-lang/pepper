@@ -5,33 +5,33 @@
 #include "llvm/Support/raw_ostream.h"
 
 namespace pepper {
-    Vector<Error> Messages::Errors;
-    Vector<Warning> Messages::Warnings;
-    uint64_t Messages::Channels;
-    std::unordered_map<TraceChannel, std::string> Messages::Indents;
-    bool Messages::VerboseOutput = false;
+    Vector<Error> Messages::errs;
+    Vector<Warning> Messages::warns;
+    uint64_t Messages::channels;
+    std::unordered_map<TraceChannel, std::string> Messages::indents;
+    bool Messages::verbose_output = false;
 
     void Messages::report(Error&& msg) {
         llvm::errs() << msg.message() << "\n";
         llvm::errs().flush();
-        Errors.emplace_back(std::move(msg));
+        errs.emplace_back(std::move(msg));
     }
 
     void Messages::report(Warning&& msg) {
         llvm::outs() << msg.message() << "\n";
         llvm::outs().flush();
-        Warnings.emplace_back(std::move(msg));
+        warns.emplace_back(std::move(msg));
     }
 
-    void Messages::Trace(TraceChannel channel, llvm::StringRef msg) {
+    void Messages::trace(TraceChannel channel, llvm::StringRef msg) {
         llvm::SmallString<256> buf(msg);
-        const auto& indent = Indents[channel];
+        const auto& indent = indents[channel];
         auto output = indent + replace_all(buf, "\n", "\n" + indent);
         llvm::outs() << output << "\n";
         llvm::outs().flush();
     }
 
-    void Messages::Verbose(llvm::StringRef msg) {
+    void Messages::verbose(llvm::StringRef msg) {
         llvm::outs() << msg << "\n";
     }
 } // namespace pepper

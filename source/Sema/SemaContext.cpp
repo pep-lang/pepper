@@ -1,7 +1,7 @@
 
 #include <cassert>
 
-#include "CodeGen/CodeGenModule.h"
+#include "CodeGen/LLVM/LLVMModuleGenerator.h"
 #include "Function.h"
 #include "Scope.h"
 #include "SemaContext.h"
@@ -23,34 +23,34 @@ namespace pepper {
         assert(Instance == nullptr);
         Instance = this;
 
-        Context = std::make_unique<llvm::LLVMContext>();
+        llvm_context = std::make_unique<llvm::LLVMContext>();
 
-        TypeMap = Ref<Types>::New(*Context);
+        type_map = Ref<Types>::create(*llvm_context);
 
-        // Builtins = Ref<Runtime>::New(Module);
-        Globals = Ref<Scope>::New("Globals");
-        Locals = Globals;
+        // Builtins = Ref<Runtime>::create(Module);
+        global_scope = Ref<Scope>::create("Globals");
+        local_scope = global_scope;
     }
 
     SemaContext::~SemaContext() {
         Instance = nullptr;
     }
 
-    void SemaContext::pushFunction(Ref<UserFunction> function) {
-        pushScope(function->name(), function->Builder);
-        Locals->FunctionTarget = function;
+    void SemaContext::push_function(Ref<UserFunction> function) {
+        push_scope(function->name(), function->ir_builder);
+        local_scope->func_target = function;
         if (function->is<Method>()) {
-            Locals->This = function.as<Method>()->This;
+            local_scope->this_struct = function.as<Method>()->This;
         }
     }
 
-    void SemaContext::pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
-        Locals = Ref<Scope>::New(name, Locals);
-        Locals->Builder = builder;
+    void SemaContext::push_scope(const std::string& name, Ref<llvm::IRBuilderBase> builder) {
+        local_scope = Ref<Scope>::create(name, local_scope);
+        local_scope->ir_builder = builder;
     }
 
-    void SemaContext::popScope() {
-        Locals = Locals->Outer == Globals ? Globals : Locals->Outer;
+    void SemaContext::pop_scope() {
+        local_scope = local_scope->outer == global_scope ? global_scope : local_scope->outer;
     }
 
 } // namespace pepper

@@ -51,7 +51,7 @@ namespace pepper {
         template <typename Ctx, typename... Args>
             requires HasToString<Ctx>
         InternalCompilerError(const Ctx& ctx, std::string_view fmt, Args&&... args)
-            : Message(std::string(llvm::formatv("%s: ", ctx.toString())) +
+            : Message(std::string(llvm::formatv("%s: ", ctx.to_string())) +
                       std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))) {}
 
         const char* what() const noexcept override {

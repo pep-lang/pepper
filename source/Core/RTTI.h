@@ -1,21 +1,22 @@
 #pragma once
 
-#include <concepts>
+#include "llvm/Support/TypeName.h"
+
 #include <type_traits>
 
 namespace pepper {
 
     class RTTI {
         const RTTI* Base;
-        const char* Name;
+        std::string_view Name;
 
       protected:
-        constexpr RTTI(const RTTI* base = nullptr, const char* name = nullptr)
+        constexpr RTTI(const RTTI* base = nullptr, std::string_view name = {})
             : Base(base)
             , Name(name) {}
 
       public:
-        constexpr const char* name() const {
+        constexpr std::string_view name() const {
             return Name;
         }
 
@@ -59,17 +60,17 @@ namespace pepper {
         RttiInstance() = delete;
         using RTTI::RTTI;
 
-        inline static RttiInstance<T>* rtti = nullptr;
+        inline static RttiInstance* rtti = nullptr;
 
       public:
-        inline static const RttiInstance<T>* get(const RTTI* base, const char* name) {
-            static std::aligned_storage_t<sizeof(RttiInstance<T>)> _rtti;
+        static const RttiInstance* get(const RTTI* base, std::string_view name) {
+            static std::byte _rtti[sizeof(RttiInstance)];
             if (!rtti)
-                rtti = new (&_rtti) RttiInstance<T>(base, name);
+                rtti = new (&_rtti) RttiInstance(base, name);
             return rtti;
         }
 
-        inline T* clone(const T* t) const {
+        T* clone(const T* t) const {
             return new T(*t);
         }
 
@@ -79,12 +80,12 @@ namespace pepper {
         //        }
 
         template <typename U>
-        inline T* downcast(U* u) const {
+        T* downcast(U* u) const {
             return static_cast<T*>(u);
         }
 
         template <typename U>
-        inline const T* downcast(const U* u) const {
+        const T* downcast(const U* u) const {
             return static_cast<const T*>(u);
         }
     };
@@ -92,7 +93,7 @@ namespace pepper {
     template <>
     class RttiInstance<RTTI::None> {
       public:
-        inline static constexpr const RTTI* get(const RTTI*, const char*) {
+        static constexpr const RTTI* get(const RTTI*, const char*) {
             return nullptr;
         }
     };
@@ -103,14 +104,14 @@ namespace pepper {
     };
 
     template <typename T = RTTI::None>
-    using rtti_type_t = typename RttiType<T>::type;
+    using rtti_type_t = RttiType<T>::type;
 
     template <typename T>
     concept HasRtti = requires(std::remove_pointer_t<T> t) { t.rtti(); };
 
 } // namespace pepper
 
-#define DECLARE_RTTI_COMMON(T)                                                                                         \
+#define DECLARE_RTTI_COMMON(Ty)                                                                                        \
     template <typename T>                                                                                              \
     bool is() const {                                                                                                  \
         auto thisTy = rtti();                                                                                          \
@@ -126,12 +127,13 @@ namespace pepper {
     }                                                                                                                  \
     template <typename To>                                                                                             \
     const std::add_pointer_t<To> as() const {                                                                          \
-        return const_cast<T*>(this)->as<To>();                                                                         \
+        return const_cast<Ty*>(this)->as<To>();                                                                        \
     }
 
 #define DECLARE_RTTI_IMPL(T, ...)                                                                                      \
     static const pepper::RttiInstance<T>* _rtti() {                                                                    \
-        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<>>(), #T);                            \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<>>(),                                 \
+                                            std::string_view{llvm::getTypeName<T>()});                                 \
     }                                                                                                                  \
     virtual const pepper::RTTI* rtti() const {                                                                         \
         return _rtti();                                                                                                \
@@ -139,7 +141,8 @@ namespace pepper {
 
 #define DECLARE_RTTI_IMPL_DERIVED(T, ...)                                                                              \
     static const pepper::RttiInstance<T>* _rtti() {                                                                    \
-        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(), #T);                 \
+        return pepper::RttiInstance<T>::get(pepper::RTTI::of<pepper::rtti_type_t<__VA_ARGS__>>(),                      \
+                                            std::string_view{llvm::getTypeName<T>()});                                 \
     }                                                                                                                  \
     const pepper::RTTI* rtti() const override {                                                                        \
         return _rtti();                                                                                                \

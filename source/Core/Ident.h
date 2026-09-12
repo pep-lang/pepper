@@ -11,25 +11,24 @@ namespace pepper {
         using super = std::string;
 
       public:
-        Ident()
-            : std::string() {}
+        constexpr Ident() = default;
 
-        Ident(const std::string& str)
+        constexpr Ident(const std::string& str)
             : super(str) {}
 
-        Ident(const char* str)
+        constexpr Ident(const char* str)
             : super(str) {}
 
-        Ident(const Ident& name)
+        constexpr Ident(const Ident& name)
             : super(name) {}
 
-        Ident(Ident&& name)
+        constexpr Ident(Ident&& name) noexcept
             : super(std::forward<Ident>(name)) {}
 
-        Ident(std::string&& str)
+        constexpr Ident(std::string&& str)
             : super(std::forward<std::string>(str)) {}
 
-        Ident(std::string_view sv)
+        constexpr Ident(std::string_view sv)
             : super(sv) {}
 
         Ident& operator=(const Ident& name) {

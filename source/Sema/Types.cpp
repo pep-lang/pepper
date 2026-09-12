@@ -11,43 +11,43 @@
 
 namespace pepper {
 
-    Type::Type(const Ident& name, llvm::Type* type, bool isSigned)
+    Type::Type(const Ident& name, llvm::Type* type, bool is_signed_type)
         : std::enable_shared_from_this<Type>()
-        , Name(name)
-        , IRType(type)
-        , IsSigned(isSigned) {}
+        , identifier(name)
+        , ir_type(type)
+        , signed_type(is_signed_type) {}
 
     Operations* Type::ops() {
-        if (!Ops)
-            Ops = Operations::get(shared_from_this());
-        return Ops.get();
+        if (!operations)
+            operations = Operations::get(shared_from_this());
+        return operations.get();
     }
 
-    //    std::string FunctionType::Signature(llvm::Type* returnType, const Params& params, bool varargs) {
+    //    std::string FunctionType::Signature(llvm::Type* return_type, const Params& params, bool varargs) {
     //        Vector<std::string> paramNames;
     //        std::transform(
     //            params.begin(), params.end(), std::back_inserter(paramNames), [](auto p) { return p.ParamName; });
     //        std::string paramsString = llvm::join(paramNames.begin(), paramNames.end(), ", ");
     //        std::string ellipsis = varargs ? ", ..." : "";
-    //        return llvm::formatv("{0}({1}{2})", Types::toString(returnType), paramsString, ellipsis);
+    //        return llvm::formatv("{0}({1}{2})", Types::to_string(return_type), paramsString, ellipsis);
     //    }
 
     Ref<Type> Type::pointer() const {
-        if (Name.ends_with('*')) {
+        if (identifier.ends_with('*')) {
             throw CompileError("Pointers to pointers are not supported");
         }
-        if (IRType->isPointerTy()) {
+        if (ir_type->isPointerTy()) {
             throw CompileError("Explicit pointers to structs are not supported");
         }
-        return Types::get(Name + "*");
+        return Types::get(identifier + "*");
     }
 
     Type::Size Type::size() const {
-        return Size::Fixed(sizeInBits() / 8);
+        return Size::Fixed(size_in_bits() / 8);
     }
 
-    Type::Size Type::sizeInBits() const {
-        return IRType->getPrimitiveSizeInBits();
+    Type::Size Type::size_in_bits() const {
+        return ir_type->getPrimitiveSizeInBits();
     }
 
     Ref<Type> Types::Bool;
@@ -67,67 +67,67 @@ namespace pepper {
 
     PointerType::PointerType(const Ident& name, Ref<Type> pointee)
         : Type(name, pointee->llvmType()->getPointerTo(), false)
-        , PointeeType(pointee) {}
+        , pointee(pointee) {}
 
     Types::Types(llvm::LLVMContext& ctx)
-        : Ctx(ctx) {
-        Void = addType(Ref<Type>::New("void", llvm::Type::getVoidTy(ctx)));
-        Int8 = addType(Ref<Type>::New("i8", llvm::Type::getInt8Ty(ctx), true), {"char"});
-        UInt8 = addType(Ref<Type>::New("u8", llvm::Type::getInt8Ty(ctx)), {"byte"});
-        Int32 = addType(Ref<Type>::New("i32", llvm::Type::getInt32Ty(ctx), true), {"int"});
-        UInt32 = addType(Ref<Type>::New("u32", llvm::Type::getInt32Ty(ctx)), {"uint"});
-        Int64 = addType(Ref<Type>::New("i64", llvm::Type::getInt64Ty(ctx), true), {"long"});
-        UInt64 = addType(Ref<Type>::New("u64", llvm::Type::getInt64Ty(ctx)), {"ulong"});
-        Bool = addType(Ref<Type>::New("bool", llvm::Type::getInt1Ty(ctx)));
-        Double = addType(Ref<Type>::New("f64", llvm::Type::getDoubleTy(ctx), true), {"double"});
-        Float = addType(Ref<Type>::New("f32", llvm::Type::getFloatTy(ctx), true), {"float"});
+        : llvm_ctx(ctx) {
+        Void = add_type(Ref<Type>::create("void", llvm::Type::getVoidTy(ctx)));
+        Int8 = add_type(Ref<Type>::create("i8", llvm::Type::getInt8Ty(ctx), true), {"char"});
+        UInt8 = add_type(Ref<Type>::create("u8", llvm::Type::getInt8Ty(ctx)), {"byte"});
+        Int32 = add_type(Ref<Type>::create("i32", llvm::Type::getInt32Ty(ctx), true), {"int"});
+        UInt32 = add_type(Ref<Type>::create("u32", llvm::Type::getInt32Ty(ctx)), {"uint"});
+        Int64 = add_type(Ref<Type>::create("i64", llvm::Type::getInt64Ty(ctx), true), {"long"});
+        UInt64 = add_type(Ref<Type>::create("u64", llvm::Type::getInt64Ty(ctx)), {"ulong"});
+        Bool = add_type(Ref<Type>::create("bool", llvm::Type::getInt1Ty(ctx)));
+        Double = add_type(Ref<Type>::create("f64", llvm::Type::getDoubleTy(ctx), true), {"double"});
+        Float = add_type(Ref<Type>::create("f32", llvm::Type::getFloatTy(ctx), true), {"float"});
         // insert pointer types for all native types
-        KnownTypes.erase("bool*");
+        known_types.erase("bool*");
         // llvm has no void*, use char* instead
-        VoidPtr = addType(Ref<PointerType>::New("void*", KnownTypes["i8*"]));
+        VoidPtr = add_type(Ref<PointerType>::create("void*", known_types["i8*"]));
     }
 
-    Ref<Type> Types::addType(Ref<Type> t, const Vector<Ident>& aliases) {
+    Ref<Type> Types::add_type(Ref<Type> t, const Vector<Ident>& aliases) {
         auto llvmType = t->llvmType();
         bool generatePointerType = !llvmType->isStructTy() && !llvmType->isPointerTy() && !llvmType->isVoidTy();
 
         // add requested type with aliases
-        KnownTypes[t->name()] = t;
-        CanonicalTypes[t.get()] = t->llvmType();
+        known_types[t->name()] = t;
+        canonical_types[t.get()] = t->llvmType();
         for (const auto& alias : aliases) {
-            KnownTypes[alias] = t;
+            known_types[alias] = t;
         }
         // add pointer types as well
 
         if (generatePointerType) {
-            auto ptrType = Ref<PointerType>::New(t);
-            KnownTypes[t->name() + "*"] = ptrType;
-            CanonicalTypes[ptrType.get()] = ptrType->llvmType();
+            auto ptrType = Ref<PointerType>::create(t);
+            known_types[t->name() + "*"] = ptrType;
+            canonical_types[ptrType.get()] = ptrType->llvmType();
             for (const auto& alias : aliases) {
-                KnownTypes[alias + "*"] = ptrType;
+                known_types[alias + "*"] = ptrType;
             }
         }
 
         return t;
     }
 
-    Ref<Type> Types::getType(const Ident& name) const {
-        auto it = KnownTypes.find(name);
-        if (it != KnownTypes.end()) {
+    Ref<Type> Types::get_type(const Ident& name) const {
+        auto it = known_types.find(name);
+        if (it != known_types.end()) {
             return it->second;
         }
         return nullptr;
     }
 
-    llvm::Type* Types::getType(const Type* ty) const {
-        return CanonicalTypes.lookup(ty);
+    llvm::Type* Types::get_type(const Type* ty) const {
+        return canonical_types.lookup(ty);
     }
 
-    std::string Types::toString(Ref<Type> ty) {
+    std::string Types::to_string(Ref<Type> ty) {
         return ty->name();
     }
 
-    std::string Types::toString(llvm::Type* ty) {
+    std::string Types::to_string(llvm::Type* ty) {
         std::string str;
         llvm::raw_string_ostream stream(str);
         ty->print(stream, true, true);
@@ -135,14 +135,14 @@ namespace pepper {
     }
 
     Ref<Type> Types::add(Ref<Type> type, const Vector<Ident>& aliases) {
-        return SemaContext::get().types()->addType(type, aliases);
+        return SemaContext::get().types()->add_type(type, aliases);
     }
 
     Ref<Type> Types::get(const Ident& name) {
-        return SemaContext::get().types()->getType(name);
+        return SemaContext::get().types()->get_type(name);
     }
 
     llvm::Type* Types::get(const Type* ty) {
-        return SemaContext::get().types()->getType(ty);
+        return SemaContext::get().types()->get_type(ty);
     }
 } // namespace pepper

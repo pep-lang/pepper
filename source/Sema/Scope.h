@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "CodeGen/Address.h"
+#include "CodeGen/LLVM/Address.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
 #include "llvm/ADT/StringMap.h"
@@ -23,33 +23,33 @@ namespace pepper {
     class Symbol;
 
     struct Scope {
-        std::string Name;
-        Ref<Scope> Outer;
+        std::string name;
+        Ref<Scope> outer;
 
-        llvm::StringMap<llvm::Type*> Types;
+        llvm::StringMap<llvm::Type*> types;
 
-        llvm::StringMap<Address> Symbols;
-        Vector<std::string> OrderedSymbols;
+        llvm::StringMap<Address> symbols;
+        Vector<std::string> ordered_symbols;
 
-        llvm::StringMap<Ref<Struct>> Structs;
+        llvm::StringMap<Ref<Struct>> structs;
 
-        llvm::StringMap<Ref<Function>> Functions;
-        Ref<UserFunction> FunctionTarget;
+        llvm::StringMap<Ref<Function>> functions;
+        Ref<UserFunction> func_target;
 
-        Ref<Struct> This;
+        Ref<Struct> this_struct;
 
-        Ref<llvm::IRBuilderBase> Builder;
+        Ref<llvm::IRBuilderBase> ir_builder;
 
         explicit Scope(const std::string& name = "Anonymous", Ref<Scope> outer = nullptr)
-            : Name(name)
-            , Outer(std::move(outer)) {}
+            : name(name)
+            , outer(std::move(outer)) {}
 
-        void newSymbol(const Address& value);
-        void newFunction(Ref<Function> function, const std::string& name = "");
+        void symbol(const Address& value);
+        void function(Ref<Function> function, const std::string& name = "");
 
-        [[nodiscard]] Ref<Function> findFunction(const std::string& name) const;
-        [[nodiscard]] const Address& findSymbol(const std::string& identifier, bool localOnly = false) const;
+        [[nodiscard]] Ref<Function> find_function(const std::string& name) const;
+        [[nodiscard]] const Address& find_symbol(const std::string& identifier, bool localOnly = false) const;
         Ref<llvm::IRBuilderBase> builder() const;
-        Ref<UserFunction> functionTarget() const;
+        Ref<UserFunction> function_target() const;
     };
 } // namespace pepper

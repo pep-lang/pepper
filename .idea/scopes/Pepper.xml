@@ -1,3 +1,0 @@
-<component name="DependencyValidationManager">
-  <scope name="Pepper" pattern="file[pepper]:grammar//*||file[pepper]:source//*||file[pepper]:tests//*||file:.clang-format||file:.gitattributes||file:.gitignore||file:.lldbinit||file:CMakeLists.txt||file:CMakePresets.json||file:llvm.natvis||file[pepper]:Source//*||file[pepper]:runtime/*||file[pepper]:Tests//*" />
-</component>

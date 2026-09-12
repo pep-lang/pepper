@@ -15,7 +15,7 @@ namespace pepper {
         DECLARE_RTTI(Message);
 
       private:
-        std::string Output = "";
+        std::string content = "";
 
       protected:
         virtual std::string prefix() const {
@@ -25,18 +25,19 @@ namespace pepper {
       public:
         template <typename... Args>
         Message(std::string_view fmt, Args&&... args) {
-            Output = prefix() + std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...));
+            content = prefix() + (sizeof...(args) ? std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...))
+                                                  : std::string{fmt});
         }
 
         template <typename Ctx, typename... Args>
             requires HasToString<Ctx>
         Message(const Ctx& ctx, std::string_view fmt, Args&&... args) {
-            Output = std::string(llvm::formatv("{0}: {1}", ctx.toString(), prefix())) +
-                     std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...));
+            content = std::string(llvm::formatv("{0}: {1}", ctx.to_string(), prefix())) +
+                      std::string(llvm::formatv(fmt.data(), std::forward<Args>(args)...));
         }
 
         std::string message() const {
-            return Output;
+            return content;
         }
     };
 
@@ -70,67 +71,67 @@ namespace pepper {
     };
 
     class Messages {
-        static Vector<Error> Errors;
-        static Vector<Warning> Warnings;
-        static uint64_t Channels;
-        static std::unordered_map<TraceChannel, std::string> Indents;
-        static bool VerboseOutput;
+        static Vector<Error> errs;
+        static Vector<Warning> warns;
+        static uint64_t channels;
+        static std::unordered_map<TraceChannel, std::string> indents;
+        static bool verbose_output;
 
       public:
         template <IsA<Message> M, HasToString Ctx, typename... Args>
-        static void Report(const Ctx& src, std::string_view fmt, Args&&... args) {
+        static void report(const Ctx& src, std::string_view fmt, Args&&... args) {
             report(std::move(M(src, fmt, std::forward<Args>(args)...)));
         }
 
         template <IsA<Message> M, typename... Args>
-        static void Report(std::string_view fmt, Args&&... args) {
+        static void report(std::string_view fmt, Args&&... args) {
             report(std::move(M(fmt, std::forward<Args>(args)...)));
         }
 
         static const Vector<Error>& errors() {
-            return Errors;
+            return errs;
         }
 
         static const Vector<Warning>& warnings() {
-            return Warnings;
+            return warns;
         }
 
-        static bool ShouldTrace(TraceChannel channel) {
-            return Channels & uint64_t(channel);
+        static bool should_trace(TraceChannel channel) {
+            return channels & uint64_t(channel);
         }
 
-        static void Indent(TraceChannel channel) {
-            Indents[channel] += "  ";
+        static void indent(TraceChannel channel) {
+            indents[channel] += "  ";
         }
 
-        static void Outdent(TraceChannel channel) {
-            const auto& existing = Indents[channel];
+        static void outdent(TraceChannel channel) {
+            const auto& existing = indents[channel];
             if (existing.size() > 1)
-                Indents[channel] = existing.substr(0, existing.size() - 2);
+                indents[channel] = existing.substr(0, existing.size() - 2);
         }
 
-        static void SetTraceChannels(uint64_t channels) {
-            Channels = channels;
+        static void set_trace_channels(uint64_t channels) {
+            channels = channels;
         }
 
-        static void SetTraceChannels(TraceChannel channel) {
-            SetTraceChannels(uint64_t(channel));
+        static void set_trace_channels(TraceChannel channel) {
+            set_trace_channels(uint64_t(channel));
         }
 
-        static uint64_t GetTraceChannels() {
-            return Channels;
+        static uint64_t get_trace_channels() {
+            return channels;
         }
 
-        static void Trace(TraceChannel channel, llvm::StringRef msg);
+        static void trace(TraceChannel channel, llvm::StringRef msg);
 
-        static void Verbose(llvm::StringRef msg);
+        static void verbose(llvm::StringRef msg);
 
-        static bool OutputVerbose() {
-            return VerboseOutput;
+        static bool using_verbose_output() {
+            return verbose_output;
         }
 
-        static void EnableVerbose(bool enable = true) {
-            VerboseOutput = enable;
+        static void enable_verbose_output(bool enable = true) {
+            verbose_output = enable;
         }
 
       private:
@@ -140,22 +141,22 @@ namespace pepper {
     };
 } // namespace pepper
 
-#define PEP_TRACING(channel) (Messages::ShouldTrace(channel))
+#define PEP_TRACING(channel) (Messages::should_trace(channel))
 
 #define PEP_TRACE(channel, fmt, ...)                                                                                   \
     do {                                                                                                               \
-        if (Messages::ShouldTrace(channel)) {                                                                          \
+        if (Messages::should_trace(channel)) {                                                                         \
             llvm::SmallString<256> msg(fmt);                                                                           \
             __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                         \
-            Messages::Trace(channel, msg);                                                                             \
+            Messages::trace(channel, msg);                                                                             \
         }                                                                                                              \
     } while (false);
 
 #define PEP_VERBOSE(fmt, ...)                                                                                          \
     do {                                                                                                               \
-        if (Messages::OutputVerbose()) {                                                                               \
+        if (Messages::using_verbose_output()) {                                                                        \
             llvm::SmallString<256> msg(fmt);                                                                           \
             __VA_OPT__(msg = llvm::formatv(fmt, __VA_ARGS__));                                                         \
-            Messages::Verbose(msg);                                                                                    \
+            Messages::verbose(msg);                                                                                    \
         }                                                                                                              \
     } while (false);

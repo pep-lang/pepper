@@ -1,7 +1,7 @@
 
 use "../string";
 
-int main() {
+main(): int {
     const str = "TEST";
     assert(str[0] == "T", @"Expected str[0] == 'T'");
     assert(str[1] == "E", @"Expected str[1] == 'E'");

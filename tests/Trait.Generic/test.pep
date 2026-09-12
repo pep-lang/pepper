@@ -20,7 +20,7 @@ extend Foo with Convert<Bar> {
     }
 }
 
-int main() {
+main(): int {
     var bar = Bar();
     var foo = Foo.from(bar);
     return foo.x - 42;

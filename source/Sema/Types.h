@@ -35,51 +35,51 @@ namespace pepper {
         using Size = llvm::TypeSize;
 
       private:
-        const Ident Name;
-        llvm::Type* IRType;
-        const bool IsSigned;
-        Ref<Operations> Ops;
+        const Ident identifier;
+        llvm::Type* ir_type;
+        const bool signed_type;
+        Ref<Operations> operations;
 
       protected:
         llvm::Type* llvmType() const {
-            return IRType;
+            return ir_type;
         }
 
       public:
-        Type(const Ident& name, llvm::Type* type, bool isSigned = false);
+        Type(const Ident& name, llvm::Type* type, bool is_signed_type = false);
 
         const Ident& name() const {
-            return Name;
+            return identifier;
         }
 
         operator llvm::Type*() const {
-            return IRType;
+            return ir_type;
         }
 
-        bool isSigned() const {
-            return IsSigned;
+        bool is_signed() const {
+            return signed_type;
         }
 
-        bool isInteger() const {
-            return IRType->isIntegerTy();
+        bool is_integer() const {
+            return ir_type->isIntegerTy();
         }
 
-        virtual bool isPointer() const {
+        virtual bool is_pointer() const {
             return false;
         }
 
-        virtual bool isStruct() const {
+        virtual bool is_struct() const {
             return false;
         }
 
         virtual Size size() const;
-        virtual Size sizeInBits() const;
+        virtual Size size_in_bits() const;
 
         virtual Size align() const {
             return Size::Fixed(0);
         }
 
-        virtual Size alignInBits() const {
+        virtual Size align_in_bits() const {
             return Size::Fixed(0);
         }
 
@@ -92,38 +92,38 @@ namespace pepper {
         DECLARE_RTTI(PointerType, Type);
 
       private:
-        Ref<Type> PointeeType;
+        Ref<Type> pointee;
 
       public:
         PointerType(Ref<Type> pointee);
         PointerType(const Ident& name, Ref<Type> pointee);
 
-        Ref<Type> pointeeType() const {
-            return PointeeType;
+        Ref<Type> pointee_type() const {
+            return pointee;
         }
 
-        bool isPointer() const override {
+        bool is_pointer() const override {
             return true;
         }
     };
 
     class Types {
-        llvm::LLVMContext& Ctx;
-        llvm::StringMap<Ref<Type>> KnownTypes;
-        llvm::DenseMap<Type*, llvm::Type*> CanonicalTypes;
+        llvm::LLVMContext& llvm_ctx;
+        llvm::StringMap<Ref<Type>> known_types;
+        llvm::DenseMap<Type*, llvm::Type*> canonical_types;
 
-        Ref<Type> addType(Ref<Type> t, const Vector<Ident>& aliases = {});
-        void aliasType(Type* t, const Ident& alias);
-        void aliasType(Type* t, const Vector<Ident>& aliases);
-        Ref<Type> getType(const Ident& name) const;
-        llvm::Type* getType(const Type* ty) const;
+        Ref<Type> add_type(Ref<Type> t, const Vector<Ident>& aliases = {});
+        void alias_type(Type* t, const Ident& alias);
+        void alias_type(Type* t, const Vector<Ident>& aliases);
+        Ref<Type> get_type(const Ident& name) const;
+        llvm::Type* get_type(const Type* ty) const;
 
       public:
         explicit Types(llvm::LLVMContext& ctx);
         ~Types() = default;
 
-        static std::string toString(llvm::Type* ty);
-        static std::string toString(Ref<Type> ty);
+        static std::string to_string(llvm::Type* ty);
+        static std::string to_string(Ref<Type> ty);
         static Ref<Type> get(const Ident& name);
         static llvm::Type* get(const Type* ty);
         static Ref<Type> add(Ref<Type> type, const Vector<Ident>& aliases = {});

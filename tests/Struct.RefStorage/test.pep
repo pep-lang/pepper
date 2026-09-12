@@ -13,7 +13,7 @@ struct Foo {
     }
 };
 
-int main() {
+main(): int {
     var t = Test();
     trace_ptr(t, @"t");
     const f = Foo(t);

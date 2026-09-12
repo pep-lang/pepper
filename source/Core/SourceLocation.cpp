@@ -21,13 +21,16 @@ namespace pepper {
         throw InternalCompilerError("Unable to find source info for file {0}", name);
     }
 
-    const std::string& Sources::getLine(const SourceLocation& source) {
-        return getLine(source.File, source.Line);
+    const std::string Sources::get_line(const SourceLocation& source) {
+        return get_line(source.file, source.line);
     }
 
-    const std::string& Sources::getLine(const std::string& name, size_t line) {
-        const auto& [file, lines] = get(name);
-        return lines[line];
+    const std::string Sources::get_line(const std::string& name, size_t line) {
+        if (Source.contains(name)) {
+            const auto& [file, lines] = get(name);
+            return lines[line];
+        }
+        return "";
     }
 
 } // namespace pepper

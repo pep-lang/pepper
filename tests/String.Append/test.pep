@@ -1,7 +1,7 @@
 
 use "../string";
 
-int main() {
+main(): int {
     var str = "TEST";
     var ret = str += "ING";
     assert(ret == str, @"ret == str");

@@ -20,19 +20,19 @@ namespace pepper {
     class StructType : public Type {
         DECLARE_RTTI(StructType, Type);
 
-        const Struct* StructDesc;
-        Ref<Operations> Ops;
+        const Struct* struct_desc;
+        Ref<Operations> struct_ops;
 
       public:
         StructType(const Struct* st, const Ident& name, llvm::Type* type);
 
-        bool isStruct() const override {
+        bool is_struct() const override {
             return true;
         }
 
-        Ref<class RefType> refType() const;
+        Ref<class RefType> ref_type() const;
 
-        Type::Size sizeInBits() const override;
+        Type::Size size_in_bits() const override;
 
         Operations* ops() override;
     };
@@ -40,87 +40,87 @@ namespace pepper {
     class RefType : public PointerType {
         DECLARE_RTTI(RefType, PointerType);
 
-        Ref<StructType> StructTy;
-        Ref<Operations> Ops;
+        Ref<StructType> struct_type;
+        Ref<Operations> struct_ops;
 
       public:
-        RefType(Ref<StructType> structType);
+        RefType(Ref<StructType> struct_type);
 
-        bool isStruct() const override {
+        bool is_struct() const override {
             return true;
         }
 
-        Ref<StructType> structType() const;
+        Ref<StructType> type() const;
 
         Operations* ops() override;
     };
 
     class Struct : public std::enable_shared_from_this<Struct> {
-        Ident Name;
-        Ref<StructType> StructTy;
-        Ref<RefType> RefTy;
-        Ref<Function> Constructor;
-        Vector<Param> Fields;
-        llvm::StringMap<Ref<Method>> Methods;
-        Type::Size Size;
-        Type::Size Align;
+        Ident struct_name;
+        Ref<StructType> struct_type;
+        Ref<RefType> ref;
+        Ref<Function> construct;
+        Vector<Param> field_members;
+        llvm::StringMap<Ref<Method>> method_members;
+        Type::Size type_size;
+        Type::Size type_align;
 
       public:
         Struct(llvm::Module& module, const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
-        static Ref<Struct> New(
+        static Ref<Struct> create(
             llvm::Module& module, const Ident& name, const Params& fields = {}, const Params& ctorParams = {});
 
-        Ref<RefType> refType() const {
-            return RefTy;
+        Ref<RefType> ref_type() const {
+            return ref;
         }
 
-        Ref<StructType> structType() const {
-            return StructTy;
+        Ref<StructType> type() const {
+            return struct_type;
         }
 
         const Ident& name() const {
-            return Name;
+            return struct_name;
         }
 
-        void setFields(const Params& fields) {
-            Fields = fields;
+        void set_fields(const Params& fields) {
+            field_members = fields;
         }
 
         Params fields() const {
-            return Fields;
+            return field_members;
         }
 
-        void setMethods(const Vector<Ref<Method>>& methods) {
+        void set_methods(const Vector<Ref<Method>>& methods) {
             for (auto& method : methods) {
-                addMethod(method);
+                add_method(method);
             }
         }
 
-        void addMethod(Ref<Method> method, const Ident& realName = "") {
-            Methods[method->name()] = method;
+        void add_method(Ref<Method> method, const Ident& realName = "") {
+            method_members[method->name()] = method;
             if (realName.size())
-                Methods[realName] = method;
+                method_members[realName] = method;
         }
 
         Ref<Function> method(const Ident& name) const {
-            return Methods.lookup(name);
+            return method_members.lookup(name);
         }
 
         Vector<Ref<Method>> methods() const {
             Vector<Ref<Method>> ms;
-            for (auto& m : Methods) {
+            for (auto& m : method_members) {
                 ms.push_back(m.getValue());
             }
             return ms;
         }
 
-        Address getMember(llvm::Value* instance, const Ident& name) const;
-        Address getField(llvm::Value* instance, const Ident& name) const;
-        Address getField(llvm::Value* instance, int idx, const Param& field) const;
-        Address getMethod(const Ident& name) const;
+        Address get_member(llvm::Value* instance, const Ident& name) const;
+        Address get_field(llvm::Value* instance, const Ident& name) const;
+        Address get_field(llvm::Value* instance, int idx, const Param& field) const;
+        Address get_method(const Ident& name) const;
 
         Ref<Function> constructor() const {
-            return Constructor;
+            return construct;
         }
 
         Ref<Function> destructor() const {
@@ -128,19 +128,19 @@ namespace pepper {
         }
 
         Type::Size size() const {
-            return Size;
+            return type_size;
         }
 
-        Type::Size sizeInBits() const {
-            return Size * 8;
+        Type::Size size_in_bits() const {
+            return type_size * 8;
         }
 
         Type::Size align() const {
-            return Align;
+            return type_align;
         }
 
-        Type::Size alignInBits() const {
-            return Align * 8;
+        Type::Size align_in_bits() const {
+            return type_align * 8;
         }
 
         static Ref<Struct> get(const Ident& name);

@@ -1,15 +1,15 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct Specialization {
         DECLARE_RTTI(Specialization);
         using GenericTypeMap = llvm::StringMap<TypeName>;
-        TypeName Name;
-        GenericTypeMap TypeMap;
+        TypeName name;
+        GenericTypeMap type_map;
 
       protected:
         Specialization() = default;
@@ -17,38 +17,38 @@ namespace pepper::ast {
 
     struct StructSpecialization : public Specialization {
         DECLARE_RTTI(StructSpecialization, Specialization);
-        StructDef* Struct;
+        StructDef* struct_def;
 
-        StructSpecialization(StructDef* structDef, const StructSpec* spec)
-            : Struct(structDef) {
-            Name = spec->Type;
+        StructSpecialization(StructDef* base, const StructSpec* spec)
+            : struct_def(base) {
+            name = spec->type;
             // map params -> args
-            for (int idx = 0; idx < Struct->GenericParams.size(); ++idx) {
-                const auto& param = Struct->GenericParams[idx];
-                const auto& type = spec->Type.SubTypes[idx];
-                TypeMap[param] = type;
+            for (int idx = 0; idx < struct_def->generic_params.size(); ++idx) {
+                const auto& param = struct_def->generic_params[idx];
+                const auto& type = spec->type.sub_types[idx];
+                type_map[param] = type;
             }
         }
     };
 
     struct FunctionSpecialization : public Specialization {
         DECLARE_RTTI(FunctionSpecialization, Specialization);
-        FunctionDef* Function;
+        FunctionDef* function_def;
 
         FunctionSpecialization(FunctionDef* base, const FunctionSpec* spec)
-            : Function(base) {
-            Name = spec->Type;
-            if (base->Type.SubTypes.size() != spec->Type.SubTypes.size())
-                throw CompileError(spec->Source,
+            : function_def(base) {
+            name = spec->type;
+            if (base->type.sub_types.size() != spec->type.sub_types.size())
+                throw CompileError(spec->source_loc,
                                    "Incorrect number of generic types in specialization of {0}: got {1}, expected {2}",
-                                   base->Name,
-                                   spec->Type.SubTypes.size(),
-                                   base->Type.SubTypes.size());
+                                   base->name,
+                                   spec->type.sub_types.size(),
+                                   base->type.sub_types.size());
             // map params -> args
-            for (int idx = 0; idx < base->Type.SubTypes.size(); ++idx) {
-                const auto& param = base->Type.SubTypes[idx].Name;
-                const auto& type = spec->Type.SubTypes[idx];
-                TypeMap[param] = type;
+            for (int idx = 0; idx < base->type.sub_types.size(); ++idx) {
+                const auto& param = base->type.sub_types[idx].name;
+                const auto& type = spec->type.sub_types[idx];
+                type_map[param] = type;
             }
         }
     };
@@ -59,17 +59,17 @@ namespace pepper::ast {
         Specializer(const Specialization& spec)
             : Spec(spec) {}
 
-        static void replace(TypeName& type, const Ident& genericParam, const TypeName& genericArg) {
-            if (type.Name == genericParam) {
-                type = genericArg;
+        static void replace(TypeName& type, const Ident& param_name, const TypeName& type_arg) {
+            if (type.name == param_name) {
+                type = type_arg;
             }
-            for (auto& arg : type.SubTypes) {
-                replace(arg, genericParam, genericArg);
+            for (auto& arg : type.sub_types) {
+                replace(arg, param_name, type_arg);
             }
         }
 
         void specializeType(TypeName& type) {
-            for (const auto& generic : Spec.TypeMap) {
+            for (const auto& generic : Spec.type_map) {
                 replace(type, generic.getKey().str(), generic.getValue());
             }
         }
@@ -78,4 +78,4 @@ namespace pepper::ast {
             specializeType(type);
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

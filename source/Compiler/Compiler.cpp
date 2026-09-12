@@ -2,113 +2,123 @@
 #include "Compiler/Compiler.h"
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <optional>
+#include <ios>
+#include <istream>
+#include <iterator>
+#include <memory>
+#include <sstream>
+#include <string>
 
-#include "AST/AST.h"
-#include "CodeGen/CodeGenModule.h"
 #include "CodeGen/CodeGenerator.h"
 #include "Compiler/ImportResolver.h"
 #include "Compiler/Linker.h"
 #include "Compiler/Options.h"
 #include "Core/Exceptions.h"
-#include "Core/LLVMUtils.h"
 #include "Core/Messages.h"
 #include "Core/Query.h"
+#include "Core/Ref.h"
+#include "Core/SourceLocation.h"
+#include "Core/String.h"
+#include "Core/Vector.h"
+#include "Parser/BoostParser.h"
+#include "Parser/Lexer.h"
+#include "Parser/LexyParser.h"
 #include "Parser/Parser.h"
+#include "Sema/Model/Module.h"
+#include "Sema/ModelBuilder.h"
 #include "Sema/SemaContext.h"
 #include "Sema/Transform.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/SourceMgr.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
 #include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 
 namespace pepper {
     class PepperCompiler : public Compiler {
-        Ref<Options> Opts;
+        Ref<Options> options;
 
         // Re-used internals per module
-        std::string ModuleName;
-        std::unique_ptr<SemaContext> Context;
+        std::string module_name;
+        std::unique_ptr<SemaContext> sema_ctx;
 
         // Collected obj files for linking
-        Vector<std::string> ObjFiles;
+        Vector<std::string> obj_files;
 
       public:
         explicit PepperCompiler(Ref<Options> options)
-            : Opts(options)
-            , ModuleName(options->ExeName) {
-            //llvm::InitializeNativeTarget();
+            : options(options)
+            , module_name(options->exe_name) {
+            llvm::InitializeNativeTarget();
+            llvm::InitializeNativeTargetAsmPrinter();
+            llvm::InitializeNativeTargetAsmParser();
 
-            if (Opts->Verbose)
-                Messages::EnableVerbose();
-            if (Opts->TraceChannels)
-                Messages::SetTraceChannels(Opts->TraceChannels);
+            if (options->verbose)
+                Messages::enable_verbose_output();
+            if (options->trace_channels)
+                Messages::set_trace_channels(options->trace_channels);
 
-            Context = std::make_unique<SemaContext>();
+            sema_ctx = std::make_unique<SemaContext>();
         }
 
-        Ref<CodeGenModule> compile() override {
-            ensureBuildDirExists();
+        void compile() override {
+            ensure_build_dir_exists();
 
-            Ref<ast::AST> parseTree = Ref<ast::AST>::New();
-            ImportResolver importer(Opts->ImportPaths);
+            Ref<sema::Module> module = Ref<sema::Module>::create(sema::ModuleKind::Main);
+            ImportResolver importer(options->import_paths);
 
-            llvm::StringSet seenFiles;
-            auto sourceFiles = Opts->SourceFiles;
-            seenFiles.insert(sourceFiles.begin(), sourceFiles.end());
+            llvm::StringSet seen_files;
+            auto sourceFiles = options->source_files;
+            seen_files.insert(sourceFiles.begin(), sourceFiles.end());
 
-            auto collectImports = [&](const std::string& sourceFile, Ref<ast::AST> ast) {
+            auto collectImports = [&](const std::string& sourceFile, Ref<sema::Module> ast) {
                 const auto& importNodes = ast->imports();
                 for (const auto& import : importNodes) {
                     auto importPath = importer.resolve(sourceFile, import->Module, import->Local);
                     if (importPath.empty())
-                        throw CompileError(import->Source, "Cannot resolve import {0}", import->Module);
-                    if (!seenFiles.contains(importPath)) {
+                        throw CompileError(import->source_loc, "Cannot resolve import {0}", import->Module);
+                    if (!seen_files.contains(importPath)) {
                         sourceFiles.emplace_back(importPath);
-                        seenFiles.insert(llvm::StringRef{importPath});
+                        seen_files.insert(llvm::StringRef{importPath});
                     }
                 }
             };
 
-            if (Opts->InputStream) {
-                PEP_TRACE(TraceChannel::Parser, "Parsing InputStream");
-                auto ast = parse(*Opts->InputStream, ModuleName);
-                parseTree->merge(ast);
-                collectImports(ModuleName, ast);
+            if (options->input_stream) {
+                PEP_TRACE(TraceChannel::Parser, "Parsing input_stream");
+                auto ast = parse(*options->input_stream, module_name);
+                if (!ast) {
+                    return;
+                }
+                module->merge(ast);
+                collectImports(module_name, ast);
             }
 
+            // TODO: do the parse/sema in parallel
             while (!sourceFiles.empty()) {
                 const auto& sourceFile = sourceFiles.pop_back_val();
                 std::ifstream sourceStream(sourceFile, std::ios_base::in);
                 PEP_TRACE(TraceChannel::Parser, "Parsing {0}...", sourceFile);
                 auto ast = parse(sourceStream, sourceFile);
-                parseTree->merge(ast);
+                module->merge(ast);
 
                 // Resolve all imports and add them to the list to process if necessary
                 collectImports(sourceFile, ast);
             }
 
-            ast::TransformPass transform(parseTree);
-            parseTree = transform.run();
+            sema::TransformPass transform(module);
+            module = transform.run();
 
             if (PEP_TRACING(TraceChannel::AST)) {
                 PEP_TRACE(TraceChannel::AST, "Parse tree:");
-                parseTree->dump();
+                module->dump();
             }
 
-            return codegen(parseTree);
+            codegen(module);
         }
 
-        static Vector<std::string> readLines(std::istream& stream) {
-            std::string source(std::istreambuf_iterator<char>(stream), {});
-            stream.seekg(0);
+        static Vector<std::string> read_lines(const std::string source) {
             const char* eol = "\n";
             auto idx = source.find("\n");
             if (idx != std::string::npos) {
@@ -120,125 +130,45 @@ namespace pepper {
             return {lines.begin(), lines.end()};
         }
 
-        static Ref<ast::AST> parse(std::istream& sourceStream, const std::string& sourcePath) {
-            auto lines = readLines(sourceStream);
+        static Ref<sema::Module> parse(std::istream& sourceStream, const std::string& sourcePath) {
+            const std::string buffer(std::istreambuf_iterator(sourceStream), {});
+
+            const auto lines = read_lines(buffer);
             Sources::add({sourcePath, lines});
-            Parser parser;
-            auto ast = parser.parse(sourceStream, sourcePath);
-            if (!ast || !Messages::errors().empty()) {
+
+            const auto lexy_parser = parser::LexyParser::create(sourcePath, buffer);
+            if (!lexy_parser->parse()) {
                 throw CompileError("Parse error(s) encountered, cannot continue");
             }
 
-            return ast;
+            auto builder = sema::ModelBuilder(lexy_parser->tree(), sema::ModuleKind::SourceFile);
+            auto module = builder.build();
+            if (!module) {
+                throw CompileError("Compilation error(s) encountered, cannot continue");
+            }
+
+            return module;
         }
 
-        Ref<CodeGenModule> codegen(Ref<ast::AST> parseTree) {
-            auto module = Ref<CodeGenModule>::New(*Context, ModuleName, Opts->PrimarySourceFile);
-            CodeGenerator codeGen(module);
-            codeGen.generate(parseTree);
+        void codegen(Ref<sema::Module> model) {
+            CodeGenerator generator(CodeGenerator::Type::LLVM, *sema_ctx, module_name, options->primary_source_file);
+            generator.generate(model, options);
 
             if (!Messages::errors().empty()) {
                 Query(Messages::errors()).each([](auto e) { llvm::errs() << e.message() << "\n"; });
                 throw CompileError("Error(s) encountered, cannot continue");
             }
 
-            if (PEP_TRACING(TraceChannel::IR)) {
-                PEP_TRACE(TraceChannel::IR, "LLVM IR:");
-                PEP_TRACE(TraceChannel::IR, module->toString());
-            }
-
-            if (Opts->EmitLLVM) {
-                emitIR(module->getModule());
-            }
-
-            if (auto err = module->verify()) {
-                throw CompileError("Module Verification failed: {0}", llvm::toString(std::move(err)));
-            }
-
-            if (!Opts->OutputPath.empty()) {
-                emitObjFile(module->getModule());
-            }
-
             llvm::outs().flush();
             llvm::errs().flush();
 
-            return module;
-        }
-
-        static std::string ModuleFilename(const llvm::Module& module) {
-            const auto& moduleSource = module.getSourceFileName();
-            if (!moduleSource.empty()) {
-                return std::filesystem::path(moduleSource).filename().replace_extension().string();
-            }
-            return module.getModuleIdentifier();
-        }
-
-        void emitObjFile(llvm::Module& module) {
-            auto targetTriple = llvm::sys::getDefaultTargetTriple();
-            auto cpu = "generic";
-            auto cpuFeatures = "";
-
-            std::string error;
-            auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-
-            // Print an error and exit if we couldn't find the requested target.
-            // This generally occurs if we've forgotten to initialise the
-            // TargetRegistry or we have a bogus target triple.
-            if (!target) {
-                throw InternalCompilerError("Failed to find requested target triple: {0}", targetTriple);
-            }
-
-            llvm::TargetOptions opt;
-            auto rm = std::optional<llvm::Reloc::Model>();
-            auto targetMachine = target->createTargetMachine(targetTriple, cpu, cpuFeatures, opt, rm);
-
-            std::filesystem::path outputFile(Opts->BuildDir);
-            std::filesystem::path inputFile(ModuleFilename(module));
-            outputFile /= inputFile.filename().replace_extension(".o");
-
-            auto objFilePath = outputFile.string();
-
-            std::error_code errCode;
-            llvm::raw_fd_ostream dest(objFilePath, errCode, llvm::sys::fs::OF_None);
-
-            if (errCode) {
-                throw CompileError("Could not open file: {0}", errCode.message());
-            }
-
-            llvm::legacy::PassManager pass;
-            auto fileType = llvm::CGFT_ObjectFile;
-
-            if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
-                throw CompileError("TargetMachine can't emit a file of this type");
-            }
-
-            pass.run(module);
-            dest.flush();
-
-            PEP_VERBOSE("Object file written to {0}", outputFile.string());
-
-            ObjFiles.emplace_back(objFilePath);
-        }
-
-        void emitIR(const llvm::Module& module) {
-            std::filesystem::path outputPath(Opts->BuildDir);
-            std::filesystem::path sourceFile(ModuleFilename(module));
-            outputPath /= sourceFile.filename().replace_extension(".ll");
-
-            std::error_code EC;
-            llvm::raw_fd_ostream out(outputPath.string(), EC);
-            if (EC) {
-                throw CompileError("Unable to write to {0}: {1}", outputPath.string(), EC.message());
-            }
-
-            module.print(out, nullptr, false, false);
-            llvm::outs() << llvm::formatv("LLVM IR written to {0}\n", outputPath.string());
+            obj_files.push_back(generator.get_object_file_path());
         }
 
         void link() override {
             Vector<const char*> args;
 
-            Linker::link(Opts, ObjFiles);
+            Linker::link(options, obj_files);
 
             //            if (triple.isOSBinFormatELF()) {
             //                lld::elf::link(args, llvm::outs(), llvm::errs(), false, false);
@@ -249,8 +179,12 @@ namespace pepper {
             //            }
         }
 
-        void ensureBuildDirExists() const {
-            auto buildDir = absolute(std::filesystem::path(Opts->BuildDir));
+        Vector<std::string> get_object_file_paths() const override {
+            return obj_files;
+        }
+
+        void ensure_build_dir_exists() const {
+            auto buildDir = absolute(std::filesystem::path(options->build_dir));
             if (!exists(buildDir)) {
                 if (!create_directories(buildDir)) {
                     throw CompileError("Unable to create build dir {0}", buildDir.string());
@@ -258,7 +192,7 @@ namespace pepper {
             }
         }
 
-        static std::string findRuntimePath() {
+        static std::string find_runtime_path() {
             Vector<std::string> searchPaths = {
                 "runtime",
                 ".pep/runtime",
@@ -278,7 +212,7 @@ namespace pepper {
             throw InternalCompilerError("Could not find runtime");
         }
 
-        static Vector<std::string> findRuntimeModuleSources(const std::string& runtimeDir) {
+        static Vector<std::string> find_runtime_module_sources(const std::string& runtimeDir) {
             Vector<std::string> sources;
             std::filesystem::path path(runtimeDir);
             for (const auto& file : std::filesystem::directory_iterator(path)) {
@@ -289,7 +223,7 @@ namespace pepper {
             return sources;
         }
 
-        static Vector<std::string> findRuntimeLibraries(const std::string& runtimeDir) {
+        static Vector<std::string> find_runtime_libraries(const std::string& runtimeDir) {
             auto triple = llvm::Triple{llvm::sys::getDefaultTargetTriple()};
             Vector<std::string> libs;
             std::filesystem::path path(runtimeDir);
@@ -307,21 +241,22 @@ namespace pepper {
             return libs;
         }
 
-        void importRuntime() {
-            if (Opts->CompileRuntime) {
-                auto runtimePath = findRuntimePath();
-                auto runtimeSources = findRuntimeModuleSources(runtimePath);
-                auto runtimeLibs = findRuntimeLibraries(runtimePath);
-                Opts->Libraries.append(runtimeLibs);
-                Opts->ImportPaths.insert(Opts->ImportPaths.begin(), runtimePath);
-                Opts->SourceFiles.insert(Opts->SourceFiles.begin(), runtimeSources.begin(), runtimeSources.end());
+        void import_runtime() {
+            if (options->compile_runtime) {
+                auto runtimePath = find_runtime_path();
+                auto runtimeSources = find_runtime_module_sources(runtimePath);
+                auto runtimeLibs = find_runtime_libraries(runtimePath);
+                options->libraries.append(runtimeLibs);
+                options->import_paths.insert(options->import_paths.begin(), runtimePath);
+                options->source_files.insert(
+                    options->source_files.begin(), runtimeSources.begin(), runtimeSources.end());
             }
         }
     };
 
     Ref<Compiler> Compiler::Create(Ref<Options> options) {
-        auto compiler = Ref<PepperCompiler>::New(options);
-        compiler->importRuntime();
+        auto compiler = Ref<PepperCompiler>::create(options);
+        compiler->import_runtime();
         return compiler;
     }
 

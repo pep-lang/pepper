@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "CodeGen/Address.h"
+#include "CodeGen/LLVM/Address.h"
 #include "Core/Common.h"
 #include "Core/Ident.h"
 #include "Core/Vector.h"
@@ -27,32 +27,32 @@ namespace pepper {
         using LinkageType = llvm::GlobalValue::LinkageTypes;
 
       protected:
-        const Ident Name;
-        Ref<Type> ReturnType;
-        const Params Parameters;
-        bool Vararg;
-        llvm::Function* Func;
-        Ref<Type> FuncType;
-        LinkageType Linkage = LinkageType::ExternalLinkage;
+        const Ident identifier;
+        Ref<Type> ret_type;
+        const Params parameters;
+        bool is_vararg;
+        llvm::Function* llvm_function;
+        Ref<Type> func_type;
+        LinkageType linkage = LinkageType::ExternalLinkage;
 
       public:
         Function(llvm::Module& module,
                  const Ident& name,
-                 Ref<Type> returnType,
+                 Ref<Type> return_type,
                  const Params& params = Params(),
                  bool vararg = false,
                  LinkageType linkage = LinkageType::ExternalLinkage);
 
         const Ident& name() const {
-            return Name;
+            return identifier;
         }
 
-        const Ref<Type> returnType() const {
-            return ReturnType;
+        const Ref<Type> return_type() const {
+            return ret_type;
         }
 
         const Vector<Param>& params() const {
-            return Parameters;
+            return parameters;
         }
 
         Ref<Function> ref() {
@@ -60,11 +60,11 @@ namespace pepper {
         }
 
         llvm::Function* function() const {
-            return Func;
+            return llvm_function;
         }
 
         Ref<Type> type() const {
-            return FuncType;
+            return func_type;
         }
 
         Address call(const Vector<Address>& args) const;
@@ -74,16 +74,16 @@ namespace pepper {
         DECLARE_RTTI(UserFunction, Function);
 
       public:
-        llvm::BasicBlock* Body = nullptr;
-        llvm::BasicBlock* Return = nullptr;
-        Address ReturnValue;
-        Ref<llvm::IRBuilderBase> Builder = nullptr;
+        llvm::BasicBlock* body = nullptr;
+        llvm::BasicBlock* return_expr = nullptr;
+        Address return_value;
+        Ref<llvm::IRBuilderBase> ir_builder = nullptr;
 
-        UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params = Params());
+        UserFunction(llvm::Module& module, const Ident& name, Ref<Type> return_type, const Params& params = Params());
 
-        virtual bool countArgRefs() const;
+        virtual bool count_arg_refs() const;
 
-        llvm::BasicBlock* appendBlock(const Ident& name = {});
+        llvm::BasicBlock* append_block(const Ident& name = {});
     };
 
     class Struct;
@@ -94,11 +94,11 @@ namespace pepper {
         Ref<Struct> This;
 
       public:
-        Method(llvm::Module& module, Ref<Struct> st, const Ident& name, Ref<Type> returnType, const Params& params = {})
-            : UserFunction(module, name, returnType, params)
+        Method(llvm::Module& module, Ref<Struct> st, const Ident& name, Ref<Type> return_type, const Params& params = {})
+            : UserFunction(module, name, return_type, params)
             , This(st) {}
 
-        bool countArgRefs() const override;
+        bool count_arg_refs() const override;
     };
 
 } // namespace pepper

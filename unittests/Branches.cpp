@@ -8,10 +8,11 @@ using namespace TestUtils;
 
 TEST(Branches, If) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 0;
-            if (x == 0)
+        test(): int {
+            var x = 0;
+            if (x == 0) {
                 x = 1;
+            }
             return x;
         }
         )SOURCE";
@@ -20,8 +21,8 @@ TEST(Branches, If) {
 
 TEST(Branches, IfElse) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 1;
+        test(): int {
+            var x = 1;
             if (x) {
                 x = 2;
             } else {
@@ -35,9 +36,9 @@ TEST(Branches, IfElse) {
 
 TEST(Branches, NestedIf) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 2;
-            int y = 3;
+        test(): int {
+            var x = 2;
+            var y = 3;
             if (y % x) {
                 if (x && y) {
                     y -= x;
@@ -53,9 +54,9 @@ TEST(Branches, NestedIf) {
 
 TEST(Branches, NestedIfElse) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 1;
-            int y = 2;
+        test(): int {
+            var x = 1;
+            var y = 2;
             if (y % x) {
                 if (x && y) {
                     y -= x;
@@ -63,7 +64,7 @@ TEST(Branches, NestedIfElse) {
                     y = 0;
                 }
             } else {
-                int z = 4;
+                var z = 4;
                 if (z % y) {
                     y = z;
                 } else {
@@ -78,8 +79,8 @@ TEST(Branches, NestedIfElse) {
 
 TEST(Branches, Ternary) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 1;
+        test(): int {
+            var x = 1;
             return x ? 0 : 1;
         }
         )SOURCE";
@@ -88,9 +89,9 @@ TEST(Branches, Ternary) {
 
 TEST(Branches, NestedTernary) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 1;
-            int y = 0;
+        test(): int {
+            var x = 1;
+            var y = 0;
             return x ? 0 : (y ? 1: 0);
         }
         )SOURCE";

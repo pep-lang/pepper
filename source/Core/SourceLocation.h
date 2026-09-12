@@ -8,21 +8,21 @@
 
 namespace pepper {
     struct SourceLocation {
-        std::string File;
-        size_t Line;
-        size_t Column;
+        std::string file;
+        size_t line;
+        size_t column;
 
-        SourceLocation(const std::string& file = "", size_t line = 0, size_t column = 0)
-            : File(file)
-            , Line(line)
-            , Column(column) {}
+        constexpr SourceLocation(const std::string& file = "", size_t line = 0, size_t column = 0)
+            : file(file)
+            , line(line)
+            , column(column) {}
 
-        std::string toString() const {
-            return llvm::formatv("{0}({1},{2})", File, Line, Column);
+        std::string to_string() const {
+            return llvm::formatv("{0}({1},{2})", file, line, column);
         }
 
         bool operator==(const SourceLocation& other) const {
-            return Line == other.Line && Column == other.Column && File == other.File;
+            return line == other.line && column == other.column && file == other.file;
         }
 
         bool operator!=(const SourceLocation& other) const {
@@ -38,7 +38,7 @@ namespace pepper {
     struct Sources {
         static void add(const SourceFile& sourceFile);
         static const SourceFile& get(const std::string& name);
-        static const std::string& getLine(const SourceLocation& source);
-        static const std::string& getLine(const std::string& name, size_t line);
+        static const std::string get_line(const SourceLocation& source);
+        static const std::string get_line(const std::string& name, size_t line);
     };
 } // namespace pepper

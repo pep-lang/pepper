@@ -2,13 +2,44 @@
   "version": "0.2.0",
   "configurations": [
       {
-          "name": "(lldb) All Tests",
+          "name": "(Windows) Launch",
+          "type": "cppvsdbg",
+          "request": "launch",
+          "program": "${command:cmake.launchTargetPath}",
+          "args": [],
+          "stopAtEntry": false,
+          "cwd": "${workspaceFolder}",
+          "environment": [],
+          "console": "integratedTerminal",
+      },
+      {
+          "name": "(Windows) Launch Tests",
+          "type": "cppvsdbg",
+          "request": "launch",
+          "program": "${command:cmake.buildDirectory}/unittests/PepperTests",
+          "stopAtEntry": false,
+          "cwd": "${command:cmake.buildDirectory}",
+          "preLaunchTask": "CMake: build"
+      },
+      {
+          "name": "(lldb) Launch Tests",
           "type": "lldb",
           "request": "launch",
-          "program": "${workspaceFolder}/out/build/${command:cmake.activeConfigurePresetName}/unittests/PepperTests",
-          "args": [],
-          "cwd": "${fileDirname}"
+          "program": "${command:cmake.buildDirectory}/unittests/PepperTests",
+          //"args": ["--gtest_filter=Structs.AcquireRelease"],
+          "cwd": "${command:cmake.buildDirectory}",
+          "preLaunchTask": "CMake: build",
+          "initCommands": ["command source ${workspaceFolder}/.lldbinit"]
       },
+      {
+        "name": "(gdb) Launch Tests",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${command:cmake.buildDirectory}/unittests/PepperTests",
+        "args": ["--gtest_filter=Structs.Simple"],
+        "cwd": "${command:cmake.buildDirectory}",
+        "preLaunchTask": "CMake: build"
+    },
       {
           "name": "(lldb) Pepper Run",
           "type": "lldb",
@@ -21,7 +52,7 @@
           "name": "(lldb) Pepper Compile",
           "type": "lldb",
           "request": "launch",
-          "program": "${workspaceFolder}/out/build/mac-llvm-clang-x64/pepper",
+          "program": "${command:cmake.buildDirectory}/pepper",
           "args": ["-Tall", "-g", "-emit-llvm", "-o", "${workspaceFolder}/out/test", "${file}"],
           "cwd": "${workspaceFolder}"
       },
@@ -29,7 +60,7 @@
           "name": "(lldb) test",
           "type": "lldb",
           "request": "launch",
-          "program": "${workspaceFolder}/out/test.exe",
+          "program": "${workspaceFolder}/out/test",
           "cwd": "${workspaceFolder}",
           "preLaunchTask": "Pepper: Compile test"
       }

@@ -1,6 +1,6 @@
 
 use "lib";
 
-int main() {
+main(): int {
     return sum(10, -10);
 }

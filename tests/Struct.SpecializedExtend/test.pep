@@ -3,12 +3,12 @@ struct Test<T> {
 };
 
 extend Test<int> {
-    int test() {
+    test(): int {
         return x;
     }
 };
 
-int main() {
+main(): int {
     const t = Test<int>();
     return t.test();
 }

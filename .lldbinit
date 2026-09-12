@@ -1,3 +1,11 @@
+# if this doesn't run, make sure 'settings set target.load-cwd-lldbinit true' is in ~/.lldbinit
+
 command script import deps/llvm/llvm-project/llvm/utils/lldbDataFormatters.py
-settings set target.process.thread.step-avoid-regexp ^(std::|boost::shared_ptr|pepper::Ref)
+type category enable llvm
+
+#log enable -v lldb script formatters
+command script import lldbPepperFormatters.py
+type category enable pepper
+
+settings set target.process.thread.step-avoid-regexp ^(std::|boost::shared_ptr|pepper::Ref|pepper::sema::TNodeRef)
 settings set plugin.jit-loader.gdb.enable on

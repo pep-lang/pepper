@@ -12,83 +12,83 @@
 namespace pepper {
     Function::Function(llvm::Module& module,
                        const Ident& name,
-                       Ref<Type> returnType,
+                       Ref<Type> return_type,
                        const Params& params,
                        bool vararg,
                        LinkageType linkage)
-        : Name(name)
-        , ReturnType(returnType)
-        , Parameters(params)
-        , Vararg(vararg)
-        , Linkage(linkage) {
+        : identifier(name)
+        , ret_type(return_type)
+        , parameters(params)
+        , is_vararg(vararg)
+        , linkage(linkage) {
         Vector<llvm::Type*> paramTypes;
-        std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.Type); });
-        auto llvmType = llvm::FunctionType::get(*returnType, paramTypes, false);
-        auto sig = Types::toString(llvmType);
-        FuncType = Types::add(Ref<Type>::New(sig, llvmType));
-        Func = llvm::Function::Create(llvmType, Linkage, Name, module);
+        std::for_each(params.begin(), params.end(), [&](auto p) { paramTypes.push_back(*p.type); });
+        auto llvmType = llvm::FunctionType::get(*return_type, paramTypes, false);
+        auto sig = Types::to_string(llvmType);
+        func_type = Types::add(Ref<Type>::create(sig, llvmType));
+        llvm_function = llvm::Function::Create(llvmType, linkage, identifier, module);
     }
 
     Address Function::call(const Vector<Address>& args) const {
-        if (Parameters.size() < args.size()) {
+        if (parameters.size() < args.size()) {
             throw CompileError(
-                "Too many arguments to call of {0}: expected: {1}, got: {2}", name(), Parameters.size(), args.size());
+                "Too many arguments to call of {0}: expected: {1}, got: {2}", name(), parameters.size(), args.size());
         }
         // fill in supplied params
         Vector<llvm::Value*> coercedArgs;
         int idx = 0;
         for (const auto& arg : args) {
-            auto expectedType = Parameters[idx++].Type->ops();
+            auto expectedType = parameters[idx++].type->ops();
             coercedArgs.push_back(expectedType->coerce(arg));
         }
 
         // fill in default params
-        for (auto argIdx = coercedArgs.size(); argIdx < Parameters.size(); ++argIdx) {
-            const auto& param = Parameters[argIdx];
-            if (!param.Default) {
+        for (auto argIdx = coercedArgs.size(); argIdx < parameters.size(); ++argIdx) {
+            const auto& param = parameters[argIdx];
+            if (!param.initializer) {
                 throw CompileError("Missing argument {0}({1}) of type {2} to {3}",
                                    argIdx,
-                                   param.Name,
-                                   Types::toString(param.Type),
-                                   Name);
+                                   param.name,
+                                   Types::to_string(param.type),
+                                   identifier);
             }
-            coercedArgs.push_back(param.Type->ops()->coerce(param.Default));
+            coercedArgs.push_back(param.type->ops()->coerce(param.initializer));
         }
-        auto functionType = llvm::cast<llvm::FunctionType>(Types::get(FuncType.get()));
-        return Address{ReturnType, SemaContext::get().ir()->CreateCall(functionType, Func, coercedArgs)};
+        auto functionType = llvm::cast<llvm::FunctionType>(Types::get(func_type.get()));
+        return Address{ret_type, SemaContext::get().ir()->CreateCall(functionType, llvm_function, coercedArgs)};
     }
 
-    UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> returnType, const Params& params)
-        : Function(module, name, returnType, params) {
-        Body = llvm::BasicBlock::Create(module.getContext(), "entry", Func);
-        Builder = Ref<llvm::IRBuilder<>>::New(Body);
+    UserFunction::UserFunction(llvm::Module& module, const Ident& name, Ref<Type> return_type, const Params& params)
+        : Function(module, name, return_type, params) {
+        body = llvm::BasicBlock::Create(module.getContext(), "entry", llvm_function);
+        ir_builder = Ref<llvm::IRBuilder<>>::create(body);
 
         // Set up return block and return instruction
-        Return = llvm::BasicBlock::Create(module.getContext(), "return", Func);
-        auto builder = Ref<llvm::IRBuilder<>>::New(Return);
-        builder->SetInsertPoint(Return);
-        if (returnType != Types::Void) {
-            ReturnValue = Address{returnType, Builder->CreateAlloca(*returnType, nullptr, "retval")};
-            builder->CreateRet(builder->CreateLoad(*ReturnType, ReturnValue));
+        return_expr = llvm::BasicBlock::Create(module.getContext(), "return", llvm_function);
+        auto builder = Ref<llvm::IRBuilder<>>::create(return_expr);
+        builder->SetInsertPoint(return_expr);
+        if (return_type != Types::Void) {
+            return_value = Address{return_type, ir_builder->CreateAlloca(*return_type, nullptr, "retval")};
+            builder->CreateRet(builder->CreateLoad(*ret_type, return_value));
         } else {
             builder->CreateRetVoid();
         }
     }
 
-    llvm::BasicBlock* UserFunction::appendBlock(const Ident& name) {
-        auto block = llvm::BasicBlock::Create(Func->getContext(), name, Func, Return);
+    llvm::BasicBlock* UserFunction::append_block(const Ident& name) {
+        auto block = llvm::BasicBlock::Create(llvm_function->getContext(), name, llvm_function, return_expr);
         return block;
     }
 
-    bool UserFunction::countArgRefs() const {
+    bool UserFunction::count_arg_refs() const {
         return true;
     }
 
-    bool Method::countArgRefs() const {
-        if (!UserFunction::countArgRefs())
+    bool Method::count_arg_refs() const {
+        if (!UserFunction::count_arg_refs())
             return false;
 
-        if (Name.find(".__") != std::string::npos)
+        if (identifier.find(".__") != std::string::npos)
             return false;
 
         return true;

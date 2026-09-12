@@ -1,11 +1,11 @@
 
 use internals;
 
-@extern ulong _pep_utf8_length(char* str);
-@extern ulong _pep_utf8_size(char* str, uint chars);
-@extern  bool _pep_utf8_compare(char* a, char* b, uint size);
+extern ulong _pep_utf8_length(char* str);
+extern ulong _pep_utf8_size(char* str, uint chars);
+extern  bool _pep_utf8_compare(char* a, char* b, uint size);
 
-@extern int strncmp(char* a, char* b, uint size);
+extern int strncmp(char* a, char* b, uint size);
 
 struct string {
     __ptr<char> Data;

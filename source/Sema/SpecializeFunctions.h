@@ -1,53 +1,53 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/TypeSwitch.h"
 #include "Sema/Specialization.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct SpecializeFunctions : public Transformer {
         DECLARE_RTTI(SpecializeFunctions, Transformer);
 
-        SymbolTable Symbols;
+        SymbolTable symbols;
 
-        void run(Ref<AST> parseTree) override {
-            Symbols = SymbolTable(*parseTree);
+        void run(Ref<Module> module) override {
+            symbols = SymbolTable(*module);
 
-            for (const auto& spec : parseTree->functionSpecs()) {
-                if (Symbols.Structs.lookup(spec->Name))
+            for (const auto& spec : module->function_specs()) {
+                if (symbols.structs.lookup(spec->name))
                     continue;
                 if (auto specialized = specialize(spec))
-                    parseTree->insert(specialized);
+                    module->insert(specialized);
             }
         }
 
-        FunctionDef* specialize(const FunctionSpec* functionSpec) {
-            if (auto function = Symbols.Functions.lookup(functionSpec->Type.toString())) {
-                PEP_TRACE_AST("  Found existing specialization for {0}", functionSpec->Type.toString());
+        FunctionDef* specialize(const FunctionSpec* function_spec) {
+            if (auto function = symbols.functions.lookup(function_spec->type.to_string())) {
+                PEP_TRACE_AST("  Found existing specialization for {0}", function_spec->type.to_string());
                 return nullptr;
             }
-            PEP_TRACE_AST("  Specializing {0}", functionSpec->Type.toString());
-            auto base = Symbols.Functions.lookup(functionSpec->Type.Name)->as<FunctionDef>();
+            PEP_TRACE_AST("  Specializing {0}", function_spec->type.to_string());
+            auto base = symbols.functions.lookup(function_spec->type.name)->as<FunctionDef>();
             if (!base) {
-                throw CompileError(functionSpec->Source,
+                throw CompileError(function_spec->source_loc,
                                    "Unable to specialize non-existent function {0} to {1}",
-                                   functionSpec->Type.Name,
-                                   functionSpec->Type.toString());
+                                   function_spec->type.name,
+                                   function_spec->type.to_string());
             }
 
             FunctionDef* specialized;
             if (base->is<MethodDef>())
-                specialized = base->cloneAs<MethodDef>();
+                specialized = base->clone_as<MethodDef>();
             else
-                specialized = base->cloneAs<FunctionDef>();
+                specialized = base->clone_as<FunctionDef>();
 
-            specialized->Type = functionSpec->Type;
-            specialized->Name = functionSpec->Type.toString();
+            specialized->type = function_spec->type;
+            specialized->name = function_spec->type.to_string();
 
-            FunctionSpecialization spec{base, functionSpec};
+            FunctionSpecialization spec{base, function_spec};
             apply(specialized, spec);
 
             return specialized;
@@ -68,4 +68,4 @@ namespace pepper::ast {
             specializer.visit(specialized);
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

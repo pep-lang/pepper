@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Query.h"
 #include "Core/TypeSwitch.h"
@@ -8,40 +8,40 @@
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct ResolveLiterals : public Transformer {
         DECLARE_RTTI(ResolveLiterals, Transformer);
 
         struct Resolver : public Visitor {
-            SymbolTable Symbols;
+            SymbolTable symbols;
 
             Resolver(const SymbolTable& symbols)
-                : Symbols(symbols) {}
+                : symbols(symbols) {}
 
             void visitNode(NodeRef& node) override {
                 if (auto neg = node->as<Minus>()) {
-                    auto operand = neg->Operand;
+                    auto operand = neg->operand;
                     if (auto intLiteral = operand->as<IntegerLiteral>()) {
-                        node = new IntegerLiteral(-intLiteral->Value);
+                        node = new IntegerLiteral(-intLiteral->value);
                         return;
                     }
                     if (auto floatLiteral = operand->as<FloatLiteral>()) {
-                        node = new FloatLiteral(-floatLiteral->Value);
+                        node = new FloatLiteral(-floatLiteral->value);
                         return;
                     }
                 }
             }
         };
 
-        void run(Ref<AST> parseTree) override {
-            Resolver resolver(*parseTree);
+        void run(Ref<Module> module) override {
+            Resolver resolver(*module);
 
-            for (const auto& function : parseTree->functions()) {
+            for (const auto& function : module->functions()) {
                 resolver.visit(function);
             }
-            for (const auto& st : parseTree->structs()) {
+            for (const auto& st : module->structs()) {
                 resolver.visit(st);
             }
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

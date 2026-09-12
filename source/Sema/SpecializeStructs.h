@@ -1,48 +1,48 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/TypeSwitch.h"
 #include "Sema/Specialization.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct SpecializeStructs : public Transformer {
         DECLARE_RTTI(SpecializeStructs, Transformer);
 
-        llvm::StringMap<StructDef*> Structs;
+        llvm::StringMap<StructDef*> structs;
 
-        void run(Ref<AST> parseTree) override {
+        void run(Ref<Module> module) override {
             llvm::DenseSet<TypeName> done;
-            for (auto& st : parseTree->structs()) {
-                Structs[st->Name] = st;
-                done.insert(st->Type);
+            for (auto& st : module->structs()) {
+                structs[st->name] = st;
+                done.insert(st->type);
             }
 
-            for (const auto& spec : parseTree->structSpecs()) {
-                if (done.contains(spec->Type))
+            for (const auto& spec : module->structSpecs()) {
+                if (done.contains(spec->type))
                     continue;
 
                 auto specialized = specialize(spec);
-                parseTree->insert(specialized);
-                done.insert(spec->Type);
+                module->insert(specialized);
+                done.insert(spec->type);
             }
         }
 
-        StructDef* specialize(const StructSpec* structSpec) {
-            PEP_TRACE_AST("  Specializing {0}", structSpec->Type.toString());
-            auto base = Structs.lookup(structSpec->Type.Name);
+        StructDef* specialize(const StructSpec* struct_spec) {
+            PEP_TRACE_AST("  Specializing {0}", struct_spec->type.to_string());
+            auto base = structs.lookup(struct_spec->type.name);
             if (!base) {
                 throw CompileError(
-                    structSpec->Source, "Unable to specialize non-existent struct {0}", structSpec->Type.Name);
+                    struct_spec->source_loc, "Unable to specialize non-existent struct {0}", struct_spec->type.name);
             }
 
-            Node::PushSource(structSpec->Source);
-            auto specialized = new StructDef(structSpec->Type, structSpec->Type.toString());
-            Node::PopSource();
-            specialized->GenericParams.clear();
-            StructSpecialization spec{base, structSpec};
+            Node::push_source(struct_spec->source_loc);
+            auto specialized = new StructDef(struct_spec->type, struct_spec->type.to_string());
+            Node::pop_source();
+            specialized->generic_params.clear();
+            StructSpecialization spec{base, struct_spec};
 
             apply(base, specialized, spec);
 
@@ -50,42 +50,42 @@ namespace pepper::ast {
         }
 
         struct StructSpecializer : Specializer {
-            StructDef* Struct;
+            StructDef* struct_def;
 
             StructSpecializer(const StructSpecialization& spec, StructDef* st)
                 : Specializer(spec)
-                , Struct(st) {}
+                , struct_def(st) {}
 
             void visitNode(NodeRef& node) override {
                 TypeSwitch<Node*>(node)
                     .Case<FieldDef>([this](FieldDef* field) {
                         assert(true);
-                        field->Struct = Struct;
+                        field->parent = struct_def;
                     })
-                    .Case<MethodDef>([this](MethodDef* method) { method->Struct = Struct; });
+                    .Case<MethodDef>([this](MethodDef* method) { method->parent = struct_def; });
             }
         };
 
         void apply(StructDef* base, StructDef* specialized, const StructSpecialization& spec) {
-            // replace types on fields
-            specialized->Fields.clone(base->Fields);
+            // replace types on field_members
+            specialized->field_members.clone(base->field_members);
 
             // clone the ctor
-            specialized->Constructor = base->Constructor->cloneAs<ConstructorDef>();
+            specialized->construct = base->construct->clone_as<ConstructorDef>();
 
             // replace types in method return types and params
-            for (const auto& srcMethod : base->Methods) {
+            for (const auto& srcMethod : base->method_members) {
                 // clone the method then specialize it
-                auto method = srcMethod->cloneAs<MethodDef>();
-                specialized->Methods.push_back(method);
+                auto method = srcMethod->clone_as<MethodDef>();
+                specialized->method_members.push_back(method);
 
-                // update special methods once specialized
-                if (method->Name == "__dtor")
-                    specialized->Destructor = method;
-                if (method->Name == "__acquire")
-                    specialized->Acquire = method;
-                if (method->Name == "__release")
-                    specialized->Release = method;
+                // update special method_members once specialized
+                if (method->name == "__dtor")
+                    specialized->destruct = method;
+                if (method->name == "__acquire")
+                    specialized->acquire = method;
+                if (method->name == "__release")
+                    specialized->release = method;
             }
 
             // apply the specializer to the new struct
@@ -93,8 +93,8 @@ namespace pepper::ast {
             specializer.visit(specialized);
 
             // fix up the constructor
-            specialized->Constructor->Name = spec.Name.toString();
-            specialized->Constructor->Type = spec.Name;
+            specialized->construct->name = spec.name.to_string();
+            specialized->construct->type = spec.name;
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

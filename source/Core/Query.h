@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 
 #include "Core/Vector.h"
@@ -89,7 +90,7 @@ namespace pepper {
             return std::move(results);
         }
 
-        Query range(size_t start, ssize_t len = -1) const {
+        Query range(size_t start, int64_t len = -1) const {
             Vector<T> results;
             auto startIt = begin() + start;
             len = (len == -1) ? std::distance(startIt, end()) : len;
@@ -106,7 +107,7 @@ namespace pepper {
             return concat(rhs.begin(), rhs.end());
         }
 
-        ssize_t indexOf(const T& item, size_t startIndex = 0) const {
+        int64_t index_of(const T& item, size_t startIndex = 0) const {
             auto it = std::find(begin() + startIndex, end(), item);
             if (it != end()) {
                 return std::distance(begin(), it);
@@ -114,7 +115,7 @@ namespace pepper {
             return -1;
         }
 
-        ssize_t indexOf(std::function<bool(const T&)> pred, size_t startIndex = 0) const {
+        int64_t index_of(std::function<bool(const T&)> pred, size_t startIndex = 0) const {
             auto it = std::find_if(begin() + startIndex, end(), pred);
             if (it != end()) {
                 return std::distance(begin(), it);

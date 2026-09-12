@@ -1,6 +1,6 @@
 
 
-int main() {
+main(): int {
     int[] arr = _pep_malloc(4 * sizeof<int>());
     arr[0] = 1;
     arr[1] = 2;
@@ -15,4 +15,3 @@ int main() {
     _pep_free(arr);
     return 10 - sum;
 }
-

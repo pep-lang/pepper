@@ -8,9 +8,9 @@
 #include "Core/Query.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/TargetParser/Host.h"
 
 #define PEP_TRACE_LINK(fmt, ...) PEP_TRACE(TraceChannel::Link, fmt, __VA_ARGS__)
 
@@ -113,7 +113,7 @@ namespace pepper {
     }
 
     static std::string GetRuntimePath(Ref<Options> opts) {
-        for (const auto& lib : opts->Libraries) {
+        for (const auto& lib : opts->libraries) {
             if (lib.ends_with("Support.lib")) {
                 StringRef libPath(lib);
                 libPath.consume_back("\\Support.lib");
@@ -124,7 +124,7 @@ namespace pepper {
     }
 
     static std::string ResolveWindowsLink(Ref<Options> opts) {
-        const std::string programPath = opts->ProgramPath;
+        const std::string programPath = opts->program_path;
 
         Vector<std::string> linkExeNames = {
             "lld-link",
@@ -134,7 +134,7 @@ namespace pepper {
             std::filesystem::path(programPath).parent_path().string(),
         };
 
-        if (opts->MSVC) {
+        if (opts->msvc) {
             linkExeNames.insert(linkExeNames.begin(), "link");
             const std::string toolsPath = GetMSVCToolsPath();
             searchPaths.emplace_back(toolsPath);
@@ -168,7 +168,7 @@ namespace pepper {
 
     void WindowsLink(Ref<Options> opts, const Vector<std::string>& objFiles) {
 
-        auto outputPath = std::filesystem::path(opts->OutputPath);
+        auto outputPath = std::filesystem::path(opts->output_path);
         auto outputDir = outputPath.parent_path();
         auto outputFilename = outputPath.filename();
 
@@ -217,8 +217,8 @@ namespace pepper {
             "user32.lib",
             "shell32.lib",
         };
-        linkArgs.append(opts->Libraries);
-        linkArgs.emplace_back("/out:" + opts->OutputPath);
+        linkArgs.append(opts->libraries);
+        linkArgs.emplace_back("/out:" + opts->output_path);
         linkArgs.append(objFiles);
 
         PEP_VERBOSE("{0}.exe {1}", linkExe, llvm::join(linkArgs, " "));
@@ -235,8 +235,8 @@ namespace pepper {
     }
 
     void PosixLink(Ref<Options> opts, const Vector<std::string>& objFiles) {
-        std::string programPath = opts->ProgramPath;
-        auto outputPath = std::filesystem::path(opts->OutputPath);
+        std::string programPath = opts->program_path;
+        auto outputPath = std::filesystem::path(opts->output_path);
         auto outputDir = outputPath.parent_path();
         auto outputFilename = outputPath.filename();
 
@@ -271,7 +271,7 @@ namespace pepper {
 
         ldArgs.append(objFiles);
 
-        for (auto& lib : opts->Libraries) {
+        for (auto& lib : opts->libraries) {
             auto path = std::filesystem::path(lib);
             if (llvm::is_contained(lib, std::filesystem::path::preferred_separator)) {
                 auto libDir = absolute(path).parent_path().string();
@@ -280,7 +280,7 @@ namespace pepper {
         }
 
         ldArgs.emplace_back("-lSystem");
-        for (auto& lib : opts->Libraries) {
+        for (auto& lib : opts->libraries) {
             auto libName = std::filesystem::path(lib).filename().replace_extension().string();
             if (libName.starts_with("lib"))
                 libName = libName.substr(3);

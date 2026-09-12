@@ -12,6 +12,14 @@
 namespace pepper {
 #define WHITESPACE " \t\n\r\f\v"
 
+    inline size_t indent_width = 2;
+    inline const std::string indent_buf = std::string(1024, ' ');
+
+    inline std::string indent(const size_t width) {
+        assert(width < indent_buf.size());
+        return indent_buf.substr(width * indent_width);
+    }
+
     // trim from end of string (right)
     inline std::string rtrim(const std::string& s, const char* t = WHITESPACE) {
         auto trimmed = s;
@@ -65,10 +73,14 @@ namespace pepper {
         return res;
     }
 
-    inline std::string rpad(const std::string& s, size_t width) {
+    inline std::string rpad(const std::string_view s, size_t width) {
         if (s.size() >= width)
-            return s;
-        return s + repeat(" ", width - s.size());
+            return std::string{s};
+        return std::string{s} + repeat(" ", width - s.size());
+    }
+
+    inline std::string rpad(const std::string& s, size_t width) {
+        return rpad(std::string_view{s}, width);
     }
 
     inline std::string indent(const std::string& s, size_t width) {

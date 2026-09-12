@@ -1,97 +1,97 @@
 
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Sema/Transform.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct GatherGenerics : public Transformer {
         DECLARE_RTTI(GatherGenerics, Transformer);
 
-        llvm::DenseSet<TypeName> Functions;
-        llvm::DenseSet<TypeName> Structs;
+        llvm::DenseSet<TypeName> functions;
+        llvm::DenseSet<TypeName> structs;
 
         struct Gatherer : Visitor {
-            llvm::DenseSet<TypeName>& Functions;
-            llvm::DenseSet<TypeName>& Structs;
+            llvm::DenseSet<TypeName>& functions;
+            llvm::DenseSet<TypeName>& structs;
 
             Gatherer(llvm::DenseSet<TypeName>& functions, llvm::DenseSet<TypeName>& structs)
-                : Functions(functions)
-                , Structs(structs) {}
+                : functions(functions)
+                , structs(structs) {}
 
             void visitType(TypeName& type) override {
-                if (type.isGeneric() && !type.Name.starts_with("__"))
-                    Structs.insert(type);
+                if (type.is_generic() && !type.name.starts_with("__"))
+                    structs.insert(type);
             }
 
             void visitNode(NodeRef& node) override {
                 if (auto call = node->as<FunctionCall>()) {
-                    const TypeName& type = call->Target;
+                    const TypeName& type = call->target;
                     // Do not record specializations for intrinsics
-                    if (type.Name.starts_with("__"))
+                    if (type.name.starts_with("__"))
                         return;
-                    if (type.isGeneric()) {
-                        Functions.insert(type);
+                    if (type.is_generic()) {
+                        functions.insert(type);
                     }
                 }
             }
         };
 
-        void run(Ref<AST> parseTree) override {
-            SymbolTable Symbols(*parseTree);
-            auto gatherer = Gatherer(Functions, Structs);
-            for (auto& st : parseTree->structs()) {
+        void run(Ref<Module> module) override {
+            SymbolTable symbols(*module);
+            auto gatherer = Gatherer(functions, structs);
+            for (auto& st : module->structs()) {
                 gatherer.visit(st);
             }
-            for (auto& fn : parseTree->functions()) {
+            for (auto& fn : module->functions()) {
                 gatherer.visit(fn);
             }
-            for (auto& ext : parseTree->extensions()) {
+            for (auto& ext : module->extensions()) {
                 gatherer.visit(ext);
             }
 
-            llvm::DenseSet<TypeName> structSpecs;
-            for (const auto& structSpec : parseTree->structSpecs())
-                structSpecs.insert(structSpec->Type);
-            llvm::DenseSet<TypeName> funcSpecs;
-            for (const auto& funcSpec : parseTree->functionSpecs())
-                funcSpecs.insert(funcSpec->Type);
+            llvm::DenseSet<TypeName> struct_specs;
+            for (const auto& structSpec : module->structSpecs())
+                struct_specs.insert(structSpec->type);
+            llvm::DenseSet<TypeName> func_specs;
+            for (const auto& funcSpec : module->function_specs())
+                func_specs.insert(funcSpec->type);
 
-            for (const auto& structSpec : Structs) {
-                if (structSpecs.contains(structSpec))
+            for (const auto& struct_spec : structs) {
+                if (struct_specs.contains(struct_spec))
                     continue;
-                if (auto st = Symbols.Structs.lookup(structSpec.Name)) {
-                    if (st->Type == structSpec)
+                if (auto st = symbols.structs.lookup(struct_spec.name)) {
+                    if (st->type == struct_spec)
                         continue;
-                    PEP_TRACE_AST("Generic struct {0}", structSpec.toString());
-                    Node::PushSource(st->Source);
-                    parseTree->insert(new StructSpec(structSpec));
-                    Node::PopSource();
-                    structSpecs.insert(structSpec);
+                    PEP_TRACE_AST("Generic struct {0}", struct_spec.to_string());
+                    Node::push_source(st->source_loc);
+                    module->insert(new StructSpec(struct_spec));
+                    Node::pop_source();
+                    struct_specs.insert(struct_spec);
                 }
             }
 
-            for (const auto& type : Functions) {
-                if (funcSpecs.contains(type))
+            for (const auto& type : functions) {
+                if (func_specs.contains(type))
                     continue;
                 // if the function call is actually a constructor
-                if (auto st = Symbols.Structs.lookup(type.Name)) {
-                    if (st->Type == type || structSpecs.contains(type))
+                if (auto st = symbols.structs.lookup(type.name)) {
+                    if (st->type == type || struct_specs.contains(type))
                         continue;
-                    PEP_TRACE_AST("Generic struct {0}", type.toString());
-                    parseTree->insert(new StructSpec(type));
+                    PEP_TRACE_AST("Generic struct {0}", type.to_string());
+                    module->insert(new StructSpec(type));
                     continue;
                 }
 
-                if (auto fn = Symbols.Functions.lookup(type.Name)) {
-                    if (fn->Type == type)
+                if (auto fn = symbols.functions.lookup(type.name)) {
+                    if (fn->type == type)
                         continue;
                 }
 
-                PEP_TRACE_AST("Generic function call {0}", type.toString());
-                parseTree->insert(new FunctionSpec(type));
+                PEP_TRACE_AST("Generic function call {0}", type.to_string());
+                module->insert(new FunctionSpec(type));
             }
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

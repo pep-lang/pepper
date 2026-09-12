@@ -1,11 +1,11 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct ConvertIntrinsics : public Transformer {
         DECLARE_RTTI(ConvertIntrinsics, Transformer);
 
@@ -13,33 +13,33 @@ namespace pepper::ast {
 
         struct IntrinsicsConverter : public Visitor {
             void visitType(TypeName& type) override {
-                if (type.Name == "__ptr") {
-                    if (type.SubTypes.size() != 1)
+                if (type.name == "__ptr") {
+                    if (type.sub_types.size() != 1)
                         throw CompileError("__ptr<T> takes only a single generic type argument");
-                    auto pointee = type.SubTypes.front().toString();
+                    auto pointee = type.sub_types.front().to_string();
                     type = {pointee + "*"};
                 }
             }
 
             void visitNode(NodeRef& node) override {
                 if (auto func = node->as<FunctionCall>()) {
-                    TypeName target = func->Target;
-                    if (target.Name == "__is_pod") {
-                        node = new IsPod(func->Target);
+                    TypeName target = func->target;
+                    if (target.name == "__is_pod") {
+                        node = new IsPod(func->target);
                     }
-                    if (target.Name == "__default") {
-                        node = new Default(func->Target);
+                    if (target.name == "__default") {
+                        node = new Default(func->target);
                     }
                 }
             }
         };
 
-        void run(Ref<AST> parseTree) override {
+        void run(Ref<Module> module) override {
             auto converter = IntrinsicsConverter();
-            for (auto& func : parseTree->functions())
+            for (auto& func : module->functions())
                 converter.visit(func);
-            for (auto& st : parseTree->structs())
+            for (auto& st : module->structs())
                 converter.visit(st);
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

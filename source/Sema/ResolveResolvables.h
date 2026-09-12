@@ -1,28 +1,28 @@
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct ResolveResolvables : public Transformer {
         DECLARE_RTTI(ResolveResolvables, Transformer);
 
-        bool ReportMissing = false;
-        SymbolTable Symbols;
+        bool report_missing = false;
+        SymbolTable symbols;
 
-        ResolveResolvables(bool reportMissing = false)
-            : ReportMissing(reportMissing) {}
+        ResolveResolvables(bool should_report_missing = false)
+            : report_missing(should_report_missing) {}
 
         struct ReferenceResolver : Resolver {
-            const SymbolTable& Symbols;
-            bool ReportMissing;
+            const SymbolTable& symbols;
+            bool report_missing;
             Vector<Node*> Stack;
 
-            ReferenceResolver(const SymbolTable& symbols, bool reportMissing)
-                : Symbols(symbols)
-                , ReportMissing(reportMissing) {}
+            ReferenceResolver(const SymbolTable& symbols, bool should_report_missing)
+                : symbols(symbols)
+                , report_missing(should_report_missing) {}
 
             Node* current() const {
                 return Stack.back();
@@ -33,9 +33,9 @@ namespace pepper::ast {
                     return;
 
                 if (res.type()->is<StructDef>()) {
-                    resolveStruct(res);
+                    resolve_struct(res);
                 } else if (res.type()->is<FunctionNode>() && !res.type()->is<MethodDef>()) {
-                    resolveFunction(res);
+                    resolve_function(res);
                 }
             }
 
@@ -50,72 +50,74 @@ namespace pepper::ast {
             void visitNode(NodeRef& node) override {
                 if (auto methodCall = node->as<MethodCall>()) {
                     if (!methodCall->Target.value())
-                        resolveMethod(methodCall);
+                        resolve_method(methodCall);
                 }
             }
 
-            void resolveStruct(ResolvableBase& res) {
-                if (auto structDef = Symbols.Structs.lookup(res.name())) {
-                    PEP_TRACE_AST("Resolved Struct {0}/{1} -> {2}", current()->toString(), res.name(), structDef->Name);
+            void resolve_struct(ResolvableBase& res) {
+                if (auto structDef = symbols.structs.lookup(res.name())) {
+                    PEP_TRACE_AST(
+                        "Resolved Struct {0}/{1} -> {2}", current()->to_string(), res.name(), structDef->name);
                     res.resolve(structDef);
                     return;
                 }
-                if (ReportMissing)
+                if (report_missing)
                     throw CompileError("Unable to resolve Struct {0}", res.name());
             }
 
-            void resolveFunction(ResolvableBase& res) {
-                if (auto funcDef = Symbols.Functions.lookup(res.name())) {
-                    PEP_TRACE_AST("Resolved Function {0}/{1} -> {2}", current()->toString(), res.name(), funcDef->Name);
+            void resolve_function(ResolvableBase& res) {
+                if (auto funcDef = symbols.functions.lookup(res.name())) {
+                    PEP_TRACE_AST(
+                        "Resolved function {0}/{1} -> {2}", current()->to_string(), res.name(), funcDef->name);
                     res.resolve(funcDef);
                     return;
                 }
-                if (ReportMissing)
-                    throw CompileError("Unable to resolve Function {0}", res.name());
+                if (report_missing)
+                    throw CompileError("Unable to resolve function {0}", res.name());
             }
 
-            void resolveMethod(MethodCall* methodCall) {
+            void resolve_method(MethodCall* methodCall) {
                 auto structType = methodCall->This->type();
 
                 // If the expression doesn't have a useful type, it could be a static function call
-                // so the LHS will be a symbol ref with the name of the class
+                // so the lhs will be a symbol ref with the name of the class
                 if (structType.empty() && methodCall->This->is<SymbolRef>()) {
                     auto ref = methodCall->This->as<SymbolRef>();
-                    structType = {ref->Name};
+                    structType = {ref->id};
                 }
                 if (!structType.empty()) {
-                    if (auto st = Symbols.Structs.lookup(structType.toString())) {
-                        if (auto method = st->getMethod(methodCall->Target.name())) {
+                    if (auto st = symbols.structs.lookup(structType.to_string())) {
+                        if (auto method = st->get_method(methodCall->Target.name())) {
                             PEP_TRACE_AST(
-                                "Resolved Method {0} -> {1}.{2}", methodCall->toString(), st->Name, method->Name);
+                                "Resolved Method {0} -> {1}.{2}", methodCall->to_string(), st->name, method->name);
                             methodCall->Target.resolve(method);
                             return;
                         }
                     }
                 }
                 PEP_TRACE_AST(
-                    "Unable to resolve Method {0} @ {1}", methodCall->toString(), methodCall->Source.toString());
-                if (ReportMissing)
+                    "Unable to resolve Method {0} @ {1}", methodCall->to_string(), methodCall->source_loc.to_string());
+                if (report_missing)
                     throw CompileError("Unable to resolve Method {0}", methodCall->Target.name());
             }
         };
 
-        void run(Ref<AST> parseTree) override {
-            Symbols = SymbolTable(*parseTree);
+        void run(Ref<Module> module) override {
+            symbols = SymbolTable(*module);
 
-            ReferenceResolver resolver(Symbols, ReportMissing);
-            for (auto& root : parseTree->roots()) {
+            ReferenceResolver resolver(symbols, report_missing);
+            for (auto& root : module->roots()) {
                 // No point in resolving generics, the results won't get used anyway
                 if (auto st = root->as<StructDef>()) {
-                    if (st->isGeneric())
+                    if (st->is_generic())
                         continue;
                 }
                 if (auto func = root->as<FunctionDef>()) {
-                    if (func->isGeneric())
+                    if (func->is_generic())
                         continue;
                 }
                 resolver.visit(root);
             }
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

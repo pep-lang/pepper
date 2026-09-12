@@ -16,11 +16,11 @@ namespace pepper {
     class SemaContext {
         static SemaContext* Instance;
 
-        std::unique_ptr<llvm::LLVMContext> Context;
-        Ref<Types> TypeMap;
-        Ref<Scope> Globals;
-        Ref<Scope> Locals;
-        bool UnitTest = false;
+        std::unique_ptr<llvm::LLVMContext> llvm_context;
+        Ref<Types> type_map;
+        Ref<Scope> global_scope;
+        Ref<Scope> local_scope;
+        bool is_unit_test = false;
 
       public:
         static SemaContext& get();
@@ -30,32 +30,32 @@ namespace pepper {
         ~SemaContext();
 
         [[nodiscard]] Ref<Types> types() const {
-            return TypeMap;
+            return type_map;
         }
 
         [[nodiscard]] Ref<Scope> globals() const {
-            return Globals;
+            return global_scope;
         }
 
         [[nodiscard]] Ref<Scope> locals() const {
-            return Locals;
+            return local_scope;
         }
 
-        llvm::LLVMContext& getContext() {
-            return *Context;
+        llvm::LLVMContext& get_llvm_context() {
+            return *llvm_context;
         }
 
-        std::unique_ptr<llvm::LLVMContext>&& takeContext() {
-            Locals.reset();
-            Globals.reset();
-            TypeMap.reset();
+        std::unique_ptr<llvm::LLVMContext>&& take_llvm_context() {
+            local_scope.reset();
+            global_scope.reset();
+            type_map.reset();
             Instance = nullptr;
-            return std::move(Context);
+            return std::move(llvm_context);
         }
 
-        void pushFunction(Ref<UserFunction> function);
-        void pushScope(const std::string& name, Ref<llvm::IRBuilderBase> builder = nullptr);
-        void popScope();
+        void push_function(Ref<UserFunction> function);
+        void push_scope(const std::string& name, Ref<llvm::IRBuilderBase> builder = nullptr);
+        void pop_scope();
     };
 
 } // namespace pepper

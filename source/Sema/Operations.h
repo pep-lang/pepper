@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "CodeGen/Address.h"
+#include "CodeGen/LLVM/Address.h"
 #include "Core/Common.h"
 
 namespace llvm {
@@ -16,18 +16,18 @@ namespace pepper {
         DECLARE_RTTI(Operations);
 
       protected:
-        Ref<Type> Ty = nullptr;
+        Ref<Type> operand_type = nullptr;
 
       public:
         explicit Operations(Ref<Type> type)
-            : Ty(type) {}
+            : operand_type(type) {}
 
         operator llvm::Type*() const {
-            return Types::get(Ty.get());
+            return Types::get(operand_type.get());
         }
 
         Ref<Type> type() const {
-            return Ty;
+            return operand_type;
         }
 
         static Ref<Operations> get(Ref<Type> type);

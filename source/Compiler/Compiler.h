@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "CodeGen/CodeGenModule.h"
+#include "CodeGen/LLVM/LLVMModuleGenerator.h"
 #include "Compiler/Options.h"
 #include "Core/Common.h"
 #include "Core/Vector.h"
@@ -19,7 +19,9 @@ namespace pepper {
       public:
         static Ref<Compiler> Create(Ref<Options> options);
 
-        virtual Ref<CodeGenModule> compile() = 0;
+        virtual void compile() = 0;
         virtual void link() = 0;
+
+        virtual Vector<std::string> get_object_file_paths() const = 0;
     };
 } // namespace pepper

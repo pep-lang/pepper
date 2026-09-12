@@ -13,7 +13,7 @@ extend Test with XGetter {
     int getX() { return x; }
 }
 
-int main() {
+main(): int {
     var t = Test();
     return t.getX();
 }

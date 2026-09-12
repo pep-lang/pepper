@@ -16,117 +16,118 @@
 #include "Sema/SpecializeStructs.h"
 #include "Sema/TagGenerics.h"
 
-namespace pepper::ast {
-    TransformPass::TransformPass(Ref<AST> parseTree)
-        : ParseTree(parseTree) {
+namespace pepper::sema {
+    TransformPass::TransformPass(Ref<Module> module)
+        : module(module) {
         // First pass
-        Transformers.emplace_back(new ResolveLiterals());
-        Transformers.emplace_back(new TagGenerics());
-        Transformers.emplace_back(new ConvertStringLiterals());
-        Transformers.emplace_back(new GatherGenerics());
-        Transformers.emplace_back(new ResolveImplicitTypes());
-        Transformers.emplace_back(new ResolveResolvables());   // resolve as much as possible
-        Transformers.emplace_back(new ApplyExtensions(false)); // apply generic/concrete extensions
-        Transformers.emplace_back(new SpecializeStructs());
-        Transformers.emplace_back(new SpecializeFunctions());
-        Transformers.emplace_back(new ConvertIntrinsics());
-        Transformers.emplace_back(new ResolveResolvables());  // resolve what remains
-        Transformers.emplace_back(new ApplyExtensions(true)); // apply specialized extensions
-        Transformers.emplace_back(new ConvertMemberRefs());
-        Transformers.emplace_back(new ResolveImplicitTypes());
-        Transformers.emplace_back(new ResolveOperators());
+        transformers.emplace_back(new ResolveLiterals());
+        transformers.emplace_back(new TagGenerics());
+        transformers.emplace_back(new ConvertStringLiterals());
+        transformers.emplace_back(new GatherGenerics());
+        transformers.emplace_back(new ResolveImplicitTypes());
+        transformers.emplace_back(new ResolveResolvables());   // resolve as much as possible
+        transformers.emplace_back(new ApplyExtensions(false)); // apply generic/concrete extensions
+        transformers.emplace_back(new SpecializeStructs());
+        transformers.emplace_back(new SpecializeFunctions());
+        transformers.emplace_back(new ConvertIntrinsics());
+        transformers.emplace_back(new ResolveResolvables());  // resolve what remains
+        transformers.emplace_back(new ApplyExtensions(true)); // apply specialized extensions
+        transformers.emplace_back(new ConvertMemberRefs());
+        transformers.emplace_back(new ResolveImplicitTypes());
+        transformers.emplace_back(new ResolveOperators());
 
         // Second pass, resolve dependent types/calls
-        Transformers.emplace_back(new GatherGenerics());
-        Transformers.emplace_back(new SpecializeStructs());
-        Transformers.emplace_back(new SpecializeFunctions());
-        Transformers.emplace_back(new ConvertIntrinsics());
-        Transformers.emplace_back(new ResolveResolvables());
-        Transformers.emplace_back(new ConvertMemberRefs());
+        transformers.emplace_back(new GatherGenerics());
+        transformers.emplace_back(new SpecializeStructs());
+        transformers.emplace_back(new SpecializeFunctions());
+        transformers.emplace_back(new ConvertIntrinsics());
+        transformers.emplace_back(new ResolveResolvables());
+        transformers.emplace_back(new ConvertMemberRefs());
 
         // final pass
-        Transformers.emplace_back(new ReleaseFieldRefs());
-        Transformers.emplace_back(new ResolveImplicitTypes());
-        Transformers.emplace_back(new ResolveOperators()); // Once implicit types are resolved, operator overloading may exist
-        Transformers.emplace_back(new ResolveResolvables(true));
+        transformers.emplace_back(new ReleaseFieldRefs());
+        transformers.emplace_back(new ResolveImplicitTypes());
+        transformers.emplace_back(
+            new ResolveOperators()); // Once implicit types are resolved, operator overloading may exist
+        transformers.emplace_back(new ResolveResolvables(true));
     }
 
-    Ref<AST> TransformPass::run() const {
-        for (auto& xform : Transformers) {
+    Ref<Module> TransformPass::run() const {
+        for (auto& xform : transformers) {
             PEP_TRACE_AST("Begin {0}", xform->rtti()->name());
-            Messages::Indent(TraceChannel::AST);
-            xform->run(ParseTree);
-            Messages::Outdent(TraceChannel::AST);
+            Messages::indent(TraceChannel::AST);
+            xform->run(module);
+            Messages::outdent(TraceChannel::AST);
             PEP_TRACE_AST("End {0}", xform->rtti()->name());
         }
-        return ParseTree;
+        return module;
     }
 
     SymbolTable::SymbolTable()
-        : Types(TypeName::IntegralTypes) {}
+        : types(TypeName::IntegralTypes) {}
 
 #define TRACE_SYMBOL(...)
 
     // #define TRACE_SYMBOL PEP_TRACE_AST
 
-    SymbolTable::SymbolTable(const AST& ast)
+    SymbolTable::SymbolTable(const Module& module)
         : SymbolTable() {
         TRACE_SYMBOL("### Symbol Table Begin ###");
-        Messages::Indent(TraceChannel::AST);
-        for (auto& function : ast.functions()) {
-            if (!Functions.lookup(function->Name)) {
+        Messages::indent(TraceChannel::AST);
+        for (auto& function : module.functions()) {
+            if (!functions.lookup(function->name)) {
                 // First function with any given name is the generic base (if it's generic)
-                Functions[function->Name] = function;
-                TRACE_SYMBOL("Function: {0} -> {1}", function->Name, function->Type.toString());
+                functions[function->name] = function;
+                TRACE_SYMBOL("Function: {0} -> {1}", function->name, function->type.to_string());
             } else {
-                Functions[function->Name] = function;
-                TRACE_SYMBOL("Function: {0} -> {1}", function->Name, function->Type.toString());
+                functions[function->name] = function;
+                TRACE_SYMBOL("Function: {0} -> {1}", function->name, function->type.to_string());
             }
         }
 
-        for (auto& externFunction : ast.externs()) {
-            Functions[externFunction->Name] = externFunction;
+        for (auto& extern_function : module.externs()) {
+            functions[extern_function->name] = extern_function;
         }
 
-        for (auto& st : ast.structs()) {
-            Structs[st->Name] = st;
-            if (st->isGeneric()) {
-                Structs[st->Type.toString()] = st;
-                TRACE_SYMBOL("Struct: {0} -> {1}", st->Name, st->Type.toString());
+        for (auto& st : module.structs()) {
+            structs[st->name] = st;
+            if (st->is_generic()) {
+                structs[st->type.to_string()] = st;
+                TRACE_SYMBOL("Struct: {0} -> {1}", st->name, st->type.to_string());
             } else {
-                TRACE_SYMBOL("Struct: {0}", st->Name);
+                TRACE_SYMBOL("Struct: {0}", st->name);
             }
 
-            Messages::Indent(TraceChannel::AST);
+            Messages::indent(TraceChannel::AST);
 
-            Functions[st->Constructor->Name] = st->Constructor;
-            TRACE_SYMBOL("Constructor {0}: {1}", st->Name, st->Constructor->Name);
+            functions[st->construct->name] = st->construct;
+            TRACE_SYMBOL("Constructor {0}: {1}", st->name, st->construct->name);
 
-            for (auto& method : st->Methods) {
-                TRACE_SYMBOL("{0}.{1}", st->Name, method->Name);
+            for (auto& method : st->method_members) {
+                TRACE_SYMBOL("{0}.{1}", st->name, method->name);
             }
-            Messages::Outdent(TraceChannel::AST);
+            Messages::outdent(TraceChannel::AST);
         }
 
-        for (auto& trait : ast.traits()) {
-            TraitDecls[trait->Name] = trait;
+        for (auto& trait : module.traits()) {
+            traits[trait->name] = trait;
         }
 
-        Messages::Outdent(TraceChannel::AST);
+        Messages::outdent(TraceChannel::AST);
         TRACE_SYMBOL("### Symbol Table End ###");
     }
 
     Symbol* SymbolTable::find(const Ident& name) const {
-        if (auto fn = Functions.lookup(name))
+        if (auto fn = functions.lookup(name))
             return fn;
-        return Structs.lookup(name);
+        return structs.lookup(name);
     }
 
     TypeName SymbolTable::find(const TypeName& name) const {
-        if (Types.contains(name.toString()))
+        if (types.contains(name.to_string()))
             return name;
-        if (Structs.lookup(name.toString()))
+        if (structs.lookup(name.to_string()))
             return name;
         return {};
     }
-} // namespace pepper::ast
+} // namespace pepper::sema

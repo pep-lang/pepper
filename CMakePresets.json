@@ -1,105 +1,116 @@
 {
   "version": 3,
   "configurePresets": [
-    {
-      "name": "windows-base",
-      "description": "Target Windows with the Visual Studio development environment.",
-      "hidden": true,
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/out/install/${presetName}",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe",
-        "CMAKE_CXX_FLAGS": "/we4703"
+      {
+          "name": "base",
+          "description": "Common configuration",
+          "hidden": true,
+          "generator": "Ninja",
+          "binaryDir": "${sourceDir}/out/build/${presetName}",
+          "installDir": "${sourceDir}/out/install/${presetName}",
+          "cacheVariables": {
+              "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+              "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+          }
       },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "win-msvc-x64-debug",
-      "displayName": "x64 Debug",
-      "description": "Target Windows (64-bit) with the Visual Studio development environment. (Debug)",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
+      {
+          "name": "windows-base",
+          "inherits": "base",
+          "description": "Target Windows with the Visual Studio development environment.",
+          "hidden": true,
+          "cacheVariables": {
+              "CMAKE_C_COMPILER": "cl.exe",
+              "CMAKE_CXX_COMPILER": "cl.exe",
+              "CMAKE_CXX_FLAGS": "/we4703"
+          },
+          "condition": {
+              "type": "equals",
+              "lhs": "${hostSystemName}",
+              "rhs": "Windows"
+          }
       },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "LLVM_DEBUG": "ON"
-      }
-    },
-    {
-      "name": "win-msvc-x64-release",
-      "displayName": "x64 Release",
-      "description": "Target Windows (64-bit) with the Visual Studio development environment. (RelWithDebInfo)",
-      "inherits": "win-msvc-x64-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "win-clang-x64-debug",
-      "displayName": "Clang Windows x64 Debug",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
+      {
+          "name": "win-msvc-x64-debug",
+          "displayName": "x64 Debug",
+          "description": "Target Windows (64-bit) with the Visual Studio development environment. (Debug)",
+          "inherits": "windows-base",
+          "architecture": {
+              "value": "x64",
+              "strategy": "external"
+          },
+          "cacheVariables": {
+              "CMAKE_BUILD_TYPE": "Debug"
+          }
       },
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang-cl.exe",
-        "CMAKE_CXX_COMPILER": "clang-cl.exe",
-        "CMAKE_BUILD_TYPE": "Debug"
+      {
+          "name": "win-msvc-x64-release",
+          "displayName": "x64 Release",
+          "description": "Target Windows (64-bit) with the Visual Studio development environment. (RelWithDebInfo)",
+          "inherits": "win-msvc-x64-debug",
+          "cacheVariables": {
+              "CMAKE_BUILD_TYPE": "Release"
+          }
+      },
+      {
+          "name": "win-clang-x64-debug",
+          "displayName": "Clang Windows x64 Debug",
+          "inherits": "windows-base",
+          "architecture": {
+              "value": "x64",
+              "strategy": "external"
+          },
+          "cacheVariables": {
+              "CMAKE_C_COMPILER": "clang-cl.exe",
+              "CMAKE_CXX_COMPILER": "clang-cl.exe",
+              "CMAKE_BUILD_TYPE": "Debug"
+          }
+      },
+      {
+          "name": "mac-apple-clang-x64-debug",
+          "inherits": "base",
+          "displayName": "Mac Apple Clang x86_64",
+          "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
+          "cacheVariables": {
+              "CMAKE_C_COMPILER": "clang",
+              "CMAKE_CXX_COMPILER": "clang++",
+              "CMAKE_BUILD_TYPE": "Debug"
+          },
+          "condition": {
+              "type": "equals",
+              "lhs": "${hostSystemName}",
+              "rhs": "macOS"
+          }
+      },
+      {
+          "name": "mac-llvm-clang-x64-debug",
+          "inherits": "base",
+          "displayName": "Mac LLVM Clang x86_64",
+          "description": "Using compilers: C = /usr/local/opt/llvm/bin/clang, CXX = /usr/local/opt/llvm/bin/clang++",
+
+          "cacheVariables": {
+              "CMAKE_C_COMPILER": "/usr/local/opt/llvm/bin/clang",
+              "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
+              "CMAKE_BUILD_TYPE": "Debug",
+              "CMAKE_CXX_FLAGS": "-Wuninitialized -Wmissing-field-initializers -Werror"
+          },
+          "condition": {
+              "type": "equals",
+              "lhs": "${hostSystemName}",
+              "rhs": "macOS"
+          }
+      },
+      {
+          "name": "linux-clang-x64-debug",
+          "inherits": "base",
+          "displayName": "Linux Clang x86_64",
+          "description": "Using compilers: C = clang, CXX = clang++",
+          "cacheVariables": {
+              "CMAKE_C_COMPILER": "clang",
+              "CMAKE_CXX_COMPILER": "clang++",
+              "CMAKE_BUILD_TYPE": "Debug",
+              "CMAKE_CXX_FLAGS": "-Wuninitialized -Wmissing-field-initializers -Werror"
+          }
       }
-    },
-    {
-      "name": "mac-apple-clang-x64-debug",
-      "displayName": "Clang 13.1.6 x86_64-apple-darwin21.2.0",
-      "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "mac-llvm-clang-x64-debug",
-      "displayName": "Clang 15.x x86_64",
-      "description": "Using compilers: C = /usr/local/opt/llvm/bin/clang, CXX = /usr/local/opt/llvm/bin/clang++",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-        "CMAKE_C_COMPILER": "/usr/local/opt/llvm/bin/clang",
-        "CMAKE_CXX_COMPILER": "/usr/local/opt/llvm/bin/clang++",
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_CXX_FLAGS": "-Wuninitialized -Wmissing-field-initializers -Werror"
-      }
-    },
-    {
-      "name": "linux-clang-x64-debug",
-      "displayName": "Linux Clang x86_64",
-      "description": "Using compilers: C = clang, CXX = clang++",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_CXX_FLAGS": "-Wuninitialized -Wmissing-field-initializers -Werror",
-        "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "/usr/lib/llvm-18/bin/clang-scan-deps"
-      }
-    }
   ],
   "testPresets": [
     {

@@ -8,11 +8,11 @@ using namespace TestUtils;
 
 TEST(Function, Sum) {
     const char* source = R"SOURCE(
-        int sum(int x, int y) {
+        sum(x: int, y: int): int {
             return x + y;
         }
 
-        int test() {
+        test(): int {
             return sum(64, 1);
         }
         )SOURCE";
@@ -21,14 +21,14 @@ TEST(Function, Sum) {
 
 TEST(Function, NestedCalls) {
     const char* source = R"SOURCE(
-        int mul(int a, int b) {
+        mul(a: int, b: int): int {
             return a * b;
         }
-        int sum(int x, int y) {
+        sum(x: int, y: int): int {
             return x + y;
         }
 
-        int test() {
+        test(): int {
             return sum(mul(8,8), mul(1, 1));
         }
         )SOURCE";
@@ -37,11 +37,11 @@ TEST(Function, NestedCalls) {
 
 TEST(Function, DefaultParams) {
     const char* source = R"SOURCE(
-        int addTo(int x, int y = 1) {
+        addTo(x: int, y: int = 1): int {
             return x + y;
         }
 
-        int test() {
+        test(): int {
             return addTo(64);
         }
         )SOURCE";
@@ -50,9 +50,9 @@ TEST(Function, DefaultParams) {
 
 TEST(Function, Extern) {
     const char* source = R"SOURCE(
-        @extern int strlen(char* str);
+        extern int strlen(char* str);
 
-        int test() {
+        test(): int {
             return strlen(@"test");
         }
         )SOURCE";
@@ -61,11 +61,11 @@ TEST(Function, Extern) {
 
 TEST(Function, Generic) {
     const char* source = R"SOURCE(
-        T sum<T>(T x, T y) {
+        sum<T>(x: T, y: T): T {
             return x + y;
         }
 
-        int test() {
+        test(): int {
             return sum<int>(64, 1);
         }
         )SOURCE";

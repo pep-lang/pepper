@@ -29,7 +29,7 @@ namespace pepper {
         }
 
         template <class... Args>
-        static Ref<T> New(Args&&... args) {
+        static Ref<T> create(Args&&... args) {
             return std::make_shared<T>(std::forward<Args>(args)...);
         }
     };

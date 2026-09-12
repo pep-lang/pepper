@@ -2,39 +2,39 @@
 
 #pragma once
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Sema/Transform.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct ReleaseFieldRefs : public Transformer {
         DECLARE_RTTI(ReleaseFieldRefs, Transformer);
 
-        SymbolTable Symbols;
+        SymbolTable symbols;
 
-        void run(Ref<AST> parseTree) override {
-            Symbols = SymbolTable(*parseTree);
-            for (const auto& st : parseTree->structs()) {
+        void run(Ref<Module> module) override {
+            symbols = SymbolTable(*module);
+            for (const auto& st : module->structs()) {
                 visitStruct(st);
             }
         }
 
         void visitStruct(StructDef* st) {
             Vector<Node*> releases;
-            for (const auto& field : st->Fields) {
-                if (auto fieldType = Symbols.Structs.lookup(field->Type.toString())) {
+            for (const auto& field : st->field_members) {
+                if (auto fieldType = symbols.structs.lookup(field->type.to_string())) {
                     // Set the release source location to be the location of the final dtor instruction
-                    Node::PushSource(st->Destructor->Body->Items.back()->Source);
-                    releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->Name), {"__release"}));
-                    Node::PopSource();
+                    Node::push_source(st->destruct->body->items.back()->source_loc);
+                    releases.emplace_back(new MethodCall(new MemberRef(new ThisRef(), field->name), {"__release"}));
+                    Node::pop_source();
                 }
             }
             // Insert the releases in reverse declaration order just before the last dtor instruction (free)
-            auto& dtorItems = st->Destructor->Body->Items;
+            auto& dtorItems = st->destruct->body->items;
             for (auto& release : llvm::reverse(releases)) {
                 auto beforeFree = std::prev(dtorItems.end());
                 dtorItems.insert(beforeFree, release);
             }
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

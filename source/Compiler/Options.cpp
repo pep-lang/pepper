@@ -17,18 +17,18 @@ namespace pepper {
     using std::string;
 
     namespace cli {
-        static cl::list<string> SourceFiles(cl::Sink, cl::Required, cl::desc("<input files>"));
-        static cl::list<string> ImportPaths("I", cl::Prefix, cl::desc("Import search path(s)"));
-        static cl::list<string> ForcedImports("import", cl::desc("Forced import for all modules"));
-        static cl::list<string> Libraries("l", cl::desc("Libraries to link"));
-        static cl::opt<string> OutputPath("o", cl::desc("Output binary"), cl::value_desc("filename"));
+        static cl::list<string> source_files(cl::Sink, cl::Required, cl::desc("<input files>"));
+        static cl::list<string> import_paths("I", cl::Prefix, cl::desc("Import search path(s)"));
+        static cl::list<string> forced_imports("import", cl::desc("Forced import for all modules"));
+        static cl::list<string> libraries("l", cl::desc("libraries to link"));
+        static cl::opt<string> output_path("o", cl::desc("Output binary"), cl::value_desc("filename"));
         static cl::opt<string> BuildPath(
             "build", cl::desc("Build directory, defaults to ./build"), cl::value_desc("path"));
-        static cl::opt<bool> EmitLLVM("emit-llvm", cl::desc("Emit LLVM IR"));
-        static cl::opt<bool> EmitDebugInfo("g", "emit-debug", cl::desc("Emit debugging information into binary"));
+        static cl::opt<bool> emit_llvm("emit-llvm", cl::desc("Emit LLVM IR"));
+        static cl::opt<bool> emit_debug_info("g", "emit-debug", cl::desc("Emit debugging information into binary"));
         static cl::opt<bool> Verbose("v", cl::desc("Verbose output"));
         static cl::opt<bool> NoRuntime("no-runtime", cl::desc("Skip runtime compilation"));
-        static cl::bits<TraceChannel> TraceChannels(
+        static cl::bits<TraceChannel> trace_channels(
             "T",
             cl::Prefix,
             cl::desc("Trace channels to enable"),
@@ -63,47 +63,47 @@ namespace pepper {
         return "";
     }
 
-    Ref<Options> Options::FromCommandLine(int argc, const char** argv) {
+    Ref<Options> Options::from_command_line(int argc, const char** argv) {
         llvm::cl::ParseCommandLineOptions(argc, argv);
-        auto opts = Defaults();
-        opts->ProgramPath = argv[0];
-        opts->SourceFiles.append(cli::SourceFiles.begin(), cli::SourceFiles.end());
-        opts->SourceFiles =
-            Query(opts->SourceFiles).map([&](auto& src) { return absolute(std::filesystem::path(src)).string(); });
-        opts->PrimarySourceFile = opts->SourceFiles.front();
+        auto opts = defaults();
+        opts->program_path = argv[0];
+        opts->source_files.append(cli::source_files.begin(), cli::source_files.end());
+        opts->source_files =
+            Query(opts->source_files).map([&](auto& src) { return absolute(std::filesystem::path(src)).string(); });
+        opts->primary_source_file = opts->source_files.front();
 
         if (cli::BuildPath != "") {
-            opts->BuildDir = Normalize(cli::BuildPath);
+            opts->build_dir = Normalize(cli::BuildPath);
         }
 
-        if (cli::OutputPath != "") {
-            opts->OutputPath = Normalize(cli::OutputPath);
-            opts->ExeName = PathToFilename(cli::OutputPath);
+        if (cli::output_path != "") {
+            opts->output_path = Normalize(cli::output_path);
+            opts->exe_name = PathToFilename(cli::output_path);
         } else {
             auto primarySourceName =
-                std::filesystem::path(opts->PrimarySourceFile).filename().replace_extension(ExecutableExt());
-            opts->OutputPath = (std::filesystem::current_path() / primarySourceName).string();
+                std::filesystem::path(opts->primary_source_file).filename().replace_extension(ExecutableExt());
+            opts->output_path = (std::filesystem::current_path() / primarySourceName).string();
         }
 
-        opts->ImportPaths.append(cli::ImportPaths.begin(), cli::ImportPaths.end());
-        opts->ForcedImports.append(cli::ForcedImports.begin(), cli::ForcedImports.end());
-        opts->Libraries.append(cli::Libraries.begin(), cli::Libraries.end());
+        opts->import_paths.append(cli::import_paths.begin(), cli::import_paths.end());
+        opts->forced_imports.append(cli::forced_imports.begin(), cli::forced_imports.end());
+        opts->libraries.append(cli::libraries.begin(), cli::libraries.end());
 
-        opts->EmitLLVM = cli::EmitLLVM;
-        opts->Verbose = cli::Verbose;
-        opts->CompileRuntime = !cli::NoRuntime;
-        opts->EmitDebugInfo = cli::EmitDebugInfo;
-        opts->TraceChannels = cli::TraceChannels.getBits();
+        opts->emit_llvm = cli::emit_llvm;
+        opts->verbose = cli::Verbose;
+        opts->compile_runtime = !cli::NoRuntime;
+        opts->emit_debug_info = cli::emit_debug_info;
+        opts->trace_channels = cli::trace_channels.getBits();
         if (cli::TraceAll)
-            opts->TraceChannels = (unsigned int)TraceChannel::ALL;
-        opts->MSVC = cli::MSVC;
+            opts->trace_channels = (unsigned int)TraceChannel::ALL;
+        opts->msvc = cli::MSVC;
         return opts;
     }
 
-    Ref<Options> Options::Defaults() {
-        auto opts = Ref<Options>::New();
-        opts->BuildDir = (std::filesystem::current_path() / ".pep" / "build").string();
-        opts->ForcedImports = {
+    Ref<Options> Options::defaults() {
+        auto opts = Ref<Options>::create();
+        opts->build_dir = (std::filesystem::current_path() / ".pep" / "build").string();
+        opts->forced_imports = {
             "internals",
             "range",
         };

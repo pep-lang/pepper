@@ -1,23 +1,9 @@
 
-use support;
+import "support";
 
-@extern void memcpy(void* dest, void* src, ulong size);
+extern void memcpy(void* dest, void* src, ulong size);
 
-void release<T>(T t) {
-    trace_ptr(t, @"release<T>");
-    t.__release();
-}
-
-# release specializations for integral types
-void release<int>(int i) {}
-void release<uint>(uint ui) {}
-void release<bool>(bool b) {}
-void release<long>(long l) {}
-void release<ulong>(ulong ul) {}
-void release<float>(float f) {}
-void release<double>(double d) {}
-
-void assert(bool condition, __ptr<char> msg) {
+assert(condition: bool, msg: __ptr<char>): void {
     if (!condition) {
         panic(msg);
     }

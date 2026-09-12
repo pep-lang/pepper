@@ -11,10 +11,11 @@ using namespace TestUtils;
 
 TEST(Loops, While) {
     const char* source = R"SOURCE(
-        int test() {
-            int x = 10;
-            while (x > 0)
+        test(): int {
+            var x = 10;
+            while (x > 0) {
                 x -= 1;
+            }
             return x;
         }
         )SOURCE";

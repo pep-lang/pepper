@@ -7,8 +7,8 @@ using namespace pepper;
 
 int main(int argc, const char** argv) {
     try {
-        auto options = Options::FromCommandLine(argc, argv);
-        auto compiler = pepper::Compiler::Create(options);
+        auto options = Options::from_command_line(argc, argv);
+        auto compiler = Compiler::Create(options);
         compiler->compile();
         compiler->link();
     } catch (std::exception& ex) {

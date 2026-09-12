@@ -9,11 +9,11 @@ using namespace TestUtils;
 TEST(Structs, Simple) {
     const char* source = R"SOURCE(
 struct Test {
-    int x = 0;
+    var x = 0;
 };
 
-int test() {
-    Test t = Test();
+test(): int {
+    var t = Test();
     return t.x;
 }
     )SOURCE";
@@ -23,10 +23,10 @@ int test() {
 TEST(Structs, SizeOf) {
     const char* source = R"SOURCE(
 struct Test {
-    int x = 0;
+    var x = 0;
 };
 
-int test() {
+test(): int {
     return sizeof<Test>();
 }
     )SOURCE";
@@ -36,17 +36,17 @@ int test() {
 TEST(Structs, SizeOfGeneric) {
     const char* source = R"SOURCE(
 struct Test<T> {
-    T x = 0;
+    var x = 0;
 };
 
 extend Test<T> {
-    int size() {
+    size(): int {
         return sizeof<T>();
     }
 }
 
-int test() {
-    Test<int> t = Test<int>();
+test(): int {
+    let t = Test<int>();
     return t.size();
 }
     )SOURCE";
@@ -56,13 +56,13 @@ int test() {
 TEST(Structs, Constructor) {
     const char* source = R"SOURCE(
 struct Test {
-    int x = 0;
+    var x = 0;
 
     new(this.x = 1) {}
 };
 
-int test() {
-    Test t = Test();
+test(): int {
+    var t = Test();
     return t.x;
 }
     )SOURCE";
@@ -72,20 +72,20 @@ int test() {
 TEST(Structs, Extension) {
     const char* source = R"SOURCE(
 struct Test {
-    int x;
+    var x: int;
     new() {
         x = 1;
     }
 };
 
 extend Test {
-    void setX(int newX) {
+    setX(newX: int): void {
         x = newX;
     }
 }
 
-int test() {
-    Test t = Test();
+test(): int {
+    var t = Test();
     t.setX(10);
     return t.x;
 }
@@ -96,10 +96,10 @@ int test() {
 TEST(Structs, Range) {
     const char* source = R"SOURCE(
 struct range_test {
-    int start;
-    int current = 0xffffffff;
-    int end;
-    int step;
+    var start: int;
+    var current = 0xffffffff;
+    var end: int;
+    var step: int;
 
     new(this.start, this.end = -1, this.step=1) {
         if (end == -1) {
@@ -110,7 +110,7 @@ struct range_test {
 }
 
 extend range_test {
-    bool next() {
+    next(): bool {
         if (current == 0xffffffff) {
             current = start;
         } else {
@@ -119,14 +119,14 @@ extend range_test {
         return current < end;
     }
 
-    int value() {
+    value(): int {
         return current;
     }
 }
 
-int test() {
-    range_test r = range_test(0, 10);
-    int x = 0;
+test(): int {
+    var r = range_test(0, 10);
+    var x = 0;
     while (r.next()) {
         x += 1;
     }
@@ -139,11 +139,11 @@ int test() {
 TEST(Structs, SimpleGeneric) {
     const char* source = R"SOURCE(
 struct Test<T> {
-    T x;
+    var x: T;
 };
 
-int test() {
-    Test<int> t = Test<int>();
+test(): int {
+    let t = Test<int>();
     return t.x;
 }
     )SOURCE";
@@ -153,13 +153,13 @@ int test() {
 TEST(Structs, SimpleGenericCtor) {
     const char* source = R"SOURCE(
 struct Test<T> {
-    T x;
+    var x: T;
 
     new(this.x) {}
 };
 
-int test() {
-    Test<int> t = Test<int>(2);
+test(): int {
+    let t = Test<int>(2);
     return t.x;
 }
     )SOURCE";
@@ -169,10 +169,10 @@ int test() {
 TEST(Structs, RangeGeneric) {
     const char* source = R"SOURCE(
 struct range_test<T> {
-    T start;
-    T current;
-    T end;
-    T step;
+    var start;
+    var current;
+    var end;
+    var step;
 
     new(this.start, this.end = -1, this.step=1) {
         if (end == -1) {
@@ -184,7 +184,7 @@ struct range_test<T> {
 }
 
 extend range_test<T> {
-    bool next() {
+    next(): bool {
         if ((current + step) == start) {
             current = start;
         } else {
@@ -193,14 +193,14 @@ extend range_test<T> {
         return current < end;
     }
 
-    T value() {
+    value(): T {
         return current;
     }
 }
 
-int test() {
-    range_test<int> r = range_test<int>(0, 10);
-    int x = 0;
+test(): int {
+    var r = range_test<int>(0, 10);
+    var x = 0;
     while (r.next()) {
         x += 1;
     }
@@ -213,14 +213,14 @@ int test() {
 TEST(Structs, RefArgument) {
     const char* source = R"SOURCE(
 struct Test {
-    int x = 2;
+    var x = 2;
 };
 
-int getX(Test t) {
+getX(t: Test): int {
     return t.x;
 }
 
-int test() {
+test(): int {
     var t = Test();
     var x = getX(t);
     return x;
@@ -232,10 +232,10 @@ int test() {
 TEST(Structs, AcquireRelease) {
     const char* source = R"SOURCE(
 struct Test {
-    int x = 2;
+    var x = 2;
 };
 
-int test() {
+test(): int {
     var t = Test();
     trace_int(t.__refcount, @"t.__refcount");
     test_assert(t.__refcount == 1, @"t.__refcount == 1");

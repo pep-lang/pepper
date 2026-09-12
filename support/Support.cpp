@@ -93,8 +93,7 @@ namespace {
     };
     const MemTrackMode MemTrack = [] {
         const char* track = GetEnv("PEP_MEMTRACK");
-        char* end{};
-        uint32_t value = track ? std::strtol(track, &end, 10) : 0;
+        uint32_t value = track ? std::strtoul(track, nullptr, 10) : 0;
         value = std::min(value, uint32_t(MemTrackMode::Max));
         return MemTrackMode(value);
     }();

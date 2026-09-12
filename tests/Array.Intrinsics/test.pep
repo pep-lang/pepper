@@ -1,5 +1,5 @@
 
-int main() {
+main(): int {
     __ptr<int> arr = _pep_malloc(5 * sizeof<int>());
     int idx = 0;
     while (idx < 5) {

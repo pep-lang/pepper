@@ -2,18 +2,18 @@
 
 #include <cassert>
 
-#include "AST/Nodes.h"
+#include "Sema/Model/Nodes.h"
 #include "Core/Exceptions.h"
 #include "Core/Messages.h"
 #include "Sema/Specialization.h"
 #include "Sema/Transform.h"
 
-namespace pepper::ast {
+namespace pepper::sema {
     struct ApplyExtensions : public Transformer {
         DECLARE_RTTI(ApplyExtensions, Transformer);
 
-        SymbolTable Symbols;
-        bool ReportMissing = true;
+        SymbolTable symbols;
+        bool report_missing = true;
 
         // Track which extensions have been applied. Application happens in 2 passes:
         // Once before specializations for concrete/generic extensions, and then again after specialization
@@ -24,33 +24,33 @@ namespace pepper::ast {
         }
 
         ApplyExtensions(bool reportMissing)
-            : ReportMissing(reportMissing) {}
+            : report_missing(reportMissing) {}
 
-        void run(Ref<AST> parseTree) override {
-            Symbols = SymbolTable(*parseTree);
+        void run(Ref<Module> module) override {
+            symbols = SymbolTable(*module);
 
-            for (const auto& ext : parseTree->extensions()) {
+            for (const auto& ext : module->extensions()) {
                 if (applied().contains(ext))
                     continue;
 
                 if (!ext->Target.value()) {
-                    if (ReportMissing)
+                    if (report_missing)
                         throw CompileError("Cannot extend non-existent struct {0}", ext->Target.name());
                     continue;
                 }
 
                 applied().insert(ext);
                 auto target = ext->Target.value();
-                for (const auto& srcMethod : ext->Methods) {
-                    PEP_TRACE_AST("Method: {0}.{1}", target->Name, srcMethod->Name);
-                    auto method = srcMethod->cloneAs<MethodDef>();
-                    method->Struct = target;
-                    target->Methods.push_back(method);
+                for (const auto& srcMethod : ext->method_members) {
+                    PEP_TRACE_AST("Method: {0}.{1}", target->name, srcMethod->name);
+                    auto method = srcMethod->clone_as<MethodDef>();
+                    method->parent = target;
+                    target->method_members.push_back(method);
                 }
                 if (auto trait = ext->as<TraitDef>()) {
-                    target->Traits.emplace_back(trait);
+                    target->traits.emplace_back(trait);
                 }
             }
         }
     };
-} // namespace pepper::ast
+} // namespace pepper::sema

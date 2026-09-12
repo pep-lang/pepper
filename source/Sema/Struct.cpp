@@ -1,7 +1,7 @@
 
 #include "Struct.h"
 
-#include "CodeGen/Address.h"
+#include "CodeGen/LLVM/Address.h"
 #include "Core/Exceptions.h"
 #include "Core/LLVMUtils.h"
 #include "Core/Query.h"
@@ -12,66 +12,66 @@
 namespace pepper {
 
     Struct::Struct(llvm::Module& module, const Ident& name, const Params& fields, const Params& ctorParams)
-        : Name(name)
-        , Size(Type::Size::Fixed(0))
-        , Align(Type::Size::Fixed(0)) {
+        : struct_name(name)
+        , type_size(Type::Size::Fixed(0))
+        , type_align(Type::Size::Fixed(0)) {
         // Create the LLVM struct type out of the field types
         Vector<llvm::Type*> fieldTypes =
-            Query(fields).select<llvm::Type*>([](auto& f) { return Types::get(f.Type.get()); });
-        auto llvmType = llvm::StructType::create(fieldTypes, Name);
+            Query(fields).select<llvm::Type*>([](auto& f) { return Types::get(f.type.get()); });
+        auto llvmType = llvm::StructType::create(fieldTypes, struct_name);
 
         // Add underlying struct as struct.<struct>
-        StructTy = Ref<StructType>::New(this, "struct." + name, llvmType);
-        Types::add(StructTy);
+        struct_type = Ref<StructType>::create(this, "struct." + name, llvmType);
+        Types::add(struct_type);
         // Add ref type as <struct>
-        RefTy = Ref<RefType>::New(StructTy);
-        Types::add(RefTy);
-        auto pointerTy = Ref<PointerType>::New(RefTy);
+        ref = Ref<RefType>::create(struct_type);
+        Types::add(ref);
+        auto pointerTy = Ref<PointerType>::create(ref);
         Types::add(pointerTy);
-        Constructor = Ref<UserFunction>::New(module, name, RefTy, ctorParams);
+        construct = Ref<UserFunction>::create(module, name, ref, ctorParams);
 
-        setFields(fields);
+        set_fields(fields);
 
         // compute size from data layout
         auto dataLayout = module.getDataLayout();
         auto structLayout = dataLayout.getStructLayout(cast<llvm::StructType>(llvmType));
-        Size = Type::Size::Fixed(structLayout->getSizeInBits() / 8);
-        Align = Type::Size::Fixed(structLayout->getAlignment().value());
+        type_size = Type::Size::Fixed(structLayout->getSizeInBits() / 8);
+        type_align = Type::Size::Fixed(structLayout->getAlignment().value());
     }
 
-    Ref<Struct> Struct::New(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
-        Ref<Struct> newStruct = Ref<Struct>::New(module, name, fields, newParams);
+    Ref<Struct> Struct::create(llvm::Module& module, const Ident& name, const Params& fields, const Params& newParams) {
+        Ref<Struct> newStruct = Ref<Struct>::create(module, name, fields, newParams);
         auto globals = SemaContext::get().globals();
-        globals->Structs[name] = newStruct;
-        globals->Functions[newStruct->Constructor->name()] = newStruct->Constructor;
+        globals->structs[name] = newStruct;
+        globals->functions[newStruct->construct->name()] = newStruct->construct;
         return newStruct;
     }
 
     Ref<Struct> Struct::get(const Ident& name) {
-        return SemaContext::get().globals()->Structs.lookup(name);
+        return SemaContext::get().globals()->structs.lookup(name);
     }
 
-    Address Struct::getMember(llvm::Value* instance, const Ident& name) const {
-        if (auto field = getField(instance, name))
+    Address Struct::get_member(llvm::Value* instance, const Ident& name) const {
+        if (auto field = get_field(instance, name))
             return field;
-        return getMethod(name);
+        return get_method(name);
     }
 
-    Address Struct::getField(llvm::Value* instance, const Ident& name) const {
-        auto idx = Query(Fields).indexOf([&](auto& f) { return f.Name == name; });
+    Address Struct::get_field(llvm::Value* instance, const Ident& name) const {
+        auto idx = Query(field_members).index_of([&](auto& f) { return f.name == name; });
         if (idx != -1) {
-            return getField(instance, (int)idx, Fields[idx]);
+            return get_field(instance, (int)idx, field_members[idx]);
         }
         return Address{};
     }
 
-    Address Struct::getField(llvm::Value* instance, int idx, const Param& field) const {
-        return Address(field.Type, ir()->CreateStructGEP(*StructTy, instance, idx, field.Name));
+    Address Struct::get_field(llvm::Value* instance, int idx, const Param& field) const {
+        return Address(field.type, ir()->CreateStructGEP(*struct_type, instance, idx, field.name));
     }
 
-    Address Struct::getMethod(const Ident& name) const {
-        auto it = Methods.find(name);
-        if (it != Methods.end()) {
+    Address Struct::get_method(const Ident& name) const {
+        auto it = method_members.find(name);
+        if (it != method_members.end()) {
             auto method = it->second;
             return Address{method->type(), method->function(), method->name()};
         }
@@ -86,7 +86,7 @@ namespace pepper {
       public:
         StructTypeOps(Ref<Type> type)
             : Operations(type) {
-            Struct = Ty.as<StructType>()->StructDesc;
+            Struct = operand_type.as<StructType>()->struct_desc;
         }
 
         Address coerce(Address) const override {
@@ -96,20 +96,20 @@ namespace pepper {
 
     StructType::StructType(const Struct* st, const Ident& name, llvm::Type* type)
         : Type(name, type)
-        , StructDesc(st) {}
+        , struct_desc(st) {}
 
-    Ref<RefType> StructType::refType() const {
-        return StructDesc->refType();
+    Ref<RefType> StructType::ref_type() const {
+        return struct_desc->ref_type();
     }
 
-    Type::Size StructType::sizeInBits() const {
-        return StructDesc->sizeInBits();
+    Type::Size StructType::size_in_bits() const {
+        return struct_desc->size_in_bits();
     }
 
     Operations* StructType::ops() {
-        if (!Ops)
-            Ops = Ref<StructTypeOps>::New(shared_from_this());
-        return Ops.get();
+        if (!struct_ops)
+            struct_ops = Ref<StructTypeOps>::create(shared_from_this());
+        return struct_ops.get();
     }
 
     class RefTypeOps : public PointerOperations {
@@ -121,14 +121,14 @@ namespace pepper {
         void init(Address lhs, Address rhs) const override {
             rhs = coerce(rhs);
             ir()->CreateStore(rhs, lhs);
-            auto st = Ty.as<RefType>()->structType()->StructDesc;
+            auto st = operand_type.as<RefType>()->type()->struct_desc;
             auto acquire = st->method("__acquire");
             acquire->call({rhs});
         }
 
         Address assign(Address lhs, Address rhs) const override {
             rhs = coerce(rhs);
-            auto st = Ty.as<RefType>()->structType()->StructDesc;
+            auto st = operand_type.as<RefType>()->type()->struct_desc;
             auto acquire = st->method("__acquire");
             auto release = st->method("__release");
             acquire->call({rhs});
@@ -138,18 +138,18 @@ namespace pepper {
         }
     };
 
-    RefType::RefType(Ref<StructType> structType)
-        : PointerType(structType->StructDesc->name(), structType)
-        , StructTy(structType) {}
+    RefType::RefType(Ref<StructType> struct_type)
+        : PointerType(struct_type->struct_desc->name(), struct_type)
+        , struct_type(struct_type) {}
 
-    Ref<StructType> RefType::structType() const {
-        return pointeeType().as<StructType>();
+    Ref<StructType> RefType::type() const {
+        return pointee_type().as<StructType>();
     }
 
     Operations* RefType::ops() {
-        if (!Ops)
-            Ops = Ref<RefTypeOps>::New(shared_from_this());
-        return Ops.get();
+        if (!struct_ops)
+            struct_ops = Ref<RefTypeOps>::create(shared_from_this());
+        return struct_ops.get();
     }
 
 } // namespace pepper

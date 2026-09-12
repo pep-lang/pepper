@@ -2,7 +2,7 @@ struct Test {
     int x = 0;
 };
 
-int main() {
+main(): int {
     const t = Test();
     return t.x;
 }
