@@ -141,6 +141,7 @@ fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_m
                 let builtin = function.starts_with("_pep_")
                     || function.starts_with("trace_")
                     || function == "print"
+                    || function == "string"
                     || function.contains('<');
                 if !builtin && report_missing {
                     panic!("Unable to resolve function {}", function);

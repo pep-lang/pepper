@@ -221,7 +221,7 @@ name = "pepper"
 version = "0.1.0"
 dependencies = [
  "clap",
- "pepper-parser",
+ "pepper-driver",
 ]
 
 [[package]]
@@ -229,6 +229,18 @@ name = "pepper-codegen"
 version = "0.1.0"
 dependencies = [
  "inkwell",
+ "pepper-parser",
+ "pepper-sema",
+ "pepper-support",
+]
+
+[[package]]
+name = "pepper-driver"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "inkwell",
+ "pepper-codegen",
  "pepper-parser",
  "pepper-sema",
  "pepper-support",

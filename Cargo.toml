@@ -6,6 +6,7 @@ members = [
     "crates/pepper-support",
     "crates/pepper-sema",
     "crates/pepper-codegen",
+    "crates/pepper-driver",
 ]
 
 [workspace.package]
@@ -24,7 +25,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-pepper-parser = { path = "crates/pepper-parser" }
+pepper-driver = { path = "crates/pepper-driver" }
 clap.workspace = true
 
 [lib]

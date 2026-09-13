@@ -87,6 +87,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let function = module.functions[idx].clone();
             self.codegen_function(&function)?;
         }
+        eprintln!("IR-DUMP\n{}", self.module.to_string());
         self.module
             .verify()
             .map_err(|e| format!("Module verification failed: {}", e.to_string()))
@@ -276,11 +277,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .ok_or_else(|| format!("unknown param type {}", param.ty))?;
             param_types.push(ty);
         }
-        let return_type = self
-            .types
-            .get(&function.ty.to_string())
-            .ok_or_else(|| format!("unknown return type {}", function.ty))?;
-        let fn_type = llvm_fn_type(return_type, &param_types, false);
+        // Void-returning fns get a true void fn type (types.get('void')
+        // maps to i32 for value positions).
+        let fn_type = if is_void(&function.ty) {
+            self.context.void_type().fn_type(
+                &param_types
+                    .iter()
+                    .map(|p| inkwell::types::BasicMetadataTypeEnum::from(*p))
+                    .collect::<Vec<_>>(),
+                false,
+            )
+        } else {
+            let return_type = self
+                .types
+                .get(&function.ty.to_string())
+                .ok_or_else(|| format!("unknown return type {}", function.ty))?;
+            llvm_fn_type(return_type, &param_types, false)
+        };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
         self.functions.insert(function.name.clone(), fn_value);
         Ok(())
@@ -350,6 +363,16 @@ impl<'ctx> CodeGenerator<'ctx> {
             let alloca = self
                 .builder
                 .build_alloca(ty, "retval")
+                .map_err(|e| e.to_string())?;
+            // Zero-init so functions without an explicit return return 0.
+            let zero: BasicValueEnum<'ctx> = match ty {
+                BasicTypeEnum::IntType(it) => BasicValueEnum::IntValue(it.const_zero()),
+                BasicTypeEnum::FloatType(ft) => BasicValueEnum::FloatValue(ft.const_zero()),
+                BasicTypeEnum::PointerType(pt) => BasicValueEnum::PointerValue(pt.const_null()),
+                other => return Err(format!("unsupported retval type {:?}", other)),
+            };
+            self.builder
+                .build_store(alloca, zero)
                 .map_err(|e| e.to_string())?;
             Some(alloca)
         };
@@ -785,6 +808,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Builtins first: print → _pep_print/_pep_print_int.
         if name == "print" {
             return self.codegen_print(args);
+        }
+        // `string(lit, len)` ctor: for the literal flow the raw bytes
+        // pointer IS the string; return the first arg directly.
+        if name == "string" {
+            if let Some(first) = args.first() {
+                return self.codegen_expr(first);
+            }
+            return Ok(self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .const_null()
+                .into());
         }
         // Constructor call `Name<...>(ctor_args)`: the ctor is registered
         // under the plain struct name (specializations under `Name<args>`).

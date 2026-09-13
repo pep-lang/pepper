@@ -1,18 +1,6 @@
-use pepper::parser;
-
-use std::path::PathBuf;
-use std::process::ExitCode;
 use clap::Parser;
-
-#[derive(Parser)]
-struct Options {
-    /// Source files to parse
-    source_files: Vec<PathBuf>,
-
-    /// Emit the AST as text instead of just parsing
-    #[arg(long)]
-    emit_ast: bool,
-}
+use pepper_driver::Options;
+use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let options = Options::parse();
@@ -22,31 +10,12 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut had_error = false;
-
-    for path in &options.source_files {
-        match parser::parse_file(path) {
-            Ok(module) => {
-                if options.emit_ast {
-                    println!("{}", module);
-                } else {
-                    eprintln!("parsed {} OK ({} imports, {} declarations)",
-                        path.display(),
-                        module.imports.len(),
-                        module.declarations.len(),
-                    );
-                }
-            }
-            Err(e) => {
-                eprintln!("error: {}", e);
-                had_error = true;
-            }
+    match pepper_driver::run(options) {
+        Ok(0) => ExitCode::SUCCESS,
+        Ok(code) => ExitCode::from(code as u8),
+        Err(e) => {
+            eprintln!("error: {}", e);
+            ExitCode::FAILURE
         }
-    }
-
-    if had_error {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
     }
 }

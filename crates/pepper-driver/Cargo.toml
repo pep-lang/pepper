@@ -1,0 +1,15 @@
+[package]
+name = "pepper-driver"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+pepper-parser = { path = "../pepper-parser" }
+pepper-sema = { path = "../pepper-sema" }
+pepper-support = { path = "../pepper-support" }
+pepper-codegen = { path = "../pepper-codegen" }
+inkwell = { version = "0.6", features = ["llvm17-0"] }
+clap.workspace = true
