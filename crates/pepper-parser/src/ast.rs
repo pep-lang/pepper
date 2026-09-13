@@ -23,7 +23,7 @@ pub struct TypeName {
 impl TypeName {
     pub fn auto() -> Self {
         Self {
-            name: "auto".to_string(),
+            name: "__auto".to_string(),
             generic_types: vec![],
         }
     }

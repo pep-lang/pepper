@@ -4,6 +4,7 @@ members = [
     ".",
     "crates/pepper-parser",
     "crates/pepper-support",
+    "crates/pepper-sema",
 ]
 
 [workspace.package]

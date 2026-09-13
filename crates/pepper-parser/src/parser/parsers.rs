@@ -74,6 +74,18 @@ fn ws(input: &mut &str) -> Result<()> {
     Ok(())
 }
 
+/// Skip spaces/tabs only, stopping before a newline (used after a default
+/// expression so decl_boundary can see the statement separator).
+fn skip_inline_ws(input: &mut &str) {
+    while let Some(c) = input.chars().next() {
+        if c == ' ' || c == '\t' || c == '\r' {
+            *input = &input[1..];
+        } else {
+            break;
+        }
+    }
+}
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 
 fn identifier(input: &mut &str) -> Result<String> {
@@ -306,6 +318,11 @@ fn atom(input: &mut &str) -> Result<Expression> {
 fn postfix(input: &mut &str) -> Result<Expression> {
     let mut expr = atom(input)?;
     loop {
+        // The raw remainder starting with a newline separates statements:
+        // stop before ws() swallows it into a postfix operator check.
+        if input.starts_with('\n') || input.starts_with("\r\n") {
+            break;
+        }
         ws(input)?;
         if input.starts_with('.') {
             *input = &input[1..];
@@ -360,7 +377,10 @@ fn postfix(input: &mut &str) -> Result<Expression> {
 /// `**` — right-associative, operand is postfix (function-call level)
 fn pow(input: &mut &str) -> Result<Expression> {
     let base = postfix(input)?;
-    ws(input)?;
+    // A newline after the operand separates statements; no `**` can follow.
+    if !input.starts_with('\n') && !input.starts_with("\r\n") {
+        ws(input)?;
+    }
     if input.starts_with("**") {
         *input = &input[2..];
         ws(input)?;
@@ -410,7 +430,17 @@ fn binary_left(
     try_op: impl Fn(&str) -> Option<&str>,
 ) -> Result<Expression> {
     let mut lhs = operand(input)?;
+    // If the remainder after the operand begins a new line, the expression is
+    // complete: a statement separator follows. The caller's boundary check
+    // must see that newline, so don't let ws() in the operator loop swallow
+    // it — track whether the first loop iteration started at a newline.
+    let started_at_newline = input.starts_with('\n') || input.starts_with("\r\n");
     loop {
+        if started_at_newline {
+            // No operator can follow a statement separator on the next line
+            // in this grammar (no line continuation); stop before ws eats it.
+            break;
+        }
         ws(input)?;
         let before = *input;
         if let Some(op) = try_op(input) {
@@ -431,7 +461,9 @@ fn binary_right(
     try_op: impl Fn(&str) -> Option<&str>,
 ) -> Result<Expression> {
     let lhs = operand(input)?;
-    ws(input)?;
+    if !input.starts_with('\n') && !input.starts_with("\r\n") {
+        ws(input)?;
+    }
     if let Some(op) = try_op(input) {
         *input = &input[op.len()..];
         let rhs = binary_right(input, operand, try_op)?;
@@ -526,7 +558,10 @@ fn logical_or(input: &mut &str) -> Result<Expression> {
 
 fn ternary(input: &mut &str) -> Result<Expression> {
     let cond = logical_or(input)?;
-    ws(input)?;
+    // A newline after the condition separates statements; no ternary follows.
+    if !input.starts_with('\n') && !input.starts_with("\r\n") {
+        ws(input)?;
+    }
     if !input.starts_with('?') { return Ok(cond); }
     *input = &input[1..];
     ws(input)?;
@@ -590,7 +625,9 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             *input = &input[1..];
             ws(input)?;
             dv = Some(expression(input)?);
-            ws(input)?;
+            // Stop whitespace-skipping at a newline so decl_boundary can see
+            // the statement separator.
+            skip_inline_ws(input);
         }
         return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: true });
     }
@@ -611,7 +648,9 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             *input = &input[1..];
             ws(input)?;
             dv = Some(expression(input)?);
-            ws(input)?;
+            // Stop whitespace-skipping at a newline so decl_boundary can see
+            // the statement separator.
+            skip_inline_ws(input);
         }
         return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false });
     }
@@ -635,7 +674,7 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
         *input = &input[1..];
         ws(input)?;
         dv = Some(expression(input)?);
-        ws(input)?;
+        skip_inline_ws(input);
     }
 
     Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false })
@@ -714,8 +753,14 @@ fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
 }
 
 /// After a `TypeName name` style declaration the next token must be a boundary
-/// (`;`, `=`, `}`, or end of input) — otherwise it was an expression all along.
+/// (`;`, `=`, `}`, newline, or end of input) — otherwise it was an expression
+/// all along.
 fn decl_boundary(input: &mut &str) -> bool {
+    // The raw (pre-ws) remainder starting with a newline separates statements
+    // that omit semicolons; ws() would swallow it into the next token.
+    if input.starts_with('\n') || input.starts_with("\r\n") {
+        return true;
+    }
     if ws(input).is_err() {
         return false;
     }
@@ -723,6 +768,7 @@ fn decl_boundary(input: &mut &str) -> bool {
     s.is_empty()
         || s.starts_with(';')
         || s.starts_with('}')
+        || s.starts_with('\n')
         || (s.starts_with('=') && !s.starts_with("=="))
 }
 

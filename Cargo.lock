@@ -160,6 +160,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pepper-sema"
+version = "0.1.0"
+dependencies = [
+ "pepper-parser",
+]
+
+[[package]]
 name = "pepper-support"
 version = "0.1.0"
 dependencies = [
