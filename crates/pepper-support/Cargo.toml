@@ -1,0 +1,11 @@
+[package]
+name = "pepper-support"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+libc.workspace = true
