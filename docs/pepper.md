@@ -103,8 +103,8 @@ struct Point {
 ```
 
 Structures can have methods attached to them in their declaration blocks, or via extension elsewhere. Structures have
-a constructor (`construct`) and a destructor(`destruct`). Within a structure's code, the current instance is referred to
-as `this`.
+a constructor (`construct`, also accepted as `new`) and a destructor (`destruct`). Within a structure's code, the current
+instance is referred to as `this`.
 
 ```
 struct Point {

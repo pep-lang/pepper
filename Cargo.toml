@@ -1,0 +1,9 @@
+[package]
+name = "pepper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+itertools = "0.14.0"
+winnow = "1.0.3"
