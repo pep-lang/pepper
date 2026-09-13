@@ -1,0 +1,15 @@
+[package]
+name = "pepper-codegen"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+pepper-sema = { path = "../pepper-sema" }
+pepper-support = { path = "../pepper-support" }
+inkwell = { version = "0.6", features = ["llvm17-0"] }
+
+[dev-dependencies]
+pepper-parser = { path = "../pepper-parser" }

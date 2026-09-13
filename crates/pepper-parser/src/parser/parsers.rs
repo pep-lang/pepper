@@ -657,7 +657,7 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
     // Only valid when NOT followed by '(' (which would indicate a function call)
-    let ty = type_name(input)?;
+    let mut ty = type_name(input)?;
     ws(input)?;
 
     // If the next token is '(' this is a function call, not a declaration
@@ -668,6 +668,14 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
 
     let name = identifier(input)?;
     ws(input)?;
+
+    // Optional `: Type` annotation (parameter style: `a: int`).
+    if input.starts_with(':') {
+        *input = &input[1..];
+        ws(input)?;
+        ty = type_name(input)?;
+        ws(input)?;
+    }
 
     let mut dv = None;
     if input.starts_with('=') && !input[1..].starts_with('=') {
@@ -829,7 +837,13 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
             *input = &input[1..];
             break;
         }
-        params.push(variable_declaration(input)?);
+        // C++ param grammar (Parser.cpp:1094-1140): `name: Type [= expr]`,
+        // or `this.<field> [= expr]` constructor params.
+        if input.starts_with("this") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+            params.push(constructor_parameter(input)?);
+        } else {
+            params.push(typed_parameter(input)?);
+        }
         ws(input)?;
         if input.starts_with(',') {
             *input = &input[1..];
@@ -842,6 +856,50 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
         return Err(cut(input));
     }
     Ok(params)
+}
+
+/// Parameter in C++ grammar: `name: Type [= expr]` (Parser.cpp:1106-1139),
+/// or C-style `Type name [= expr]` (used by the corpus, e.g. lib.pep's
+/// `int sum(int x, int y)`).
+fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
+    let before = *input;
+    // Colon style: `name: Type`.
+    if let Ok(decl) = (|| {
+        let name = identifier(input)?;
+        ws(input)?;
+        if !input.starts_with(':') {
+            return Err(bt(input));
+        }
+        *input = &input[1..];
+        ws(input)?;
+        let ty = type_name(input)?;
+        ws(input)?;
+        Ok((name, ty))
+    })() {
+        let (name, ty) = decl;
+        let mut dv = None;
+        if input.starts_with('=') && !input[1..].starts_with('=') {
+            *input = &input[1..];
+            ws(input)?;
+            dv = Some(expression(input)?);
+            skip_inline_ws(input);
+        }
+        return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false });
+    }
+    // C style: `Type name`.
+    *input = before;
+    let ty = type_name(input)?;
+    ws(input)?;
+    let name = identifier(input)?;
+    ws(input)?;
+    let mut dv = None;
+    if input.starts_with('=') && !input[1..].starts_with('=') {
+        *input = &input[1..];
+        ws(input)?;
+        dv = Some(expression(input)?);
+        skip_inline_ws(input);
+    }
+    Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false })
 }
 
 fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
@@ -903,7 +961,6 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             return_type = type_name(input)?;
             ws(input)?;
         }
-
         let body = block(input)?;
         ws(input)?;
 
@@ -932,13 +989,22 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
         };
         ws(input)?;
 
+        // Optional trailing `: Type` return annotation.
+        let mut effective_return = return_type;
+        if input.starts_with(':') {
+            *input = &input[1..];
+            ws(input)?;
+            effective_return = type_name(input)?;
+            ws(input)?;
+        }
+
         let body = block(input)?;
         ws(input)?;
 
         return Ok(FunctionDecl {
             name,
             generic_params: vec![],
-            return_type,
+            return_type: effective_return,
             parameters,
             external: false,
             body: Some(body),

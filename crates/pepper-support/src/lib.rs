@@ -98,10 +98,11 @@ pub extern "C" fn _pep_assert(condition: bool, message: *const c_char) {
 /// Zero-initialized allocation (port of `_pep_malloc`, tracking off).
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_malloc(size: usize) -> *mut c_void {
+    let alloc_size = size.max(1);
     unsafe {
-        let layout = std::alloc::Layout::from_size_align(size.max(1), 1).unwrap();
+        let layout = std::alloc::Layout::from_size_align(alloc_size, 1).unwrap();
         let ptr = std::alloc::alloc(layout);
-        std::ptr::write_bytes(ptr, 0, size);
+        std::ptr::write_bytes(ptr, 0, alloc_size);
         ptr as *mut c_void
     }
 }
