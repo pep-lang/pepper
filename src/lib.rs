@@ -1,1 +1,1 @@
-pub mod parser;
+pub use pepper_parser::parser;

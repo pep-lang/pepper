@@ -6,7 +6,7 @@
 //!   shift       →  add       →  mul         →  prefix       →
 //!   unary       →  pow       →  postfix     →  atom
 
-use crate::parser::ast::*;
+use crate::ast::*;
 use winnow::error::ErrMode;
 
 

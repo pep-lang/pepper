@@ -1,11 +1,10 @@
-pub mod ast;
 pub mod parsers;
 
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use ast::Module;
+use crate::ast::Module;
 
 /// Parse a single `.pep` file from disk.
 pub fn parse_file(path: &Path) -> Result<Module, String> {

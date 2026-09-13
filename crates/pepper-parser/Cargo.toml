@@ -1,0 +1,11 @@
+[package]
+name = "pepper-parser"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+itertools.workspace = true
+winnow.workspace = true

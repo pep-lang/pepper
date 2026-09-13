@@ -142,6 +142,13 @@ name = "pepper"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "pepper-parser",
+]
+
+[[package]]
+name = "pepper-parser"
+version = "0.1.0"
+dependencies = [
  "itertools",
  "winnow",
 ]
