@@ -96,6 +96,34 @@ fn resolve_expr(expr: &mut Expression, method_names: &[String]) {
                         method: "__index_set".to_string(),
                         args: vec![index, rhs_value],
                     };
+                    return;
+                }
+                // Compound assigns with an overload method (`str += x` →
+                // `str.+=(x)`): only when the lhs is a struct-typed symbol
+                // (resolve_implicit_types annotated its ty).
+                let op_name = op.op_name();
+                let lhs_is_struct = match &**lhs {
+                    Expression::SymbolRef { ty, .. } => {
+                        !ty.is_empty()
+                            && ty.to_string() != "__auto"
+                            && crate::type_name::INTEGRAL_TYPES
+                                .contains(ty.to_string().as_str())
+                            == false
+                    }
+                    Expression::ThisRef => true,
+                    _ => false,
+                };
+                if !op_name.is_empty()
+                    && method_names.iter().any(|m| *m == op_name)
+                    && lhs_is_struct
+                {
+                    let lhs = (**lhs).clone();
+                    let rhs = (**rhs).clone();
+                    *e = Expression::MethodCall {
+                        this: Box::new(lhs),
+                        method: op_name,
+                        args: vec![rhs],
+                    };
                 }
             }
             Expression::Index { lhs, rhs } => {
@@ -138,10 +166,38 @@ fn resolve_expr(expr: &mut Expression, method_names: &[String]) {
 }
 
 fn resolve_free_block(block: &mut Block, struct_method_names: &[(String, Vec<String>)]) {
-    // Free functions can overload operators on struct types.
+    // Free functions can overload operators on struct types. Walk all
+    // statements (declarations can nest operator expressions).
     for stmt in &mut block.items {
-        if let Statement::Expression(expr) = stmt {
-            resolve_free_expr(expr, struct_method_names);
+        resolve_free_stmt(stmt, struct_method_names);
+    }
+}
+
+fn resolve_free_stmt(stmt: &mut Statement, struct_method_names: &[(String, Vec<String>)]) {
+    match stmt {
+        Statement::Expression(expr) => resolve_free_expr(expr, struct_method_names),
+        Statement::Block(inner) => resolve_free_block(inner, struct_method_names),
+        Statement::Declaration(Declaration::Variable(var)) => {
+            if let Some(default) = &mut var.default {
+                resolve_free_expr(default, struct_method_names);
+            }
+        }
+        Statement::Declaration(_) => {}
+        Statement::Branch(branch) => {
+            resolve_free_expr(&mut branch.condition, struct_method_names);
+            resolve_free_block(&mut branch.if_block, struct_method_names);
+            if let Some(else_block) = &mut branch.else_block {
+                resolve_free_block(else_block, struct_method_names);
+            }
+        }
+        Statement::While(wh) => {
+            resolve_free_expr(&mut wh.condition, struct_method_names);
+            resolve_free_block(&mut wh.block, struct_method_names);
+        }
+        Statement::Return(ret) => {
+            if let Some(expr) = &mut ret.expr {
+                resolve_free_expr(expr, struct_method_names);
+            }
         }
     }
 }

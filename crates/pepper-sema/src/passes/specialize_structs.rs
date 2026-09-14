@@ -47,6 +47,9 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         for param in &mut m.parameters {
             substitute(&mut param.ty, &type_map);
         }
+        if let Some(body) = &mut m.body {
+            substitute_block(body, &type_map);
+        }
         specialized.method_members.push(m);
     }
 
@@ -120,6 +123,10 @@ fn substitute_statement(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
 
 fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)]) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        // SizeOf<T> in specialized bodies: substitute the generic arg.
+        if let Expression::SizeOf(ty) = e {
+            substitute(ty, type_map);
+        }
         // `this` symbol refs in specialized bodies carry the base type.
         if let Expression::SymbolRef { id, ty } = e {
             if id == "this" && !type_map.is_empty() {

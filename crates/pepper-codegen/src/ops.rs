@@ -286,7 +286,7 @@ pub fn pointer_binary<'ctx>(
 }
 
 /// Int value as bool (non-zero) (port of `asBool`).
-pub fn as_bool<'ctx>(builder: &Builder<'ctx>, value: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
+pub fn as_bool<'ctx>(context: &'ctx Context, builder: &Builder<'ctx>, value: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
     match value {
         BasicValueEnum::IntValue(v) => {
             if v.get_type().get_bit_width() == 1 {
@@ -299,13 +299,21 @@ pub fn as_bool<'ctx>(builder: &Builder<'ctx>, value: BasicValueEnum<'ctx>) -> In
                         v.get_type().const_zero(),
                         "asbool",
                     )
-                    .unwrap_or_else(|_| v)
+                    .unwrap_or(v)
             }
         }
         BasicValueEnum::FloatValue(v) => builder
             .build_float_compare(inkwell::FloatPredicate::ONE, v, v.get_type().const_zero(), "fbool")
             .expect("float compare"),
-        BasicValueEnum::PointerValue(_) => value.into_int_value(),
+        BasicValueEnum::PointerValue(p) => {
+            // Pointer truthiness: ptr != null via ptrtoint compare.
+            let i64t = context.i64_type();
+            let zero = i64t.const_zero();
+            let lhs_int = builder.build_ptr_to_int(p, i64t, "p2i").unwrap_or(zero);
+            builder
+                .build_int_compare(inkwell::IntPredicate::NE, lhs_int, zero, "ptrbool")
+                .unwrap_or(lhs_int)
+        }
         _ => value.into_int_value(),
     }
 }

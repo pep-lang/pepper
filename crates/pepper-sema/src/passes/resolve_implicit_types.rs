@@ -155,7 +155,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             }
             // Only resolve when the name is a known struct.
             for (ty, _) in &scopes.structs {
-                if ty == name {
+                let base = ty.split('<').next().unwrap_or(ty);
+                if base == name {
                     return crate::passes::gather_generics::parse_type_string(function);
                 }
             }

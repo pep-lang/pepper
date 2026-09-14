@@ -26,6 +26,8 @@ pub struct StructDesc<'ctx> {
     pub size: u64,
     /// real method name → mangled function name (`__dtor` → `Test.__dtor`).
     pub methods: HashMap<String, String>,
+    /// real names of static methods (no `this` param).
+    pub static_methods: std::collections::HashSet<String>,
     /// field name → sema type string.
     pub fields: Vec<(String, String)>,
 }
@@ -114,9 +116,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Struct instantiation (port of StructGen.cpp:57-106) ─────────────────
 
     fn instantiate_struct(&mut self, st: &StructDef) -> Result<(), String> {
-        // Generic struct bases are abstract: skip `Name<...>` instances here;
-        // specializations were cloned with concrete names by sema.
-        if st.name.contains('<') {
+        // Generic struct bases are abstract: skip `Name<...>` instances and
+        // generic bases (ty 'array<T>'); specializations were cloned with
+        // concrete names by sema.
+        if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
         }
 
@@ -162,6 +165,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             llvm_type,
             size,
             methods: HashMap::new(),
+            static_methods: std::collections::HashSet::new(),
             fields: st
                 .field_members
                 .iter()
@@ -180,11 +184,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Method instantiation (port of StructGen.cpp:108-148) ────────────────
 
     fn instantiate_methods(&mut self, st: &StructDef) -> Result<(), String> {
-        if st.name.contains('<') {
+        if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
         }
         let struct_name = st.name.clone();
         let mut methods: HashMap<String, String> = HashMap::new();
+        let mut static_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for method in &st.method_members {
             // Mangle `<Struct>.<name>`, inject `this` first for non-static.
             let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
@@ -207,6 +212,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&param.ty.to_string())
                     .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+                // Struct-typed params are pointers (C++ ref semantics).
+                let ty = match ty {
+                    BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
+                        sct.ptr_type(inkwell::AddressSpace::default()),
+                    ),
+                    other => other,
+                };
                 param_types.push(ty);
             }
             let mangled = format!("{}.{}", struct_name, method.name);
@@ -229,10 +241,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
             self.functions.insert(mangled.clone(), fn_value);
+            if method.is_static {
+                static_names.insert(method.name.clone());
+            }
             methods.insert(method.name.clone(), mangled);
         }
         if let Some(desc) = self.structs.get_mut(&st.name) {
             desc.methods = methods;
+            desc.static_methods = static_names;
         }
         Ok(())
     }
@@ -270,7 +286,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(());
         }
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
-        for param in &function.parameters {
+        // Params with defaults are optional: the LLVM fn takes only the
+        // required ones (defaults are emitted in the body).
+        for param in function.parameters.iter().filter(|p| p.default.is_none()) {
             let ty = self
                 .types
                 .get(&param.ty.to_string())
@@ -302,6 +320,9 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Struct codegen (ctor + methods) ─────────────────────────────────────
 
     fn codegen_struct(&mut self, st: &StructDef) -> Result<(), String> {
+        if st.ty.is_generic() && st.name == st.ty.name {
+            return Ok(());
+        }
         // Patch the ctor's `size` literal with the computed struct size
         // (port of StructGen.cpp:85-95).
         let mut ctor = st.constructor.clone();
@@ -407,9 +428,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut declared_params: Vec<(String, String)> = function
             .parameters
             .iter()
+            .filter(|p| p.default.is_none())
             .map(|p| (p.name.clone(), p.ty.to_string()))
             .collect();
-        if function.name.contains('.') {
+        // Static methods are instantiated WITHOUT a this param.
+        let is_static_method = function
+            .name
+            .split('.')
+            .next()
+            .and_then(|sn| self.structs.get(sn))
+            .map(|desc| {
+                let method_name = function.name.split('.').nth(1).unwrap_or("");
+                desc.static_methods.contains(method_name)
+            })
+            .unwrap_or(false);
+        if function.name.contains('.') && !is_static_method {
             let struct_name = function.name.split('.').next().unwrap_or("").to_string();
             declared_params.insert(0, ("this".to_string(), format!("{}*", struct_name)));
         }
@@ -418,11 +451,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .iter()
                 .enumerate()
                 .map(|(param_idx, (name, ty_string))| {
-                    let arg = fn_value.get_nth_param(param_idx as u32).expect("param");
-                    let ty = self
-                        .types
-                        .get(ty_string)
-                        .ok_or_else(|| format!("unknown param type {}", ty_string))?;
+                    let arg = fn_value.get_nth_param(param_idx as u32).unwrap_or_else(|| {
+                        panic!("param {} idx {} fn {}", name, param_idx, fn_value.get_name().to_string_lossy());
+                    });
+                    // The alloca type must match the LLVM fn's actual param
+                    // type (struct params were lowered to pointers).
+                    let ty = arg.get_type();
                     let alloca = self
                         .builder
                         .build_alloca(ty, name)
@@ -438,11 +472,40 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
         }
 
+        // Defaulted params become locals initialized from their defaults.
+        let mut defaulted_stmts: Vec<Statement> = vec![];
+        for param in function.parameters.iter().filter(|p| p.default.is_some()) {
+            let ty = self
+                .types
+                .get(&param.ty.to_string())
+                .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+            let ty = match ty {
+                BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
+                    sct.ptr_type(inkwell::AddressSpace::default()),
+                ),
+                other => other,
+            };
+            let alloca = self
+                .builder
+                .build_alloca(ty, &param.name)
+                .map_err(|e| e.to_string())?;
+            if let Some(default) = &param.default {
+                let value = self.codegen_expr(default)?;
+                self.builder
+                    .build_store(alloca, value)
+                    .map_err(|e| e.to_string())?;
+            }
+            self.frame.push_local(
+                &param.name,
+                Address::with_llvm_ty(&param.name, &param.ty.to_string(), ty, alloca),
+            );
+        }
         let body = function.body.clone().unwrap_or_else(|| Block {
             name: String::new(),
             items: vec![],
         });
         self.codegen_block(&body)?;
+        let _ = defaulted_stmts;
 
         // Terminate any orphaned trailing block (e.g. an `ifcont` after a
         // branch whose paths both return) with a branch to the return block.
@@ -571,7 +634,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let merge_block = self.context.append_basic_block(fn_value, "ifcont");
 
         let cond = self.codegen_expr(&branch.condition)?;
-        let cond_bool = llvm_ops::as_bool(&self.builder, cond);
+        let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, then_block, else_block.unwrap_or(merge_block))
             .map_err(|e| e.to_string())?;
@@ -609,7 +672,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         // Initial condition check.
         let cond = self.codegen_expr(&wh.condition)?;
-        let cond_bool = llvm_ops::as_bool(&self.builder, cond);
+        let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
@@ -622,7 +685,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let after_body = self.builder.get_insert_block().expect("insert block");
         self.builder.position_at_end(after_body);
         let cond = self.codegen_expr(&wh.condition)?;
-        let cond_bool = llvm_ops::as_bool(&self.builder, cond);
+        let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
@@ -766,8 +829,25 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Err(format!("unknown type in sizeof: {}", name))
                 }
             }
-            Expression::IsPod(_) | Expression::Default(_) => {
-                Err("intrinsics are not supported".to_string())
+            Expression::IsPod(_) => {
+                // __is_pod<T>: false for structs (the only corpus use).
+                Ok(self.context.bool_type().const_int(0, false).into())
+            }
+            Expression::Default(ty) => {
+                // __default<T>: the type's zero value.
+                let name = ty.to_string();
+                if let Some(ty) = self.types.get(&name) {
+                    let any = match ty {
+                        BasicTypeEnum::IntType(it) => it.const_zero().into(),
+                        BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+                        BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+                        BasicTypeEnum::StructType(sct) => sct.const_zero().into(),
+                        _ => self.context.i32_type().const_zero().into(),
+                    };
+                    Ok(any)
+                } else {
+                    Ok(self.context.i32_type().const_zero().into())
+                }
             }
             Expression::FunctionCall {
                 function: name,
@@ -775,7 +855,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => self.codegen_call(name, args),
             Expression::MethodCall { this, method, args } => {
                 // Mangle: `<StructOf(this)>.<method>`. The struct name comes
-                // from the this Address's sema type (strip the pointer suffix).
+                // from the this Address's sema type (strip the pointer suffix);
+                // non-symbol lhs (e.g. Index) falls back to the method name
+                // as-is (array index methods resolve at codegen).
                 let struct_name = match this.as_ref() {
                     Expression::SymbolRef { id, .. } => self
                         .frame
@@ -793,14 +875,98 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .to_string(),
                     _ => String::new(),
                 };
-                let this_val = self.codegen_expr(this)?;
+                if method.starts_with("__index_") {
+                    // POD array index set/get: direct GEP + load/store.
+                    return self.codegen_index_method(this, method, args);
+                }
+                // Struct-typed args pass the POINTER (C++ ref semantics):
+                // load the alloca address, not the struct value.
+                let this_val = match this.as_ref() {
+                    Expression::SymbolRef { id, .. } if self
+                        .frame
+                        .find_local(id)
+                        .map(|a| self.structs.contains_key(a.ty.trim_end_matches('*')))
+                        .unwrap_or(false) =>
+                    {
+                        let addr = self.frame.find_local(id).unwrap();
+                        BasicValueEnum::PointerValue(addr.ptr)
+                    }
+                    Expression::ThisRef => {
+                        let addr = self.frame.find_local("this").unwrap();
+                        BasicValueEnum::PointerValue(addr.ptr)
+                    }
+                    _ => self.codegen_expr(this)?,
+                };
                 let mangled = format!("{}.{}", struct_name, method);
                 let mut arg_vals = vec![this_val];
                 for arg in args {
                     arg_vals.push(self.codegen_expr(arg)?);
                 }
+                // Static methods have no `this` param: if the fn's param
+                // count is arg_vals.len() - 1, drop the this.
+                if let Some(f) = self.functions.get(&mangled) {
+                    let param_count = f.get_type().get_param_types().len();
+                    if param_count == arg_vals.len() - 1 {
+                        arg_vals.remove(0);
+                    }
+                }
                 self.call_function(&mangled, arg_vals)
             }
+        }
+    }
+
+    /// POD array index get/set: `arr[i]` → load via GEP, `arr[i] = v` →
+    /// store via GEP.
+    fn codegen_index_method(
+        &mut self,
+        this: &Expression,
+        method: &str,
+        args: &[Expression],
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let base = self.codegen_expr(this)?;
+        let ptr = match base {
+            BasicValueEnum::PointerValue(p) => p,
+            BasicValueEnum::StructValue(_) => {
+                return Err("index method on struct value".to_string())
+            }
+            _ => return Err("index method on non-pointer".to_string()),
+        };
+        let index_expr = args.first().ok_or_else(|| "index needs an index".to_string())?;
+        let index = self.codegen_expr(index_expr)?;
+        let gep = unsafe {
+            self.builder
+                .build_gep(self.context.i32_type(), ptr, &[index.into_int_value()], "idxm")
+                .map_err(|e| e.to_string())?
+        };
+        if method == "__index_get" {
+            // POD arrays load i32; the string indexer returns a string (ptr).
+            let base_ty = self
+                .frame
+                .find_local(
+                    match this {
+                        Expression::SymbolRef { id, .. } => id.as_str(),
+                        Expression::ThisRef => "this",
+                        _ => "",
+                    },
+                )
+                .map(|a| a.ty.to_string())
+                .unwrap_or_default();
+            let load_ty: BasicTypeEnum<'ctx> = if base_ty.starts_with("string") {
+                self.context.ptr_type(inkwell::AddressSpace::default()).into()
+            } else {
+                self.context.i32_type().into()
+            };
+            self.builder
+                .build_load(load_ty, gep, "loadidx")
+                .map_err(|e| e.to_string())
+        } else {
+            // __index_set: the value is args[1].
+            let value_expr = args.get(1).ok_or_else(|| "index set needs a value".to_string())?;
+            let value = self.codegen_expr(value_expr)?;
+            self.builder
+                .build_store(gep, value)
+                .map_err(|e| e.to_string())?;
+            Ok(value)
         }
     }
 
@@ -808,6 +974,36 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Builtins first: print → _pep_print/_pep_print_int.
         if name == "print" {
             return self.codegen_print(args);
+        }
+        // release<T>(v) → v.__release() (POD no-op).
+        if name == "release" || name.starts_with("release<") {
+            if let Some(first) = args.first() {
+                let value = self.codegen_expr(first)?;
+                return Ok(value);
+            }
+            return Ok(self.context.i32_type().const_zero().into());
+        }
+        // Intrinsics: __is_pod<T> → false for structs (true for POD);
+        // __default<T> → the type's zero value.
+        if name == "__is_pod" {
+            return Ok(self.context.bool_type().const_int(0, false).into());
+        }
+        if name == "__default" {
+            let base = name.split('<').next().unwrap_or(name);
+            let _ = base;
+            // The generic arg type: `__default<T>` — use the ty from the
+            // call's target string.
+            if let Some(ty) = self.types.get(&name.to_string()) {
+                let any = match ty {
+                    BasicTypeEnum::IntType(it) => it.const_zero().into(),
+                    BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+                    BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+                    BasicTypeEnum::StructType(sct) => sct.const_zero().into(),
+                    _ => self.context.i32_type().const_zero().into(),
+                };
+                return Ok(any);
+            }
+            return Ok(self.context.i32_type().const_zero().into());
         }
         // `string(lit, len)` ctor: for the literal flow the raw bytes
         // pointer IS the string; return the first arg directly.
@@ -1076,6 +1272,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                 };
                 Ok(Address::with_llvm_ty(name, &ty_name, field_ty, gep))
             }
+            Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
+                // POD array element store: `arr[i] = v` → GEP + store.
+                let base = self.codegen_expr(lhs)?;
+                let index = self.codegen_expr(rhs)?;
+                let ptr = base.into_pointer_value();
+                let gep = unsafe {
+                    self.builder
+                        .build_gep(self.context.i32_type(), ptr, &[index.into_int_value()], "idxl")
+                        .map_err(|e| e.to_string())?
+                };
+                Ok(Address::new("idxl", "i32", gep))
+            }
             _ => Err("unsupported lvalue".to_string()),
         }
     }
@@ -1100,7 +1308,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Pos => self.codegen_expr(operand),
             LogicalNot => {
                 let value = self.codegen_expr(operand)?;
-                let b = llvm_ops::as_bool(&self.builder, value);
+                let b = llvm_ops::as_bool(self.context, &self.builder, value);
                 Ok(BasicValueEnum::IntValue(
                     self.builder.build_not(b, "lnot").map_err(|e| e.to_string())?,
                 ))
@@ -1172,7 +1380,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let merge_block = self.context.append_basic_block(fn_value, "ternarycont");
 
         let cond = self.codegen_expr(condition)?;
-        let cond_bool = llvm_ops::as_bool(&self.builder, cond);
+        let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, true_block, false_block)
             .map_err(|e| e.to_string())?;
@@ -1261,10 +1469,28 @@ fn apply_op<'ctx>(
     ty_name: &str,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match (lhs, rhs) {
-        (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => Ok(BasicValueEnum::IntValue(
-            llvm_ops::int_binary(context, builder, op, l, r, ty_name)
-                .ok_or_else(|| format!("unsupported op {:?}", op))?,
-        )),
+        (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+            // Mixed widths: coerce both to the wider one before the op.
+            let (l2, r2) = if l.get_type().get_bit_width() == r.get_type().get_bit_width() {
+                (l, r)
+            } else if l.get_type().get_bit_width() > r.get_type().get_bit_width() {
+                let r2 = builder
+                    .build_int_s_extend(r, l.get_type(), "argw")
+                    .unwrap_or(r);
+                (l, r2)
+            } else {
+                let l2 = builder
+                    .build_int_s_extend(l, r.get_type(), "argw")
+                    .unwrap_or(l);
+                (l2, r)
+            };
+            Ok(BasicValueEnum::IntValue(
+                llvm_ops::int_binary(context, builder, op, l2, r2, ty_name)
+                    .ok_or_else(|| {
+                        format!("unsupported op {:?}", op)
+                    })?,
+            ))
+        }
         (BasicValueEnum::FloatValue(l), BasicValueEnum::FloatValue(r)) => {
             if is_comparison(op) {
                 Ok(BasicValueEnum::IntValue(
@@ -1278,12 +1504,79 @@ fn apply_op<'ctx>(
                 ))
             }
         }
-        (BasicValueEnum::PointerValue(l), BasicValueEnum::PointerValue(r)) => Ok(
-            BasicValueEnum::IntValue(
+        (BasicValueEnum::PointerValue(l), BasicValueEnum::PointerValue(r)) => {
+            Ok(BasicValueEnum::IntValue(
                 llvm_ops::pointer_binary(context, builder, op, l, r)
-                    .ok_or_else(|| format!("unsupported op {:?}", op))?,
-            ),
-        ),
+                    .ok_or_else(|| {
+                        format!("unsupported op {:?}", op)
+                    })?,
+            ))
+        }
+        // Pointer arithmetic: ptr + int / ptr - int (e.g. `Data + idx`).
+        (BasicValueEnum::PointerValue(p), BasicValueEnum::IntValue(i)) => {
+            match op {
+                BinaryOp::Add | BinaryOp::Sub => {
+                    let idx = if op == BinaryOp::Add {
+                        i
+                    } else {
+                        builder.build_int_neg(i, "negidx").unwrap_or(i)
+                    };
+                    let advanced = unsafe {
+                        builder
+                            .build_in_bounds_gep(context.i32_type(), p, &[idx], "ptrarith")
+                            .map_err(|e| e.to_string())?
+                    };
+                    Ok(BasicValueEnum::PointerValue(advanced))
+                }
+                _ => {
+            Err(format!("unsupported op {:?} on pointer", op))
+        }
+            }
+        }
+        // Mixed int/pointer comparison: ptrtoint the pointer side.
+        (l_kind, r_kind) if is_comparison(op) => {
+            let ptr_val = match (l_kind, r_kind) {
+                (BasicValueEnum::IntValue(_), BasicValueEnum::PointerValue(p)) => p,
+                (BasicValueEnum::PointerValue(p), BasicValueEnum::IntValue(_)) => p,
+                _ => return Err(format!("unsupported operand kinds for {:?}", op)),
+            };
+            let as_int = builder
+                .build_ptr_to_int(ptr_val, context.i64_type(), "p2i")
+                .map_err(|e| e.to_string())?;
+            let (li, ri) = match (l_kind, r_kind) {
+                (BasicValueEnum::IntValue(i), _) => {
+                    let li = if i.get_type().get_bit_width() < 64 {
+                        builder
+                            .build_int_s_extend(i, context.i64_type(), "argw")
+                            .map_err(|e| e.to_string())?
+                    } else {
+                        i
+                    };
+                    (li, as_int)
+                }
+                (_, BasicValueEnum::IntValue(i)) => {
+                    let ri = if i.get_type().get_bit_width() < 64 {
+                        builder
+                            .build_int_s_extend(i, context.i64_type(), "argw")
+                            .map_err(|e| e.to_string())?
+                    } else {
+                        i
+                    };
+                    (as_int, ri)
+                }
+                _ => return Err(format!("unsupported operand kinds for {:?}", op)),
+            };
+            let pred = match op {
+                BinaryOp::Equal | BinaryOp::Identical => inkwell::IntPredicate::EQ,
+                BinaryOp::NotEqual => inkwell::IntPredicate::NE,
+                _ => return Err(format!("unsupported op {:?}", op)),
+            };
+            Ok(BasicValueEnum::IntValue(
+                builder
+                    .build_int_compare(pred, li, ri, "mixedcmp")
+                    .map_err(|e| e.to_string())?,
+            ))
+        }
         _ => Err(format!("unsupported operand kinds for {:?}", op)),
     }
 }

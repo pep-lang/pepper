@@ -65,16 +65,16 @@ impl BinaryOp {
             BinaryOp::LogicalAnd => "operator&&",
             BinaryOp::LogicalOr => "operator||",
             BinaryOp::Identical => "",
-            BinaryOp::Assign
-            | BinaryOp::AddAssign
-            | BinaryOp::SubAssign
-            | BinaryOp::MulAssign
-            | BinaryOp::DivAssign
-            | BinaryOp::ModAssign
-            | BinaryOp::LShiftAssign
-            | BinaryOp::RShiftAssign
-            | BinaryOp::BitAndAssign
-            | BinaryOp::BitOrAssign => "",
+            BinaryOp::Assign => "",
+            BinaryOp::AddAssign => "+=",
+            BinaryOp::SubAssign => "-=",
+            BinaryOp::MulAssign => "*=",
+            BinaryOp::DivAssign => "/=",
+            BinaryOp::ModAssign => "%=",
+            BinaryOp::LShiftAssign => "<<=",
+            BinaryOp::RShiftAssign => ">>=",
+            BinaryOp::BitAndAssign => "&=",
+            BinaryOp::BitOrAssign => "^=",
         };
         base.to_string()
     }

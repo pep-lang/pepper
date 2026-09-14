@@ -7,6 +7,11 @@ use pepper_parser::ast;
 
 fn type_name_from(t: &ast::TypeName) -> TypeName {
     let args: Vec<TypeName> = t.generic_types.iter().map(type_name_from).collect();
+    // Array suffix: `int[]` → Array-flagged type (element `int`).
+    if let Some(base) = t.name.strip_suffix("[]") {
+        let element = TypeName::new(base);
+        return TypeName::make_array(&format!("{}[]", base), element);
+    }
     if args.is_empty() {
         TypeName::new(&t.name)
     } else {
@@ -88,7 +93,7 @@ fn expression(expr: &ast::Expression) -> Expression {
             }
         }
         ast::Expression::TypeLiteral(ty) => Expression::FunctionCall {
-            function: ty.name.clone(),
+            function: type_name_from(ty).to_string(),
             args: vec![],
         },
         ast::Expression::SizeOf(ty) => Expression::SizeOf(type_name_from(ty)),
@@ -119,14 +124,24 @@ fn expression(expr: &ast::Expression) -> Expression {
             name: name.clone(),
         },
         ast::Expression::FunctionCall { function, arguments } => {
+            // Method call `t.getX()`: the target is a member access.
+            if let ast::Expression::MemberAccess { lhs, name } = function.as_ref() {
+                return Expression::MethodCall {
+                    this: Box::new(expression(lhs)),
+                    method: name.clone(),
+                    args: arguments.iter().map(expression).collect(),
+                };
+            }
             // Constructor-style call `Name<args>(ctor_args)` keeps the generic
             // target name; the args become the call arguments.
             let function = match function.as_ref() {
                 ast::Expression::TypeLiteral(ty) => type_name_from(ty).to_string(),
                 ast::Expression::SymbolRef(name) => name.clone(),
-                other => match other {
-                    _ => panic!("unsupported call target"),
-                },
+                ast::Expression::Literal(lit) => lit.to_string(),
+                other => {
+                    // Fall back to the display form for exotic targets.
+                    format!("{}", other)
+                }
             };
             Expression::FunctionCall {
                 function,

@@ -82,6 +82,11 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
     match stmt {
         Statement::Expression(expr) => walk_expression(expr, f),
         Statement::Block(inner) => walk_block(inner, f),
+        Statement::Declaration(Declaration::Variable(var)) => {
+            if let Some(default) = &mut var.default {
+                walk_expression(default, f);
+            }
+        }
         Statement::Declaration(_) => {}
         Statement::Branch(branch) => {
             walk_expression(&mut branch.condition, f);
