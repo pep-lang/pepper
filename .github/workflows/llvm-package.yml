@@ -117,6 +117,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The upstream Linux tree is 11.6 GB -- nearly three times the Windows
+      # one, because its `bin/` alone is 9 GB of unstripped tools -- and this
+      # job's peak is about 14.7 GB: that tree, the 1.4 GB archive, the ~200 MB
+      # output, and the post-job cache save, which tars the archive to a second
+      # file on the same filesystem while the tree is still present (1.48 GB
+      # observed on the macOS leg). ubuntu-latest has ~13 GB free, so it ran
+      # out mid-package, and so did the runner's own diagnostic log.
+      #
+      # Reclaim the preinstalled toolchains this job never touches; the `df`
+      # lines are here so the log shows what was actually gained if a future
+      # image changes what it ships. Only the producer pays this: consumers
+      # install the package, which is why it exists. Deliberately not `set -e`
+      # on the removals -- an image that drops one of these paths must not fail
+      # the job.
+      - name: Reclaim disk (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          df -BM --output=avail / | tail -1 | awk '{print "before: " $1}'
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /usr/share/swift || true
+          df -BM --output=avail / | tail -1 | awk '{print "after:  " $1}'
+
       # A full upstream install is the input to packaging, so this job pays the
       # cost CI is being spared. Cache it so repeat runs skip the download.
       - name: Cache LLVM archive (Windows)

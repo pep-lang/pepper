@@ -4,13 +4,20 @@
 # The official releases are enormous -- 11.6 GB extracted on Linux, 9 GB of
 # that being unstripped tools this project never invokes -- which is what
 # exhausts a GitHub runner's disk. What the build actually consumes is
-# llvm-config (for llvm-sys discovery) and the static component archives (for
-# linking), about 313 MB.
+# llvm-config (for llvm-sys discovery), the component libraries (for linking)
+# and the C headers: 83 MB compressed on Windows, 123 MB on macOS arm64.
 #
 # clang is deliberately excluded: crates/pepper-driver/src/linker.rs prefers
 # the prefix's clang but falls back to clang on PATH, and both the Linux and
 # macOS runners ship one. Including it would add gigabytes to package a
 # compiler we only use as a link driver.
+#
+# tar reads the keep-set straight out of the prefix rather than a staging copy.
+# Staging cost a second copy of everything -- 435 MB on the macOS leg -- on the
+# same filesystem as the 11.6 GB tree it was copied from, which is exactly the
+# disk this job does not have. `cp -l` is not the portable way out: macOS cp
+# documents -l but fails with EBADF, and TMPDIR is not guaranteed to share a
+# filesystem with the prefix.
 #
 # Usage: scripts/package-llvm.sh <prefix> <output.tar.xz>
 set -euo pipefail
@@ -23,40 +30,41 @@ output="${2:?usage: package-llvm.sh <prefix> <output.tar.xz>}"
   exit 1
 }
 
-staging=$(mktemp -d)
-trap 'rm -rf "$staging"' EXIT
+# Resolved before the cd below, and while the directory is guaranteed to exist,
+# so a relative output path still lands where the caller asked.
+mkdir -p "$(dirname "$output")"
+output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
 
-mkdir -p "$staging/bin" "$staging/lib"
-cp "$prefix/bin/llvm-config" "$staging/bin/"
+cd "$prefix"
+
+# Members are named relative to the prefix, so the archive unpacks straight
+# over a prefix root with no --strip-components.
+#
+# nullglob matters: without it a non-matching glob is passed to tar verbatim
+# and tar fails on a file called `libLLVM*.a`. The guards below then report
+# which piece is actually missing.
+shopt -s nullglob
 
 # llvm-config --libs names these; a missing one is a link error much later.
-#
-# Counted with find, not `ls ... | wc -l`: under `set -euo pipefail` a
-# non-matching glob makes ls exit 2, pipefail propagates it out of the
-# command substitution, and the script dies here printing nothing at all --
-# so the guard below, which exists precisely to explain this case, never runs.
-archives=$(find "$prefix/lib" -maxdepth 1 -name 'libLLVM*.a' | wc -l)
-[ "$archives" -gt 0 ] || { echo "no libLLVM*.a archives in $prefix/lib" >&2; exit 1; }
-cp "$prefix"/lib/libLLVM*.a "$staging/lib/"
+members=(lib/libLLVM*.a)
+[ "${#members[@]}" -gt 0 ] || { echo "no libLLVM*.a archives in $prefix/lib" >&2; exit 1; }
+archives="${#members[@]}"
 
 # Anything else llvm-config reports as a link dependency of the components.
-for extra in "$prefix"/lib/libLLVM*.so*; do
-  [ -e "$extra" ] && cp -P "$extra" "$staging/lib/"
-done
+members+=(lib/libLLVM*.so* lib/libLLVM*.dylib)
+members+=(bin/llvm-config)
 
 # llvm-sys also compiles a small C shim (wrappers/*.c) against the C API, so
 # the C headers travel with the package: llvm-c itself plus llvm/Config, which
 # llvm-c/Target.h pulls in for the target .def lists. A couple of MB; the C++
 # headers are not needed.
 for headers in include/llvm-c include/llvm/Config; do
-  [ -d "$prefix/$headers" ] || { echo "no $headers in $prefix" >&2; exit 1; }
-  mkdir -p "$staging/$(dirname "$headers")"
-  cp -R "$prefix/$headers" "$staging/$headers"
+  [ -d "$headers" ] || { echo "no $headers in $prefix" >&2; exit 1; }
+  members+=("$headers")
 done
 
 echo "packaging $archives archives from $prefix"
-du -sm "$staging" | awk '{print "  staged: " $1 " MB"}'
+du -cm "${members[@]}" | awk 'END {print "  selected: " $1 " MB"}'
 
-mkdir -p "$(dirname "$output")"
-tar -C "$staging" -cJf "$output" .
+tar -cJf "$output" "${members[@]}"
 du -m "$output" | awk '{print "  package: " $1 " MB"}'
