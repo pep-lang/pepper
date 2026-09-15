@@ -122,30 +122,28 @@ jobs:
       # a hardcoded key still hits exactly after the pinned LLVM version is
       # bumped, and actions/cache skips its save on an exact hit, so the new
       # archive would never be cached and every run would re-download it.
-      - name: Cache LLVM archive (Windows)
+      - name: Cache LLVM download (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v6
         with:
           path: ~/AppData/Local/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
 
-      - name: Cache LLVM archive (Unix)
+      - name: Cache LLVM download (Unix)
         if: runner.os != 'Windows'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ matrix.os }}
 
-      - name: Provision LLVM (Windows)
-        if: runner.os == 'Windows'
-        run: pwsh -File scripts/setup-llvm.ps1
-
-      # Invoked through bash rather than as ./scripts/...: the exec bit is easy
-      # to lose when committing from a core.filemode=false checkout, and this
-      # form does not depend on it.
-      - name: Provision LLVM (Unix)
-        if: runner.os != 'Windows'
-        run: bash scripts/setup-llvm.sh
+      # Installs the minimal LLVM package when one has been published, else a
+      # full upstream install. The Linux tree is 11.6 GB extracted, which is
+      # what exhausted this runner's disk before the package existed.
+      - name: Provision LLVM
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci-provision-llvm.sh
 
       # The command is supplied by someone with write access (dispatch requires
       # it), and reaches the shell through the environment rather than template

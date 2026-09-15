@@ -43,22 +43,24 @@ jobs:
           rustc --version
           cargo --version
 
-      # scripts/setup-llvm.ps1 caches its download here. Caching the archive
-      # rather than the extracted prefix keeps the cache entry at ~800 MB
-      # instead of several GB; re-extracting takes about 30 seconds.
-      #
-      # The key tracks the script's hash, not a hardcoded version: a hardcoded
-      # key still hits exactly after the pinned LLVM version is bumped, and
-      # actions/cache skips its save on an exact hit, so the new archive would
-      # never be cached and every later run would re-download 822 MB.
-      - name: Cache LLVM archive
+      # Installs the minimal LLVM package published by the llvm-package
+      # workflow (~450 MB) and falls back to a full upstream install (4 GB
+      # extracted) if none exists yet. The cache covers whichever download
+      # happens; its key tracks the setup script's hash, not a hardcoded
+      # version, because a hardcoded key keeps hitting exactly after a version
+      # bump and actions/cache skips its save on an exact hit -- so the new
+      # archive would never be cached and every later run would re-download.
+      - name: Cache LLVM download
         uses: actions/cache@v6
         with:
           path: ~/AppData/Local/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
 
       - name: Provision LLVM
-        run: pwsh -File scripts/setup-llvm.ps1
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci-provision-llvm.sh
 
       - name: Cache cargo registry
         uses: actions/cache@v6

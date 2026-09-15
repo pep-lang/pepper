@@ -46,6 +46,13 @@ $ErrorActionPreference = 'Stop'
 
 # Dictated by the inkwell feature in crates/*/Cargo.toml:
 #   inkwell "llvm22-1" -> llvm-sys 221.x -> LLVM 22.1.x
+#
+# Changing this? Re-run the llvm-package workflow afterwards
+# (gh workflow run llvm-package.yml). The CI packages are per-version, and a
+# missing one does not fail: CI silently reverts to multi-GB full installs.
+#
+# This line is also parsed by ci-provision-llvm.sh to locate the prefix on
+# Windows, so keep the `$LlvmVersion = '<version>'` shape.
 $LlvmVersion = '22.1.8'
 $LlvmMajor = '22'
 $LlvmSysMajor = '221'
@@ -64,6 +71,10 @@ $CacheDir = Join-Path $Root 'cache'
 $Asset = "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc.tar.xz"
 $Archive = Join-Path $CacheDir $Asset
 $Url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$Asset"
+
+# Windows' bundled bsdtar, resolved absolutely. See its use below for why PATH
+# is not good enough.
+$script:WindowsTar = Join-Path $env:SystemRoot 'System32\tar.exe'
 
 # PEPPER_SETUP_DEVTOOLS lets a dev opt in once (user/CI environment) instead of
 # remembering the flag on every run.
@@ -173,7 +184,12 @@ if ((Test-LlvmPrefix $Prefix) -and -not $Force) {
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     # The tarball has a single `clang+llvm-...` top-level dir; --strip-components
     # lands its contents directly in $Prefix.
-    tar.exe -xf $Archive -C $Prefix --strip-components=1
+    #
+    # Resolved absolutely rather than through PATH: when this script is invoked
+    # from Git bash, `tar.exe` finds GNU tar, which reads the `C:` in a Windows
+    # path as a remote host ("Cannot connect to C: resolve failed"). Windows'
+    # own bsdtar handles drive letters and xz.
+    & $script:WindowsTar -xf $Archive -C $Prefix --strip-components=1
     if ($LASTEXITCODE -ne 0) { throw "extraction failed: $Archive" }
 
     if (-not (Test-LlvmPrefix $Prefix)) {

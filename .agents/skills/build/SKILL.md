@@ -33,10 +33,19 @@ pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 
 Windows specifics worth knowing, since they are not obvious: `lldb` is **absent** from the `clang+llvm` tarball and ships only in the llvm.org NSIS installer, so the script extracts it (7-Zip required — `winget install 7zip.7zip`) rather than running the installer, which keeps the registry and system PATH untouched. `liblldb.dll` is also linked against one exact CPython minor version and the installer bundles no Python, so the script drops Python's embeddable runtime next to `lldb.exe`; without it `lldb` aborts with `unable to find python311.dll`. On Unix, lldb normally lives in the same LLVM prefix or the distro package, so the script only reports what it finds.
 
-`lldb` resolves Rust symbols, source lines, and frame arguments on these builds, which is the fastest way to localize an access violation:
+`lldb` resolves Rust symbols, source lines, and frame arguments on these builds, which is the fastest way to localize an access violation. Since the script leaves PATH untouched (see above), invoke it by full path on Windows — a bare `lldb` only appears to work on a machine that happens to have an unrelated LLVM installed:
+
+```powershell
+& "$env:LOCALAPPDATA\pepper\llvm\22.1.8\bin\lldb.exe" --batch -o run `
+  -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
+```
+
+The `22.1.8` in that path is the version pinned in `scripts/setup-llvm.ps1`; after a bump it is whatever that script now installs.
+
+On macOS and Linux, with `lldb` on PATH:
 
 ```bash
-lldb --batch -o run -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
+lldb --batch -o run -k "thread backtrace" -- target/debug/pepper tests/hello.pep
 ```
 
 ## Build
@@ -61,6 +70,16 @@ Symptoms and causes worth knowing before you start guessing:
 ## Upgrading LLVM
 
 The version is pinned in three places that must agree: the `inkwell` feature (`llvm22-1`) in `crates/pepper-codegen/Cargo.toml` and `crates/pepper-driver/Cargo.toml`, `LLVM_SYS_MAJOR` in `crates/pepper-codegen/build.rs` and `LLVM_PREFIX_ENV` in `crates/pepper-driver/src/linker.rs`, and the version constants in both setup scripts.
+
+**Then republish the CI packages:**
+
+```bash
+gh workflow run llvm-package.yml
+```
+
+CI installs a prebuilt minimal LLVM published as an asset on the `llvm-<version>` release (see `.github/workflows/llvm-package.yml`). Those assets are per-version, so a bump leaves no package for the new one — and nothing fails loudly when that happens. `scripts/ci-provision-llvm.sh` quietly falls back to a full upstream install, which means every CI job silently starts paying a multi-gigabyte download and extraction again, and the Linux and macOS legs of `platform-test` can exhaust the runner's disk outright, which is what the package exists to avoid. The only signal is a line in the provisioning log: *"No prebuilt package published for &lt;platform&gt;"*.
+
+Run the workflow after the pins are updated and merged: it builds from the version the setup scripts name, so it has to see the new value. The LLVM caches invalidate themselves, since their keys hash the setup scripts.
 
 ## Notes
 

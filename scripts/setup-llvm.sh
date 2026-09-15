@@ -20,6 +20,12 @@ set -euo pipefail
 
 # Dictated by the inkwell feature in crates/*/Cargo.toml:
 #   inkwell "llvm22-1" -> llvm-sys 221.x -> LLVM 22.1.x
+#
+# Changing this? Re-run the llvm-package workflow afterwards
+# (gh workflow run llvm-package.yml). The CI packages are per-version, and a
+# missing one does not fail: CI silently reverts to multi-GB full installs.
+# This line is also parsed by ci-provision-llvm.sh and llvm-package.yml, so
+# keep the `LLVM_VERSION="<version>"` shape.
 LLVM_VERSION="22.1.8"
 LLVM_MAJOR="22"
 LLVM_SYS_MAJOR="221"
