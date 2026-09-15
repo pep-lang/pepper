@@ -17,7 +17,7 @@ Follow the **legacy_build** skill: configure if CMake files changed, then
 cmake --build D:/pepper/build --parallel
 ```
 
-(remember the vcvars + Ninja PATH setup from the build skill; `cl.exe` won't work without it)
+(remember the vcvars + Ninja PATH setup from the **legacy_build** skill; `cl.exe` won't work without it)
 
 ## Step 2: Run ctest
 
@@ -25,7 +25,7 @@ cmake --build D:/pepper/build --parallel
 "C:\Program Files\CMake\bin\ctest.exe" --test-dir D:/pepper/build -C Release --output-on-failure
 ```
 
-cTest itself does not need the MSVC environment, but running both steps in one `cmd //c` session (as in the build skill) is simplest.
+cTest itself does not need the MSVC environment, but running both steps in one `cmd //c` session (as in the **legacy_build** skill) is simplest.
 
 Useful variants:
 

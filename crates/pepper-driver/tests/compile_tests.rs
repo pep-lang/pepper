@@ -1,7 +1,7 @@
 //! End-to-end compile tests: JIT value tests (entry `test`) and a full
 //! obj+link+spawn run (entry `main`), ported from `unittests/*`.
 
-use std::path::PathBuf;
+mod common;
 
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
@@ -10,8 +10,6 @@ use pepper_sema::passes::transform_pass;
 use pepper_sema::struct_body;
 
 fn compile_jit(source: &str) -> i32 {
-    // Retain support symbols so JIT'd externs resolve from the host process.
-    let _ = pepper_support::retain_support_symbols();
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
     let mut module: SemaModule = build(&ast);
     struct_body::apply(&mut module);
@@ -169,9 +167,6 @@ test(): int {
 
 #[test]
 fn full_pipeline_link_and_spawn() {
-    // Retain support symbols (same requirement as the CLI).
-    let _ = pepper_support::retain_support_symbols();
-
     let source = r#"
 main(): int {
     return 0
@@ -190,7 +185,7 @@ main(): int {
     let build_dir = std::env::temp_dir().join("pepper_link_test");
     std::fs::create_dir_all(&build_dir).unwrap();
     let obj_path = build_dir.join("test.o");
-    let out_path = build_dir.join("test_bin");
+    let out_path = build_dir.join(if cfg!(windows) { "test_bin.exe" } else { "test_bin" });
 
     inkwell::targets::Target::initialize_x86(&inkwell::targets::InitializationConfig::default());
     let triple = inkwell::targets::TargetMachine::get_default_triple();
@@ -210,51 +205,11 @@ main(): int {
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
         .unwrap();
 
-    // Link with the support staticlib.
-    let staticlib = std::env::var("PEPPER_SUPPORT_A")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            // target/debug/deps/... → target/debug/libpepper_support.a
-            let mut dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
-            while dir.file_name().map(|n| n != "target").unwrap_or(true) {
-                dir = dir.parent().unwrap().to_path_buf();
-            }
-            dir.join("debug").join("libpepper_support.a")
-        });
+    // Link through the driver's own linker so this test exercises the real
+    // link path instead of a hand-rolled duplicate of it.
+    let staticlib = common::support_staticlib();
 
-    let status = std::process::Command::new("ld")
-        .args([
-            "-demangle",
-            "-dynamic",
-            "-arch",
-            "x86_64",
-            "-o",
-            out_path.to_str().unwrap(),
-        ])
-        .args(if cfg!(target_os = "macos") {
-            let sdk = std::process::Command::new("xcrun")
-                .arg("--show-sdk-path")
-                .output()
-                .ok()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                .unwrap_or_default();
-            vec![
-                "-platform_version".to_string(),
-                "macos".to_string(),
-                "12.1.0".to_string(),
-                "12.3".to_string(),
-                "-syslibroot".to_string(),
-                sdk,
-            ]
-        } else {
-            vec![]
-        })
-        .arg(obj_path.to_str().unwrap())
-        .arg(staticlib.to_str().unwrap())
-        .arg("-lSystem")
-        .status()
-        .unwrap();
-    assert!(status.success(), "link failed");
+    pepper_driver::linker::link(&[obj_path, staticlib], &out_path, &[], &[]).expect("link");
 
     let run = std::process::Command::new(&out_path).status().unwrap();
     assert!(run.success(), "spawned binary failed");

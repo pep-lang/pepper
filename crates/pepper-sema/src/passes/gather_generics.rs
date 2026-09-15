@@ -13,7 +13,6 @@ pub fn gather_generics(module: &mut Module) {
 
     let mut gather = |expr: &mut Expression| {
         if let Expression::FunctionCall { function, .. } = expr {
-            eprintln!("DBG gather call={:?}", function);
             // Do not record specializations for intrinsics.
             if function.starts_with("__") {
                 return;
@@ -83,7 +82,6 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
 
-    eprintln!("DBG gather functions={:?}", functions);
     // Emit struct specs.
     let mut struct_specs: Vec<TypeName> = module.struct_specs.clone();
     for name in &structs {
@@ -98,7 +96,6 @@ pub fn gather_generics(module: &mut Module) {
             struct_specs.push(ty);
         }
     }
-    eprintln!("DBG gather structs={:?} -> specs={:?}", structs, struct_specs.iter().map(|s| s.to_string()).collect::<Vec<_>>());
     module.struct_specs = struct_specs;
 
     // Emit function specs (constructor calls become struct specs).

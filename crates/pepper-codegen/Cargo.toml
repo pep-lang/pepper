@@ -9,7 +9,18 @@ path = "src/lib.rs"
 [dependencies]
 pepper-sema = { path = "../pepper-sema" }
 pepper-support = { path = "../pepper-support" }
-inkwell = { version = "0.6", features = ["llvm17-0"] }
+
+# `target-all` (inkwell's default) emits initializers for every LLVM target,
+# including ones a given LLVM build omits. Pepper only targets x86.
+#
+# Windows links LLVM-C.dll instead of LLVM's static libs -- those are built
+# against the static CRT and mixing CRTs corrupts the heap. `no-llvm-linking`
+# hands linkage to build.rs; see the comment there.
+[target.'cfg(windows)'.dependencies]
+inkwell = { version = "0.10", default-features = false, features = ["llvm22-1-no-llvm-linking", "target-x86"] }
+
+[target.'cfg(not(windows))'.dependencies]
+inkwell = { version = "0.10", default-features = false, features = ["llvm22-1", "target-x86"] }
 
 [dev-dependencies]
 pepper-parser = { path = "../pepper-parser" }

@@ -89,7 +89,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             let function = module.functions[idx].clone();
             self.codegen_function(&function)?;
         }
-        eprintln!("IR-DUMP\n{}", self.module.to_string());
         self.module
             .verify()
             .map_err(|e| format!("Module verification failed: {}", e.to_string()))
@@ -97,14 +96,22 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Compile + JIT a value-test module: returns the entry's return value.
     pub fn jit_execute(&mut self, module: &mut SemaModule, entry: &str) -> Result<i32, String> {
-        // Retain the support symbols so the linker does not GC them from the
-        // rlib — the JIT'd code resolves them at runtime only.
-        let _ = pepper_support::retain_support_symbols();
         self.generate(module)?;
         let ee = self
             .module
             .create_jit_execution_engine(OptimizationLevel::None)
             .map_err(|e| format!("JIT failed: {}", e.to_string()))?;
+
+        // Bind the runtime support functions. The JIT cannot discover them on
+        // its own: they live in a static rlib linked into this executable, so
+        // they are absent from the process export table that MCJIT's symbol
+        // search consults, and calls would land on unresolved addresses.
+        for (name, addr) in pepper_support::support_symbols() {
+            if let Some(declared) = self.module.get_function(name) {
+                ee.add_global_mapping(&declared, addr);
+            }
+        }
+
         unsafe {
             let f = ee
                 .get_function::<unsafe extern "C" fn() -> i32>(entry)
@@ -1080,8 +1087,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .i8_type()
                     .ptr_type(inkwell::AddressSpace::default());
                 let (ret, params): (BasicTypeEnum<'ctx>, Vec<BasicTypeEnum<'ctx>>) = match name {
-                    "_pep_print" | "_pep_print_float" => (i32t.into(), vec![ptr_ty.into()]),
+                    "_pep_print" => (i32t.into(), vec![ptr_ty.into()]),
                     "_pep_print_int" => (i32t.into(), vec![self.context.i64_type().into()]),
+                    // codegen_print widens float args to f64 before calling.
+                    "_pep_print_float" => (i32t.into(), vec![self.context.f64_type().into()]),
                     "_pep_malloc" | "_pep_realloc" => {
                         (ptr_ty.into(), vec![self.context.i64_type().into()])
                     }
@@ -1163,7 +1172,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
         Ok(call
             .try_as_basic_value()
-            .left()
+            .basic()
             .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
     }
 

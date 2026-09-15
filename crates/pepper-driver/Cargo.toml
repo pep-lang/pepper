@@ -11,5 +11,11 @@ pepper-parser = { path = "../pepper-parser" }
 pepper-sema = { path = "../pepper-sema" }
 pepper-support = { path = "../pepper-support" }
 pepper-codegen = { path = "../pepper-codegen" }
-inkwell = { version = "0.6", features = ["llvm17-0"] }
 clap.workspace = true
+
+# See crates/pepper-codegen/Cargo.toml + build.rs for why Windows links the DLL.
+[target.'cfg(windows)'.dependencies]
+inkwell = { version = "0.10", default-features = false, features = ["llvm22-1-no-llvm-linking", "target-x86"] }
+
+[target.'cfg(not(windows))'.dependencies]
+inkwell = { version = "0.10", default-features = false, features = ["llvm22-1", "target-x86"] }

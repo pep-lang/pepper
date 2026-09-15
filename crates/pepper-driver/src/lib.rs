@@ -98,8 +98,11 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
 /// Locate the pepper-support staticlib next to this binary's target dir.
 fn support_staticlib() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    // target/debug/pepper → target/debug/libpepper_support.a
-    exe.parent()?.join("libpepper_support.a").canonicalize().ok()
+    // target/debug/pepper → target/debug/<pepper_support staticlib>
+    exe.parent()?
+        .join(linker::support_staticlib_name())
+        .canonicalize()
+        .ok()
 }
 
 /// Default-target machine for obj emission (cpu "generic" per

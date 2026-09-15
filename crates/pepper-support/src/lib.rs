@@ -188,23 +188,39 @@ pub extern "C" fn _pep_print_int(value: i64) {
     println!("{}", value);
 }
 
-/// Force retention of every exported symbol: the linker GCs `#[no_mangle]`
-/// symbols in an rlib unless referenced, but the JIT'd module references them
-/// only at runtime. Returns the addresses (kept opaque) for callers.
-pub fn retain_support_symbols() -> [usize; 12] {
-    [
-        black_box(SupportInit as usize),
-        black_box(panic as usize),
-        black_box(trace_region as usize),
-        black_box(trace_ptr as usize),
-        black_box(trace_int as usize),
-        black_box(_pep_assert as usize),
-        black_box(_pep_malloc as usize),
-        black_box(_pep_realloc as usize),
-        black_box(_pep_free as usize),
-        black_box(_pep_utf8_length as usize),
-        black_box(_pep_utf8_size as usize),
-        black_box(_pep_utf8_compare as usize),
+/// Print a float (backs `print` with float args). Codegen widens every float
+/// argument to f64 before the call, so this takes a double.
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_print_float(value: f64) {
+    println!("{}", value);
+}
+
+/// Every symbol the generated code may call, paired with its address.
+///
+/// Two jobs. First, referencing the functions here keeps the linker from GC'ing
+/// `#[no_mangle]` symbols out of this rlib, since compiled Pepper code only
+/// references them at runtime. Second, the JIT needs the addresses explicitly:
+/// symbols of a static rlib linked into an executable are not in the process's
+/// export table (notably on Windows), so MCJIT's symbol search cannot find them
+/// and calls into unresolved addresses. `pepper-codegen` binds this table into
+/// the execution engine with LLVMAddGlobalMapping.
+pub fn support_symbols() -> Vec<(&'static str, usize)> {
+    vec![
+        ("SupportInit", black_box(SupportInit as usize)),
+        ("panic", black_box(panic as usize)),
+        ("trace_region", black_box(trace_region as usize)),
+        ("trace_ptr", black_box(trace_ptr as usize)),
+        ("trace_int", black_box(trace_int as usize)),
+        ("_pep_assert", black_box(_pep_assert as usize)),
+        ("_pep_malloc", black_box(_pep_malloc as usize)),
+        ("_pep_realloc", black_box(_pep_realloc as usize)),
+        ("_pep_free", black_box(_pep_free as usize)),
+        ("_pep_utf8_length", black_box(_pep_utf8_length as usize)),
+        ("_pep_utf8_size", black_box(_pep_utf8_size as usize)),
+        ("_pep_utf8_compare", black_box(_pep_utf8_compare as usize)),
+        ("_pep_print", black_box(_pep_print as usize)),
+        ("_pep_print_int", black_box(_pep_print_int as usize)),
+        ("_pep_print_float", black_box(_pep_print_float as usize)),
     ]
 }
 
@@ -278,8 +294,25 @@ mod tests {
     }
 
     #[test]
-    fn retain_covers_all_exports() {
-        let addrs = retain_support_symbols();
-        assert!(addrs.iter().all(|a| *a != 0));
+    fn support_symbols_are_bindable() {
+        let syms = support_symbols();
+        assert!(syms.iter().all(|(name, addr)| !name.is_empty() && *addr != 0));
+        // Codegen looks these up by name to bind them into the JIT; a missing
+        // entry means generated code calls an unresolved address. codegen_print
+        // picks one per argument type, so all three print variants must be here.
+        for required in [
+            "_pep_malloc",
+            "_pep_free",
+            "trace_ptr",
+            "trace_int",
+            "_pep_print",
+            "_pep_print_int",
+            "_pep_print_float",
+        ] {
+            assert!(
+                syms.iter().any(|(name, _)| *name == required),
+                "{required} missing from support_symbols()"
+            );
+        }
     }
 }

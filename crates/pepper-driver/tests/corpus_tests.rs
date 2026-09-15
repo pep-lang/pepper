@@ -2,6 +2,8 @@
 //! `unittests/main.cpp:27-35` — entry `main`, runtime on iff the source
 //! contains `import`; assert exit code 0.
 
+mod common;
+
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
 use pepper_sema::model::Module as SemaModule;
@@ -24,7 +26,6 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     // Runtime discovery uses the CWD; chdir to the repo root.
     let repo_root = tests_dir().parent().unwrap().to_path_buf();
     std::env::set_current_dir(&repo_root).unwrap();
-    let _ = pepper_support::retain_support_symbols();
 
     let content = std::fs::read_to_string(entry)
         .map_err(|e| format!("cannot read {}: {}", entry.display(), e))?;
@@ -54,7 +55,6 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
             .iter()
             .map(|i| (i.name.clone(), i.is_local))
             .collect();
-        eprintln!("DBG merged file={:?} structs={:?}", source_file, built.structs.iter().map(|s| s.name.clone()).collect::<Vec<_>>());
         merged.merge(std::mem::take(&mut built));
         for (name, is_local) in &this_imports {
             let path =
@@ -82,8 +82,6 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
 
     struct_body::apply(&mut merged);
     transform_pass(&mut merged);
-    eprintln!("DBG fns={:?}", merged.functions.iter().map(|f| f.name.clone()).collect::<Vec<_>>());
-    eprintln!("DBG specs={:?} structs={:?}", merged.struct_specs, merged.structs.iter().map(|s| s.name.clone()).collect::<Vec<_>>());
 
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
@@ -93,7 +91,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let build_dir = std::env::temp_dir().join("pepper_corpus_test");
     std::fs::create_dir_all(&build_dir).unwrap();
     let obj_path = build_dir.join("corpus.o");
-    let out_path = build_dir.join("corpus_bin");
+    let out_path = build_dir.join(if cfg!(windows) { "corpus_bin.exe" } else { "corpus_bin" });
 
     inkwell::targets::Target::initialize_x86(&inkwell::targets::InitializationConfig::default());
     let triple = inkwell::targets::TargetMachine::get_default_triple();
@@ -114,54 +112,15 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
         .unwrap();
 
-    // Link with the support staticlib.
-    let staticlib = support_staticlib().expect("support staticlib");
-    let mut args: Vec<String> = vec![
-        "-demangle".to_string(),
-        "-dynamic".to_string(),
-        "-arch".to_string(),
-        "x86_64".to_string(),
-        "-o".to_string(),
-        out_path.to_string_lossy().into_owned(),
-    ];
-    if cfg!(target_os = "macos") {
-        let sdk = std::process::Command::new("xcrun")
-            .arg("--show-sdk-path")
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default();
-        args.push("-platform_version".to_string());
-        args.push("macos".to_string());
-        args.push("12.1.0".to_string());
-        args.push("12.3".to_string());
-        args.push("-syslibroot".to_string());
-        args.push(sdk);
-    }
-    args.push(obj_path.to_string_lossy().into_owned());
-    args.push(staticlib.to_string_lossy().into_owned());
-    args.push("-lSystem".to_string());
-
-    let status = std::process::Command::new("ld")
-        .args(&args)
-        .status()
-        .map_err(|e| format!("ld failed: {}", e))?;
-    if !status.success() {
-        return Err("link failed".to_string());
-    }
+    // Link through the driver's own linker, same as compile_tests -- a second
+    // hand-rolled `ld` invocation here would only drift from it (and could not
+    // work on Windows at all).
+    let staticlib = common::support_staticlib();
+    pepper_driver::linker::link(&[obj_path, staticlib], &out_path, &[], &[])?;
 
     std::process::Command::new(&out_path)
         .status()
         .map_err(|e| format!("spawn failed: {}", e))
-}
-
-fn support_staticlib() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let mut dir = exe.parent()?.to_path_buf();
-    while dir.file_name().map(|n| n != "target").unwrap_or(true) {
-        dir = dir.parent()?.to_path_buf();
-    }
-    dir.join("debug").join("libpepper_support.a").canonicalize().ok()
 }
 
 /// KNOWN GAPS (tracked for the next phase): 10 of 14 corpus fixtures fail —

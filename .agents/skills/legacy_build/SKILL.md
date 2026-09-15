@@ -46,4 +46,4 @@ Notes:
 
 ## Verify
 
-A good build ends with `pepper.exe`, `PepperTests.exe`, and their helper exes present under `D:/pepper/build/`. Use the test skill to verify behavior after building.
+A good build ends with `pepper.exe`, `PepperTests.exe`, and their helper exes present under `D:/pepper/build/`. Use the **legacy_test** skill to verify behavior after building — the `test` skill now runs the Rust suite instead.
