@@ -1,34 +1,33 @@
 ---
 name: finish-pr
 description: >
-  Drives a feature branch through to a merged PR: makes sure the local branch
-  is current, pushes it, opens (or finds) its GitHub PR, runs a code review
-  against the changes, and — once that review comes back clean and CI is
-  green — automatically squash-merges and deletes the branch, no separate
-  go-ahead needed. If the review turns up findings, it stops there for the
-  user to triage; once those are resolved (in this conversation, or by
-  re-invoking the skill), it re-reviews and, if clean, finishes the same way.
-  Trigger this whenever the user says things like "finish this PR", "finish
-  the PR", "wrap up this branch", "ship this branch", "push this and open a
-  PR", "is CI green yet, merge it", "check on my PR", or otherwise asks to
-  move a branch from "done coding" to "merged" — even if they don't spell out
-  every step themselves. It's resumable: invoke it again after addressing
-  review feedback (or after CI finishes running) to pick up from wherever
-  things stand, rather than redoing push/PR/review from scratch.
+  Use when the user wants a branch moved from "done coding" to "merged" —
+  "finish this PR", "finish the PR", "wrap up this branch", "ship this
+  branch", "push this and open a PR", "is CI green yet, merge it", "check on
+  my PR" — even if they don't spell out the individual steps. Also use it to
+  resume that work: invoke it again after review feedback is resolved or CI
+  finishes, and it picks up from wherever things stand instead of redoing the
+  push, the PR, or the review. Review findings are always reported to the
+  user with proposed fixes and never resolved on the skill's own initiative,
+  whatever else it was told to do.
 ---
 
 # Finish PR
 
 A feature branch goes through the same handful of stages on its way to
-`main`: push it, open a PR, get it reviewed, address feedback, wait for CI,
-merge. This skill carries a branch through those stages, stopping at the one
-point that genuinely needs a human: when the code review turns up findings
-that need triaging. A clean review plus green CI is, on its own, enough
-authorization to squash-merge and delete the branch — invoking this skill at
-all is the user asking it to get the branch to "merged," so once there's
-nothing left for a human to decide, finish the job rather than pausing to ask
-"should I merge?" again. The user can always say "hold off" or stop the
-skill before this point if they want a manual look first.
+`main`: push it, open a PR, get it reviewed, triage feedback with the user,
+wait for CI, merge. This skill carries a branch through those stages,
+stopping at the one point that genuinely needs a human: when the code review
+turns up findings that need triaging. A clean review plus green CI is, on its
+own, enough authorization to squash-merge and delete the branch — invoking
+this skill at all is the user asking it to get the branch to "merged," so
+once there's nothing left for a human to decide, finish the job rather than
+pausing to ask "should I merge?" again. The user can always say "hold off" or
+stop the skill before this point if they want a manual look first.
+
+That autonomy covers *merging*, and nothing else. It is never authorization
+to resolve review findings yourself: those are the one thing this workflow
+hands back to the user every time (Phase 5).
 
 Read the current state before acting — don't assume you're starting from
 step 1. A user invoking this after already opening a PR and getting a review
@@ -125,33 +124,61 @@ Phase 2), re-run it — a review is only as good as the diff it saw.
 
 ## Phase 5 — Findings gate the merge; a clean review doesn't
 
-- **The review has findings** — present them, most severe first, and stop
-  there. This is the one point in the workflow that ends with the user
-  making a decision, not with you making it:
-  - Don't silently fix findings yourself, even ones that look obviously
-    right — the user asked to finish the PR, not to hand over judgment
-    calls about what the code should do.
-  - If they ask you to fix specific findings in this same conversation,
-    that's a normal edit request — go ahead, commit and push the fix, then
-    treat the next pass (later in this conversation, or the next invocation
-    of this skill) as starting back at Phase 4 — the diff changed, so the
-    review has to re-run — rather than skipping straight to CI.
-  - Do not continue to Phase 6 in the same pass that just surfaced
-    findings, even if some findings seem minor. Let the user (or a later
-    fix) come back to this before merging is back on the table.
+- **The review has findings** — present every one, most severe first, each
+  with the fix you would propose for it, and stop there. Do not apply any of
+  them until the user has said which ones to fix — not in this pass, not in
+  the next one.
+
+  **Surfacing is unconditional.** Which findings get fixed, and how, is the
+  user's call — that is the entire reason this phase exists. None of the
+  following authorizes fixing them yourself instead, announced or not:
+
+  - The user already said "finish the PR", "ship it", or "merge it". That
+    authorizes *merging a clean review*. It does not authorize editing code
+    on their behalf, and it does not convert a findings result into a clean
+    one.
+  - The finding is obviously correct, or the reviewer handed over the exact
+    patch to apply.
+  - You wrote the code under review yourself, minutes ago, in this very
+    conversation.
+  - The fix is small, mechanical, or "only a comment/doc change".
+  - Fixing it looks faster than asking about it.
+
+  A finding you fix on your own initiative is a decision the user never got
+  to see, and the diff they eventually approve is not the one that was
+  reviewed. Present the findings with proposals; then wait.
+
+  - Once the user picks fixes, apply exactly those, commit and push, then go
+    back to **Phase 4** — the diff changed, and a review is only as good as
+    the diff it saw. Re-review even when the fixes were verbatim the
+    reviewer's own suggestions.
+  - Never continue to Phase 6 in the same pass that surfaced findings, even
+    if every finding looks minor.
 - **The review is clean (no findings)** — say so, briefly, and continue
   straight into Phase 6 in the same pass. A clean review is exactly the
   condition this skill is waiting for; once it has that, there's nothing
   left for a human to weigh in on, so don't stop to ask "should I merge?" —
   that question was already answered by the review coming back clean.
 
+### Red flags — every one of these means "surface it, don't fix it"
+
+- "These are the reviewer's own patches, so applying them isn't a judgment
+  call."
+- "The user told me to merge, so they obviously want the findings cleared."
+- "It's my own code from this session, so I'm just correcting myself."
+- "It's only documentation / a comment / a one-liner."
+- "I'll fix them and list what I fixed in the summary."
+
+The summary is not a substitute for the user's decision. Stop, present the
+findings and the proposed fixes, and let them choose.
+
 ## Phase 6 — CI and merge
 
 Reachable automatically once Phase 5 lands on a clean review — whether
-that's the first pass through, or a later one after the user (or you, in
-this conversation) resolved every finding and the re-run review came back
-clean. No separate "merge it" is needed here: the clean review is the
-authorization, and this phase's only remaining job is to confirm CI agrees
+that's the first pass through, or a later one after the user decided which
+findings to fix, those fixes were applied and pushed, and the re-run review
+came back clean. No separate "merge it" is needed here: the clean review is
+the authorization, and this phase's only remaining job is to confirm CI agrees
 before actually merging. Merging is visible to everyone else who touches
 this repo and isn't something to walk back casually, so still never skip a
 real check or bypass branch protection to force it through — the autonomy
