@@ -1,0 +1,80 @@
+# Required check for merging into main: builds the workspace and runs the test
+# suite on Windows, the platform the compiler is developed against.
+#
+# Other platforms are deliberately not part of this gate. The driver's codegen
+# initializes only the x86 LLVM target, so a macOS arm64 runner cannot be green
+# yet, and making it required would block every merge. Use the on-demand
+# `platform-test` workflow (and the skill of the same name) to exercise other
+# operating systems when a change warrants it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer commit on the same ref makes older runs irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail fast on a warning-free build rather than letting warnings accumulate?
+  # No: the port still carries known-dead code. Warnings stay visible in logs.
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    runs-on: windows-latest
+    # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
+    # seconds. 45 leaves room for a slow download without hanging forever.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          rustc --version
+          cargo --version
+
+      # scripts/setup-llvm.ps1 caches its download here. Caching the archive
+      # rather than the extracted prefix keeps the cache entry at ~800 MB
+      # instead of several GB; re-extracting takes about 30 seconds.
+      #
+      # The key tracks the script's hash, not a hardcoded version: a hardcoded
+      # key still hits exactly after the pinned LLVM version is bumped, and
+      # actions/cache skips its save on an exact hit, so the new archive would
+      # never be cached and every later run would re-download 822 MB.
+      - name: Cache LLVM archive
+        uses: actions/cache@v6
+        with:
+          path: ~/AppData/Local/pepper/cache
+          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
+
+      - name: Provision LLVM
+        run: pwsh -File scripts/setup-llvm.ps1
+
+      - name: Cache cargo registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Build
+        run: cargo build --workspace --locked
+
+      # --workspace is required: the repo root is itself a package, so a bare
+      # `cargo test` would run only its single integration test and skip every
+      # crate under crates/.
+      - name: Test
+        run: cargo test --workspace --locked
