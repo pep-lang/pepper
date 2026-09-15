@@ -1,5 +1,5 @@
 ---
-name: test
+name: legacy_test
 description: Build the Pepper project first, then run its test suite with ctest. Use when asked to test, run tests, or verify changes to the compiler.
 ---
 
@@ -11,7 +11,7 @@ The test suite is a gtest binary (`PepperTests`) driven by ctest. Each `CompileT
 
 Tests must be built before ctest can see them: `gtest_discover_tests` registers tests at build time, and the post-build step copies `.env` (which sets `PEP_SEARCH_DIR`) and `TestSupport.pep` next to `PepperTests.exe`. A stale or missing build yields zero or crashing tests.
 
-Follow the **build** skill: configure if CMake files changed, then
+Follow the **legacy_build** skill: configure if CMake files changed, then
 
 ```bat
 cmake --build D:/pepper/build --parallel

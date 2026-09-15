@@ -1,5 +1,5 @@
 ---
-name: build
+name: legacy_build
 description: Configure and build the Pepper compiler project with CMake (Ninja + MSVC) on Windows. Use when asked to build, compile, or reconfigure the project.
 ---
 
