@@ -25,8 +25,25 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-pepper-driver = { path = "crates/pepper-driver" }
+pepper-driver = { path = "crates/pepper-driver", default-features = false }
 clap.workspace = true
+
+# The LLVM version for the whole build, selected here so a single
+# `--features llvm19-1` at the workspace root reaches every crate that links
+# LLVM. Exactly one must be active: inkwell rejects two, with an error naming
+# the conflicting llvm-sys crates.
+#
+# Default is LLVM 20 -- `apt install llvm-20-dev` on ubuntu-24.04 and the
+# preinstalled Homebrew llvm@20 on macos-latest both provide it. Run
+# scripts/setup-llvm.sh (or .ps1) and it will tell you which version it found
+# and, if it is not the default, the exact flag to pass.
+[features]
+default = ["llvm20-1"]
+llvm18-1 = ["pepper-driver/llvm18-1"]
+llvm19-1 = ["pepper-driver/llvm19-1"]
+llvm20-1 = ["pepper-driver/llvm20-1"]
+llvm21-1 = ["pepper-driver/llvm21-1"]
+llvm22-1 = ["pepper-driver/llvm22-1"]
 
 [lib]
 path = "src/lib.rs"

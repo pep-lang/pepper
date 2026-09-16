@@ -29,6 +29,10 @@ on:
         description: "Command to run (bash, from the repo root)"
         required: false
         default: cargo test --workspace
+      provision:
+        description: "Provision LLVM before running the script (false to probe the bare image)"
+        required: false
+        default: "true"
 
 concurrency:
   group: platform-test-${{ github.ref }}
@@ -123,23 +127,28 @@ jobs:
       # bumped, and actions/cache skips its save on an exact hit, so the new
       # archive would never be cached and every run would re-download it.
       - name: Cache LLVM download (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && inputs.provision != 'false'
         uses: actions/cache@v6
         with:
           path: ~/AppData/Local/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
 
       - name: Cache LLVM download (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && inputs.provision != 'false'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ matrix.os }}
 
-      # Installs the minimal LLVM package when one has been published, else a
-      # full upstream install. The Linux tree is 11.6 GB extracted, which is
-      # what exhausted this runner's disk before the package existed.
+      # Windows installs the minimal LLVM package when one has been published,
+      # else the upstream archive. Linux and macOS install from apt or
+      # Homebrew, which takes seconds.
+      #
+      # Skippable because the question is sometimes what the bare image already
+      # has -- which package-manager LLVM it can reach, and whether that is
+      # enough to build with.
       - name: Provision LLVM
+        if: inputs.provision != 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

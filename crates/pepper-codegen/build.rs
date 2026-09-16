@@ -17,17 +17,61 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-const LLVM_SYS_MAJOR: &str = "221";
+/// Cargo feature -> llvm-sys major, for every LLVM this crate can build
+/// against. Keep in sync with the `[features]` table in Cargo.toml; a feature
+/// missing from here would fall through to the "no version selected" panic.
+const LLVM_SYS_MAJORS: &[(&str, &str)] = &[
+    ("CARGO_FEATURE_LLVM18_1", "181"),
+    ("CARGO_FEATURE_LLVM19_1", "191"),
+    ("CARGO_FEATURE_LLVM20_1", "201"),
+    ("CARGO_FEATURE_LLVM21_1", "211"),
+    ("CARGO_FEATURE_LLVM22_1", "221"),
+];
+
+/// The llvm-sys major implied by the enabled version feature.
+///
+/// Cargo sets `CARGO_FEATURE_<NAME>` for each enabled feature, so the selected
+/// version is readable here without duplicating the pin. Two enabled at once
+/// is rejected rather than silently taking the first: inkwell would fail later
+/// with an error about conflicting llvm-sys crates, which does not point here.
+fn llvm_sys_major() -> &'static str {
+    let enabled: Vec<&(&str, &str)> = LLVM_SYS_MAJORS
+        .iter()
+        .filter(|(feature, _)| env::var_os(feature).is_some())
+        .collect();
+
+    match enabled.as_slice() {
+        [(_, major)] => major,
+        [] => panic!(
+            "no LLVM version feature enabled -- build with one of \
+             --features llvm18-1|llvm19-1|llvm20-1|llvm21-1|llvm22-1"
+        ),
+        many => panic!(
+            "{} LLVM version features enabled ({}) -- exactly one is allowed",
+            many.len(),
+            // The flags to change, not the llvm-sys majors they imply:
+            // CARGO_FEATURE_LLVM20_1 -> llvm20-1.
+            many.iter()
+                .map(|(feature, _)| feature
+                    .trim_start_matches("CARGO_FEATURE_")
+                    .to_ascii_lowercase()
+                    .replacen('_', "-", 1))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=LLVM_SYS_{LLVM_SYS_MAJOR}_PREFIX");
+    let llvm_sys_major = llvm_sys_major();
+    println!("cargo:rerun-if-env-changed=LLVM_SYS_{llvm_sys_major}_PREFIX");
 
     let target = env::var("TARGET").unwrap_or_default();
     if !target.contains("windows") {
         return;
     }
 
-    let var = format!("LLVM_SYS_{LLVM_SYS_MAJOR}_PREFIX");
+    let var = format!("LLVM_SYS_{llvm_sys_major}_PREFIX");
     let Ok(prefix) = env::var(&var) else {
         panic!("{var} is not set -- run scripts/setup-llvm.ps1 (see the build skill)");
     };

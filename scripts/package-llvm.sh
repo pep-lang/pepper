@@ -51,7 +51,14 @@ members=(lib/libLLVM*.a)
 archives="${#members[@]}"
 
 # Anything else llvm-config reports as a link dependency of the components.
-members+=(lib/libLLVM*.so* lib/libLLVM*.dylib)
+#
+# libPolly is named by `llvm-config --libnames --link-static` on prefixes that
+# ship it -- Debian splits it into libpolly-N-dev -- and llvm-sys hands every
+# name it gets to the linker. Leaving it out produced a package that
+# setup-llvm.sh's own usable_llvm check would reject, with the failure
+# surfacing as "could not find native static library Polly" at link time.
+# Keep this set in step with archive_members() in scripts/setup-llvm.sh.
+members+=(lib/libLLVM*.so* lib/libLLVM*.dylib lib/libPolly*.a)
 members+=(bin/llvm-config)
 
 # llvm-sys also compiles a small C shim (wrappers/*.c) against the C API, so

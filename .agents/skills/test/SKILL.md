@@ -23,6 +23,9 @@ cargo test --workspace --test compile_tests    # one integration test binary
 cargo test --workspace int_add                 # filter by test name (substring)
 cargo test --workspace -- --ignored            # run #[ignore]d tests
 cargo test --workspace -- --nocapture          # show println!/eprintln! output
+
+# against an LLVM other than the default 20 (must be provisioned first)
+cargo test --workspace --no-default-features --features llvm19-1
 ```
 
 ## Test layout

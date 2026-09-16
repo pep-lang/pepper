@@ -1,27 +1,36 @@
 # Publishes the minimal LLVM packages that CI installs.
 #
-# Run this once per LLVM version bump:
+# Only Windows actually needs one: its runner image has no usable LLVM (2.4 GB
+# of LLVM 20 with no llvm-config.exe) and neither winget nor choco ships one,
+# while Linux and macOS install a complete LLVM dev package from apt or
+# Homebrew in seconds. So the default is windows alone; linux and macos remain
+# available for a platform that ever loses that.
 #
-#   gh workflow run llvm-package.yml
+# Run this once per LLVM major that Windows CI should not have to download an
+# archive for:
+#
+#   gh workflow run llvm-package.yml -f llvm=20
 #
 # Each platform provisions a full upstream LLVM, strips it to the pieces this
-# project actually consumes (see scripts/package-llvm.*), and uploads the result
-# as an asset on the `llvm-<version>` release. CI and platform-test then install
-# that instead of the multi-gigabyte upstream tree -- which is what ran a Linux
-# runner out of disk.
+# project actually consumes (see scripts/package-llvm.*), and uploads the
+# result as an asset on the `llvm-<version>` release.
 #
 # Sizes measured on Windows: 4.1 GB upstream tree -> 449 MB installed, 83 MB
-# compressed. Both CI workflows fall back to a full install when no package has
-# been published, so this is an optimization, never a prerequisite.
+# compressed. ci-provision-llvm.sh falls back to the upstream archive when no
+# package has been published, so this is an optimization, never a prerequisite.
 name: llvm-package
 
 on:
   workflow_dispatch:
     inputs:
+      llvm:
+        description: "LLVM major to package (blank: the setup scripts' default)"
+        required: false
+        default: ""
       platforms:
         description: "Comma-separated: linux, macos, windows"
         required: false
-        default: linux,macos,windows
+        default: windows
 
 concurrency:
   group: llvm-package
@@ -37,29 +46,46 @@ jobs:
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       version: ${{ steps.resolve.outputs.version }}
+      major: ${{ steps.resolve.outputs.major }}
     steps:
       - uses: actions/checkout@v7
 
       - id: resolve
         env:
           PLATFORMS: ${{ inputs.platforms }}
+          LLVM: ${{ inputs.llvm }}
         run: |
-          # The version pins live in the setup scripts; never duplicate them
-          # here. Strip CR first: a Windows checkout gives CRLF endings and an
-          # anchored match would return empty.
-          version=$(tr -d '\r' < scripts/setup-llvm.sh | sed -nE 's/^LLVM_VERSION="([^"]+)".*/\1/p' | head -1)
-          [ -n "$version" ] || { echo "::error::cannot read LLVM_VERSION"; exit 1; }
+          # Versions live in the setup scripts, next to the code that installs
+          # them; never duplicate them here. Strip CR first: a Windows checkout
+          # gives CRLF endings and an anchored match would return empty.
+          read_sh() { tr -d '\r' < scripts/setup-llvm.sh | sed -nE "$1" | head -1; }
+          read_ps1() { tr -d '\r' < scripts/setup-llvm.ps1 | sed -nE "$1" | head -1; }
 
-          # Each setup script owns its own pin, and ci-provision-llvm.sh asks
-          # for the asset named by whichever pin belongs to its platform. If
-          # the two ever drift, this job would publish under one version while
-          # Windows CI requested another and silently fell back to a full
-          # install -- so refuse to publish anything until they agree.
-          win_version=$(tr -d '\r' < scripts/setup-llvm.ps1 \
-                        | sed -nE "s/^\\\$LlvmVersion = '([^']+)'.*/\\1/p" | head -1)
-          [ -n "$win_version" ] || { echo "::error::cannot read \$LlvmVersion from setup-llvm.ps1"; exit 1; }
+          major="$LLVM"
+          if [ -z "$major" ]; then
+            major=$(read_ps1 "s/^\\\$DefaultLlvmMajor = '([^']+)'.*/\\1/p")
+            [ -n "$major" ] || { echo "::error::cannot read \$DefaultLlvmMajor from setup-llvm.ps1"; exit 1; }
+          fi
+
+          # Digits only. The value is interpolated into the sed expressions
+          # below, where anything else is matched as a regex rather than a
+          # literal: `llvm=.*` would otherwise match the first row of both
+          # tables, agree with itself, and be passed on to the setup scripts.
+          case "$major" in
+            ''|*[!0-9]*) echo "::error::llvm must be a major version number, got '$major'"; exit 1 ;;
+          esac
+
+          # Both scripts carry a major -> patch table, and each installs from
+          # its own. ci-provision-llvm.sh asks for the asset named by the
+          # Windows table, so a disagreement would publish under one version
+          # while Windows CI requested another and silently fell back to an
+          # archive install -- refuse to publish anything until they agree.
+          version=$(read_sh "s/^ *$major\) echo \"([^\"]+)\".*/\\1/p")
+          [ -n "$version" ] || { echo "::error::setup-llvm.sh has no version for LLVM $major"; exit 1; }
+          win_version=$(read_ps1 "s/^ *'$major' = '([^']+)'.*/\\1/p")
+          [ -n "$win_version" ] || { echo "::error::setup-llvm.ps1 has no version for LLVM $major"; exit 1; }
           if [ "$version" != "$win_version" ]; then
-            echo "::error::version pins disagree: setup-llvm.sh=$version setup-llvm.ps1=$win_version"
+            echo "::error::LLVM $major differs: setup-llvm.sh=$version setup-llvm.ps1=$win_version"
             exit 1
           fi
 
@@ -81,8 +107,9 @@ jobs:
 
           matrix=$(printf '%s' "$runners" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, - | sed 's/^/[/; s/$/]/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "major=$major" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "Packaging LLVM $version for $matrix"
+          echo "Packaging LLVM $version (major $major) for $matrix"
 
       # Created once, before the matrix fans out, so three concurrent uploads
       # cannot race to create the same release.
@@ -155,13 +182,24 @@ jobs:
           path: ~/.local/share/pepper/cache
           key: llvm-archive-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ matrix.os }}
 
+      # --no-packages stops the Unix leg from *installing* an apt/brew LLVM to
+      # package; it does not stop one already on the image from being adopted
+      # (macos-latest has Homebrew llvm@20), which is what the version
+      # assertion in the next step is for.
+      # $env:MAJOR, not "$MAJOR": this step has no `shell:`, so on windows it
+      # runs under pwsh, where a bare $MAJOR is an undefined PowerShell
+      # variable and would expand to nothing.
       - name: Provision full LLVM (Windows)
         if: runner.os == 'Windows'
-        run: pwsh -File scripts/setup-llvm.ps1
+        env:
+          MAJOR: ${{ needs.prepare.outputs.major }}
+        run: pwsh -File scripts/setup-llvm.ps1 -Llvm $env:MAJOR
 
       - name: Provision full LLVM (Unix)
         if: runner.os != 'Windows'
-        run: bash scripts/setup-llvm.sh
+        env:
+          MAJOR: ${{ needs.prepare.outputs.major }}
+        run: bash scripts/setup-llvm.sh --llvm "$MAJOR" --no-packages
 
       - name: Build package
         id: build
@@ -172,11 +210,11 @@ jobs:
           set -euo pipefail
 
           # The platform only names the asset. The prefix is read back out of
-          # the config the setup script just wrote, rather than re-derived:
-          # setup-llvm.sh prefers a matching *system* LLVM when it finds one
-          # (llvm-config-22, brew llvm@22, /usr/lib/llvm-22) and then never
-          # populates ~/.local/share/pepper/llvm/<version> at all, so a
-          # re-derived path would fail here at `du` with nothing explaining why.
+          # the config the setup script just wrote, rather than re-derived: the
+          # script may settle on a system LLVM (an apt or Homebrew prefix, or a
+          # different major than the one asked for) and then never populate
+          # ~/.local/share/pepper/llvm/<version> at all, so a re-derived path
+          # would fail below at `du` with nothing explaining why.
           case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*) platform=windows-x64 ;;
             Darwin)               platform="macos-$(uname -m)" ;;
@@ -197,6 +235,18 @@ jobs:
                    | head -1 | sed 's|\\\\|\\|g')
           [ -n "$prefix" ] || { echo "::error::no LLVM_SYS_*_PREFIX in $config"; exit 1; }
           echo "  prefix: $prefix"
+
+          # The asset is named from the requested major's version, but the
+          # prefix is whatever provisioning settled on, and those can differ:
+          # setup-llvm.sh adopts an already-installed supported major when the
+          # requested one cannot be had, and macos-latest ships Homebrew
+          # llvm@20 preinstalled. Publishing LLVM 20 as llvm-18.1.8-* would be
+          # undetectable afterwards, so compare before packaging.
+          actual=$("$prefix/bin/llvm-config" --version)
+          if [ "$actual" != "$VERSION" ]; then
+            echo "::error::provisioned LLVM $actual at $prefix, but the asset would be named for $VERSION"
+            exit 1
+          fi
 
           du -sm "$prefix" | awk '{print "  upstream prefix: " $1 " MB"}'
           if [ "$platform" = windows-x64 ]; then

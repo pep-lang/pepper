@@ -1,11 +1,20 @@
 # Required check for merging into main: builds the workspace and runs the test
-# suite on Windows, the platform the compiler is developed against.
+# suite on Windows, the platform the compiler is developed against, against the
+# default LLVM version.
 #
-# Other platforms are deliberately not part of this gate. The driver's codegen
-# initializes only the x86 LLVM target, so a macOS arm64 runner cannot be green
-# yet, and making it required would block every merge. Use the on-demand
-# `platform-test` workflow (and the skill of the same name) to exercise other
-# operating systems when a change warrants it.
+# The `llvm-versions` job below then runs the same suite against every LLVM the
+# runner's package manager can serve, which is how a version-specific
+# regression gets caught. It is not a required check: its matrix is discovered
+# at run time, so the context names change as distributions add and drop LLVM
+# versions, and required checks have to be named in advance.
+#
+# Linux and macOS both pass the full suite -- Linux for the 18, 19 and 20 that
+# apt serves, macOS for all five majors via Homebrew -- contrary to an earlier
+# note here claiming macOS arm64 could not: codegen initializes only the x86
+# target, which the suite never exercises natively. (The macOS *CLI* still
+# cannot compile a program on arm64; see README.md.) macOS is kept off the push
+# path anyway -- private-repo macOS minutes bill at ten times the Linux rate --
+# and is reachable through `platform-test`.
 name: CI
 
 on:
@@ -43,8 +52,9 @@ jobs:
           rustc --version
           cargo --version
 
-      # Installs the minimal LLVM package published by the llvm-package
-      # workflow (~450 MB) and falls back to a full upstream install (4 GB
+      # Windows is the one platform with no package manager that ships a usable
+      # LLVM, so it installs the minimal package published by the llvm-package
+      # workflow (~450 MB) and falls back to the upstream archive (4 GB
       # extracted) if none exists yet. The cache covers whichever download
       # happens; its key tracks the setup script's hash, not a hardcoded
       # version, because a hardcoded key keeps hitting exactly after a version
@@ -80,3 +90,82 @@ jobs:
       # crate under crates/.
       - name: Test
         run: cargo test --workspace --locked
+
+  # Which LLVM versions to test is not a fixed list: it is every major this
+  # workspace supports that apt can actually install, discovered here. Ubuntu
+  # 24.04 currently serves 18, 19 and 20 from its own repositories, and picks up
+  # later ones for free as they are published.
+  llvm-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      majors: ${{ steps.resolve.outputs.majors }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: resolve
+        run: |
+          set -euo pipefail
+
+          # The supported set lives in the setup script, next to the feature
+          # table it mirrors, rather than being duplicated here.
+          supported=$(tr -d '\r' < scripts/setup-llvm.sh \
+                      | sed -nE 's/^SUPPORTED_MAJORS="([^"]+)".*/\1/p' | head -1)
+          [ -n "$supported" ] || { echo "::error::cannot read SUPPORTED_MAJORS"; exit 1; }
+
+          sudo apt-get update -qq
+          majors=''
+          for major in $supported; do
+            # LC_ALL=C: apt translates "Candidate:", and a runner image that
+            # ever sets a non-English locale would silently discover an empty
+            # matrix and fail the job below.
+            candidate=$(LC_ALL=C apt-cache policy "llvm-$major-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
+            if [ -n "$candidate" ] && [ "$candidate" != "(none)" ]; then
+              echo "llvm-$major-dev $candidate"
+              majors="${majors:+$majors,}\"$major\""
+            fi
+          done
+          [ -n "$majors" ] || { echo "::error::apt has no llvm-<major>-dev for any supported major"; exit 1; }
+
+          echo "majors=[$majors]" >> "$GITHUB_OUTPUT"
+
+  llvm-versions:
+    needs: llvm-matrix
+    strategy:
+      # A version failing is the result being looked for, not a reason to stop
+      # testing the others.
+      fail-fast: false
+      matrix:
+        major: ${{ fromJSON(needs.llvm-matrix.outputs.majors) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # apt serves a complete LLVM dev install in seconds (4-8s measured, plus
+      # Polly, which llvm-config names but Debian packages separately), so there
+      # is nothing to cache and no archive to download.
+      - name: Provision LLVM ${{ matrix.major }}
+        shell: bash
+        env:
+          PEPPER_LLVM_MAJOR: ${{ matrix.major }}
+        run: bash scripts/ci-provision-llvm.sh
+
+      - name: Cache cargo registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # The LLVM version is a cargo feature, so it has to be named here too;
+      # setup-llvm.sh prints this exact command when it provisions a non-default
+      # version.
+      - name: Test against LLVM ${{ matrix.major }}
+        run: |
+          cargo test --workspace --locked --no-default-features \
+            --features llvm${{ matrix.major }}-1

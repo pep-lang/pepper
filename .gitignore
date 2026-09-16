@@ -383,3 +383,8 @@ tests/cmake_test_discovery*.json
 
 # Pepper's own build output: the driver defaults to $CWD/.pep/build
 .pep/
+
+# Compiled by the README/skill smoke commands: `pepper tests/hello.pep -o hello`
+# (no .exe suffix on Windows -- the driver does not add one)
+/hello
+/hello.exe

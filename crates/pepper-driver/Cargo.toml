@@ -10,12 +10,25 @@ path = "src/lib.rs"
 pepper-parser = { path = "../pepper-parser" }
 pepper-sema = { path = "../pepper-sema" }
 pepper-support = { path = "../pepper-support" }
-pepper-codegen = { path = "../pepper-codegen" }
+pepper-codegen = { path = "../pepper-codegen", default-features = false }
 clap.workspace = true
+inkwell = { version = "0.10", default-features = false, features = ["target-x86"] }
 
 # See crates/pepper-codegen/Cargo.toml + build.rs for why Windows links the DLL.
 [target.'cfg(windows)'.dependencies]
-inkwell = { version = "0.10", default-features = false, features = ["llvm22-1-no-llvm-linking", "target-x86"] }
+llvm-sys-181 = { package = "llvm-sys", version = "181", features = ["no-llvm-linking"], optional = true }
+llvm-sys-191 = { package = "llvm-sys", version = "191", features = ["no-llvm-linking"], optional = true }
+llvm-sys-201 = { package = "llvm-sys", version = "201", features = ["no-llvm-linking"], optional = true }
+llvm-sys-211 = { package = "llvm-sys", version = "211", features = ["no-llvm-linking"], optional = true }
+llvm-sys-221 = { package = "llvm-sys", version = "221", features = ["no-llvm-linking"], optional = true }
 
-[target.'cfg(not(windows))'.dependencies]
-inkwell = { version = "0.10", default-features = false, features = ["llvm22-1", "target-x86"] }
+# Forwarded to pepper-codegen so one flag selects the LLVM version for the
+# whole workspace; `default-features = false` above keeps codegen's own
+# default from pinning a second, conflicting version.
+[features]
+default = ["llvm20-1"]
+llvm18-1 = ["pepper-codegen/llvm18-1", "inkwell/llvm18-1", "llvm-sys-181"]
+llvm19-1 = ["pepper-codegen/llvm19-1", "inkwell/llvm19-1", "llvm-sys-191"]
+llvm20-1 = ["pepper-codegen/llvm20-1", "inkwell/llvm20-1", "llvm-sys-201"]
+llvm21-1 = ["pepper-codegen/llvm21-1", "inkwell/llvm21-1", "llvm-sys-211"]
+llvm22-1 = ["pepper-codegen/llvm22-1", "inkwell/llvm22-1", "llvm-sys-221"]

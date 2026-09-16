@@ -147,7 +147,11 @@ dependencies = [
  "bitflags",
  "inkwell_internals",
  "libc",
- "llvm-sys",
+ "llvm-sys 181.3.0",
+ "llvm-sys 191.1.0",
+ "llvm-sys 201.1.0",
+ "llvm-sys 211.1.0",
+ "llvm-sys 221.1.0",
  "thiserror",
 ]
 
@@ -191,6 +195,62 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "llvm-sys"
+version = "181.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e24aad69cbdb0c6ebe777262e9e6314dceba0d6e6a2a63e47563ccd293a2eda8"
+dependencies = [
+ "anyhow",
+ "cc",
+ "lazy_static",
+ "libc",
+ "regex-lite",
+ "semver",
+]
+
+[[package]]
+name = "llvm-sys"
+version = "191.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0ad1fffbdac72a40b55aa58b31aa0efe925e277941b6705f128692b27f1d506"
+dependencies = [
+ "anyhow",
+ "cc",
+ "lazy_static",
+ "libc",
+ "regex-lite",
+ "semver",
+]
+
+[[package]]
+name = "llvm-sys"
+version = "201.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5390a7a7dc5a52ff1cc78bd02c7e6bd07cea1057b7247edd7c54062ebe5909e5"
+dependencies = [
+ "anyhow",
+ "cc",
+ "lazy_static",
+ "libc",
+ "regex-lite",
+ "semver",
+]
+
+[[package]]
+name = "llvm-sys"
+version = "211.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d46d5a98158d96b6bf216265dcd8200378c1e01ae9e40b2a3ad25d70a337aa1e"
+dependencies = [
+ "anyhow",
+ "cc",
+ "lazy_static",
+ "libc",
+ "regex-lite",
+ "semver",
+]
+
+[[package]]
+name = "llvm-sys"
 version = "221.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e52e36cd9eef0d5c4ba35c751c252f207642293009bb774185f84f678c7683c"
@@ -228,6 +288,11 @@ name = "pepper-codegen"
 version = "0.1.0"
 dependencies = [
  "inkwell",
+ "llvm-sys 181.3.0",
+ "llvm-sys 191.1.0",
+ "llvm-sys 201.1.0",
+ "llvm-sys 211.1.0",
+ "llvm-sys 221.1.0",
  "pepper-parser",
  "pepper-sema",
  "pepper-support",
@@ -239,6 +304,11 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "inkwell",
+ "llvm-sys 181.3.0",
+ "llvm-sys 191.1.0",
+ "llvm-sys 201.1.0",
+ "llvm-sys 211.1.0",
+ "llvm-sys 221.1.0",
  "pepper-codegen",
  "pepper-parser",
  "pepper-sema",

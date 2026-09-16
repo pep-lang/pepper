@@ -1,64 +1,72 @@
 #!/usr/bin/env bash
-# CI-only LLVM provisioning: install the repo's prebuilt minimal LLVM package
-# if one has been published, otherwise fall back to a full upstream install.
+# CI-only LLVM provisioning.
 #
-# The upstream releases do not fit comfortably on a GitHub runner: 11.6 GB
-# extracted on Linux (9 GB of it tools this project never invokes), which is
-# what exhausted the disk on the first cross-platform run. The published
-# package carries only the pieces the build consumes -- llvm-config, the
-# component libraries, the llvm-c headers, and on Windows LLVM-C.dll plus
-# clang -- which is ~450 MB installed instead of several GB.
+# Windows has no package manager that ships a usable LLVM -- the llvm.org
+# installer and the winget/choco packages carry neither llvm-config nor the
+# component libraries (windows-latest has 2.4 GB of LLVM 20 with no
+# llvm-config.exe and a single LLVM*.lib) -- so it installs the repo's prebuilt
+# minimal package, falling back to the upstream archive when none is published.
+#
+# Linux and macOS need none of that: apt and Homebrew both carry complete LLVM
+# dev packages, and setup-llvm.sh prefers them. Measured on the runner images,
+# per LLVM major:
+#
+#   ubuntu-24.04   apt llvm-{18,19,20}-dev + libpolly   4-8s, 400-750 MB
+#   macos-latest   brew llvm@{18..22}                   13-17s (llvm@20 preinstalled)
+#
+# All of those build the workspace and pass the suite, which is why nothing
+# here downloads an 11.6 GB tarball any more.
 #
 # Either way this ends by running the normal setup script, which validates the
 # prefix and writes .cargo/config.toml, so there is one source of truth for how
 # cargo finds LLVM.
 #
-# Publish packages with the llvm-package workflow. Needs GH_TOKEN to read
-# release assets from a private repo.
+# The LLVM major comes from PEPPER_LLVM_MAJOR when set, else each setup
+# script's own default. Needs GH_TOKEN on Windows to read release assets from a
+# private repo.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
 
-# Each setup script owns its own version pin, and the one that matters here is
-# whichever script will actually create the prefix: reading the Unix pin and
-# then handing off to the PowerShell script would put the package in a
-# directory setup-llvm.ps1 never inspects if the two pins ever drifted, and CI
-# would silently re-download the full tree without even logging the
-# "no prebuilt package" line. The CR strip matters -- a Windows checkout gives
-# these files CRLF endings, and an anchored match would come back empty.
+case "$(uname -s)" in
+  Darwin|Linux)
+    # Nothing to pre-stage: the setup script installs from apt/brew and only
+    # reaches for an archive if the platform's package manager cannot serve
+    # the requested major at all.
+    exec bash scripts/setup-llvm.sh
+    ;;
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *) echo "unsupported host: $(uname -s)" >&2; exit 1 ;;
+esac
+
+# --- Windows ---------------------------------------------------------------
+
+# The major decides which package to fetch, and the patch version decides where
+# setup-llvm.ps1 will look for it. Both come from that script, so the package
+# cannot land in a directory it never inspects. The CR strip matters -- a
+# Windows checkout gives these files CRLF endings, and an anchored match would
+# come back empty.
 read_pin() {
-  tr -d '\r' < "$1" | sed -nE "$2" | head -1
+  tr -d '\r' < scripts/setup-llvm.ps1 | sed -nE "$1" | head -1
 }
+
+major="${PEPPER_LLVM_MAJOR:-$(read_pin "s/^\\\$DefaultLlvmMajor = '([^']+)'.*/\\1/p")}"
+[ -n "$major" ] || { echo "cannot read \$DefaultLlvmMajor from scripts/setup-llvm.ps1" >&2; exit 1; }
+
+# The version table is `'<major>' = '<version>'`, one per line.
+version=$(read_pin "s/^ *'$major' = '([^']+)'.*/\\1/p")
+[ -n "$version" ] || { echo "no LLVM $major in the version table in scripts/setup-llvm.ps1" >&2; exit 1; }
 
 # `tar` differs per host. Under Git bash on Windows, PATH finds GNU tar, which
 # reads the `C:` of a Windows path as a remote host ("Cannot connect to C:
 # resolve failed"). What keeps that from happening is the `cygpath` conversion
 # below: every path handed to tar -- the prefix and the archive alike -- is in
 # POSIX form, so no drive letter ever reaches it. Keep that conversion.
-case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*)
-    platform=windows-x64
-    version=$(read_pin scripts/setup-llvm.ps1 "s/^\\\$LlvmVersion = '([^']+)'.*/\\1/p")
-    [ -n "$version" ] || { echo "cannot read \$LlvmVersion from scripts/setup-llvm.ps1" >&2; exit 1; }
-    # $LOCALAPPDATA is a native path with backslashes; cygpath makes it usable
-    # by mkdir/cd, and keeps the drive letter away from tar. setup-llvm.ps1
-    # derives the same directory itself, from its own pin (read above).
-    local_appdata=$(cygpath -u "$LOCALAPPDATA")
-    prefix="$local_appdata/pepper/llvm/$version"
-    ;;
-  Darwin|Linux)
-    case "$(uname -s)" in
-      Darwin) platform="macos-$(uname -m)" ;;
-      *)      platform="linux-$(uname -m)" ;;
-    esac
-    version=$(read_pin scripts/setup-llvm.sh 's/^LLVM_VERSION="([^"]+)".*/\1/p')
-    [ -n "$version" ] || { echo "cannot read LLVM_VERSION from scripts/setup-llvm.sh" >&2; exit 1; }
-    prefix="${XDG_DATA_HOME:-$HOME/.local/share}/pepper/llvm/$version"
-    ;;
-  *) echo "unsupported host: $(uname -s)" >&2; exit 1 ;;
-esac
+local_appdata=$(cygpath -u "$LOCALAPPDATA")
+prefix="$local_appdata/pepper/llvm/$version"
 
+platform=windows-x64
 tag="llvm-$version"
 asset="llvm-$version-$platform.tar.xz"
 
@@ -75,8 +83,8 @@ else
   # Only an absent release or asset justifies the fallback. An auth failure,
   # rate limit or dropped connection exits non-zero too, and treating those as
   # "nothing published" would quietly pay the multi-GB install this script
-  # exists to avoid -- on Linux, the extraction that ran the runner out of
-  # disk -- while logging a reason that is simply false.
+  # exists to avoid, while logging a reason that is simply false.
+  #
   # gh has two "nothing to fetch" messages: "no assets match the file pattern"
   # when the release has assets, and "no assets to download" when it has none
   # -- the latter being a state this project's own llvm-package workflow
@@ -87,7 +95,7 @@ else
   # falling back to the multi-GB install this check exists to prevent.
   case "$download_error" in
     *"release not found"*|*"no assets match"*|*"no assets to download"*)
-      echo "No prebuilt package published for $platform; falling back to a full install."
+      echo "No prebuilt package published for $platform LLVM $version; falling back to the archive."
       echo "Publish one with the llvm-package workflow to cut several GB off this job."
       ;;
     *)
@@ -99,9 +107,6 @@ else
   esac
 fi
 
-# Validates whatever is now in the prefix, installs a full LLVM if the download
-# did not happen, and writes .cargo/config.toml either way.
-case "$platform" in
-  windows-*) pwsh -File scripts/setup-llvm.ps1 ;;
-  *)         bash scripts/setup-llvm.sh ;;
-esac
+# Validates whatever is now in the prefix, installs from the archive if the
+# download did not happen, and writes .cargo/config.toml either way.
+pwsh -File scripts/setup-llvm.ps1 -Llvm "$major"

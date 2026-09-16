@@ -2,35 +2,55 @@
 # Provision the LLVM toolchain that llvm-sys (via inkwell) links against, and
 # point cargo at it. macOS / Linux counterpart of scripts/setup-llvm.ps1.
 #
-# llvm-sys finds LLVM by running `<prefix>/bin/llvm-config` and matching its
-# major version, so an install that ships llvm-config is required. A system
-# LLVM of the right major version is used when present (Homebrew, apt.llvm.org,
-# distro packages); otherwise the official release tarball is downloaded to
-# ~/.local/share/pepper/llvm/<version>.
+# Order of preference, cheapest first:
+#
+#   1. an LLVM of the wanted major already on this machine
+#   2. the platform's own LLVM dev package -- apt llvm-<major>-dev, or
+#      Homebrew llvm@<major>. On both CI images this is seconds and a few
+#      hundred MB, and on macos-latest llvm@20 is already there.
+#   3. the upstream release archive, unpacking only the files the build needs.
+#      The Linux tarball is 11.6 GB extracted and 9 GB of that is tools this
+#      project never invokes, which is what used to exhaust a CI runner's disk.
 #
 # Usage:
-#   ./scripts/setup-llvm.sh [--devtools]
+#   ./scripts/setup-llvm.sh [--devtools] [--llvm <major>] [--no-packages]
 #
-#   --devtools   also make sure a debugger (lldb) is available; equivalent to
-#                PEPPER_SETUP_DEVTOOLS=1. Off by default: the build does not
-#                need it.
+#   --llvm <major>  provision this LLVM major (18-22) instead of the default.
+#   --no-packages   never invoke apt/brew; use what is installed or the archive.
+#   --devtools      also make sure a debugger (lldb) is available; equivalent to
+#                   PEPPER_SETUP_DEVTOOLS=1. Off by default: the build does not
+#                   need it.
 #
 # Idempotent: re-running with a usable toolchain only rewrites .cargo/config.toml.
 set -euo pipefail
 
-# Dictated by the inkwell feature in crates/*/Cargo.toml:
-#   inkwell "llvm22-1" -> llvm-sys 221.x -> LLVM 22.1.x
-#
-# Changing this? Re-run the llvm-package workflow afterwards
-# (gh workflow run llvm-package.yml). The CI packages are per-version, and a
-# missing one does not fail: CI silently reverts to multi-GB full installs.
-# This line is also parsed by ci-provision-llvm.sh and llvm-package.yml, so
-# keep the `LLVM_VERSION="<version>"` shape.
-LLVM_VERSION="22.1.8"
-LLVM_MAJOR="22"
-LLVM_SYS_MAJOR="221"
+# The majors this workspace can build against, newest first. Dictated by the
+# feature table in Cargo.toml -- inkwell needs exactly one llvmNN-1 feature and
+# only publishes these -- so the two lists move together.
+SUPPORTED_MAJORS="22 21 20 19 18"
 
-# CPython minor version liblldb is linked against in this LLVM release; only
+# Matches `default` in Cargo.toml's [features]: with this major provisioned,
+# plain `cargo build` works with no extra flags. LLVM 20 because apt and
+# Homebrew both serve it cheaply.
+DEFAULT_MAJOR="20"
+
+# Patch version per major, used only when falling back to the release archive.
+# Each is the newest patch release upstream published for that major.
+#
+# These lines are parsed by ci-provision-llvm.sh and llvm-package.yml, so keep
+# the `<major>) echo <version>` shape.
+archive_version() {
+    case "$1" in
+        22) echo "22.1.8" ;;
+        21) echo "21.1.8" ;;
+        20) echo "20.1.8" ;;
+        19) echo "19.1.7" ;;
+        18) echo "18.1.8" ;;
+        *) return 1 ;;
+    esac
+}
+
+# CPython minor version liblldb is linked against in the LLVM releases; only
 # used to make the "lldb won't start" hint concrete.
 LLDB_PYTHON_MINOR="11"
 
@@ -41,51 +61,152 @@ case "${PEPPER_SETUP_DEVTOOLS:-}" in
     ""|0|false|no) ;;
     *) DEVTOOLS=1 ;;
 esac
-for arg in "$@"; do
-    case "$arg" in
+
+# MAJOR_EXPLICIT distinguishes "this exact major" from "whatever is cheapest".
+# A named version is a requirement: substituting another one would have CI
+# testing a feature it never provisioned for, and llvm-package publishing an
+# asset under a version it does not contain.
+WANT_MAJOR="$DEFAULT_MAJOR"
+MAJOR_EXPLICIT=0
+if [[ -n "${PEPPER_LLVM_MAJOR:-}" ]]; then
+    WANT_MAJOR="$PEPPER_LLVM_MAJOR"
+    MAJOR_EXPLICIT=1
+fi
+USE_PACKAGES=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --devtools) DEVTOOLS=1 ;;
         --no-devtools) DEVTOOLS=0 ;;
+        --no-packages) USE_PACKAGES=0 ;;
+        --llvm)
+            WANT_MAJOR="${2:-}"
+            [[ -n "$WANT_MAJOR" ]] || { echo "--llvm needs a major version" >&2; exit 2; }
+            MAJOR_EXPLICIT=1
+            shift
+            ;;
+        --llvm=*)
+            WANT_MAJOR="${1#*=}"
+            MAJOR_EXPLICIT=1
+            ;;
         -h|--help)
-            sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
-            echo "unknown argument: $arg" >&2
+            echo "unknown argument: $1" >&2
             exit 2
             ;;
     esac
+    shift
 done
+
+case " $SUPPORTED_MAJORS " in
+    *" $WANT_MAJOR "*) ;;
+    *)
+        echo "unsupported LLVM major '$WANT_MAJOR' (supported: $SUPPORTED_MAJORS)" >&2
+        exit 2
+        ;;
+esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/pepper"
-PREFIX="$ROOT/llvm/$LLVM_VERSION"
 CACHE_DIR="$ROOT/cache"
 
-# Report the prefix of an llvm-config whose major version matches, else nothing.
-probe_llvm_config() {
-    local config="$1"
-    command -v "$config" >/dev/null 2>&1 || return 1
-    local version
+# --- what "usable" means ----------------------------------------------------
+
+# llvm-sys does not just need llvm-config: it asks llvm-config for the library
+# names to link and hands them straight to the linker, and it compiles a C shim
+# against the llvm-c headers. So check the prefix the way llvm-sys will consume
+# it, not merely that llvm-config exists.
+#
+# Which link mode matters is subtle and was got wrong once. llvm-sys prefers
+# static, and only falls back to shared when `llvm-config --libnames
+# --link-static` *fails*, not when the files it names are missing. Debian's
+# llvm-N-dev is exactly that trap: --link-static succeeds and names Polly's
+# archives, which live in libpolly-N-dev, so a prefix that looks fine by any
+# "some link mode works" test dies with
+#
+#   error: could not find native static library `Polly`
+#
+# Accepting such a prefix also skips the apt install that would have fixed it,
+# which is how the preinstalled /usr/lib/llvm-18 on ubuntu-24.04 broke the CI
+# matrix. Rejecting it makes the script install llvm-18-dev and
+# libpolly-18-dev and try again.
+#
+# Prints nothing and returns 1 if unusable; prints the prefix if usable.
+usable_llvm() {
+    local config="$1" want="$2"
+    [[ -x "$config" ]] || return 1
+
+    local version major prefix libdir includedir
     version="$("$config" --version 2>/dev/null)" || return 1
-    [[ "${version%%.*}" == "$LLVM_MAJOR" ]] || return 1
-    "$config" --prefix 2>/dev/null
+    major="${version%%.*}"
+    [[ -n "$want" && "$major" != "$want" ]] && return 1
+    case " $SUPPORTED_MAJORS " in
+        *" $major "*) ;;
+        *) return 1 ;;
+    esac
+
+    prefix="$("$config" --prefix 2>/dev/null)" || return 1
+    libdir="$("$config" --libdir 2>/dev/null)" || return 1
+    includedir="$("$config" --includedir 2>/dev/null)" || return 1
+
+    [[ -e "$includedir/llvm-c/Core.h" ]] || return 1
+    [[ -e "$includedir/llvm/Config/llvm-config.h" ]] || return 1
+
+    # Mirror llvm-sys's choice: static unless llvm-config cannot report it.
+    local names
+    if ! names="$("$config" --libnames --link-static 2>/dev/null)" || [[ -z "$names" ]]; then
+        names="$("$config" --libnames --link-shared 2>/dev/null)" || return 1
+        [[ -n "$names" ]] || return 1
+    fi
+    local name
+    for name in $names; do
+        [[ -e "$libdir/$name" ]] || return 1
+    done
+
+    printf '%s' "$prefix"
 }
 
-find_system_llvm() {
-    local candidates=("llvm-config-$LLVM_MAJOR" "llvm-config")
-    # Homebrew keeps versioned LLVM off PATH.
+# Every llvm-config worth trying, for one major.
+llvm_candidates() {
+    local major="$1"
+    echo "llvm-config-$major"
+    echo "/usr/lib/llvm-$major/bin/llvm-config"
+    echo "/opt/homebrew/opt/llvm@$major/bin/llvm-config"
+    echo "/usr/local/opt/llvm@$major/bin/llvm-config"
+    echo "$ROOT/llvm/$(archive_version "$major" 2>/dev/null)/bin/llvm-config"
     if command -v brew >/dev/null 2>&1; then
         local brew_prefix
-        for formula in "llvm@$LLVM_MAJOR" llvm; do
+        for formula in "llvm@$major" llvm; do
             brew_prefix="$(brew --prefix "$formula" 2>/dev/null || true)"
-            [[ -n "$brew_prefix" ]] && candidates+=("$brew_prefix/bin/llvm-config")
+            [[ -n "$brew_prefix" ]] && echo "$brew_prefix/bin/llvm-config"
         done
     fi
-    candidates+=("/usr/lib/llvm-$LLVM_MAJOR/bin/llvm-config")
+    # Unversioned last: it is whatever the machine happens to default to, and
+    # is only accepted if its major matches what we are looking for anyway.
+    echo "llvm-config"
+}
+
+find_llvm() {
+    local major="$1" candidate prefix
+
+    # Collected before the loop rather than piped into it: returning from the
+    # middle of a `while read` leaves llvm_candidates writing to a closed pipe,
+    # which printed two "echo: write error: Broken pipe" lines into every CI
+    # log on the common path where the first candidate is the answer.
+    local candidates=()
+    while read -r candidate; do
+        [[ -n "$candidate" ]] && candidates+=("$candidate")
+    done < <(llvm_candidates "$major")
 
     for candidate in "${candidates[@]}"; do
-        local prefix
-        if prefix="$(probe_llvm_config "$candidate")"; then
+        # A bare name has to be resolved through PATH first.
+        if [[ "$candidate" != /* ]]; then
+            candidate="$(command -v "$candidate" 2>/dev/null || true)"
+            [[ -n "$candidate" ]] || continue
+        fi
+        if prefix="$(usable_llvm "$candidate" "$major")"; then
             printf '%s' "$prefix"
             return 0
         fi
@@ -93,65 +214,349 @@ find_system_llvm() {
     return 1
 }
 
-# Official tarball for this host. Naming differs per platform and release, so
-# keep this table next to the version constant above.
-release_asset() {
+# --- package managers -------------------------------------------------------
+
+# apt ships Polly separately, and llvm-config names Polly's libraries in
+# --link-static output, so llvm-N-dev alone is not a complete static prefix.
+# clang and build-essential are the link driver and the libc/startup objects
+# it needs; both runner images have them, a fresh desktop may not.
+apt_install() {
+    local major="$1" pkgs="llvm-$major-dev" candidate
+
+    # LC_ALL=C: apt translates its output, so "Candidate:" is "Kandidat:" on a
+    # German desktop and this would conclude the package does not exist --
+    # silently downgrading an 8-second apt install to a ~1 GB archive download.
+    candidate="$(LC_ALL=C apt-cache policy "llvm-$major-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')"
+    [[ -n "$candidate" && "$candidate" != "(none)" ]] || return 1
+
+    if LC_ALL=C apt-cache policy "libpolly-$major-dev" 2>/dev/null | grep -q 'Candidate: [0-9]'; then
+        pkgs="$pkgs libpolly-$major-dev"
+    fi
+    # The link driver, and the libc/startup objects and `ld` it needs. Both
+    # runner images have them; a fresh desktop may not. Checked by command
+    # rather than by package, since a locally built clang counts.
+    command -v clang >/dev/null 2>&1 || pkgs="$pkgs clang"
+    command -v cc >/dev/null 2>&1 || pkgs="$pkgs build-essential"
+
+    echo "Installing $pkgs (apt) ..."
+    local sudo=""
+    [[ "$(id -u)" != "0" ]] && sudo="sudo"
+    $sudo apt-get update -qq || return 1
+    # shellcheck disable=SC2086 # deliberate word splitting of the package list
+    $sudo apt-get install -y $pkgs || return 1
+}
+
+brew_install() {
+    local major="$1" formula="llvm@$major"
+    command -v brew >/dev/null 2>&1 || return 1
+    brew info --formula "$formula" >/dev/null 2>&1 || return 1
+    echo "Installing $formula (brew) ..."
+    brew install "$formula" || return 1
+}
+
+install_via_packages() {
+    local major="$1"
+    case "$(uname -s)" in
+        Linux) command -v apt-get >/dev/null 2>&1 && apt_install "$major" ;;
+        Darwin) brew_install "$major" ;;
+        *) return 1 ;;
+    esac
+}
+
+# --- release archive (last resort) ------------------------------------------
+
+# Asset naming is not consistent across the versions this workspace supports:
+#
+#   18.1.8   clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz  (old scheme
+#            only; every LLVM-18.1.8-*.tar.xz is a 404)
+#   19.1.7   LLVM-19.1.7-Linux-X64 / macOS-X64 / macOS-ARM64, but Linux ARM64
+#            only as clang+llvm-19.1.7-aarch64-linux-gnu
+#   20-22    LLVM-<v>-Linux-X64 / Linux-ARM64 / macOS-ARM64, no macOS-X64
+#
+# so a hardcoded name 404s for some major/platform pairs. Both schemes encode
+# the platform differently; this matches either.
+platform_pattern() {
     local os arch
     os="$(uname -s)"
     arch="$(uname -m)"
     case "$os/$arch" in
-        Darwin/arm64)          printf 'LLVM-%s-macOS-ARM64.tar.xz' "$LLVM_VERSION" ;;
-        Linux/x86_64)          printf 'LLVM-%s-Linux-X64.tar.xz' "$LLVM_VERSION" ;;
-        Linux/aarch64|Linux/arm64) printf 'LLVM-%s-Linux-ARM64.tar.xz' "$LLVM_VERSION" ;;
+        Darwin/arm64)              printf 'macOS-ARM64|arm64-apple-macos' ;;
+        Darwin/x86_64)             printf 'macOS-X64|x86_64-apple-darwin' ;;
+        Linux/x86_64)              printf 'Linux-X64|x86_64-linux-gnu' ;;
+        Linux/aarch64|Linux/arm64) printf 'Linux-ARM64|aarch64-linux-gnu' ;;
         *)
-            echo "no prebuilt LLVM $LLVM_VERSION for $os/$arch." >&2
-            echo "Install LLVM $LLVM_MAJOR with llvm-config (e.g. 'brew install llvm@$LLVM_MAJOR'" >&2
+            echo "no prebuilt LLVM for $os/$arch." >&2
+            echo "Install LLVM with llvm-config yourself (e.g. 'brew install llvm@$DEFAULT_MAJOR'" >&2
             echo "or https://apt.llvm.org) and re-run this script." >&2
             return 1
             ;;
     esac
 }
 
-usable_prefix() {
-    local prefix="$1"
-    [[ -x "$prefix/bin/llvm-config" ]] || return 1
-    local version
-    version="$("$prefix/bin/llvm-config" --version 2>/dev/null)" || return 1
-    [[ "${version%%.*}" == "$LLVM_MAJOR" ]]
+# An already-downloaded archive for this version and platform, if any.
+#
+# Checked before the API lookup below, because the caches CI restores exist
+# precisely so a repeat run skips the download: resolving the name online first
+# would make an offline or rate-limited run fail with the tarball already on
+# disk.
+cached_asset() {
+    local version="$1" pattern="$2" path base
+    for path in "$CACHE_DIR"/*"$version"*.tar.xz; do
+        [[ -f "$path" ]] || continue
+        base="${path##*/}"
+        case "$base" in LLVM-*|clang+llvm-*) ;; *) continue ;; esac
+        if printf '%s' "$base" | grep -qE "$pattern"; then
+            printf '%s' "$base"
+            return 0
+        fi
+    done
+    return 1
 }
 
-install_prefix=""
-if system_prefix="$(find_system_llvm)"; then
-    echo "Using system LLVM $LLVM_MAJOR at $system_prefix"
-    install_prefix="$system_prefix"
-elif usable_prefix "$PREFIX"; then
-    echo "LLVM $LLVM_VERSION already installed at $PREFIX"
-    install_prefix="$PREFIX"
-else
-    asset="$(release_asset)"
-    url="https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_VERSION/$asset"
-    archive="$CACHE_DIR/$asset"
+# Resolve the asset name from the release's own listing.
+#
+# Unauthenticated: llvm-project is public, and this runs immediately before
+# downloading ~1 GB from the same host. Names only -- no jq, which is not
+# guaranteed present.
+resolve_release_asset() {
+    local version="$1" pattern="$2" body err code names modern legacy
+    body="$(mktemp)"
+    err="$(mktemp)"
 
-    mkdir -p "$CACHE_DIR"
-    if [[ ! -f "$archive" ]]; then
-        echo "Downloading $asset ..."
-        curl -L --fail --progress-bar -o "$archive.part" "$url"
-        mv "$archive.part" "$archive"
-    else
-        echo "Using cached $archive"
+    # No -f: the status is wanted, not hidden, so the three failure modes can
+    # be told apart. Collapsing them into "cannot reach the API" sends the
+    # reader to retry a rate limit that will not clear for an hour.
+    if ! code="$(curl -sS -o "$body" -w '%{http_code}' \
+        "https://api.github.com/repos/llvm/llvm-project/releases/tags/llvmorg-$version" \
+        2>"$err")"; then
+        echo "cannot reach the GitHub API: $(head -1 "$err")" >&2
+        rm -f "$body" "$err"
+        return 1
+    fi
+    rm -f "$err"
+
+    case "$code" in
+        200) ;;
+        403|429)
+            echo "GitHub API rate limit reached (HTTP $code) resolving the LLVM $version asset." >&2
+            echo "Wait, or install LLVM $version from your package manager instead." >&2
+            rm -f "$body"
+            return 1
+            ;;
+        404)
+            echo "upstream has no release llvmorg-$version (HTTP 404)." >&2
+            rm -f "$body"
+            return 1
+            ;;
+        *)
+            echo "GitHub API returned HTTP $code resolving the LLVM $version asset." >&2
+            rm -f "$body"
+            return 1
+            ;;
+    esac
+
+    # A 200 that is not a release listing -- a captive portal or proxy serving
+    # HTML -- would otherwise fall through to "publishes no build", which is a
+    # false statement about upstream rather than about the response.
+    if ! grep -q '"tag_name"' "$body"; then
+        echo "the GitHub API returned something that is not a release listing." >&2
+        echo "A proxy or captive portal intercepting api.github.com would do this." >&2
+        rm -f "$body"
+        return 1
     fi
 
-    echo "Extracting to $PREFIX ..."
-    rm -rf "$PREFIX"
-    mkdir -p "$PREFIX"
-    tar -xf "$archive" -C "$PREFIX" --strip-components=1
+    names="$(grep -oE '"name": *"(LLVM|clang\+llvm)-[^"]+\.tar\.xz"' "$body" \
+             | sed -E 's/.*"(.*)"/\1/' | grep -E "$pattern" || true)"
+    rm -f "$body"
 
-    usable_prefix "$PREFIX" || {
-        echo "extracted tree at $PREFIX has no usable bin/llvm-config" >&2
-        exit 1
-    }
-    echo "Installed LLVM $LLVM_VERSION to $PREFIX"
-    install_prefix="$PREFIX"
+    # Prefer the modern scheme explicitly. `sort -r` looked like it did this
+    # but does the opposite under byte collation -- 'c' > 'L' -- and the answer
+    # would have flipped with the locale.
+    #
+    # First line taken by expansion rather than `head -1`: under pipefail a
+    # reader that exits early makes the producer die of SIGPIPE and the whole
+    # pipeline report 141.
+    modern="$(printf '%s\n' "$names" | grep -E '^LLVM-' || true)"
+    legacy="$(printf '%s\n' "$names" | grep -E '^clang\+llvm-' || true)"
+    if [[ -n "$modern" ]]; then
+        printf '%s' "${modern%%$'\n'*}"
+    elif [[ -n "$legacy" ]]; then
+        printf '%s' "${legacy%%$'\n'*}"
+    else
+        echo "LLVM $version publishes no build for $(uname -s)/$(uname -m)." >&2
+        echo "Pick a different major (--llvm <major>), or install LLVM $version" >&2
+        echo "from your package manager instead." >&2
+        return 1
+    fi
+}
+
+# Only the members the build consumes: llvm-config for discovery, the component
+# libraries for linking, and the llvm-c headers for llvm-sys's C shim. Same set
+# as scripts/package-llvm.sh, which prebuilds this for CI.
+#
+# clang is skipped on purpose -- crates/pepper-driver/src/linker.rs prefers the
+# prefix's clang but falls back to PATH, and every platform that gets this far
+# has one.
+archive_members() {
+    printf '%s\n' \
+        '*/bin/llvm-config' \
+        '*/lib/libLLVM*.a' \
+        '*/lib/libLLVM*.so*' \
+        '*/lib/libLLVM*.dylib' \
+        '*/lib/libPolly*.a' \
+        '*/include/llvm-c/*' \
+        '*/include/llvm/Config/*'
+}
+
+# Sets ARCHIVE_PREFIX rather than printing the prefix, deliberately. Returning
+# it on stdout would mean calling this in a command substitution, and bash does
+# not inherit errexit into one unless `inherit_errexit` is set: a failing curl,
+# mv or tar would be swallowed and provisioning would carry on with a partial
+# tree. It also let progress messages end up captured *as* the prefix, which
+# broke the archive path outright.
+ARCHIVE_PREFIX=""
+install_from_archive() {
+    local major="$1" version asset pattern url archive prefix
+    version="$(archive_version "$major")"
+    pattern="$(platform_pattern)" || return 1
+    prefix="$ROOT/llvm/$version"
+    mkdir -p "$CACHE_DIR"
+
+    if asset="$(cached_asset "$version" "$pattern")"; then
+        archive="$CACHE_DIR/$asset"
+        echo "Using cached $archive"
+    else
+        asset="$(resolve_release_asset "$version" "$pattern")" || return 1
+        archive="$CACHE_DIR/$asset"
+        url="https://github.com/llvm/llvm-project/releases/download/llvmorg-$version/$asset"
+        echo "Downloading $asset ..."
+        # Downloaded to .part and renamed, so an interrupted transfer is never
+        # picked up as a cached archive by the lookup above.
+        curl -L --fail --progress-bar -o "$archive.part" "$url"
+        mv "$archive.part" "$archive"
+    fi
+
+    echo "Unpacking the build's LLVM files to $prefix ..."
+    rm -rf "$prefix"
+    mkdir -p "$prefix"
+    local members=()
+    while read -r member; do members+=("$member"); done < <(archive_members)
+
+    # A member pattern that matches nothing is an error to both tars -- GNU
+    # exits 2, bsdtar 1 -- and one of the shared-library patterns can never
+    # match, since no release carries .dylib on Linux or .so on macOS. Those
+    # complaints are expected and their output is suppressed; anything else is
+    # a real failure and is reported. What was actually extracted is then
+    # judged by usable_llvm, which is the check that matters.
+    # Tolerated wording, per implementation:
+    #   GNU tar  "<pattern>: Not found in archive" + "Exiting with failure status
+    #            due to previous errors"          (exit 2)
+    #   bsdtar   "<pattern>: Not found in archive" + "Error exit delayed from
+    #            previous errors"                 (exit 1)
+    # Missing the bsdtar line made this return 1 on every macOS run, since
+    # `*/lib/libLLVM*.so*` can never match a macOS release.
+    #
+    # A nonzero exit with no output at all -- a signal death, say -- is a real
+    # failure, not a tolerated one: an empty log would otherwise slip through
+    # the filter below and be reported later as a merely incomplete tree.
+    # Assembled into one always-non-empty array rather than expanding a
+    # possibly-empty "${wildcards[@]}": on bash 3.2 -- which is what
+    # /bin/bash still is on macOS, including the runner image -- expanding an
+    # empty array under `set -u` is a fatal "unbound variable", and wildcards
+    # is empty on exactly the hosts whose tar is bsdtar. That aborted the
+    # archive tier on macOS before tar ran.
+    #
+    # LC_ALL=C because the tolerated wording below is GNU tar's English
+    # message text, which gettext translates: on a non-English desktop every
+    # Linux archive run -- all of which produce an unmatched-pattern
+    # complaint, since `*.dylib` cannot match -- would be reported as a failed
+    # extraction.
+    local tar_log status=0 unexpected
+    local tar_args=(-xf "$archive" -C "$prefix" --strip-components=1)
+    tar --version 2>/dev/null | grep -q GNU && tar_args+=(--wildcards)
+    tar_args+=("${members[@]}")
+    tar_log="$(LC_ALL=C tar "${tar_args[@]}" 2>&1)" || status=$?
+
+    # Collected into a variable rather than ending the pipeline in `grep -q .`:
+    # that exits on the first surviving line, the upstream grep dies of SIGPIPE,
+    # and under pipefail the pipeline reports 141 -- so a tar failure chatty
+    # enough to fill the 64 KiB pipe buffer (ENOSPC repeated per member, say)
+    # was classified as tolerated and its output never shown.
+    unexpected="$(printf '%s\n' "$tar_log" \
+        | grep -vE 'Not found in archive|Exiting with failure status|Error exit delayed|^$' \
+        || true)"
+    if [[ "$status" != "0" ]] && { [[ -z "$tar_log" ]] || [[ -n "$unexpected" ]]; }; then
+        [[ -n "$tar_log" ]] && printf '%s\n' "$tar_log" >&2
+        echo "extraction of $archive failed (tar exit $status)" >&2
+        return 1
+    fi
+
+    # The modern release tarballs are built with LTO, so their static
+    # libraries are LLVM bitcode rather than native objects. Apple's linker
+    # reads that bitcode with its own (older) libLTO and rejects it:
+    #
+    #   ld: could not parse bitcode object file ...: 'Unknown attribute kind
+    #   (105) (Producer: 'LLVM22.1.8' Reader: 'LLVM APPLE_1_2100.1.1.101_0')'
+    #
+    # Measured on macos-latest with LLVM 22: the unpack succeeds and the build
+    # then fails at link. Homebrew's llvm@<major> is built without LTO and
+    # works, which is why it is preferred -- this path only runs on a Mac
+    # without brew, or with --no-packages. The prefix's own clang could read
+    # the bitcode, but the keep-set deliberately excludes clang (gigabytes to
+    # ship a compiler used only as a link driver), so there is nothing local
+    # to point cargo at. Warn rather than fail: a future Xcode whose libLTO is
+    # newer than the archive's producer would work.
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "warning: these release libraries are LTO bitcode, which Apple's linker" >&2
+        echo "  usually cannot read ('could not parse bitcode object file' at link time)." >&2
+        echo "  If that happens, install LLVM $major with Homebrew instead:" >&2
+        echo "    brew install llvm@$major && ./scripts/setup-llvm.sh --llvm $major" >&2
+    fi
+
+    ARCHIVE_PREFIX="$prefix"
+}
+
+# --- provision --------------------------------------------------------------
+
+install_prefix=""
+install_major=""
+
+if install_prefix="$(find_llvm "$WANT_MAJOR")"; then
+    install_major="$WANT_MAJOR"
+    echo "Using LLVM $WANT_MAJOR at $install_prefix"
+elif [[ "$USE_PACKAGES" == "1" ]] && install_via_packages "$WANT_MAJOR" \
+     && install_prefix="$(find_llvm "$WANT_MAJOR")"; then
+    install_major="$WANT_MAJOR"
+    echo "Installed LLVM $WANT_MAJOR at $install_prefix"
+else
+    # Anything else supported and already present beats a multi-hundred-MB
+    # download; the build just has to be told which version to use.
+    #
+    # Only when the caller did not name a version. `--llvm N` is a requirement:
+    # CI's matrix builds --features llvmN-1 against whatever this provisions,
+    # and llvm-package publishes it under N's version, so substituting a
+    # different major there tests and ships something other than what it says.
+    if [[ "$MAJOR_EXPLICIT" == "0" ]]; then
+        for major in $SUPPORTED_MAJORS; do
+            [[ "$major" == "$WANT_MAJOR" ]] && continue
+            if install_prefix="$(find_llvm "$major")"; then
+                install_major="$major"
+                echo "LLVM $WANT_MAJOR is not available, but LLVM $major is, at $install_prefix"
+                break
+            fi
+        done
+    fi
+
+    if [[ -z "$install_major" ]]; then
+        install_from_archive "$WANT_MAJOR"
+        install_prefix="$ARCHIVE_PREFIX"
+        install_major="$WANT_MAJOR"
+        usable_llvm "$install_prefix/bin/llvm-config" "$WANT_MAJOR" >/dev/null || {
+            echo "unpacked tree at $install_prefix is missing pieces llvm-sys needs" >&2
+            exit 1
+        }
+        echo "Installed LLVM $WANT_MAJOR to $install_prefix"
+    fi
 fi
 
 # Unlike Windows -- where lldb has to be pulled out of a separate installer --
@@ -163,41 +568,41 @@ fi
 # link liblldb against a specific libpython, which is often absent, so lldb
 # dies at load time. Probe by running it.
 working_lldb() {
-    local candidate="$1"
-    local out
-    out="$("$candidate" --version 2>&1)" || return 1
-    [[ "$out" == *lldb* ]] || return 1
-    printf '%s' "$out" | head -1
+    local lldb="$1"
+    [[ -x "$lldb" ]] || return 1
+    "$lldb" --version >/dev/null 2>&1
 }
 
 check_devtools() {
-    local reported
-    if [[ -x "$install_prefix/bin/lldb" ]]; then
-        if reported="$(working_lldb "$install_prefix/bin/lldb")"; then
-            echo "Debugger: $reported"
+    local prefix="$1" candidates=("$prefix/bin/lldb")
+    command -v lldb >/dev/null 2>&1 && candidates+=("$(command -v lldb)")
+
+    for lldb in "${candidates[@]}"; do
+        if working_lldb "$lldb"; then
+            echo "Debugger: $lldb ($("$lldb" --version 2>/dev/null | head -1))"
             return 0
         fi
-        echo "Debugger: $install_prefix/bin/lldb is present but will not run" >&2
-        echo "  (usually a missing libpython for liblldb; install python3.$LLDB_PYTHON_MINOR" >&2
-        echo "   or use the distro lldb instead)" >&2
-    fi
-    if command -v lldb >/dev/null 2>&1 && reported="$(working_lldb lldb)"; then
-        echo "Debugger: $reported (from PATH)"
-        return 0
-    fi
-    echo "Debugger: no usable lldb found." >&2
+    done
+
+    echo "Debugger: no working lldb found." >&2
     case "$(uname -s)" in
-        Darwin) echo "  Install with: brew install llvm@$LLVM_MAJOR   (or use Xcode's lldb)" >&2 ;;
-        *)      echo "  Install with: apt install lldb-$LLVM_MAJOR    (see https://apt.llvm.org)" >&2 ;;
+        Darwin)
+            echo "  Xcode ships one: 'xcode-select --install', or 'brew install llvm' for" >&2
+            echo "  a matching lldb." >&2
+            ;;
+        *)
+            echo "  Install your distro's package, e.g. 'sudo apt install lldb'." >&2
+            ;;
     esac
-    # Not fatal: the build and tests do not need a debugger.
+    echo "  An lldb that exists but fails to start is usually missing" >&2
+    echo "  libpython3.$LLDB_PYTHON_MINOR." >&2
     return 0
 }
 
 if [[ "$DEVTOOLS" == "1" ]]; then
-    check_devtools
+    check_devtools "$install_prefix"
 else
-    echo "Skipping debugger check; re-run with --devtools (or PEPPER_SETUP_DEVTOOLS=1)."
+    echo "Devtools: skipped (--devtools to check for a debugger)"
 fi
 
 # Point cargo at the prefix. `.cargo/config.toml` [env] reaches build scripts,
@@ -205,10 +610,16 @@ fi
 mkdir -p "$REPO_ROOT/.cargo"
 cat > "$REPO_ROOT/.cargo/config.toml" <<EOF
 # Generated by scripts/setup-llvm.sh -- do not edit, do not commit.
-# The path is machine-specific; re-run the script on a new machine.
 [env]
-LLVM_SYS_${LLVM_SYS_MAJOR}_PREFIX = "$install_prefix"
+LLVM_SYS_${install_major}1_PREFIX = "$install_prefix"
 EOF
 
-echo "Wrote $REPO_ROOT/.cargo/config.toml (LLVM_SYS_${LLVM_SYS_MAJOR}_PREFIX)"
-echo "Run 'cargo build' to verify."
+echo "Wrote $REPO_ROOT/.cargo/config.toml (LLVM_SYS_${install_major}1_PREFIX)"
+if [[ "$install_major" == "$DEFAULT_MAJOR" ]]; then
+    echo "Run 'cargo build' to verify."
+else
+    # The version is a cargo feature, and only the default one is implied.
+    echo "LLVM $install_major is not the default ($DEFAULT_MAJOR), so name it when building:"
+    echo "  cargo build --no-default-features --features llvm$install_major-1"
+    echo "  cargo test --workspace --no-default-features --features llvm$install_major-1"
+fi

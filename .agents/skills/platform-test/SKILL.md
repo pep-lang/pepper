@@ -12,10 +12,11 @@ description: >
 
 # Platform test
 
-CI (`.github/workflows/ci.yml`) gates merges on Windows only, because that is
-the platform the compiler currently works on. Anything cross-platform —
-`cfg(windows)` branches, `scripts/setup-llvm.sh`, the linker's system-library
-lists — is therefore unverified until you run it somewhere else. That is what
+CI (`.github/workflows/ci.yml`) gates merges on Windows, and also runs the
+suite on Linux against every LLVM apt serves. macOS is not on that path —
+private-repo macOS minutes bill at ten times the Linux rate — so
+`cfg(target_os = "macos")` branches, Homebrew provisioning and anything else
+macOS-specific stays unverified until you run it there. That is what
 `.github/workflows/platform-test.yml` is for: it runs a command you choose on
 the platforms you choose, on demand.
 
@@ -35,8 +36,17 @@ gh workflow run platform-test.yml -f platforms=macos -f script="cargo test --wor
 - `script`: any command, run with bash from the repo root. Defaults to
   `cargo test --workspace`.
 
+- `provision`: `false` skips LLVM provisioning, for questions about what the
+  bare runner image already has.
+
 Each selected platform provisions LLVM with the repo's setup script first, so
-the command can build.
+the command can build. On Linux and macOS that is an apt or Homebrew install
+taking seconds; only Windows downloads an archive.
+
+Platform-specific facts are worth measuring on the platform rather than
+reasoning about: `-f provision=false -f script="bash scripts/probe-llvm-packages.sh"`
+reports which LLVM versions the image's package manager can serve and builds
+and tests the workspace against each one.
 
 To exercise code that isn't merged yet, add `--ref`:
 
@@ -102,16 +112,22 @@ missing symbol, not "the macos job failed".
 
 ## Interpreting results
 
-- **macOS is expected to fail in codegen today.** `macos-latest` is arm64, and
-  the driver initializes only the x86 LLVM target (`Target::initialize_x86`,
-  with inkwell's `target-x86` feature), so `Target::from_triple` cannot
-  resolve an `aarch64-apple-darwin` triple. Adding arm64 support means adding
-  the inkwell target feature *and* the initialization call — not a CI problem.
-- **Linux is the useful signal** for the linker work, since it is the one
-  platform whose `default_system_libraries()` entries (`m`, `dl`, `pthread`)
-  have never been exercised.
+- **macOS arm64 passes the suite but cannot compile a program.** `cargo test
+  --workspace` — the default `script` — passes against Homebrew LLVM 18
+  through 22. What fails is the CLI: the driver initializes only the x86 LLVM
+  target (`Target::initialize_x86`, with inkwell's `target-x86` feature), so
+  `Target::from_triple` cannot resolve `arm64-apple-darwin` and `pepper
+  foo.pep` exits with "No available targets are compatible". Adding arm64
+  means the inkwell target feature *and* the initialization call — not a CI
+  problem.
+- **Linux works end to end** and is covered on every PR by `ci.yml`'s
+  `llvm-versions` job (LLVM 18, 19 and 20 from apt), including the
+  `default_system_libraries()` entries (`m`, `dl`, `pthread`). Use
+  `platform-test` on Linux for what that job does not do: compiling and
+  running a `.pep` program, or a major apt does not carry.
 - A failure inside `scripts/setup-llvm.sh` is about provisioning, not your
-  change: check the release asset name for that platform first.
+  change. On Linux and macOS that means apt or Homebrew; only Windows, and the
+  last-resort fallback, involve a release asset.
 - Private-repo minutes are billed, and macOS runners cost several times Linux.
   Prefer naming the one platform you actually need over defaulting to all
   three.

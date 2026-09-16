@@ -39,23 +39,53 @@
 [CmdletBinding()]
 param(
     [switch]$DevTools,
-    [switch]$Force
+    [switch]$Force,
+    # LLVM major to provision. Defaults to the `default` feature in Cargo.toml,
+    # so plain `cargo build` works after a default run.
+    [ValidateSet('18', '19', '20', '21', '22')]
+    [string]$Llvm = $env:PEPPER_LLVM_MAJOR
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Dictated by the inkwell feature in crates/*/Cargo.toml:
-#   inkwell "llvm22-1" -> llvm-sys 221.x -> LLVM 22.1.x
+# The majors this workspace can build against, and the newest patch release
+# upstream published for each. Dictated by the feature table in
+# crates/*/Cargo.toml -- inkwell needs exactly one llvmNN-1 feature -- so the
+# two move together.
 #
-# Changing this? Re-run the llvm-package workflow afterwards
-# (gh workflow run llvm-package.yml). The CI packages are per-version, and a
-# missing one does not fail: CI silently reverts to multi-GB full installs.
+# Unlike Linux and macOS, no Windows package manager ships a usable LLVM: the
+# llvm.org installer and the winget/choco packages carry neither llvm-config
+# nor the component libraries (verified on windows-latest: 2.4 GB of LLVM 20
+# with no llvm-config.exe and one LLVM*.lib), so every version here comes from
+# the release archive.
 #
-# This line is also parsed by ci-provision-llvm.sh to locate the prefix on
-# Windows, so keep the `$LlvmVersion = '<version>'` shape.
-$LlvmVersion = '22.1.8'
-$LlvmMajor = '22'
-$LlvmSysMajor = '221'
+# This table is parsed by ci-provision-llvm.sh to locate the prefix, so keep
+# the `'<major>' = '<version>'` shape.
+$LlvmVersions = @{
+    '22' = '22.1.8'
+    '21' = '21.1.8'
+    '20' = '20.1.8'
+    '19' = '19.1.7'
+    '18' = '18.1.8'
+}
+
+# Matches `default` in Cargo.toml's [features].
+$DefaultLlvmMajor = '20'
+
+if (-not $Llvm) { $Llvm = $DefaultLlvmMajor }
+
+# [ValidateSet] applies to a bound argument, not to a parameter's default, so
+# PEPPER_LLVM_MAJOR reaches here unchecked. Without this, an unsupported value
+# produces $null from the table and the failure surfaces as a 404 on
+# `clang+llvm--x86_64-pc-windows-msvc.tar.xz`, naming neither the variable nor
+# the supported set.
+if (-not $LlvmVersions.ContainsKey($Llvm)) {
+    throw "unsupported LLVM major '$Llvm' (supported: $(($LlvmVersions.Keys | Sort-Object) -join ', '))"
+}
+
+$LlvmMajor = $Llvm
+$LlvmVersion = $LlvmVersions[$LlvmMajor]
+$LlvmSysMajor = "${LlvmMajor}1"
 
 # liblldb.dll is linked against this exact CPython minor version and the
 # llvm.org installer does not bundle it, so the embeddable runtime is placed
@@ -143,7 +173,7 @@ function Install-DevTools {
     Get-Download `
         -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$installerAsset" `
         -Destination $installer `
-        -Label "$installerAsset (~434 MB, debugger only)"
+        -Label "$installerAsset (debugger only)"
 
     Write-Host "Extracting lldb into $Prefix\bin ..."
     $binDir = Join-Path $Prefix 'bin'
@@ -177,7 +207,10 @@ function Install-DevTools {
 if ((Test-LlvmPrefix $Prefix) -and -not $Force) {
     Write-Host "LLVM $LlvmVersion already installed at $Prefix"
 } else {
-    Get-Download -Uri $Url -Destination $Archive -Label "$Asset (~822 MB)"
+    # No size in the label: it varies by major (806-936 MB across the
+    # supported ones) and a hardcoded figure went stale the moment the default
+    # version changed. curl's progress bar reports the real one.
+    Get-Download -Uri $Url -Destination $Archive -Label $Asset
 
     Write-Host "Extracting to $Prefix ..."
     if (Test-Path $Prefix) { Remove-Item -Recurse -Force $Prefix }
@@ -218,4 +251,11 @@ LLVM_SYS_${LlvmSysMajor}_PREFIX = "$EscapedPrefix"
 "@ | Set-Content -Path $CargoConfig -Encoding utf8
 
 Write-Host "Wrote $CargoConfig (LLVM_SYS_${LlvmSysMajor}_PREFIX)"
-Write-Host "Run 'cargo build' to verify."
+if ($LlvmMajor -eq $DefaultLlvmMajor) {
+    Write-Host "Run 'cargo build' to verify."
+} else {
+    # The version is a cargo feature and only the default one is implied.
+    Write-Host "LLVM $LlvmMajor is not the default ($DefaultLlvmMajor), so name it when building:"
+    Write-Host "  cargo build --no-default-features --features llvm$LlvmMajor-1"
+    Write-Host "  cargo test --workspace --no-default-features --features llvm$LlvmMajor-1"
+}

@@ -9,8 +9,32 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Matches the `LLVM_SYS_<major>_PREFIX` that `pepper-codegen` builds against.
+/// Matches the `LLVM_SYS_<major>_PREFIX` that `pepper-codegen` builds against,
+/// which depends on the selected LLVM version feature. Getting this wrong is
+/// silent: `link_driver()` simply falls through to whatever `clang` is on PATH,
+/// which may be a different LLVM than the one this compiler links against.
+#[cfg(feature = "llvm18-1")]
+const LLVM_PREFIX_ENV: &str = "LLVM_SYS_181_PREFIX";
+#[cfg(feature = "llvm19-1")]
+const LLVM_PREFIX_ENV: &str = "LLVM_SYS_191_PREFIX";
+#[cfg(feature = "llvm20-1")]
+const LLVM_PREFIX_ENV: &str = "LLVM_SYS_201_PREFIX";
+#[cfg(feature = "llvm21-1")]
+const LLVM_PREFIX_ENV: &str = "LLVM_SYS_211_PREFIX";
+#[cfg(feature = "llvm22-1")]
 const LLVM_PREFIX_ENV: &str = "LLVM_SYS_221_PREFIX";
+
+#[cfg(not(any(
+    feature = "llvm18-1",
+    feature = "llvm19-1",
+    feature = "llvm20-1",
+    feature = "llvm21-1",
+    feature = "llvm22-1"
+)))]
+compile_error!(
+    "no LLVM version feature enabled -- build with one of \
+     --features llvm18-1|llvm19-1|llvm20-1|llvm21-1|llvm22-1"
+);
 
 /// Filename of the pepper-support static library for the host platform.
 pub fn support_staticlib_name() -> &'static str {

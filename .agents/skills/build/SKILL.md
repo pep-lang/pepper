@@ -9,16 +9,27 @@ Pepper is a Rust workspace: root crate `pepper` (lib + `main.rs` CLI) plus the c
 
 ## First time on a machine: provision LLVM
 
-`pepper-codegen` and `pepper-driver` use `inkwell`, which links LLVM through `llvm-sys`. `llvm-sys` locates LLVM by running `<prefix>/bin/llvm-config` and matching its major version, so a full LLVM install tree is required — the LLVM builds from winget/scoop/chocolatey and the llvm.org installers do **not** qualify (no `llvm-config`, no component libs).
+`pepper-codegen` and `pepper-driver` use `inkwell`, which links LLVM through `llvm-sys`. `llvm-sys` locates LLVM by running `<prefix>/bin/llvm-config`, asks it which component libraries to link, and compiles a C shim against the `llvm-c` headers — so a full LLVM *development* install is required.
 
 ```bash
 pwsh -File scripts/setup-llvm.ps1   # Windows
 ./scripts/setup-llvm.sh             # macOS / Linux
 ```
 
-The script installs the LLVM version the `inkwell` feature demands (`llvm22-1` → LLVM 22.1.x), caches the download, and writes `.cargo/config.toml` with `LLVM_SYS_221_PREFIX`. That file is generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. Re-running is cheap and idempotent.
+Where LLVM comes from, cheapest source first: an install of the wanted major already on the machine, then the platform's package manager (`apt install llvm-<major>-dev` plus `libpolly-<major>-dev`, 4–8s; `brew install llvm@<major>`, 13–17s), then the upstream release archive, from which only the members the build consumes are unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries.
 
-The install also provides `clang`, `lld`, `llc`, `lli`, and `opt` — the driver links through the prefix's `clang` (see `crates/pepper-driver/src/linker.rs`).
+The script writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX`. That file is generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. Re-running is cheap and idempotent.
+
+### LLVM version
+
+The workspace builds against **LLVM 18–22**, chosen by a cargo feature on the root package and forwarded to `pepper-driver` and `pepper-codegen`. LLVM 20 is the default (`cargo build` needs no flag); anything else is named explicitly, and the setup script prints the command when it provisions a non-default version:
+
+```bash
+./scripts/setup-llvm.sh --llvm 19      # or -Llvm 19, or PEPPER_LLVM_MAJOR=19
+cargo test --workspace --no-default-features --features llvm19-1
+```
+
+Verified coverage: 18, 19 and 20 pass the suite on Linux — those are what `apt` on `ubuntu-24.04` serves — and all five pass on macOS, where Homebrew has `llvm@18` through `llvm@22`. Only the *Windows* archive install is a full LLVM tree with `clang`, `lld`, `llc`, `lli` and `opt`; the Unix archive path unpacks just `llvm-config`, the libraries and the `llvm-c` headers, so with either that or an apt prefix the driver falls back to `clang` on PATH (`crates/pepper-driver/src/linker.rs`). Homebrew prefixes do carry clang.
 
 ### Debugger (opt-in)
 
@@ -36,11 +47,11 @@ Windows specifics worth knowing, since they are not obvious: `lldb` is **absent*
 `lldb` resolves Rust symbols, source lines, and frame arguments on these builds, which is the fastest way to localize an access violation. Since the script leaves PATH untouched (see above), invoke it by full path on Windows — a bare `lldb` only appears to work on a machine that happens to have an unrelated LLVM installed:
 
 ```powershell
-& "$env:LOCALAPPDATA\pepper\llvm\22.1.8\bin\lldb.exe" --batch -o run `
+& "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
   -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
 ```
 
-The `22.1.8` in that path is the version pinned in `scripts/setup-llvm.ps1`; after a bump it is whatever that script now installs.
+The `20.1.8` in that path is the default major's version from `$LlvmVersions` in `scripts/setup-llvm.ps1`; with `-Llvm <major>` it is that major's version instead.
 
 On macOS and Linux, with `lldb` on PATH:
 
@@ -63,21 +74,32 @@ Errors are `rustc` diagnostics in `crates/*/src` — fix top-down, since later e
 
 Symptoms and causes worth knowing before you start guessing:
 
-- **`No suitable version of LLVM was found ... LLVM_SYS_221_PREFIX`** — no usable install. Run the setup script. Check `<prefix>/bin/llvm-config --version` matches the major version the `inkwell` feature implies.
+- **`No suitable version of LLVM was found ... LLVM_SYS_<major>1_PREFIX`** — no usable install for the *selected* version. Either run the setup script for that major, or name the major you do have: the variable in the message tells you which one cargo is looking for.
+- **`no LLVM version feature enabled`** from `build.rs` — `--no-default-features` without a `--features llvmNN-1`.
+- **`could not find native static library Polly`** — a Debian `llvm-N-dev` without `libpolly-N-dev`: `llvm-config --libnames --link-static` names Polly's archives whether or not they are installed, and llvm-sys prefers static, falling back to shared only when that command *fails* rather than when the files it names are missing. So `usable_llvm()` in the setup script checks the mode llvm-sys will actually choose and rejects such a prefix, which both catches this at provisioning and makes the script install `libpolly-N-dev`. The preinstalled `/usr/lib/llvm-18` on `ubuntu-24.04` is exactly this case.
 - **Unresolved `LLVMInitialize<Target>*` at link time** — `inkwell`'s default `target-all` feature wants initializers for every LLVM target, including ones a given LLVM build omits (`llvm-config --targets-built` lists them). The crates therefore set `default-features = false` and select only `target-x86`.
-- **Random access violations inside LLVM (verifier, printer) on Windows** — LLVM's release libs are built against the *static* CRT (`DEFAULTLIB:libcmt.lib`) while Rust MSVC uses the dynamic one; two CRTs in one process corrupt the heap, and `LNK4098` warns about it. Windows therefore links `LLVM-C.dll` instead, via `inkwell`'s `llvm22-1-no-llvm-linking` feature plus `crates/pepper-codegen/build.rs`, which also copies the DLL next to the built artifacts. Don't "fix" this by re-enabling static linking.
+- **Random access violations inside LLVM (verifier, printer) on Windows** — LLVM's release libs are built against the *static* CRT (`DEFAULTLIB:libcmt.lib`) while Rust MSVC uses the dynamic one; two CRTs in one process corrupt the heap, and `LNK4098` warns about it. Windows therefore links `LLVM-C.dll` instead: each supported `llvm-sys` major is a windows-only optional dependency carrying `no-llvm-linking`, and `crates/pepper-codegen/build.rs` emits the DLL link and copies it next to the built artifacts. Don't "fix" this by re-enabling static linking.
+- **`undefined symbol: _pep_print` / `panic` when compiling a `.pep` file** — not an LLVM problem. The driver links `libpepper_support.a`/`pepper_support.lib` from next to the `pepper` binary, and `cargo run` alone does not build that staticlib. `cargo build --workspace` first.
 
-## Upgrading LLVM
+## Adding or changing an LLVM version
 
-The version is pinned in three places that must agree: the `inkwell` feature (`llvm22-1`) in `crates/pepper-codegen/Cargo.toml` and `crates/pepper-driver/Cargo.toml`, `LLVM_SYS_MAJOR` in `crates/pepper-codegen/build.rs` and `LLVM_PREFIX_ENV` in `crates/pepper-driver/src/linker.rs`, and the version constants in both setup scripts.
+Supported majors are listed in six places that must agree, and `inkwell` must publish a matching `llvmNN-1` feature:
 
-**Then republish the CI packages:**
+- the `[features]` tables in `Cargo.toml`, `crates/pepper-driver/Cargo.toml` and `crates/pepper-codegen/Cargo.toml`, plus the windows-only `llvm-sys-<major>1` dependency in the latter two;
+- `LLVM_SYS_MAJORS` in `crates/pepper-codegen/build.rs`;
+- the `LLVM_PREFIX_ENV` cfg cascade in `crates/pepper-driver/src/linker.rs` — a *missing* arm stops the build at the `compile_error!` there, but an arm naming the *wrong* variable is silent: `link_driver()` just falls back to `clang` on PATH;
+- `SUPPORTED_MAJORS` and `archive_version()` in `scripts/setup-llvm.sh`;
+- `$LlvmVersions` **and** the `-Llvm` `[ValidateSet]` in `scripts/setup-llvm.ps1`, which rejects any major not enumerated in it.
+
+CI discovers its version matrix from `SUPPORTED_MAJORS` intersected with what apt offers, so a new major is tested as soon as both carry it.
+
+**Republish the Windows CI package for a new default:**
 
 ```bash
-gh workflow run llvm-package.yml
+gh workflow run llvm-package.yml -f llvm=20
 ```
 
-CI installs a prebuilt minimal LLVM published as an asset on the `llvm-<version>` release (see `.github/workflows/llvm-package.yml`). Those assets are per-version, so a bump leaves no package for the new one — and nothing fails loudly when that happens. `scripts/ci-provision-llvm.sh` quietly falls back to a full upstream install, which means every CI job silently starts paying a multi-gigabyte download and extraction again, and the Linux and macOS legs of `platform-test` can exhaust the runner's disk outright, which is what the package exists to avoid. The only signal is a line in the provisioning log: *"No prebuilt package published for &lt;platform&gt;"*.
+Windows CI installs a prebuilt minimal LLVM published as an asset on the `llvm-<version>` release (see `.github/workflows/llvm-package.yml`); Linux and macOS install from apt or Homebrew and need no package. Those assets are per-version, so a bump leaves no package for the new one — and nothing fails loudly when that happens: `scripts/ci-provision-llvm.sh` falls back to the upstream archive, so the Windows job quietly starts paying an ~900 MB download and extraction again. The only signal is a line in the provisioning log: *"No prebuilt package published for &lt;platform&gt;"*.
 
 Run the workflow after the pins are updated and merged: it builds from the version the setup scripts name, so it has to see the new value. The LLVM caches invalidate themselves, since their keys hash the setup scripts.
 

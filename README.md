@@ -10,15 +10,34 @@ See [`docs/pepper.md`](docs/pepper.md) for the language itself.
 ## Setting up a development environment
 
 Three steps on every platform: install Rust, install the platform
-prerequisites, run the LLVM setup script. The script is the only unusual part —
-`inkwell` links LLVM through `llvm-sys`, which finds LLVM by running
-`<prefix>/bin/llvm-config` and matching its major version, and the LLVM builds
-distributed by winget, scoop, chocolatey and the llvm.org installers do **not**
-satisfy that (no `llvm-config`, no component libraries). The script installs one
-that does — or, on macOS and Linux, reuses a system LLVM of the right major
-version if you already have one, probing `llvm-config-22`, `llvm-config`,
-`brew --prefix llvm@22`, `brew --prefix llvm` and `/usr/lib/llvm-22` in that
-order and taking the first whose major version matches.
+prerequisites, run the LLVM setup script.
+
+The LLVM step is the only unusual part. `inkwell` links LLVM through
+`llvm-sys`, which finds LLVM by running `<prefix>/bin/llvm-config`, asks it
+which component libraries to link, and compiles a small C shim against the
+`llvm-c` headers — so it needs a full LLVM *development* install, not just
+clang. On macOS and Linux your package manager has one and the script uses it:
+
+| platform | where LLVM comes from | cost |
+| --- | --- | --- |
+| Linux | `apt install llvm-<major>-dev` (plus `libpolly-<major>-dev`) | 4–8s, 400–750 MB |
+| macOS | `brew install llvm@<major>` | 13–17s |
+| Windows | the official release archive | 800–950 MB download (896 MB for the default major) |
+
+Windows needs the archive because nothing else on the platform works: the
+llvm.org installer and the winget, scoop and chocolatey packages ship neither
+`llvm-config` nor the component libraries. The script falls back to the archive
+on Linux and macOS too, but only if the package manager cannot serve the
+version you asked for.
+
+That fallback is sound on Linux — verified by building and testing against an
+archive-installed LLVM 22 on `ubuntu-24.04`, which apt does not carry — but is
+usually unusable on **macOS**: the release tarballs are LTO builds, so their
+static libraries are LLVM bitcode, and Apple's linker rejects bitcode produced
+by a newer LLVM than its own (`could not parse bitcode object file … Unknown
+attribute kind`). Homebrew's `llvm@<major>` is not LTO-built and works, so on
+macOS install the version you want with `brew` and re-run the script. It warns
+about this when it takes the archive path there.
 
 ### 1. Rust
 
@@ -46,10 +65,11 @@ On Windows, use the default `x86_64-pc-windows-msvc` host toolchain.
 
 **Linux** (Debian/Ubuntu names; translate for your distro)
 - `sudo apt install build-essential clang curl xz-utils`
-- `build-essential` is the load-bearing one: linking needs the libc, startup
-  objects and `ld` it provides. `clang` is there as a fallback — the LLVM
-  prefix normally supplies the one that drives the link, and PATH is only
-  consulted when it does not.
+- `build-essential` supplies the libc, startup objects and `ld` that linking
+  needs. `clang` is load-bearing too: it is the link driver, and on Linux
+  nothing else provides one — `llvm-<major>-dev` does not install a
+  `bin/clang` into the prefix (that is the separate `clang-<major>` package),
+  and the archive path deliberately omits it — so PATH is what supplies it.
 
 ### 3. LLVM
 
@@ -75,22 +95,37 @@ flag, so you can opt in once per machine instead of remembering it.
 
 Either way the script:
 
-- makes sure LLVM 22 is available — installing the version the `inkwell`
-  feature demands (currently 22.1.8) and caching the download so re-runs are
-  cheap, or adopting a matching system LLVM on macOS/Linux if it finds one;
-- writes `.cargo/config.toml` with `LLVM_SYS_221_PREFIX` pointing at whichever
-  prefix it settled on. Cargo applies its `[env]` table to build scripts, so
-  from then on plain `cargo` commands work with no shell setup, no environment
-  variables, and no Developer Prompt. That file is generated and gitignored —
-  re-run the script on a new machine rather than copying it;
+- provisions LLVM, cheapest source first: an LLVM of the wanted major that is
+  already installed, else the platform's package manager, else the release
+  archive (cached, so re-runs are free);
+- writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX` pointing at
+  whichever prefix it settled on. Cargo applies its `[env]` table to build
+  scripts, so from then on plain `cargo` commands work with no shell setup, no
+  environment variables, and no Developer Prompt. That file is generated and
+  gitignored — re-run the script on a new machine rather than copying it;
 - is idempotent: with a valid install present it only rewrites the cargo config.
 
-When it does install LLVM itself, budget roughly **5 GB** of disk on Windows and
-**12 GB** on Linux for the tree plus its cached archive, and several minutes for
-the first run (822 MB to download, then extraction). It all lands outside the
-repository, under `%LOCALAPPDATA%\pepper` or `~/.local/share/pepper`. If an
-existing system LLVM is adopted instead, nothing is downloaded and the prefix is
-wherever that LLVM already lives.
+#### Choosing an LLVM version
+
+The workspace builds against **LLVM 18 through 22**, selected by a cargo
+feature. LLVM 20 is the default because both package managers serve it, so
+after a default setup plain `cargo build` works:
+
+```bash
+./scripts/setup-llvm.sh --llvm 19          # macOS / Linux
+pwsh -File scripts/setup-llvm.ps1 -Llvm 19 # Windows
+cargo test --workspace --no-default-features --features llvm19-1
+```
+
+The script prints that exact command when it provisions something other than
+the default, so you do not have to remember the mapping. `PEPPER_LLVM_MAJOR`
+works too, and `--no-packages` forces the archive path.
+
+Only the Windows archive path is large: budget roughly **5 GB** of disk for the
+tree plus its cached archive, and a few minutes for the first run. Package
+manager installs are 400–750 MB and take seconds. Everything lands outside the
+repository, under `%LOCALAPPDATA%\pepper` or `~/.local/share/pepper`, except a
+package-manager prefix, which stays wherever apt or brew put it.
 
 #### Why devtools is recommended
 
@@ -106,10 +141,11 @@ inside code the JIT just generated. `lldb` turns that into a symbolized stack
 with source lines and frame arguments:
 
 On Windows the setup script deliberately leaves PATH alone, so invoke it by
-full path from PowerShell:
+full path from PowerShell. The version directory is whichever one setup
+installed — `20.1.8` for the default:
 
 ```powershell
-& "$env:LOCALAPPDATA\pepper\llvm\22.1.8\bin\lldb.exe" --batch -o run `
+& "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
   -k "thread backtrace" -- target/debug/pepper.exe tests/hello.pep
 ```
 
@@ -123,7 +159,8 @@ Two real bugs in this repository were found exactly that way. Without it you
 are left bisecting by `eprintln!`.
 
 What it costs, and why it is opt-in rather than default: an extra download
-(434 MB on Windows) that the build itself does not need. Platform notes:
+(335–434 MB on Windows, depending on the major) that the build itself does not
+need. Platform notes:
 
 - **Windows** — lldb is absent from the `clang+llvm` tarball and ships only in
   the llvm.org installer, so the script extracts it with 7-Zip instead of
@@ -150,6 +187,17 @@ every crate** under `crates/`. Expect about 99 passing tests and 1 ignored (a
 corpus test whose fixtures need language features that are not implemented
 yet).
 
+Those commands build against the default LLVM 20. For any other version, name
+it — the same count should pass:
+
+```bash
+cargo test --workspace --no-default-features --features llvm18-1
+```
+
+CI runs that matrix on Linux for every LLVM apt offers — 18, 19 and 20 on
+`ubuntu-24.04`. On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
+all five pass.
+
 ## Run the compiler
 
 ```bash
@@ -160,9 +208,9 @@ cargo run -- tests/hello.pep -o hello.exe   # choose the output name
 ```
 
 The compiler produces an executable; it does not run it for you. With no `-o`
-the output goes to `<cwd>/<source stem>` — so the third command leaves a `hello`
-in whatever directory you invoked it from, including the repository root, where
-it is not gitignored.
+the output goes to `<cwd>/<source stem>` — so the third command leaves a
+`hello` in whatever directory you invoked it from. At the repository root that
+path is gitignored; anywhere else it is not.
 
 Note that the default name carries **no extension**, which Windows will not
 execute; pass `-o hello.exe` there. Then run it yourself:
@@ -190,15 +238,24 @@ automatically.
 - **Windows x64** is the platform the compiler is developed against and the one
   CI gates on. The full suite passes, and the CLI compiles and links programs
   that then run correctly.
-- **Linux x64** builds the parser, sema and support crates; the LLVM
-  provisioning is verified on CI, but a full build has not yet been confirmed
-  end to end.
-- **macOS** is unverified in both halves. On x86_64 the setup script has no
-  prebuilt asset at all, so it needs an existing LLVM 22 (`brew install
-  llvm@22`). On arm64 provisioning works but codegen does not: the driver
-  initializes only the x86 LLVM target, so it cannot resolve an
-  `aarch64-apple-darwin` triple. Adding arm64 means adding the `inkwell` target
-  feature *and* the initialization call.
+- **Linux x64** works end to end: the suite passes against LLVM 18, 19 and 20
+  from apt, and `cargo run -- tests/hello.pep -o hello && ./hello` prints
+  `Hello world!` on `ubuntu-24.04`.
+- **macOS arm64** builds and passes the full suite against Homebrew LLVM 18
+  through 22, but the CLI cannot compile a program yet:
+
+  ```
+  error: No available targets are compatible with triple "arm64-apple-darwin25.6.0"
+  ```
+
+  Codegen initializes only the x86 LLVM target
+  (`default_target_machine()` in `crates/pepper-driver/src/lib.rs`). Fixing it
+  means adding `inkwell`'s `target-aarch64` feature *and* the matching
+  initialization call.
+- **macOS x86_64** is untested. Homebrew serves it, which is the path that
+  works on macOS anyway; of the supported majors only LLVM 19 publishes a
+  `macOS-X64` archive, and the fallback reports that the version has no build
+  for this platform rather than attempting a download.
 
 To exercise another platform from the machine you are on, use the
 `platform-test` workflow:
@@ -206,6 +263,10 @@ To exercise another platform from the machine you are on, use the
 ```bash
 gh workflow run platform-test.yml -f platforms=linux -f script="cargo test --workspace"
 ```
+
+It can also skip LLVM provisioning entirely (`-f provision=false`), which is
+how `scripts/probe-llvm-packages.sh` reports what a bare runner image can
+install and whether the result actually builds.
 
 ## When something goes wrong
 
