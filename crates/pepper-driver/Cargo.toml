@@ -15,8 +15,9 @@ clap.workspace = true
 inkwell = { version = "0.10", default-features = false }
 
 # The LLVM backend, per host architecture. See the same tables in
-# crates/pepper-codegen/Cargo.toml for why it is not `target-all`, and
-# crates/pepper-codegen/src/target.rs for the registration.
+# crates/pepper-codegen/Cargo.toml for why it is not `target-all`, why
+# `target-x86` is 64-bit here, and crates/pepper-codegen/src/target.rs for
+# the registration.
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 inkwell = { version = "0.10", default-features = false, features = ["target-x86"] }
 

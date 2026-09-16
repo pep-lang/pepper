@@ -39,6 +39,10 @@ use inkwell::OptimizationLevel;
 pub fn initialize_host() {
     let config = InitializationConfig::default();
 
+    // `initialize_x86` / inkwell's `target-x86` is LLVM's X86 backend, which
+    // serves x86-64 as well as i386 -- there is no separate "x86_64" target
+    // to register. 32-bit output is never selected, because the triple is
+    // always the host's, and a 32-bit *host* trips the compile_error below.
     #[cfg(target_arch = "x86_64")]
     Target::initialize_x86(&config);
 

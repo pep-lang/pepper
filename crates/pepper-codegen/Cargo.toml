@@ -23,6 +23,13 @@ pepper-support = { path = "../pepper-support" }
 # Windows runner image has no usable LLVM at all. See scripts/setup-llvm.*.
 inkwell = { version = "0.10", default-features = false }
 
+# `target-x86` is LLVM's *X86 backend*, which covers i386 and x86-64 alike --
+# `llvm-config --targets-built` lists one `X86`, not two. The emitted code is
+# 64-bit because the triple is always the host's
+# (`TargetMachine::get_default_triple()`): PE32+ x86-64 on Windows, ELF 64-bit
+# x86-64 on Linux. 32-bit is not supported and cannot be reached by accident:
+# an i686 host reports `target_arch = "x86"`, matches neither table, and so
+# trips the compile_error in src/target.rs.
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 inkwell = { version = "0.10", default-features = false, features = ["target-x86"] }
 
