@@ -12,10 +12,11 @@
 # message, so every push would queue a job just to discover there was nothing
 # to do, and the command would have to be parsed back out of prose.
 #
-# None of these jobs are required checks: this is a diagnostic, and some
-# platforms are expected to fail until the compiler supports them. macOS
-# runners bill at several times the Linux rate on private repositories, so
-# name the platform you need rather than defaulting to all three.
+# None of these jobs are required checks: this is a diagnostic. All three
+# platforms pass end to end, so a red run here is a regression rather than a
+# known gap. macOS runners bill at several times the Linux rate on private
+# repositories, so name the platform you need rather than defaulting to all
+# three.
 name: platform-test
 
 on:
@@ -110,7 +111,15 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Was 60. A hung job is the most expensive failure mode here -- it is
+    # silent (GitHub exposes no partial log for a running step) and it burns a
+    # whole investigation round.
+    #
+    # The step caps below must sum to less than this, or the job is cancelled
+    # before either of them fires: a cancelled job reports neither which phase
+    # stalled nor the diagnostics below, since `failure()` is false under
+    # cancellation.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7
@@ -149,6 +158,9 @@ jobs:
       # enough to build with.
       - name: Provision LLVM
         if: inputs.provision != 'false'
+        # 10 + 15 < the job's 30, so a stall trips the step -- naming the
+        # phase and running diagnostics -- rather than cancelling the job.
+        timeout-minutes: 10
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,11 +169,67 @@ jobs:
       # The command is supplied by someone with write access (dispatch requires
       # it), and reaches the shell through the environment rather than template
       # interpolation.
+      #
+      # `-e -u -o pipefail -x` because every run of this workflow costs minutes
+      # of wall clock: without -e a script keeps going after the failure you
+      # care about and buries it, and without -x the log shows output with no
+      # indication of which command produced it. Both cost investigation
+      # rounds. A script that genuinely needs to continue past a failure can
+      # say so with `|| true`.
       - name: Run requested script
+        timeout-minutes: 15
         shell: bash
         env:
           SCRIPT: ${{ inputs.script }}
           PLATFORM: ${{ matrix.os }}
         run: |
           echo "Running on $PLATFORM: $SCRIPT"
-          bash -c "$SCRIPT"
+          bash -euxo pipefail -c "$SCRIPT"
+
+      # Only when the job did not pass, so a green run stays readable. This is
+      # the state a failure is almost always about, and collecting it here
+      # saves re-dispatching the whole job to ask what LLVM it had.
+      - name: Diagnostics
+        # `always()` would also run this after a clean pass; `cancelled()` is
+        # included because a job cancelled by the timeout is exactly when the
+        # state below is wanted, and `failure()` alone is false then.
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          set +e
+          echo "::group::toolchain"
+          rustc -vV; cargo -V
+          echo "::endgroup::"
+
+          echo "::group::host"
+          uname -a
+          sw_vers 2>/dev/null
+          [ -r /etc/os-release ] && cat /etc/os-release
+          df -m . | tail -2
+          echo "::endgroup::"
+
+          echo "::group::LLVM as cargo sees it"
+          cat .cargo/config.toml 2>/dev/null || echo "no .cargo/config.toml"
+          prefix=$(tr -d '\r' < .cargo/config.toml 2>/dev/null \
+                   | sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX = "(.*)"$/\1/p' \
+                   | head -1 | sed 's|\\\\|\\|g')
+          if [ -n "$prefix" ]; then
+            echo "prefix: $prefix"
+            "$prefix/bin/llvm-config" --version --targets-built --libdir 2>&1 | sed 's/^/  /'
+          fi
+          for cfg in llvm-config llvm-config-20 llvm-config-19 llvm-config-18; do
+            path=$(command -v "$cfg" 2>/dev/null) && echo "PATH $cfg: $path ($("$cfg" --version 2>&1))"
+          done
+          echo "::endgroup::"
+
+          echo "::group::link driver"
+          # The driver prefers the prefix's clang and falls back to PATH, so
+          # which one answered matters when a link fails.
+          [ -n "$prefix" ] && [ -x "$prefix/bin/clang" ] && "$prefix/bin/clang" --version | head -2
+          command -v clang >/dev/null && clang --version | head -2
+          echo "::endgroup::"
+
+          echo "::group::build artifacts"
+          ls -l target/debug 2>/dev/null | head -20
+          ls -l .pep/build 2>/dev/null | head -20
+          echo "::endgroup::"

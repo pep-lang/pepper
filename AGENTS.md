@@ -39,3 +39,37 @@ somewhere already ignored.
 In GitHub Actions, the same rule takes a different form: untrusted or
 non-trivial values reach a `run:` body through `env:`, never through `${{ }}`
 interpolation, which splices text into the script before bash parses it.
+
+## Make cross-platform CI runs fail fast, and say why
+
+A `platform-test` dispatch is a slow, expensive question: minutes of wall
+clock, and GitHub exposes **no partial log for a step that is still running**,
+so a job that hangs looks identical to one that is working. Every run that
+ends without a usable answer costs another round. So:
+
+- **Scripts run under `bash -euxo pipefail`.** Without `-e` the script
+  continues past the failure you care about and buries it hundreds of lines
+  up; without `-x` the log is output with no indication of which command
+  produced it. Something that must continue past a failure says `|| true` at
+  that line, deliberately.
+
+  Those flags govern the *wrapper* shell only. A dispatched
+  `bash probe.sh` is a new shell with its own options, so a script **file**
+  sets `set -euo pipefail` itself — otherwise it sails past every failure and
+  the job reports success having answered nothing, which is a wasted run that
+  looks like a good one.
+- **Bound every phase**, but note macOS ships no GNU `timeout`: the job's and
+  steps' `timeout-minutes` are the portable bound, and a script that wraps
+  individual commands has to tolerate the command being absent.
+- **Never pipe the interesting command through `tail` or `head`.** A
+  `| tail -8` around a provisioning step once hid the one line that explained
+  a 25-minute stall, and cost two extra runs to recover. Filter *noise*
+  (progress bars, `Reading database …`) by pattern, not by position.
+- **Collect the state a failure is about in the same run.** The workflow has
+  an `if: failure() || cancelled()` diagnostics step (toolchain, host, the
+  LLVM cargo actually sees, which `clang` answered, build artifacts) —
+  cancellation is included because a job killed by its timeout is exactly
+  when that state is wanted, and `failure()` is false then. Extend it rather
+  than re-dispatching to ask a follow-up question.
+- **Ask several questions per run.** Independent checks belong in one script
+  with clear `=== section` markers, since the cost is per run, not per check.

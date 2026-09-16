@@ -30,14 +30,14 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 ## Test layout
 
-Expect ~105 passing and 1 ignored.
+Expect ~106 passing and 1 ignored.
 
 | Crate | Tests |
 |---|---|
 | `pepper-parser` | 53 unit tests in `src/parser/parsers.rs` (grammar: literals, expressions, structs, traits, generics) |
 | `pepper-sema` | 8 model tests in `src/model_tests.rs` (parse + build + transform → resolved model) |
 | `pepper-support` | 6 unit tests in `src/lib.rs` (C ABI runtime support functions) |
-| `pepper-codegen` | 16 tests in `tests/codegen_tests.rs` — codegen + JIT, asserting the value `test()` returns |
+| `pepper-codegen` | 1 unit test in `src/target.rs` — the host's own triple resolves to a target machine, which is what a CLI run needs. Other tests reach the same code, but inkwell's execution-engine constructors register the host backend as a side effect, so a JIT test running first can mask a wrong registration; this one runs alone in its binary and cannot be masked. Plus 16 tests in `tests/codegen_tests.rs` — codegen + JIT, asserting the value `test()` returns |
 | `pepper-driver` | 15 tests in `tests/compile_tests.rs` (14 JIT value tests + `full_pipeline_link_and_spawn`, which emits an object, links it, and runs the binary) |
 | `pepper-driver` | 1 `#[ignore]`d test in `tests/corpus_tests.rs` (compile-and-run the corpus) |
 | root `pepper` | `tests/parser_corpus.rs` — every `tests/**/*.pep` file must parse into a well-formed module |

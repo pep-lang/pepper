@@ -105,21 +105,11 @@ fn support_staticlib() -> Option<PathBuf> {
         .ok()
 }
 
-/// Default-target machine for obj emission (cpu "generic" per
-/// `LLVMCodeGenerator.cpp:245-258`).
+/// Machine for object emission: the host, CPU `generic`.
+///
+/// Delegated to `pepper_codegen::target` so the backend registration lives in
+/// one place; registering only x86 here is what left the CLI unable to compile
+/// anything on Apple silicon while the suite stayed green.
 fn default_target_machine() -> Result<inkwell::targets::TargetMachine, String> {
-    inkwell::targets::Target::initialize_x86(&inkwell::targets::InitializationConfig::default());
-    let triple = inkwell::targets::TargetMachine::get_default_triple();
-    let target =
-        inkwell::targets::Target::from_triple(&triple).map_err(|e| e.to_string())?;
-    target
-        .create_target_machine(
-            &triple,
-            "generic",
-            "",
-            inkwell::OptimizationLevel::None,
-            inkwell::targets::RelocMode::Default,
-            inkwell::targets::CodeModel::Default,
-        )
-        .ok_or_else(|| "target machine".to_string())
+    pepper_codegen::target::host_machine()
 }

@@ -20,9 +20,9 @@ macOS-specific stays unverified until you run it there. That is what
 `.github/workflows/platform-test.yml` is for: it runs a command you choose on
 the platforms you choose, on demand.
 
-It is a diagnostic, not a gate. Some platforms are *expected* to fail right
-now (see Interpreting results), so a red run here is information, not a
-regression.
+It is a diagnostic, not a gate — no job here is a required check. All three
+platforms now pass end to end, though, so a red run is a regression or a real
+platform gap, not an expected failure (see Interpreting results).
 
 ## Invoke it
 
@@ -110,21 +110,42 @@ Report which platforms passed, and for failures quote the actual error rather
 than the job name — the useful signal is nearly always a linker line or a
 missing symbol, not "the macos job failed".
 
+## Make each run answer everything it can
+
+A dispatch costs minutes, and **GitHub serves no partial log for a step that
+is still running** — a hung job looks exactly like a working one. So the
+workflow runs the requested command under `bash -euxo pipefail`, caps the job
+at 30 minutes (provision 10, script 15 — the step caps must sum to less than
+the job cap, or the job is cancelled before either fires and a cancelled job
+reports nothing), and dumps a diagnostics block on failure *or cancellation*:
+toolchain, host, the LLVM cargo actually sees with `--targets-built`, which
+`clang` answered, and the build artifacts.
+
+A probe that needs longer than 15 minutes should be split across dispatches
+rather than raised — smaller questions come back sooner.
+
+Two traps that each cost a run here:
+
+- Those flags govern the *wrapper* shell. A dispatched `bash probe.sh` is a
+  new shell, so a script **file** sets `set -euo pipefail` itself — otherwise
+  it runs past every failure and the job reports success having answered
+  nothing.
+- macOS has no GNU `timeout`. Rely on `timeout-minutes`, or guard the call.
+
+Put independent questions in one script with `=== section` markers, and never
+pipe the interesting command through `tail`/`head` — filter noise by pattern.
+
 ## Interpreting results
 
-- **macOS arm64 passes the suite but cannot compile a program.** `cargo test
-  --workspace` — the default `script` — passes against Homebrew LLVM 18
-  through 22. What fails is the CLI: the driver initializes only the x86 LLVM
-  target (`Target::initialize_x86`, with inkwell's `target-x86` feature), so
-  `Target::from_triple` cannot resolve `arm64-apple-darwin` and `pepper
-  foo.pep` exits with "No available targets are compatible". Adding arm64
-  means the inkwell target feature *and* the initialization call — not a CI
-  problem.
-- **Linux works end to end** and is covered on every PR by `ci.yml`'s
-  `llvm-versions` job (LLVM 18, 19 and 20 from apt), including the
-  `default_system_libraries()` entries (`m`, `dl`, `pthread`). Use
-  `platform-test` on Linux for what that job does not do: compiling and
-  running a `.pep` program, or a major apt does not carry.
+- **All three platforms work end to end**, so a failure is a real finding, not
+  an expected gap: the suite passes on Windows x64, Linux x64 (apt LLVM 18-20)
+  and macOS arm64 (Homebrew 18-22), and each compiles, links and runs a `.pep`
+  program. Codegen registers the *host's* backend
+  (`crates/pepper-codegen/src/target.rs`); if a CLI run reports "No available
+  targets are compatible with triple …", that registration is wrong for the
+  host. The suite may not tell you: inkwell's JIT registers the host backend
+  as a side effect, so whichever test creates an execution engine first can
+  mask a wrong explicit registration.
 - A failure inside `scripts/setup-llvm.sh` is about provisioning, not your
   change. On Linux and macOS that means apt or Homebrew; only Windows, and the
   last-resort fallback, involve a release asset.

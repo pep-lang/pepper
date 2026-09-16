@@ -93,21 +93,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let obj_path = build_dir.join("corpus.o");
     let out_path = build_dir.join(if cfg!(windows) { "corpus_bin.exe" } else { "corpus_bin" });
 
-    inkwell::targets::Target::initialize_x86(&inkwell::targets::InitializationConfig::default());
-    let triple = inkwell::targets::TargetMachine::get_default_triple();
-    let target = inkwell::targets::Target::from_triple(&triple)
-        .map_err(|e| e.to_string())
-        .unwrap();
-    let machine = target
-        .create_target_machine(
-            &triple,
-            "generic",
-            "",
-            inkwell::OptimizationLevel::None,
-            inkwell::targets::RelocMode::Default,
-            inkwell::targets::CodeModel::Default,
-        )
-        .unwrap();
+    let machine = pepper_codegen::target::host_machine().unwrap();
     machine
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
         .unwrap();

@@ -194,7 +194,7 @@ cargo test --workspace
 
 `--workspace` is not optional. The repository root is itself a package, so a
 bare `cargo test` runs only its single integration test and **silently skips
-every crate** under `crates/`. Expect about 105 passing tests and 1 ignored (a
+every crate** under `crates/`. Expect about 106 passing tests and 1 ignored (a
 corpus test whose fixtures need language features that are not implemented
 yet).
 
@@ -252,17 +252,15 @@ automatically.
 - **Linux x64** works end to end: the suite passes against LLVM 18, 19 and 20
   from apt, and `cargo run -- tests/hello.pep -o hello && ./hello` prints
   `Hello world!` on `ubuntu-24.04`.
-- **macOS arm64** builds and passes the full suite against Homebrew LLVM 18
-  through 22, but the CLI cannot compile a program yet:
-
-  ```
-  error: No available targets are compatible with triple "arm64-apple-darwin25.6.0"
-  ```
-
-  Codegen initializes only the x86 LLVM target
-  (`default_target_machine()` in `crates/pepper-driver/src/lib.rs`). Fixing it
-  means adding `inkwell`'s `target-aarch64` feature *and* the matching
-  initialization call.
+- **macOS arm64** works end to end: the suite passes against Homebrew LLVM 18
+  through 22, and `cargo run -- tests/hello.pep -o hello && ./hello` produces
+  a `Mach-O 64-bit executable arm64` that prints `Hello world!`. Codegen
+  registers the host's own LLVM backend
+  (`crates/pepper-codegen/src/target.rs`); registering x86 unconditionally, as
+  it used to, broke every CLI invocation with *"No available targets are
+  compatible with triple arm64-apple-darwin"* while the suite stayed green,
+  because inkwell's JIT registers the host backend as a side effect and
+  whichever test did that first masked the problem for the others.
 - **macOS x86_64** is untested. Homebrew serves it, which is the path that
   works on macOS anyway; of the supported majors only LLVM 19 publishes a
   `macOS-X64` archive, and the fallback reports that the version has no build

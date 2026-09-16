@@ -11,13 +11,23 @@ pepper-sema = { path = "../pepper-sema" }
 pepper-support = { path = "../pepper-support" }
 
 # `target-all` (inkwell's default) emits initializers for every LLVM target,
-# including ones a given LLVM build omits. Pepper only targets x86.
+# including ones a given LLVM build omits, which fails at link time with
+# unresolved LLVMInitialize<Target>*. So the backend is requested per host
+# architecture below, and crates/pepper-codegen/src/target.rs registers it.
+# Asking for both everywhere would require every LLVM this builds against --
+# including a system one nobody here chose -- to carry both backends.
 #
 # The LLVM version is a feature, not a fixed dependency: inkwell requires
 # exactly one `llvmNN-1` feature, and which LLVM is cheaply available differs
 # per platform -- apt has 18/19/20, Homebrew has `llvm@18` through `llvm@22`,
 # Windows runner image has no usable LLVM at all. See scripts/setup-llvm.*.
+inkwell = { version = "0.10", default-features = false }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 inkwell = { version = "0.10", default-features = false, features = ["target-x86"] }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+inkwell = { version = "0.10", default-features = false, features = ["target-aarch64"] }
 
 # Windows links LLVM-C.dll instead of LLVM's static libs -- those are built
 # against the static CRT and mixing CRTs corrupts the heap. `no-llvm-linking`

@@ -5,6 +5,7 @@
 pub mod address;
 pub mod ops;
 pub mod types;
+pub mod target;
 
 use address::{Address, Frame};
 use inkwell::context::Context;
@@ -148,22 +149,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // StructType::size_of yields an unfolded ptrtoint expression under
         // opaque pointers; use the TargetMachine's TargetData for ABI size.
         let size = {
-            inkwell::targets::Target::initialize_x86(
-                &inkwell::targets::InitializationConfig::default(),
-            );
-            let triple = inkwell::targets::TargetMachine::get_default_triple();
-            let target = inkwell::targets::Target::from_triple(&triple)
-                .map_err(|e| e.to_string())?;
-            let machine = target
-                .create_target_machine(
-                    &triple,
-                    "generic",
-                    "",
-                    OptimizationLevel::None,
-                    inkwell::targets::RelocMode::Default,
-                    inkwell::targets::CodeModel::Default,
-                )
-                .ok_or_else(|| "target machine".to_string())?;
+            let machine = crate::target::host_machine()?;
             let td = machine.get_target_data();
             td.get_abi_size(&llvm_type)
         };

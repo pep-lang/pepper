@@ -8,13 +8,11 @@
 # at run time, so the context names change as distributions add and drop LLVM
 # versions, and required checks have to be named in advance.
 #
-# Linux and macOS both pass the full suite -- Linux for the 18, 19 and 20 that
-# apt serves, macOS for all five majors via Homebrew -- contrary to an earlier
-# note here claiming macOS arm64 could not: codegen initializes only the x86
-# target, which the suite never exercises natively. (The macOS *CLI* still
-# cannot compile a program on arm64; see README.md.) macOS is kept off the push
-# path anyway -- private-repo macOS minutes bill at ten times the Linux rate --
-# and is reachable through `platform-test`.
+# Linux and macOS both work end to end -- the suite passes for the 18, 19 and
+# 20 that apt serves and for all five majors via Homebrew, and each compiles,
+# links and runs a program. macOS is kept off the push path because
+# private-repo macOS minutes bill at ten times the Linux rate, not because it
+# is expected to fail; reach it through `platform-test`.
 name: CI
 
 on:

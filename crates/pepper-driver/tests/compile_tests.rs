@@ -187,20 +187,7 @@ main(): int {
     let obj_path = build_dir.join("test.o");
     let out_path = build_dir.join(if cfg!(windows) { "test_bin.exe" } else { "test_bin" });
 
-    inkwell::targets::Target::initialize_x86(&inkwell::targets::InitializationConfig::default());
-    let triple = inkwell::targets::TargetMachine::get_default_triple();
-    let target =
-        inkwell::targets::Target::from_triple(&triple).map_err(|e| e.to_string()).unwrap();
-    let machine = target
-        .create_target_machine(
-            &triple,
-            "generic",
-            "",
-            inkwell::OptimizationLevel::None,
-            inkwell::targets::RelocMode::Default,
-            inkwell::targets::CodeModel::Default,
-        )
-        .unwrap();
+    let machine = pepper_codegen::target::host_machine().unwrap();
     machine
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
         .unwrap();
