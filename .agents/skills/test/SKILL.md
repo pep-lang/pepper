@@ -30,7 +30,7 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 ## Test layout
 
-Expect ~99 passing and 1 ignored.
+Expect ~105 passing and 1 ignored.
 
 | Crate | Tests |
 |---|---|
@@ -41,6 +41,7 @@ Expect ~99 passing and 1 ignored.
 | `pepper-driver` | 15 tests in `tests/compile_tests.rs` (14 JIT value tests + `full_pipeline_link_and_spawn`, which emits an object, links it, and runs the binary) |
 | `pepper-driver` | 1 `#[ignore]`d test in `tests/corpus_tests.rs` (compile-and-run the corpus) |
 | root `pepper` | `tests/parser_corpus.rs` — every `tests/**/*.pep` file must parse into a well-formed module |
+| `xtask` | 6 unit tests in `src/main.rs` — flag resolution (last of `--devtools`/`--no-devtools` wins, identically for both scripts; `--llvm` in each script's spelling; `-ExecutionPolicy Bypass` before `-File`; `--check`/`-h` not provisioning and bad input rejected), reading the generated cargo config back including TOML-escaped Windows paths, and the default LLVM major being readable from the workspace manifest |
 
 `tests/` also holds the `.pep` fixtures: standalone files at the root (`hello.pep`, `array.pep`, `string.pep`, `struct.pep`, `debug.pep`) and one `test.pep` per feature folder.
 

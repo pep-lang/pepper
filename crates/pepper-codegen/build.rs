@@ -71,9 +71,16 @@ fn main() {
         return;
     }
 
+    // The major here is the one the selected feature implies, so this names
+    // the LLVM the build actually wants rather than whatever is installed.
     let var = format!("LLVM_SYS_{llvm_sys_major}_PREFIX");
     let Ok(prefix) = env::var(&var) else {
-        panic!("{var} is not set -- run scripts/setup-llvm.ps1 (see the build skill)");
+        panic!(
+            "{var} is not set. Provision LLVM with:\n    \
+             cargo run -p xtask -- setup\n  \
+             (or `cargo setup` once that has run). \
+             `cargo run -p xtask -- --check` reports what is configured."
+        );
     };
     let prefix = PathBuf::from(prefix);
 

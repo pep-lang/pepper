@@ -30,7 +30,7 @@ inventory() {
     echo "  size:    $(du -sm "$("$config" --prefix)" 2>/dev/null | cut -f1) MB"
     for kind in static shared; do
         names="$("$config" --libnames "--link-$kind" 2>&1)"
-        if [ -z "$names" ] || printf '%s' "$names" | grep -qi 'error\|not available'; then
+        if [ -z "$names" ] || printf '%s' "$names" | grep -i 'error\|not available' >/dev/null; then
             echo "  $kind: unavailable"
             continue
         fi
@@ -108,7 +108,11 @@ Linux)
         section "apt install llvm-$n-dev"
         start=$SECONDS
         pkgs="llvm-$n-dev"
-        LC_ALL=C apt-cache policy "libpolly-$n-dev" 2>/dev/null | grep -q 'Candidate: [0-9]' && pkgs="$pkgs libpolly-$n-dev"
+        # awk, not `grep -q`: -q exits early, apt-cache dies of SIGPIPE, and
+        # pipefail then reports the test as false -- a race that silently drops
+        # libpolly and makes the prefix unusable.
+        polly="$(LC_ALL=C apt-cache policy "libpolly-$n-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')"
+        [ -n "$polly" ] && [ "$polly" != "(none)" ] && pkgs="$pkgs libpolly-$n-dev"
         echo "  packages: $pkgs"
         sudo apt-get install -y -qq $pkgs >/dev/null 2>&1 \
             && echo "  installed in $((SECONDS - start))s" \

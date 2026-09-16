@@ -7,6 +7,9 @@ members = [
     "crates/pepper-sema",
     "crates/pepper-codegen",
     "crates/pepper-driver",
+    # `cargo run -p xtask -- setup` provisions LLVM. Dependency-free on
+    # purpose, so it builds before any LLVM exists.
+    "xtask",
 ]
 
 [workspace.package]

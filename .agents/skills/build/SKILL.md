@@ -12,20 +12,23 @@ Pepper is a Rust workspace: root crate `pepper` (lib + `main.rs` CLI) plus the c
 `pepper-codegen` and `pepper-driver` use `inkwell`, which links LLVM through `llvm-sys`. `llvm-sys` locates LLVM by running `<prefix>/bin/llvm-config`, asks it which component libraries to link, and compiles a C shim against the `llvm-c` headers — so a full LLVM *development* install is required.
 
 ```bash
-pwsh -File scripts/setup-llvm.ps1   # Windows
-./scripts/setup-llvm.sh             # macOS / Linux
+cargo run -p xtask -- setup      # first time: works with no LLVM installed
+cargo setup                      # afterwards, via the alias setup writes
+cargo setup --check              # what is configured, and how to build it
 ```
+
+`xtask` is dependency-free precisely so this works on a fresh clone: `llvm-sys` fails to *compile* when no LLVM is configured (`compile_error!` in its lib.rs), and it builds before `pepper-codegen`'s build script exists — so nothing inside the build can discover LLVM in time to configure it. `cargo run -p xtask` never pulls it in. It runs the platform's script (`scripts/setup-llvm.{sh,ps1}`, also usable directly, which is what CI does) and finds a shell for it: `pwsh`, else Windows PowerShell 5.1.
 
 Where LLVM comes from, cheapest source first: an install of the wanted major already on the machine, then the platform's package manager (`apt install llvm-<major>-dev` plus `libpolly-<major>-dev`, 4–8s; `brew install llvm@<major>`, 13–17s), then the upstream release archive, from which only the members the build consumes are unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries.
 
-The script writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX`. That file is generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. Re-running is cheap and idempotent.
+Setup writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX` plus the `cargo setup` alias. That file is generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. It is the *only* mechanism that reaches `llvm-sys` without shell state, which is why provisioning cannot live in a build script. Re-running is cheap and idempotent.
 
 ### LLVM version
 
 The workspace builds against **LLVM 18–22**, chosen by a cargo feature on the root package and forwarded to `pepper-driver` and `pepper-codegen`. LLVM 20 is the default (`cargo build` needs no flag); anything else is named explicitly, and the setup script prints the command when it provisions a non-default version:
 
 ```bash
-./scripts/setup-llvm.sh --llvm 19      # or -Llvm 19, or PEPPER_LLVM_MAJOR=19
+cargo setup --llvm 19                  # or PEPPER_LLVM_MAJOR=19
 cargo test --workspace --no-default-features --features llvm19-1
 ```
 

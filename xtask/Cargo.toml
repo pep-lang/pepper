@@ -1,0 +1,18 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# Deliberately dependency-free, including on the rest of this workspace.
+#
+# The whole point is that `cargo run -p xtask -- setup` works on a fresh clone
+# of a machine with no LLVM: the moment this crate depends on anything that
+# pulls in inkwell, cargo would have to build llvm-sys first, and llvm-sys
+# fails to compile at all when no LLVM is configured -- which is the situation
+# this command exists to fix.
+[dependencies]
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"

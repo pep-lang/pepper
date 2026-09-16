@@ -73,21 +73,32 @@ On Windows, use the default `x86_64-pc-windows-msvc` host toolchain.
 
 ### 3. LLVM
 
-Recommended — with devtools, which sets up the `lldb` debugger. On Windows it
-installs lldb; on macOS and Linux it checks that a usable one is present and
-tells you how to get it:
+One command, the same on every platform:
+
+```bash
+cargo run -p xtask -- setup --devtools
+```
+
+`--devtools` sets up the `lldb` debugger and is recommended (see below). Drop
+it to skip — on Windows that saves the extra download; on macOS and Linux it
+only skips a check.
+
+That works on a fresh clone with no LLVM installed, because `xtask` has no
+dependencies: nothing in the LLVM half of the workspace has to compile first.
+It writes `.cargo/config.toml`, which also defines a `cargo setup` alias, so
+re-runs are just:
+
+```bash
+cargo setup --llvm 19        # provision a different major
+cargo setup --check          # what is configured, and how to build it
+```
+
+Under the hood it runs the platform's script, which you can also invoke
+directly — that is what CI does:
 
 ```bash
 pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 ./scripts/setup-llvm.sh --devtools            # macOS / Linux
-```
-
-Without devtools — on Windows, this is what saves the extra download; on macOS
-and Linux it only skips the check:
-
-```bash
-pwsh -File scripts/setup-llvm.ps1             # Windows
-./scripts/setup-llvm.sh                       # macOS / Linux
 ```
 
 `PEPPER_SETUP_DEVTOOLS=1` in your environment is equivalent to passing the
@@ -112,14 +123,14 @@ feature. LLVM 20 is the default because both package managers serve it, so
 after a default setup plain `cargo build` works:
 
 ```bash
-./scripts/setup-llvm.sh --llvm 19          # macOS / Linux
-pwsh -File scripts/setup-llvm.ps1 -Llvm 19 # Windows
+cargo setup --llvm 19
 cargo test --workspace --no-default-features --features llvm19-1
 ```
 
-The script prints that exact command when it provisions something other than
-the default, so you do not have to remember the mapping. `PEPPER_LLVM_MAJOR`
-works too, and `--no-packages` forces the archive path.
+Setup prints that exact `--features` command whenever it provisions something
+other than the default, and `cargo setup --check` prints it again later, so
+you do not have to remember the mapping. `PEPPER_LLVM_MAJOR` works too, and
+`--no-packages` forces the archive path.
 
 Only the Windows archive path is large: budget roughly **5 GB** of disk for the
 tree plus its cached archive, and a few minutes for the first run. Package
@@ -183,7 +194,7 @@ cargo test --workspace
 
 `--workspace` is not optional. The repository root is itself a package, so a
 bare `cargo test` runs only its single integration test and **silently skips
-every crate** under `crates/`. Expect about 99 passing tests and 1 ignored (a
+every crate** under `crates/`. Expect about 105 passing tests and 1 ignored (a
 corpus test whose fixtures need language features that are not implemented
 yet).
 
