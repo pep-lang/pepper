@@ -1,5 +1,4 @@
 
-use "../string";
 
 main(): int {
     const str = "TEST";

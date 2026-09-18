@@ -148,8 +148,36 @@ pub fn apply_synthesized(st: &mut StructDef) {
 /// Ctor finish: allocation prologue + field inits + user ctor body +
 /// `return this`; dtor gets `_pep_free`; synthesized methods appended
 /// (port of `Struct.cpp:159-192`).
-pub fn finish(st: &mut StructDef) {
+pub fn finish(st: &mut StructDef) -> Result<(), String> {
     let struct_name = st.name.clone();
+    // `this.<field>` constructor parameters become real parameters that
+    // assign the field. Collect first so we don't borrow `st` twice.
+    let init_params: Vec<(usize, String, TypeName)> = st
+        .constructor
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.name.starts_with("this."))
+        .map(|(i, p)| {
+            let field = p.name.strip_prefix("this.").unwrap().to_string();
+            let ty = st
+                .field_members
+                .iter()
+                .find(|f| f.name == field)
+                .map(|f| f.ty.clone())
+                .ok_or_else(|| {
+                    format!(
+                        "constructor parameter this.{} has no matching field on {}",
+                        field, struct_name
+                    )
+                })?;
+            Ok((i, field, ty))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    for (i, field, ty) in &init_params {
+        st.constructor.parameters[*i].name = format!("__init_{}", field);
+        st.constructor.parameters[*i].ty = ty.clone();
+    }
 
     // Copy off whatever the user put in the ctor, if anything.
     let user_ctor = st
@@ -196,6 +224,19 @@ pub fn finish(st: &mut StructDef) {
             }));
         }
     }
+    // Assign the `this.<field>` parameters to their fields, in declaration
+    // order. The `__init_` prefix keeps them out of the bare-symbol →
+    // `this.<field>` rewrite, so they don't shadow the field.
+    for (_, field, ty) in &init_params {
+        items.push(Statement::Expression(Expression::Binary {
+            op: BinaryOp::Assign,
+            lhs: Box::new(member_ref(field)),
+            rhs: Box::new(Expression::SymbolRef {
+                id: format!("__init_{}", field),
+                ty: ty.clone(),
+            }),
+        }));
+    }
 
     // Restore the user's ctor instructions.
     items.extend(user_ctor);
@@ -228,13 +269,15 @@ pub fn finish(st: &mut StructDef) {
     st.method_members.push(release);
     st.method_members.push(acquire);
     st.method_members.push(destructor);
+    Ok(())
 }
 
 /// Apply both the constructor bodies and the synthesized members to every
 /// struct in the module.
-pub fn apply(module: &mut Module) {
+pub fn apply(module: &mut Module) -> Result<(), String> {
     for st in &mut module.structs {
         apply_synthesized(st);
-        finish(st);
+        finish(st)?;
     }
+    Ok(())
 }

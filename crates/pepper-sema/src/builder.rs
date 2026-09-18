@@ -73,9 +73,9 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
 fn expression(expr: &ast::Expression) -> Expression {
     match expr {
         ast::Expression::Literal(lit) => match lit {
-            ast::Literal::String(value, is_raw) => Expression::StringLiteral {
+            ast::Literal::String(value) => Expression::StringLiteral {
                 value: value.clone(),
-                is_raw: *is_raw,
+                is_raw: false,
             },
             ast::Literal::Integer(v) => Expression::IntLiteral(*v),
             ast::Literal::Float(v) => Expression::FloatLiteral(*v),
@@ -252,6 +252,7 @@ fn struct_def(decl: &ast::StructDecl) -> StructDef {
         Some(ctor) => {
             let mut f = function_def(ctor, Some(base_name.clone()));
             f.name = ty.to_string();
+            f.ty = ty.clone();
             f
         }
         None => FunctionDef {

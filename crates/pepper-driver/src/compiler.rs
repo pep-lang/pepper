@@ -102,7 +102,7 @@ pub fn compile(
         }
     }
 
-    struct_body::apply(&mut module);
+    struct_body::apply(&mut module)?;
     transform_pass(&mut module);
 
     Ok(module)

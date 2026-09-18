@@ -42,28 +42,28 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
-    /// Operator name for method overload lookup (`opName()`): `+` → `operator+` etc.
+    /// Operator name for method overload lookup (`opName()`): `+` → `+`, `==` → `==`.
     pub fn op_name(&self) -> String {
         let base = match self {
-            BinaryOp::Add => "operator+",
-            BinaryOp::Sub => "operator-",
-            BinaryOp::Mul => "operator*",
-            BinaryOp::Div => "operator/",
-            BinaryOp::Mod => "operator%",
-            BinaryOp::Pow => "operator**",
-            BinaryOp::Equal => "operator==",
-            BinaryOp::NotEqual => "operator!=",
-            BinaryOp::Less => "operator<",
-            BinaryOp::LessEqual => "operator<=",
-            BinaryOp::Greater => "operator>",
-            BinaryOp::GreaterEqual => "operator>=",
-            BinaryOp::LShift => "operator<<",
-            BinaryOp::RShift => "operator>>",
-            BinaryOp::BitAnd => "operator&",
-            BinaryOp::BitOr => "operator|",
-            BinaryOp::BitXor => "operator^",
-            BinaryOp::LogicalAnd => "operator&&",
-            BinaryOp::LogicalOr => "operator||",
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Mod => "%",
+            BinaryOp::Pow => "**",
+            BinaryOp::Equal => "==",
+            BinaryOp::NotEqual => "!=",
+            BinaryOp::Less => "<",
+            BinaryOp::LessEqual => "<=",
+            BinaryOp::Greater => ">",
+            BinaryOp::GreaterEqual => ">=",
+            BinaryOp::LShift => "<<",
+            BinaryOp::RShift => ">>",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::LogicalAnd => "&&",
+            BinaryOp::LogicalOr => "||",
             BinaryOp::Identical => "",
             BinaryOp::Assign => "",
             BinaryOp::AddAssign => "+=",
@@ -108,6 +108,15 @@ impl BinaryOp {
                 | BinaryOp::RShiftAssign
                 | BinaryOp::BitAndAssign
                 | BinaryOp::BitOrAssign
+        )
+    }
+
+    /// Comparison ops (`==`, `!=`, `<`, `<=`, `>`, `>=`, identical): their
+    /// result type is `bool`.
+    pub fn is_comparison(&self) -> bool {
+        matches!(
+            self,
+            BinaryOp::Identical | BinaryOp::Equal | BinaryOp::NotEqual | BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual
         )
     }
 }

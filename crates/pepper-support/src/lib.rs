@@ -5,7 +5,6 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::hint::black_box;
-use std::sync::OnceLock;
 
 type AssertFn = unsafe extern "C" fn(bool, *const c_char);
 
@@ -95,16 +94,46 @@ pub extern "C" fn _pep_assert(condition: bool, message: *const c_char) {
     debug_assert!(condition);
 }
 
+/// Allocation header stored before the returned pointer: a magic word plus
+/// the size, so `_pep_free` and `_pep_realloc` can deallocate with the layout
+/// used at allocation time (std requires an identical layout) without a
+/// global table. The magic is zeroed on free, so a double free or a foreign
+/// pointer is diagnosed instead of deallocating a wild base.
+const MAGIC: usize = 0x5045_5041_4C4C; // "PEPALL"
+const HEADER: usize = std::mem::size_of::<usize>() * 2;
+const ALIGN: usize = std::mem::align_of::<usize>();
+
+fn layout_for(size: usize) -> std::alloc::Layout {
+    std::alloc::Layout::from_size_align(size + HEADER, ALIGN).unwrap()
+}
+
+fn alloc_with_header(size: usize) -> *mut c_void {
+    let base = unsafe { std::alloc::alloc(layout_for(size)) };
+    unsafe {
+        (base as *mut usize).write(MAGIC);
+        base.add(std::mem::size_of::<usize>()).cast::<usize>().write(size);
+        std::ptr::write_bytes(base.add(HEADER), 0, size);
+        base.add(HEADER) as *mut c_void
+    }
+}
+
+/// (allocation base, recorded size) for a pointer returned by `_pep_malloc`;
+/// `None` when the magic is absent — a foreign pointer or one already freed.
+fn base_and_size(ptr: *const c_void) -> Option<(*mut u8, usize)> {
+    let p = ptr as *mut u8;
+    unsafe {
+        if (p.sub(HEADER) as *const usize).read() != MAGIC {
+            return None;
+        }
+        let size = (p.sub(std::mem::size_of::<usize>()) as *const usize).read();
+        Some((p.sub(HEADER), size))
+    }
+}
+
 /// Zero-initialized allocation (port of `_pep_malloc`, tracking off).
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_malloc(size: usize) -> *mut c_void {
-    let alloc_size = size.max(1);
-    unsafe {
-        let layout = std::alloc::Layout::from_size_align(alloc_size, 1).unwrap();
-        let ptr = std::alloc::alloc(layout);
-        std::ptr::write_bytes(ptr, 0, alloc_size);
-        ptr as *mut c_void
-    }
+    alloc_with_header(size)
 }
 
 /// Manual realloc: copy min(prev, new), zero the tail (port of `_pep_realloc`).
@@ -112,10 +141,13 @@ pub extern "C" fn _pep_malloc(size: usize) -> *mut c_void {
 pub extern "C" fn _pep_realloc(ptr: *mut c_void, prev_size: usize, new_size: usize) -> *mut c_void {
     let new_mem = _pep_malloc(new_size);
     if !ptr.is_null() {
-        unsafe {
-            std::ptr::copy_nonoverlapping(ptr as *const u8, new_mem as *mut u8, prev_size.min(new_size));
-            let layout = std::alloc::Layout::from_size_align(prev_size.max(1), 1).unwrap();
-            std::alloc::dealloc(ptr as *mut u8, layout);
+        match base_and_size(ptr) {
+            Some((base, size)) => unsafe {
+                std::ptr::copy_nonoverlapping(ptr as *const u8, new_mem.cast::<u8>(), prev_size.min(new_size));
+                (base as *mut usize).write(0);
+                std::alloc::dealloc(base, layout_for(size));
+            },
+            None => eprintln!("_pep_realloc: unknown pointer {:p}", ptr),
         }
     }
     new_mem
@@ -127,11 +159,12 @@ pub extern "C" fn _pep_free(ptr: *mut c_void) {
     if ptr.is_null() {
         return;
     }
-    unsafe {
-        // Size is not recoverable without tracking; allocate/unfree deallocation
-        // is done via the same 1-aligned layout used by _pep_malloc.
-        let layout = std::alloc::Layout::from_size_align(1, 1).unwrap();
-        std::alloc::dealloc(ptr as *mut u8, layout);
+    match base_and_size(ptr) {
+        Some((base, size)) => unsafe {
+            (base as *mut usize).write(0);
+            std::alloc::dealloc(base, layout_for(size));
+        },
+        None => eprintln!("_pep_free: unknown or double-freed pointer {:p}", ptr),
     }
 }
 
@@ -170,6 +203,47 @@ pub extern "C" fn _pep_utf8_compare(a: *const c_char, b: *const c_char, size: us
     } else {
         a.len() >= size && b.len() >= size && a[..size] == b[..size]
     }
+}
+
+/// Byte offset of `needle` inside `haystack`, or -1. Both are raw byte spans.
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_utf8_find(
+    haystack: *const u8,
+    haystack_size: usize,
+    needle: *const u8,
+    needle_size: usize,
+) -> isize {
+    if haystack.is_null() || haystack_size == 0 {
+        return -1;
+    }
+    let haystack = unsafe { std::slice::from_raw_parts(haystack, haystack_size) };
+    if needle_size == 0 {
+        return 0;
+    }
+    if needle.is_null() {
+        return -1;
+    }
+    let needle = unsafe { std::slice::from_raw_parts(needle, needle_size) };
+    match (std::str::from_utf8(haystack), std::str::from_utf8(needle)) {
+        (Ok(h), Ok(n)) => h.find(n).map(|o| o as isize).unwrap_or(-1),
+        _ => -1,
+    }
+}
+
+/// Byte offset reached after `chars` characters, clamped to `size`.
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_utf8_char_offset(data: *const u8, size: usize, chars: usize) -> usize {
+    if data.is_null() || size == 0 {
+        return 0;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data, size) };
+    let s = match std::str::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => return size,
+    };
+    // take(chars) caps at the available character count, so the sum is
+    // already clamped to `size` for valid UTF-8.
+    s.chars().take(chars).map(|c| c.len_utf8()).sum()
 }
 
 /// Print a UTF-8 string followed by a newline (backs the `print` builtin).
@@ -218,6 +292,8 @@ pub fn support_symbols() -> Vec<(&'static str, usize)> {
         ("_pep_utf8_length", black_box(_pep_utf8_length as usize)),
         ("_pep_utf8_size", black_box(_pep_utf8_size as usize)),
         ("_pep_utf8_compare", black_box(_pep_utf8_compare as usize)),
+        ("_pep_utf8_find", black_box(_pep_utf8_find as usize)),
+        ("_pep_utf8_char_offset", black_box(_pep_utf8_char_offset as usize)),
         ("_pep_print", black_box(_pep_print as usize)),
         ("_pep_print_int", black_box(_pep_print_int as usize)),
         ("_pep_print_float", black_box(_pep_print_float as usize)),
@@ -294,6 +370,44 @@ mod tests {
     }
 
     #[test]
+    fn utf8_find_locates_needle() {
+        let hay = c_string("hello world");
+        let needle = c_string("world");
+        assert_eq!(
+            _pep_utf8_find(hay.as_ptr() as *const u8, 11, needle.as_ptr() as *const u8, 5),
+            6
+        );
+        let missing = c_string("mars");
+        assert_eq!(
+            _pep_utf8_find(hay.as_ptr() as *const u8, 11, missing.as_ptr() as *const u8, 4),
+            -1
+        );
+        // Empty needle is found at 0.
+        let empty = c_string("");
+        assert_eq!(
+            _pep_utf8_find(hay.as_ptr() as *const u8, 11, empty.as_ptr() as *const u8, 0),
+            0
+        );
+        // Multi-byte needle: byte offset, not character offset.
+        let uni_hay = c_string("héllo");
+        let accented = c_string("é");
+        assert_eq!(
+            _pep_utf8_find(uni_hay.as_ptr() as *const u8, 6, accented.as_ptr() as *const u8, 2),
+            1
+        );
+    }
+
+    #[test]
+    fn utf8_char_offset_counts_chars_not_bytes() {
+        let hay = c_string("héllo");
+        assert_eq!(_pep_utf8_char_offset(hay.as_ptr() as *const u8, 6, 0), 0);
+        assert_eq!(_pep_utf8_char_offset(hay.as_ptr() as *const u8, 6, 1), 1);
+        assert_eq!(_pep_utf8_char_offset(hay.as_ptr() as *const u8, 6, 2), 3);
+        // Past the end clamps to size.
+        assert_eq!(_pep_utf8_char_offset(hay.as_ptr() as *const u8, 6, 99), 6);
+    }
+
+    #[test]
     fn support_symbols_are_bindable() {
         let syms = support_symbols();
         assert!(syms.iter().all(|(name, addr)| !name.is_empty() && *addr != 0));
@@ -308,6 +422,8 @@ mod tests {
             "_pep_print",
             "_pep_print_int",
             "_pep_print_float",
+            "_pep_utf8_find",
+            "_pep_utf8_char_offset",
         ] {
             assert!(
                 syms.iter().any(|(name, _)| *name == required),

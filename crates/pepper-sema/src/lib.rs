@@ -1,6 +1,7 @@
 pub mod builder;
 pub mod model;
 pub mod passes;
+pub(crate) mod static_type;
 pub mod struct_body;
 pub mod symbols;
 pub mod type_name;

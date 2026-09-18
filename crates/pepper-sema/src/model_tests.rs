@@ -10,7 +10,7 @@ use pepper_parser::parser::parse_source;
 fn compile(source: &str) -> crate::model::Module {
     let ast = parse_source("test.pep", source).expect("parse error");
     let mut module = build(&ast);
-    struct_body::apply(&mut module);
+    struct_body::apply(&mut module).expect("sema");
     transform_pass(&mut module);
     module
 }

@@ -20,6 +20,7 @@ pub mod convert_intrinsics;
 pub mod convert_member_refs;
 pub mod resolve_operators;
 pub mod release_field_refs;
+pub mod convert_print_calls;
 
 use apply_extensions::apply_extensions;
 use convert_intrinsics::convert_intrinsics;
@@ -34,6 +35,7 @@ use resolve_resolvables::resolve_resolvables;
 use specialize_functions::specialize_functions;
 use specialize_structs::specialize_structs;
 use tag_generics::tag_generics;
+use convert_print_calls::convert_print_calls;
 
 /// Run every pass in the ported order (25 entries, repeats included).
 pub fn transform_pass(module: &mut Module) {
@@ -66,6 +68,7 @@ pub fn transform_pass(module: &mut Module) {
     release_field_refs(module);
     resolve_implicit_types(module);
     resolve_operators(module); // once implicit types are resolved, operator overloading may exist
+    convert_print_calls(module);
     resolve_resolvables(module, true);
 }
 

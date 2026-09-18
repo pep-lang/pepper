@@ -12,7 +12,7 @@ use pepper_sema::struct_body;
 fn compile_jit(source: &str) -> i32 {
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
     let mut module: SemaModule = build(&ast);
-    struct_body::apply(&mut module);
+    struct_body::apply(&mut module).expect("sema");
     transform_pass(&mut module);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
@@ -174,7 +174,7 @@ main(): int {
 "#;
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
     let mut module: SemaModule = build(&ast);
-    struct_body::apply(&mut module);
+    struct_body::apply(&mut module).expect("sema");
     transform_pass(&mut module);
 
     let ctx = inkwell::context::Context::create();

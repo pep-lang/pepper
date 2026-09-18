@@ -11,7 +11,7 @@ use address::{Address, Frame};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, FunctionValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::types::AnyType as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
@@ -31,6 +31,8 @@ pub struct StructDesc<'ctx> {
     pub static_methods: std::collections::HashSet<String>,
     /// field name → sema type string.
     pub fields: Vec<(String, String)>,
+    /// method name → return-type sema string.
+    pub method_returns: HashMap<String, String>,
 }
 
 /// Result of generation.
@@ -46,9 +48,14 @@ pub struct CodeGenerator<'ctx> {
     pub structs: HashMap<String, StructDesc<'ctx>>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
+    /// default-argument expressions per instantiated callable, in parameter
+    /// order (keyed like `functions`); trailing missing args are padded from
+    /// these at the call site.
+    param_defaults: HashMap<String, Vec<Option<Expression>>>,
+    /// Identical string literals share one global constant.
+    global_strings: HashMap<String, PointerValue<'ctx>>,
     frame: Frame<'ctx>,
 }
-
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
         let module = context.create_module(module_name);
@@ -60,6 +67,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             types: types::Types::new(context),
             structs: HashMap::new(),
             functions: HashMap::new(),
+            param_defaults: HashMap::new(),
+            global_strings: HashMap::new(),
             frame: Frame::empty(),
         }
     }
@@ -73,6 +82,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         for idx in 0..module.structs.len() {
             self.instantiate_methods(&module.structs[idx])?;
+        }
+        for idx in 0..module.structs.len() {
+            self.instantiate_ctor(&module.structs[idx])?;
         }
         for idx in 0..module.externs.len() {
             self.instantiate_extern(&module.externs[idx])?;
@@ -164,6 +176,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .iter()
                 .map(|f| (f.name.clone(), f.ty.to_string()))
                 .collect(),
+            method_returns: HashMap::new(),
         };
         self.structs.insert(st.name.clone(), desc);
 
@@ -182,6 +195,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         let struct_name = st.name.clone();
         let mut methods: HashMap<String, String> = HashMap::new();
+        let mut method_returns: HashMap<String, String> = HashMap::new();
         let mut static_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for method in &st.method_members {
             // Mangle `<Struct>.<name>`, inject `this` first for non-static.
@@ -234,14 +248,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
             self.functions.insert(mangled.clone(), fn_value);
+            self.param_defaults.insert(
+                mangled.clone(),
+                method.parameters.iter().map(|p| p.default.clone()).collect(),
+            );
             if method.is_static {
                 static_names.insert(method.name.clone());
             }
             methods.insert(method.name.clone(), mangled);
+            method_returns.insert(method.name.clone(), method.ty.to_string());
         }
         if let Some(desc) = self.structs.get_mut(&st.name) {
             desc.methods = methods;
             desc.static_methods = static_names;
+            desc.method_returns = method_returns;
         }
         Ok(())
     }
@@ -279,13 +299,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(());
         }
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
-        // Params with defaults are optional: the LLVM fn takes only the
-        // required ones (defaults are emitted in the body).
-        for param in function.parameters.iter().filter(|p| p.default.is_none()) {
+        // Every declared parameter is a real LLVM parameter; missing trailing
+        // arguments are padded from the defaults at the call site.
+        for param in &function.parameters {
             let ty = self
                 .types
                 .get(&param.ty.to_string())
                 .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+            // Struct-typed params are pointers (C++ ref semantics).
+            let ty = match ty {
+                BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
+                    sct.ptr_type(inkwell::AddressSpace::default()),
+                ),
+                other => other,
+            };
             param_types.push(ty);
         }
         // Void-returning fns get a true void fn type (types.get('void')
@@ -307,37 +334,50 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
         self.functions.insert(function.name.clone(), fn_value);
+        self.param_defaults.insert(
+            function.name.clone(),
+            function.parameters.iter().map(|p| p.default.clone()).collect(),
+        );
         Ok(())
     }
 
-    // ── Struct codegen (ctor + methods) ─────────────────────────────────────
-
-    fn codegen_struct(&mut self, st: &StructDef) -> Result<(), String> {
-        if st.ty.is_generic() && st.name == st.ty.name {
-            return Ok(());
-        }
-        // Patch the ctor's `size` literal with the computed struct size
-        // (port of StructGen.cpp:85-95).
+    /// The ctor with its `size` literal patched to the computed struct size
+    /// (port of StructGen's `locals()->function(structDesc->constructor())`).
+    /// Both the instantiation pass and codegen must use this, so the declared
+    /// function and the emitted body agree on the allocation size.
+    fn patched_ctor(&self, st: &StructDef) -> FunctionDef {
         let mut ctor = st.constructor.clone();
+        let struct_size = self.structs.get(&st.name).map(|d| d.size).unwrap_or(0) as i64;
         if let Some(body) = &mut ctor.body {
             for stmt in &mut body.items {
                 if let Statement::Declaration(Declaration::Variable(var)) = stmt {
                     if var.name == "size" {
-                        if let Some(desc) = self.structs.get(&st.name) {
-                            if let Some(default) = &mut var.default {
-                                *default = Expression::IntLiteral(desc.size as i64);
-                            }
-                        }
+                        var.default = Some(Expression::IntLiteral(struct_size));
                         break;
                     }
                 }
             }
         }
+        ctor
+    }
+
+    /// Ctor instantiation: declare the function so call sites can bind it
+    /// before any codegen runs.
+    fn instantiate_ctor(&mut self, st: &StructDef) -> Result<(), String> {
+        if st.ty.is_generic() && st.name == st.ty.name {
+            return Ok(());
+        }
+        self.instantiate_function(&self.patched_ctor(st))
+    }
+
+    // ── Struct codegen (ctor + methods) ─────────────────────────────────────
+    fn codegen_struct(&mut self, st: &StructDef) -> Result<(), String> {
+        if st.ty.is_generic() && st.name == st.ty.name {
+            return Ok(());
+        }
         // The ctor lives in module.structs[i].constructor, not
-        // module.functions — instantiate it here (port of StructGen's
-        // `locals()->function(structDesc->constructor())`).
-        self.instantiate_function(&ctor)?;
-        self.codegen_function(&ctor)?;
+        // module.functions — it was instantiated in the instantiation pass.
+        self.codegen_function(&self.patched_ctor(st))?;
         for method in &st.method_members {
             // Methods are registered under the mangled name; rename the
             // snapshot for the functions-map lookup.
@@ -421,7 +461,6 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut declared_params: Vec<(String, String)> = function
             .parameters
             .iter()
-            .filter(|p| p.default.is_none())
             .map(|p| (p.name.clone(), p.ty.to_string()))
             .collect();
         // Static methods are instantiated WITHOUT a this param.
@@ -465,40 +504,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
         }
 
-        // Defaulted params become locals initialized from their defaults.
-        let mut defaulted_stmts: Vec<Statement> = vec![];
-        for param in function.parameters.iter().filter(|p| p.default.is_some()) {
-            let ty = self
-                .types
-                .get(&param.ty.to_string())
-                .ok_or_else(|| format!("unknown param type {}", param.ty))?;
-            let ty = match ty {
-                BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
-                    sct.ptr_type(inkwell::AddressSpace::default()),
-                ),
-                other => other,
-            };
-            let alloca = self
-                .builder
-                .build_alloca(ty, &param.name)
-                .map_err(|e| e.to_string())?;
-            if let Some(default) = &param.default {
-                let value = self.codegen_expr(default)?;
-                self.builder
-                    .build_store(alloca, value)
-                    .map_err(|e| e.to_string())?;
-            }
-            self.frame.push_local(
-                &param.name,
-                Address::with_llvm_ty(&param.name, &param.ty.to_string(), ty, alloca),
-            );
-        }
         let body = function.body.clone().unwrap_or_else(|| Block {
             name: String::new(),
             items: vec![],
         });
         self.codegen_block(&body)?;
-        let _ = defaulted_stmts;
 
         // Terminate any orphaned trailing block (e.g. an `ifcont` after a
         // branch whose paths both return) with a branch to the return block.
@@ -588,6 +598,23 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
         if let Some(default) = &var.default {
             let value = self.codegen_expr(default)?;
+            // Integer literals codegen as i32; widen into a wider int alloca
+            // so the full word is defined (e.g. the ctor's `u64 size`).
+            let value = match (&value, ty) {
+                (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(it))
+                    if v.get_type().get_bit_width() < it.get_bit_width() =>
+                {
+                    self.builder
+                        .build_int_s_extend(
+                            *v,
+                            it,
+                            &format!("{}w", var.name),
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()
+                }
+                _ => value,
+            };
             self.builder
                 .build_store(alloca, value)
                 .map_err(|e| e.to_string())?;
@@ -687,8 +714,64 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    // ── Expression codegen (OperatorGen.cpp + FunctionGen emit) ─────────────
+    /// Sema type string of an expression's value, as declared (pointer
+    /// suffix intact); `None` when it cannot be determined.
+    fn value_sema_type(&self, expr: &Expression) -> Option<String> {
+        match expr {
+            Expression::SymbolRef { id, .. } => self
+                .frame
+                .find_local(id)
+                .map(|a| a.ty.to_string()),
+            Expression::ThisRef => self
+                .frame
+                .find_local("this")
+                .map(|a| a.ty.to_string()),
+            Expression::FunctionCall { function, .. } => {
+                let base = function.split('<').next().unwrap_or("").to_string();
+                self.structs.get(&base).map(|_| base)
+            }
+            Expression::MemberRef { lhs, name } => {
+                let struct_name = self.struct_name_of(lhs)?;
+                self.structs
+                    .get(&struct_name)?
+                    .fields
+                    .iter()
+                    .find(|(f, _)| f == name)
+                    .map(|(_, ty)| ty.clone())
+            }
+            Expression::MethodCall { this, method, .. } => {
+                let struct_name = self.struct_name_of(this)?;
+                self.structs
+                    .get(&struct_name)?
+                    .method_returns
+                    .get(method)
+                    .cloned()
+            }
+            Expression::Binary { lhs, .. } => {
+                // Arithmetic keeps the left operand's type (`char* + int`
+                // stays `char*`, `int + int` stays `int`).
+                self.value_sema_type(lhs)
+            }
+            _ => None,
+        }
+    }
 
+    /// Best-effort struct name of an expression's value, for field/method
+    /// access when the receiver is not a bare frame local (e.g. a parameter).
+    fn struct_name_of(&self, expr: &Expression) -> Option<String> {
+        self.value_sema_type(expr)
+            .map(|ty| ty.trim_end_matches('*').to_string())
+    }
+
+    /// LLVM element type behind a pointer/array receiver (`char*` → i8,
+    /// `int[]`/`int*` → i32); i32 when the receiver's type is unknown.
+    fn index_element_type(&self, receiver: &Expression) -> BasicTypeEnum<'ctx> {
+        let base = self
+            .value_sema_type(receiver)
+            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()));
+        base.and_then(|b| self.types.get(&b))
+            .unwrap_or_else(|| self.context.i32_type().into())
+    }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
             Expression::BoolLiteral(v) => Ok(BasicValueEnum::IntValue(
@@ -700,12 +783,18 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::FloatLiteral(v) => Ok(BasicValueEnum::FloatValue(
                 self.context.f64_type().const_float(*v),
             )),
-            Expression::StringLiteral { value, .. } => Ok(BasicValueEnum::PointerValue(
-                self.builder
+            Expression::StringLiteral { value, .. } => {
+                if let Some(ptr) = self.global_strings.get(value).copied() {
+                    return Ok(BasicValueEnum::PointerValue(ptr));
+                }
+                let ptr = self
+                    .builder
                     .build_global_string_ptr(value, "str")
                     .map_err(|e| e.to_string())?
-                    .as_pointer_value(),
-            )),
+                    .as_pointer_value();
+                self.global_strings.insert(value.clone(), ptr);
+                Ok(BasicValueEnum::PointerValue(ptr))
+            }
             Expression::PointerLiteral => Ok(BasicValueEnum::PointerValue(
                 self.context.ptr_type(inkwell::AddressSpace::default())
                     .const_null(),
@@ -728,20 +817,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::MemberRef { lhs, name } => {
                 // Load lhs (this pointer), then StructGEP (Struct.cpp:60-70).
-                // The struct name comes from the lhs Address's sema type, not
-                // the LLVM value (opaque pointers lose the type).
-                let local_name = match lhs.as_ref() {
-                    Expression::SymbolRef { id, .. } => id.as_str(),
-                    Expression::ThisRef => "this",
-                    _ => "",
-                };
-                let raw_ty = self
-                    .frame
-                    .find_local(local_name)
-                    .map(|a| a.ty.to_string())
-                    .unwrap_or_default();
-                let struct_name = raw_ty.trim_end_matches('*').to_string();
+                // The struct name comes from the lhs's static type, not the
+                // LLVM value (opaque pointers lose the type).
+                let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 let this_ptr = self.codegen_expr(lhs)?;
+                let base_ptr = match this_ptr {
+                    BasicValueEnum::StructValue(_) => self.codegen_lvalue(lhs)?.ptr,
+                    _ => this_ptr.into_pointer_value(),
+                };
                 let desc = self
                     .structs
                     .get(&struct_name)
@@ -751,25 +834,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .iter()
                     .position(|(n, _)| n == name)
                     .ok_or_else(|| format!("no field {}.{}", struct_name, name))?;
-                let base_ptr = match this_ptr {
-                    BasicValueEnum::StructValue(_) => {
-                        // Double-loaded: use the lhs alloca pointer directly.
-                        self.frame
-                            .find_local(local_name)
-                            .map(|a| a.ptr)
-                            .ok_or_else(|| "no lhs alloca".to_string())?
-                    }
-                    _ => this_ptr.into_pointer_value(),
-                };
+                let field_ty = self
+                    .types
+                    .get(&desc.fields[idx].1)
+                    .ok_or_else(|| format!("unknown field type {}", desc.fields[idx].1))?;
                 let gep = unsafe {
                     self.builder
                         .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
                         .map_err(|e| e.to_string())?
                 };
-                let field_ty = self
-                    .types
-                    .get(&desc.fields[idx].1)
-                    .ok_or_else(|| format!("unknown field type {}", desc.fields[idx].1))?;
                 self.builder
                     .build_load(field_ty, gep, name)
                     .map_err(|e| e.to_string())
@@ -783,16 +856,17 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => self.codegen_ternary(condition, true_expr, false_expr),
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array indexing.
+                let element_ty = self.index_element_type(lhs);
                 let base = self.codegen_expr(lhs)?;
                 let index = self.codegen_expr(rhs)?;
                 let ptr = base.into_pointer_value();
                 let gep = unsafe {
                     self.builder
-                        .build_gep(self.context.i32_type(), ptr, &[index.into_int_value()], "idx")
+                        .build_gep(element_ty, ptr, &[index.into_int_value()], "idx")
                         .map_err(|e| e.to_string())?
                 };
                 self.builder
-                    .build_load(self.context.i32_type(), gep, "loadidx")
+                    .build_load(element_ty, gep, "loadidx")
                     .map_err(|e| e.to_string())
             }
             Expression::SizeOf(ty) => {
@@ -848,60 +922,38 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => self.codegen_call(name, args),
             Expression::MethodCall { this, method, args } => {
                 // Mangle: `<StructOf(this)>.<method>`. The struct name comes
-                // from the this Address's sema type (strip the pointer suffix);
-                // non-symbol lhs (e.g. Index) falls back to the method name
-                // as-is (array index methods resolve at codegen).
-                let struct_name = match this.as_ref() {
-                    Expression::SymbolRef { id, .. } => self
-                        .frame
-                        .find_local(id)
-                        .map(|a| a.ty.to_string())
-                        .unwrap_or_default()
-                        .trim_end_matches('*')
-                        .to_string(),
-                    Expression::ThisRef => self
-                        .frame
-                        .find_local("this")
-                        .map(|a| a.ty.to_string())
-                        .unwrap_or_default()
-                        .trim_end_matches('*')
-                        .to_string(),
-                    _ => String::new(),
-                };
+                // from the receiver's static type; non-struct receivers fall
+                // back to the method name as-is (array index methods resolve
+                // at codegen).
+                let struct_name = self.struct_name_of(this.as_ref()).unwrap_or_default();
                 if method.starts_with("__index_") {
-                    // POD array index set/get: direct GEP + load/store.
-                    return self.codegen_index_method(this, method, args);
+                    // POD array index set/get: direct GEP + load/store — but
+                    // only when the receiver's struct does not declare the
+                    // indexer itself.
+                    let has_indexer = self
+                        .structs
+                        .get(&struct_name)
+                        .map(|d| d.methods.contains_key(method))
+                        .unwrap_or(false);
+                    if !has_indexer {
+                        return self.codegen_index_method(this, method, args);
+                    }
                 }
-                // Struct-typed args pass the POINTER (C++ ref semantics):
-                // load the alloca address, not the struct value.
-                let this_val = match this.as_ref() {
-                    Expression::SymbolRef { id, .. } if self
-                        .frame
-                        .find_local(id)
-                        .map(|a| self.structs.contains_key(a.ty.trim_end_matches('*')))
-                        .unwrap_or(false) =>
-                    {
-                        let addr = self.frame.find_local(id).unwrap();
-                        BasicValueEnum::PointerValue(addr.ptr)
-                    }
-                    Expression::ThisRef => {
-                        let addr = self.frame.find_local("this").unwrap();
-                        BasicValueEnum::PointerValue(addr.ptr)
-                    }
-                    _ => self.codegen_expr(this)?,
-                };
+                // The receiver is the instance pointer: loading the lhs gives
+                // exactly what the `this` parameter expects.
+                let this_val = self.codegen_expr(this)?;
                 let mangled = format!("{}.{}", struct_name, method);
-                let mut arg_vals = vec![this_val];
+                let is_static = self
+                    .structs
+                    .get(&struct_name)
+                    .map(|d| d.static_methods.contains(method.as_str()))
+                    .unwrap_or(false);
+                let mut arg_vals = if is_static { vec![] } else { vec![this_val] };
                 for arg in args {
                     arg_vals.push(self.codegen_expr(arg)?);
                 }
-                // Static methods have no `this` param: if the fn's param
-                // count is arg_vals.len() - 1, drop the this.
-                if let Some(f) = self.functions.get(&mangled) {
-                    let param_count = f.get_type().get_param_types().len();
-                    if param_count == arg_vals.len() - 1 {
-                        arg_vals.remove(0);
-                    }
+                for extra in self.missing_args(&mangled, args.len())? {
+                    arg_vals.push(self.codegen_expr(&extra)?);
                 }
                 self.call_function(&mangled, arg_vals)
             }
@@ -916,6 +968,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         method: &str,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
+        let element_ty = self.index_element_type(this);
         let base = self.codegen_expr(this)?;
         let ptr = match base {
             BasicValueEnum::PointerValue(p) => p,
@@ -928,34 +981,27 @@ impl<'ctx> CodeGenerator<'ctx> {
         let index = self.codegen_expr(index_expr)?;
         let gep = unsafe {
             self.builder
-                .build_gep(self.context.i32_type(), ptr, &[index.into_int_value()], "idxm")
+                .build_gep(element_ty, ptr, &[index.into_int_value()], "idxm")
                 .map_err(|e| e.to_string())?
         };
         if method == "__index_get" {
-            // POD arrays load i32; the string indexer returns a string (ptr).
-            let base_ty = self
-                .frame
-                .find_local(
-                    match this {
-                        Expression::SymbolRef { id, .. } => id.as_str(),
-                        Expression::ThisRef => "this",
-                        _ => "",
-                    },
-                )
-                .map(|a| a.ty.to_string())
-                .unwrap_or_default();
-            let load_ty: BasicTypeEnum<'ctx> = if base_ty.starts_with("string") {
-                self.context.ptr_type(inkwell::AddressSpace::default()).into()
-            } else {
-                self.context.i32_type().into()
-            };
             self.builder
-                .build_load(load_ty, gep, "loadidx")
+                .build_load(element_ty, gep, "loadidx")
                 .map_err(|e| e.to_string())
         } else {
             // __index_set: the value is args[1].
             let value_expr = args.get(1).ok_or_else(|| "index set needs a value".to_string())?;
-            let value = self.codegen_expr(value_expr)?;
+            let mut value = self.codegen_expr(value_expr)?;
+            if let (BasicTypeEnum::IntType(target), BasicValueEnum::IntValue(iv)) =
+                (element_ty, &value)
+            {
+                if iv.get_type().get_bit_width() > target.get_bit_width() {
+                    value = match self.builder.build_int_truncate(*iv, target, "narrow") {
+                        Ok(t) => BasicValueEnum::IntValue(t),
+                        Err(_) => value,
+                    };
+                }
+            }
             self.builder
                 .build_store(gep, value)
                 .map_err(|e| e.to_string())?;
@@ -998,18 +1044,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             return Ok(self.context.i32_type().const_zero().into());
         }
-        // `string(lit, len)` ctor: for the literal flow the raw bytes
-        // pointer IS the string; return the first arg directly.
-        if name == "string" {
-            if let Some(first) = args.first() {
-                return self.codegen_expr(first);
-            }
-            return Ok(self
-                .context
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into());
-        }
         // Constructor call `Name<...>(ctor_args)`: the ctor is registered
         // under the plain struct name (specializations under `Name<args>`).
         let target = if self.functions.contains_key(name) || self.structs.contains_key(name) {
@@ -1024,6 +1058,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut arg_vals = vec![];
         for arg in args {
             arg_vals.push(self.codegen_expr(arg)?);
+        }
+        for extra in self.missing_args(target, args.len())? {
+            arg_vals.push(self.codegen_expr(&extra)?);
         }
         self.call_function(target, arg_vals)
     }
@@ -1056,6 +1093,27 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         Ok(self.context.i32_type().const_zero().into())
+    }
+
+    /// Default-argument expressions for the parameters a call did not supply.
+    fn missing_args(&self, target: &str, provided: usize) -> Result<Vec<Expression>, String> {
+        let Some(defaults) = self.param_defaults.get(target) else {
+            // Unknown names are not an error here: call_function declares
+            // support-library externs (_pep_malloc, …) on demand.
+            return Ok(vec![]);
+        };
+        if provided >= defaults.len() {
+            return Ok(vec![]);
+        }
+        defaults[provided..]
+            .iter()
+            .enumerate()
+            .map(|(offset, default)| {
+                default.clone().ok_or_else(|| {
+                    format!("{}: missing argument {}", target, provided + offset)
+                })
+            })
+            .collect()
     }
 
     fn call_function(
@@ -1096,7 +1154,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                             (i32t.into(), vec![ptr_ty.into(), ptr_ty.into()])
                         }
                     }
-                    &_ => return Err(format!("unknown function {}", name)),
+                    &_ => {
+                        return Err(format!("unknown function {}", name));
+                    }
                 };
                 let fn_type = llvm_fn_type(ret, &params, false);
                 let declared = self.module.add_function(name, fn_type, None);
@@ -1180,6 +1240,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                 &value_type_name(&rhs_val),
                 &lhs_ty,
             );
+            // The sema type name can be a pointer (`__ptr<char>` → i32 in
+            // coerce) while the address's LLVM pointee is narrower (i8);
+            // narrow to it so `Data[Size] = 0` stores one byte, not four.
+            let fit = |v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
+                if let (Some(BasicTypeEnum::IntType(target)), BasicValueEnum::IntValue(iv)) =
+                    (&lhs_addr.llvm_ty, &v)
+                {
+                    if iv.get_type().get_bit_width() > target.get_bit_width() {
+                        return match self.builder.build_int_truncate(*iv, *target, "narrow") {
+                            Ok(t) => BasicValueEnum::IntValue(t),
+                            Err(_) => v,
+                        };
+                    }
+                }
+                v
+            };
+            let coerced = fit(coerced);
             // Compound assign: load lhs, apply the base op, store.
             if let Some(base_op) = op.base_assign_op() {
                 let lhs_val = lhs_addr
@@ -1190,11 +1267,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let result_ty = llvm_ops::result_type(&lhs_name, &rhs_name);
                 let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
                 let rhs_c = llvm_ops::coerce(self.context, &self.builder, coerced, &rhs_name, &result_ty);
-                let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty)?;
+                let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None)?;
                 lhs_addr
-                    .store(&self.builder, result)
+                    .store(&self.builder, fit(result))
                     .ok_or_else(|| "compound store".to_string())?;
-                return Ok(result);
+                return Ok(fit(result));
             }
             lhs_addr
                 .store(&self.builder, coerced)
@@ -1209,7 +1286,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         let result_ty = llvm_ops::result_type(&lhs_name, &rhs_name);
         let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
         let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
-        apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty)
+        // Pointer arithmetic needs the pointer's element type (`char*` strides
+        // i8); `value_type_name` flattens pointers to `void*`, so use the
+        // sema type of the lhs expression for that.
+        let ptr_elem = self
+            .value_sema_type(lhs)
+            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+            .and_then(|base| self.types.get(&base));
+        apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem)
     }
 
     /// Resolve an lvalue expression to an Address (assignment target).
@@ -1226,18 +1310,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .cloned()
                 .ok_or_else(|| "no this".to_string()),
             Expression::MemberRef { lhs, name } => {
-                let local_name = match lhs.as_ref() {
-                    Expression::SymbolRef { id, .. } => id.as_str(),
-                    Expression::ThisRef => "this",
-                    _ => "",
-                };
-                let raw_ty = self
-                    .frame
-                    .find_local(local_name)
-                    .map(|a| a.ty.to_string())
-                    .unwrap_or_default();
-                let struct_name = raw_ty.trim_end_matches('*').to_string();
+                let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 let this_ptr = self.codegen_expr(lhs)?;
+                let base_ptr = match this_ptr {
+                    BasicValueEnum::StructValue(_) => self.codegen_lvalue(lhs)?.ptr,
+                    _ => this_ptr.into_pointer_value(),
+                };
                 let desc = self
                     .structs
                     .get(&struct_name)
@@ -1252,14 +1330,6 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&ty_name)
                     .ok_or_else(|| format!("unknown field type {}", ty_name))?;
-                let base_ptr = match this_ptr {
-                    BasicValueEnum::StructValue(_) => self
-                        .frame
-                        .find_local(local_name)
-                        .map(|a| a.ptr)
-                        .ok_or_else(|| "no lhs alloca".to_string())?,
-                    _ => this_ptr.into_pointer_value(),
-                };
                 let gep = unsafe {
                     self.builder
                         .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
@@ -1269,15 +1339,22 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array element store: `arr[i] = v` → GEP + store.
+                let element_ty = self.index_element_type(lhs);
+                let ty_name = self
+                    .value_sema_type(lhs)
+                    .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+                    .unwrap_or_else(|| "i32".to_string());
                 let base = self.codegen_expr(lhs)?;
                 let index = self.codegen_expr(rhs)?;
                 let ptr = base.into_pointer_value();
                 let gep = unsafe {
                     self.builder
-                        .build_gep(self.context.i32_type(), ptr, &[index.into_int_value()], "idxl")
+                        .build_gep(element_ty, ptr, &[index.into_int_value()], "idxl")
                         .map_err(|e| e.to_string())?
                 };
-                Ok(Address::new("idxl", "i32", gep))
+                // Carry the element's LLVM type so stores truncate to it
+                // (`Data[Size] = 0` on `char*` must store one byte, not four).
+                Ok(Address::with_llvm_ty("idxl", &ty_name, element_ty, gep))
             }
             _ => Err("unsupported lvalue".to_string()),
         }
@@ -1462,6 +1539,7 @@ fn apply_op<'ctx>(
     lhs: BasicValueEnum<'ctx>,
     rhs: BasicValueEnum<'ctx>,
     ty_name: &str,
+    ptr_elem: Option<BasicTypeEnum<'ctx>>,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match (lhs, rhs) {
         (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
@@ -1516,9 +1594,15 @@ fn apply_op<'ctx>(
                     } else {
                         builder.build_int_neg(i, "negidx").unwrap_or(i)
                     };
+                    // Stride by the pointer's element type (`char*` → i8,
+                    // `int*` → i32); opaque pointers carry no element info.
+                    let element_ty = match ptr_elem {
+                        Some(BasicTypeEnum::IntType(it)) => it,
+                        _ => context.i32_type(),
+                    };
                     let advanced = unsafe {
                         builder
-                            .build_in_bounds_gep(context.i32_type(), p, &[idx], "ptrarith")
+                            .build_in_bounds_gep(element_ty, p, &[idx], "ptrarith")
                             .map_err(|e| e.to_string())?
                     };
                     Ok(BasicValueEnum::PointerValue(advanced))

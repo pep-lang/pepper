@@ -80,7 +80,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         merged.merge(std::mem::take(&mut built));
     }
 
-    struct_body::apply(&mut merged);
+    struct_body::apply(&mut merged)?;
     transform_pass(&mut merged);
 
     let ctx = inkwell::context::Context::create();
@@ -109,14 +109,15 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .map_err(|e| format!("spawn failed: {}", e))
 }
 
-/// KNOWN GAPS (tracked for the next phase): 10 of 14 corpus fixtures fail —
-/// generics in extensions (Struct.SpecializedExtend, Trait.Generic),
-/// trait dispatch (Trait.Basic), string internals ABI (String.*,
-/// Struct.RefStorage) and Scratch (float compare). These need their own
-/// sema/codegen features per the C++ anchors. Ignored until implemented;
-/// NOT a pass.
+/// KNOWN GAPS (tracked for the next phase): 6 of 15 corpus fixtures fail —
+/// generic extensions and arrays (`Array.Container`, `Array.OfStructs`,
+/// `Struct.SpecializedExtend`), trait dispatch (`Trait.Basic`,
+/// `Trait.Generic`), and struct storage with string fields
+/// (`Struct.RefStorage`). The String.* fixtures pass end to end. These need
+/// their own sema/codegen features per the C++ anchors. Ignored until
+/// implemented; NOT a pass.
 #[test]
-#[ignore = "10/14 corpus fixtures fail: generics-in-extensions, trait dispatch, string internals, Scratch float compare — tracked feature work"]
+#[ignore = "6/15 corpus fixtures fail: generics-in-extensions, trait dispatch, struct-with-string storage — tracked feature work"]
 fn corpus_files_compile_and_run() {
     let dir = tests_dir();
     let entries = match std::fs::read_dir(&dir) {

@@ -166,12 +166,6 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
 }
 
 fn string_constant(input: &mut &str) -> Result<Literal> {
-    let is_raw = if input.starts_with('@') {
-        *input = &input[1..];
-        true
-    } else {
-        false
-    };
     if !input.starts_with('"') {
         return Err(bt(input));
     }
@@ -180,12 +174,12 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     while let Some(c) = input.chars().next() {
         if c == '"' { break; }
         content.push(c);
-        *input = &input[1..];
+        *input = &input[c.len_utf8()..];
     }
     // consume closing quote
     if !input.starts_with('"') { return Err(cut(input)); }
     *input = &input[1..];
-    Ok(Literal::String(content, is_raw))
+    Ok(Literal::String(content))
 }
 
 fn numeric_constant(input: &mut &str) -> Result<Literal> {
@@ -1177,7 +1171,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                 ws(&mut after)?;
                 *input = after;
                 return Ok(FunctionDecl {
-                    name: "[]".into(),
+                    name: if parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() },
                     generic_params: vec![],
                     return_type: ty,
                     parameters,
@@ -1206,34 +1200,40 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
         return Ok(f);
     }
 
-    // `ReturnType name(params) { body }` — `name` may be an overloadable operator.
-    let name_ok = input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-        || OPERATORS.iter().any(|op| input.starts_with(op));
-    if name_ok {
-        let return_type = TypeName { name, generic_types: vec![] };
-        let mname = match identifier(input) {
-            Ok(n) => n,
-            Err(_) => operator_name(input)?,
-        };
-        ws(input)?;
-        let parameters = if input.starts_with('(') {
-            function_parameters(input)?
-        } else {
-            vec![]
-        };
-        ws(input)?;
-        let body = block(input)?;
-        ws(input)?;
-        return Ok(FunctionDecl {
-            name: mname,
-            generic_params: vec![],
-            return_type,
-            parameters,
-            external: false,
-            body: Some(body),
-            is_static,
-            is_indexer: false,
-        });
+    // `ReturnType name(params) { body }` — the method name may be an overloadable
+    // operator, and the return type may carry generic arguments (`__ptr<char> c_str()`).
+    let mut after: &str = before;
+    if let Ok(ty) = type_name_base(&mut after) {
+        ws(&mut after)?;
+        let name_ok = !after.is_empty()
+            && (after.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                || OPERATORS.iter().any(|op| after.starts_with(op)));
+        if name_ok {
+            let mname = match identifier(&mut after) {
+                Ok(n) => n,
+                Err(_) => operator_name(&mut after)?,
+            };
+            ws(&mut after)?;
+            let parameters = if after.starts_with('(') {
+                function_parameters(&mut after)?
+            } else {
+                vec![]
+            };
+            ws(&mut after)?;
+            let body = block(&mut after)?;
+            ws(&mut after)?;
+            *input = after;
+            return Ok(FunctionDecl {
+                name: mname,
+                generic_params: vec![],
+                return_type: ty,
+                parameters,
+                external: false,
+                body: Some(body),
+                is_static,
+                is_indexer: false,
+            });
+        }
     }
 
     *input = before;
@@ -1579,7 +1579,7 @@ fn import(input: &mut &str) -> Result<Import> {
 
     let (name, is_local) = if input.starts_with('"') {
         let lit = string_constant(input)?;
-        if let Literal::String(s, _) = lit { (s, true) }
+        if let Literal::String(s) = lit { (s, true) }
         else { return Err(cut(input)); }
     } else {
         (identifier(input)?, false)
@@ -1706,19 +1706,11 @@ mod tests {
     fn test_string_literal() {
         let e = parse_expr("\"hello world\"");
         match e {
-            Expression::Literal(Literal::String(s, false)) => assert_eq!(s, "hello world"),
+            Expression::Literal(Literal::String(s)) => assert_eq!(s, "hello world"),
             other => panic!("expected string, got {:?}", other),
         }
     }
 
-    #[test]
-    fn test_raw_string_literal() {
-        let e = parse_expr("@\"raw string\"");
-        match e {
-            Expression::Literal(Literal::String(s, true)) => assert_eq!(s, "raw string"),
-            other => panic!("expected raw string, got {:?}", other),
-        }
-    }
 
     // ── Identifiers & refs ──
 
@@ -2215,7 +2207,7 @@ mod tests {
                 assert_eq!(s.methods[0].name, "helper");
                 assert!(!s.methods[1].is_static);
                 assert!(s.methods[1].is_indexer);
-                assert_eq!(s.methods[1].name, "[]");
+                assert_eq!(s.methods[1].name, "__index_get");
             }
             other => panic!("{:?}", other),
         }

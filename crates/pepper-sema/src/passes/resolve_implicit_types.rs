@@ -287,6 +287,11 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
                     }
                 }
             }
+            // Resolve symbol types inside the default so operator resolution
+            // can see them (`var ret = str += x` keeps `str` typed).
+            if let Some(default) = &mut var.default {
+                resolve_expression(default, scopes, current_struct, None);
+            }
             scopes
                 .symbols
                 .last_mut()

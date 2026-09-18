@@ -5,7 +5,7 @@ use itertools::join;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    String(String, bool), // (value, is_raw)
+    String(String),
     Integer(i64),
     Float(f64),
     Bool(bool),
@@ -80,12 +80,12 @@ pub enum Expression {
 
 impl From<String> for Literal {
     fn from(s: String) -> Self {
-        Literal::String(s, false)
+        Literal::String(s)
     }
 }
 impl From<&str> for Literal {
     fn from(s: &str) -> Self {
-        Literal::String(s.to_string(), false)
+        Literal::String(s.to_string())
     }
 }
 impl From<i64> for Literal {
@@ -220,7 +220,7 @@ pub struct Module {
 impl Display for Literal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::String(s, raw) => write!(f, "{}\"{}\"", if *raw { "@" } else { "" }, s),
+            Literal::String(s) => write!(f, "\"{}\"", s),
             Literal::Integer(v) => write!(f, "{}", v),
             Literal::Float(v) => write!(f, "{}", v),
             Literal::Bool(v) => write!(f, "{}", v),

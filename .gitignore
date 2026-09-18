@@ -388,3 +388,7 @@ tests/cmake_test_discovery*.json
 # (no .exe suffix on Windows -- the driver does not add one)
 /hello
 /hello.exe
+
+# scratch
+.review33/
+strings-plan.md
