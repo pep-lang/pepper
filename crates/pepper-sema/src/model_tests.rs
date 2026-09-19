@@ -9,10 +9,33 @@ use pepper_parser::parser::parse_source;
 
 fn compile(source: &str) -> crate::model::Module {
     let ast = parse_source("test.pep", source).expect("parse error");
-    let mut module = build(&ast);
+    let mut module = build(&ast).expect("build");
     struct_body::apply(&mut module).expect("sema");
     transform_pass(&mut module);
     module
+}
+
+#[test]
+fn reserved_member_access_is_rejected() {
+    let ast = parse_source(
+        "test.pep",
+        r#"
+struct Test {
+    var x = 0
+}
+test(): int {
+    var t = Test()
+    return t.__refcount
+}
+"#,
+    )
+    .expect("parse error");
+    let err = build(&ast).expect_err("reserved member access must be rejected");
+    assert!(
+        err.contains("reserved"),
+        "expected a reserved-member diagnostic, got: {}",
+        err
+    );
 }
 
 const BASIC_STRUCT: &str = r#"
@@ -115,9 +138,26 @@ fn type_name_to_string_generics() {
     assert!(!TypeName::new("int").is_generic());
     let ptr = TypeName::new("char*");
     assert!(ptr.is_pointer());
-    let arr = TypeName::make_array("array", TypeName::new("int"));
-    assert_eq!(arr.to_string(), "array*");
-    assert!(arr.is_array());
+}
+
+#[test]
+fn bracket_type_lowers_to_array() {
+    // `int[]` is the spelling of `array<int>`; nested brackets nest.
+    let module = compile(
+        "test(): int {
+            int[] xs = array<int>();
+            int[][] ys = array<array<int>>();
+            return 0
+        }",
+    );
+    let body = module.functions[0].body.as_ref().expect("body");
+    let mut types: Vec<String> = vec![];
+    for stmt in &body.items {
+        if let crate::model::Statement::Declaration(crate::model::Declaration::Variable(v)) = stmt {
+            types.push(v.ty.to_string());
+        }
+    }
+    assert_eq!(types, vec!["array<int>".to_string(), "array<array<int>>".to_string()]);
 }
 
 #[test]

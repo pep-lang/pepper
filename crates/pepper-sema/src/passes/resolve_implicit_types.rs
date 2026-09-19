@@ -14,6 +14,8 @@ struct Scopes {
     function_depth: Option<usize>,
     /// Struct field tables: struct type string → fields.
     structs: Vec<(String, Vec<VariableDef>)>,
+    /// Struct method tables: struct type string → (method name, return type).
+    methods: Vec<(String, Vec<(String, TypeName)>)>,
 }
 
 impl Scopes {
@@ -24,6 +26,7 @@ impl Scopes {
             symbols: vec![vec![]],
             function_depth: None,
             structs: vec![],
+            methods: vec![],
         }
     }
 
@@ -113,12 +116,19 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 TypeName::auto()
             }
         }
-        Expression::MethodCall { this, .. } => {
+        Expression::MethodCall { this, method, .. } => {
             let this_type = type_of_expr(this, scopes, current_struct);
             if this_type.is_empty() || this_type.to_string() == crate::type_name::AUTO {
                 return TypeName::auto();
             }
             // Return type of the method, if the struct is known.
+            for (ty, methods) in &scopes.methods {
+                if *ty == this_type.to_string() {
+                    if let Some((_, ret)) = methods.iter().find(|(m, _)| m == method) {
+                        return ret.clone();
+                    }
+                }
+            }
             TypeName::auto()
         }
         Expression::Binary { op, lhs, .. } => {
@@ -185,6 +195,20 @@ pub fn resolve_implicit_types(module: &mut Module) {
             )
         })
         .collect();
+    // Struct method table: return type per method name.
+    let struct_methods: Vec<(String, Vec<(String, TypeName)>)> = module
+        .structs
+        .iter()
+        .map(|st| {
+            (
+                st.ty.to_string(),
+                st.method_members
+                    .iter()
+                    .map(|m| (m.name.clone(), m.ty.clone()))
+                    .collect(),
+            )
+        })
+        .collect();
 
     // Structs first (methods see field types).
     let struct_pairs: Vec<(String, TypeName)> = module
@@ -196,6 +220,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         let current_struct = st.ty.clone();
         let mut scopes = Scopes::new();
         scopes.structs = struct_fields.clone();
+        scopes.methods = struct_methods.clone();
 
         // Resolve field types with defaults.
         for field in &mut st.field_members {
@@ -211,6 +236,13 @@ pub fn resolve_implicit_types(module: &mut Module) {
 
         // Rebuild field table with resolved types for method bodies.
         scopes.structs = vec![(current_struct.to_string(), st.field_members.clone())];
+        scopes.methods = vec![(
+            current_struct.to_string(),
+            st.method_members
+                .iter()
+                .map(|m| (m.name.clone(), m.ty.clone()))
+                .collect(),
+        )];
 
         // Constructor body.
         if let Some(body) = &mut st.constructor.body {
@@ -254,6 +286,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         if let Some(body) = &mut function.body {
             let mut scopes = Scopes::new();
             scopes.structs = struct_fields.clone();
+            scopes.methods = struct_methods.clone();
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             scopes.function_depth = Some(scopes.names.len() - 1);

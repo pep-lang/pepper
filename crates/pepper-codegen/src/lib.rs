@@ -291,8 +291,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn instantiate_function(&mut self, function: &FunctionDef) -> Result<(), String> {
-        // Generic functions are abstract.
-        if function.ty.is_generic() {
+        // Generic function bases are abstract: skip `Name<...>` instances and
+        // generic bases (ty 'name<T>'); specializations were cloned with
+        // concrete names by sema. Mirrors `instantiate_struct`.
+        if function.ty.is_generic() && function.name == function.ty.name {
             return Ok(());
         }
         if self.functions.contains_key(&function.name) {
@@ -362,7 +364,6 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Ctor instantiation: declare the function so call sites can bind it
-    /// before any codegen runs.
     fn instantiate_ctor(&mut self, st: &StructDef) -> Result<(), String> {
         if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
@@ -752,6 +753,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // stays `char*`, `int + int` stays `int`).
                 self.value_sema_type(lhs)
             }
+            Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
+                // Indexed element: the receiver's pointee (`array<array<int>>`
+                // → `array<int>`), so method calls on a nested-array element
+                // mangle against the element's struct.
+                self.index_receiver_pointee(lhs)
+            }
             _ => None,
         }
     }
@@ -771,6 +778,63 @@ impl<'ctx> CodeGenerator<'ctx> {
             .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()));
         base.and_then(|b| self.types.get(&b))
             .unwrap_or_else(|| self.context.i32_type().into())
+    }
+
+    /// Value type of an indexed element: struct elements are stored as
+    /// references, so they load and store as pointers while the GEP stride
+    /// stays the element type.
+    fn index_value_type(&self, receiver: &Expression) -> BasicTypeEnum<'ctx> {
+        let elem = self.index_element_type(receiver);
+        if matches!(elem, BasicTypeEnum::StructType(_)) {
+            return self.context.ptr_type(inkwell::AddressSpace::default()).into();
+        }
+        elem
+    }
+    /// Sema type string of an indexed receiver's pointee (`array<array<int>>`
+    /// → `array<int>`); the element type for method mangling on a nested-array
+    /// index. `None` when the receiver's type is unknown.
+    fn index_receiver_pointee(&self, receiver: &Expression) -> Option<String> {
+        self.value_sema_type(receiver)
+            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+    }
+    /// GEP stride for an indexed element. Struct elements are stored as
+    /// pointers, so every struct slot is exactly pointer-sized: correctly
+    /// aligned for the 8-byte pointer loads/stores and independent of the
+    /// struct's own ABI size (which need not be a pointer multiple). Matches
+    /// the SizeOf branch below, which sizes the allocation.
+    fn slot_stride(&self, elem: BasicTypeEnum<'ctx>) -> BasicTypeEnum<'ctx> {
+        if matches!(elem, BasicTypeEnum::StructType(_)) {
+            return self.context.ptr_type(inkwell::AddressSpace::default()).into();
+        }
+        elem
+    }
+    /// Release the old occupant and acquire the new value of a struct-reference
+    /// index slot. Arrays are just a collection of individual references, so
+    /// every store into one transfers ownership at the store site, regardless
+    /// of caller. Both methods null-guard themselves, so calling them on
+    /// zero-initialized slots is safe.
+    fn index_refcount_ops(
+        &mut self,
+        receiver: &Expression,
+        gep: PointerValue<'ctx>,
+        new_val: BasicValueEnum<'ctx>,
+    ) -> Result<(), String> {
+        let elem = self.index_element_type(receiver);
+        if !matches!(elem, BasicTypeEnum::StructType(_)) {
+            return Ok(());
+        }
+        let elem_name = match elem {
+            BasicTypeEnum::StructType(st) => st
+                .get_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .ok_or_else(|| "unnamed struct element type".to_string())?,
+            _ => unreachable!(),
+        };
+        let value_ty = self.index_value_type(receiver);
+        let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
+        self.call_function(&format!("{}.{}", elem_name, "__acquire"), vec![new_val])?;
+        self.call_function(&format!("{}.{}", elem_name, "__release"), vec![old])?;
+        Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
@@ -856,7 +920,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => self.codegen_ternary(condition, true_expr, false_expr),
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array indexing.
-                let element_ty = self.index_element_type(lhs);
+                let element_ty = self.slot_stride(self.index_element_type(lhs));
+                let value_ty = self.index_value_type(lhs);
                 let base = self.codegen_expr(lhs)?;
                 let index = self.codegen_expr(rhs)?;
                 let ptr = base.into_pointer_value();
@@ -866,29 +931,27 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| e.to_string())?
                 };
                 self.builder
-                    .build_load(element_ty, gep, "loadidx")
+                    .build_load(value_ty, gep, "loadidx")
                     .map_err(|e| e.to_string())
             }
             Expression::SizeOf(ty) => {
                 let name = ty.to_string();
-                if let Some(desc) = self.structs.get(&name) {
+                if self.structs.contains_key(&name) {
+                    // Struct elements are stored as pointers, so a struct's
+                    // slot (and its `sizeof`) is exactly pointer-sized,
+                    // independent of the struct's own ABI size (matches
+                    // `slot_stride`).
                     Ok(BasicValueEnum::IntValue(
-                        self.context.i64_type().const_int(desc.size, false),
+                        self.context.i64_type().const_int(std::mem::size_of::<usize>() as u64, false),
                     ))
                 } else if let Some(ty) = self.types.get(&name) {
-                    let any = match ty {
-                        BasicTypeEnum::ArrayType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::FloatType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::IntType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::PointerType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::StructType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::VectorType(t) => t.as_any_type_enum(),
-                        BasicTypeEnum::ScalableVectorType(t) => t.as_any_type_enum(),
-                    };
-                    let size = any
-                        .size_of()
-                        .and_then(|v| v.get_zero_extended_constant())
-                        .unwrap_or(0);
+                    // Scalar/pointer ABI size: `AnyType::size_of` is an
+                    // unfolded ptrtoint under opaque pointers (None for
+                    // scalars); the TargetData measure is authoritative, as
+                    // in `instantiate_struct`.
+                    let any = ty.as_any_type_enum();
+                    let machine = crate::target::host_machine()?;
+                    let size = machine.get_target_data().get_abi_size(&any);
                     Ok(BasicValueEnum::IntValue(
                         self.context.i64_type().const_int(size, false),
                     ))
@@ -901,14 +964,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(self.context.bool_type().const_int(0, false).into())
             }
             Expression::Default(ty) => {
-                // __default<T>: the type's zero value.
-                let name = ty.to_string();
+                // __default<T>: the type's zero value — 0 for numerics, a null
+                // pointer for pointers and struct types (including `string`).
+                // The argument is carried in the name (`__default<int>`), so
+                // parse it out; looking up the full name would never match.
+                let parsed = pepper_sema::passes::gather_generics::parse_type_string(&ty.to_string());
+                let inner = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&parsed.name),
+                };
+                let name = inner.to_string();
                 if let Some(ty) = self.types.get(&name) {
                     let any = match ty {
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                         BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                        BasicTypeEnum::StructType(sct) => sct.const_zero().into(),
+                        BasicTypeEnum::StructType(_) => {
+                            self.context.ptr_type(inkwell::AddressSpace::default()).const_null().into()
+                        }
                         _ => self.context.i32_type().const_zero().into(),
                     };
                     Ok(any)
@@ -916,25 +989,114 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Ok(self.context.i32_type().const_zero().into())
                 }
             }
+            Expression::RefCount(ty, arg) => {
+                // __refcount<T>(t): 0 for POD T; the u32 head field of a
+                // struct object (index 0, inserted by sema's apply_synthesized).
+                let struct_ty = match self.types.get(&ty.to_string()) {
+                    Some(BasicTypeEnum::StructType(sct)) => sct,
+                    _ => return Ok(self.context.i32_type().const_int(0, false).into()),
+                };
+                let val = self.codegen_expr(arg)?;
+                let ptr = match val {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("__refcount expects a pointer, got {:?}", other)),
+                };
+                let zero = self.context.i32_type().const_int(0, false);
+                let ptr_int = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "rcptr").map_err(|e| e.to_string())?;
+                let is_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, ptr_int, self.context.i64_type().const_int(0, false), "refcount_null").map_err(|e| e.to_string())?;
+                // The head-field load must not run on a null pointer: branch
+                // first and phi the result (a select over an already-executed
+                // load would dereference null).
+                let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                let entry = self.builder.get_insert_block().expect("no insert block");
+                let then_block = self.context.append_basic_block(fn_value, "refcount_nonnull");
+                let merge_block = self.context.append_basic_block(fn_value, "refcount_merge");
+                self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(then_block);
+                let idx0 = self.context.i32_type().const_int(0, false);
+                let field = unsafe {
+                    self.builder
+                        .build_gep(struct_ty, ptr, &[idx0.into()], "refcount")
+                        .map_err(|e| e.to_string())?
+                };
+                let loaded = self.builder.build_load(self.context.i32_type(), field, "refcount_val").map_err(|e| e.to_string())?;
+                self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(merge_block);
+                let phi = self.builder.build_phi(self.context.i32_type(), "__refcount").map_err(|e| e.to_string())?;
+                phi.add_incoming(&[(&loaded, then_block), (&BasicValueEnum::IntValue(zero), entry)]);
+                Ok(phi.as_basic_value().into_int_value().into())
+            }
             Expression::FunctionCall {
                 function: name,
                 args,
             } => self.codegen_call(name, args),
             Expression::MethodCall { this, method, args } => {
+                // Receiver is a buffer slot (`Data[i]`): GEP the element out
+                // of the raw buffer. Indexer methods are the exception — they
+                // address the pointee's own data (`s[0]` on `string s`), so
+                // they dispatch to the pointee when it declares them.
+                if matches!(this.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                    let lhs = match this.as_ref() {
+                        Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
+                            lhs.as_ref()
+                        }
+                        _ => unreachable!(),
+                    };
+                    let pointee = self.index_element_type(lhs);
+                    let pointee_struct = match pointee {
+                        BasicTypeEnum::StructType(st) => st
+                            .get_name()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .unwrap_or_default(),
+                        _ => String::new(),
+                    };
+                    let pointee_declares = self
+                        .structs
+                        .get(&pointee_struct)
+                        .map(|d| d.methods.contains_key(method))
+                        .unwrap_or(false);
+                    if method.starts_with("__index_") || !pointee_declares {
+                        return self.codegen_index_method(this, method, args);
+                    }
+                    // Load the slot value with the correct element type —
+                    // the Index arm GEPs + loads using the receiver's pointee.
+                    let elem_val = self.codegen_expr(this)?;
+                    let is_static = self
+                        .structs
+                        .get(&pointee_struct)
+                        .map(|d| d.static_methods.contains(method.as_str()))
+                        .unwrap_or(false);
+                    let mangled = format!("{}.{}", pointee_struct, method);
+                    let mut arg_vals = if is_static { vec![] } else { vec![elem_val] };
+                    for arg in args {
+                        arg_vals.push(self.codegen_expr(arg)?);
+                    }
+                    for extra in self.missing_args(&mangled, args.len())? {
+                        arg_vals.push(self.codegen_expr(&extra)?);
+                    }
+                    return self.call_function(&mangled, arg_vals);
+                }
                 // Mangle: `<StructOf(this)>.<method>`. The struct name comes
                 // from the receiver's static type; non-struct receivers fall
                 // back to the method name as-is (array index methods resolve
-                // at codegen).
                 let struct_name = self.struct_name_of(this.as_ref()).unwrap_or_default();
                 if method.starts_with("__index_") {
                     // POD array index set/get: direct GEP + load/store — but
-                    // only when the receiver's struct does not declare the
-                    // indexer itself.
-                    let has_indexer = self
-                        .structs
-                        .get(&struct_name)
-                        .map(|d| d.methods.contains_key(method))
-                        .unwrap_or(false);
+                    // only when the receiver's struct declares the indexer
+                    // and the receiver is not itself a pointer. A pointer
+                    // receiver (raw buffer field like `Data` on
+                    // `array<array<int>>`) must GEP the slot; dispatching
+                    // would call the pointee's indexer on the element's own
+                    // data.
+                    let receiver_is_ptr = self
+                        .value_sema_type(this)
+                        .is_some_and(|ty| ty.ends_with('*'));
+                    let has_indexer = !receiver_is_ptr
+                        && self
+                            .structs
+                            .get(&struct_name)
+                            .map(|d| d.methods.contains_key(method))
+                            .unwrap_or(false);
                     if !has_indexer {
                         return self.codegen_index_method(this, method, args);
                     }
@@ -968,7 +1130,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         method: &str,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let element_ty = self.index_element_type(this);
+        let element_ty = self.slot_stride(self.index_element_type(this));
+        let value_ty = self.index_value_type(this);
         let base = self.codegen_expr(this)?;
         let ptr = match base {
             BasicValueEnum::PointerValue(p) => p,
@@ -986,14 +1149,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         if method == "__index_get" {
             self.builder
-                .build_load(element_ty, gep, "loadidx")
+                .build_load(value_ty, gep, "loadidx")
                 .map_err(|e| e.to_string())
         } else {
             // __index_set: the value is args[1].
             let value_expr = args.get(1).ok_or_else(|| "index set needs a value".to_string())?;
             let mut value = self.codegen_expr(value_expr)?;
             if let (BasicTypeEnum::IntType(target), BasicValueEnum::IntValue(iv)) =
-                (element_ty, &value)
+                (value_ty, &value)
             {
                 if iv.get_type().get_bit_width() > target.get_bit_width() {
                     value = match self.builder.build_int_truncate(*iv, target, "narrow") {
@@ -1002,6 +1165,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     };
                 }
             }
+            self.index_refcount_ops(this, gep, value)?;
             self.builder
                 .build_store(gep, value)
                 .map_err(|e| e.to_string())?;
@@ -1027,42 +1191,42 @@ impl<'ctx> CodeGenerator<'ctx> {
         if name == "__is_pod" {
             return Ok(self.context.bool_type().const_int(0, false).into());
         }
-        if name == "__default" {
-            let base = name.split('<').next().unwrap_or(name);
-            let _ = base;
-            // The generic arg type: `__default<T>` — use the ty from the
-            // call's target string.
-            if let Some(ty) = self.types.get(&name.to_string()) {
+        if name == "__default" || name.starts_with("__default<") {
+            let parsed = pepper_sema::passes::gather_generics::parse_type_string(name);
+            let inner = match parsed.sub_types.into_iter().next() {
+                Some(inner) => inner,
+                None => TypeName::new(&parsed.name),
+            };
+            if let Some(ty) = self.types.get(&inner.to_string()) {
                 let any = match ty {
                     BasicTypeEnum::IntType(it) => it.const_zero().into(),
                     BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                     BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                    BasicTypeEnum::StructType(sct) => sct.const_zero().into(),
+                    BasicTypeEnum::StructType(_) => {
+                        self.context.ptr_type(inkwell::AddressSpace::default()).const_null().into()
+                    }
                     _ => self.context.i32_type().const_zero().into(),
                 };
                 return Ok(any);
             }
             return Ok(self.context.i32_type().const_zero().into());
         }
-        // Constructor call `Name<...>(ctor_args)`: the ctor is registered
-        // under the plain struct name (specializations under `Name<args>`).
-        let target = if self.functions.contains_key(name) || self.structs.contains_key(name) {
-            if self.functions.contains_key(name) {
-                name
-            } else {
-                name
-            }
+        // Constructor call `Name<...>(ctor_args)`: specializations are
+        // registered under their full name (`array<int>`); fall back to the
+        // base name for non-generic ctors.
+        let target = if self.functions.contains_key(name) {
+            name.to_string()
         } else {
-            name.split('<').next().unwrap_or(name).trim()
+            name.split('<').next().unwrap_or(name).trim().to_string()
         };
         let mut arg_vals = vec![];
         for arg in args {
             arg_vals.push(self.codegen_expr(arg)?);
         }
-        for extra in self.missing_args(target, args.len())? {
+        for extra in self.missing_args(&target, args.len())? {
             arg_vals.push(self.codegen_expr(&extra)?);
         }
-        self.call_function(target, arg_vals)
+        self.call_function(&target, arg_vals)
     }
 
     fn codegen_print(&mut self, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
@@ -1268,10 +1432,21 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
                 let rhs_c = llvm_ops::coerce(self.context, &self.builder, coerced, &rhs_name, &result_ty);
                 let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None)?;
+                let fitted = fit(result);
+                if let Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } = lhs {
+                    // Compound store into a struct-reference slot transfers
+                    // ownership like any other index store.
+                    self.index_refcount_ops(lhs, lhs_addr.ptr, fitted)?;
+                }
                 lhs_addr
-                    .store(&self.builder, fit(result))
+                    .store(&self.builder, fitted)
                     .ok_or_else(|| "compound store".to_string())?;
-                return Ok(fit(result));
+                return Ok(fitted);
+            }
+            if let Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } = lhs {
+                // The element type is resolved from the buffer's pointee
+                // (`Data`), not the index expression itself.
+                self.index_refcount_ops(lhs, lhs_addr.ptr, coerced)?;
             }
             lhs_addr
                 .store(&self.builder, coerced)
@@ -1339,7 +1514,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array element store: `arr[i] = v` → GEP + store.
-                let element_ty = self.index_element_type(lhs);
+                let element_ty = self.slot_stride(self.index_element_type(lhs));
+                let value_ty = self.index_value_type(lhs);
                 let ty_name = self
                     .value_sema_type(lhs)
                     .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
@@ -1352,9 +1528,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_gep(element_ty, ptr, &[index.into_int_value()], "idxl")
                         .map_err(|e| e.to_string())?
                 };
-                // Carry the element's LLVM type so stores truncate to it
-                // (`Data[Size] = 0` on `char*` must store one byte, not four).
-                Ok(Address::with_llvm_ty("idxl", &ty_name, element_ty, gep))
+                // Carry the element's value type so stores truncate to it
+                // (`Data[Size] = 0` on `char*` must store one byte, not four);
+                // struct elements load/store as pointers.
+                Ok(Address::with_llvm_ty("idxl", &ty_name, value_ty, gep))
             }
             _ => Err("unsupported lvalue".to_string()),
         }
@@ -1520,7 +1697,7 @@ fn value_type_name<'ctx>(value: &BasicValueEnum<'ctx>) -> String {
             w => format!("i{}", w),
         },
         BasicValueEnum::FloatValue(v) => {
-            if v.get_type().size_of().get_zero_extended_constant() == Some(32) {
+            if v.get_type().get_bit_width() == 32 {
                 "f32".to_string()
             } else {
                 "f64".to_string()

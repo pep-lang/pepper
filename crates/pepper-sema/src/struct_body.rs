@@ -50,17 +50,32 @@ fn if_block(condition: Expression, items: Vec<Statement>) -> Statement {
 /// Fill in the refcount field + synthesized method bodies (the `StructDef`
 /// constructor part of `Struct.cpp:99-149`).
 pub fn apply_synthesized(st: &mut StructDef) {
-    // Head field for the refcount.
-    st.field_members.insert(
-        0,
-        var_def("__refcount", TypeName::new("u32"), Some(Expression::IntLiteral(0)), false),
-    );
+    // Head field for the refcount. Default 1: a freshly constructed object
+    // is owned by its creator; the ctor's field-init loop stores this default.
+    // Guarded: specialized instances clone the base's fields (which already
+    // carry the head) and re-run apply_synthesized.
+    if !st.field_members.iter().any(|f| f.name == "__refcount") {
+        st.field_members.insert(
+            0,
+            var_def("__refcount", TypeName::new("u32"), Some(Expression::IntLiteral(1)), false),
+        );
+    }
 
     let struct_name = st.name.clone();
 
-    // __acquire body: ++this.__refcount + trace calls.
+    // __acquire body: null-check, ++this.__refcount + trace calls. Codegen
+    // acquires on every store of a struct reference, including nulls from
+    // zero-initialized slots, so the guard mirrors __release's.
     if let Some(body) = &mut st.acquire.body {
         body.items = vec![
+            if_block(
+                Expression::Binary {
+                    op: BinaryOp::Identical,
+                    lhs: Box::new(Expression::ThisRef),
+                    rhs: Box::new(Expression::PointerLiteral),
+                },
+                vec![Statement::Return(ReturnStatement { expr: None })],
+            ),
             Statement::Expression(Expression::Binary {
                 op: BinaryOp::Assign,
                 lhs: Box::new(member_ref("__refcount")),

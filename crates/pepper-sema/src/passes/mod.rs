@@ -23,8 +23,8 @@ pub mod release_field_refs;
 pub mod convert_print_calls;
 
 use apply_extensions::apply_extensions;
-use convert_intrinsics::convert_intrinsics;
 use convert_member_refs::convert_member_refs;
+use convert_intrinsics::convert_intrinsics;
 use convert_string_literals::convert_string_literals;
 use gather_generics::gather_generics;
 use release_field_refs::release_field_refs;
@@ -39,6 +39,7 @@ use convert_print_calls::convert_print_calls;
 
 /// Run every pass in the ported order (25 entries, repeats included).
 pub fn transform_pass(module: &mut Module) {
+    apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
     resolve_literals(module);
     tag_generics(module);
@@ -139,6 +140,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(rhs, f);
         }
         Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
+        Expression::RefCount(_, arg) => walk_expression(arg, f),
         Expression::FunctionCall { args, .. } => {
             for arg in args {
                 walk_expression(arg, f);

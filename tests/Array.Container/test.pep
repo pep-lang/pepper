@@ -1,5 +1,4 @@
 
-use "../array";
 
 main(): int {
     var nums = array<int>();

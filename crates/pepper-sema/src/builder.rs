@@ -7,10 +7,13 @@ use pepper_parser::ast;
 
 fn type_name_from(t: &ast::TypeName) -> TypeName {
     let args: Vec<TypeName> = t.generic_types.iter().map(type_name_from).collect();
-    // Array suffix: `int[]` → Array-flagged type (element `int`).
+    // `int[]` → `array<int>`; applied innermost-first, so `int[][]` nests.
     if let Some(base) = t.name.strip_suffix("[]") {
-        let element = TypeName::new(base);
-        return TypeName::make_array(&format!("{}[]", base), element);
+        let element = type_name_from(&ast::TypeName {
+            name: base.to_string(),
+            generic_types: t.generic_types.clone(),
+        });
+        return TypeName::with_args("array", vec![element]);
     }
     if args.is_empty() {
         TypeName::new(&t.name)
@@ -70,67 +73,75 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
     })
 }
 
-fn expression(expr: &ast::Expression) -> Expression {
+fn expression(expr: &ast::Expression) -> Result<Expression, String> {
     match expr {
         ast::Expression::Literal(lit) => match lit {
-            ast::Literal::String(value) => Expression::StringLiteral {
+            ast::Literal::String(value) => Ok(Expression::StringLiteral {
                 value: value.clone(),
                 is_raw: false,
-            },
-            ast::Literal::Integer(v) => Expression::IntLiteral(*v),
-            ast::Literal::Float(v) => Expression::FloatLiteral(*v),
-            ast::Literal::Bool(v) => Expression::BoolLiteral(*v),
-            ast::Literal::Null => Expression::PointerLiteral,
+            }),
+            ast::Literal::Integer(v) => Ok(Expression::IntLiteral(*v)),
+            ast::Literal::Float(v) => Ok(Expression::FloatLiteral(*v)),
+            ast::Literal::Bool(v) => Ok(Expression::BoolLiteral(*v)),
+            ast::Literal::Null => Ok(Expression::PointerLiteral),
         },
         ast::Expression::SymbolRef(id) => {
             if id == "this" {
-                Expression::ThisRef
+                Ok(Expression::ThisRef)
             } else {
-                Expression::SymbolRef {
+                Ok(Expression::SymbolRef {
                     id: id.clone(),
                     ty: TypeName::auto(),
-                }
+                })
             }
         }
-        ast::Expression::TypeLiteral(ty) => Expression::FunctionCall {
+        ast::Expression::TypeLiteral(ty) => Ok(Expression::FunctionCall {
             function: type_name_from(ty).to_string(),
             args: vec![],
-        },
-        ast::Expression::SizeOf(ty) => Expression::SizeOf(type_name_from(ty)),
-        ast::Expression::Unary { op, prefix, operand } => Expression::Unary {
+        }),
+        ast::Expression::SizeOf(ty) => Ok(Expression::SizeOf(type_name_from(ty))),
+        ast::Expression::Unary { op, prefix, operand } => Ok(Expression::Unary {
             op: unary_op(op, *prefix).expect("unknown unary operator"),
-            operand: Box::new(expression(operand)),
-        },
-        ast::Expression::Binary { lhs, op, rhs } => Expression::Binary {
+            operand: Box::new(expression(operand)?),
+        }),
+        ast::Expression::Binary { lhs, op, rhs } => Ok(Expression::Binary {
             op: binary_op(op).expect("unknown binary operator"),
-            lhs: Box::new(expression(lhs)),
-            rhs: Box::new(expression(rhs)),
-        },
+            lhs: Box::new(expression(lhs)?),
+            rhs: Box::new(expression(rhs)?),
+        }),
         ast::Expression::Ternary {
             condition,
             true_expr,
             false_expr,
-        } => Expression::Ternary {
-            condition: Box::new(expression(condition)),
-            true_expr: Box::new(expression(true_expr)),
-            false_expr: Box::new(expression(false_expr)),
-        },
-        ast::Expression::Index { lhs, rhs } => Expression::Index {
-            lhs: Box::new(expression(lhs)),
-            rhs: Box::new(expression(rhs)),
-        },
-        ast::Expression::MemberAccess { lhs, name } => Expression::MemberRef {
-            lhs: Box::new(expression(lhs)),
-            name: name.clone(),
-        },
+        } => Ok(Expression::Ternary {
+            condition: Box::new(expression(condition)?),
+            true_expr: Box::new(expression(true_expr)?),
+            false_expr: Box::new(expression(false_expr)?),
+        }),
+        ast::Expression::Index { lhs, rhs } => Ok(Expression::Index {
+            lhs: Box::new(expression(lhs)?),
+            rhs: Box::new(expression(rhs)?),
+        }),
+        ast::Expression::MemberAccess { lhs, name } => {
+            if name.starts_with("__") {
+                return Err(format!("'{}' is a reserved (synthesized) member and cannot be accessed from source code", name));
+            }
+            Ok(Expression::MemberRef {
+                lhs: Box::new(expression(lhs)?),
+                name: name.clone(),
+            })
+        }
         ast::Expression::FunctionCall { function, arguments } => {
             // Method call `t.getX()`: the target is a member access.
             if let ast::Expression::MemberAccess { lhs, name } = function.as_ref() {
-                return Expression::MethodCall {
-                    this: Box::new(expression(lhs)),
+                if name.starts_with("__") {
+                    return Err(format!("'{}' is a reserved (synthesized) method and cannot be called from source code", name));
+                }
+                return Ok(Expression::MethodCall {
+                    this: Box::new(expression(lhs)?),
                     method: name.clone(),
-                    args: arguments.iter().map(expression).collect(),
-                };
+                    args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                });
             }
             // Constructor-style call `Name<args>(ctor_args)` keeps the generic
             // target name; the args become the call arguments.
@@ -143,59 +154,58 @@ fn expression(expr: &ast::Expression) -> Expression {
                     format!("{}", other)
                 }
             };
-            Expression::FunctionCall {
+            Ok(Expression::FunctionCall {
                 function,
-                args: arguments.iter().map(expression).collect(),
-            }
+                args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+            })
         }
     }
 }
-
-fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> VariableDef {
-    VariableDef {
+fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, String> {
+    Ok(VariableDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.type_name),
-        default: decl.default_value.as_ref().map(expression),
+        default: decl.default_value.as_ref().map(expression).transpose()?,
         hidden: false,
         kind,
-    }
+    })
 }
 
-fn block(block: &ast::Block) -> Block {
-    Block {
+fn block(block: &ast::Block) -> Result<Block, String> {
+    Ok(Block {
         name: String::new(),
-        items: block.statements.iter().map(statement).collect(),
-    }
+        items: block.statements.iter().map(statement).collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
-fn statement(stmt: &ast::Statement) -> Statement {
+fn statement(stmt: &ast::Statement) -> Result<Statement, String> {
     match stmt {
-        ast::Statement::Expression(expr) => Statement::Expression(expression(expr)),
-        ast::Statement::Block(inner) => Statement::Block(block(inner)),
-        ast::Statement::Declaration(decl) => Statement::Declaration(declaration(decl)),
-        ast::Statement::Branch(branch) => Statement::Branch(Branch {
-            condition: expression(&branch.condition),
-            if_block: block(&branch.if_block),
-            else_block: branch.else_block.as_ref().map(block),
-        }),
-        ast::Statement::While(wh) => Statement::While(While {
-            condition: expression(&wh.condition),
-            block: block(&wh.block),
-        }),
-        ast::Statement::Return(ret) => Statement::Return(ReturnStatement {
-            expr: Some(expression(&ret.expr)),
-        }),
+        ast::Statement::Expression(expr) => Ok(Statement::Expression(expression(expr)?)),
+        ast::Statement::Block(inner) => Ok(Statement::Block(block(inner)?)),
+        ast::Statement::Declaration(decl) => Ok(Statement::Declaration(declaration(decl)?)),
+        ast::Statement::Branch(branch) => Ok(Statement::Branch(Branch {
+            condition: expression(&branch.condition)?,
+            if_block: block(&branch.if_block)?,
+            else_block: branch.else_block.as_ref().map(block).transpose()?,
+        })),
+        ast::Statement::While(wh) => Ok(Statement::While(While {
+            condition: expression(&wh.condition)?,
+            block: block(&wh.block)?,
+        })),
+        ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
+            expr: Some(expression(&ret.expr)?),
+        })),
     }
 }
 
-fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> FunctionDef {
+fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, String> {
     let parameters: Vec<VariableDef> = decl
         .parameters
         .iter()
         .map(|p| variable_def(p, Kind::Param))
-        .collect();
-    let body = decl.body.as_ref().map(block);
-    FunctionDef {
+        .collect::<Result<Vec<_>, _>>()?;
+    let body = decl.body.as_ref().map(block).transpose()?;
+    Ok(FunctionDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
         parameters,
@@ -204,32 +214,31 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> FunctionDef
         is_static: decl.is_static,
         is_indexer: decl.is_indexer,
         is_generic_func: false,
-    }
+    })
 }
 
-fn declaration(decl: &ast::Declaration) -> Declaration {
+fn declaration(decl: &ast::Declaration) -> Result<Declaration, String> {
     match decl {
         ast::Declaration::Variable(v) => {
-            Declaration::Variable(variable_def(v, Kind::Variable))
+            Ok(Declaration::Variable(variable_def(v, Kind::Variable)?))
         }
-        ast::Declaration::Function(f) => Declaration::Function(function_def(f, None)),
-        ast::Declaration::Struct(s) => Declaration::Struct(struct_def(s)),
-        ast::Declaration::Trait(t) => Declaration::Trait(TraitDef {
+        ast::Declaration::Function(f) => Ok(Declaration::Function(function_def(f, None)?)),
+        ast::Declaration::Struct(s) => Ok(Declaration::Struct(struct_def(s)?)),
+        ast::Declaration::Trait(t) => Ok(Declaration::Trait(TraitDef {
             name: t.name.clone(),
-            methods: t.methods.iter().map(|m| function_def(m, None)).collect(),
-        }),
-        ast::Declaration::Extend(e) => Declaration::Extension(ExtensionDef {
+            methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        })),
+        ast::Declaration::Extend(e) => Ok(Declaration::Extension(ExtensionDef {
             target: type_name_from(&e.target),
             resolved: None,
             traits: e.traits.iter().map(type_name_from).collect(),
-            methods: e.methods.iter().map(|m| function_def(m, None)).collect(),
-        }),
+            methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        })),
     }
 }
-
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
-fn struct_def(decl: &ast::StructDecl) -> StructDef {
+fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
     let generic_params: Vec<TypeName> = decl.generic_params.iter().map(type_name_from).collect();
     let base_name = decl.name.clone();
     let ty = if generic_params.is_empty() {
@@ -241,16 +250,16 @@ fn struct_def(decl: &ast::StructDecl) -> StructDef {
         .fields
         .iter()
         .map(|f| variable_def(f, Kind::Field))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
     let method_members: Vec<FunctionDef> = decl
         .methods
         .iter()
         .map(|m| function_def(m, Some(base_name.clone())))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let constructor = match &decl.constructor {
         Some(ctor) => {
-            let mut f = function_def(ctor, Some(base_name.clone()));
+            let mut f = function_def(ctor, Some(base_name.clone()))?;
             f.name = ty.to_string();
             f.ty = ty.clone();
             f
@@ -274,7 +283,7 @@ fn struct_def(decl: &ast::StructDecl) -> StructDef {
             name: "__dtor".to_string(),
             ty: TypeName::void(),
             parameters: vec![],
-            body: Some(block(body)),
+            body: Some(block(body)?),
             parent: Some(base_name.clone()),
             is_static: false,
             is_indexer: false,
@@ -295,7 +304,7 @@ fn struct_def(decl: &ast::StructDecl) -> StructDef {
         },
     };
 
-    StructDef {
+    Ok(StructDef {
         name: base_name.clone(),
         ty,
         generic_params,
@@ -306,7 +315,7 @@ fn struct_def(decl: &ast::StructDecl) -> StructDef {
         acquire: empty_method(&base_name, "__acquire"),
         release: empty_method(&base_name, "__release"),
         traits: vec![],
-    }
+    })
 }
 
 fn empty_method(parent: &str, name: &str) -> FunctionDef {
@@ -327,7 +336,7 @@ fn empty_method(parent: &str, name: &str) -> FunctionDef {
 
 /// Parse-level module → model module (no synthesized members yet; call
 /// [`struct_body::apply_synthesized`] afterwards).
-pub fn build(module: &ast::Module) -> Module {
+pub fn build(module: &ast::Module) -> Result<Module, String> {
     let mut out = Module::default();
     out.imports = module.imports.clone();
     for decl in &module.declarations {
@@ -340,10 +349,13 @@ pub fn build(module: &ast::Module) -> Module {
                     body: v
                         .default_value
                         .as_ref()
-                        .map(|expr| Block {
-                            name: String::new(),
-                            items: vec![Statement::Expression(expression(expr))],
-                        }),
+                        .map(|expr| -> Result<Block, String> {
+                            Ok(Block {
+                                name: String::new(),
+                                items: vec![Statement::Expression(expression(expr)?)],
+                            })
+                        })
+                        .transpose()?,
                     parent: None,
                     is_static: false,
                     is_indexer: false,
@@ -359,24 +371,24 @@ pub fn build(module: &ast::Module) -> Module {
                             .parameters
                             .iter()
                             .map(|p| variable_def(p, Kind::Param))
-                            .collect(),
+                            .collect::<Result<Vec<_>, _>>()?,
                     });
                 } else {
-                    out.functions.push(function_def(f, None));
+                    out.functions.push(function_def(f, None)?);
                 }
             }
-            ast::Declaration::Struct(s) => out.structs.push(struct_def(s)),
+            ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
             ast::Declaration::Trait(t) => out.traits.push(TraitDef {
                 name: t.name.clone(),
-                methods: t.methods.iter().map(|m| function_def(m, None)).collect(),
+                methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
             }),
             ast::Declaration::Extend(e) => out.extensions.push(ExtensionDef {
                 target: type_name_from(&e.target),
                 resolved: None,
                 traits: e.traits.iter().map(type_name_from).collect(),
-                methods: e.methods.iter().map(|m| function_def(m, None)).collect(),
+                methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
             }),
         }
     }
-    out
+    Ok(out)
 }

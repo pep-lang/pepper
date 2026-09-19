@@ -199,6 +199,8 @@ pub enum Expression {
     SizeOf(TypeName),
     IsPod(TypeName),
     Default(TypeName),
+    /// `__refcount<T>(t)`: the reference count of object `t` (0 for POD T).
+    RefCount(TypeName, Box<Expression>),
     /// Free function call by name (possibly specialized `name<args>`)
     FunctionCall {
         function: String,

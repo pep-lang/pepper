@@ -32,9 +32,21 @@ pub extern "C" fn panic(msg: *const c_char) {
     std::process::abort();
 }
 
+/// Trace output is off unless `PEP_TRACE` is set to a non-empty value; the
+/// synthesized acquire/release/ctor/dtor bodies call these unconditionally,
+/// so without the gate every struct-element array op pollutes stdout.
+fn trace_enabled() -> bool {
+    static ENABLED: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("PEP_TRACE").is_some_and(|v| !v.is_empty()));
+    *ENABLED
+}
+
 /// Trace a memory region (port of `trace_region`).
 #[unsafe(no_mangle)]
 pub extern "C" fn trace_region(ptr: *const c_void, size: usize, name: *const c_char) {
+    if !trace_enabled() {
+        return;
+    }
     let name = if name.is_null() {
         String::new()
     } else {
@@ -77,6 +89,9 @@ pub extern "C" fn trace_ptr(ptr: *const c_void, name: *const c_char) {
 /// Trace an integer (port of `trace_int`).
 #[unsafe(no_mangle)]
 pub extern "C" fn trace_int(value: i64, name: *const c_char) {
+    if !trace_enabled() {
+        return;
+    }
     let name = if name.is_null() { "".to_string() } else { unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned() };
     println!("{}: {}", name, value);
 }
@@ -165,6 +180,23 @@ pub extern "C" fn _pep_free(ptr: *mut c_void) {
             std::alloc::dealloc(base, layout_for(size));
         },
         None => eprintln!("_pep_free: unknown or double-freed pointer {:p}", ptr),
+    }
+}
+
+/// Exchange the reference (first pointer-sized bytes) of two slots in a
+/// struct-element buffer. Raw pointer moves keep both references owned by the
+/// array, which per-slot release/acquire cannot express for swap.
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_swap_refs(p: *mut c_void, stride: usize, i: usize, j: usize) {
+    const SLOT: usize = std::mem::size_of::<*mut c_void>();
+    let len = stride.min(SLOT);
+    unsafe {
+        let a = p.add(i * stride).cast::<u8>();
+        let b = p.add(j * stride).cast::<u8>();
+        let mut tmp = [0u8; SLOT];
+        std::ptr::copy_nonoverlapping(a, tmp.as_mut_ptr(), len);
+        std::ptr::copy_nonoverlapping(b, a, len);
+        std::ptr::copy_nonoverlapping(tmp.as_ptr(), b, len);
     }
 }
 
@@ -290,6 +322,7 @@ pub fn support_symbols() -> Vec<(&'static str, usize)> {
         ("_pep_realloc", black_box(_pep_realloc as usize)),
         ("_pep_free", black_box(_pep_free as usize)),
         ("_pep_utf8_length", black_box(_pep_utf8_length as usize)),
+        ("_pep_swap_refs", black_box(_pep_swap_refs as usize)),
         ("_pep_utf8_size", black_box(_pep_utf8_size as usize)),
         ("_pep_utf8_compare", black_box(_pep_utf8_compare as usize)),
         ("_pep_utf8_find", black_box(_pep_utf8_find as usize)),

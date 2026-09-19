@@ -127,6 +127,13 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
         if let Expression::SizeOf(ty) = e {
             substitute(ty, type_map);
         }
+        // Constructor calls inside method bodies (`array<T>(n)` →
+        // `array<int>(n)`): parse the name, substitute, re-emit.
+        if let Expression::FunctionCall { function, .. } = e {
+            let mut parsed = crate::passes::gather_generics::parse_type_string(function);
+            substitute(&mut parsed, type_map);
+            *function = parsed.to_string();
+        }
         // `this` symbol refs in specialized bodies carry the base type.
         if let Expression::SymbolRef { id, ty } = e {
             if id == "this" && !type_map.is_empty() {

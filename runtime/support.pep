@@ -5,6 +5,7 @@ extern void trace_int(long num, char* msg);
 extern void* _pep_malloc(ulong size);
 extern void _pep_free(void* ptr);
 extern void* _pep_realloc(void* ptr, ulong prevSize, ulong newSize);
+extern void _pep_swap_refs(void* p, ulong stride, ulong i, ulong j);
 extern void panic(char* msg);
 
 extern ulong _pep_utf8_length(char* str);

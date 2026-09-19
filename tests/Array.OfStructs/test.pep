@@ -1,5 +1,4 @@
 
-use "../array";
 
 struct Test {
     int x;

@@ -7,7 +7,6 @@ use std::sync::LazyLock;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeFlags {
     Scalar,
-    Array,
     Function,
 }
 
@@ -82,14 +81,6 @@ impl TypeName {
         Self::new(VOID_PTR)
     }
 
-    pub fn make_array(name: &str, element: TypeName) -> Self {
-        Self {
-            name: name.to_string(),
-            sub_types: vec![element],
-            flags: TypeFlags::Array,
-        }
-    }
-
     pub fn make_function(name: &str, args: Vec<TypeName>) -> Self {
         Self {
             name: name.to_string(),
@@ -110,16 +101,12 @@ impl TypeName {
         self.flags == TypeFlags::Scalar
     }
 
-    pub fn is_array(&self) -> bool {
-        self.flags == TypeFlags::Array
-    }
-
     pub fn is_function(&self) -> bool {
         self.flags == TypeFlags::Function
     }
 
     pub fn is_generic(&self) -> bool {
-        self.flags != TypeFlags::Array && !self.sub_types.is_empty()
+        !self.sub_types.is_empty()
     }
 
     pub fn is_pointer(&self) -> bool {
@@ -142,8 +129,7 @@ impl TypeName {
         } else {
             String::new()
         };
-        let ptr = if self.is_array() { "*" } else { "" };
-        format!("{}{}{}", self.name, generic_types, ptr)
+        format!("{}{}", self.name, generic_types)
     }
 
     /// Recursive generic parameter substitution (port of `Specializer::replace`).

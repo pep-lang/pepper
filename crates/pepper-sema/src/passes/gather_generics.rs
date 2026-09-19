@@ -1,6 +1,6 @@
 //! Port of `source/Sema/GatherGenerics.h`: record generic uses as specs.
 
-use crate::model::{Expression, Module, Spec};
+use crate::model::{Block, Declaration, Expression, Module, Spec, Statement};
 use crate::passes::{walk_expression, walk_function};
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
@@ -82,6 +82,24 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
 
+    // Local variable declarations (`array<int> a;` with no ctor call) are the
+    // only place generic types can appear that fields/params/calls miss.
+    for st in &module.structs {
+        for method in &st.method_members {
+            if let Some(body) = &method.body {
+                gather_local_declarations(body, &mut structs);
+            }
+        }
+        if let Some(body) = &st.constructor.body {
+            gather_local_declarations(body, &mut structs);
+        }
+    }
+    for function in &module.functions {
+        if let Some(body) = &function.body {
+            gather_local_declarations(body, &mut structs);
+        }
+    }
+
     // Emit struct specs.
     let mut struct_specs: Vec<TypeName> = module.struct_specs.clone();
     for name in &structs {
@@ -160,4 +178,28 @@ pub fn parse_type_string(s: &str) -> TypeName {
         parts.iter().map(|p| parse_type_string(p)).collect()
     };
     TypeName::with_args(name, args)
+}
+
+/// Collect generic types from local variable declarations, recursing into
+/// nested blocks (branch/while bodies). Same predicate as the field and
+/// parameter collection above.
+fn gather_local_declarations(block: &Block, structs: &mut HashSet<String>) {
+    for stmt in &block.items {
+        match stmt {
+            Statement::Declaration(Declaration::Variable(var)) => {
+                if var.ty.is_generic() && !var.ty.name.starts_with("__") {
+                    structs.insert(var.ty.to_string());
+                }
+            }
+            Statement::Block(inner) => gather_local_declarations(inner, structs),
+            Statement::Branch(branch) => {
+                gather_local_declarations(&branch.if_block, structs);
+                if let Some(else_block) = &branch.else_block {
+                    gather_local_declarations(else_block, structs);
+                }
+            }
+            Statement::While(wh) => gather_local_declarations(&wh.block, structs),
+            _ => {}
+        }
+    }
 }

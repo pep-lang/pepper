@@ -63,10 +63,9 @@ fn ws(input: &mut &str) -> Result<()> {
         }
         // skip # comment to end of line
         if input.starts_with('#') {
-            *input = &input[1..];
-            while let Some(c) = input.chars().next() {
-                *input = &input[1..];
-                if c == '\n' { break; }
+            match input.find('\n') {
+                Some(pos) => *input = &input[pos + 1..],
+                None => *input = "",
             }
         }
         if *input == before { break; }
@@ -970,9 +969,21 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
         });
     }
 
-    // Syntax 2: `first` is the return type, next identifier is the name
-    if input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-        let return_type = TypeName { name: first, generic_types: vec![] };
+    // Syntax 2: `first` is the return type, next identifier is the name.
+    if input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || input.starts_with('[') {
+        let mut return_type = TypeName { name: first, generic_types: vec![] };
+        // Array suffix on the return type (`int[] echo(...)`).
+        while input.starts_with('[') {
+            *input = &input[1..];
+            ws(input)?;
+            if input.starts_with(']') {
+                *input = &input[1..];
+                ws(input)?;
+                return_type.name.push_str("[]");
+            } else {
+                break;
+            }
+        }
         let name = identifier(input)?;
         ws(input)?;
 

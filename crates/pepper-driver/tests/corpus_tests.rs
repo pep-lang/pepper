@@ -46,7 +46,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         let content = std::fs::read_to_string(&source_file)
             .map_err(|e| format!("cannot read {}: {}", source_file.display(), e))?;
         let ast = pepper_parser::parser::parse_source(&source_file.to_string_lossy(), &content)?;
-        let mut built = build(&ast);
+        let mut built = build(&ast)?;
         // Resolve imports from THIS file's AST (the merged module's import
         // list accumulates across files and would resolve against the wrong
         // source dir).
@@ -76,7 +76,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         let content = std::fs::read_to_string(source)
             .map_err(|e| format!("cannot read {}: {}", source.display(), e))?;
         let ast = pepper_parser::parser::parse_source(&source.to_string_lossy(), &content)?;
-        let mut built = build(&ast);
+        let mut built = build(&ast).expect("build");
         merged.merge(std::mem::take(&mut built));
     }
 
@@ -109,15 +109,13 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .map_err(|e| format!("spawn failed: {}", e))
 }
 
-/// KNOWN GAPS (tracked for the next phase): 6 of 15 corpus fixtures fail —
-/// generic extensions and arrays (`Array.Container`, `Array.OfStructs`,
-/// `Struct.SpecializedExtend`), trait dispatch (`Trait.Basic`,
-/// `Trait.Generic`), and struct storage with string fields
-/// (`Struct.RefStorage`). The String.* fixtures pass end to end. These need
-/// their own sema/codegen features per the C++ anchors. Ignored until
-/// implemented; NOT a pass.
+/// KNOWN GAPS (tracked for the next phase): 2 of 16 corpus fixtures fail —
+/// trait dispatch (`Trait.Generic`) and struct storage with string fields
+/// (`Struct.RefStorage`). The String.* and Array.* fixtures pass end to
+/// end. These need their own sema/codegen features per the C++ anchors.
+/// Ignored until implemented; NOT a pass.
 #[test]
-#[ignore = "6/15 corpus fixtures fail: generics-in-extensions, trait dispatch, struct-with-string storage — tracked feature work"]
+#[ignore = "2/16 corpus fixtures fail: trait dispatch, struct-with-string storage — tracked feature work"]
 fn corpus_files_compile_and_run() {
     let dir = tests_dir();
     let entries = match std::fs::read_dir(&dir) {

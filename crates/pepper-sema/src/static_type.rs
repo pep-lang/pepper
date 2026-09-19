@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::model::{BinaryOp, Expression, Module};
 use crate::type_name::TypeName;
 
+#[derive(Clone)]
 pub(crate) struct StructInfo {
     /// (field name, field type)
     pub(crate) fields: Vec<(String, TypeName)>,
@@ -25,18 +26,25 @@ impl StructTable {
         let mut structs = HashMap::new();
         for st in &module.structs {
             let name = st.ty.to_string();
-            let fields = st
-                .field_members
-                .iter()
-                .map(|f| (f.name.clone(), f.ty.clone()))
-                .collect();
-            let methods = st.method_members.iter().map(|m| m.name.clone()).collect();
-            let returns = st
-                .method_members
-                .iter()
-                .map(|m| (m.name.clone(), m.ty.clone()))
-                .collect();
-            structs.insert(name, StructInfo { fields, methods, returns });
+            let info = StructInfo {
+                fields: st
+                    .field_members
+                    .iter()
+                    .map(|f| (f.name.clone(), f.ty.clone()))
+                    .collect(),
+                methods: st.method_members.iter().map(|m| m.name.clone()).collect(),
+                returns: st
+                    .method_members
+                    .iter()
+                    .map(|m| (m.name.clone(), m.ty.clone()))
+                    .collect(),
+            };
+            structs.insert(name.clone(), info.clone());
+            // Also key the generic base (`array<T>` -> `array`) so pre-
+            // specialization lookups resolve; never clobber a concrete entry.
+            if name != st.ty.name {
+                structs.entry(st.ty.name.clone()).or_insert(info);
+            }
         }
         Self { structs }
     }
@@ -48,6 +56,14 @@ impl StructTable {
     /// Base struct name of a type string (`string<...>` -> `string`).
     pub(crate) fn base_name(ty: &TypeName) -> String {
         ty.to_string().split('<').next().unwrap_or("").to_string()
+    }
+
+    /// Struct info for a type: the exact specialization first (`array<int>`),
+    /// then the generic base (`array`) for pre-specialization lookups.
+    pub(crate) fn lookup(&self, ty: &TypeName) -> Option<&StructInfo> {
+        self.structs
+            .get(&ty.to_string())
+            .or_else(|| self.structs.get(&Self::base_name(ty)))
     }
 }
 
@@ -70,29 +86,48 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
         Expression::MemberRef { lhs, name } => {
             let lhs_type = of(lhs, table, current)?;
-            let info = table.get(&StructTable::base_name(&lhs_type))?;
+            let info = table.lookup(&lhs_type)?;
             info.fields.iter().find(|(f, _)| f == name).map(|(_, ty)| ty.clone())
         }
         Expression::MethodCall { this, method, .. } => {
             let this_type = of(this, table, current)?;
-            table.get(&StructTable::base_name(&this_type))?.returns.get(method).cloned()
+            table.lookup(&this_type)?.returns.get(method).cloned()
         }
         Expression::Index { lhs, .. } => {
             let lhs_type = of(lhs, table, current)?;
-            table
-                .get(&StructTable::base_name(&lhs_type))?
-                .returns
-                .get("__index_get")
-                .cloned()
+            // Pointer receiver (`T*`): the element is the pointee, and the
+            // indexing stays RAW (codegen GEPs through the pointer). Even
+            // when the pointee is a struct with its own indexer — dispatching
+            // on it would route `Data[i] = v` inside an array of arrays to
+            // the element's `__index_set` instead of writing the slot. A
+            // generic pointee such as `array<int>*` is the exception: its
+            // specialized entry (`array<int>`) carries a concrete
+            // `__index_get` return, so use it — the base-template lookup
+            // would otherwise yield the unsubstituted template param.
+            if let Some(pointee) = lhs_type.to_string().strip_suffix('*') {
+                let pointee_ty = TypeName::new(pointee);
+                if let Some(info) = table.get(pointee) {
+                    if let Some(ret) = info.returns.get("__index_get") {
+                        return Some(ret.clone());
+                    }
+                } else if let Some(info) = table.lookup(&pointee_ty) {
+                    if let Some(ret) = info.returns.get("__index_get") {
+                        return Some(ret.clone());
+                    }
+                }
+                return Some(pointee_ty);
+            }
+            if let Some(info) = table.lookup(&lhs_type) {
+                if let Some(ret) = info.returns.get("__index_get") {
+                    return Some(ret.clone());
+                }
+            }
+            None
         }
         Expression::ArrayIndex { ty, .. } => Some(ty.clone()),
         Expression::FunctionCall { function, .. } => {
-            let base = StructTable::base_name(&TypeName::new(function.as_str()));
-            if table.get(&base).is_some() {
-                Some(TypeName::new(base.as_str()))
-            } else {
-                None
-            }
+            let ty = crate::passes::gather_generics::parse_type_string(function);
+            table.lookup(&ty).map(|_| ty)
         }
         Expression::Binary { op, lhs, .. } => {
             if op.is_assignment() {

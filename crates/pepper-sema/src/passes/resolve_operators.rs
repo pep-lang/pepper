@@ -14,7 +14,9 @@ pub fn resolve_operators(module: &mut Module) {
     let table = StructTable::build(module);
 
     for st_idx in 0..module.structs.len() {
-        if module.structs[st_idx].ty.is_generic() {
+        // Abstract generic bases (`array<T>`) have no concrete bodies to
+        // resolve; specializations (`array<int>`) are concrete and must be.
+        if module.structs[st_idx].ty.is_generic() && module.structs[st_idx].name == module.structs[st_idx].ty.name {
             continue;
         }
         // The enclosing struct's type supplies `this`/bare-field types to the
@@ -122,12 +124,12 @@ fn lhs_struct<'a>(lhs: &Expression, table: &'a StructTable, current: Option<&Typ
         if let Expression::SymbolRef { id, .. } = lhs {
             current.and_then(|c| {
                 table
-                    .get(&StructTable::base_name(c))
+                    .lookup(c)
                     .and_then(|info| info.fields.iter().find(|(f, _)| f == id).map(|(_, ty)| ty.clone()))
             })
         } else {
             None
         }
     })?;
-    table.get(&StructTable::base_name(&ty))
+    table.lookup(&ty)
 }

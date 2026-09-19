@@ -124,7 +124,8 @@ fn int_type_of_name<'ctx>(context: &'ctx Context, name: &str) -> inkwell::types:
     match name {
         "bool" | "i1" => context.bool_type(),
         "i8" | "char" | "u8" | "byte" => context.i8_type(),
-        "u64" | "ulong" => context.i64_type(),
+        "u32" | "uint" => context.i32_type(),
+        "i64" | "long" | "u64" | "ulong" => context.i64_type(),
         _ => context.i32_type(),
     }
 }

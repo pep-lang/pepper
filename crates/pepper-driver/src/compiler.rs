@@ -57,7 +57,7 @@ fn compile_queue(
         let content = std::fs::read_to_string(&source_file)
             .map_err(|e| format!("cannot read {}: {}", source_file.display(), e))?;
         let ast = parse_source(&source_file.to_string_lossy(), &content)?;
-        let mut built = build(&ast);
+        let mut built = build(&ast)?;
         module.merge(std::mem::take(&mut built));
 
         // Resolve all imports and add them to the queue if necessary.
@@ -96,7 +96,7 @@ pub fn compile(
         if let Some(path) = path {
             if std::fs::read_to_string(&path).is_ok() {
                 let ast = parse_source(&path.to_string_lossy(), &std::fs::read_to_string(&path).unwrap())?;
-                let mut built = build(&ast);
+                let mut built = build(&ast)?;
                 module.merge(std::mem::take(&mut built));
             }
         }
