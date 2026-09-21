@@ -1,6 +1,62 @@
 use std::fmt::{Display, Formatter};
 use itertools::join;
 
+// ── Source locations ──────────────────────────────────────────────────────────
+
+/// A position in a source file, 0-based line and column (column is in
+/// characters).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Position {
+    pub line: usize,
+    pub col: usize,
+}
+
+/// A byte-offset range within one source file. `start` is inclusive, `end`
+/// exclusive. Offsets are valid for the source the node was parsed from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    /// Zero-length span at offset `pos`.
+    pub fn point(pos: usize) -> Self {
+        Self { start: pos, end: pos }
+    }
+
+    /// The empty span; used for nodes synthesized outside of parsing.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
+
+    /// Convert a byte offset in `source` to a (line, col) position.
+    pub fn offset_to_position(source: &str, offset: usize) -> Position {
+        let offset = offset.min(source.len());
+        let before = &source[..offset];
+        let line = before.bytes().filter(|&b| b == b'\n').count();
+        let col_start = match before.rfind('\n') {
+            Some(i) => i + 1,
+            None => 0,
+        };
+        let col = before[col_start..].chars().count();
+        Position { line, col }
+    }
+
+    pub fn start_position(&self, source: &str) -> Position {
+        Self::offset_to_position(source, self.start)
+    }
+
+    /// The end position points just past the last byte of the span.
+    pub fn end_position(&self, source: &str) -> Position {
+        Self::offset_to_position(source, self.end)
+    }
+}
+
 // ── Literals ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +74,8 @@ pub enum Literal {
 pub struct TypeName {
     pub name: String,
     pub generic_types: Vec<TypeName>,
+    /// Span of the whole type as written (`int[]`, `array<int>`, ...).
+    pub span: Span,
 }
 
 impl TypeName {
@@ -25,6 +83,7 @@ impl TypeName {
         Self {
             name: "__auto".to_string(),
             generic_types: vec![],
+            span: Span::none(),
         }
     }
 }
@@ -43,8 +102,8 @@ impl Display for TypeName {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Literal(Literal),
-    SymbolRef(String),
+    Literal { value: Literal, span: Span },
+    SymbolRef { id: String, span: Span },
     /// A generic type reference in expression position, e.g. the `array<int>` in `array<int>()`.
     TypeLiteral(TypeName),
     SizeOf(TypeName),
@@ -53,29 +112,53 @@ pub enum Expression {
         op: String,
         prefix: bool,
         operand: Box<Expression>,
+        span: Span,
     },
     Binary {
         lhs: Box<Expression>,
         op: String,
         rhs: Box<Expression>,
+        span: Span,
     },
     Ternary {
         condition: Box<Expression>,
         true_expr: Box<Expression>,
         false_expr: Box<Expression>,
+        span: Span,
     },
     Index {
         lhs: Box<Expression>,
         rhs: Box<Expression>,
+        span: Span,
     },
     MemberAccess {
         lhs: Box<Expression>,
         name: String,
+        /// Span of the member name after the `.`.
+        name_span: Span,
+        span: Span,
     },
     FunctionCall {
         function: Box<Expression>,
         arguments: Vec<Expression>,
+        span: Span,
     },
+}
+
+impl Expression {
+    pub fn span(&self) -> Span {
+        match self {
+            Expression::Literal { span, .. }
+            | Expression::SymbolRef { span, .. }
+            | Expression::Unary { span, .. }
+            | Expression::Binary { span, .. }
+            | Expression::Ternary { span, .. }
+            | Expression::Index { span, .. }
+            | Expression::MemberAccess { span, .. }
+            | Expression::FunctionCall { span, .. } => *span,
+            Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
+        }
+    }
 }
 
 impl From<String> for Literal {
@@ -109,14 +192,20 @@ impl From<bool> for Literal {
 #[derive(Debug, Clone)]
 pub struct VariableDecl {
     pub name: String,
+    /// Span of the declared name token.
+    pub name_span: Span,
     pub type_name: TypeName,
     pub default_value: Option<Expression>,
     pub is_const: bool,
+    /// Span from the declaration's first token to its last.
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionDecl {
     pub name: String,
+    /// Span of the function name token.
+    pub name_span: Span,
     pub generic_params: Vec<TypeName>,
     pub return_type: TypeName,
     pub parameters: Vec<VariableDecl>,
@@ -126,11 +215,14 @@ pub struct FunctionDecl {
     pub is_static: bool,
     /// Indexer method: `T [](params) { ... }`
     pub is_indexer: bool,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    /// Span of the struct name token.
+    pub name_span: Span,
     pub generic_params: Vec<TypeName>,
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
@@ -138,13 +230,17 @@ pub struct StructDecl {
     pub constructor: Option<FunctionDecl>,
     /// `destruct { ... }` destructor body
     pub destructor: Option<Block>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub name: String,
+    /// Span of the trait name token.
+    pub name_span: Span,
     pub generic_params: Vec<TypeName>,
     pub methods: Vec<FunctionDecl>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -154,6 +250,7 @@ pub struct ExtendDecl {
     /// Traits implemented by the extension (after `with`)
     pub traits: Vec<TypeName>,
     pub methods: Vec<FunctionDecl>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -165,11 +262,46 @@ pub enum Declaration {
     Extend(ExtendDecl),
 }
 
+impl Declaration {
+    pub fn name(&self) -> &str {
+        match self {
+            Declaration::Variable(d) => &d.name,
+            Declaration::Function(f) => &f.name,
+            Declaration::Struct(s) => &s.name,
+            Declaration::Trait(t) => &t.name,
+            Declaration::Extend(e) => e.target.name.as_str(),
+        }
+    }
+
+    /// Span of the declared name token (for the extend target: the target type).
+    pub fn name_span(&self) -> Span {
+        match self {
+            Declaration::Variable(d) => d.name_span,
+            Declaration::Function(f) => f.name_span,
+            Declaration::Struct(s) => s.name_span,
+            Declaration::Trait(t) => t.name_span,
+            Declaration::Extend(e) => e.target.span,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            Declaration::Variable(d) => d.span,
+            Declaration::Function(f) => f.span,
+            Declaration::Struct(s) => s.span,
+            Declaration::Trait(t) => t.span,
+            Declaration::Extend(e) => e.span,
+        }
+    }
+}
+
 // ── Blocks & statements ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Statement>,
+    /// Span covering the braces.
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -177,17 +309,20 @@ pub struct Branch {
     pub condition: Expression,
     pub if_block: Block,
     pub else_block: Option<Block>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct While {
     pub condition: Expression,
     pub block: Block,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
     pub expr: Expression,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -200,13 +335,29 @@ pub enum Statement {
     Return(ReturnStatement),
 }
 
+impl Statement {
+    pub fn span(&self) -> Span {
+        match self {
+            Statement::Expression(e) => e.span(),
+            Statement::Block(b) => b.span,
+            Statement::Declaration(d) => d.span(),
+            Statement::Branch(b) => b.span,
+            Statement::While(w) => w.span,
+            Statement::Return(r) => r.span,
+        }
+    }
+}
+
 // ── Module ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct Import {
     pub name: String,
+    /// Span of the imported name (identifier or string literal).
+    pub name_span: Span,
     pub alias: Option<String>,
     pub is_local: bool,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -232,24 +383,24 @@ impl Display for Literal {
 impl Display for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expression::Literal(lit) => write!(f, "{}", lit),
-            Expression::SymbolRef(name) => write!(f, "{}", name),
+            Expression::Literal { value, .. } => write!(f, "{}", value),
+            Expression::SymbolRef { id, .. } => write!(f, "{}", id),
             Expression::TypeLiteral(ty) => write!(f, "{}", ty),
             Expression::SizeOf(ty) => write!(f, "sizeof<{}>()", ty),
-            Expression::Unary { op, prefix, operand } => {
+            Expression::Unary { op, prefix, operand, .. } => {
                 if *prefix {
                     write!(f, "{}{}", op, operand)
                 } else {
                     write!(f, "{}{}", operand, op)
                 }
             }
-            Expression::Binary { lhs, op, rhs } => write!(f, "({} {} {})", lhs, op, rhs),
-            Expression::Ternary { condition, true_expr, false_expr } => {
+            Expression::Binary { lhs, op, rhs, .. } => write!(f, "({} {} {})", lhs, op, rhs),
+            Expression::Ternary { condition, true_expr, false_expr, .. } => {
                 write!(f, "({} ? {} : {})", condition, true_expr, false_expr)
             }
-            Expression::Index { lhs, rhs } => write!(f, "{}[{}]", lhs, rhs),
-            Expression::MemberAccess { lhs, name } => write!(f, "{}.{}", lhs, name),
-            Expression::FunctionCall { function, arguments } => {
+            Expression::Index { lhs, rhs, .. } => write!(f, "{}[{}]", lhs, rhs),
+            Expression::MemberAccess { lhs, name, .. } => write!(f, "{}.{}", lhs, name),
+            Expression::FunctionCall { function, arguments, .. } => {
                 write!(f, "{}({})", function, join(arguments, ", "))
             }
         }

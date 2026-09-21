@@ -2,10 +2,12 @@
 //! pipeline, linking, and JIT execution.
 
 pub mod compiler;
-pub mod imports;
 pub mod linker;
 pub mod options;
-pub mod runtime;
+/// Import resolution, now in `pepper-files` (shared with the LSP server).
+pub use pepper_files::imports;
+/// Runtime discovery, now in `pepper-files` (shared with the LSP server).
+pub use pepper_files::runtime;
 
 pub use options::Options;
 pub use pepper_parser::parser;

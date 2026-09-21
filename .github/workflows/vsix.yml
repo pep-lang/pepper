@@ -1,0 +1,151 @@
+# Builds the pepper-lsp server (release) for every supported platform and
+# packages it with the VSCode extension into a single downloadable .vsix.
+#
+# The LSP crate depends only on pepper-parser, pepper-sema and pepper-files,
+# none of which link LLVM, so each matrix leg needs no LLVM provisioning:
+# unlike the CI workflow it runs in seconds after checkout. Each leg builds
+# natively on its own runner (no cross-compilation toolchains) and smoke-
+# tests the binary it produced before uploading it.
+#
+# The vsix bundles one server per platform at server/<platform>-<arch>/, so
+# installing it requires nothing else. `pepper.lspPath` remains as a dev
+# override for using your own build.
+name: VSIX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/pepper-parser/**"
+      - "crates/pepper-files/**"
+      - "tools/lsp/**"
+      - "tools/vscode-pepper/**"
+      - ".github/workflows/vsix.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: vsix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # One native runner per target; the runner's preinstalled rustc
+        # matches the host arch, so no cross-compilation is needed.
+        # macos-latest is arm64; the free Intel macOS label is
+        # macos-15-intel (macos-14 is itself an arm64 image).
+        include:
+          - { target: win32-x64, runs-on: windows-latest, exe: ".exe" }
+          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe" }
+          - { target: linux-x64, runs-on: ubuntu-latest, exe: "" }
+          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "" }
+          - { target: darwin-x64, runs-on: macos-15-intel, exe: "" }
+          - { target: darwin-arm64, runs-on: macos-latest, exe: "" }
+    runs-on: ${{ matrix.runs-on }}
+    # No LLVM download, so the budget is dominated by cargo.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          rustc --version
+          cargo --version
+          node --version
+
+      - name: Cache cargo registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.target }}-
+
+      # Release build, as required for the bundled server. No features: the
+      # LSP crate never links LLVM, so -p selects exactly what to build.
+      - name: Build pepper-lsp (release)
+        run: cargo build --release -p pepper-lsp --locked
+
+      # Prove the binary that ships actually serves LSP requests before it is
+      # packaged; the smoke test spawns it over stdio and exercises diagnostics,
+      # hover, completion, go-to-definition and document symbols.
+      - name: Smoke test release server
+        shell: bash
+        env:
+          PEPPER_LSP_BIN: target/release/pepper-lsp${{ matrix.exe }}
+          PEPPER_REPO_ROOT: ${{ github.workspace }}
+        run: node tools/lsp/smoke-test.mjs tests/String.Methods/test.pep
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepper-lsp-${{ matrix.target }}
+          path: target/release/pepper-lsp${{ matrix.exe }}
+          if-no-files-found: error
+
+  package:
+    runs-on: ubuntu-latest
+    needs: build
+    # npm ci + vsce packaging; no compilation here.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/vscode-pepper/package-lock.json
+
+      # All six server binaries, one directory per artifact. Fails if any
+      # build leg produced nothing.
+      - name: Collect server binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: servers
+
+      # The extension resolves the bundled server at
+      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js).
+      - name: Bundle servers into extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            mkdir -p "tools/vscode-pepper/server/$target"
+            cp "servers/pepper-lsp-$target/"* "tools/vscode-pepper/server/$target/"
+          done
+          # Artifact download does not preserve file permissions (files arrive
+          # 644), and vsce zips with the on-disk mode, so restore the exec bit
+          # or the POSIX binaries would be installed non-executable.
+          chmod +x tools/vscode-pepper/server/*/pepper-lsp*
+          find tools/vscode-pepper/server -type f -exec ls -l {} +
+
+      # Bundle runtime dependencies so the vsix is self-contained.
+      - name: Install extension dependencies
+        working-directory: tools/vscode-pepper
+        run: npm ci --no-audit --no-fund
+
+      - name: Package vsix
+        working-directory: tools/vscode-pepper
+        run: npx --yes @vscode/vsce@3 package --out pepper-language.vsix
+
+      - name: Upload vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepper-language-vsix
+          path: tools/vscode-pepper/pepper-language.vsix
+          if-no-files-found: error

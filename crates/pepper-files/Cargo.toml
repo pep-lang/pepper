@@ -1,0 +1,8 @@
+[package]
+name = "pepper-files"
+version.workspace = true
+edition.workspace = true
+
+# File-level helpers shared by the driver and tooling (LSP server).
+# Deliberately dependency-free so consumers never pull in LLVM.
+[dependencies]

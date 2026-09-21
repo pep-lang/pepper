@@ -20,6 +20,64 @@ fn cut(_input: &mut &str) -> ErrMode<&'static str> {
     ErrMode::Cut("parse error")
 }
 
+// ── Source-location tracking ─────────────────────────────────────────────────
+
+// Length of the source currently being parsed. Set by `parse_source` (and the
+// test helpers) for the duration of one parse; `pos()` turns any remaining
+// slice into a byte offset in that source.
+thread_local! {
+    static SRC_LEN: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    /// Furthest byte offset reached during the current parse. PEG backtracking
+    /// rewinds `input`, so the remaining-slice offset alone underreports where
+    /// parsing stopped; this records the deepest point any rule reached.
+    static MAX_POS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Byte offset of `input`'s start within the tracked source, also recording it
+/// as the furthest point reached so far.
+fn pos(input: &str) -> usize {
+    let p = SRC_LEN.with(|l| l.get().unwrap_or(0).saturating_sub(input.len()));
+    MAX_POS.with(|m| {
+        if p > m.get() {
+            m.set(p);
+        }
+    });
+    p
+}
+
+
+/// RAII guard that tracks the length of the source being parsed, so `pos()`
+/// can convert remaining input slices into byte offsets. Restores the previous
+/// value on drop (parsing is not reentrant per thread).
+pub(crate) struct SourceGuard(Option<usize>);
+
+impl SourceGuard {
+    fn set(len: usize) -> Self {
+        let prev = SRC_LEN.with(|l| l.replace(Some(len)));
+        MAX_POS.with(|m| m.set(0));
+        SourceGuard(prev)
+    }
+}
+
+impl Drop for SourceGuard {
+    fn drop(&mut self) {
+        SRC_LEN.with(|l| l.set(self.0));
+    }
+}
+
+/// Begin tracking a source of `len` bytes for the duration of one parse.
+pub(crate) fn track_source(len: usize) -> SourceGuard {
+    SourceGuard::set(len)
+}
+
+/// Furthest byte offset reached during the current tracked parse — the best
+/// available position to report a parse error, since PEG backtracking rewinds
+/// the remaining input.
+pub(crate) fn max_pos() -> usize {
+    MAX_POS.with(|m| m.get())
+}
+
+
 // ── Keywords ──────────────────────────────────────────────────────────────────
 
 const RESERVED: &[&str] = &[
@@ -144,12 +202,14 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         }
     }
 
+    ty.span.end = pos(input);
     Ok(ty)
 }
 
 /// Type name without a trailing array suffix, so indexer methods
 /// (`T [](params)`) are not mistaken for `T[]` array types.
 fn type_name_base(input: &mut &str) -> Result<TypeName> {
+    let start = pos(input);
     let name = identifier(input)?;
     ws(input)?;
 
@@ -173,7 +233,7 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
         }
     }
 
-    Ok(TypeName { name, generic_types })
+    Ok(TypeName { name, generic_types, span: Span { start, end: pos(input) } })
 }
 
 fn string_constant(input: &mut &str) -> Result<Literal> {
@@ -245,29 +305,30 @@ fn numeric_constant(input: &mut &str) -> Result<Literal> {
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 fn primary_expression(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
     // true / false
     if input.starts_with("true") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[4..];
-        return Ok(Expression::Literal(Literal::Bool(true)));
+        return Ok(Expression::Literal { value: Literal::Bool(true), span: Span { start, end: pos(input) } });
     }
     if input.starts_with("false") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[5..];
-        return Ok(Expression::Literal(Literal::Bool(false)));
+        return Ok(Expression::Literal { value: Literal::Bool(false), span: Span { start, end: pos(input) } });
     }
     // numeric
     if input.starts_with(|c: char| c.is_ascii_digit()) || (input.starts_with('-') && input[1..].starts_with(|c: char| c.is_ascii_digit())) {
         let n = numeric_constant(input)?;
-        return Ok(Expression::Literal(n));
+        return Ok(Expression::Literal { value: n, span: Span { start, end: pos(input) } });
     }
     // string
     if input.starts_with('"') || input.starts_with('@') {
         let s = string_constant(input)?;
-        return Ok(Expression::Literal(s));
+        return Ok(Expression::Literal { value: s, span: Span { start, end: pos(input) } });
     }
     // __null
     if input.starts_with("__null") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[6..];
-        return Ok(Expression::Literal(Literal::Null));
+        return Ok(Expression::Literal { value: Literal::Null, span: Span { start, end: pos(input) } });
     }
     // sizeof<TypeName>
     if input.starts_with("sizeof") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -289,7 +350,7 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
             if !input.starts_with(')') { return Err(cut(input)); }
             *input = &input[1..];
         }
-        return Ok(Expression::SizeOf(ty));
+        return Ok(Expression::SizeOf(ty)); // span carried by ty
     }
     // symbol reference, or a generic type literal such as `array<int>` in `array<int>()`
     let before = *input;
@@ -304,7 +365,7 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
             return Ok(Expression::TypeLiteral(ty));
         }
     }
-    Ok(Expression::SymbolRef(name))
+    Ok(Expression::SymbolRef { id: name, span: Span { start, end: pos(input) } })
 }
 
 fn atom(input: &mut &str) -> Result<Expression> {
@@ -333,7 +394,9 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             *input = &input[1..];
             ws(input)?;
             let name = identifier(input)?;
-            expr = Expression::MemberAccess { lhs: Box::new(expr), name };
+            let name_len = name.len();
+            let start = expr.span().start;
+            expr = Expression::MemberAccess { lhs: Box::new(expr), name, name_span: Span { start: pos(input) - name_len, end: pos(input) }, span: Span { start, end: pos(input) } };
             continue;
         }
         if input.starts_with('[') {
@@ -343,7 +406,8 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             ws(input)?;
             if !input.starts_with(']') { return Err(cut(input)); }
             *input = &input[1..];
-            expr = Expression::Index { lhs: Box::new(expr), rhs: Box::new(rhs) };
+            let start = expr.span().start;
+            expr = Expression::Index { lhs: Box::new(expr), rhs: Box::new(rhs), span: Span { start, end: pos(input) } };
             continue;
         }
         if input.starts_with('(') {
@@ -365,13 +429,15 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             ws(input)?;
             if !input.starts_with(')') { return Err(cut(input)); }
             *input = &input[1..];
-            expr = Expression::FunctionCall { function: Box::new(expr), arguments: args };
+            let start = expr.span().start;
+            expr = Expression::FunctionCall { function: Box::new(expr), arguments: args, span: Span { start, end: pos(input) } };
             continue;
         }
         if input.starts_with("++") || input.starts_with("--") {
             let op = if input.starts_with("++") { "++" } else { "--" };
             *input = &input[op.len()..];
-            expr = Expression::Unary { op: op.to_string(), prefix: false, operand: Box::new(expr) };
+            let start = expr.span().start;
+            expr = Expression::Unary { op: op.to_string(), prefix: false, operand: Box::new(expr), span: Span { start, end: pos(input) } };
             continue;
         }
         break;
@@ -387,10 +453,11 @@ fn pow(input: &mut &str) -> Result<Expression> {
         ws(input)?;
     }
     if input.starts_with("**") {
+        let start = pos(input);
         *input = &input[2..];
         ws(input)?;
         let rhs = pow(input)?; // right-assoc: rhs is another pow
-        return Ok(Expression::Binary { lhs: Box::new(base), op: "**".into(), rhs: Box::new(rhs) });
+        return Ok(Expression::Binary { lhs: Box::new(base), op: "**".into(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
     Ok(base)
 }
@@ -406,9 +473,10 @@ fn unary(input: &mut &str) -> Result<Expression> {
         else if input.starts_with('!') { Some("!") }
         else { None };
     if let Some(op) = op {
+        let start = pos(input);
         *input = &input[op.len()..];
         let operand = pow(input)?;
-        return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand) });
+        return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     pow(input)
 }
@@ -417,14 +485,16 @@ fn unary(input: &mut &str) -> Result<Expression> {
 fn prefix_op(input: &mut &str) -> Result<Expression> {
     ws(input)?;
     if input.starts_with("++") {
+        let start = pos(input);
         *input = &input[2..];
         let operand = unary(input)?;
-        return Ok(Expression::Unary { op: "++".into(), prefix: true, operand: Box::new(operand) });
+        return Ok(Expression::Unary { op: "++".into(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     if input.starts_with("--") {
+        let start = pos(input);
         *input = &input[2..];
         let operand = unary(input)?;
-        return Ok(Expression::Unary { op: "--".into(), prefix: true, operand: Box::new(operand) });
+        return Ok(Expression::Unary { op: "--".into(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     unary(input)
 }
@@ -449,9 +519,10 @@ fn binary_left(
         ws(input)?;
         let before = *input;
         if let Some(op) = try_op(input) {
+            let start = pos(input);
             *input = &input[op.len()..];
             let rhs = operand(input)?;
-            lhs = Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs) };
+            lhs = Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } };
         } else {
             *input = before;
             break;
@@ -470,9 +541,10 @@ fn binary_right(
         ws(input)?;
     }
     if let Some(op) = try_op(input) {
+        let start = pos(input);
         *input = &input[op.len()..];
         let rhs = binary_right(input, operand, try_op)?;
-        return Ok(Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs) });
+        return Ok(Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
     Ok(lhs)
 }
@@ -576,10 +648,12 @@ fn ternary(input: &mut &str) -> Result<Expression> {
     *input = &input[1..];
     ws(input)?;
     let false_expr = expression(input)?;
+    let start = cond.span().start;
     Ok(Expression::Ternary {
         condition: Box::new(cond),
         true_expr: Box::new(true_expr),
         false_expr: Box::new(false_expr),
+        span: Span { start, end: pos(input) },
     })
 }
 
@@ -610,13 +684,16 @@ pub fn expression(input: &mut &str) -> Result<Expression> {
 ///   1. `[var|const] name [: TypeName] [= expr]`
 ///   2. `TypeName name [= expr]`  (struct field style)
 fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
+    let start = pos(input);
     let before = *input;
 
     // Case 1: explicit specifier (var / const)
     if input.starts_with("const") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[5..];
         ws(input)?;
+        let name_span_start = pos(input);
         let name = identifier(input)?;
+        let name_span_end = pos(input);
         ws(input)?;
         let mut ty = TypeName::auto();
         if input.starts_with(':') {
@@ -634,12 +711,14 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: true });
+        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) } });
     }
     if input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[3..];
         ws(input)?;
+        let name_span_start = pos(input);
         let name = identifier(input)?;
+        let name_span_end = pos(input);
         ws(input)?;
         let mut ty = TypeName::auto();
         if input.starts_with(':') {
@@ -657,7 +736,7 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false });
+        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
     }
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
@@ -671,9 +750,10 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
         return Err(bt(input));
     }
 
+    let name_span_start = pos(input);
     let name = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
-
     // Optional `: Type` annotation (parameter style: `a: int`).
     if input.starts_with(':') {
         *input = &input[1..];
@@ -690,10 +770,11 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
         skip_inline_ws(input);
     }
 
-    Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false })
+    Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
 }
 
 fn block(input: &mut &str) -> Result<Block> {
+    let start = pos(input);
     if !input.starts_with('{') { return Err(cut(input)); }
     *input = &input[1..];
 
@@ -716,10 +797,11 @@ fn block(input: &mut &str) -> Result<Block> {
     if input.starts_with('}') {
         *input = &input[1..];
     }
-    Ok(Block { statements })
+    Ok(Block { statements, span: Span { start, end: pos(input) } })
 }
 
 fn branch(input: &mut &str) -> Result<Branch> {
+    let start = pos(input);
     if !input.starts_with("if") || input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -738,10 +820,12 @@ fn branch(input: &mut &str) -> Result<Branch> {
         ws(input)?;
     }
 
-    Ok(Branch { condition, if_block, else_block })
+    let end = else_block.as_ref().map(|b| b.span.end).unwrap_or(if_block.span.end);
+    Ok(Branch { condition, if_block, else_block, span: Span { start, end } })
 }
 
 fn while_loop(input: &mut &str) -> Result<While> {
+    let start = pos(input);
     if !input.starts_with("while") || input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -750,11 +834,13 @@ fn while_loop(input: &mut &str) -> Result<While> {
     let condition = expression(input)?;
     ws(input)?;
     let block = block(input)?;
+    let end = block.span.end;
     ws(input)?;
-    Ok(While { condition, block })
+    Ok(While { condition, block, span: Span { start, end } })
 }
 
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
+    let start = pos(input);
     if !input.starts_with("return") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -762,7 +848,8 @@ fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     ws(input)?;
     let expr = expression(input)?;
     ws(input)?;
-    Ok(ReturnStatement { expr })
+    let end = expr.span().end;
+    Ok(ReturnStatement { expr, span: Span { start, end } })
 }
 
 /// After a `TypeName name` style declaration the next token must be a boundary
@@ -867,10 +954,15 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
 /// or C-style `Type name [= expr]` (used by the corpus, e.g. lib.pep's
 /// `int sum(int x, int y)`).
 fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
+    let start = pos(input);
     let before = *input;
     // Colon style: `name: Type`.
+    let mut name_span_start = pos(input);
+    let mut name_span_end = name_span_start;
     if let Ok(decl) = (|| {
+        name_span_start = pos(input);
         let name = identifier(input)?;
+        name_span_end = pos(input);
         ws(input)?;
         if !input.starts_with(':') {
             return Err(bt(input));
@@ -889,13 +981,15 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
             dv = Some(expression(input)?);
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false });
+        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
     }
     // C style: `Type name`.
     *input = before;
     let ty = type_name(input)?;
     ws(input)?;
+    let name_span_start = pos(input);
     let name = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
     let mut dv = None;
     if input.starts_with('=') && !input[1..].starts_with('=') {
@@ -904,7 +998,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
         dv = Some(expression(input)?);
         skip_inline_ws(input);
     }
-    Ok(VariableDecl { name, type_name: ty, default_value: dv, is_const: false })
+    Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
 }
 
 fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
@@ -936,12 +1030,14 @@ fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
 ///   1. `name [generic_params] (params) [: TypeName] { body }`
 ///   2. `TypeName name (params) { body }`  (return-type prefix style)
 fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
+    let start = pos(input);
     let before = *input;
 
     // Parse first identifier
+    let name_span_start = pos(input);
     let first = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
-
     // Determine which syntax based on what follows
     if input.starts_with('(') || input.starts_with('<') {
         // Syntax 1: `first` is the function name
@@ -971,6 +1067,7 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
 
         return Ok(FunctionDecl {
             name: first,
+            name_span: Span { start: name_span_start, end: name_span_end },
             generic_params,
             return_type,
             parameters,
@@ -978,12 +1075,13 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             body: Some(body),
             is_static: false,
             is_indexer: false,
+            span: Span { start, end: pos(input) },
         });
     }
 
     // Syntax 2: `first` is the return type, next identifier is the name.
     if input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || input.starts_with('[') {
-        let mut return_type = TypeName { name: first, generic_types: vec![] };
+        let mut return_type = TypeName { name: first, generic_types: vec![], span: Span { start, end: pos(input) } };
         // Array suffix on the return type (`int[] echo(...)`).
         while input.starts_with('[') {
             *input = &input[1..];
@@ -996,7 +1094,9 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
                 break;
             }
         }
+        let name_span_start = pos(input);
         let name = identifier(input)?;
+        let name_span_end = pos(input);
         ws(input)?;
 
         let parameters = if input.starts_with('(') {
@@ -1020,6 +1120,7 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
 
         return Ok(FunctionDecl {
             name,
+            name_span: Span { start: name_span_start, end: name_span_end },
             generic_params: vec![],
             return_type: effective_return,
             parameters,
@@ -1027,6 +1128,7 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             body: Some(body),
             is_static: false,
             is_indexer: false,
+            span: Span { start, end: pos(input) },
         });
     }
 
@@ -1059,9 +1161,12 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
         if input.starts_with(')') { break; }
         let ty = extern_type_name(input)?;
         ws(input)?;
+        let name_span_start = pos(input);
         let name = identifier(input)?;
+        let name_span_end = pos(input);
         ws(input)?;
-        params.push(VariableDecl { name, type_name: ty, default_value: None, is_const: false });
+        let span_start = ty.span.start;
+        params.push(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) } });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -1075,15 +1180,19 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
 }
 
 fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
+    let start = pos(input);
     if !input.starts_with("extern") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
+
     *input = &input[6..];
     ws(input)?;
 
     let return_type = extern_type_name(input)?;
     ws(input)?;
+    let name_span_start = pos(input);
     let name = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
     let parameters = extern_parameters(input)?;
     ws(input)?;
@@ -1093,6 +1202,7 @@ fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
 
     Ok(FunctionDecl {
         name,
+        name_span: Span { start: name_span_start, end: name_span_end },
         generic_params: vec![],
         return_type,
         parameters,
@@ -1100,6 +1210,7 @@ fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
         body: None,
         is_static: false,
         is_indexer: false,
+        span: Span { start, end: pos(input) },
     })
 }
 
@@ -1107,11 +1218,14 @@ fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
 fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
     ws(input)?;
     if input.starts_with("this") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        let start = pos(input);
         *input = &input[4..];
         if !input.starts_with('.') { return Err(cut(input)); }
         *input = &input[1..];
         ws(input)?;
+        let field_span_start = pos(input);
         let field = identifier(input)?;
+        let field_span_end = pos(input);
         ws(input)?;
         if !input.starts_with('=') { return Err(cut(input)); }
         *input = &input[1..];
@@ -1120,16 +1234,19 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
         ws(input)?;
         return Ok(VariableDecl {
             name: format!("this.{}", field),
+            name_span: Span { start: field_span_start, end: field_span_end },
             type_name: TypeName::auto(),
             default_value: Some(value),
             is_const: false,
+            span: Span { start, end: pos(input) },
         });
     }
     variable_declaration(input)
 }
 
 /// A function with an already-parsed name: `name (params) [: TypeName] { body }`.
-fn named_function(input: &mut &str, name: String) -> Result<FunctionDecl> {
+fn named_function(input: &mut &str, name: String, name_span: Span) -> Result<FunctionDecl> {
+    let start = pos(input);
     ws(input)?;
     let generic_params = if input.starts_with('<') {
         generic_params(input)?
@@ -1154,6 +1271,7 @@ fn named_function(input: &mut &str, name: String) -> Result<FunctionDecl> {
     ws(input)?;
     Ok(FunctionDecl {
         name,
+        name_span,
         generic_params,
         return_type,
         parameters,
@@ -1161,6 +1279,7 @@ fn named_function(input: &mut &str, name: String) -> Result<FunctionDecl> {
         body: Some(body),
         is_static: false,
         is_indexer: false,
+        span: Span { start, end: pos(input) },
     })
 }
 
@@ -1195,6 +1314,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                 *input = after;
                 return Ok(FunctionDecl {
                     name: if parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() },
+                    name_span: ty.span,
                     generic_params: vec![],
                     return_type: ty,
                     parameters,
@@ -1202,11 +1322,13 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                     body: Some(body),
                     is_static,
                     is_indexer: true,
+                    span: Span { start: pos(before), end: pos(after) },
                 });
             }
         }
     }
 
+    let name_span_start = pos(input);
     let name = match identifier(input) {
         Ok(n) => n,
         Err(e) => {
@@ -1214,11 +1336,12 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
             return Err(e);
         }
     };
+    let name_span_end = pos(input);
     ws(input)?;
 
     if input.starts_with('(') {
         // `name(params) [: type] { body }`
-        let mut f = named_function(input, name)?;
+        let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end })?;
         f.is_static = is_static;
         return Ok(f);
     }
@@ -1232,10 +1355,12 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
             && (after.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
                 || OPERATORS.iter().any(|op| after.starts_with(op)));
         if name_ok {
+            let mname_span_start = pos(after);
             let mname = match identifier(&mut after) {
                 Ok(n) => n,
                 Err(_) => operator_name(&mut after)?,
             };
+            let mname_span_end = pos(after);
             ws(&mut after)?;
             let parameters = if after.starts_with('(') {
                 function_parameters(&mut after)?
@@ -1248,6 +1373,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
             *input = after;
             return Ok(FunctionDecl {
                 name: mname,
+                name_span: Span { start: mname_span_start, end: mname_span_end },
                 generic_params: vec![],
                 return_type: ty,
                 parameters,
@@ -1255,6 +1381,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                 body: Some(body),
                 is_static,
                 is_indexer: false,
+                span: Span { start: pos(before), end: pos(after) },
             });
         }
     }
@@ -1265,6 +1392,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
 
 /// A trait method: like `struct_method` but the body is optional (`int getX();`).
 fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
+    let start = pos(input);
     ws(input)?;
     let is_static = if input.starts_with("static") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[6..];
@@ -1275,6 +1403,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
     };
 
     let before = *input;
+    let name_span_start = pos(input);
     let first = match identifier(input) {
         Ok(n) => n,
         Err(e) => {
@@ -1282,6 +1411,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
             return Err(e);
         }
     };
+    let name_span_end = pos(input);
     ws(input)?;
 
     fn optional_body(input: &mut &str) -> Result<Option<Block>> {
@@ -1312,6 +1442,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
             name: first,
+            name_span: Span { start: name_span_start, end: name_span_end },
             generic_params: vec![],
             return_type,
             parameters,
@@ -1319,17 +1450,20 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
             body,
             is_static,
             is_indexer: false,
+            span: Span { start, end: pos(input) },
         });
     }
 
     let name_ok = input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
         || OPERATORS.iter().any(|op| input.starts_with(op));
     if name_ok {
-        let return_type = TypeName { name: first, generic_types: vec![] };
+        let return_type = TypeName { name: first, generic_types: vec![], span: Span { start: name_span_start, end: name_span_end } };
+        let name_span2_start = pos(input);
         let name = match identifier(input) {
             Ok(n) => n,
             Err(_) => operator_name(input)?,
         };
+        let name_span2_end = pos(input);
         ws(input)?;
         let parameters = if input.starts_with('(') {
             function_parameters(input)?
@@ -1340,6 +1474,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
             name,
+            name_span: Span { start: name_span2_start, end: name_span2_end },
             generic_params: vec![],
             return_type,
             parameters,
@@ -1347,6 +1482,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
             body,
             is_static,
             is_indexer: false,
+            span: Span { start, end: pos(input) },
         });
     }
 
@@ -1356,12 +1492,15 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
 
 /// `trait Name[<params>] { methods }`
 fn trait_declaration(input: &mut &str) -> Result<TraitDecl> {
+    let start = pos(input);
     if !input.starts_with("trait") || input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
     *input = &input[5..];
     ws(input)?;
+    let name_span_start = pos(input);
     let name = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
     let generic_params = if input.starts_with('<') {
         generic_params(input)?
@@ -1390,11 +1529,12 @@ fn trait_declaration(input: &mut &str) -> Result<TraitDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(TraitDecl { name, generic_params, methods })
+    Ok(TraitDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start, end: pos(input) } })
 }
 
 /// `extend TypeName[<...>] [with Trait, ...] { methods }`
 fn extend_declaration(input: &mut &str) -> Result<ExtendDecl> {
+    let start = pos(input);
     if !input.starts_with("extend") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -1439,19 +1579,21 @@ fn extend_declaration(input: &mut &str) -> Result<ExtendDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { target, traits, methods })
+    Ok(ExtendDecl { target, traits, methods, span: Span { start, end: pos(input) } })
 }
 
 fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
+    let start = pos(input);
     if !input.starts_with("struct") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
     *input = &input[6..];
     ws(input)?;
 
+    let name_span_start = pos(input);
     let name = identifier(input)?;
+    let name_span_end = pos(input);
     ws(input)?;
-
     let generic_params = if input.starts_with('<') {
         generic_params(input)?
     } else {
@@ -1478,8 +1620,10 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
         // constructor: `new(params) { ... }` (docs also call this `construct`)
         if (input.starts_with("new") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
             || (input.starts_with("construct") && !input[9..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')) {
+            let new_span_start = pos(input);
             *input = if input.starts_with("construct") { &input[9..] } else { &input[3..] };
             ws(input)?;
+            let new_span_end = pos(input);
             if !input.starts_with('(') { return Err(cut(input)); }
             *input = &input[1..];
             let mut parameters = vec![];
@@ -1501,6 +1645,7 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
             ws(input)?;
             constructor = Some(FunctionDecl {
                 name: "new".into(),
+                name_span: Span { start: new_span_start, end: new_span_end },
                 generic_params: vec![],
                 return_type: TypeName::auto(),
                 parameters,
@@ -1508,6 +1653,7 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
                 body: Some(body),
                 is_static: false,
                 is_indexer: false,
+                span: Span { start: new_span_start, end: pos(input) },
             });
             continue;
         }
@@ -1555,7 +1701,7 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, generic_params, fields, methods, constructor, destructor })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start, end: pos(input) } })
 }
 
 fn declaration(input: &mut &str) -> Result<Declaration> {
@@ -1589,6 +1735,7 @@ fn declaration(input: &mut &str) -> Result<Declaration> {
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 fn import(input: &mut &str) -> Result<Import> {
+    let start = pos(input);
     ws(input)?;
 
     if input.starts_with("import") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -1599,13 +1746,20 @@ fn import(input: &mut &str) -> Result<Import> {
         return Err(bt(input));
     }
     ws(input)?;
-
+    let mut name_span_start = pos(input);
+    #[allow(unused_assignments)] // reassigned in both branches below
+    let mut name_span_end = name_span_start;
     let (name, is_local) = if input.starts_with('"') {
+        name_span_start = pos(input);
         let lit = string_constant(input)?;
+        name_span_end = pos(input);
         if let Literal::String(s) = lit { (s, true) }
         else { return Err(cut(input)); }
     } else {
-        (identifier(input)?, false)
+        name_span_start = pos(input);
+        let id = identifier(input)?;
+        name_span_end = pos(input);
+        (id, false)
     };
     ws(input)?;
 
@@ -1617,7 +1771,7 @@ fn import(input: &mut &str) -> Result<Import> {
         None
     };
 
-    Ok(Import { name, alias, is_local })
+    Ok(Import { name, name_span: Span { start: name_span_start, end: name_span_end }, alias, is_local, span: Span { start, end: pos(input) } })
 }
 
 // ── Module ────────────────────────────────────────────────────────────────────
@@ -1668,11 +1822,13 @@ mod tests {
     use super::*;
 
     fn parse(s: &str) -> Module {
+        let _guard = track_source(s.len());
         let mut input = s;
         parse_module(&mut input).expect("parse should succeed")
     }
 
     fn parse_expr(s: &str) -> Expression {
+        let _guard = track_source(s.len());
         let mut input = s;
         expression(&mut input).expect("expression parse should succeed")
     }
@@ -1683,7 +1839,7 @@ mod tests {
     fn test_int_literal() {
         let e = parse_expr("42");
         match e {
-            Expression::Literal(Literal::Integer(42)) => {}
+            Expression::Literal { value: Literal::Integer(42), .. } => {}
             other => panic!("expected int 42, got {:?}", other),
         }
     }
@@ -1692,11 +1848,11 @@ mod tests {
     fn test_negative_int() {
         let e = parse_expr("-7");
         match e {
-            Expression::Unary { op, prefix, operand } => {
+            Expression::Unary { op, prefix, operand, .. } => {
                 assert_eq!(op, "-");
                 assert!(prefix);
                 match *operand {
-                    Expression::Literal(Literal::Integer(7)) => {}
+                    Expression::Literal { value: Literal::Integer(7), .. } => {}
                     other => panic!("expected 7, got {:?}", other),
                 }
             }
@@ -1708,7 +1864,7 @@ mod tests {
     fn test_float_literal() {
         let e = parse_expr("3.14");
         match e {
-            Expression::Literal(Literal::Float(v)) => assert!((v - 3.14).abs() < 1e-9),
+            Expression::Literal { value: Literal::Float(v), .. } => assert!((v - 3.14).abs() < 1e-9),
             other => panic!("expected float, got {:?}", other),
         }
     }
@@ -1716,11 +1872,11 @@ mod tests {
     #[test]
     fn test_bool_literals() {
         match parse_expr("true") {
-            Expression::Literal(Literal::Bool(true)) => {}
+            Expression::Literal { value: Literal::Bool(true), .. } => {}
             other => panic!("expected true, got {:?}", other),
         }
         match parse_expr("false") {
-            Expression::Literal(Literal::Bool(false)) => {}
+            Expression::Literal { value: Literal::Bool(false), .. } => {}
             other => panic!("expected false, got {:?}", other),
         }
     }
@@ -1729,7 +1885,7 @@ mod tests {
     fn test_string_literal() {
         let e = parse_expr("\"hello world\"");
         match e {
-            Expression::Literal(Literal::String(s)) => assert_eq!(s, "hello world"),
+            Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "hello world"),
             other => panic!("expected string, got {:?}", other),
         }
     }
@@ -1741,7 +1897,7 @@ mod tests {
     fn test_symbol_ref() {
         let e = parse_expr("my_var");
         match e {
-            Expression::SymbolRef(name) => assert_eq!(name, "my_var"),
+            Expression::SymbolRef { id: name, .. } => assert_eq!(name, "my_var"),
             other => panic!("expected symbol ref, got {:?}", other),
         }
     }
@@ -1752,10 +1908,10 @@ mod tests {
     fn test_addition() {
         let e = parse_expr("1 + 2");
         match e {
-            Expression::Binary { lhs, op, rhs } => {
+            Expression::Binary { lhs, op, rhs, .. } => {
                 assert_eq!(op, "+");
-                match *lhs { Expression::Literal(Literal::Integer(1)) => {}, o => panic!("{:?}", o) }
-                match *rhs { Expression::Literal(Literal::Integer(2)) => {}, o => panic!("{:?}", o) }
+                match *lhs { Expression::Literal { value: Literal::Integer(1), .. } => {}, o => panic!("{:?}", o) }
+                match *rhs { Expression::Literal { value: Literal::Integer(2), .. } => {}, o => panic!("{:?}", o) }
             }
             other => panic!("expected binary +, got {:?}", other),
         }
@@ -1939,10 +2095,10 @@ mod tests {
     fn test_function_call_no_args() {
         let e = parse_expr("foo()");
         match e {
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall { function, arguments, .. } => {
                 assert!(arguments.is_empty());
                 match *function {
-                    Expression::SymbolRef(n) => assert_eq!(n, "foo"),
+                    Expression::SymbolRef { id: n, .. } => assert_eq!(n, "foo"),
                     other => panic!("{:?}", other),
                 }
             }
@@ -2167,7 +2323,7 @@ mod tests {
         match stmt {
             Statement::Return(r) => {
                 match r.expr {
-                    Expression::Literal(Literal::Integer(42)) => {}
+                    Expression::Literal { value: Literal::Integer(42), .. } => {}
                     other => panic!("{:?}", other),
                 }
             }
@@ -2254,7 +2410,7 @@ mod tests {
         let e = parse_expr("x = __null");
         match e {
             Expression::Binary { rhs, .. } => match *rhs {
-                Expression::Literal(Literal::Null) => {}
+                Expression::Literal { value: Literal::Null, .. } => {}
                 other => panic!("{:?}", other),
             },
             other => panic!("{:?}", other),
@@ -2305,7 +2461,7 @@ mod tests {
         // `array<int>()` is a type-literal call with generic argument
         let e = parse_expr("array<int>()");
         match e {
-            Expression::FunctionCall { function, arguments } => {
+            Expression::FunctionCall { function, arguments, .. } => {
                 assert!(arguments.is_empty());
                 match *function {
                     Expression::TypeLiteral(t) => {

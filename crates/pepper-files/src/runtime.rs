@@ -1,6 +1,6 @@
 //! Runtime discovery: port of `source/Compiler/Compiler.cpp:195-254`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Search `runtime`, `.pep/runtime`, then 1..5 levels of `../runtime`;
 /// collect `.pep` sources + `.a` libs + the dir for import search paths.

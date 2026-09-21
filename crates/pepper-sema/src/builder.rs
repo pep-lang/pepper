@@ -12,6 +12,7 @@ fn type_name_from(t: &ast::TypeName) -> TypeName {
         let element = type_name_from(&ast::TypeName {
             name: base.to_string(),
             generic_types: t.generic_types.clone(),
+            span: ast::Span::none(),
         });
         return TypeName::with_args("array", vec![element]);
     }
@@ -75,7 +76,7 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
 
 fn expression(expr: &ast::Expression) -> Result<Expression, String> {
     match expr {
-        ast::Expression::Literal(lit) => match lit {
+        ast::Expression::Literal { value: lit, .. } => match lit {
             ast::Literal::String(value) => Ok(Expression::StringLiteral {
                 value: value.clone(),
                 is_raw: false,
@@ -85,7 +86,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             ast::Literal::Bool(v) => Ok(Expression::BoolLiteral(*v)),
             ast::Literal::Null => Ok(Expression::PointerLiteral),
         },
-        ast::Expression::SymbolRef(id) => {
+        ast::Expression::SymbolRef { id, .. } => {
             if id == "this" {
                 Ok(Expression::ThisRef)
             } else {
@@ -100,11 +101,11 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             args: vec![],
         }),
         ast::Expression::SizeOf(ty) => Ok(Expression::SizeOf(type_name_from(ty))),
-        ast::Expression::Unary { op, prefix, operand } => Ok(Expression::Unary {
+        ast::Expression::Unary { op, prefix, operand, .. } => Ok(Expression::Unary {
             op: unary_op(op, *prefix).expect("unknown unary operator"),
             operand: Box::new(expression(operand)?),
         }),
-        ast::Expression::Binary { lhs, op, rhs } => Ok(Expression::Binary {
+        ast::Expression::Binary { lhs, op, rhs, .. } => Ok(Expression::Binary {
             op: binary_op(op).expect("unknown binary operator"),
             lhs: Box::new(expression(lhs)?),
             rhs: Box::new(expression(rhs)?),
@@ -113,16 +114,17 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             condition,
             true_expr,
             false_expr,
+            ..
         } => Ok(Expression::Ternary {
             condition: Box::new(expression(condition)?),
             true_expr: Box::new(expression(true_expr)?),
             false_expr: Box::new(expression(false_expr)?),
         }),
-        ast::Expression::Index { lhs, rhs } => Ok(Expression::Index {
+        ast::Expression::Index { lhs, rhs, .. } => Ok(Expression::Index {
             lhs: Box::new(expression(lhs)?),
             rhs: Box::new(expression(rhs)?),
         }),
-        ast::Expression::MemberAccess { lhs, name } => {
+        ast::Expression::MemberAccess { lhs, name, .. } => {
             if name.starts_with("__") && name != "__release" && name != "__acquire" {
                 return Err(format!("'{}' is a reserved (synthesized) member and cannot be accessed from source code", name));
             }
@@ -131,9 +133,9 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
                 name: name.clone(),
             })
         }
-        ast::Expression::FunctionCall { function, arguments } => {
+        ast::Expression::FunctionCall { function, arguments, .. } => {
             // Method call `t.getX()`: the target is a member access.
-            if let ast::Expression::MemberAccess { lhs, name } = function.as_ref() {
+            if let ast::Expression::MemberAccess { lhs, name, .. } = function.as_ref() {
                 // `__release`/`__acquire` are deliberately callable from
                 // source: explicit refcount control is the language's escape
                 // hatch for object lifetimes.
@@ -150,8 +152,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             // target name; the args become the call arguments.
             let function = match function.as_ref() {
                 ast::Expression::TypeLiteral(ty) => type_name_from(ty).to_string(),
-                ast::Expression::SymbolRef(name) => name.clone(),
-                ast::Expression::Literal(lit) => lit.to_string(),
+                ast::Expression::SymbolRef { id: name, .. } => name.clone(),
+                ast::Expression::Literal { value: lit, .. } => lit.to_string(),
                 other => {
                     // Fall back to the display form for exotic targets.
                     format!("{}", other)

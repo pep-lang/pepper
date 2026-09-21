@@ -1,0 +1,14 @@
+[package]
+name = "pepper-lsp"
+version.workspace = true
+edition.workspace = true
+
+# Language server for Pepper. Depends only on the parser and sema so it never
+# links LLVM; import resolution and runtime discovery come from pepper-files.
+[dependencies]
+pepper-parser = { path = "../../crates/pepper-parser" }
+pepper-sema = { path = "../../crates/pepper-sema" }
+pepper-files = { path = "../../crates/pepper-files" }
+tower-lsp.workspace = true
+tokio.workspace = true
+serde_json.workspace = true

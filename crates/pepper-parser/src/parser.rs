@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::ast::Module;
+use crate::ast::{Module, Span};
 
 /// Parse a single `.pep` file from disk.
 pub fn parse_file(path: &Path) -> Result<Module, String> {
@@ -20,15 +20,28 @@ pub fn parse_file(path: &Path) -> Result<Module, String> {
 
 /// Parse source text into a `Module`.
 pub fn parse_source(name: &str, source: &str) -> Result<Module, String> {
+    let _guard = parsers::track_source(source.len());
     let mut input: &str = source;
-    parsers::parse_module(&mut input)
-        .map_err(|_| {
-            // Try to report position
-            let line = source[..source.len() - input.len()].lines().count();
-            let col = source[..source.len() - input.len()]
-                .rfind('\n')
-                .map(|i| source[..source.len() - input.len()].len() - i - 1)
-                .unwrap_or(source[..source.len() - input.len()].len());
-            format!("{}:{}:{}: parse error", name, line + 1, col + 1)
-        })
+    parsers::parse_module(&mut input).map_err(|_| {
+        // Report the parse error at the furthest point parsing reached. PEG
+        // backtracking rewinds `input`, so the remaining-slice offset alone
+        // underreports the true failure position.
+        let offset = parsers::max_pos().min(source.len());
+        let p = Span::offset_to_position(source, offset);
+        format!("{}:{}:{}: parse error", name, p.line + 1, p.col + 1)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn parse_error_reports_furthest_position() {
+        // The failure is mid-file; PEG backtracking must not drag the reported
+        // position back to line 1.
+        let src = "main(): int {\n    var x = ;\n}\n";
+        match super::parse_source("t.pep", src) {
+            Ok(_) => panic!("expected a parse error"),
+            Err(e) => assert!(e.starts_with("t.pep:2:"), "reported position: {}", e),
+        }
+    }
 }

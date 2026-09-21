@@ -2,7 +2,7 @@
 //! import collection with a seen-set, parse each file, merge into one
 //! `Module`, run the transform passes, codegen.
 
-use crate::imports::resolve;
+use pepper_files::imports::resolve;
 use crate::options::Options;
 use pepper_codegen::CodeGenerator;
 use pepper_parser::parser::parse_source;
