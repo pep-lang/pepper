@@ -127,6 +127,17 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
         if let Expression::SizeOf(ty) = e {
             substitute(ty, type_map);
         }
+        // Intrinsic nodes carry a TypeName that may still reference a
+        // generic param (e.g. `Address(T)` from `__address<T>(v)`):
+        // substitute those too.
+        match e {
+            Expression::ArrayIndex { ty, .. }
+            | Expression::IsPod(ty)
+            | Expression::Default(ty) => substitute(ty, type_map),
+            Expression::RefCount(ty, _) => substitute(ty, type_map),
+            Expression::Address(ty, _) => substitute(ty, type_map),
+            _ => {}
+        }
         // Constructor calls inside method bodies (`array<T>(n)` →
         // `array<int>(n)`): parse the name, substitute, re-emit.
         if let Expression::FunctionCall { function, .. } = e {

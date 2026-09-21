@@ -1,42 +1,34 @@
 //! Port of `source/Sema/GatherGenerics.h`: record generic uses as specs.
 
-use crate::model::{Block, Declaration, Expression, Module, Spec, Statement};
+use crate::model::{Block, Declaration, Expression, Module, Statement};
 use crate::passes::{walk_expression, walk_function};
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
 use std::collections::HashSet;
 
 pub fn gather_generics(module: &mut Module) {
+    concrete_overrides(module);
     let symbols = SymbolTable::build(module);
     let mut functions: HashSet<String> = HashSet::new();
     let mut structs: HashSet<String> = HashSet::new();
 
-    let mut gather = |expr: &mut Expression| {
-        if let Expression::FunctionCall { function, .. } = expr {
-            // Do not record specializations for intrinsics.
-            if function.starts_with("__") {
-                return;
-            }
-            if let Some(open) = function.find('<') {
-                if function.ends_with('>') {
-                    functions.insert(function.clone());
-                    let _ = open;
+    // Walk struct bodies for generic calls and TypeLiteral-based generics.
+    for st in &mut module.structs {
+        let params = st.generic_params.clone();
+        let mut gather = |expr: &mut Expression| {
+            if let Expression::FunctionCall { function, .. } = expr {
+                // Do not record specializations for intrinsics.
+                if function.starts_with("__") {
+                    return;
+                }
+                if function.find('<').is_some() && function.ends_with('>') {
+                    let ty = parse_type_string(function);
+                    if !contains_param(&ty, &params) {
+                        functions.insert(function.clone());
+                    }
                 }
             }
-        }
-    };
-
-    // Walk struct bodies for generic calls and TypeLiteral-based generics.
-    for st in &module.structs {
-        for method in &mut {
-            // borrow dance: gather uses closures over a set, walk takes &mut
-            st.method_members.clone()
-        } {
-            let _ = method;
-        }
-    }
-
-    for st in &mut module.structs {
+        };
         for method in &mut st.method_members {
             walk_function(method, &mut gather);
         }
@@ -48,16 +40,25 @@ pub fn gather_generics(module: &mut Module) {
         }
         // Struct field/method types carrying generics.
         for field in &st.field_members {
-            if field.ty.is_generic() && !field.ty.name.starts_with("__") {
+            if field.ty.is_generic()
+                && !field.ty.name.starts_with("__")
+                && !contains_param(&field.ty, &params)
+            {
                 structs.insert(field.ty.to_string());
             }
         }
         for method in &st.method_members {
-            if method.ty.is_generic() && !method.ty.name.starts_with("__") {
+            if method.ty.is_generic()
+                && !method.ty.name.starts_with("__")
+                && !contains_param(&method.ty, &params)
+            {
                 structs.insert(method.ty.to_string());
             }
             for param in &method.parameters {
-                if param.ty.is_generic() && !param.ty.name.starts_with("__") {
+                if param.ty.is_generic()
+                    && !param.ty.name.starts_with("__")
+                    && !contains_param(&param.ty, &params)
+                {
                     structs.insert(param.ty.to_string());
                 }
             }
@@ -65,6 +66,21 @@ pub fn gather_generics(module: &mut Module) {
     }
 
     for function in &mut module.functions {
+        let params = function.generic_params.clone();
+        let mut gather = |expr: &mut Expression| {
+            if let Expression::FunctionCall { function, .. } = expr {
+                // Do not record specializations for intrinsics.
+                if function.starts_with("__") {
+                    return;
+                }
+                if function.find('<').is_some() && function.ends_with('>') {
+                    let ty = parse_type_string(function);
+                    if !contains_param(&ty, &params) {
+                        functions.insert(function.clone());
+                    }
+                }
+            }
+        };
         walk_function(function, &mut gather);
         if function.ty.is_generic() && !function.ty.name.starts_with("__") {
             structs.insert(function.ty.to_string());
@@ -77,6 +93,17 @@ pub fn gather_generics(module: &mut Module) {
     }
 
     for ext in &mut module.extensions {
+        let mut gather = |expr: &mut Expression| {
+            if let Expression::FunctionCall { function, .. } = expr {
+                // Do not record specializations for intrinsics.
+                if function.starts_with("__") {
+                    return;
+                }
+                if function.find('<').is_some() && function.ends_with('>') {
+                    functions.insert(function.clone());
+                }
+            }
+        };
         for method in &mut ext.methods {
             walk_function(method, &mut gather);
         }
@@ -85,18 +112,20 @@ pub fn gather_generics(module: &mut Module) {
     // Local variable declarations (`array<int> a;` with no ctor call) are the
     // only place generic types can appear that fields/params/calls miss.
     for st in &module.structs {
+        let params = st.generic_params.clone();
         for method in &st.method_members {
             if let Some(body) = &method.body {
-                gather_local_declarations(body, &mut structs);
+                gather_local_declarations(body, &mut structs, &params);
             }
         }
         if let Some(body) = &st.constructor.body {
-            gather_local_declarations(body, &mut structs);
+            gather_local_declarations(body, &mut structs, &params);
         }
     }
     for function in &module.functions {
+        let params = function.generic_params.clone();
         if let Some(body) = &function.body {
-            gather_local_declarations(body, &mut structs);
+            gather_local_declarations(body, &mut structs, &params);
         }
     }
 
@@ -138,7 +167,56 @@ pub fn gather_generics(module: &mut Module) {
         func_specs.push(ty);
     }
     module.func_specs = func_specs;
-    let _ = Spec::Struct(TypeName::auto());
+}
+
+/// Concrete specializations written as definitions override generic bases:
+/// `hash<string>(string value)` is a distinct function from `hash<T>(T)`.
+/// The parser cannot tell them apart (both parse as name + generic params),
+/// so this pass rewrites any free-function definition whose generic
+/// parameters are ALL concrete types into its specialization form, in place:
+/// the name becomes `name<args>` (the same string call sites use) and the
+/// definition stops being a generic base. The generic base (`hash<T>`) is a
+/// separate remaining entry that serves other call sites (`hash<int>`);
+/// `specialize_functions` skips cloning a spec whose name already exists, so
+/// the user's concrete body wins over the synthesized one. Idempotent —
+/// rewritten functions have empty `generic_params` and are skipped on later
+/// rounds.
+fn concrete_overrides(module: &mut Module) {
+    let mut rewrites: Vec<(usize, String)> = vec![];
+    for (idx, function) in module.functions.iter().enumerate() {
+        if function.generic_params.is_empty() {
+            continue;
+        }
+        let all_concrete = function
+            .generic_params
+            .iter()
+            .all(|p| p.sub_types.is_empty() && (crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "string"));
+        if !all_concrete {
+            continue;
+        }
+        let args = function.generic_params.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
+        rewrites.push((idx, format!("{}<{}>", function.name, args)));
+    }
+    for (idx, new_name) in rewrites {
+        let mut concrete = module.functions[idx].clone();
+        concrete.name = new_name;
+        concrete.generic_params.clear();
+        concrete.is_generic_func = false;
+        // The original definition stays in place as the generic base.
+        module.functions[idx] = concrete;
+    }
+}
+
+/// A type that references one of the enclosing generic parameters is unbound
+/// in this context; recording it as a spec would produce a specialization
+/// with no concrete argument (e.g. `array<V>` from hash_map's own field
+/// list). Concrete uses are re-discovered from specialized bodies in the
+/// second gather round.
+fn contains_param(ty: &TypeName, params: &[TypeName]) -> bool {
+    if params.iter().any(|p| p.name == ty.name) {
+        return true;
+    }
+    ty.sub_types.iter().any(|s| contains_param(s, params))
 }
 
 /// Parse `Name<a, b>` back into a TypeName (specs are carried as TypeNames).
@@ -183,22 +261,29 @@ pub fn parse_type_string(s: &str) -> TypeName {
 /// Collect generic types from local variable declarations, recursing into
 /// nested blocks (branch/while bodies). Same predicate as the field and
 /// parameter collection above.
-fn gather_local_declarations(block: &Block, structs: &mut HashSet<String>) {
+fn gather_local_declarations(
+    block: &Block,
+    structs: &mut HashSet<String>,
+    params: &[TypeName],
+) {
     for stmt in &block.items {
         match stmt {
             Statement::Declaration(Declaration::Variable(var)) => {
-                if var.ty.is_generic() && !var.ty.name.starts_with("__") {
+                if var.ty.is_generic()
+                    && !var.ty.name.starts_with("__")
+                    && !contains_param(&var.ty, params)
+                {
                     structs.insert(var.ty.to_string());
                 }
             }
-            Statement::Block(inner) => gather_local_declarations(inner, structs),
+            Statement::Block(inner) => gather_local_declarations(inner, structs, params),
             Statement::Branch(branch) => {
-                gather_local_declarations(&branch.if_block, structs);
+                gather_local_declarations(&branch.if_block, structs, params);
                 if let Some(else_block) = &branch.else_block {
-                    gather_local_declarations(else_block, structs);
+                    gather_local_declarations(else_block, structs, params);
                 }
             }
-            Statement::While(wh) => gather_local_declarations(&wh.block, structs),
+            Statement::While(wh) => gather_local_declarations(&wh.block, structs, params),
             _ => {}
         }
     }

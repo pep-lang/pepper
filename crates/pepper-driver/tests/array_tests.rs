@@ -724,3 +724,314 @@ test(): int {
         0
     );
 }
+
+// ── Edge cases: empty arrays, growth from zero, self-aliasing ops ──────────
+
+#[test]
+fn empty_array_boundaries() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var e = array<int>();
+    if (!e.empty()) { return -1; }
+    if (e.count() != 0) { return -2; }
+    if (e.find(1) != -1) { return -3; }
+    if (e.contains(1)) { return -4; }
+    var f = array<int>();
+    if (!(e == f)) { return -5; }
+    e.truncate(0);
+    if (!e.empty()) { return -6; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn growth_from_zero_capacity() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var g = array<int>();
+    var i = 0;
+    while (i < 10) {
+        g.append(i * i);
+        i = i + 1;
+    }
+    if (g.capacity() < 10) { return -1; }
+    if (g.count() != 10) { return -2; }
+    i = 0;
+    while (i < 10) {
+        if (g[i] != i * i) { return -3; }
+        i = i + 1;
+    }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn self_append_terminates_and_doubles() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var h = array<int>();
+    h.append(1);
+    h.append(2);
+    h += h;
+    if (h.count() != 4) { return -1; }
+    if (!(h[0] == 1 && h[1] == 2 && h[2] == 1 && h[3] == 2)) { return -2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn plus_with_empty_operand() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var p = array<int>();
+    p.append(5);
+    var q = p + array<int>();
+    if (q.count() != 1) { return -1; }
+    if (q[0] != 5) { return -2; }
+    if (p.count() != 1) { return -3; }
+    var r = array<int>() + p;
+    if (r.count() != 1 || r[0] != 5) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn insert_into_empty_and_remove_only_element() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var r = array<int>();
+    r.insert(0, 7);
+    if (r.count() != 1 || r[0] != 7) { return -1; }
+    var last = r.remove_at(0);
+    if (last != 7) { return -2; }
+    if (!r.empty()) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn truncate_at_and_beyond_size() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var t = array<int>();
+    t.append(1);
+    t.append(2);
+    t.truncate(2);
+    if (t.count() != 2) { return -1; }
+    t.truncate(99);
+    if (t.count() != 2) { return -2; }
+    if (!(t[0] == 1 && t[1] == 2)) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn self_swap_and_tiny_reverses() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var w = array<int>();
+    w.append(1);
+    w.swap(0, 0);
+    if (w[0] != 1) { return -1; }
+    w.reverse();
+    if (w.count() != 1 || w[0] != 1) { return -2; }
+    var z = array<int>();
+    z.reverse();
+    if (!z.empty()) { return -3; }
+    var two = array<int>();
+    two.append(1);
+    two.append(2);
+    two.reverse();
+    if (!(two[0] == 2 && two[1] == 1)) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn index_set_returns_stored_value() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var v = array<int>();
+    v.append(0);
+    var rv = v[0] = 42;
+    if (rv != 42) { return -1; }
+    if (v[0] != 42) { return -2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn reserve_zero_then_append() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var s = array<int>();
+    s.reserve(0);
+    s.append(3);
+    if (s.count() != 1 || s[0] != 3) { return -1; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn nested_clone_shares_inner_arrays() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var n = array<array<int>>();
+    var inner = array<int>();
+    inner.append(1);
+    inner.append(2);
+    n.append(inner);
+    var nc = n.clone();
+    nc[0].append(3);
+    if (nc[0][2] != 3) { return -1; }
+    # struct-typed elements are references: the clone shares the inner array,
+    # so the append is visible through both views.
+    if (n[0].count() != 3) { return -2; }
+    if (nc[0].count() != 3) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn array_of_strings_compares_by_value() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var st = array<string>();
+    st.append("ab");
+    st.append("cd");
+    if (st.find("cd") != 1) { return -1; }
+    if (!st.contains("ab")) { return -2; }
+    if (!(st[0] == "ab")) { return -3; }
+    var other = array<string>();
+    other.append("ab");
+    other.append("cd");
+    if (!(st == other)) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn bracket_signature_auto_typed_return() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+roundtrip(int[] xs): int[] {
+    xs.append(9);
+    return xs;
+}
+test(): int {
+    var out = roundtrip(array<int>());
+    if (out.count() != 1) { return -1; }
+    if (out[0] != 9) { return -2; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn nested_array_raw_buffer_write() {
+    // Regression: a raw-buffer field write (`Data[i] = v`) inside an
+    // `array<array<int>>` body must stay a buffer store, not be rewritten to
+    // the element type's `__index_set` with the raw pointer as receiver.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var outer = array<array<int>>(4);
+    outer.Size = 4;
+    var inner = array<int>(3);
+    inner.append(10);
+    inner.append(20);
+    outer.Data[0] = inner;
+    if (outer.Data[0].count() != 2) { return -1; }
+    if (outer.Data[0][1] != 20) { return -2; }
+    var empty = array<int>();
+    outer.Data[1] = empty;
+    if (!outer.Data[1].empty()) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn float_compound_assign() {
+    // Regression: compound assigns must coerce the ALREADY-COERCED rhs value,
+    // not the raw rhs with the post-coercion name — `x += 1` on a float lhs
+    // used to reach codegen as int + float and fail.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    double x = 1.5;
+    x += 1;
+    if (x != 2.5) { return -1; }
+    x -= 0.5;
+    if (x != 2.0) { return -2; }
+    double y = 3.0;
+    y *= 2;
+    if (y != 6.0) { return -3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

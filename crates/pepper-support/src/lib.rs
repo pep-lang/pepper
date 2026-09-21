@@ -145,22 +145,34 @@ fn base_and_size(ptr: *const c_void) -> Option<(*mut u8, usize)> {
     }
 }
 
-/// Zero-initialized allocation (port of `_pep_malloc`, tracking off).
+/// Live-allocation counter for leak tests: every `_pep_malloc` +1, every
+/// successful `_pep_free` -1. `realloc` goes through the raw allocator so a
+/// grow is counted exactly once (the net new block).
+static LIVE_ALLOCS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_malloc(size: usize) -> *mut c_void {
+    LIVE_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     alloc_with_header(size)
 }
 
-/// Manual realloc: copy min(prev, new), zero the tail (port of `_pep_realloc`).
+/// Current live-allocation count (leak-test baseline helper).
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_live_allocs() -> i64 {
+    LIVE_ALLOCS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_realloc(ptr: *mut c_void, prev_size: usize, new_size: usize) -> *mut c_void {
-    let new_mem = _pep_malloc(new_size);
+    let new_mem = alloc_with_header(new_size);
+    LIVE_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if !ptr.is_null() {
         match base_and_size(ptr) {
             Some((base, size)) => unsafe {
                 std::ptr::copy_nonoverlapping(ptr as *const u8, new_mem.cast::<u8>(), prev_size.min(new_size));
                 (base as *mut usize).write(0);
                 std::alloc::dealloc(base, layout_for(size));
+                LIVE_ALLOCS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             },
             None => eprintln!("_pep_realloc: unknown pointer {:p}", ptr),
         }
@@ -168,7 +180,6 @@ pub extern "C" fn _pep_realloc(ptr: *mut c_void, prev_size: usize, new_size: usi
     new_mem
 }
 
-/// Free (port of `_pep_free`, tracking off).
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_free(ptr: *mut c_void) {
     if ptr.is_null() {
@@ -178,6 +189,7 @@ pub extern "C" fn _pep_free(ptr: *mut c_void) {
         Some((base, size)) => unsafe {
             (base as *mut usize).write(0);
             std::alloc::dealloc(base, layout_for(size));
+            LIVE_ALLOCS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         },
         None => eprintln!("_pep_free: unknown or double-freed pointer {:p}", ptr),
     }
@@ -188,6 +200,9 @@ pub extern "C" fn _pep_free(ptr: *mut c_void) {
 /// array, which per-slot release/acquire cannot express for swap.
 #[unsafe(no_mangle)]
 pub extern "C" fn _pep_swap_refs(p: *mut c_void, stride: usize, i: usize, j: usize) {
+    if i == j {
+        return;
+    }
     const SLOT: usize = std::mem::size_of::<*mut c_void>();
     let len = stride.min(SLOT);
     unsafe {
@@ -198,6 +213,26 @@ pub extern "C" fn _pep_swap_refs(p: *mut c_void, stride: usize, i: usize, j: usi
         std::ptr::copy_nonoverlapping(b, a, len);
         std::ptr::copy_nonoverlapping(tmp.as_ptr(), b, len);
     }
+}
+
+/// FNV-1a 64-bit over a byte range. Same constants as the compiler's
+/// `__address` lowering, so content hashes agree across both paths.
+#[unsafe(no_mangle)]
+pub extern "C" fn _pep_hash_bytes(data: *const c_void, length: usize) -> u64 {
+    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    // `from_raw_parts` needs a non-null, aligned pointer even for zero
+    // length; default-constructed strings carry a null `Data`.
+    if data.is_null() || length == 0 {
+        return OFFSET_BASIS;
+    }
+    let mut h = OFFSET_BASIS;
+    let bytes = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), length) };
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(PRIME);
+    }
+    h
 }
 
 /// UTF-8 character count; invalid UTF-8 returns 0 (port of `_pep_utf8_length`).
@@ -321,15 +356,17 @@ pub fn support_symbols() -> Vec<(&'static str, usize)> {
         ("_pep_malloc", black_box(_pep_malloc as usize)),
         ("_pep_realloc", black_box(_pep_realloc as usize)),
         ("_pep_free", black_box(_pep_free as usize)),
+        ("_pep_print", black_box(_pep_print as usize)),
+        ("_pep_print_int", black_box(_pep_print_int as usize)),
+        ("_pep_print_float", black_box(_pep_print_float as usize)),
+        ("_pep_live_allocs", black_box(_pep_live_allocs as usize)),
         ("_pep_utf8_length", black_box(_pep_utf8_length as usize)),
         ("_pep_swap_refs", black_box(_pep_swap_refs as usize)),
         ("_pep_utf8_size", black_box(_pep_utf8_size as usize)),
         ("_pep_utf8_compare", black_box(_pep_utf8_compare as usize)),
         ("_pep_utf8_find", black_box(_pep_utf8_find as usize)),
         ("_pep_utf8_char_offset", black_box(_pep_utf8_char_offset as usize)),
-        ("_pep_print", black_box(_pep_print as usize)),
-        ("_pep_print_int", black_box(_pep_print_int as usize)),
-        ("_pep_print_float", black_box(_pep_print_float as usize)),
+        ("_pep_hash_bytes", black_box(_pep_hash_bytes as usize)),
     ]
 }
 

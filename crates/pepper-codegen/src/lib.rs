@@ -48,6 +48,9 @@ pub struct CodeGenerator<'ctx> {
     pub structs: HashMap<String, StructDesc<'ctx>>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
+    /// free-function name → return-type sema string (for receiver typing of
+    /// calls that produce struct values, e.g. `roundtrip(...) + x`).
+    fn_returns: HashMap<String, String>,
     /// default-argument expressions per instantiated callable, in parameter
     /// order (keyed like `functions`); trailing missing args are padded from
     /// these at the call site.
@@ -67,6 +70,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             types: types::Types::new(context),
             structs: HashMap::new(),
             functions: HashMap::new(),
+            fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
             global_strings: HashMap::new(),
             frame: Frame::empty(),
@@ -77,8 +81,26 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// (LLVMCodeGenerator.cpp:264-308).
     pub fn generate(&mut self, module: &mut SemaModule) -> Result<(), String> {
         // Instantiation pass: structs → methods → externs → functions.
+        // Concrete (non-abstract) structs are pre-registered as opaque
+        // pointers first: a struct's field may name a specialization that is
+        // declared later in the module (`hash_map<Point, int>` before
+        // `array<Point>`), and field lookup must not fall back to the base.
+        for idx in 0..module.structs.len() {
+            let st = &module.structs[idx];
+            if st.ty.is_generic() && st.name == st.ty.name {
+                continue;
+            }
+            self.types.ensure_opaque(&st.name);
+        }
         for idx in 0..module.structs.len() {
             self.instantiate_struct(&module.structs[idx])?;
+        }
+        // ABI sizes are only correct once every body is set (a field may
+        // name a struct declared later, e.g. `Holder { array<int> items; }`),
+        // so measure after the whole registration pass.
+        for desc in self.structs.values_mut() {
+            let machine = crate::target::host_machine()?;
+            desc.size = machine.get_target_data().get_abi_size(&desc.llvm_type);
         }
         for idx in 0..module.structs.len() {
             self.instantiate_methods(&module.structs[idx])?;
@@ -155,20 +177,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.types.register_struct(st, &field_types);
         let llvm_type = self.types.struct_type(&st.name).expect("registered");
 
-        // Store size via llvm_type.size_of (port of Struct.cpp:14-40). The
-        // ABI size comes from the TargetData of a created execution engine;
-        // StructType::size_of needs the struct body set (it is).
-        // StructType::size_of yields an unfolded ptrtoint expression under
-        // opaque pointers; use the TargetMachine's TargetData for ABI size.
-        let size = {
-            let machine = crate::target::host_machine()?;
-            let td = machine.get_target_data();
-            td.get_abi_size(&llvm_type)
-        };
+        // ABI size is measured after all bodies are set (see `generate`),
+        // because a field may name a struct declared later in the module.
         let desc = StructDesc {
             name: st.name.clone(),
             llvm_type,
-            size,
+            size: 0,
             methods: HashMap::new(),
             static_methods: std::collections::HashSet::new(),
             fields: st
@@ -243,7 +257,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let return_type = self
                     .types
                     .get(&method.ty.to_string())
-                    .ok_or_else(|| format!("unknown return type {}", method.ty))?;
+                    .ok_or_else(|| format!("unknown return type {} for method {}.{}", method.ty, struct_name, method.name))?;
                 llvm_fn_type(return_type, &param_types, false)
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
@@ -287,14 +301,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             None => self.module.add_function(&ext.name, fn_type, None),
         };
         self.functions.insert(ext.name.clone(), fn_value);
+        self.fn_returns.insert(ext.name.clone(), ext.ty.to_string());
         Ok(())
     }
 
     fn instantiate_function(&mut self, function: &FunctionDef) -> Result<(), String> {
-        // Generic function bases are abstract: skip `Name<...>` instances and
-        // generic bases (ty 'name<T>'); specializations were cloned with
-        // concrete names by sema. Mirrors `instantiate_struct`.
-        if function.ty.is_generic() && function.name == function.ty.name {
+        // Generic function bases are abstract: skip them; specializations
+        // were cloned with concrete names by sema. Mirrors `instantiate_struct`.
+        if function.is_generic_func {
             return Ok(());
         }
         if self.functions.contains_key(&function.name) {
@@ -331,11 +345,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             let return_type = self
                 .types
                 .get(&function.ty.to_string())
-                .ok_or_else(|| format!("unknown return type {}", function.ty))?;
+                .ok_or_else(|| format!("unknown return type {} for fn {}", function.ty, function.name))?;
             llvm_fn_type(return_type, &param_types, false)
         };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
         self.functions.insert(function.name.clone(), fn_value);
+        self.fn_returns.insert(function.name.clone(), function.ty.to_string());
         self.param_defaults.insert(
             function.name.clone(),
             function.parameters.iter().map(|p| p.default.clone()).collect(),
@@ -728,8 +743,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .find_local("this")
                 .map(|a| a.ty.to_string()),
             Expression::FunctionCall { function, .. } => {
-                let base = function.split('<').next().unwrap_or("").to_string();
-                self.structs.get(&base).map(|_| base)
+                // Free functions first (their declared return type), then
+                // ctor-style calls `Name<...>(...)` resolve to Name<...>.
+                self.fn_returns.get(function).cloned().or_else(|| {
+                    let base = function.split('<').next().unwrap_or("").to_string();
+                    if !base.is_empty() && self.structs.contains_key(&base) {
+                        Some(pepper_sema::passes::gather_generics::parse_type_string(function).to_string())
+                    } else {
+                        None
+                    }
+                })
             }
             Expression::MemberRef { lhs, name } => {
                 let struct_name = self.struct_name_of(lhs)?;
@@ -765,19 +788,45 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Best-effort struct name of an expression's value, for field/method
     /// access when the receiver is not a bare frame local (e.g. a parameter).
+    /// The declared name resolves exactly first — only concrete
+    /// specializations are registered (`array<array<int>>`), never the base;
+    /// unregistered names fall back to their base for abstract receivers.
     fn struct_name_of(&self, expr: &Expression) -> Option<String> {
-        self.value_sema_type(expr)
-            .map(|ty| ty.trim_end_matches('*').to_string())
+        let ty = self.value_sema_type(expr)?.trim_end_matches('*').to_string();
+        if self.structs.contains_key(&ty) {
+            return Some(ty);
+        }
+        ty.split('<').next().filter(|n| !n.is_empty()).map(|s| s.to_string())
     }
 
     /// LLVM element type behind a pointer/array receiver (`char*` → i8,
     /// `int[]`/`int*` → i32); i32 when the receiver's type is unknown.
+    /// The exact name resolves first — specializations register under their
+    /// full names (`array<int>`), and a nested index on a struct-reference
+    /// slot (`outer.Data[0][0]`) must stride by pointer, not by the base
+    /// struct's first field. Unregistered names fall back to their base —
+    /// only base struct types are registered for abstract receivers.
     fn index_element_type(&self, receiver: &Expression) -> BasicTypeEnum<'ctx> {
+        // `outer.Data[0][0]` → resolve the element type from the base
+        // receiver's pointee; a nested Index receiver cannot be resolved as
+        // a whole by value_sema_type.
+        let mut r = receiver;
+        while let Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } = r {
+            r = lhs;
+        }
         let base = self
-            .value_sema_type(receiver)
-            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()));
-        base.and_then(|b| self.types.get(&b))
-            .unwrap_or_else(|| self.context.i32_type().into())
+            .value_sema_type(r)
+            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+            .or_else(|| self.value_sema_type(receiver).map(|t| t.to_string()));
+        let pointee = base.and_then(|b| {
+            self.types.get(&b).or_else(|| {
+                b.split('<')
+                    .next()
+                    .filter(|n| !n.is_empty())
+                    .and_then(|n| self.types.get(n))
+            })
+        });
+        pointee.unwrap_or_else(|| self.context.i32_type().into())
     }
 
     /// Value type of an indexed element: struct elements are stored as
@@ -792,10 +841,81 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
     /// Sema type string of an indexed receiver's pointee (`array<array<int>>`
     /// → `array<int>`); the element type for method mangling on a nested-array
-    /// index. `None` when the receiver's type is unknown.
+    /// index. Specialized names resolve through their base for struct lookup;
+    /// `None` when the receiver's type is unknown.
     fn index_receiver_pointee(&self, receiver: &Expression) -> Option<String> {
-        self.value_sema_type(receiver)
-            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+        let pointee = self
+            .value_sema_type(receiver)
+            .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))?;
+        if self.types.get(&pointee).is_some() {
+            return Some(pointee);
+        }
+        pointee.split('<').next().filter(|n| !n.is_empty()).map(|s| s.to_string())
+    }
+    /// For a nested index on a struct-reference slot (`outer.Data[0][i]`),
+    /// `slot_ptr` addresses the loaded inner reference; the indexed buffer
+    /// lives in its `Data` field. Returns that buffer pointer and the
+    /// buffer's element name (the pointee of the `__ptr<T>` Data field, or
+    /// the field type itself for non-pointer fields); `None` for plain
+    /// (non-nested) receivers, which GEP the raw buffer directly.
+    fn nested_index_buffer(
+        &self,
+        lhs: &Expression,
+        slot_ptr: PointerValue<'ctx>,
+    ) -> Result<Option<(PointerValue<'ctx>, String)>, String> {
+        if !matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+            return Ok(None);
+        }
+        let elem = self.index_element_type(lhs);
+        // Copy the descriptor data out before returning; no `self` borrow
+        // crosses codegen below.
+        let (llvm_ty, data_idx, data_name) = match elem {
+            BasicTypeEnum::StructType(st) => {
+                let desc = self.structs.get(
+                    &st
+                        .get_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                )
+                .ok_or_else(|| "nested index on unregistered struct".to_string())?;
+                let (idx, name) = desc
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _))| n == "Data")
+                    .map(|(i, (_, t))| {
+                        // The Data field is a raw pointer buffer (`T*` after
+                        // the `__ptr<T>` rewrite): its element is the pointee
+                        // (`int`, `array<int>`, …), which drives the GEP
+                        // stride and load/store value type. Non-pointer
+                        // fields use their own type name.
+                        let elem_name = t.strip_suffix('*').map(str::to_string).unwrap_or_else(|| t.clone());
+                        (i, elem_name)
+                    })
+                    .ok_or_else(|| "nested index: no Data field".to_string())?;
+                (desc.llvm_type, idx, name)
+            }
+            _ => return Err("nested index on non-struct element".to_string()),
+        };
+        // `slot_ptr` addresses the inner reference; its `Data` field is the
+        // raw buffer pointer. GEP the field, then load it to get the buffer.
+        let data_addr = self
+            .builder
+            .build_struct_gep(llvm_ty, slot_ptr, data_idx as u32, "dataf")
+            .map_err(|e| e.to_string())?;
+        let buffer = self
+            .builder
+            .build_load(self.context.ptr_type(inkwell::AddressSpace::default()), data_addr, "innerbuf")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value();
+        Ok(Some((buffer, data_name)))
+    }
+    /// LLVM type of a buffer field's element name for the GEP stride.
+    /// Element names are pointees (`int`, `array<int>`), so they resolve to
+    /// their own LLVM type; unresolvable names fall back to i32, matching
+    /// the historical behavior of the index arms.
+    fn buffer_element_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
+        self.types.get(name).unwrap_or_else(|| self.context.i32_type().into())
     }
     /// GEP stride for an indexed element. Struct elements are stored as
     /// pointers, so every struct slot is exactly pointer-sized: correctly
@@ -815,25 +935,65 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// zero-initialized slots is safe.
     fn index_refcount_ops(
         &mut self,
-        receiver: &Expression,
+        elem_name: &str,
+        value_ty: BasicTypeEnum<'ctx>,
         gep: PointerValue<'ctx>,
         new_val: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
-        let elem = self.index_element_type(receiver);
+        // The element needs refcount ops only when the buffer's own element
+        // type is a struct (before the pointer stride): `__ptr<T>` and scalar
+        // buffers hold raw values, so they need none. `elem_name` and
+        // `value_ty` are the same values the caller used for the GEP, so this
+        // stays in lockstep with it for nested stores (`outer.Data[0][i]`).
+        let elem = self.buffer_element_type(elem_name);
         if !matches!(elem, BasicTypeEnum::StructType(_)) {
             return Ok(());
         }
-        let elem_name = match elem {
-            BasicTypeEnum::StructType(st) => st
-                .get_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .ok_or_else(|| "unnamed struct element type".to_string())?,
-            _ => unreachable!(),
-        };
-        let value_ty = self.index_value_type(receiver);
         let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
         self.call_function(&format!("{}.{}", elem_name, "__acquire"), vec![new_val])?;
         self.call_function(&format!("{}.{}", elem_name, "__release"), vec![old])?;
+        Ok(())
+    }
+    /// Release the old occupant of a struct-typed field. A field is one
+    /// reference slot: the stored value already carries its creation ref, so
+    /// a store transfers exactly that one ref — no acquire here (acquiring
+    /// would leave every ctor-initialized field at refcount 2 and nothing
+    /// would ever reach zero). Mirrors the load-old side of
+    /// `index_refcount_ops`. Struct values are references, so the slot holds a
+    /// pointer; `__release` null-guards itself, so storing over a
+    /// zero-initialized field is safe.
+    fn field_refcount_ops(
+        &mut self,
+        lhs: &Expression,
+        gep: PointerValue<'ctx>,
+    ) -> Result<(), String> {
+        let field_ty_name = match lhs {
+            Expression::MemberRef { lhs, name } => {
+                // `codegen_lvalue` already resolved this MemberRef; a miss
+                // here means the store target is not a struct field.
+                let struct_name = self.struct_name_of(lhs).unwrap_or_default();
+                let Some(desc) = self.structs.get(&struct_name) else {
+                    return Ok(());
+                };
+                let Some((_, field_ty_name)) = desc.fields.iter().find(|(n, _)| n == name) else {
+                    return Ok(());
+                };
+                field_ty_name.clone()
+            }
+            // `this = ...` is not a valid store target.
+            _ => return Ok(()),
+        };
+        let field_ty = self.types.get(&field_ty_name);
+        let value_ty = match field_ty {
+            Some(BasicTypeEnum::StructType(_)) => {
+                BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
+            }
+            _ => return Ok(()),
+        };
+        let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
+        // Release the old occupant with the FIELD type's __release (not the
+        // enclosing struct's): the slot holds a field-typed reference.
+        self.call_function(&format!("{}.{}", field_ty_name, "__release"), vec![old])?;
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
@@ -907,9 +1067,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
                         .map_err(|e| e.to_string())?
                 };
-                self.builder
-                    .build_load(field_ty, gep, name)
-                    .map_err(|e| e.to_string())
+                // Struct-typed fields store a reference (the heap object's
+                // pointer), exactly like struct locals and params — load the
+                // stored pointer, not the slot address.
+                match field_ty {
+                    BasicTypeEnum::StructType(_) => self
+                        .builder
+                        .build_load(self.context.ptr_type(inkwell::AddressSpace::default()), gep, name)
+                        .map_err(|e| e.to_string()),
+                    _ => self
+                        .builder
+                        .build_load(field_ty, gep, name)
+                        .map_err(|e| e.to_string()),
+                }
             }
             Expression::Binary { op, lhs, rhs } => self.codegen_binary(op, lhs, rhs),
             Expression::Unary { op, operand } => self.codegen_unary(*op, operand),
@@ -920,11 +1090,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             } => self.codegen_ternary(condition, true_expr, false_expr),
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array indexing.
-                let element_ty = self.slot_stride(self.index_element_type(lhs));
-                let value_ty = self.index_value_type(lhs);
-                let base = self.codegen_expr(lhs)?;
                 let index = self.codegen_expr(rhs)?;
-                let ptr = base.into_pointer_value();
+                let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
+                // A nested index (`outer.Data[0][i]`) GEPs the inner
+                // struct's own `Data` buffer (the slot holds its reference);
+                // a plain index GEPs the raw buffer directly. The element and
+                // value types come from the indexed buffer's field type in
+                // both cases.
+                let (ptr, elem_name) = match self.nested_index_buffer(lhs, slot_ptr)? {
+                    Some((buffer, name)) => (buffer, name),
+                    None => (slot_ptr, self.index_receiver_pointee(lhs).unwrap_or_else(|| "i32".to_string())),
+                };
+                let element_ty = self.slot_stride(self.buffer_element_type(&elem_name));
+                // Struct elements are stored as references, so `slot_stride`
+                // already mapped them to the pointer value type.
+                let value_ty = element_ty;
                 let gep = unsafe {
                     self.builder
                         .build_gep(element_ty, ptr, &[index.into_int_value()], "idx")
@@ -966,14 +1146,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Default(ty) => {
                 // __default<T>: the type's zero value — 0 for numerics, a null
                 // pointer for pointers and struct types (including `string`).
-                // The argument is carried in the name (`__default<int>`), so
-                // parse it out; looking up the full name would never match.
-                let parsed = pepper_sema::passes::gather_generics::parse_type_string(&ty.to_string());
-                let inner = match parsed.sub_types.into_iter().next() {
-                    Some(inner) => inner,
-                    None => TypeName::new(&parsed.name),
-                };
-                let name = inner.to_string();
+                let name = ty.to_string();
                 if let Some(ty) = self.types.get(&name) {
                     let any = match ty {
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
@@ -1025,6 +1198,47 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let phi = self.builder.build_phi(self.context.i32_type(), "__refcount").map_err(|e| e.to_string())?;
                 phi.add_incoming(&[(&loaded, then_block), (&BasicValueEnum::IntValue(zero), entry)]);
                 Ok(phi.as_basic_value().into_int_value().into())
+            }
+            Expression::Address(ty, arg) => {
+                // __address<T>(v): identity hash — the object's pointer
+                // address for struct T (null → seed), the value's own bytes
+                // folded FNV-1a for POD T.
+                let i64 = self.context.i64_type();
+                let seed = i64.const_int(0xcbf29ce484222325, false);
+                match self.types.get(&ty.to_string()) {
+                    Some(BasicTypeEnum::StructType(_)) => {
+                        let val = self.codegen_expr(arg)?;
+                        let ptr = match val {
+                            BasicValueEnum::PointerValue(p) => p,
+                            other => return Err(format!("__address expects a pointer, got {:?}", other)),
+                        };
+                        let ptr_int = self.builder.build_ptr_to_int(ptr, i64, "addrptr").map_err(|e| e.to_string())?;
+                        let is_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, ptr_int, i64.const_zero(), "addrnul").map_err(|e| e.to_string())?;
+                        // Null-guard: branch and phi the result (mirrors `__refcount`).
+                        let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                        let entry = self.builder.get_insert_block().expect("no insert block");
+                        let then_block = self.context.append_basic_block(fn_value, "addr_nonnull");
+                        let merge_block = self.context.append_basic_block(fn_value, "addr_merge");
+                        self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
+                        self.builder.position_at_end(then_block);
+                        // Fold the address bits through FNV-1a: every
+                        // `_pep_malloc` result is pointer-aligned, so a raw
+                        // `h & mask` would land all struct keys in bucket 0.
+                        let folded = self.fnv_fold_8(seed, &ptr_int)?;
+                        self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
+                        self.builder.position_at_end(merge_block);
+                        let phi = self.builder.build_phi(i64, "__address").map_err(|e| e.to_string())?;
+                        phi.add_incoming(&[(&folded, then_block), (&seed, entry)]);
+                        Ok(phi.as_basic_value().into_int_value().into())
+                    }
+                    Some(_) => {
+                        // POD: fold the value's own bytes.
+                        let val = self.codegen_expr(arg)?;
+                        let v64 = self.hash_value_to_i64(&val)?;
+                        Ok(self.fnv_fold_8(seed, &v64)?.into())
+                    }
+                    None => Err(format!("__address: unknown type {}", ty)),
+                }
             }
             Expression::FunctionCall {
                 function: name,
@@ -1121,7 +1335,46 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
     }
+    /// FNV-1a fold of one i64's eight bytes (memory order) into `h`.
+    fn fnv_fold_8(&mut self, mut h: inkwell::values::IntValue<'ctx>, v: &inkwell::values::IntValue<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let i64 = self.context.i64_type();
+        let prime = i64.const_int(0x100000001b3, false);
+        for shift in [0u64, 8, 16, 24, 32, 40, 48, 56] {
+            let byte = self.builder.build_right_shift(*v, i64.const_int(shift, false), false, "hfsh").map_err(|e| e.to_string())?;
+            let masked = self.builder.build_and(byte, i64.const_int(0xff, false), "hfb").map_err(|e| e.to_string())?;
+            h = self.builder.build_xor(h, masked, "hfx").map_err(|e| e.to_string())?;
+            h = self.builder.build_int_mul(h, prime, "hfm").map_err(|e| e.to_string())?;
+        }
+        Ok(h)
+    }
 
+    /// A loaded field's value as i64: ints zext/trunc, floats bitcast,
+    /// pointers ptrtoint (identity).
+    fn hash_value_to_i64(&mut self, val: &BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let i64 = self.context.i64_type();
+        match val {
+            BasicValueEnum::IntValue(iv) => {
+                if iv.get_type().get_bit_width() == 64 {
+                    Ok(*iv)
+                } else if iv.get_type().get_bit_width() > 64 {
+                    Ok(self.builder.build_int_truncate(*iv, i64, "hft").map_err(|e| e.to_string())?)
+                } else {
+                    Ok(self.builder.build_int_z_extend(*iv, i64, "hfz").map_err(|e| e.to_string())?)
+                }
+            }
+            BasicValueEnum::FloatValue(fv) => {
+                let bits = if fv.get_type().get_bit_width() == 64 {
+                    self.builder.build_bit_cast(*fv, i64, "hfbits").map_err(|e| e.to_string())?
+                } else {
+                    let ext = self.builder.build_float_ext(*fv, self.context.f64_type(), "hfext").map_err(|e| e.to_string())?;
+                    self.builder.build_bit_cast(ext, i64, "hfbits").map_err(|e| e.to_string())?
+                };
+                Ok(bits.into_int_value())
+            }
+            BasicValueEnum::PointerValue(pv) => Ok(self.builder.build_ptr_to_int(*pv, i64, "hfptri").map_err(|e| e.to_string())?),
+            other => Err(format!("__address: cannot fold {:?}", other)),
+        }
+    }
     /// POD array index get/set: `arr[i]` → load via GEP, `arr[i] = v` →
     /// store via GEP.
     fn codegen_index_method(
@@ -1165,7 +1418,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     };
                 }
             }
-            self.index_refcount_ops(this, gep, value)?;
+            self.index_refcount_ops(&self.index_receiver_pointee(this).unwrap_or_else(|| "i32".to_string()), value_ty, gep, value)?;
             self.builder
                 .build_store(gep, value)
                 .map_err(|e| e.to_string())?;
@@ -1178,13 +1431,50 @@ impl<'ctx> CodeGenerator<'ctx> {
         if name == "print" {
             return self.codegen_print(args);
         }
-        // release<T>(v) → v.__release() (POD no-op).
+        // assert(condition, msg): the message is a raw `char*`. A string
+        // literal (already rewritten by convert_string_literals into a
+        // `string(raw, size, len)` ctor call) lowers to its global pointer —
+        // no temporary allocation on hot paths like index bounds checks.
+        // Any other expression is lowered to `msg.c_str()`.
+        if name == "assert" && args.len() == 2 {
+            let cond = self.codegen_expr(&args[0])?;
+            let msg = match &args[1] {
+                Expression::FunctionCall { function, args: inner }
+                    if function == "string"
+                        && matches!(
+                            inner.first(),
+                            Some(Expression::StringLiteral { is_raw: true, .. })
+                        ) =>
+                {
+                    self.codegen_expr(inner.first().unwrap())?
+                }
+                other => {
+                    let v = self.codegen_expr(other)?;
+                    // The message must be a `char*`: an argument already typed
+                    // as a pointer (`char*`, `__ptr<T>`) is passed through,
+                    // everything else (notably `string`) lowers via `c_str`.
+                    match self.value_sema_type(other) {
+                        Some(ty) if ty.ends_with('*') || ty.starts_with("__ptr<") => v,
+                        _ => self.call_function("string.c_str", vec![v])?,
+                    }
+                }
+            };
+            return self.call_function("assert", vec![cond, msg]);
+        }
+        // release<T>(v): no-op for POD values (nothing to free), dispatches
+        // to T.__release for struct references.
         if name == "release" || name.starts_with("release<") {
-            if let Some(first) = args.first() {
-                let value = self.codegen_expr(first)?;
-                return Ok(value);
+            let value = args.first().map(|a| self.codegen_expr(a)).transpose()?;
+            if let (Some(v), Some(parsed)) =
+                (value, name.strip_prefix("release<").and_then(|s| s.strip_suffix('>')))
+            {
+                let parsed = pepper_sema::passes::gather_generics::parse_type_string(parsed);
+                let is_struct = matches!(self.types.get(&parsed.to_string()), Some(BasicTypeEnum::StructType(_)));
+                if is_struct {
+                    return self.call_function(&format!("{}.__release", parsed), vec![v]);
+                }
             }
-            return Ok(self.context.i32_type().const_zero().into());
+            return Ok(value.unwrap_or_else(|| self.context.i32_type().const_zero().into()));
         }
         // Intrinsics: __is_pod<T> → false for structs (true for POD);
         // __default<T> → the type's zero value.
@@ -1297,12 +1587,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let (ret, params): (BasicTypeEnum<'ctx>, Vec<BasicTypeEnum<'ctx>>) = match name {
                     "_pep_print" => (i32t.into(), vec![ptr_ty.into()]),
                     "_pep_print_int" => (i32t.into(), vec![self.context.i64_type().into()]),
-                    // codegen_print widens float args to f64 before calling.
                     "_pep_print_float" => (i32t.into(), vec![self.context.f64_type().into()]),
+                    "_pep_free" => (i32t.into(), vec![ptr_ty.into()]),
+                    "_pep_hash_bytes" => {
+                        (self.context.i64_type().into(), vec![ptr_ty.into(), self.context.i64_type().into()])
+                    }
                     "_pep_malloc" | "_pep_realloc" => {
                         (ptr_ty.into(), vec![self.context.i64_type().into()])
                     }
-                    "_pep_free" => (i32t.into(), vec![ptr_ty.into()]),
+                    "_pep_live_allocs" => (self.context.i64_type().into(), vec![]),
                     "trace_int" => (
                         i32t.into(),
                         vec![self.context.i64_type().into(), ptr_ty.into()],
@@ -1433,20 +1726,30 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let rhs_c = llvm_ops::coerce(self.context, &self.builder, coerced, &rhs_name, &result_ty);
                 let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None)?;
                 let fitted = fit(result);
-                if let Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } = lhs {
+                if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                     // Compound store into a struct-reference slot transfers
                     // ownership like any other index store.
-                    self.index_refcount_ops(lhs, lhs_addr.ptr, fitted)?;
+                    self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, fitted)?;
+                }
+                if let Expression::MemberRef { .. } = lhs {
+                    // Compound store into a struct-typed field transfers
+                    // ownership like any other reference-slot store.
+                    self.field_refcount_ops(lhs, lhs_addr.ptr)?;
                 }
                 lhs_addr
                     .store(&self.builder, fitted)
                     .ok_or_else(|| "compound store".to_string())?;
                 return Ok(fitted);
             }
-            if let Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } = lhs {
+            if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                 // The element type is resolved from the buffer's pointee
                 // (`Data`), not the index expression itself.
-                self.index_refcount_ops(lhs, lhs_addr.ptr, coerced)?;
+                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced)?;
+            }
+            if let Expression::MemberRef { .. } = lhs {
+                // A struct-typed field is one reference slot: storing over it
+                // releases the old occupant and acquires the new value.
+                    self.field_refcount_ops(lhs, lhs_addr.ptr)?;
             }
             lhs_addr
                 .store(&self.builder, coerced)
@@ -1514,24 +1817,25 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array element store: `arr[i] = v` → GEP + store.
-                let element_ty = self.slot_stride(self.index_element_type(lhs));
-                let value_ty = self.index_value_type(lhs);
-                let ty_name = self
-                    .value_sema_type(lhs)
-                    .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
-                    .unwrap_or_else(|| "i32".to_string());
-                let base = self.codegen_expr(lhs)?;
                 let index = self.codegen_expr(rhs)?;
-                let ptr = base.into_pointer_value();
+                let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
+                // A nested index (`outer.Data[0][i] = v`) stores into the
+                // inner struct's own `Data` buffer, not its reference slot.
+                let (ptr, elem_name) = match self.nested_index_buffer(lhs, slot_ptr)? {
+                    Some((buffer, name)) => (buffer, name),
+                    None => (slot_ptr, self.index_receiver_pointee(lhs).unwrap_or_else(|| "i32".to_string())),
+                };
+                let element_ty = self.slot_stride(self.buffer_element_type(&elem_name));
+                // Carry the element's value type so stores truncate to it
+                // (`Data[Size] = 0` on `char*` must store one byte, not four);
+                // struct elements load/store as pointers.
+                let value_ty = element_ty;
                 let gep = unsafe {
                     self.builder
                         .build_gep(element_ty, ptr, &[index.into_int_value()], "idxl")
                         .map_err(|e| e.to_string())?
                 };
-                // Carry the element's value type so stores truncate to it
-                // (`Data[Size] = 0` on `char*` must store one byte, not four);
-                // struct elements load/store as pointers.
-                Ok(Address::with_llvm_ty("idxl", &ty_name, value_ty, gep))
+                Ok(Address::with_llvm_ty("idxl", &elem_name, value_ty, gep))
             }
             _ => Err("unsupported lvalue".to_string()),
         }

@@ -19,6 +19,8 @@ pub(crate) struct StructInfo {
 
 pub(crate) struct StructTable {
     pub(crate) structs: HashMap<String, StructInfo>,
+    /// Free-function and extern name -> return type.
+    pub(crate) functions: HashMap<String, TypeName>,
 }
 
 impl StructTable {
@@ -46,7 +48,14 @@ impl StructTable {
                 structs.entry(st.ty.name.clone()).or_insert(info);
             }
         }
-        Self { structs }
+        let mut functions = HashMap::new();
+        for f in &module.functions {
+            functions.insert(f.name.clone(), f.ty.clone());
+        }
+        for e in &module.externs {
+            functions.insert(e.name.clone(), e.ty.clone());
+        }
+        Self { structs, functions }
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&StructInfo> {
@@ -85,9 +94,47 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::IntLiteral(_) => Some(TypeName::new("i32")),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
         Expression::MemberRef { lhs, name } => {
-            let lhs_type = of(lhs, table, current)?;
-            let info = table.lookup(&lhs_type)?;
-            info.fields.iter().find(|(f, _)| f == name).map(|(_, ty)| ty.clone())
+            // Specialized clones keep unsubstituted annotations on bare
+            // symbols (`keys` typed `K*` in `hash_map<string, int>`), and a
+            // table lookup of the enclosing type may fall back to the
+            // generic base entry (also unsubstituted). So both the
+            // annotation and the enclosing struct's field table are tried as
+            // lhs types; for pointer types the stripped pointee is tried
+            // first, so `keys.Data` in a specialized body hits the exact
+            // `array<string>` entry before the base-name fallback reaches
+            // the unsubstituted generic `array`. The first candidate that
+            // names the field wins.
+            let mut candidates = Vec::new();
+            if let Some(ty) = of(lhs, table, current) {
+                candidates.push(ty);
+            }
+            if let Expression::SymbolRef { id, .. } = lhs.as_ref() {
+                if let Some(ty) = current.and_then(|c| {
+                    table.lookup(c)
+                        .and_then(|info| info.fields.iter().find(|(f, _)| f == id).map(|(_, ty)| ty.clone()))
+                }) {
+                    candidates.push(ty);
+                }
+            }
+            for lhs_type in candidates {
+                // A starred type (`array<string>*`) must try its exact
+                // specialized pointee first: `lookup` on the pointer falls
+                // straight through to the unsubstituted generic base, which
+                // would shadow the concrete entry.
+                let mut keys = Vec::new();
+                if let Some(pointee) = lhs_type.to_string().strip_suffix('*') {
+                    keys.push(TypeName::new(pointee));
+                }
+                keys.push(lhs_type.clone());
+                for key in keys {
+                    if let Some(info) = table.lookup(&key) {
+                        if let Some((_, ty)) = info.fields.iter().find(|(f, _)| f == name) {
+                            return Some(ty.clone());
+                        }
+                    }
+                }
+            }
+            None
         }
         Expression::MethodCall { this, method, .. } => {
             let this_type = of(this, table, current)?;
@@ -126,6 +173,11 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         }
         Expression::ArrayIndex { ty, .. } => Some(ty.clone()),
         Expression::FunctionCall { function, .. } => {
+            // Plain free-function call: its declared return type.
+            if let Some(ty) = table.functions.get(function) {
+                return Some(ty.clone());
+            }
+            // Constructor-style call `Name<...>(...)` resolves to Name<...>.
             let ty = crate::passes::gather_generics::parse_type_string(function);
             table.lookup(&ty).map(|_| ty)
         }

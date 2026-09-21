@@ -65,11 +65,22 @@ impl<'ctx> Types<'ctx> {
     }
 
     /// Register a struct type from its field types (port of
-    /// `StructGen`'s `StructType::create(fieldTypes, name)`).
+    /// `StructGen`'s `StructType::create(fieldTypes, name)`). Reuses the
+    /// opaque type created by [`ensure_opaque`] so the LLVM name stays
+    /// unique (`LLVMContext` disambiguates duplicate names with `.1`).
     pub fn register_struct(&mut self, st: &StructDef, field_types: &[BasicTypeEnum<'ctx>]) {
-        let struct_ty = self.context.opaque_struct_type(&st.name);
+        let struct_ty = self.ensure_opaque(&st.name);
         struct_ty.set_body(field_types, false);
-        self.struct_types.insert(st.name.clone(), struct_ty);
+    }
+
+    /// Opaque (body-less) struct type for a name, created once per name.
+    pub fn ensure_opaque(&mut self, name: &str) -> StructType<'ctx> {
+        if let Some(st) = self.struct_types.get(name) {
+            return *st;
+        }
+        let struct_ty = self.context.opaque_struct_type(name);
+        self.struct_types.insert(name.to_string(), struct_ty);
+        struct_ty
     }
 
     /// The struct type for a (possibly specialized) name.

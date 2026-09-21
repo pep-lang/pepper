@@ -22,20 +22,22 @@ pub fn specialize_functions(module: &mut Module) {
         let Some(base) = module
             .functions
             .iter()
-            .find(|f| f.name == spec.name && !f.ty.sub_types.is_empty())
+            .find(|f| f.name == spec.name && f.is_generic_func)
             .cloned()
         else {
             continue;
         };
-        // map base type sub_types[idx] -> spec sub_types[idx]
+        // map base generic_params[idx] -> spec sub_types[idx]
         let mut type_map: Vec<(String, TypeName)> = vec![];
-        for (idx, param_type) in base.ty.sub_types.iter().enumerate() {
+        for (idx, param) in base.generic_params.iter().enumerate() {
             if let Some(arg) = spec.sub_types.get(idx) {
-                type_map.push((param_type.name.clone(), arg.clone()));
+                type_map.push((param.name.clone(), arg.clone()));
             }
         }
         let mut specialized = base.clone();
-        specialized.ty = spec.clone();
+        // The instance's declared return type is the base's, with the
+        // generic arguments substituted (`hash<T>` → `u64`).
+        crate::type_name::replace_map(&mut specialized.ty, &type_map);
         specialized.name = spec.to_string();
         specialized.is_generic_func = false;
         for param in &mut specialized.parameters {
@@ -86,6 +88,27 @@ fn replace_stmt_types(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
 
 fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        // `SizeOf<T>` in specialized bodies: substitute the generic arg.
+        if let Expression::SizeOf(ty) = e {
+            crate::type_name::replace_map(ty, type_map);
+        }
+        // Intrinsic nodes carry a TypeName that may still reference a
+        // generic param (`Address(T)` from `__address<T>(v)`):
+        // substitute those too.
+        match e {
+            Expression::ArrayIndex { ty, .. }
+            | Expression::IsPod(ty)
+            | Expression::Default(ty) => crate::type_name::replace_map(ty, type_map),
+            Expression::RefCount(ty, _) => crate::type_name::replace_map(ty, type_map),
+            Expression::Address(ty, _) => crate::type_name::replace_map(ty, type_map),
+            _ => {}
+        }
+        // Generic calls inside bodies (`__address<T>(v)` → `__address<int>(v)`).
+        if let Expression::FunctionCall { function, .. } = e {
+            let mut parsed = crate::passes::gather_generics::parse_type_string(function);
+            crate::type_name::replace_map(&mut parsed, type_map);
+            *function = parsed.to_string();
+        }
         if let Expression::SymbolRef { ty, .. } = e {
             crate::type_name::replace_map(ty, type_map);
         }

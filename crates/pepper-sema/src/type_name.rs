@@ -133,9 +133,16 @@ impl TypeName {
     }
 
     /// Recursive generic parameter substitution (port of `Specializer::replace`).
+    /// Pointer types carry the suffix in the name (`T*`), so a param used as a
+    /// pointer is matched on the exact pointee and re-emitted with the stars.
     pub fn replace(&mut self, param_name: &str, type_arg: &TypeName) {
         if self.name == param_name {
             *self = type_arg.clone();
+        } else if let Some(pointee) = self.name.strip_suffix('*') {
+            if pointee == param_name {
+                let stars = &self.name[pointee.len()..];
+                self.name = format!("{}{}", type_arg, stars);
+            }
         }
         for arg in &mut self.sub_types {
             arg.replace(param_name, type_arg);

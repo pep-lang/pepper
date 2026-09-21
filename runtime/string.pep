@@ -21,8 +21,6 @@ struct string {
     }
 
     destruct {
-        trace_ptr(Data, "string.Data".c_str());
-        trace_ptr(this, Data);
         _pep_free(Data);
     }
 
@@ -63,10 +61,11 @@ struct string {
     }
 
     bool ==(string rhs) {
-        trace_ptr(this, "this".c_str());
-        trace_ptr(rhs, "rhs".c_str());
         if (Length != rhs.Length) {
             return false;
+        }
+        if (Size == 0) {
+            return true;
         }
         bool eq = _pep_utf8_compare(Data, rhs.Data, Size);
         return eq;
@@ -102,12 +101,21 @@ struct string {
     }
 
     bool starts_with(string prefix) {
-        return prefix.Size <= Size && _pep_utf8_compare(Data, prefix.Data, prefix.Size);
+        if (prefix.Size > Size) {
+            return false;
+        }
+        if (prefix.Size == 0) {
+            return true;
+        }
+        return _pep_utf8_compare(Data, prefix.Data, prefix.Size);
     }
 
     bool ends_with(string suffix) {
         if (suffix.Size > Size) {
             return false;
+        }
+        if (suffix.Size == 0) {
+            return true;
         }
         return _pep_utf8_compare(Data + (Size - suffix.Size), suffix.Data, suffix.Size);
     }

@@ -109,13 +109,13 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .map_err(|e| format!("spawn failed: {}", e))
 }
 
-/// KNOWN GAPS (tracked for the next phase): 2 of 16 corpus fixtures fail —
-/// trait dispatch (`Trait.Generic`) and struct storage with string fields
-/// (`Struct.RefStorage`). The String.* and Array.* fixtures pass end to
+/// KNOWN GAPS (tracked for the next phase): 1 of 16 corpus fixtures fails —
+/// trait dispatch (`Trait.Generic`). `Struct.RefStorage` passes since the
+/// release_field_refs fix. The String.* and Array.* fixtures pass end to
 /// end. These need their own sema/codegen features per the C++ anchors.
 /// Ignored until implemented; NOT a pass.
 #[test]
-#[ignore = "2/16 corpus fixtures fail: trait dispatch, struct-with-string storage — tracked feature work"]
+#[ignore = "1/16 corpus fixture fails: trait dispatch — tracked feature work"]
 fn corpus_files_compile_and_run() {
     let dir = tests_dir();
     let entries = match std::fs::read_dir(&dir) {

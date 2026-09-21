@@ -201,6 +201,9 @@ pub enum Expression {
     Default(TypeName),
     /// `__refcount<T>(t)`: the reference count of object `t` (0 for POD T).
     RefCount(TypeName, Box<Expression>),
+    /// `__address<T>(v)`: the pointer address of object `v` (identity
+    /// hashing for structs); POD T folds the value's bytes instead.
+    Address(TypeName, Box<Expression>),
     /// Free function call by name (possibly specialized `name<args>`)
     FunctionCall {
         function: String,
@@ -267,6 +270,8 @@ pub struct VariableDef {
 pub struct FunctionDef {
     pub name: String,
     pub ty: TypeName,
+    /// Generic parameters (`T` in `hash<T>`), in declaration order.
+    pub generic_params: Vec<TypeName>,
     pub parameters: Vec<VariableDef>,
     pub body: Option<Block>,
     /// Owning struct for methods.

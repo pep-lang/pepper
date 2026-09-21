@@ -4,7 +4,6 @@
 
 use crate::model::*;
 use crate::symbols::SymbolTable;
-use crate::type_name::TypeName;
 
 pub fn release_field_refs(module: &mut Module) {
     let symbols = SymbolTable::build(module);
@@ -30,8 +29,13 @@ pub fn release_field_refs(module: &mut Module) {
         if field_names.is_empty() {
             continue;
         }
-
-        let Some(body) = &mut st.destructor.body else {
+        // Codegen emits method bodies from `method_members`, where the
+        // synthesized `__dtor` lives: struct_body::finish clones it out of
+        // `destructor` before this pass runs, so patch that copy.
+        let Some(dtor) = st.method_members.iter_mut().find(|m| m.name == "__dtor") else {
+            continue;
+        };
+        let Some(body) = &mut dtor.body else {
             continue;
         };
         // Insert the releases in reverse declaration order just before the
@@ -55,5 +59,4 @@ pub fn release_field_refs(module: &mut Module) {
             body.items.insert(insert_at + offset, release);
         }
     }
-    let _ = TypeName::auto();
 }

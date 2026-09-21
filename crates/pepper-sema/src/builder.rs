@@ -123,7 +123,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             rhs: Box::new(expression(rhs)?),
         }),
         ast::Expression::MemberAccess { lhs, name } => {
-            if name.starts_with("__") {
+            if name.starts_with("__") && name != "__release" && name != "__acquire" {
                 return Err(format!("'{}' is a reserved (synthesized) member and cannot be accessed from source code", name));
             }
             Ok(Expression::MemberRef {
@@ -134,7 +134,10 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
         ast::Expression::FunctionCall { function, arguments } => {
             // Method call `t.getX()`: the target is a member access.
             if let ast::Expression::MemberAccess { lhs, name } = function.as_ref() {
-                if name.starts_with("__") {
+                // `__release`/`__acquire` are deliberately callable from
+                // source: explicit refcount control is the language's escape
+                // hatch for object lifetimes.
+                if name.starts_with("__") && name != "__release" && name != "__acquire" {
                     return Err(format!("'{}' is a reserved (synthesized) method and cannot be called from source code", name));
                 }
                 return Ok(Expression::MethodCall {
@@ -208,12 +211,13 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Func
     Ok(FunctionDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
+        generic_params: decl.generic_params.iter().map(type_name_from).collect(),
         parameters,
         body,
         parent,
         is_static: decl.is_static,
         is_indexer: decl.is_indexer,
-        is_generic_func: false,
+        is_generic_func: !decl.generic_params.is_empty(),
     })
 }
 
@@ -267,6 +271,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
         None => FunctionDef {
             name: ty.to_string(),
             ty: ty.clone(),
+            generic_params: vec![],
             parameters: vec![],
             body: Some(Block {
                 name: String::new(),
@@ -282,6 +287,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
         Some(body) => FunctionDef {
             name: "__dtor".to_string(),
             ty: TypeName::void(),
+            generic_params: vec![],
             parameters: vec![],
             body: Some(block(body)?),
             parent: Some(base_name.clone()),
@@ -292,6 +298,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
         None => FunctionDef {
             name: "__dtor".to_string(),
             ty: TypeName::void(),
+            generic_params: vec![],
             parameters: vec![],
             body: Some(Block {
                 name: String::new(),
@@ -322,6 +329,7 @@ fn empty_method(parent: &str, name: &str) -> FunctionDef {
     FunctionDef {
         name: name.to_string(),
         ty: TypeName::void(),
+        generic_params: vec![],
         parameters: vec![],
         body: Some(Block {
             name: String::new(),
@@ -345,6 +353,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                 out.functions.push(FunctionDef {
                     name: v.name.clone(),
                     ty: type_name_from(&v.type_name),
+                    generic_params: vec![],
                     parameters: vec![],
                     body: v
                         .default_value

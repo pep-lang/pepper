@@ -16,6 +16,8 @@ struct Scopes {
     structs: Vec<(String, Vec<VariableDef>)>,
     /// Struct method tables: struct type string → (method name, return type).
     methods: Vec<(String, Vec<(String, TypeName)>)>,
+    /// Free-function and extern name → return type.
+    functions: Vec<(String, TypeName)>,
 }
 
 impl Scopes {
@@ -27,6 +29,7 @@ impl Scopes {
             function_depth: None,
             structs: vec![],
             methods: vec![],
+            functions: vec![],
         }
     }
 
@@ -159,11 +162,27 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
         Expression::FunctionCall { function, .. } => {
+            // Specialized call `name<args>`: the instance (not the base)
+            // carries the substituted return type.
+            if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == function) {
+                return ty.clone();
+            }
             let name = function.split('<').next().unwrap_or(function).trim();
             if name.is_empty() {
                 return TypeName::auto();
             }
-            // Only resolve when the name is a known struct.
+            // Intrinsics carry no declared function; type them by name so a
+            // `var x = __address<T>(v)` is not mis-inferred as i32.
+            match name {
+                "__address" => return TypeName::new("u64"),
+                "__refcount" => return TypeName::new("u32"),
+                _ => {}
+            }
+            // Plain free-function call: its declared return type.
+            if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
+                return ty.clone();
+            }
+            // Constructor-style call `Name<...>(...)` resolves to Name<...>.
             for (ty, _) in &scopes.structs {
                 let base = ty.split('<').next().unwrap_or(ty);
                 if base == name {
@@ -172,6 +191,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             }
             TypeName::auto()
         }
+        // Intrinsics carry no declared function; type them directly so a
+        // `var x = __address<T>(v)` is not mis-inferred as i32.
+        Expression::Address(..) => TypeName::new("u64"),
+        Expression::RefCount(..) => TypeName::new("u32"),
         _ => TypeName::auto(),
     }
 }
@@ -209,6 +232,15 @@ pub fn resolve_implicit_types(module: &mut Module) {
             )
         })
         .collect();
+    // Free-function and extern return types.
+    let mut function_returns: Vec<(String, TypeName)> = module
+        .functions
+        .iter()
+        .map(|f| (f.name.clone(), f.ty.clone()))
+        .collect();
+    for e in &module.externs {
+        function_returns.push((e.name.clone(), e.ty.clone()));
+    }
 
     // Structs first (methods see field types).
     let struct_pairs: Vec<(String, TypeName)> = module
@@ -221,6 +253,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         let mut scopes = Scopes::new();
         scopes.structs = struct_fields.clone();
         scopes.methods = struct_methods.clone();
+        scopes.functions = function_returns.clone();
 
         // Resolve field types with defaults.
         for field in &mut st.field_members {
@@ -287,6 +320,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
             let mut scopes = Scopes::new();
             scopes.structs = struct_fields.clone();
             scopes.methods = struct_methods.clone();
+            scopes.functions = function_returns.clone();
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             scopes.function_depth = Some(scopes.names.len() - 1);

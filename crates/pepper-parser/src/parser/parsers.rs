@@ -132,6 +132,18 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         break;
     }
 
+    // pointer suffix: one or more `*` (e.g. char*, void**) — same shape as
+    // the extern declaration grammar, so runtime code can take raw pointers.
+    loop {
+        ws(input)?;
+        if input.starts_with('*') {
+            *input = &input[1..];
+            ty.name.push('*');
+        } else {
+            break;
+        }
+    }
+
     Ok(ty)
 }
 

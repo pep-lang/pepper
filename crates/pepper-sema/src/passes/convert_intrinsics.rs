@@ -18,10 +18,19 @@ fn convert_expression(expr: &mut Expression) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         if let Expression::FunctionCall { function, args } = e {
             let base = function.split('<').next().unwrap_or(function);
-            if base == "__is_pod" {
-                *e = Expression::IsPod(TypeName::new(function));
-            } else if base == "__default" {
-                *e = Expression::Default(TypeName::new(function));
+            if base == "__is_pod" || base == "__default" {
+                // Store the inner type (not the full call name) so later
+                // specialization passes can substitute generic params.
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&parsed.name),
+                };
+                *e = if base == "__is_pod" {
+                    Expression::IsPod(ty)
+                } else {
+                    Expression::Default(ty)
+                };
             } else if base == "__refcount" && args.len() == 1 {
                 let parsed = crate::passes::gather_generics::parse_type_string(function);
                 let base_name = parsed.name.clone();
@@ -31,6 +40,15 @@ fn convert_expression(expr: &mut Expression) {
                 };
                 let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
                 *e = Expression::RefCount(ty, Box::new(arg));
+            } else if base == "__address" && args.len() == 1 {
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                *e = Expression::Address(ty, Box::new(arg));
             }
         }
     });

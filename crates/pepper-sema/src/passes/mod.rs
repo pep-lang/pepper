@@ -140,7 +140,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(rhs, f);
         }
         Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
-        Expression::RefCount(_, arg) => walk_expression(arg, f),
+        Expression::RefCount(_, arg) | Expression::Address(_, arg) => walk_expression(arg, f),
         Expression::FunctionCall { args, .. } => {
             for arg in args {
                 walk_expression(arg, f);
