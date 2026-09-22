@@ -551,12 +551,56 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// A nested `{ ... }` statement gets its own basic block so a `return`
+    /// inside it terminates only the block's path (mirroring
+    /// `codegen_branch`). Two exit shapes:
+    /// - no return in the region: the region's current block is unterminated,
+    ///   so a continuation block is inserted after it and the entry branches
+    ///   to it — control flow resumes with the next outer statement.
+    /// - a return happened: the insert point sits in the function's return
+    ///   block; every region block left unterminated (the entry, branch
+    ///   merges) is patched to fall through to the return block, and
+    ///   subsequent statements — dead code — are emitted into a fresh dead
+    ///   block so they never land after a terminator.
+    fn codegen_nested_block(&mut self, inner: &Block) -> Result<(), String> {
+        let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let return_block = self.frame.return_block.expect("return block");
+        let entry = self.context.append_basic_block(fn_value, "block");
+        self.builder.build_unconditional_branch(entry).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(entry);
+        self.codegen_block(inner)?;
+
+        let current = self.builder.get_insert_block().expect("insert block");
+        if current.get_terminator().is_none() {
+            // No return in the region: branch through to a continuation.
+            let cont = self.context.insert_basic_block_after(current, "blockcont");
+            self.builder.build_unconditional_branch(cont).map_err(|e| e.to_string())?;
+            self.builder.position_at_end(cont);
+        } else {
+            // A return in the region: patch every unterminated block created
+            // by it to fall through, then land subsequent (dead) statements
+            // in a fresh unreachable block.
+            let blocks = fn_value.get_basic_blocks();
+            let start = blocks.iter().position(|b| *b == entry).expect("entry block");
+            for bb in &blocks[start..] {
+                if bb.get_terminator().is_none() {
+                    self.builder.position_at_end(*bb);
+                    self.builder
+                        .build_unconditional_branch(return_block)
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            let dead = self.context.append_basic_block(fn_value, "blockdead");
+            self.builder.position_at_end(dead);
+        }
+        Ok(())
+    }
     fn codegen_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::Expression(expr) => {
                 self.codegen_expr(expr)?;
             }
-            Statement::Block(inner) => self.codegen_block(inner)?,
+            Statement::Block(inner) => self.codegen_nested_block(inner)?,
             Statement::Declaration(Declaration::Variable(var)) => {
                 self.codegen_var_def(var)?;
             }

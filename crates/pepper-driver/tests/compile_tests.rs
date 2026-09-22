@@ -203,3 +203,73 @@ main(): int {
     let run = std::process::Command::new(&out_path).status().unwrap();
     assert!(run.success(), "spawned binary failed");
 }
+
+// ── Nested blocks with returns ─────────────────────────────────────────────
+
+#[test]
+fn return_in_nested_block() {
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var r = 0;\n\
+                     {\n\
+                         r = 5;\n\
+                         return r;\n\
+                     }\n\
+                     return 9;\n\
+                 }"),
+        5
+    );
+}
+
+#[test]
+fn nested_block_fallthrough_continues() {
+    // No return inside: the block's path falls through to the continuation.
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var r = 0;\n\
+                     {\n\
+                         r = 5;\n\
+                     }\n\
+                     r = r + 1;\n\
+                     return r;\n\
+                 }"),
+        6
+    );
+}
+
+#[test]
+fn deeply_nested_block_return() {
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var r = 0;\n\
+                     {\n\
+                         {\n\
+                             {\n\
+                                 r = 7;\n\
+                                 return r;\n\
+                             }\n\
+                         }\n\
+                     }\n\
+                     return 9;\n\
+                 }"),
+        7
+    );
+}
+
+#[test]
+fn nested_block_return_inside_if() {
+    // Return in the branch body, block continues after the branch.
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var r = 0;\n\
+                     {\n\
+                         if true {\n\
+                             return 3;\n\
+                         }\n\
+                         r = 8;\n\
+                     }\n\
+                     return r;\n\
+                 }"),
+        3
+    );
+}
