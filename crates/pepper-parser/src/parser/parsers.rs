@@ -678,13 +678,66 @@ pub fn expression(input: &mut &str) -> Result<Expression> {
     assignment(input)
 }
 
+// ── Attributes ────────────────────────────────────────────────────────────────
+
+/// A single attribute: `[Name(arg1, arg2)]`. The argument list is optional, so
+/// bare `[Name]` is accepted as well.
+fn attribute(input: &mut &str) -> Result<Attribute> {
+    if !input.starts_with('[') { return Err(bt(input)); }
+    let start = pos(input);
+    *input = &input[1..];
+    ws(input)?;
+    let name_span_start = pos(input);
+    let name = match identifier(input) {
+        Ok(n) => n,
+        Err(_) => return Err(cut(input)),
+    };
+    let name_span_end = pos(input);
+    ws(input)?;
+    let mut arguments = vec![];
+    if input.starts_with('(') {
+        *input = &input[1..];
+        loop {
+            ws(input)?;
+            if input.starts_with(')') { break; }
+            match expression(input) {
+                Ok(arg) => arguments.push(arg),
+                Err(_) => return Err(cut(input)),
+            }
+            ws(input)?;
+            if input.starts_with(',') {
+                *input = &input[1..];
+                continue;
+            }
+            if !input.starts_with(')') { return Err(cut(input)); }
+            break;
+        }
+        *input = &input[1..];
+    }
+    ws(input)?;
+    if !input.starts_with(']') { return Err(cut(input)); }
+    *input = &input[1..];
+    Ok(Attribute { name, name_span: Span { start: name_span_start, end: name_span_end }, arguments, span: Span { start, end: pos(input) } })
+}
+
+/// Zero or more attributes preceding a declaration or block.
+fn attributes(input: &mut &str) -> Result<Vec<Attribute>> {
+    let mut out = vec![];
+    while input.starts_with('[') {
+        out.push(attribute(input)?);
+        ws(input)?;
+    }
+    Ok(out)
+}
+
 // ── Statements ────────────────────────────────────────────────────────────────
 
 /// Variable declaration — supports two syntaxes:
 ///   1. `[var|const] name [: TypeName] [= expr]`
 ///   2. `TypeName name [= expr]`  (struct field style)
-fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
-    let start = pos(input);
+fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<VariableDecl> {
+    // Widen the node span to cover any preceding attributes.
+    let start = attributes.first().map(|a| a.span.start).unwrap_or(pos(input));
     let before = *input;
 
     // Case 1: explicit specifier (var / const)
@@ -711,7 +764,7 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) } });
     }
     if input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[3..];
@@ -736,7 +789,7 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
     }
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
@@ -770,11 +823,12 @@ fn variable_declaration(input: &mut &str) -> Result<VariableDecl> {
         skip_inline_ws(input);
     }
 
-    Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
+    Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
 }
 
-fn block(input: &mut &str) -> Result<Block> {
-    let start = pos(input);
+fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
+    // Widen the node span to cover any preceding attributes.
+    let start = attributes.first().map(|a| a.span.start).unwrap_or(pos(input));
     if !input.starts_with('{') { return Err(cut(input)); }
     *input = &input[1..];
 
@@ -797,7 +851,7 @@ fn block(input: &mut &str) -> Result<Block> {
     if input.starts_with('}') {
         *input = &input[1..];
     }
-    Ok(Block { statements, span: Span { start, end: pos(input) } })
+    Ok(Block { statements, span: Span { start, end: pos(input) }, attributes })
 }
 
 fn branch(input: &mut &str) -> Result<Branch> {
@@ -809,14 +863,14 @@ fn branch(input: &mut &str) -> Result<Branch> {
     ws(input)?;
     let condition = expression(input)?;
     ws(input)?;
-    let if_block = block(input)?;
+    let if_block = block(input, vec![])?;
     ws(input)?;
 
     let mut else_block = None;
     if input.starts_with("else") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[4..];
         ws(input)?;
-        else_block = Some(block(input)?);
+        else_block = Some(block(input, vec![])?);
         ws(input)?;
     }
 
@@ -833,7 +887,7 @@ fn while_loop(input: &mut &str) -> Result<While> {
     ws(input)?;
     let condition = expression(input)?;
     ws(input)?;
-    let block = block(input)?;
+    let block = block(input, vec![])?;
     let end = block.span.end;
     ws(input)?;
     Ok(While { condition, block, span: Span { start, end } })
@@ -875,8 +929,15 @@ fn decl_boundary(input: &mut &str) -> bool {
 fn statement(input: &mut &str) -> Result<Statement> {
     ws(input)?;
 
+    // An attributed block statement: `[Name(args)] { ... }`. No expression in the
+    // grammar starts with `[`, so this cannot shadow a valid expression.
+    if input.starts_with('[') {
+        let attrs = attributes(input)?;
+        let b = block(input, attrs)?;
+        return Ok(Statement::Block(b));
+    }
     if input.starts_with('{') {
-        let b = block(input)?;
+        let b = block(input, vec![])?;
         return Ok(Statement::Block(b));
     }
     if input.starts_with("if") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -902,7 +963,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
             && !input.starts_with('('));
     if is_var_decl {
         let before = *input;
-        if let Ok(v) = variable_declaration(input) {
+        if let Ok(v) = variable_declaration(input, vec![]) {
             // A real declaration must end at a boundary; otherwise what looked like
             // `type name` was really an expression such as `arr[idx] = 1`.
             if decl_boundary(input) {
@@ -981,7 +1042,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
             dv = Some(expression(input)?);
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
     }
     // C style: `Type name`.
     *input = before;
@@ -998,7 +1059,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
         dv = Some(expression(input)?);
         skip_inline_ws(input);
     }
-    Ok(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
+    Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
 }
 
 fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
@@ -1029,8 +1090,10 @@ fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
 /// Function declaration — supports two syntaxes:
 ///   1. `name [generic_params] (params) [: TypeName] { body }`
 ///   2. `TypeName name (params) { body }`  (return-type prefix style)
-fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
+fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     let before = *input;
 
     // Parse first identifier
@@ -1062,7 +1125,7 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             return_type = type_name(input)?;
             ws(input)?;
         }
-        let body = block(input)?;
+        let body = block(input, vec![])?;
         ws(input)?;
 
         return Ok(FunctionDecl {
@@ -1075,7 +1138,8 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             body: Some(body),
             is_static: false,
             is_indexer: false,
-            span: Span { start, end: pos(input) },
+            span: Span { start: decl_start, end: pos(input) },
+            attributes,
         });
     }
 
@@ -1115,7 +1179,7 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             ws(input)?;
         }
 
-        let body = block(input)?;
+        let body = block(input, vec![])?;
         ws(input)?;
 
         return Ok(FunctionDecl {
@@ -1128,7 +1192,8 @@ fn function_declaration(input: &mut &str) -> Result<FunctionDecl> {
             body: Some(body),
             is_static: false,
             is_indexer: false,
-            span: Span { start, end: pos(input) },
+            span: Span { start: decl_start, end: pos(input) },
+            attributes,
         });
     }
 
@@ -1166,7 +1231,7 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
         let name_span_end = pos(input);
         ws(input)?;
         let span_start = ty.span.start;
-        params.push(VariableDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) } });
+        params.push(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) } });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -1179,8 +1244,10 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
     Ok(params)
 }
 
-fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
+fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     if !input.starts_with("extern") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -1210,7 +1277,8 @@ fn extern_function_declaration(input: &mut &str) -> Result<FunctionDecl> {
         body: None,
         is_static: false,
         is_indexer: false,
-        span: Span { start, end: pos(input) },
+        span: Span { start: decl_start, end: pos(input) },
+        attributes,
     })
 }
 
@@ -1238,15 +1306,18 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
             type_name: TypeName::auto(),
             default_value: Some(value),
             is_const: false,
+            attributes: vec![],
             span: Span { start, end: pos(input) },
         });
     }
-    variable_declaration(input)
+    variable_declaration(input, vec![])
 }
 
 /// A function with an already-parsed name: `name (params) [: TypeName] { body }`.
-fn named_function(input: &mut &str, name: String, name_span: Span) -> Result<FunctionDecl> {
+fn named_function(input: &mut &str, name: String, name_span: Span, attributes: &[Attribute]) -> Result<FunctionDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     ws(input)?;
     let generic_params = if input.starts_with('<') {
         generic_params(input)?
@@ -1267,7 +1338,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span) -> Result<Fun
         return_type = type_name(input)?;
         ws(input)?;
     }
-    let body = block(input)?;
+    let body = block(input, vec![])?;
     ws(input)?;
     Ok(FunctionDecl {
         name,
@@ -1279,7 +1350,8 @@ fn named_function(input: &mut &str, name: String, name_span: Span) -> Result<Fun
         body: Some(body),
         is_static: false,
         is_indexer: false,
-        span: Span { start, end: pos(input) },
+        span: Span { start: decl_start, end: pos(input) },
+        attributes: attributes.to_vec(),
     })
 }
 
@@ -1288,7 +1360,10 @@ fn named_function(input: &mut &str, name: String, name_span: Span) -> Result<Fun
 ///   - indexer method: `T [](params) { body }`
 ///   - operator overload: `bool ==(x) { ... }` / `string +=(x) { ... }`
 ///   - `name(params) [: type] { body }` or `ReturnType name(params) { body }`
-fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
+fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionDecl> {
+    let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     ws(input)?;
     let is_static = if input.starts_with("static") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[6..];
@@ -1309,7 +1384,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
             if after.starts_with('(') {
                 let parameters = function_parameters(&mut after)?;
                 ws(&mut after)?;
-                let body = block(&mut after)?;
+                let body = block(&mut after, vec![])?;
                 ws(&mut after)?;
                 *input = after;
                 return Ok(FunctionDecl {
@@ -1322,7 +1397,8 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                     body: Some(body),
                     is_static,
                     is_indexer: true,
-                    span: Span { start: pos(before), end: pos(after) },
+                    span: Span { start: decl_start, end: pos(after) },
+                    attributes: attributes.to_vec(),
                 });
             }
         }
@@ -1341,7 +1417,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
 
     if input.starts_with('(') {
         // `name(params) [: type] { body }`
-        let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end })?;
+        let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end }, attributes)?;
         f.is_static = is_static;
         return Ok(f);
     }
@@ -1368,7 +1444,7 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                 vec![]
             };
             ws(&mut after)?;
-            let body = block(&mut after)?;
+            let body = block(&mut after, vec![])?;
             ws(&mut after)?;
             *input = after;
             return Ok(FunctionDecl {
@@ -1381,7 +1457,8 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
                 body: Some(body),
                 is_static,
                 is_indexer: false,
-                span: Span { start: pos(before), end: pos(after) },
+                span: Span { start: decl_start, end: pos(after) },
+                attributes: attributes.to_vec(),
             });
         }
     }
@@ -1391,8 +1468,10 @@ fn struct_method(input: &mut &str) -> Result<FunctionDecl> {
 }
 
 /// A trait method: like `struct_method` but the body is optional (`int getX();`).
-fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
+fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     ws(input)?;
     let is_static = if input.starts_with("static") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[6..];
@@ -1416,7 +1495,7 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
 
     fn optional_body(input: &mut &str) -> Result<Option<Block>> {
         if input.starts_with('{') {
-            let b = block(input)?;
+            let b = block(input, vec![])?;
             ws(input)?;
             return Ok(Some(b));
         }
@@ -1450,7 +1529,8 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
             body,
             is_static,
             is_indexer: false,
-            span: Span { start, end: pos(input) },
+            span: Span { start: decl_start, end: pos(input) },
+            attributes,
         });
     }
 
@@ -1482,7 +1562,8 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
             body,
             is_static,
             is_indexer: false,
-            span: Span { start, end: pos(input) },
+            span: Span { start: decl_start, end: pos(input) },
+            attributes,
         });
     }
 
@@ -1491,8 +1572,10 @@ fn trait_method(input: &mut &str) -> Result<FunctionDecl> {
 }
 
 /// `trait Name[<params>] { methods }`
-fn trait_declaration(input: &mut &str) -> Result<TraitDecl> {
+fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attrs.first().map(|a| a.span.start).unwrap_or(start);
     if !input.starts_with("trait") || input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -1519,7 +1602,8 @@ fn trait_declaration(input: &mut &str) -> Result<TraitDecl> {
             *input = &input[1..];
             continue;
         }
-        methods.push(trait_method(input)?);
+        let m_attrs = attributes(input)?;
+        methods.push(trait_method(input, m_attrs)?);
         ws(input)?;
         if input.starts_with(';') {
             *input = &input[1..];
@@ -1529,12 +1613,14 @@ fn trait_declaration(input: &mut &str) -> Result<TraitDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(TraitDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start, end: pos(input) } })
+    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) } })
 }
 
 /// `extend TypeName[<...>] [with Trait, ...] { methods }`
-fn extend_declaration(input: &mut &str) -> Result<ExtendDecl> {
+fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attrs.first().map(|a| a.span.start).unwrap_or(start);
     if !input.starts_with("extend") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -1569,7 +1655,8 @@ fn extend_declaration(input: &mut &str) -> Result<ExtendDecl> {
             *input = &input[1..];
             continue;
         }
-        methods.push(struct_method(input)?);
+        let m_attrs = attributes(input)?;
+        methods.push(struct_method(input, &m_attrs)?);
         ws(input)?;
         if input.starts_with(';') {
             *input = &input[1..];
@@ -1579,11 +1666,13 @@ fn extend_declaration(input: &mut &str) -> Result<ExtendDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { target, traits, methods, span: Span { start, end: pos(input) } })
+    Ok(ExtendDecl { attributes: attrs, target, traits, methods, span: Span { start: decl_start, end: pos(input) } })
 }
 
-fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
+fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDecl> {
     let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attrs.first().map(|a| a.span.start).unwrap_or(start);
     if !input.starts_with("struct") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(bt(input));
     }
@@ -1616,8 +1705,9 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
             *input = &input[1..];
             continue;
         }
-
-        // constructor: `new(params) { ... }` (docs also call this `construct`)
+        // `[Name(args)]` may precede any struct member: method, field, constructor, destructor, extern.
+        let m_attrs = attributes(input)?;
+        let after_attrs = *input;
         if (input.starts_with("new") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
             || (input.starts_with("construct") && !input[9..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')) {
             let new_span_start = pos(input);
@@ -1641,7 +1731,7 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
             }
             *input = &input[1..];
             ws(input)?;
-            let body = block(input)?;
+            let body = block(input, vec![])?;
             ws(input)?;
             constructor = Some(FunctionDecl {
                 name: "new".into(),
@@ -1653,7 +1743,8 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
                 body: Some(body),
                 is_static: false,
                 is_indexer: false,
-                span: Span { start: new_span_start, end: pos(input) },
+                span: Span { start: m_attrs.first().map(|a| a.span.start).unwrap_or(new_span_start), end: pos(input) },
+                attributes: m_attrs,
             });
             continue;
         }
@@ -1662,20 +1753,19 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
         if input.starts_with("destruct") && !input[8..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
             *input = &input[8..];
             ws(input)?;
-            destructor = Some(block(input)?);
+            destructor = Some(block(input, m_attrs)?);
             ws(input)?;
             continue;
         }
 
         if input.starts_with("extern") {
-            let m = extern_function_declaration(input)?;
+            let m = extern_function_declaration(input, m_attrs)?;
             ws(input)?;
             methods.push(m);
             continue;
         }
 
-        let before = *input;
-        if let Ok(m) = struct_method(input) {
+        if let Ok(m) = struct_method(input, &m_attrs) {
             ws(input)?;
             methods.push(m);
             if input.starts_with(';') {
@@ -1683,12 +1773,12 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
             }
             continue;
         }
-        *input = before;
-
-        let f = variable_declaration(input)?;
+        // Method attempt failed (it may have consumed input past the name); restart at the post-attribute position.
+        *input = after_attrs;
+        let f = variable_declaration(input, m_attrs)?;
         ws(input)?;
         if !decl_boundary(input) {
-            *input = before;
+            *input = after_attrs;
             return Err(bt(input));
         }
         fields.push(f);
@@ -1701,31 +1791,38 @@ fn struct_declaration(input: &mut &str) -> Result<StructDecl> {
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start, end: pos(input) } })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs })
 }
 
 fn declaration(input: &mut &str) -> Result<Declaration> {
     ws(input)?;
 
+    // Attributes may precede any top-level declaration.
+    let leading = attributes(input)?;
+
     if input.starts_with("struct") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        return Ok(Declaration::Struct(struct_declaration(input)?));
+        return Ok(Declaration::Struct(struct_declaration(input, leading)?));
     }
     if input.starts_with("trait") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        return Ok(Declaration::Trait(trait_declaration(input)?));
+        return Ok(Declaration::Trait(trait_declaration(input, leading)?));
     }
     if input.starts_with("extend") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        return Ok(Declaration::Extend(extend_declaration(input)?));
+        return Ok(Declaration::Extend(extend_declaration(input, leading)?));
     }
     if input.starts_with("extern") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        return Ok(Declaration::Function(extern_function_declaration(input)?));
+        return Ok(Declaration::Function(extern_function_declaration(input, leading)?));
     }
     let before = *input;
-    if let Ok(f) = function_declaration(input) {
+    if !leading.is_empty() {
+        // Attributes commit the statement to a function definition.
+        return Ok(Declaration::Function(function_declaration(input, leading)?));
+    }
+    if let Ok(f) = function_declaration(input, vec![]) {
         return Ok(Declaration::Function(f));
     }
     *input = before;
 
-    let v = variable_declaration(input)?;
+    let v = variable_declaration(input, vec![])?;
     if !decl_boundary(input) {
         return Err(bt(input));
     }
@@ -2185,7 +2282,7 @@ mod tests {
     #[test]
     fn test_var_declaration() {
         let mut input = "var x: int = 42";
-        let decl = variable_declaration(&mut input).unwrap();
+        let decl = variable_declaration(&mut input, vec![]).unwrap();
         assert_eq!(decl.name, "x");
         assert_eq!(decl.type_name.name, "int");
         assert!(!decl.is_const);
@@ -2195,7 +2292,7 @@ mod tests {
     #[test]
     fn test_const_declaration() {
         let mut input = "const MAX = 100";
-        let decl = variable_declaration(&mut input).unwrap();
+        let decl = variable_declaration(&mut input, vec![]).unwrap();
         assert_eq!(decl.name, "MAX");
         assert!(decl.is_const);
     }
@@ -2203,7 +2300,7 @@ mod tests {
     #[test]
     fn test_type_name_declaration() {
         let mut input = "int count = 0";
-        let decl = variable_declaration(&mut input).unwrap();
+        let decl = variable_declaration(&mut input, vec![]).unwrap();
         assert_eq!(decl.name, "count");
         assert_eq!(decl.type_name.name, "int");
     }
@@ -2508,6 +2605,254 @@ mod tests {
         // and a valid program must still succeed
         let mut input = "int x = 1;";
         assert!(parse_module(&mut input).is_ok());
+    }
+
+    // ── Attributes ──
+
+    fn assert_int_arg(e: &Expression, n: i64) {
+        match e {
+            Expression::Literal { value: Literal::Integer(v), .. } => assert_eq!(*v, n),
+            other => panic!("expected int literal {}, got {:?}", n, other),
+        }
+    }
+    #[test]
+    fn test_function_attributes() {
+        // Syntax 1: `name(params) : ret { body }` — multiple attributes, mixed args.
+        let m = parse("[A(1, 2)] [B] main(): int {\n    return 42;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.name, "main");
+                assert_eq!(f.attributes.len(), 2);
+                assert_eq!(f.attributes[0].name, "A");
+                assert_eq!(f.attributes[0].arguments.len(), 2);
+                assert_int_arg(&f.attributes[0].arguments[0], 1);
+                assert_int_arg(&f.attributes[0].arguments[1], 2);
+                assert_eq!(f.attributes[1].name, "B");
+                assert!(f.attributes[1].arguments.is_empty());
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_function_attributes_return_type_prefix() {
+        // Syntax 2: `TypeName name(params) { body }` — attributes still attach to the function.
+        let m = parse("[Export(\"x\")] string hello() {\n    return \"\";\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.name, "hello");
+                assert_eq!(f.attributes.len(), 1);
+                assert_eq!(f.attributes[0].name, "Export");
+                match &f.attributes[0].arguments[0] {
+                    Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "x"),
+                    other => panic!("expected string arg, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_extern_function_attributes() {
+        let m = parse("[Export(\"x\")] extern int my_func(int a);");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert!(f.external);
+                assert_eq!(f.name, "my_func");
+                assert_eq!(f.attributes.len(), 1);
+                assert_eq!(f.attributes[0].name, "Export");
+                assert_eq!(f.attributes[0].arguments.len(), 1);
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_struct_attributes() {
+        let m = parse("[Align(16)] struct Point {\n    int x = 0;\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert_eq!(s.name, "Point");
+                assert_eq!(s.attributes.len(), 1);
+                assert_eq!(s.attributes[0].name, "Align");
+                assert_int_arg(&s.attributes[0].arguments[0], 16);
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_struct_member_attributes() {
+        let m = parse("struct S {\n    [ReadOnly] int x = 0;\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert_eq!(s.fields.len(), 1);
+                assert_eq!(s.fields[0].name, "x");
+                assert_eq!(s.fields[0].attributes.len(), 1);
+                assert_eq!(s.fields[0].attributes[0].name, "ReadOnly");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_block_attributes() {
+        let m = parse("main(): int {\n    var y = 1;\n    [Scope] {\n        y = 2;\n    }\n    return y;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                let body = f.body.as_ref().expect("body");
+                assert_eq!(body.statements.len(), 3);
+                match &body.statements[1] {
+                    Statement::Block(b) => {
+                        assert_eq!(b.attributes.len(), 1);
+                        assert_eq!(b.attributes[0].name, "Scope");
+                    }
+                    other => panic!("expected attributed block, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_trait_attributes() {
+        let m = parse("[Cacheable] trait Shape {\n    int area();\n}");
+        match &m.declarations[0] {
+            Declaration::Trait(t) => {
+                assert_eq!(t.name, "Shape");
+                assert_eq!(t.attributes.len(), 1);
+                assert_eq!(t.attributes[0].name, "Cacheable");
+                assert!(t.attributes[0].arguments.is_empty());
+                assert_eq!(t.methods.len(), 1);
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_extend_attributes() {
+        let m = parse("[Inline] extend Point with Shape {\n    int area() {\n        return 1;\n    }\n}");
+        match &m.declarations[0] {
+            Declaration::Extend(e) => {
+                assert_eq!(e.target.name, "Point");
+                assert_eq!(e.attributes.len(), 1);
+                assert_eq!(e.attributes[0].name, "Inline");
+                assert_eq!(e.traits.len(), 1);
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_method_attributes() {
+        // Struct method (named form, via `named_function`).
+        let m = parse("struct S {\n    [Inline] [Opt(2)] area(): int {\n        return 1;\n    }\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert_eq!(s.methods.len(), 1);
+                assert_eq!(s.methods[0].name, "area");
+                assert_eq!(s.methods[0].attributes.len(), 2);
+                assert_eq!(s.methods[0].attributes[0].name, "Inline");
+                assert_eq!(s.methods[0].attributes[1].name, "Opt");
+                assert_eq!(s.to_string(), "struct S {\n    [Inline] [Opt(2)] area(): int {\n    return 1;\n}\n}");
+            }
+            other => panic!("{:?}", other),
+        }
+
+        // Trait method (return-type prefix form, bodyless).
+        let m = parse("trait Shape {\n    [Cacheable] int area();\n}");
+        match &m.declarations[0] {
+            Declaration::Trait(t) => {
+                assert_eq!(t.methods.len(), 1);
+                assert_eq!(t.methods[0].name, "area");
+                assert_eq!(t.methods[0].attributes.len(), 1);
+                assert_eq!(t.methods[0].attributes[0].name, "Cacheable");
+                assert_eq!(t.to_string(), "trait Shape {\n    [Cacheable] area(): int;\n}");
+            }
+            other => panic!("{:?}", other),
+        }
+
+        // Extend method (return-type prefix form).
+        let m = parse("extend Point with Shape {\n    [Inline] int area() {\n        return 1;\n    }\n}");
+        match &m.declarations[0] {
+            Declaration::Extend(e) => {
+                assert_eq!(e.methods.len(), 1);
+                assert_eq!(e.methods[0].name, "area");
+                assert_eq!(e.methods[0].attributes.len(), 1);
+                assert_eq!(e.methods[0].attributes[0].name, "Inline");
+                assert_eq!(e.to_string(), "extend Point with Shape {\n    [Inline] area(): int {\n    return 1;\n}\n}");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_struct_ctor_destructor_extern_attributes() {
+        // Attributes on constructor, destructor, and extern members.
+        let m = parse("struct S {\n    int x;\n    [Export] new(this.x = 0) {\n        x += 1;\n    }\n    [Cleanup(1)] destruct {\n        x = 0;\n    }\n    [Inline] extern int helper(int a);\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                let c = s.constructor.as_ref().expect("constructor present");
+                assert_eq!(c.attributes.len(), 1);
+                assert_eq!(c.attributes[0].name, "Export");
+                assert_eq!(s.destructor.as_ref().unwrap().attributes.len(), 1);
+                assert_eq!(s.destructor.as_ref().unwrap().attributes[0].name, "Cleanup");
+                assert_eq!(s.methods.len(), 1);
+                assert_eq!(s.methods[0].name, "helper");
+                assert_eq!(s.methods[0].attributes.len(), 1);
+                assert_eq!(s.methods[0].attributes[0].name, "Inline");
+                assert_eq!(s.to_string(), "struct S {\n    var x: int\n    [Export] new(var this.x: __auto = 0) {\n    (x += 1);\n}\n    [Cleanup(1)] destruct {\n    (x = 0);\n}\n    [Inline] extern int helper(var a: int)\n}");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_attribute_display() {
+        // Bare attributes must not gain empty parens.
+        let m = parse("[A(1, 2)] [B] main(): int {\n    return 42;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => assert_eq!(f.to_string(), "[A(1, 2)] [B] main(): int {\n    return 42;\n}"),
+            other => panic!("{:?}", other),
+        }
+        let m = parse("[Export(\"x\")] extern int my_func(int a);");
+        match &m.declarations[0] {
+            Declaration::Function(f) => assert_eq!(f.to_string(), "[Export(\"x\")] extern int my_func(var a: int)"),
+            other => panic!("{:?}", other),
+        }
+        let m = parse("[Align(16)] struct Point {\n    int x = 0;\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => assert_eq!(s.to_string(), "[Align(16)] struct Point {\n    var x: int = 0\n}"),
+            other => panic!("{:?}", other),
+        }
+        let m = parse("[Cacheable] trait Shape {\n    int area();\n}");
+        match &m.declarations[0] {
+            Declaration::Trait(t) => assert_eq!(t.to_string(), "[Cacheable] trait Shape {\n    area(): int;\n}"),
+            other => panic!("{:?}", other),
+        }
+        let m = parse("[Inline] extend Point with Shape {\n    int area() {\n        return 1;\n    }\n}");
+        match &m.declarations[0] {
+            Declaration::Extend(e) => assert_eq!(e.to_string(), "[Inline] extend Point with Shape {\n    area(): int {\n    return 1;\n}\n}"),
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_attribute_errors() {
+        // Malformed attributes and attributes in unsupported positions must be rejected.
+        let bad_sources = [
+            "[A(1] f() {}",
+            "[A f() {}",
+            "[] f() {}",
+            "[1] f() {}",
+            "[A] var x = 1;",
+            "[A] { }",
+            "[A(1+] f() {}",
+        ];
+        for src in bad_sources {
+            let mut input = src;
+            assert!(parse_module(&mut input).is_err(), "should reject: {}", src);
+        }
     }
 }
 

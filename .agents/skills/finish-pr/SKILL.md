@@ -122,6 +122,21 @@ this exact set of commits and nothing has been pushed since. If any commits
 were added or amended since the last review (including ones just pushed in
 Phase 2), re-run it — a review is only as good as the diff it saw.
 
+**Stream the review's feedback; don't make the user wait for a batch.**
+A finished review is one artifact, but a long silent review feels like a stuck
+one — and the first finding is often worth seeing before the last. So when
+you dispatch the reviewer:
+
+- Tell it in the task to **send you a message as soon as it confirms a
+  finding** (file, line, issue, proposed fix) via `hub` send to `Main`, and
+  a one-line progress note if the review runs past a few minutes. The final
+  structured report is still due at the end — streamed messages are previews,
+  not replacements.
+- While it runs, relay each message to the user as it arrives: a confirmed
+  finding goes out immediately with its proposed fix; progress notes only if
+  you'd otherwise be silent for minutes. Don't batch findings in your pocket
+  until the final report lands.
+
 ## Phase 5 — Findings gate the merge; a clean review doesn't
 
 - **The review has findings** — present every one, most severe first, each

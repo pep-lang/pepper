@@ -98,6 +98,19 @@ impl Display for TypeName {
     }
 }
 
+// ── Attributes ───────────────────────────────────────────────────────────────
+
+/// A single attribute: `[Name(arg1, arg2)]`.
+#[derive(Debug, Clone)]
+pub struct Attribute {
+    pub name: String,
+    /// Span of the attribute name token.
+    pub name_span: Span,
+    pub arguments: Vec<Expression>,
+    /// Span covering the whole `[Name(...)]` bracket group.
+    pub span: Span,
+}
+
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -191,6 +204,8 @@ impl From<bool> for Literal {
 
 #[derive(Debug, Clone)]
 pub struct VariableDecl {
+    /// Attributes preceding the declaration (`[Name(args)]`).
+    pub attributes: Vec<Attribute>,
     pub name: String,
     /// Span of the declared name token.
     pub name_span: Span,
@@ -216,6 +231,8 @@ pub struct FunctionDecl {
     /// Indexer method: `T [](params) { ... }`
     pub is_indexer: bool,
     pub span: Span,
+    /// Attributes preceding the function (`[Name(args)]`).
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,10 +248,14 @@ pub struct StructDecl {
     /// `destruct { ... }` destructor body
     pub destructor: Option<Block>,
     pub span: Span,
+    /// Attributes preceding the struct (`[Name(args)]`).
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
+    /// Attributes preceding the `trait` keyword.
+    pub attributes: Vec<Attribute>,
     pub name: String,
     /// Span of the trait name token.
     pub name_span: Span,
@@ -245,6 +266,8 @@ pub struct TraitDecl {
 
 #[derive(Debug, Clone)]
 pub struct ExtendDecl {
+    /// Attributes preceding the `extend` keyword.
+    pub attributes: Vec<Attribute>,
     /// The struct being extended, possibly specialized: `Test<int>`
     pub target: TypeName,
     /// Traits implemented by the extension (after `with`)
@@ -300,8 +323,10 @@ impl Declaration {
 #[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Statement>,
-    /// Span covering the braces.
+    /// Span covering the braces, widened to the first attribute when present.
     pub span: Span,
+    /// Attributes preceding the block (`[Name(args)]`).
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -407,9 +432,42 @@ impl Display for Expression {
     }
 }
 
+impl Display for Attribute {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}", self.name)?;
+        if !self.arguments.is_empty() {
+            write!(f, "({})", join(&self.arguments, ", "))?;
+        }
+        write!(f, "]")
+    }
+}
+
+/// Render a leading attribute list (`[A(1)] [B] `), including the trailing
+/// separator, if any.
+fn write_attributes(f: &mut Formatter<'_>, attributes: &[Attribute]) -> std::fmt::Result {
+    for attr in attributes {
+        write!(f, "{} ", attr)?;
+    }
+    Ok(())
+}
+
+/// Render a block's braces and statements without its leading attributes, so
+/// callers can place the attributes themselves (e.g. `destruct { ... }`).
+fn write_block_body(f: &mut Formatter<'_>, block: &Block) -> std::fmt::Result {
+    write!(f, "{{")?;
+    for stmt in &block.statements {
+        write!(f, "\n    {}", stmt)?;
+    }
+    if !block.statements.is_empty() {
+        write!(f, "\n")?;
+    }
+    write!(f, "}}")
+}
+
 impl Display for VariableDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let spec = if self.is_const { "const " } else { "var " };
+        write_attributes(f, &self.attributes)?;
         write!(f, "{}{}: {}", spec, self.name, self.type_name)?;
         if let Some(v) = &self.default_value {
             write!(f, " = {}", v)?;
@@ -420,6 +478,7 @@ impl Display for VariableDecl {
 
 impl Display for FunctionDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
         if self.external {
             write!(f, "extern {} {}({})", self.return_type, self.name, join(&self.parameters, ", "))?;
             return Ok(());
@@ -452,6 +511,7 @@ impl Display for FunctionDecl {
 
 impl Display for StructDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
         write!(f, "struct {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
@@ -462,10 +522,15 @@ impl Display for StructDecl {
         }
         if let Some(constructor) = &self.constructor {
             let body = constructor.body.as_ref().expect("constructor has a body");
-            write!(f, "\n    new({}) {}", join(&constructor.parameters, ", "), body)?;
+            write!(f, "\n    ")?;
+            write_attributes(f, &constructor.attributes)?;
+            write!(f, "new({}) {}", join(&constructor.parameters, ", "), body)?;
         }
         if let Some(destructor) = &self.destructor {
-            write!(f, "\n    destruct {}", destructor)?;
+            write!(f, "\n    ")?;
+            write_attributes(f, &destructor.attributes)?;
+            write!(f, "destruct ")?;
+            write_block_body(f, destructor)?;
         }
         for method in &self.methods {
             write!(f, "\n    {}", method)?;
@@ -484,6 +549,7 @@ impl Display for StructDecl {
 
 impl Display for TraitDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
         write!(f, "trait {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
@@ -501,6 +567,7 @@ impl Display for TraitDecl {
 
 impl Display for ExtendDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
         write!(f, "extend {}", self.target)?;
         if !self.traits.is_empty() {
             write!(f, " with {}", join(&self.traits, ", "))?;
@@ -518,15 +585,8 @@ impl Display for ExtendDecl {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{")?;
-        for stmt in &self.statements {
-            write!(f, "\n    {}", stmt)?;
-        }
-        if !self.statements.is_empty() {
-            write!(f, "\n")?;
-        }
-        write!(f, "}}")?;
-        Ok(())
+        write_attributes(f, &self.attributes)?;
+        write_block_body(f, self)
     }
 }
 
