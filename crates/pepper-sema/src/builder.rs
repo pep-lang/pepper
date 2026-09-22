@@ -180,6 +180,7 @@ fn block(block: &ast::Block) -> Result<Block, String> {
     Ok(Block {
         name: String::new(),
         items: block.statements.iter().map(statement).collect::<Result<Vec<_>, _>>()?,
+        attributes: block.attributes.clone(),
     })
 }
 
@@ -220,6 +221,7 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Func
         is_static: decl.is_static,
         is_indexer: decl.is_indexer,
         is_generic_func: !decl.generic_params.is_empty(),
+        attributes: decl.attributes.clone(),
     })
 }
 
@@ -233,12 +235,14 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, String> {
         ast::Declaration::Trait(t) => Ok(Declaration::Trait(TraitDef {
             name: t.name.clone(),
             methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+            attributes: t.attributes.clone(),
         })),
         ast::Declaration::Extend(e) => Ok(Declaration::Extension(ExtensionDef {
             target: type_name_from(&e.target),
             resolved: None,
             traits: e.traits.iter().map(type_name_from).collect(),
             methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+            attributes: e.attributes.clone(),
         })),
     }
 }
@@ -278,11 +282,13 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             body: Some(Block {
                 name: String::new(),
                 items: vec![],
+                attributes: vec![],
             }),
             parent: Some(base_name.clone()),
             is_static: false,
             is_indexer: false,
             is_generic_func: false,
+            attributes: vec![],
         },
     };
     let destructor = match &decl.destructor {
@@ -296,6 +302,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             is_static: false,
             is_indexer: false,
             is_generic_func: false,
+            attributes: body.attributes.clone(),
         },
         None => FunctionDef {
             name: "__dtor".to_string(),
@@ -305,11 +312,13 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             body: Some(Block {
                 name: String::new(),
                 items: vec![],
+                attributes: vec![],
             }),
             parent: Some(base_name.clone()),
             is_static: false,
             is_indexer: false,
             is_generic_func: false,
+            attributes: vec![],
         },
     };
 
@@ -324,6 +333,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
         acquire: empty_method(&base_name, "__acquire"),
         release: empty_method(&base_name, "__release"),
         traits: vec![],
+        attributes: decl.attributes.clone(),
     })
 }
 
@@ -336,11 +346,13 @@ fn empty_method(parent: &str, name: &str) -> FunctionDef {
         body: Some(Block {
             name: String::new(),
             items: vec![],
+            attributes: vec![],
         }),
         parent: Some(parent.to_string()),
         is_static: false,
         is_indexer: false,
         is_generic_func: false,
+        attributes: vec![],
     }
 }
 
@@ -364,6 +376,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                             Ok(Block {
                                 name: String::new(),
                                 items: vec![Statement::Expression(expression(expr)?)],
+                                attributes: vec![],
                             })
                         })
                         .transpose()?,
@@ -371,6 +384,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                     is_static: false,
                     is_indexer: false,
                     is_generic_func: false,
+                    attributes: v.attributes.clone(),
                 });
             }
             ast::Declaration::Function(f) => {
@@ -383,6 +397,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                             .iter()
                             .map(|p| variable_def(p, Kind::Param))
                             .collect::<Result<Vec<_>, _>>()?,
+                        attributes: f.attributes.clone(),
                     });
                 } else {
                     out.functions.push(function_def(f, None)?);
@@ -392,12 +407,14 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
             ast::Declaration::Trait(t) => out.traits.push(TraitDef {
                 name: t.name.clone(),
                 methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+                attributes: t.attributes.clone(),
             }),
             ast::Declaration::Extend(e) => out.extensions.push(ExtensionDef {
                 target: type_name_from(&e.target),
                 resolved: None,
                 traits: e.traits.iter().map(type_name_from).collect(),
                 methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+                attributes: e.attributes.clone(),
             }),
         }
     }

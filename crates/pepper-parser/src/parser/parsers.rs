@@ -680,44 +680,74 @@ pub fn expression(input: &mut &str) -> Result<Expression> {
 
 // ── Attributes ────────────────────────────────────────────────────────────────
 
-/// A single attribute: `[Name(arg1, arg2)]`. The argument list is optional, so
-/// bare `[Name]` is accepted as well.
+/// A single attribute `[expr]`. The body is a full boolean expression, so
+/// simple attributes (`[A]`, `[A(1, 2)]`) and platform predicates
+/// (`[OS(Windows) || OS(Mac)]`, `[!OS(Windows)]`) share one grammar.
 fn attribute(input: &mut &str) -> Result<Attribute> {
     if !input.starts_with('[') { return Err(bt(input)); }
     let start = pos(input);
     *input = &input[1..];
     ws(input)?;
-    let name_span_start = pos(input);
-    let name = match identifier(input) {
-        Ok(n) => n,
-        Err(_) => return Err(cut(input)),
-    };
-    let name_span_end = pos(input);
-    ws(input)?;
-    let mut arguments = vec![];
-    if input.starts_with('(') {
-        *input = &input[1..];
-        loop {
-            ws(input)?;
-            if input.starts_with(')') { break; }
-            match expression(input) {
-                Ok(arg) => arguments.push(arg),
-                Err(_) => return Err(cut(input)),
-            }
-            ws(input)?;
-            if input.starts_with(',') {
-                *input = &input[1..];
-                continue;
-            }
-            if !input.starts_with(')') { return Err(cut(input)); }
-            break;
-        }
-        *input = &input[1..];
-    }
+    // Inside the brackets, a failed body is a hard error: backtracking would
+    // leave the dangling `[` to be misreported at the next declaration.
+    let body = expression(input).map_err(|_| cut(input))?;
+    // The body must be a boolean predicate (symbols, calls, `!`, `&&`/`||`);
+    // anything else — literals, arithmetic, assignment — is a hard error.
+    if !is_predicate_body(&body) { return Err(cut(input)); }
     ws(input)?;
     if !input.starts_with(']') { return Err(cut(input)); }
     *input = &input[1..];
-    Ok(Attribute { name, name_span: Span { start: name_span_start, end: name_span_end }, arguments, span: Span { start, end: pos(input) } })
+    Ok(Attribute { body, span: Span { start, end: pos(input) } })
+}
+
+/// Attribute bodies are boolean predicates over platform symbols: a bare
+/// symbol, a `Name(args)` call, `!`, and `&&`/`||` (with `and`/`or`).
+fn is_predicate_body(e: &Expression) -> bool {
+    match e {
+        Expression::SymbolRef { .. } => true,
+        // A `Name(arg, ...)` parses as a plain function call.
+        Expression::FunctionCall { function, .. } => {
+            matches!(function.as_ref(), Expression::SymbolRef { .. })
+        }
+        Expression::Unary { op, prefix, operand, .. } => {
+            *prefix && op == "!" && is_predicate_body(operand)
+        }
+        Expression::Binary { lhs, op, rhs, .. } => {
+            (op == "&&" || op == "||" || op == "and" || op == "or")
+                && is_predicate_body(lhs)
+                && is_predicate_body(rhs)
+        }
+        _ => false,
+    }
+}
+
+/// True if the attribute body selects on a platform predicate in operand
+/// position: `OS`, `Arch`, `Platform`/`Target`, bare or called, under `!` and
+/// `&&`/`||`. A predicate nested inside another attribute's argument list
+/// (e.g. `[Align(OS(Windows))]`) is not a selection and is not reported here,
+/// matching the evaluator, which also ignores such arguments. Used to reject
+/// predicates on struct fields, which have no per-platform semantics —
+/// including mixed bodies like `[OS(Windows) && Export]`, where the predicate
+/// half would otherwise be silently ignored. Also used by the sema pass to
+/// skip attributes that contain no predicate at all.
+pub fn contains_platform_predicate(e: &Expression) -> bool {
+    match e {
+        Expression::SymbolRef { id, .. } => is_platform_predicate_name(&id),
+        Expression::FunctionCall { function, .. } => {
+            matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id))
+        }
+        Expression::Unary { operand, .. } => contains_platform_predicate(operand),
+        Expression::Binary { lhs, rhs, .. } => {
+            contains_platform_predicate(lhs) || contains_platform_predicate(rhs)
+        }
+        _ => false,
+    }
+}
+
+/// Predicate names recognized by platform selection. Shared with the sema
+/// pass so the parser's field rejection and the evaluator agree on the set.
+pub fn is_platform_predicate_name(id: &str) -> bool {
+    matches!(id.to_ascii_lowercase().as_str(), "os" | "arch" | "platform" | "target")
 }
 
 /// Zero or more attributes preceding a declaration or block.
@@ -1775,6 +1805,11 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
         }
         // Method attempt failed (it may have consumed input past the name); restart at the post-attribute position.
         *input = after_attrs;
+        // Platform predicates select whole declarations, not individual
+        // fields — reject them here rather than silently ignoring them.
+        if m_attrs.iter().any(|a| contains_platform_predicate(&a.body)) {
+            return Err(cut(input));
+        }
         let f = variable_declaration(input, m_attrs)?;
         ws(input)?;
         if !decl_boundary(input) {
@@ -2623,12 +2658,12 @@ mod tests {
             Declaration::Function(f) => {
                 assert_eq!(f.name, "main");
                 assert_eq!(f.attributes.len(), 2);
-                assert_eq!(f.attributes[0].name, "A");
-                assert_eq!(f.attributes[0].arguments.len(), 2);
-                assert_int_arg(&f.attributes[0].arguments[0], 1);
-                assert_int_arg(&f.attributes[0].arguments[1], 2);
-                assert_eq!(f.attributes[1].name, "B");
-                assert!(f.attributes[1].arguments.is_empty());
+                let (name, args) = attr_call_name_args(&f.attributes[0].body);
+                assert_eq!(name, "A");
+                assert_eq!(args.len(), 2);
+                assert_int_arg(&args[0], 1);
+                assert_int_arg(&args[1], 2);
+                assert_bare_attr(&f.attributes[1].body, "B");
             }
             other => panic!("{:?}", other),
         }
@@ -2642,8 +2677,10 @@ mod tests {
             Declaration::Function(f) => {
                 assert_eq!(f.name, "hello");
                 assert_eq!(f.attributes.len(), 1);
-                assert_eq!(f.attributes[0].name, "Export");
-                match &f.attributes[0].arguments[0] {
+                let (name, args) = attr_call_name_args(&f.attributes[0].body);
+                assert_eq!(name, "Export");
+                assert_eq!(args.len(), 1);
+                match &args[0] {
                     Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "x"),
                     other => panic!("expected string arg, got {:?}", other),
                 }
@@ -2660,8 +2697,9 @@ mod tests {
                 assert!(f.external);
                 assert_eq!(f.name, "my_func");
                 assert_eq!(f.attributes.len(), 1);
-                assert_eq!(f.attributes[0].name, "Export");
-                assert_eq!(f.attributes[0].arguments.len(), 1);
+                let (name, args) = attr_call_name_args(&f.attributes[0].body);
+                assert_eq!(name, "Export");
+                assert_eq!(args.len(), 1);
             }
             other => panic!("{:?}", other),
         }
@@ -2674,8 +2712,9 @@ mod tests {
             Declaration::Struct(s) => {
                 assert_eq!(s.name, "Point");
                 assert_eq!(s.attributes.len(), 1);
-                assert_eq!(s.attributes[0].name, "Align");
-                assert_int_arg(&s.attributes[0].arguments[0], 16);
+                let (name, args) = attr_call_name_args(&s.attributes[0].body);
+                assert_eq!(name, "Align");
+                assert_int_arg(&args[0], 16);
             }
             other => panic!("{:?}", other),
         }
@@ -2689,7 +2728,7 @@ mod tests {
                 assert_eq!(s.fields.len(), 1);
                 assert_eq!(s.fields[0].name, "x");
                 assert_eq!(s.fields[0].attributes.len(), 1);
-                assert_eq!(s.fields[0].attributes[0].name, "ReadOnly");
+                assert_bare_attr(&s.fields[0].attributes[0].body, "ReadOnly");
             }
             other => panic!("{:?}", other),
         }
@@ -2705,7 +2744,7 @@ mod tests {
                 match &body.statements[1] {
                     Statement::Block(b) => {
                         assert_eq!(b.attributes.len(), 1);
-                        assert_eq!(b.attributes[0].name, "Scope");
+                        assert_bare_attr(&b.attributes[0].body, "Scope");
                     }
                     other => panic!("expected attributed block, got {:?}", other),
                 }
@@ -2721,8 +2760,7 @@ mod tests {
             Declaration::Trait(t) => {
                 assert_eq!(t.name, "Shape");
                 assert_eq!(t.attributes.len(), 1);
-                assert_eq!(t.attributes[0].name, "Cacheable");
-                assert!(t.attributes[0].arguments.is_empty());
+                assert_bare_attr(&t.attributes[0].body, "Cacheable");
                 assert_eq!(t.methods.len(), 1);
             }
             other => panic!("{:?}", other),
@@ -2736,7 +2774,7 @@ mod tests {
             Declaration::Extend(e) => {
                 assert_eq!(e.target.name, "Point");
                 assert_eq!(e.attributes.len(), 1);
-                assert_eq!(e.attributes[0].name, "Inline");
+                assert_bare_attr(&e.attributes[0].body, "Inline");
                 assert_eq!(e.traits.len(), 1);
             }
             other => panic!("{:?}", other),
@@ -2752,8 +2790,9 @@ mod tests {
                 assert_eq!(s.methods.len(), 1);
                 assert_eq!(s.methods[0].name, "area");
                 assert_eq!(s.methods[0].attributes.len(), 2);
-                assert_eq!(s.methods[0].attributes[0].name, "Inline");
-                assert_eq!(s.methods[0].attributes[1].name, "Opt");
+                assert_bare_attr(&s.methods[0].attributes[0].body, "Inline");
+                let (name, _) = attr_call_name_args(&s.methods[0].attributes[1].body);
+                assert_eq!(name, "Opt");
                 assert_eq!(s.to_string(), "struct S {\n    [Inline] [Opt(2)] area(): int {\n    return 1;\n}\n}");
             }
             other => panic!("{:?}", other),
@@ -2763,10 +2802,9 @@ mod tests {
         let m = parse("trait Shape {\n    [Cacheable] int area();\n}");
         match &m.declarations[0] {
             Declaration::Trait(t) => {
-                assert_eq!(t.methods.len(), 1);
                 assert_eq!(t.methods[0].name, "area");
                 assert_eq!(t.methods[0].attributes.len(), 1);
-                assert_eq!(t.methods[0].attributes[0].name, "Cacheable");
+                assert_bare_attr(&t.methods[0].attributes[0].body, "Cacheable");
                 assert_eq!(t.to_string(), "trait Shape {\n    [Cacheable] area(): int;\n}");
             }
             other => panic!("{:?}", other),
@@ -2779,7 +2817,7 @@ mod tests {
                 assert_eq!(e.methods.len(), 1);
                 assert_eq!(e.methods[0].name, "area");
                 assert_eq!(e.methods[0].attributes.len(), 1);
-                assert_eq!(e.methods[0].attributes[0].name, "Inline");
+                assert_bare_attr(&e.methods[0].attributes[0].body, "Inline");
                 assert_eq!(e.to_string(), "extend Point with Shape {\n    [Inline] area(): int {\n    return 1;\n}\n}");
             }
             other => panic!("{:?}", other),
@@ -2794,13 +2832,14 @@ mod tests {
             Declaration::Struct(s) => {
                 let c = s.constructor.as_ref().expect("constructor present");
                 assert_eq!(c.attributes.len(), 1);
-                assert_eq!(c.attributes[0].name, "Export");
+                assert_bare_attr(&c.attributes[0].body, "Export");
                 assert_eq!(s.destructor.as_ref().unwrap().attributes.len(), 1);
-                assert_eq!(s.destructor.as_ref().unwrap().attributes[0].name, "Cleanup");
+                let (name, _) = attr_call_name_args(&s.destructor.as_ref().unwrap().attributes[0].body);
+                assert_eq!(name, "Cleanup");
                 assert_eq!(s.methods.len(), 1);
                 assert_eq!(s.methods[0].name, "helper");
                 assert_eq!(s.methods[0].attributes.len(), 1);
-                assert_eq!(s.methods[0].attributes[0].name, "Inline");
+                assert_bare_attr(&s.methods[0].attributes[0].body, "Inline");
                 assert_eq!(s.to_string(), "struct S {\n    var x: int\n    [Export] new(var this.x: __auto = 0) {\n    (x += 1);\n}\n    [Cleanup(1)] destruct {\n    (x = 0);\n}\n    [Inline] extern int helper(var a: int)\n}");
             }
             other => panic!("{:?}", other),
@@ -2852,6 +2891,175 @@ mod tests {
         for src in bad_sources {
             let mut input = src;
             assert!(parse_module(&mut input).is_err(), "should reject: {}", src);
+        }
+    }
+
+    // ── Platform selection attributes (OS / Arch / Platform / Target) ──
+    /// Returns `(name, args)` for an attribute body that is a `Name(args)` call.
+    fn attr_call_name_args(body: &Expression) -> (&str, &[Expression]) {
+        match body {
+            Expression::FunctionCall { function, arguments, .. } => match function.as_ref() {
+                Expression::SymbolRef { id, .. } => (id.as_str(), arguments),
+                other => panic!("expected call target symbol, got {:?}", other),
+            },
+            other => panic!("expected attribute call, got {:?}", other),
+        }
+    }
+
+    fn assert_bare_attr(body: &Expression, name: &str) {
+        match body {
+            Expression::SymbolRef { id, .. } => assert_eq!(id, name),
+            other => panic!("expected bare attribute {}, got {:?}", name, other),
+        }
+    }
+
+    fn assert_os_call(e: &Expression, value: &str) {
+        let (name, args) = attr_call_name_args(e);
+        assert_eq!(name, "OS");
+        assert_eq!(args.len(), 1);
+        match &args[0] {
+            Expression::SymbolRef { id, .. } => assert_eq!(id, value),
+            other => panic!("expected SymbolRef {}, got {:?}", value, other),
+        }
+    }
+
+    #[test]
+    fn test_platform_os_or_expression() {
+        // `[OS(Windows) || OS(Mac)]` is one attribute whose body is a binary OR.
+        let m = parse("[OS(Windows) || OS(Mac)] main(): int {\n    return 42;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.attributes.len(), 1);
+                match &f.attributes[0].body {
+                    Expression::Binary { op, lhs, rhs, .. } => {
+                        assert_eq!(op.as_str(), "||");
+                        assert_os_call(lhs, "Windows");
+                        assert_os_call(rhs, "Mac");
+                    }
+                    other => panic!("expected || binary, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_platform_negated_os() {
+        // `[!OS(Windows)]` is a single unary-`!` body.
+        let m = parse("[!OS(Windows)] main(): int {\n    return 42;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.attributes.len(), 1);
+                match &f.attributes[0].body {
+                    Expression::Unary { op, prefix, operand, .. } => {
+                        assert_eq!(op.as_str(), "!");
+                        assert!(*prefix);
+                        assert_os_call(operand, "Windows");
+                    }
+                    other => panic!("expected unary !, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_platform_target_alias() {
+        // `Target(x64)` is an alias for `Arch(x64)`.
+        let m = parse("[Target(x64)] main(): int {\n    return 42;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.attributes.len(), 1);
+                let (name, args) = attr_call_name_args(&f.attributes[0].body);
+                assert_eq!(name, "Target");
+                match &args[0] {
+                    Expression::SymbolRef { id, .. } => assert_eq!(id, "x64"),
+                    other => panic!("expected SymbolRef x64, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_platform_block_in_body() {
+        // Attributed block inside a body carries the platform predicate.
+        let m = parse("main(): int {\n    [OS(Windows)] {\n        return 1;\n    }\n    return 2;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                let body = f.body.as_ref().expect("body");
+                assert_eq!(body.statements.len(), 2);
+                match &body.statements[0] {
+                    Statement::Block(b) => {
+                        assert_eq!(b.attributes.len(), 1);
+                        assert_os_call(&b.attributes[0].body, "Windows");
+                    }
+                    other => panic!("expected attributed block, got {:?}", other),
+                }
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_malformed_attribute_body_is_hard_error() {
+        // A body that fails to parse inside `[...]` is a hard error at the
+        // brackets (cut), not a backtrack that leaves a dangling `[` to be
+        // misreported on the next declaration.
+        for s in [
+            "[]\ntest(): int {\n    return 0;\n}",
+            "[*]\ntest(): int {\n    return 0;\n}",
+            "[if x { }]\ntest(): int {\n    return 0;\n}",
+        ] {
+            let _guard = track_source(s.len());
+            let mut input = s;
+            assert!(parse_module(&mut input).is_err(), "expected parse error for: {s}");
+        }
+    }
+
+    #[test]
+    fn test_field_platform_predicate_rejected() {
+        // Platform predicates select whole declarations, not individual
+        // fields — a predicate on a field is a hard parse error.
+        for s in [
+            "struct S {\n    [OS(Windows)] int x;\n}",
+            "struct S {\n    [Arch(x64)] int x;\n}",
+            "struct S {\n    [!OS(Linux) || OS(Mac)] int x;\n}",
+            // Mixed bodies: the predicate half must be rejected too, not
+            // silently ignored.
+            "struct S {\n    [OS(Windows) && Export] int x;\n}",
+            "struct S {\n    [Export || Arch(x64)] int x;\n}",
+        ] {
+            let _guard = track_source(s.len());
+            let mut input = s;
+            assert!(parse_module(&mut input).is_err(), "expected parse error for: {s}");
+        }
+    }
+
+    #[test]
+    fn test_field_non_predicate_attribute_allowed() {
+        // Non-predicate attributes on fields keep working.
+        let m = parse("struct S {\n    [Export] int x;\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert_eq!(s.fields.len(), 1);
+                assert_eq!(s.fields[0].attributes.len(), 1);
+            }
+            other => panic!("expected struct, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_attribute_display_no_outer_parens() {
+        // A combined attribute body prints bare inside the brackets — the
+        // diagnostic must quote what the user typed.
+        let m = parse("[OS(Windows) || OS(Mac)] f(): int {\n    return 0;\n}");
+        match &m.declarations[0] {
+            Declaration::Function(f) => {
+                assert_eq!(f.attributes.len(), 1);
+                assert_eq!(f.attributes[0].to_string(), "[OS(Windows) || OS(Mac)]");
+            }
+            other => panic!("expected function, got {:?}", other),
         }
     }
 }

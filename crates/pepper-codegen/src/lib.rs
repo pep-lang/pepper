@@ -523,6 +523,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let body = function.body.clone().unwrap_or_else(|| Block {
             name: String::new(),
             items: vec![],
+            attributes: vec![],
         });
         self.codegen_block(&body)?;
 

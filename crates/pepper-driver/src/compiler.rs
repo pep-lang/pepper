@@ -102,6 +102,7 @@ pub fn compile(
         }
     }
 
+    pepper_sema::apply_platform_filters(&mut module)?;
     struct_body::apply(&mut module)?;
     transform_pass(&mut module);
 

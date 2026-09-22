@@ -31,6 +31,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         acquire: base.acquire.clone(),
         release: base.release.clone(),
         traits: base.traits.clone(),
+        attributes: base.attributes.clone(),
     };
 
     // Fields: clone then substitute types.

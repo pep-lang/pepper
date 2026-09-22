@@ -10,4 +10,5 @@ pub mod model_tests;
 pub use builder::build;
 pub use model::Module;
 pub use passes::transform_pass;
+pub use passes::platform::apply_platform_filters;
 pub use type_name::TypeName;

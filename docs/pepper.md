@@ -167,6 +167,42 @@ The `[export]` attribute attached to any global function will create a C linkage
 in the function signature are automatically lowered to C types, with object references becoming opaque handles
 (effectively `void*` from C's perspective).
 
+## Platform selection
+
+The `[OS(...)]` and `[Arch(...)]` attributes select code for the compile target, which is always the host
+platform. They can be attached to top-level functions, externs, structs, traits, extensions, struct/trait/
+extension methods, and to blocks inside function bodies:
+
+```
+[OS(Windows)]
+int window_width() { return 80; }
+
+[!OS(Windows)]
+int window_width() { return 120; }
+
+main(): int {
+    [OS(Windows) || OS(Mac)] {
+        // Windows- and Mac-only code.
+    }
+    [Arch(aarch64)] {
+        // ARM-specific code.
+    }
+    return window_width();
+}
+```
+
+- `OS` accepts `Windows`, `Mac`, and `Linux`; `Arch` accepts `x64` and `aarch64`. Values are matched
+  case-insensitively.
+- `Platform(...)` is an alias of `OS(...)` and `Target(...)` is an alias of `Arch(...)`.
+- Predicate values combine with `&&`, `||` (or `and`/`or`) and negate with `!`, e.g.
+  `[OS(Linux) && Arch(x64)]` or `[!(OS(Windows) || OS(Mac))]`.
+- Multiple attributes on one item are ANDed: the item is kept only if all of them match.
+- A block whose attribute does not match the host is removed entirely before compilation, so code that
+  references platform-specific symbols (such as `extern` declarations) is fine as long as it is dropped on
+  the current host.
+- Platform predicates on struct fields are a parse error; platform selection applies to whole declarations,
+  not individual fields.
+
 ## Linking
 ### Default System Libraries/Linking
 

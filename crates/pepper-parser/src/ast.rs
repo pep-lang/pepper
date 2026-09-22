@@ -100,14 +100,13 @@ impl Display for TypeName {
 
 // ── Attributes ───────────────────────────────────────────────────────────────
 
-/// A single attribute: `[Name(arg1, arg2)]`.
+/// A single attribute: `[expr]`, where `expr` is a full boolean expression.
+/// Simple attributes are a symbol (`[A]`) or a call (`[A(1, 2)]`); platform
+/// selection allows combinations such as `[OS(Windows) || OS(Mac)]`.
 #[derive(Debug, Clone)]
 pub struct Attribute {
-    pub name: String,
-    /// Span of the attribute name token.
-    pub name_span: Span,
-    pub arguments: Vec<Expression>,
-    /// Span covering the whole `[Name(...)]` bracket group.
+    pub body: Expression,
+    /// Span covering the whole `[...]` bracket group.
     pub span: Span,
 }
 
@@ -434,11 +433,12 @@ impl Display for Expression {
 
 impl Display for Attribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}", self.name)?;
-        if !self.arguments.is_empty() {
-            write!(f, "({})", join(&self.arguments, ", "))?;
+        // `Expression`'s Display parenthesizes every binary; an attribute body
+        // is already bracketed, so print the outermost one bare.
+        match &self.body {
+            Expression::Binary { lhs, op, rhs, .. } => write!(f, "[{} {} {}]", lhs, op, rhs),
+            body => write!(f, "[{}]", body),
         }
-        write!(f, "]")
     }
 }
 

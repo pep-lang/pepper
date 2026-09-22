@@ -42,6 +42,7 @@ fn if_block(condition: Expression, items: Vec<Statement>) -> Statement {
         if_block: Block {
             name: "if".to_string(),
             items,
+            attributes: vec![],
         },
         else_block: None,
     })
@@ -267,6 +268,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
     st.constructor.body = Some(Block {
         name: st.constructor.name.clone(),
         items,
+        attributes: vec![],
     });
 
     // Free at the end of the destructor.

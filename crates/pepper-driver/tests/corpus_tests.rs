@@ -80,6 +80,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         merged.merge(std::mem::take(&mut built));
     }
 
+    pepper_sema::apply_platform_filters(&mut merged)?;
     struct_body::apply(&mut merged)?;
     transform_pass(&mut merged);
 

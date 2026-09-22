@@ -438,6 +438,7 @@ impl PepperLsp {
         // a user file, so a panicking pass degrades to "no semantic info".
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut m = module;
+            pepper_sema::apply_platform_filters(&mut m)?;
             pepper_sema::struct_body::apply(&mut m)?;
             pepper_sema::transform_pass(&mut m);
             Ok(m)
