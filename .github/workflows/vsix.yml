@@ -7,9 +7,11 @@
 # natively on its own runner (no cross-compilation toolchains) and smoke-
 # tests the binary it produced before uploading it.
 #
-# The vsix bundles one server per platform at server/<platform>-<arch>/, so
-# installing it requires nothing else. `pepper.lspPath` remains as a dev
-# override for using your own build.
+# The vsix is published as a GitHub release asset, not a run artifact, so it
+# stays available after the run's artifacts expire. The tag carries the
+# extension version from tools/vscode-pepper/package.json: repeat pushes
+# replace the asset on the existing release, and a version bump opens a new
+# one. `pepper.lspPath` remains as a dev override for using your own build.
 name: VSIX
 
 on:
@@ -97,6 +99,8 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     needs: build
     # npm ci + vsce packaging; no compilation here.
     timeout-minutes: 15
@@ -143,9 +147,33 @@ jobs:
         working-directory: tools/vscode-pepper
         run: npx --yes @vscode/vsce@3 package --out pepper-language.vsix
 
-      - name: Upload vsix
-        uses: actions/upload-artifact@v4
-        with:
-          name: pepper-language-vsix
-          path: tools/vscode-pepper/pepper-language.vsix
-          if-no-files-found: error
+      # Publish the vsix as a release asset, tagged by the extension version
+      # in package.json: repeat pushes replace the asset on the existing
+      # release, a version bump opens a new one. The tag is read from the
+      # file that owns it, never re-derived.
+      - name: Publish to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./tools/vscode-pepper/package.json').version")
+          tag="vsix-v$version"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            printf '%s\n' \
+              "VSCode extension for the Pepper language, built by the VSIX workflow." \
+              "" \
+              "Bundles a pepper-lsp server for win32-x64, win32-arm64," \
+              "linux-x64, linux-arm64, darwin-x64 and darwin-arm64; nothing" \
+              "else is needed to install it." \
+              > "$RUNNER_TEMP/notes.md"
+            # A concurrent run (a superseded one cancel-in-progress has not
+            # stopped yet, or a dispatch on another branch) may create the
+            # release in between; treat "already exists" as success.
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "Pepper Language v$version" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              || gh release view "$tag" >/dev/null
+          fi
+          gh release upload "$tag" tools/vscode-pepper/pepper-language.vsix --clobber
+
