@@ -92,6 +92,10 @@ pub fn convert_intrinsics(module: &mut Module) {
     for function in &mut module.functions {
         convert_function(function);
     }
+    for var in &mut module.globals {
+        convert_type_string(&mut var.ty);
+        crate::passes::walk_global(var, &mut convert_expression);
+    }
     for st in &mut module.structs {
         for field in &mut st.field_members {
             convert_type_string(&mut field.ty);

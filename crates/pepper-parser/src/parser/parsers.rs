@@ -462,7 +462,7 @@ fn pow(input: &mut &str) -> Result<Expression> {
     Ok(base)
 }
 
-/// prefix `+`, `-`, `~`, `!` — operand is pow
+/// prefix `+`, `-`, `~`, `!` — operand is an `as` cast
 fn unary(input: &mut &str) -> Result<Expression> {
     ws(input)?;
     // Never grab the operator part of compound assignments (`+=`, `-=`); those
@@ -475,10 +475,29 @@ fn unary(input: &mut &str) -> Result<Expression> {
     if let Some(op) = op {
         let start = pos(input);
         *input = &input[op.len()..];
-        let operand = pow(input)?;
+        let operand = cast(input)?;
         return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
-    pow(input)
+    cast(input)
+}
+
+/// `expr as Type` — static cast (spec docs/pepper.md). Sits between the unary
+/// and `**` levels, so `as` binds tighter than unary: `-x as int` parses as
+/// `-(x as int)` and `2 ** 3 as float` as `(2 ** 3) as float`. C-style
+/// `(int)x` is NOT a cast.
+fn cast(input: &mut &str) -> Result<Expression> {
+    let expr = pow(input)?;
+    if !input.starts_with('\n') && !input.starts_with("\r\n") {
+        ws(input)?;
+    }
+    if input.starts_with("as") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        let start = expr.span().start;
+        *input = &input[2..];
+        ws(input)?;
+        let ty = type_name(input)?;
+        return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) } });
+    }
+    Ok(expr)
 }
 
 /// prefix `++`, `--` — operand is unary
@@ -2534,6 +2553,51 @@ mod tests {
                 assert_eq!(s.methods[1].name, "+=");
             }
             other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_as_cast() {
+        let e = parse_expr("x as int");
+        match e {
+            Expression::Cast { expr, ty, .. } => {
+                assert_eq!(ty.to_string(), "int");
+                match *expr {
+                    Expression::SymbolRef { id, .. } => assert_eq!(id, "x"),
+                    other => panic!("expected x, got {:?}", other),
+                }
+            }
+            other => panic!("expected cast, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_as_cast_precedence() {
+        // Casts bind tighter than unary (C-style): `-x as int` is `-(x as int)`.
+        // With truncation-toward-zero this is observationally identical to
+        // `(-x) as int`; the grouping only matters in the AST.
+        let e = parse_expr("-x as int");
+        match e {
+            Expression::Unary { op, operand, .. } => {
+                assert_eq!(op, "-");
+                match *operand {
+                    Expression::Cast { ty, .. } => assert_eq!(ty.to_string(), "int"),
+                    other => panic!("expected cast, got {:?}", other),
+                }
+            }
+            other => panic!("expected unary -, got {:?}", other),
+        }
+
+        let e = parse_expr("2 ** 3 as float");
+        match e {
+            Expression::Cast { expr, ty, .. } => {
+                assert_eq!(ty.to_string(), "float");
+                match *expr {
+                    Expression::Binary { op, .. } => assert_eq!(op, "**"),
+                    other => panic!("expected ** binary, got {:?}", other),
+                }
+            }
+            other => panic!("expected cast, got {:?}", other),
         }
     }
 

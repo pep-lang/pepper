@@ -92,6 +92,25 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
 
+    // Global initializers: `var x = array<int>()` at file scope must register
+    // the specialization too.
+    for var in &mut module.globals {
+        let mut gather = |expr: &mut Expression| {
+            if let Expression::FunctionCall { function, .. } = expr {
+                if function.starts_with("__") {
+                    return;
+                }
+                if function.find('<').is_some() && function.ends_with('>') {
+                    functions.insert(function.clone());
+                }
+            }
+        };
+        crate::passes::walk_global(var, &mut gather);
+        if var.ty.is_generic() && !var.ty.name.starts_with("__") {
+            structs.insert(var.ty.to_string());
+        }
+    }
+
     for ext in &mut module.extensions {
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {

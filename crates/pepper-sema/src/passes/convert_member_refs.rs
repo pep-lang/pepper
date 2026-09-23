@@ -5,54 +5,54 @@
 use crate::model::*;
 use crate::type_name::TypeName;
 
-fn convert_block(block: &mut Block, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>) {
+fn convert_block(block: &mut Block, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
     for stmt in &mut block.items {
-        convert_statement(stmt, struct_name, fields, methods, locals);
+        convert_statement(stmt, struct_name, fields, methods, locals, globals);
     }
 }
 
-fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>) {
+fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &mut Vec<String>, globals: &std::collections::HashSet<String>) {
     match stmt {
-        Statement::Expression(expr) => convert_expression(expr, struct_name, fields, methods, locals),
+        Statement::Expression(expr) => convert_expression(expr, struct_name, fields, methods, locals, globals),
         Statement::Block(inner) => {
             let base = locals.len();
-            convert_block(inner, struct_name, fields, methods, locals);
+            convert_block(inner, struct_name, fields, methods, locals, globals);
             locals.truncate(base);
         }
         Statement::Declaration(Declaration::Variable(var)) => {
             // Record the local (params were pre-seeded by the caller).
             locals.push(var.name.clone());
             if let Some(default) = &mut var.default {
-                convert_expression(default, struct_name, fields, methods, locals);
+                convert_expression(default, struct_name, fields, methods, locals, globals);
             }
         }
         Statement::Declaration(_) => {}
         Statement::Branch(branch) => {
-            convert_expression(&mut branch.condition, struct_name, fields, methods, locals);
+            convert_expression(&mut branch.condition, struct_name, fields, methods, locals, globals);
             let base = locals.len();
-            convert_block(&mut branch.if_block, struct_name, fields, methods, locals);
+            convert_block(&mut branch.if_block, struct_name, fields, methods, locals, globals);
             locals.truncate(base);
             if let Some(else_block) = &mut branch.else_block {
                 let base = locals.len();
-                convert_block(else_block, struct_name, fields, methods, locals);
+                convert_block(else_block, struct_name, fields, methods, locals, globals);
                 locals.truncate(base);
             }
         }
         Statement::While(wh) => {
-            convert_expression(&mut wh.condition, struct_name, fields, methods, locals);
+            convert_expression(&mut wh.condition, struct_name, fields, methods, locals, globals);
             let base = locals.len();
-            convert_block(&mut wh.block, struct_name, fields, methods, locals);
+            convert_block(&mut wh.block, struct_name, fields, methods, locals, globals);
             locals.truncate(base);
         }
         Statement::Return(ret) => {
             if let Some(expr) = &mut ret.expr {
-                convert_expression(expr, struct_name, fields, methods, locals);
+                convert_expression(expr, struct_name, fields, methods, locals, globals);
             }
         }
     }
 }
 
-fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &[String]) {
+fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &[String], globals: &std::collections::HashSet<String>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         match e {
             Expression::SymbolRef { id, ty } => {
@@ -63,14 +63,21 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     return;
                 }
                 // Unresolved bare symbol in a struct method: this.<field>.
+                // Fields shadow file-scope globals (member-lookup order);
+                // checking globals first would silently route field access
+                // to the global.
                 if fields.iter().any(|f| &f.name == id) {
                     *e = Expression::MemberRef {
                         lhs: Box::new(Expression::ThisRef),
                         name: id.clone(),
                     };
-                } else if ty.is_empty()
-                    || ty.to_string() == crate::type_name::AUTO
-                {
+                    return;
+                }
+                // File-scope globals are visible from struct methods too.
+                if globals.contains(id) {
+                    return;
+                }
+                if ty.is_empty() || ty.to_string() == crate::type_name::AUTO {
                     panic!("Unable to resolve symbol {} in struct {}", id, struct_name);
                 }
             }
@@ -95,6 +102,11 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
 }
 
 pub fn convert_member_refs(module: &mut Module) {
+    let globals: std::collections::HashSet<String> = module
+        .globals
+        .iter()
+        .map(|v| v.name.clone())
+        .collect();
     let struct_count = module.structs.len();
     for st_idx in 0..struct_count {
         let (fields, method_names): (Vec<VariableDef>, Vec<String>) = {
@@ -115,7 +127,7 @@ pub fn convert_member_refs(module: &mut Module) {
             let st = &mut module.structs[st_idx];
             let mut locals: Vec<String> = st.constructor.parameters.iter().map(|p| p.name.clone()).collect();
             if let Some(body) = &mut st.constructor.body {
-                convert_block(body, &st_name, &fields, &method_names, &mut locals);
+                convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
             }
         }
 
@@ -128,7 +140,7 @@ pub fn convert_member_refs(module: &mut Module) {
                 .map(|p| p.name.clone())
                 .collect();
             if let Some(body) = &mut st.method_members[method_idx].body {
-                convert_block(body, &st_name, &fields, &method_names, &mut locals);
+                convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
             }
         }
     }

@@ -192,6 +192,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             }
         }
         Expression::Ternary { true_expr, .. } => of(true_expr, table, current),
+        // `x as T` has the cast target's type.
+        Expression::Cast { ty, .. } => Some(ty.clone()),
         _ => None,
     }
 }

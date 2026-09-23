@@ -34,8 +34,10 @@ fn binary_op(op: &str) -> Option<BinaryOp> {
         ">>" => BinaryOp::RShift,
         "&" => BinaryOp::BitAnd,
         "&&" => BinaryOp::LogicalAnd,
+        "and" => BinaryOp::LogicalAnd,
         "|" => BinaryOp::BitOr,
         "||" => BinaryOp::LogicalOr,
+        "or" => BinaryOp::LogicalOr,
         "^" => BinaryOp::BitXor,
         "==" => BinaryOp::Equal,
         ">=" => BinaryOp::GreaterEqual,
@@ -104,6 +106,10 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
         ast::Expression::Unary { op, prefix, operand, .. } => Ok(Expression::Unary {
             op: unary_op(op, *prefix).expect("unknown unary operator"),
             operand: Box::new(expression(operand)?),
+        }),
+        ast::Expression::Cast { expr, ty, .. } => Ok(Expression::Cast {
+            expr: Box::new(expression(expr)?),
+            ty: type_name_from(ty),
         }),
         ast::Expression::Binary { lhs, op, rhs, .. } => Ok(Expression::Binary {
             op: binary_op(op).expect("unknown binary operator"),
@@ -364,28 +370,10 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
     for decl in &module.declarations {
         match decl {
             ast::Declaration::Variable(v) => {
-                out.functions.push(FunctionDef {
-                    name: v.name.clone(),
-                    ty: type_name_from(&v.type_name),
-                    generic_params: vec![],
-                    parameters: vec![],
-                    body: v
-                        .default_value
-                        .as_ref()
-                        .map(|expr| -> Result<Block, String> {
-                            Ok(Block {
-                                name: String::new(),
-                                items: vec![Statement::Expression(expression(expr)?)],
-                                attributes: vec![],
-                            })
-                        })
-                        .transpose()?,
-                    parent: None,
-                    is_static: false,
-                    is_indexer: false,
-                    is_generic_func: false,
-                    attributes: v.attributes.clone(),
-                });
+                // Module-scope variable: an addressable global, not a
+                // function. The initializer (if any) is codegen'd into the
+                // global's constant initializer or an init function.
+                out.globals.push(variable_def(v, Kind::Variable)?);
             }
             ast::Declaration::Function(f) => {
                 if f.external {

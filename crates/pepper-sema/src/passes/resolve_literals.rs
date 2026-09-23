@@ -34,4 +34,7 @@ pub fn resolve_literals(module: &mut Module) {
     for function in &mut module.functions {
         walk_function(function, &mut f);
     }
+    for var in &mut module.globals {
+        crate::passes::walk_global(var, &mut f);
+    }
 }

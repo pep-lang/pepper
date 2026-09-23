@@ -180,3 +180,42 @@ fn negated_literal_folds() {
     assert!(!dumped.contains("Neg"), "no negation remains: {}", dumped);
     assert!(dumped.contains("-5"), "folded literal: {}", dumped);
 }
+
+#[test]
+fn as_cast_survives_to_model() {
+    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e\n}");
+    let body = module.functions[0].body.as_ref().expect("body");
+    // The declaration's default must be a Cast node (not folded away).
+    let mut found = false;
+    for stmt in &body.items {
+        if let crate::model::Statement::Declaration(crate::model::Declaration::Variable(v)) = stmt {
+            match &v.default {
+                Some(crate::model::Expression::Cast { ty, .. }) => {
+                    assert_eq!(ty.to_string(), "int");
+                    found = true;
+                }
+                other => panic!("expected Cast default, got {:?}", other),
+            }
+        }
+    }
+    assert!(found, "no variable declaration found: {:?}", body);
+}
+
+#[test]
+fn cast_inferred_var_takes_cast_type() {
+    let module = compile("test(): int {\n    var e = 1.5e2 as int;\n    return e\n}");
+    let body = module.functions[0].body.as_ref().expect("body");
+    for stmt in &body.items {
+        if let crate::model::Statement::Declaration(crate::model::Declaration::Variable(v)) = stmt {
+            assert_eq!(v.ty.to_string(), "int", "var must infer the cast target type");
+        }
+    }
+}
+
+#[test]
+fn globals_land_in_module_globals() {
+    let module = compile("var counter = 7;\ntest(): int {\n    return counter\n}");
+    assert_eq!(module.globals.len(), 1);
+    assert_eq!(module.globals[0].name, "counter");
+    assert_eq!(module.globals[0].ty.to_string(), "i32");
+}

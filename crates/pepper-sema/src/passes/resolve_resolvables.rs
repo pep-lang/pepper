@@ -72,6 +72,13 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
         }
     }
 
+    // Global initializers: same call-target resolution as function bodies.
+    for var in &mut module.globals {
+        if let Some(default) = &mut var.default {
+            resolve_expression(default, &view, report_missing);
+        }
+    }
+
     for st_idx in 0..module.structs.len() {
         // Skip generic structs; no point in resolving generics, the results
         // won't get used anyway.

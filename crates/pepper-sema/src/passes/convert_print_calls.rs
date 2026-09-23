@@ -44,6 +44,9 @@ pub fn convert_print_calls(module: &mut Module) {
             walk_body(body, &table, None);
         }
     }
+    for var in &mut module.globals {
+        crate::passes::walk_global(var, &mut |expr: &mut Expression| convert(expr, &table, None));
+    }
 
     // Struct ctor and method bodies.
     for st in &mut module.structs {

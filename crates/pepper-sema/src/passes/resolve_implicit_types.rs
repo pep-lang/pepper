@@ -195,6 +195,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // `var x = __address<T>(v)` is not mis-inferred as i32.
         Expression::Address(..) => TypeName::new("u64"),
         Expression::RefCount(..) => TypeName::new("u32"),
+        // `x as T` resolves to the cast target.
+        Expression::Cast { ty, .. } => ty.clone(),
         _ => TypeName::auto(),
     }
 }
@@ -242,6 +244,13 @@ pub fn resolve_implicit_types(module: &mut Module) {
         function_returns.push((e.name.clone(), e.ty.clone()));
     }
 
+    // Global variables are visible from every scope (C++ global scope).
+    let global_symbols: Vec<(String, TypeName)> = module
+        .globals
+        .iter()
+        .map(|v| (v.name.clone(), v.ty.clone()))
+        .collect();
+
     // Structs first (methods see field types).
     let struct_pairs: Vec<(String, TypeName)> = module
         .structs
@@ -254,6 +263,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         scopes.structs = struct_fields.clone();
         scopes.methods = struct_methods.clone();
         scopes.functions = function_returns.clone();
+        scopes.symbols[0].extend(global_symbols.iter().cloned());
 
         // Resolve field types with defaults.
         for field in &mut st.field_members {
@@ -321,12 +331,34 @@ pub fn resolve_implicit_types(module: &mut Module) {
             scopes.structs = struct_fields.clone();
             scopes.methods = struct_methods.clone();
             scopes.functions = function_returns.clone();
+            scopes.symbols[0].extend(global_symbols.iter().cloned());
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             scopes.function_depth = Some(scopes.names.len() - 1);
             resolve_block(body, &mut scopes, &None);
             scopes.pop();
         }
+    }
+
+    // Global variables: one shared scope so later globals see earlier ones.
+    let mut scopes = Scopes::new();
+    scopes.structs = struct_fields.clone();
+    scopes.methods = struct_methods.clone();
+    scopes.functions = function_returns.clone();
+    scopes.symbols[0].extend(global_symbols.iter().cloned());
+    for var in &mut module.globals {
+        if var.ty.to_string() == crate::type_name::AUTO {
+            if let Some(default) = &var.default {
+                let ty = type_of_expr(default, &scopes, None);
+                if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                    var.ty = ty;
+                }
+            }
+        }
+        if let Some(default) = &mut var.default {
+            resolve_expression(default, &mut scopes, &None, None);
+        }
+        scopes.symbols[0].push((var.name.clone(), var.ty.clone()));
     }
 }
 

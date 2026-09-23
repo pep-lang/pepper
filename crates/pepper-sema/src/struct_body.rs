@@ -47,6 +47,18 @@ fn if_block(condition: Expression, items: Vec<Statement>) -> Statement {
         else_block: None,
     })
 }
+/// Zero value for a field type: null reference for struct/pointer types,
+/// 0.0 for floats, 0 for everything else (port of `zero_value` in
+/// `StructGen.cpp:35`).
+fn zero_for(ty: &TypeName) -> Expression {
+    if ty.is_pointer() || ty.is_struct() {
+        Expression::PointerLiteral
+    } else if matches!(ty.name.as_str(), "f32" | "float" | "f64" | "double") {
+        Expression::FloatLiteral(0.0)
+    } else {
+        Expression::IntLiteral(0)
+    }
+}
 
 /// Fill in the refcount field + synthesized method bodies (the `StructDef`
 /// constructor part of `Struct.cpp:99-149`).
@@ -230,15 +242,22 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         ),
     ];
 
-    // Field initializations.
+    // Field initializations. A field with an explicit default is assigned it;
+    // every other field is zero-initialized (null reference / 0), matching
+    // `StructGen.cpp:31-37`. `_pep_malloc` already zeroes the payload, so the
+    // stores are redundant today — kept for C++ reference parity and to make
+    // the ctor's initialization contract explicit in the model (a future
+    // non-zeroing allocator would not silently change semantics).
     for field in &st.field_members {
-        if let Some(default) = &field.default {
-            items.push(Statement::Expression(Expression::Binary {
-                op: BinaryOp::Assign,
-                lhs: Box::new(member_ref(&field.name)),
-                rhs: Box::new(default.clone()),
-            }));
-        }
+        let value = match &field.default {
+            Some(d) => d.clone(),
+            None => zero_for(&field.ty),
+        };
+        items.push(Statement::Expression(Expression::Binary {
+            op: BinaryOp::Assign,
+            lhs: Box::new(member_ref(&field.name)),
+            rhs: Box::new(value),
+        }));
     }
     // Assign the `this.<field>` parameters to their fields, in declaration
     // order. The `__init_` prefix keeps them out of the bare-symbol →

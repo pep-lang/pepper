@@ -180,6 +180,11 @@ pub enum Expression {
         op: UnaryOp,
         operand: Box<Expression>,
     },
+    /// `expr as Type` — static cast (spec docs/pepper.md).
+    Cast {
+        expr: Box<Expression>,
+        ty: TypeName,
+    },
     Ternary {
         condition: Box<Expression>,
         true_expr: Box<Expression>,
@@ -359,6 +364,9 @@ pub struct Module {
     pub extensions: Vec<ExtensionDef>,
     pub functions: Vec<FunctionDef>,
     pub externs: Vec<ExternDef>,
+    /// Module-scope variables (`var x = ...` at file scope): LLVM globals,
+    /// initialized by a constant initializer or an init function.
+    pub globals: Vec<VariableDef>,
     pub struct_specs: Vec<TypeName>,
     pub func_specs: Vec<TypeName>,
 }
@@ -371,6 +379,7 @@ impl Module {
         self.extensions.extend(other.extensions);
         self.functions.extend(other.functions);
         self.externs.extend(other.externs);
+        self.globals.extend(other.globals);
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
     }

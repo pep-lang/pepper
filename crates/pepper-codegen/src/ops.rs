@@ -4,13 +4,20 @@
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
-use pepper_sema::type_name::widest;
 
-/// Compute the result type of a mixed-type arithmetic operation (port of
-/// `widest()` from `TypeName.cpp:49-108`).
+/// Compute the result type of a mixed-type arithmetic operation.
+///
+/// Integer operands promote to at least 32 bits (port of `largestIntType`
+/// in `OperatorGen.cpp:59-64`: `(bits > 32) ? Int64 : Int32`) — an i8 + u8
+/// sum like 300 must not wrap in 8-bit arithmetic. C-style promotion also
+/// governs signedness: an operand keeps its unsignedness only when it is as
+/// wide as the promoted result, so `u32`/`u64` operands yield a `"u32"`/
+/// `"u64"` result while narrower unsigned operands (`u8`, `byte`) promote to
+/// signed int. The returned name is load-bearing — it selects udiv/urem/ushr
+/// and ULT-family ops in `int_binary` and zext-vs-sext in `codegen_cast`.
+/// Floats promote to the wider float; non-numeric operands keep the lhs type
+/// (pointer arithmetic is handled by `apply_op`).
 pub fn result_type(lhs: &str, rhs: &str) -> String {
-    let lhs_ty = pepper_sema::type_name::TypeName::new(lhs);
-    let rhs_ty = pepper_sema::type_name::TypeName::new(rhs);
     let numeric = |n: &str| {
         matches!(
             n,
@@ -38,10 +45,36 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         // Non-numeric operand: keep the lhs type.
         return lhs.to_string();
     }
-    widest(&lhs_ty, &rhs_ty).to_string()
+    let width = |n: &str| -> u32 {
+        match n {
+            "bool" | "i1" => 1,
+            "i8" | "char" | "u8" | "byte" => 8,
+            "f64" | "double" | "i64" | "long" | "u64" | "ulong" => 64,
+            _ => 32,
+        }
+    };
+    let w = width(lhs).max(width(rhs));
+    if is_float_type(lhs) || is_float_type(rhs) {
+        return if w > 32 { "f64".to_string() } else { "f32".to_string() };
+    }
+    // C-style integer promotion: an operand keeps its unsignedness only when
+    // it is as wide as the promoted result — u8/byte promote to signed int,
+    // while u32/u64 stay unsigned. The name drives op selection (udiv/sdiv)
+    // and cast signedness, so it must name the value actually produced.
+    let promoted = if w > 32 { 64 } else { 32 };
+    let keeps_unsigned = |n: &str| {
+        matches!(n, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong") && width(n) == promoted
+    };
+    let unsigned = keeps_unsigned(lhs) || keeps_unsigned(rhs);
+    match (w > 32, unsigned) {
+        (true, true) => "u64".to_string(),
+        (true, false) => "i64".to_string(),
+        (false, true) => "u32".to_string(),
+        (false, false) => "i32".to_string(),
+    }
 }
 
-fn is_float_type(name: &str) -> bool {
+pub fn is_float_type(name: &str) -> bool {
     matches!(name, "f32" | "float" | "f64" | "double")
 }
 
@@ -100,8 +133,11 @@ pub fn coerce<'ctx>(
             if from_ty.get_bit_width() == to_ty.get_bit_width() {
                 value
             } else if from_ty.get_bit_width() < to_ty.get_bit_width() {
-                // i1 (bool) is unsigned: zext, not sext.
-                let ext = if from_ty.get_bit_width() == 1 {
+                // i1 (bool) and unsigned sources widen with zext, not sext —
+                // `u8 b = 200` must stay 200, not become -56.
+                let unsigned = matches!(from, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
+                    || from_ty.get_bit_width() == 1;
+                let ext = if unsigned {
                     builder.build_int_z_extend(from_i, to_i, "zext")
                 } else {
                     builder.build_int_s_extend(from_i, to_i, "sext")

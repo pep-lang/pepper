@@ -126,6 +126,13 @@ pub enum Expression {
         operand: Box<Expression>,
         span: Span,
     },
+    /// `expr as Type` — a static cast (spec docs/pepper.md: "equivalent of
+    /// static_cast; compile error if the cast cannot succeed").
+    Cast {
+        expr: Box<Expression>,
+        ty: TypeName,
+        span: Span,
+    },
     Binary {
         lhs: Box<Expression>,
         op: String,
@@ -167,6 +174,7 @@ impl Expression {
             | Expression::Ternary { span, .. }
             | Expression::Index { span, .. }
             | Expression::MemberAccess { span, .. }
+            | Expression::Cast { span, .. }
             | Expression::FunctionCall { span, .. } => *span,
             Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
         }
@@ -419,6 +427,7 @@ impl Display for Expression {
                 }
             }
             Expression::Binary { lhs, op, rhs, .. } => write!(f, "({} {} {})", lhs, op, rhs),
+            Expression::Cast { expr, ty, .. } => write!(f, "({} as {})", expr, ty),
             Expression::Ternary { condition, true_expr, false_expr, .. } => {
                 write!(f, "({} ? {} : {})", condition, true_expr, false_expr)
             }

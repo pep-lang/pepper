@@ -49,13 +49,15 @@ struct string {
     }
 
     string [](int idx) {
-        assert(idx < Length, "string[] idx must be < length");
-        # allow negative indices to index from the end
+        # Normalize a negative index to the end-relative offset *before* the
+        # bounds check: `idx < Length` compares int against ulong, which
+        # promotes to unsigned (a negative idx would wrap to ~2^64).
         if (Length > 0) {
             while (idx < 0) {
                 idx += Length;
             }
         }
+        assert(idx < Length, "string[] idx must be < length");
         ulong begin = _pep_utf8_char_offset(Data, Size, idx);
         return string(Data + begin, 0, 1);
     }

@@ -45,25 +45,58 @@ pub fn resolve_operators(module: &mut Module) {
             resolve_body(body, &table, None);
         }
     }
+
+    // Global initializers: resolve operators in the default expression.
+    // A compound-index assign in a global initializer would splice extra
+    // statements (unsupported edge case) — only the first survives.
+    for var in &mut module.globals {
+        if let Some(default) = var.default.take() {
+            let mut block = Block {
+                name: String::new(),
+                items: vec![Statement::Expression(default)],
+                attributes: vec![],
+            };
+            resolve_body(&mut block, &table, None);
+            if !block.items.is_empty() {
+                var.default = match block.items.remove(0) {
+                    Statement::Expression(expr) => Some(expr),
+                    other => {
+                        panic!("global initializer became a non-expression statement: {:?}", std::mem::discriminant(&other));
+                    }
+                };
+            }
+        }
+    }
 }
 
 fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
+    // Compound assign through an index (`x[y] += z`) expands to the C++
+    // reference's tmp/get/set sequence before the walk: a bare `__index_set`
+    // rewrite would drop the read-modify-write. The expansion splices one
+    // extra statement after the decl, so it runs as a pre-pass over every
+    // block (recursing into nested blocks) at statement level.
+    expand_compound_index_assigns(body, table, current);
     // Single traversal: walk_block visits every expression node once.
     crate::passes::walk_block(body, &mut |expr: &mut Expression| match expr {
         Expression::Binary { op, lhs, rhs } if op.is_assignment() => {
             // `x[y] = z` → `x.__index_set(y, z)`, when the container is a
-            // struct declaring the setter.
-            if let Expression::Index { lhs: container, rhs: index } = &**lhs {
-                if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set")) && !is_raw_buffer_field(container, table, current) {
-                    let container = (**container).clone();
-                    let index = (**index).clone();
-                    let rhs_value = (**rhs).clone();
-                    *expr = Expression::MethodCall {
-                        this: Box::new(container),
-                        method: "__index_set".to_string(),
-                        args: vec![index, rhs_value],
-                    };
-                    return;
+            // struct declaring the setter. Plain assign only — compound
+            // assigns through an index expand in the pre-pass (statement
+            // level) or use codegen's load-op-store path; a bare set here
+            // would drop the read-modify-write.
+            if *op == BinaryOp::Assign {
+                if let Expression::Index { lhs: container, rhs: index } = &**lhs {
+                    if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set")) && !is_raw_buffer_field(container, table, current) {
+                        let container = (**container).clone();
+                        let index = (**index).clone();
+                        let rhs_value = (**rhs).clone();
+                        *expr = Expression::MethodCall {
+                            this: Box::new(container),
+                            method: "__index_set".to_string(),
+                            args: vec![index, rhs_value],
+                        };
+                        return;
+                    }
                 }
             }
             // Compound assigns with an overload method (`str += x` →
@@ -129,6 +162,96 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
         }
         _ => {}
     });
+}
+
+/// Pre-pass for `x[y] op= z`: expands each compound index assign to the
+/// tmp/get/set statement pair, recursing into nested blocks (the expansion
+/// splices a statement, so it cannot run inside the expression walk).
+/// NOTE: in loop bodies the synthesized tmp allocates per iteration
+/// (`codegen_var_def` emits its alloca at the insertion point, not the entry
+/// block), so a long loop with `a[i] += x` grows the stack — pre-existing
+/// codegen behavior shared by any user-written local in a loop body.
+fn expand_compound_index_assigns(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
+    let mut i = 0usize;
+    while i < body.items.len() {
+        match &mut body.items[i] {
+            Statement::Expression(expr) => {
+                if let Some((decl, set)) = compound_index_assign(expr, table, current) {
+                    // The statement becomes the tmp decl (C++ `binOp = tmp`);
+                    // only the set call is spliced after it.
+                    body.items[i] = Statement::Declaration(Declaration::Variable(decl));
+                    body.items.splice((i + 1)..(i + 1), [Statement::Expression(set)]);
+                    i += 2;
+                    continue;
+                }
+            }
+            Statement::Block(inner) => expand_compound_index_assigns(inner, table, current),
+            Statement::Branch(branch) => {
+                expand_compound_index_assigns(&mut branch.if_block, table, current);
+                if let Some(else_block) = &mut branch.else_block {
+                    expand_compound_index_assigns(else_block, table, current);
+                }
+            }
+            Statement::While(w) => expand_compound_index_assigns(&mut w.block, table, current),
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+/// `x[y] op= z` as a whole expression → (tmp decl, set call) per the C++
+/// reference. The statement becomes `var tmp = x.__index_get(y)`; the set
+/// call carries `tmp op= z` so codegen's compound path performs the
+/// read-modify-write on the loaded value.
+fn compound_index_assign(
+    expr: &Expression,
+    table: &StructTable,
+    current: Option<&TypeName>,
+) -> Option<(VariableDef, Expression)> {
+    let Expression::Binary { op, lhs, rhs } = expr else {
+        return None;
+    };
+    let Some(base_op) = op.base_assign_op() else {
+        return None;
+    };
+    let Expression::Index { lhs: container, rhs: index } = &**lhs else {
+        return None;
+    };
+    if !lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
+        || is_raw_buffer_field(container, table, current)
+    {
+        return None;
+    }
+    let get_call = Expression::MethodCall {
+        this: Box::new((**container).clone()),
+        method: "__index_get".to_string(),
+        args: vec![(**index).clone()],
+    };
+    // No source locations in the model; a process-wide counter keeps the
+    // name unique across functions.
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let tmp_name = format!("_idx_tmp_{}", COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let elem_ty = static_type::of(&get_call, table, current).unwrap_or_else(TypeName::auto);
+    let tmp = VariableDef {
+        ty: elem_ty,
+        name: tmp_name.clone(),
+        default: Some(get_call),
+        hidden: false,
+        kind: Kind::Variable,
+    };
+    let set = Expression::MethodCall {
+        this: Box::new((**container).clone()),
+        method: "__index_set".to_string(),
+        args: vec![
+            (**index).clone(),
+            Expression::Binary {
+                op: base_op,
+                lhs: Box::new(Expression::SymbolRef { id: tmp_name, ty: TypeName::auto() }),
+                rhs: Box::new((**rhs).clone()),
+            },
+        ],
+    };
+    Some((tmp, set))
 }
 
 /// The struct declaring the lhs's type, via its static type. Bare symbols resolve

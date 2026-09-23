@@ -127,6 +127,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(rhs, f);
         }
         Expression::Unary { operand, .. } => walk_expression(operand, f),
+        Expression::Cast { expr, .. } => walk_expression(expr, f),
         Expression::Ternary {
             condition,
             true_expr,
@@ -160,6 +161,13 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
 pub fn walk_function(function: &mut FunctionDef, f: &mut impl FnMut(&mut Expression)) {
     if let Some(body) = &mut function.body {
         walk_block(body, f);
+    }
+}
+
+/// Apply `f` to a global variable's default initializer (if any).
+pub fn walk_global(var: &mut VariableDef, f: &mut impl FnMut(&mut Expression)) {
+    if let Some(default) = &mut var.default {
+        walk_expression(default, f);
     }
 }
 

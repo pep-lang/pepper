@@ -134,7 +134,8 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
         match e {
             Expression::ArrayIndex { ty, .. }
             | Expression::IsPod(ty)
-            | Expression::Default(ty) => substitute(ty, type_map),
+            | Expression::Default(ty)
+            | Expression::Cast { ty, .. } => substitute(ty, type_map),
             Expression::RefCount(ty, _) => substitute(ty, type_map),
             Expression::Address(ty, _) => substitute(ty, type_map),
             _ => {}

@@ -11,7 +11,7 @@ use address::{Address, Frame};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{AsValueRef, BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 use inkwell::types::AnyType as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
@@ -57,6 +57,8 @@ pub struct CodeGenerator<'ctx> {
     param_defaults: HashMap<String, Vec<Option<Expression>>>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
+    /// File-scope globals: name → Address (frame locals miss falls back here).
+    global_addrs: HashMap<String, Address<'ctx>>,
     frame: Frame<'ctx>,
 }
 impl<'ctx> CodeGenerator<'ctx> {
@@ -73,6 +75,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
             global_strings: HashMap::new(),
+            global_addrs: HashMap::new(),
             frame: Frame::empty(),
         }
     }
@@ -115,6 +118,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.instantiate_function(&module.functions[idx])?;
         }
 
+        // File-scope globals: LLVM globals + (if any initializer needs it) a
+        // ctor-registered init function. Emitted between the instantiation and
+        // codegen passes so initializers can call instantiated functions.
+        self.emit_globals(module)?;
+
         // Codegen pass: structs → functions.
         for idx in 0..module.structs.len() {
             let st = module.structs[idx].clone();
@@ -127,6 +135,166 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.module
             .verify()
             .map_err(|e| format!("Module verification failed: {}", e.to_string()))
+    }
+
+    /// File-scope globals (port of the C++ reference's global handling, which
+    /// kept them in a symbol table; here they are real LLVM globals).
+    /// Constant initializers become `set_initializer`; non-constant ones are
+    /// stored by `__pep_global_init`, registered via `llvm.global_ctors` so it
+    /// runs before `main` (the JIT calls run_static_constructors; the linked
+    /// binary's .init_array does it at process start).
+    fn emit_globals(&mut self, module: &SemaModule) -> Result<(), String> {
+        let mut non_const: Vec<(String, Expression)> = vec![];
+        for var in &module.globals {
+            let ty_string = var.ty.to_string();
+            let is_struct_ref = self.structs.contains_key(&ty_string);
+            let llvm_ty: BasicTypeEnum<'ctx> = if is_struct_ref {
+                // Struct-typed globals hold POINTERS (C++ ref semantics).
+                self.context.ptr_type(inkwell::AddressSpace::default()).into()
+            } else {
+                self.types
+                    .get(&ty_string)
+                    .ok_or_else(|| format!("unknown global type {}", ty_string))?
+            };
+            let global = self.module.add_global(llvm_ty, None, &var.name);
+            // Every global is defined at link time: zero/null base initializer;
+            // const arms below override it. Non-const defaults are stored by
+            // the ctor-registered init fn before `main` runs.
+            match llvm_ty {
+                BasicTypeEnum::IntType(it) => {
+                    global.set_initializer(&it.const_int(0, true));
+                }
+                BasicTypeEnum::FloatType(ft) => {
+                    global.set_initializer(&ft.const_float(0.0));
+                }
+                BasicTypeEnum::PointerType(_) => {
+                    global.set_initializer(
+                        &self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
+                    );
+                }
+                _ => {}
+            }
+            if let Some(default) = &var.default {
+                match (default, llvm_ty) {
+                    // Create the literal at the global's own width (inkwell's
+                    // const casts are unavailable on LLVM ≥18).
+                    (Expression::IntLiteral(v), BasicTypeEnum::IntType(it)) => {
+                        global.set_initializer(&it.const_int(*v as u64, true));
+                    }
+                    (Expression::FloatLiteral(v), BasicTypeEnum::FloatType(ft)) => {
+                        global.set_initializer(&ft.const_float(*v));
+                    }
+                    (Expression::BoolLiteral(v), BasicTypeEnum::IntType(it)) => {
+                        global.set_initializer(&it.const_int(*v as u64, false));
+                    }
+                    (Expression::PointerLiteral, BasicTypeEnum::PointerType(_)) => {
+                        global.set_initializer(
+                            &self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
+                        );
+                    }
+                    // String defaults: the string data must be a *constant*
+                    // global — an internal-linkage string referenced by an
+                    // external initializer fails module verification.
+                    (Expression::StringLiteral { value, .. }, BasicTypeEnum::PointerType(_)) => {
+                        let bytes = value.as_bytes();
+                        let i8 = self.context.i8_type();
+                        let data: Vec<BasicValueEnum<'ctx>> = bytes
+                            .iter()
+                            .map(|b| BasicValueEnum::IntValue(i8.const_int(*b as u64, false)))
+                            .chain(std::iter::once(BasicValueEnum::IntValue(
+                                i8.const_int(0, false),
+                            )))
+                            .collect();
+                        // inkwell 0.10's new_const_array forwards its type arg to
+                        // LLVMConstArray2, which takes the ELEMENT type on LLVM >= 18.
+                        let arr = unsafe {
+                            inkwell::values::ArrayValue::new_const_array(&i8, &data)
+                        };
+                        let data_global = self.module.add_global(arr.get_type(), None, "str");
+                        data_global.set_linkage(inkwell::module::Linkage::Internal);
+                        data_global.set_initializer(&arr);
+                        global.set_initializer(
+                            &BasicValueEnum::PointerValue(data_global.as_pointer_value()),
+                        );
+                    }
+                    _ => non_const.push((var.name.clone(), default.clone())),
+                }
+            }
+            self.global_addrs.insert(
+                var.name.clone(),
+                Address::with_llvm_ty(&var.name, &ty_string, llvm_ty, global.as_pointer_value()),
+            );
+        }
+
+        // Non-constant initializers: `g = <expr>;` in a ctor-registered fn.
+        if !non_const.is_empty() {
+            let init_fn = self.module.add_function(
+                "__pep_global_init",
+                self.context.void_type().fn_type(&[], false),
+                None,
+            );
+            let entry = self.context.append_basic_block(init_fn, "entry");
+            self.builder.position_at_end(entry);
+            for (name, expr) in &non_const {
+                let value = self.codegen_expr(expr)?;
+                // Match the global's width (mirrors codegen_var_def).
+                let addr = self.global_addrs.get(name).unwrap();
+                let value = match (&value, addr.llvm_ty) {
+                    (BasicValueEnum::IntValue(v), Some(BasicTypeEnum::IntType(it)))
+                        if v.get_type() != it =>
+                    {
+                        self.builder
+                            .build_int_cast(*v, it, &format!("{}w", name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    }
+                    (BasicValueEnum::FloatValue(v), Some(BasicTypeEnum::FloatType(ft)))
+                        if v.get_type() != ft =>
+                    {
+                        self.builder
+                            .build_float_cast(*v, ft, &format!("{}w", name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    }
+                    _ => value,
+                };
+                addr.store(&self.builder, value)
+                    .ok_or_else(|| format!("global store failed: {}", name))?;
+            }
+            self.builder.build_return(None).map_err(|e| e.to_string())?;
+
+            // llvm.global_ctors = [1 x { i32 priority, ptr fn, ptr data }]
+            // inkwell's FunctionValue has no as_pointer_value; GlobalValue is
+            // a transparent newtype over the same LLVMValueRef.
+            let init_fn_ptr = unsafe {
+                GlobalValue::new(init_fn.as_value_ref())
+                    .as_pointer_value()
+            };
+            let ctor_struct = self.context.const_struct(
+                &[
+                    BasicValueEnum::IntValue(self.context.i32_type().const_int(65535, false)),
+                    BasicValueEnum::PointerValue(init_fn_ptr),
+                    BasicValueEnum::PointerValue(
+                        self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
+                    ),
+                ],
+                false,
+            );
+            let ctor_array = unsafe {
+                inkwell::values::ArrayValue::new_const_array(
+                    &ctor_struct.get_type(),
+                    &[ctor_struct],
+                )
+            };
+            // `llvm.global_ctors` is a reserved name the verifier only accepts
+            // with common (zero-initialized) or appending linkage; Clang uses
+            // appending.
+            let ctors = self.module.add_global(ctor_array.get_type(), None, "llvm.global_ctors");
+            ctors.set_linkage(inkwell::module::Linkage::Appending);
+            ctors.set_initializer(&ctor_array);
+
+        }
+        Ok(())
     }
 
     /// Compile + JIT a value-test module: returns the entry's return value.
@@ -146,6 +314,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ee.add_global_mapping(&declared, addr);
             }
         }
+        // Static ctors (llvm.global_ctors, e.g. __pep_global_init) do NOT run
+        // at engine creation — MCJIT only runs them on explicit request.
+        // After the mappings so the ctor's runtime calls resolve.
+        ee.run_static_constructors();
 
         unsafe {
             let f = ee
@@ -659,20 +831,50 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
         if let Some(default) = &var.default {
             let value = self.codegen_expr(default)?;
-            // Integer literals codegen as i32; widen into a wider int alloca
-            // so the full word is defined (e.g. the ctor's `u64 size`).
+            // Integer literals codegen as i32; adjust into the alloca's width
+            // so the full word is defined (widen e.g. the ctor's `u64 size`,
+            // truncate e.g. `u8 b = 200` — a mismatched-width store is invalid
+            // IR and loads back garbage).
             let value = match (&value, ty) {
                 (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(it))
                     if v.get_type().get_bit_width() < it.get_bit_width() =>
                 {
-                    self.builder
-                        .build_int_s_extend(
-                            *v,
-                            it,
-                            &format!("{}w", var.name),
-                        )
-                        .map_err(|e| e.to_string())?
-                        .into()
+                    // 1-bit values (bools from comparisons / `!`) are unsigned
+                    // 0/1: zero-extend, else `true` sign-extends to -1.
+                    let zext = v.get_type().get_bit_width() == 1;
+                    if zext {
+                        self.builder
+                            .build_int_z_extend(*v, it, &format!("{}w", var.name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    } else {
+                        self.builder
+                            .build_int_s_extend(
+                                *v,
+                                it,
+                                &format!("{}w", var.name),
+                            )
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    }
+                }
+                (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(it))
+                    if v.get_type().get_bit_width() > it.get_bit_width() =>
+                {
+                    // A 1-bit target is a bool: truncation keeps only the low
+                    // bit (`2` -> false); the value must be compared != 0.
+                    if it.get_bit_width() == 1 {
+                        BasicValueEnum::IntValue(llvm_ops::as_bool(
+                            &self.context,
+                            &self.builder,
+                            BasicValueEnum::IntValue(*v),
+                        ))
+                    } else {
+                        self.builder
+                            .build_int_truncate(*v, it, &format!("{}t", var.name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    }
                 }
                 _ => value,
             };
@@ -782,6 +984,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::SymbolRef { id, .. } => self
                 .frame
                 .find_local(id)
+                .or_else(|| self.global_addrs.get(id))
                 .map(|a| a.ty.to_string()),
             Expression::ThisRef => self
                 .frame
@@ -816,10 +1019,46 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .get(method)
                     .cloned()
             }
-            Expression::Binary { lhs, .. } => {
-                // Arithmetic keeps the left operand's type (`char* + int`
-                // stays `char*`, `int + int` stays `int`).
-                self.value_sema_type(lhs)
+            Expression::Unary { op, operand } => match *op {
+                // `!x` produces an i1; the arithmetic unaries keep the
+                // operand's type (codegen_unary).
+                UnaryOp::LogicalNot => Some("bool".to_string()),
+                // `-x`/`~x` produce a signed two's-complement value at the
+                // operand's width: a narrower-than-int unsigned operand
+                // promotes to signed int (same rule as `result_type`), or
+                // `-(u8 1)` zero-extends to 255 instead of -1.
+                UnaryOp::Neg | UnaryOp::BitNot => self
+                    .value_sema_type(operand)
+                    .map(|t| llvm_ops::result_type(&t, &t)),
+                _ => self.value_sema_type(operand),
+            },
+            Expression::Binary { op, lhs, rhs } => {
+                // The produced value is the *promoted* type from
+                // `codegen_binary` (`binary_result_type`): numeric operands
+                // are promoted to canonical i32/i64/f32/f64 (a `u8 - int`
+                // binary produces a signed i32; u32/u64 keep their
+                // unsignedness), non-numeric operands keep the lhs type.
+                // Reporting the declared lhs type would misclassify negative
+                // results as unsigned in casts.
+                if is_comparison(*op) {
+                    // A comparison produces an i1, not the promoted operand
+                    // type: naming the operand type makes `coerce` a no-op
+                    // and apply_op sign-extends `true` into -1.
+                    return Some("bool".to_string());
+                }
+                match (self.value_sema_type(lhs), self.value_sema_type(rhs)) {
+                    (Some(l), Some(r)) => Some(binary_result_type(op, &l, &r)),
+                    // An unresolved rhs promotes to `int` in the same way
+                    // codegen_binary coerces it: a non-numeric lhs keeps its
+                    // type verbatim (pointer arithmetic retains its element
+                    // type), a numeric lhs gets the canonical promotion. A
+                    // float-valued rhs makes the binary produce f32/f64, so
+                    // it must fall through to the `value_type_name` fallback.
+                    (Some(l), None) if !is_float_valued(rhs) => {
+                        Some(binary_result_type(op, &l, "int"))
+                    }
+                    _ => None,
+                }
             }
             Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
                 // Indexed element: the receiver's pointee (`array<array<int>>`
@@ -827,6 +1066,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // mangle against the element's struct.
                 self.index_receiver_pointee(lhs)
             }
+            // `x as T` has the cast target's type.
+            Expression::Cast { ty, .. } => Some(ty.to_string()),
             _ => None,
         }
     }
@@ -1072,6 +1313,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let addr = self
                     .frame
                     .find_local(id)
+                    .or_else(|| self.global_addrs.get(id))
                     .ok_or_else(|| format!("unknown symbol {}", id))?;
                 addr.load(&self.builder)
                     .ok_or_else(|| format!("load failed {}", id))
@@ -1128,6 +1370,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Binary { op, lhs, rhs } => self.codegen_binary(op, lhs, rhs),
             Expression::Unary { op, operand } => self.codegen_unary(*op, operand),
+            Expression::Cast { expr, ty } => self.codegen_cast(expr, ty),
             Expression::Ternary {
                 condition,
                 true_expr,
@@ -1735,11 +1978,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             let rhs_val = self.codegen_expr(rhs)?;
             let lhs_addr = self.codegen_lvalue(lhs)?;
             let lhs_ty = lhs_addr.ty.clone();
+            // The sema names carry signedness (`u8` vs `i8`) — LLVM value
+            // names flatten both to i8, which would sext a u8 200 to -56.
+            let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
             let coerced = llvm_ops::coerce(
                 self.context,
                 &self.builder,
                 rhs_val,
-                &value_type_name(&rhs_val),
+                &rhs_name,
                 &lhs_ty,
             );
             // The sema type name can be a pointer (`__ptr<char>` → i32 in
@@ -1764,9 +2010,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let lhs_val = lhs_addr
                     .load(&self.builder)
                     .ok_or_else(|| "compound lhs load".to_string())?;
-                let lhs_name = value_type_name(&lhs_val);
-                let rhs_name = value_type_name(&coerced);
-                let result_ty = llvm_ops::result_type(&lhs_name, &rhs_name);
+                let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
+                // The compound op runs at the lhs's width: `coerced` is the
+                // rhs already converted to the lhs type, so the result fits
+                // the store. Feeding `rhs_val` (pre-conversion) would promote
+                // to a float for `x += 2.5` and then store an f64 into the
+                // i32/i8 slot — opaque pointers hide that from module verify,
+                // so it surfaces as garbage or an access violation at runtime.
+                let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&coerced));
+                let result_ty = binary_result_type(&base_op, &lhs_name, &rhs_name);
                 let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
                 let rhs_c = llvm_ops::coerce(self.context, &self.builder, coerced, &rhs_name, &result_ty);
                 let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None)?;
@@ -1804,9 +2056,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let lhs_val = self.codegen_expr(lhs)?;
         let rhs_val = self.codegen_expr(rhs)?;
-        let lhs_name = value_type_name(&lhs_val);
-        let rhs_name = value_type_name(&rhs_val);
-        let result_ty = llvm_ops::result_type(&lhs_name, &rhs_name);
+        let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
+        let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
+        let result_ty = binary_result_type(op, &lhs_name, &rhs_name);
         let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
         let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
         // Pointer arithmetic needs the pointer's element type (`char*` strides
@@ -1825,6 +2077,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::SymbolRef { id, .. } => self
                 .frame
                 .find_local(id)
+                .or_else(|| self.global_addrs.get(id))
                 .cloned()
                 .ok_or_else(|| format!("unknown lvalue {}", id)),
             Expression::ThisRef => self
@@ -1963,6 +2216,92 @@ impl<'ctx> CodeGenerator<'ctx> {
                     _ => Ok(old),
                 }
             }
+        }
+    }
+
+    /// `expr as T` — static cast (spec docs/pepper.md: "equivalent of
+    /// static_cast; compile error if the cast cannot succeed"). Numeric and
+    /// bool targets only; struct/pointer casts are rejected.
+    fn codegen_cast(&mut self, expr: &Expression, ty: &TypeName) -> Result<BasicValueEnum<'ctx>, String> {
+        // Source signedness decides zext vs sext on widening (same rule as
+        // ops::coerce); resolve it before codegen_expr mutates the frame.
+        let source_name = self.value_sema_type(expr);
+        let val = self.codegen_expr(expr)?;
+        let name = ty.to_string();
+        let target = self.types.get(&name).ok_or_else(|| format!("unknown cast target type {}", name))?;
+        match (val, target) {
+            (BasicValueEnum::IntValue(from), BasicTypeEnum::IntType(to)) => {
+                if from.get_type() == to {
+                    return Ok(val);
+                }
+                let v = if from.get_type().get_bit_width() < to.get_bit_width() {
+                    // 1-bit bool values and unsigned sources widen zero-extended
+                    // (`true` = 1, not -1; u8 200 stays positive); signed types
+                    // sign-extend.
+                    let unsigned = source_name.as_deref().is_some_and(|s| {
+                        matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
+                            || s == "bool"
+                    });
+                    if from.get_type().get_bit_width() == 1 || unsigned {
+                        self.builder.build_int_z_extend(from, to, "cast").map_err(|e| e.to_string())?
+                    } else {
+                        self.builder.build_int_s_extend(from, to, "cast").map_err(|e| e.to_string())?
+                    }
+                } else if to.get_bit_width() == 1 {
+                    // A 1-bit target is a bool: compare != 0 (`2 as bool` is
+                    // true); truncation would keep only the low bit.
+                    llvm_ops::as_bool(&self.context, &self.builder, val)
+                } else {
+                    // Truncate: static_cast keeps the low bits (negative -> u8 wraps).
+                    self.builder.build_int_truncate(from, to, "cast").map_err(|e| e.to_string())?
+                };
+                Ok(BasicValueEnum::IntValue(v))
+            }
+            (BasicValueEnum::FloatValue(from), BasicTypeEnum::FloatType(to)) => {
+                if from.get_type() == to {
+                    return Ok(val);
+                }
+                let v = if from.get_type().get_bit_width() < to.get_bit_width() {
+                    self.builder.build_float_ext(from, to, "cast").map_err(|e| e.to_string())?
+                } else {
+                    self.builder.build_float_trunc(from, to, "cast").map_err(|e| e.to_string())?
+                };
+                Ok(BasicValueEnum::FloatValue(v))
+            }
+            (BasicValueEnum::IntValue(from), BasicTypeEnum::FloatType(to)) => {
+                // Same signedness rule as the int->int widening arm: unsigned
+                // and 1-bit sources convert via sitofp's unsigned sibling, or
+                // `u8 200 as float` reinterprets as -56.0.
+                let unsigned = from.get_type().get_bit_width() == 1
+                    || source_name.as_deref().is_some_and(|s| {
+                        matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong") || s == "bool"
+                    });
+                let v = if unsigned {
+                    self.builder.build_unsigned_int_to_float(from, to, "cast").map_err(|e| e.to_string())?
+                } else {
+                    self.builder.build_signed_int_to_float(from, to, "cast").map_err(|e| e.to_string())?
+                };
+                Ok(BasicValueEnum::FloatValue(v))
+            }
+            (BasicValueEnum::FloatValue(from), BasicTypeEnum::IntType(to)) => {
+                if to.get_bit_width() == 1 {
+                    // fptosi to i1 is poison outside -1..0; a bool target
+                    // compares != 0 (as_bool handles the float compare).
+                    Ok(BasicValueEnum::IntValue(llvm_ops::as_bool(&self.context, &self.builder, val)))
+                } else {
+                    // fptosi is poison above the *signed* range of the target;
+                    // unsigned targets (u8..ulong) need fptoui, mirroring the
+                    // signedness rule on the int->float arm.
+                    let unsigned = matches!(name.as_str(), "u8" | "byte" | "u32" | "uint" | "u64" | "ulong");
+                    let v = if unsigned {
+                        self.builder.build_float_to_unsigned_int(from, to, "cast").map_err(|e| e.to_string())?
+                    } else {
+                        self.builder.build_float_to_signed_int(from, to, "cast").map_err(|e| e.to_string())?
+                    };
+                    Ok(BasicValueEnum::IntValue(v))
+                }
+            }
+            _ => Err(format!("cannot cast to {}", name)),
         }
     }
 
@@ -2192,4 +2531,38 @@ fn is_comparison(op: BinaryOp) -> bool {
         op,
         Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual | Identical
     )
+}
+
+/// True when the expression codegens to a float value. `value_sema_type`
+/// cannot resolve every form (literals, nested unresolvable binaries), so
+/// callers deciding signedness from an unresolved operand must check this
+/// first — reporting an int-promoted type for a float-producing binary makes
+/// `coerce` hit `into_int_value()` on a FloatValue.
+fn is_float_valued(expr: &Expression) -> bool {
+    match expr {
+        Expression::FloatLiteral(_) => true,
+        Expression::Unary { operand, .. } => is_float_valued(operand),
+        Expression::Binary { lhs, rhs, .. } => {
+            is_float_valued(lhs) || is_float_valued(rhs)
+        }
+        Expression::Cast { ty, .. } => llvm_ops::is_float_type(ty.to_string().as_str()),
+        Expression::Ternary { true_expr, false_expr, .. } => {
+            is_float_valued(true_expr) || is_float_valued(false_expr)
+        }
+        _ => false,
+    }
+}
+
+/// The type `codegen_binary` produces for a binary op — the single source of
+/// truth shared by `value_sema_type` and both codegen sites. Shifts are
+/// excluded from the usual arithmetic conversions (C semantics): each operand
+/// is promoted independently and the result takes the type of the promoted
+/// *left* operand, so an unsigned shift amount must not turn a signed `>>`
+/// into a logical shift.
+fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
+    if matches!(op, BinaryOp::LShift | BinaryOp::RShift) {
+        llvm_ops::result_type(lhs_name, lhs_name)
+    } else {
+        llvm_ops::result_type(lhs_name, rhs_name)
+    }
 }

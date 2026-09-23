@@ -36,6 +36,9 @@ pub fn convert_string_literals(module: &mut Module) {
             walk_body(body);
         }
     }
+    for var in &mut module.globals {
+        crate::passes::walk_global(var, &mut |expr: &mut Expression| convert(expr));
+    }
 
     // Struct method bodies and ctor.
     for st in &mut module.structs {

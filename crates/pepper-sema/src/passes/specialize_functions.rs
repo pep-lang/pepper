@@ -98,7 +98,8 @@ fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
         match e {
             Expression::ArrayIndex { ty, .. }
             | Expression::IsPod(ty)
-            | Expression::Default(ty) => crate::type_name::replace_map(ty, type_map),
+            | Expression::Default(ty)
+            | Expression::Cast { ty, .. } => crate::type_name::replace_map(ty, type_map),
             Expression::RefCount(ty, _) => crate::type_name::replace_map(ty, type_map),
             Expression::Address(ty, _) => crate::type_name::replace_map(ty, type_map),
             _ => {}
