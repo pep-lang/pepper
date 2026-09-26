@@ -206,6 +206,9 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::RefCount(..) => TypeName::new("u32"),
         // `x as T` resolves to the cast target.
         Expression::Cast { ty, .. } => ty.clone(),
+        // Both ternary arms have the same type (enforced by sema): report it
+        // so `var x = c ? A() : B()` infers the arm's type.
+        Expression::Ternary { true_expr, .. } => type_of_expr(true_expr, scopes, current_struct),
         _ => TypeName::auto(),
     }
 }

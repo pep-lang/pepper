@@ -65,6 +65,15 @@ pub struct Frame<'ctx> {
     pub locals: Vec<(String, Address<'ctx>)>,
     /// Innermost enclosing while's `(continue, break)` blocks; `None` outside a loop.
     pub loop_break: Option<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
+    /// Index of the innermost enclosing while's body scope on `scopes`;
+    /// `None` outside a loop. Used by break/continue to release exactly the
+    /// scopes exited by the jump (all scopes at or below that index for
+    /// break; above it for continue).
+    pub loop_base_depth: Option<usize>,
+    /// True once the current region (function body, `{ }`, if-arm, while
+    /// body) has emitted a `return`/`break`/`continue`: every subsequent
+    /// statement in it is dead and must be skipped.
+    pub exited: bool,
 }
 
 impl<'ctx> Frame<'ctx> {
@@ -77,6 +86,8 @@ impl<'ctx> Frame<'ctx> {
             retval_type: None,
             locals: vec![],
             loop_break: None,
+            loop_base_depth: None,
+            exited: false,
         }
     }
 

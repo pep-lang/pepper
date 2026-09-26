@@ -663,6 +663,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.retval = retval;
         self.frame.retval_type = Some(function.ty.to_string());
         self.frame.locals.clear();
+        self.frame.exited = false;
+        self.frame.loop_base_depth = None;
         // Fresh scope stack for this function: the body is one scope.
         self.scopes.clear();
         self.scopes.push(Vec::new());
@@ -791,33 +793,35 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn codegen_nested_block(&mut self, inner: &Block) -> Result<(), String> {
         let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
         let return_block = self.frame.return_block.expect("return block");
+        let region_start = fn_value.get_basic_blocks().len();
         let entry = self.context.append_basic_block(fn_value, "block");
         self.builder.build_unconditional_branch(entry).map_err(|e| e.to_string())?;
         self.builder.position_at_end(entry);
         // The `{ ... }` is its own scope: locals declared inside are released
         // at the fall-through exit (a `return` inside already drained all).
+        self.frame.exited = false;
         self.scopes.push(Vec::new());
         self.codegen_block(inner)?;
 
         let current = self.builder.get_insert_block().expect("insert block");
-        if current.get_terminator().is_none() {
-            // No return in the region: release this scope's slots, then
-            // branch through to a continuation.
+        if !self.frame.exited {
+            // No return/break/continue in the region: release this scope's
+            // slots, then branch through to a continuation.
             let scope = self.scopes.pop().unwrap_or_default();
             self.release_scope(&scope)?;
             let cont = self.context.insert_basic_block_after(current, "blockcont");
             self.builder.build_unconditional_branch(cont).map_err(|e| e.to_string())?;
             self.builder.position_at_end(cont);
         } else {
-            // A return in the region: every path through it exited, so this
-            // scope's slots are all released; pop it for stack balance and
-            // patch every unterminated block created by the region to fall
-            // through, then land subsequent (dead) statements in a fresh
-            // unreachable block.
+            // Every path through the region exited (a `return` — break and
+            // continue land in loop blocks, never here): this scope's slots
+            // are all released; pop it for stack balance and patch every
+            // unterminated block created by the region to fall through, then
+            // keep subsequent (dead) statements landing in a fresh dead
+            // block so they never land after a terminator.
             self.scopes.pop();
             let blocks = fn_value.get_basic_blocks();
-            let start = blocks.iter().position(|b| *b == entry).expect("entry block");
-            for bb in &blocks[start..] {
+            for bb in &blocks[region_start..] {
                 if bb.get_terminator().is_none() {
                     self.builder.position_at_end(*bb);
                     self.builder
@@ -831,6 +835,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
     fn codegen_statement(&mut self, stmt: &Statement) -> Result<(), String> {
+        // Dead code after a `return`/`break`/`continue` in this region: the
+        // insert point sits past a terminator (or in a dead block), so skip
+        // emitting it — landing instructions after a terminator is invalid IR.
+        if self.frame.exited {
+            return Ok(());
+        }
         match stmt {
             Statement::Expression(expr) => {
                 let temp_ty = self.owned_temp_type(expr);
@@ -900,6 +910,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder
                     .build_unconditional_branch(return_block)
                     .map_err(|e| e.to_string())?;
+                // The return terminated this region: subsequent statements
+                // are dead, and the region's fall-through exit (if any) is
+                // unreachable — its slots were released above.
+                self.frame.exited = true;
             }
         }
         Ok(())
@@ -1054,6 +1068,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // fall-through tail, where they dominate (function-end release would
         // load them from a block that does not dominate the tail).
         self.scopes.push(Vec::new());
+        self.frame.exited = false;
         self.builder.position_at_end(then_block);
         self.codegen_block(&branch.if_block)?;
         let then_end = self.builder.get_insert_block().expect("insert block");
@@ -1071,6 +1086,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         if let Some(else_b) = else_block {
             // Same scope rule for the else-arm.
             self.scopes.push(Vec::new());
+            self.frame.exited = false;
             self.builder.position_at_end(else_b);
             self.codegen_block(branch.else_block.as_ref().expect("else block"))?;
             let else_end = self.builder.get_insert_block().expect("insert block");
@@ -1084,6 +1100,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         self.builder.position_at_end(merge_block);
+        // The if statement completes here: control after it is live again.
+        self.frame.exited = false;
         Ok(())
     }
 
@@ -1109,15 +1127,20 @@ impl<'ctx> CodeGenerator<'ctx> {
         // block may end in any of three terminators (fall-through, break,
         // continue), so the back-edge re-check needs an explicit `cond_block`.
         let saved = self.frame.loop_break;
+        let saved_base = self.frame.loop_base_depth;
         self.frame.loop_break = Some((cond_block, merge_block));
 
         // Body. The body is its own scope, re-created on every iteration:
         // locals declared inside are released at the loop head (which
         // dominates both the entry and back-edge paths) before the next
-        // condition check.
+        // condition check. Its index on the scope stack is the break/continue
+        // release boundary (`loop_base_depth`).
         self.builder.position_at_end(body_block);
         let body_scope = Vec::new();
         self.scopes.push(body_scope);
+        let base_depth = self.scopes.len() - 1;
+        self.frame.loop_base_depth = Some(base_depth);
+        self.frame.exited = false;
         self.codegen_block(&wh.block)?;
         // A `return` inside already drained all scopes; pop the (now empty)
         // body scope so the stack stays balanced.
@@ -1131,6 +1154,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         self.frame.loop_break = saved;
+        self.frame.loop_base_depth = saved_base;
 
         // Back-edge: release this iteration's body locals, then re-check.
         // `cond_block` is a single point every completed body iteration
@@ -1149,8 +1173,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
-
         self.builder.position_at_end(merge_block);
+        // The loop completes here: control after it is live again.
+        self.frame.exited = false;
         Ok(())
     }
 
@@ -1159,10 +1184,38 @@ impl<'ctx> CodeGenerator<'ctx> {
             .frame
             .loop_break
             .ok_or_else(|| "break/continue outside a loop".to_string())?;
+        // shared_ptr-by-value: exiting the loop destroys exactly the scopes
+        // the jump leaves behind — the same slots a fall-through exit would
+        // release. `break` skips the body scope's cond_block release, so it
+        // releases everything from the innermost scope down to and including
+        // the body scope; `continue` re-enters through cond_block, which
+        // already releases the body scope, so only the scopes above it are
+        // released here. (Outer scopes release at their own tails after the
+        // loop, on every path.)
+        let base = self
+            .frame
+            .loop_base_depth
+            .ok_or_else(|| "break/continue outside a loop".to_string())?;
+        let depth = self.scopes.len();
+        let scopes = std::mem::take(&mut self.scopes);
+        for (i, scope) in scopes[base.min(depth - 1)..depth].iter().rev().enumerate() {
+            // The body scope at depth `base`: cond_block releases it on the
+            // continue path (skipped there when empty), so release nothing.
+            if lb.kind == LoopBreakKind::Continue && depth - i == base + 1 {
+                continue;
+            }
+            self.release_scope(scope)?;
+        }
+        self.scopes = scopes;
         let target = match lb.kind {
             LoopBreakKind::Continue => cont,
             LoopBreakKind::Break => brk,
         };
+        // After the branch the insert point is past a terminator: mark this
+        // region exited so any remaining statements in it are skipped, and
+        // its fall-through exit (if any) unreachable — the scopes above were
+        // released here.
+        self.frame.exited = true;
         self.builder.build_unconditional_branch(target).map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -1271,6 +1324,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             // `x as T` has the cast target's type.
             Expression::Cast { ty, .. } => Some(ty.to_string()),
+            // Both ternary arms have the same declared type (enforced by
+            // sema): report it so consumers (var defs, refcount helpers)
+            // see the arm's type, not nothing.
+            Expression::Ternary { true_expr, .. } => self.value_sema_type(true_expr),
             _ => None,
         }
     }
@@ -1338,6 +1395,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         match expr {
             Expression::MethodCall { .. } | Expression::FunctionCall { .. } => {
                 self.is_struct_ref_name(&self.value_sema_type(expr))
+            }
+            // A ternary of two owned rvalues is one owned rvalue: the arm's
+            // creation ref flows into the phi, so the consumer releases it
+            // once. Mixed lvalue/rvalue arms are not (C++ yields a copy of
+            // the lvalue there — no single temporary to destroy).
+            Expression::Ternary { true_expr, false_expr, .. } => {
+                self.is_owned_rvalue(true_expr) && self.is_owned_rvalue(false_expr)
             }
             _ => false,
         }
@@ -2907,22 +2971,17 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
 
         self.builder.position_at_end(true_block);
-        let true_temp = self.owned_temp_type(true_expr);
         let true_val = self.codegen_expr(true_expr)?;
-        if let Some(ty) = true_temp {
-            self.release_temp(&ty, true_val)?;
-        }
+        // The arm's creation ref survives into the phi: a ternary of owned
+        // rvalues is itself an owned rvalue (the consumer releases it once),
+        // exactly as C++'s conditional operator yields one temporary.
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;
         let true_end = self.builder.get_insert_block().expect("insert block");
 
         self.builder.position_at_end(false_block);
-        let false_temp = self.owned_temp_type(false_expr);
         let false_val = self.codegen_expr(false_expr)?;
-        if let Some(ty) = false_temp {
-            self.release_temp(&ty, false_val)?;
-        }
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;

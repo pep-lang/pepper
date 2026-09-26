@@ -567,3 +567,195 @@ test(): int {{
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "fluent += must not leak the returned this");
 }
+
+// ── control-flow exits: break/continue destroy exactly the exited scopes ────
+
+#[test]
+fn census_break_body_local() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var i = 0;
+    while (i < 5) {{
+        var t = Tally();
+        if (i == 2) {{ break; }}
+        i = i + 1;
+    }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // The body-local `t` must be destroyed at the break site, not leaked:
+    // a shared_ptr local goes out of scope when the loop exits early.
+    assert_eq!(delta, 0, "break must release the body scope's locals");
+}
+
+#[test]
+fn census_break_nested_block() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var i = 0;
+    while (i < 5) {{
+        {{
+            var t = Tally();
+            if (i == 2) {{ break; }}
+        }}
+        i = i + 1;
+    }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // The nested `{ }` scope is exited by the break: its locals are released
+    // at the jump site (the fall-through exit is unreachable).
+    assert_eq!(delta, 0, "break in a nested block must release that block's locals");
+}
+
+#[test]
+fn census_continue_nested_block() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var i = 0;
+    while (i < 5) {{
+        i = i + 1;
+        {{
+            var t = Tally();
+            if (i == 3) {{ continue; }}
+        }}
+    }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // The continue re-enters through the loop head, which releases the body
+    // scope; the nested block's locals must not survive the jump.
+    assert_eq!(delta, 0, "continue in a nested block must release that block's locals");
+}
+
+#[test]
+fn census_break_outer_local_survives() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var o = Tally();
+    var i = 0;
+    while (i < 5) {{
+        if (i == 2) {{ break; }}
+        i = i + 1;
+    }}
+    if (o.alive != 1) {{ return -1; }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0, "outer local must survive the break (its scope did not exit)");
+    assert_eq!(delta, 0);
+}
+
+// ── ternary: a conditional of owned rvalues is one owned temporary ──────────
+
+#[test]
+fn census_ternary_owned() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var c = 1;
+    var x = c ? Tally() : Tally();
+    if (__refcount<Tally>(x) != 1) {{ return -1; }}
+    if (x.alive != 1) {{ return -2; }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // Exactly one of the two arm temporaries survives (the chosen one's ref
+    // flows into x); the other is destroyed at the end of the full expression.
+    assert_eq!(delta, 0, "ternary must yield exactly one live reference");
+}
+
+#[test]
+fn census_ternary_discarded() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var c = 1;
+    c ? Tally() : Tally();
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // A discarded ternary of owned rvalues is a temporary: destroyed at the
+    // end of the full expression.
+    assert_eq!(delta, 0, "discarded ternary rvalue must be released");
+}
+
+#[test]
+fn census_break_inner_loop() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var i = 0;
+    while (i < 3) {{
+        var o = Tally();
+        var j = 0;
+        while (j < 4) {{
+            var t = Tally();
+            if (j == 1) {{ break; }}
+            j = j + 1;
+        }}
+        i = i + 1;
+    }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // The inner break releases only the inner body scope (t); the outer
+    // scopes (o) release at their own tails. Both must net zero.
+    assert_eq!(delta, 0, "inner-loop break must not leak or over-release");
+}
+
+#[test]
+fn census_break_if_arm_local() {
+    let (code, delta) = compile_jit_census(
+        &format!(
+            r#"{tally}
+test(): int {{
+    var i = 0;
+    while (i < 5) {{
+        if (i == 2) {{
+            var t = Tally();
+            break;
+        }}
+        i = i + 1;
+    }}
+    return 0;
+}}"#,
+            tally = TALLY
+        ),
+    );
+    assert_eq!(code, 0);
+    // The if-arm scope is exited by the break: its local is released at the
+    // jump site (the arm's fall-through tail is unreachable).
+    assert_eq!(delta, 0, "break in an if-arm must release the arm's locals");
+}
