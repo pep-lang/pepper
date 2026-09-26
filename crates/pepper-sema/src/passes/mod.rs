@@ -109,6 +109,7 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
                 walk_expression(expr, f);
             }
         }
+        Statement::LoopBreak(_) => {}
     }
 }
 

@@ -63,22 +63,25 @@ fn zero_for(ty: &TypeName) -> Expression {
 /// Fill in the refcount field + synthesized method bodies (the `StructDef`
 /// constructor part of `Struct.cpp:99-149`).
 pub fn apply_synthesized(st: &mut StructDef) {
-    // Head field for the refcount. Default 1: a freshly constructed object
-    // is owned by its creator; the ctor's field-init loop stores this default.
+    // Head field for the refcount. Default 0 (port of `Struct.cpp:108-109`,
+    // `IntegerLiteral(0)`): a freshly constructed object carries NO refs —
+    // its first reference is taken by the receiver's init/param-entry
+    // acquire (the caller side), exactly as C++'s `RefTypeOps::init` does.
     // Guarded: specialized instances clone the base's fields (which already
     // carry the head) and re-run apply_synthesized.
     if !st.field_members.iter().any(|f| f.name == "__refcount") {
         st.field_members.insert(
             0,
-            var_def("__refcount", TypeName::new("u32"), Some(Expression::IntLiteral(1)), false),
+            var_def("__refcount", TypeName::new("u32"), Some(Expression::IntLiteral(0)), false),
         );
     }
 
     let struct_name = st.name.clone();
 
     // __acquire body: null-check, ++this.__refcount + trace calls. Codegen
-    // acquires on every store of a struct reference, including nulls from
-    // zero-initialized slots, so the guard mirrors __release's.
+    // acquires on a struct-reference store whenever the new occupant differs
+    // from the old one (including nulls from zero-initialized slots), so the
+    // guard mirrors __release's.
     if let Some(body) = &mut st.acquire.body {
         body.items = vec![
             if_block(
@@ -272,6 +275,14 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             }),
         }));
     }
+
+    // The object leaves the ctor with `__refcount == 1`: `return this`
+    // acquires at the return site, so the ctor result is an owned rvalue
+    // carrying its creation ref — exactly as `std::make_shared` hands back a
+    // shared_ptr. A variable init (`var x = T()`) moves that ref into the
+    // slot; a pass-by-value param entry acquires on top of it. The ctor's
+    // `this` local is excluded from scope tracking (codegen), so nothing
+    // here releases the object.
 
     // Restore the user's ctor instructions.
     items.extend(user_ctor);

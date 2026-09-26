@@ -83,6 +83,7 @@ fn replace_stmt_types(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
                 replace_expr_types(expr, type_map);
             }
         }
+        Statement::LoopBreak(_) => {}
     }
 }
 

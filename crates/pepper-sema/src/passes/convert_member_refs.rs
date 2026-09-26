@@ -49,6 +49,7 @@ fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[Variable
                 convert_expression(expr, struct_name, fields, methods, locals, globals);
             }
         }
+        Statement::LoopBreak(_) => {}
     }
 }
 

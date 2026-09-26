@@ -5,7 +5,7 @@ description: Build the Pepper compiler with cargo. Use when asked to build, comp
 
 # Building Pepper
 
-Pepper is a Rust workspace: root crate `pepper` (lib + `main.rs` CLI) plus the crates `pepper-parser`, `pepper-sema`, `pepper-codegen`, `pepper-support`, and `pepper-driver` under `crates/`.
+Pepper is a Rust workspace: root crate `pepper` (lib + `main.rs` CLI) plus the crates `pepper-parser`, `pepper-sema`, `pepper-codegen`, and `pepper-driver` under `crates/`.
 
 ## First time on a machine: provision LLVM
 
@@ -82,7 +82,6 @@ Symptoms and causes worth knowing before you start guessing:
 - **`could not find native static library Polly`** — a Debian `llvm-N-dev` without `libpolly-N-dev`: `llvm-config --libnames --link-static` names Polly's archives whether or not they are installed, and llvm-sys prefers static, falling back to shared only when that command *fails* rather than when the files it names are missing. So `usable_llvm()` in the setup script checks the mode llvm-sys will actually choose and rejects such a prefix, which both catches this at provisioning and makes the script install `libpolly-N-dev`. The preinstalled `/usr/lib/llvm-18` on `ubuntu-24.04` is exactly this case.
 - **Unresolved `LLVMInitialize<Target>*` at link time** — `inkwell`'s default `target-all` feature wants initializers for every LLVM target, including ones a given LLVM build omits (`llvm-config --targets-built` lists them). The crates therefore set `default-features = false` and request one backend per host architecture, in the `cfg(target_arch = …)` dependency tables of `crates/pepper-{codegen,driver}/Cargo.toml`: `target-x86` on x86_64, `target-aarch64` on aarch64. `crates/pepper-codegen/src/target.rs` registers that backend and builds the machine everything emits for; registering the wrong one breaks every CLI invocation with *"No available targets are compatible with triple …"* while the suite can stay green, since inkwell's JIT registers the host backend as a side effect and whichever test does that first masks it for the rest. `target.rs`'s own unit test asks the question directly instead.
 - **Random access violations inside LLVM (verifier, printer) on Windows** — LLVM's release libs are built against the *static* CRT (`DEFAULTLIB:libcmt.lib`) while Rust MSVC uses the dynamic one; two CRTs in one process corrupt the heap, and `LNK4098` warns about it. Windows therefore links `LLVM-C.dll` instead: each supported `llvm-sys` major is a windows-only optional dependency carrying `no-llvm-linking`, and `crates/pepper-codegen/build.rs` emits the DLL link and copies it next to the built artifacts. Don't "fix" this by re-enabling static linking.
-- **`undefined symbol: _pep_print` / `panic` when compiling a `.pep` file** — not an LLVM problem. The driver links `libpepper_support.a`/`pepper_support.lib` from next to the `pepper` binary, and `cargo run` alone does not build that staticlib. `cargo build --workspace` first.
 
 ## Adding or changing an LLVM version
 

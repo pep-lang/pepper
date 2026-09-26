@@ -36,9 +36,8 @@ Expect ~106 passing and 1 ignored.
 |---|---|
 | `pepper-parser` | 53 unit tests in `src/parser/parsers.rs` (grammar: literals, expressions, structs, traits, generics) |
 | `pepper-sema` | 8 model tests in `src/model_tests.rs` (parse + build + transform → resolved model) |
-| `pepper-support` | 6 unit tests in `src/lib.rs` (C ABI runtime support functions) |
 | `pepper-codegen` | 1 unit test in `src/target.rs` — the host's own triple resolves to a target machine, which is what a CLI run needs. Other tests reach the same code, but inkwell's execution-engine constructors register the host backend as a side effect, so a JIT test running first can mask a wrong registration; this one runs alone in its binary and cannot be masked. Plus 16 tests in `tests/codegen_tests.rs` — codegen + JIT, asserting the value `test()` returns |
-| `pepper-driver` | 15 tests in `tests/compile_tests.rs` (14 JIT value tests + `full_pipeline_link_and_spawn`, which emits an object, links it, and runs the binary) |
+| `pepper-driver` | 18 tests in `tests/compile_tests.rs` (17 JIT value tests + `full_pipeline_link_and_spawn`, which emits an object, links it, and runs the binary) |
 | `pepper-driver` | 1 `#[ignore]`d test in `tests/corpus_tests.rs` (compile-and-run the corpus) |
 | root `pepper` | `tests/parser_corpus.rs` — every `tests/**/*.pep` file must parse into a well-formed module |
 | `xtask` | 6 unit tests in `src/main.rs` — flag resolution (last of `--devtools`/`--no-devtools` wins, identically for both scripts; `--llvm` in each script's spelling; `-ExecutionPolicy Bypass` before `-File`; `--check`/`-h` not provisioning and bad input rejected), reading the generated cargo config back including TOML-escaped Windows paths, and the default LLVM major being readable from the workspace manifest |
@@ -53,6 +52,6 @@ Expect ~106 passing and 1 ignored.
 ## Diagnosing failures
 
 1. Re-run the single test with `--nocapture` to see its own output.
-2. A JIT test that dies with a native fault (`STATUS_ACCESS_VIOLATION` / SIGSEGV) rather than an assertion is usually not a bad-IR problem. Two causes have bitten before: generated code calling a support function that the JIT could not resolve (`pepper-support::support_symbols()` must list it, since `pepper-codegen` binds that table into the engine with `add_global_mapping` — a static rlib's symbols aren't in the process export table), and LLVM CRT mismatch on Windows (see the **build** skill).
+2. A JIT test that dies with a native fault (`STATUS_ACCESS_VIOLATION` / SIGSEGV) rather than an assertion is usually not a bad-IR problem. Two causes have bitten before: generated code calling a function that is neither in the module nor exported by the host process (the runtime lives in `runtime/*.pep`, merged into every test module — if the name resolves to nothing, `call_function` errors with `unknown function`), and LLVM CRT mismatch on Windows (see the **build** skill).
 3. To decide between malformed IR and a runtime fault, dump the module with `Module::print_to_stderr()` before `verify()` — printing streams inside LLVM, so partial output pinpoints a bad construct.
 4. For a parse failure, reproduce standalone with the parse-only path: `cargo run -- --emit-ast tests/<Name>/test.pep`. Plain `cargo run -- tests/<Name>/test.pep` runs the whole pipeline (sema, codegen, object emission, link), so it can fail for reasons that have nothing to do with parsing.

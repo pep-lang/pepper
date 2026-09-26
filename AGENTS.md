@@ -73,3 +73,45 @@ ends without a usable answer costs another round. So:
   than re-dispatching to ask a follow-up question.
 - **Ask several questions per run.** Independent checks belong in one script
   with clear `=== section` markers, since the cost is per run, not per check.
+
+
+## Reference counting is std::shared_ptr<T> passed by value — always
+
+Every struct reference in Pepper behaves exactly like a `std::shared_ptr<T>`
+value. For any construct, ask what C++ would do if that expression were a
+`shared_ptr<T>`, and emit the acquire/release calls in exactly that order. No
+ad-hoc refcount rules, no extra categories of references, and **no such thing
+as a borrowed reference** — if a design needs a "borrow" concept, it is wrong
+under this model.
+
+The whole model, as a construct mapping:
+
+- `var x = Foo();` ≡ `shared_ptr<T> x = make_shared<T>();` — construction
+  leaves `__refcount == 0`; the slot that first receives the value acquires
+  (the "first owner").
+- Reading a place (`x`, `x.f`, `x[i]`) yields a **reference** to the stored
+  value, like C++ `T&`. The read itself does no refcount work. Copying that
+  reference into a new shared_ptr — var init, assignment RHS, function
+  argument, return — is a `shared_ptr` copy: acquire.
+- `y = z;` ≡ `shared_ptr::operator=`: acquire the new value, release the
+  slot's old occupant. Self-assignment (`a = a`, including `x[i] = x[i]`) is
+  a no-op, as in C++.
+- By-value parameter ≡ pass by value: acquire at entry, release at function
+  exit — exactly like a shared_ptr local going out of scope.
+- `x.m()` ≡ `x->m()`: the receiver is accessed as `this`, a reference — no
+  copy, no refcount work on the receiver. The call result is a temporary
+  owning one reference: the return site acquires when it copies `this`, a
+  field, or an element; for an owned local its ref moves out (emitted as
+  acquire-at-return plus the slot's normal exit release — net-identical to a
+  move, no moved-from tracking).
+- A discarded temporary (call/ctor result not bound to anything) is an
+  unnamed shared_ptr destroyed at the end of the full expression: release
+  once. That includes a call result used as an argument after the call and
+  the receiver of `f().g()`.
+
+Everything else — scope exit, parameter exit, store-release-old — follows
+from "every owned value releases exactly once when it goes out of scope".
+
+`source/` (the original C++ implementation) is a historical archive only. It
+is NOT a source for behavior, design, or codegen decisions — derive everything
+from the shared_ptr model above.

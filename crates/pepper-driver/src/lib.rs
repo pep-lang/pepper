@@ -72,14 +72,7 @@ pub fn run(options: Options) -> Result<i32, String> {
         }
     }
 
-    // Link the pepper-support staticlib (built alongside this binary) so
-    // the JIT'd/generated code resolves _pep_* symbols.
-    let mut objects: Vec<PathBuf> = vec![obj_path];
-    if let Some(staticlib) = support_staticlib() {
-        objects.push(staticlib);
-    }
-
-    linker::link(&objects, &out_path, &libraries, &library_dirs)?;
+    linker::link(&[obj_path], &out_path, &libraries, &library_dirs)?;
 
     Ok(0)
 }
@@ -97,15 +90,6 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
     Ok(0)
 }
 
-/// Locate the pepper-support staticlib next to this binary's target dir.
-fn support_staticlib() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    // target/debug/pepper → target/debug/<pepper_support staticlib>
-    exe.parent()?
-        .join(linker::support_staticlib_name())
-        .canonicalize()
-        .ok()
-}
 
 /// Machine for object emission: the host, CPU `generic`.
 ///

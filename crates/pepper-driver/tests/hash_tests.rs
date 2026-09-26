@@ -236,7 +236,7 @@ struct Point {
     int y;
     new(this.x = 0, this.y = 0) {}
 }
-test(): int {
+build(): int {
     var m = hash_map<Point, int>();
     var p = Point();
     p.x = 1;
@@ -252,6 +252,14 @@ test(): int {
     if (!m.remove(q)) { return -6; }
     if (m.count() != 1 || !m.contains(p)) { return -7; }
     if (m.get(p) != 42) { return -8; }
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Every allocation must be freed when build's scope exits.
+    if (_pep_live_allocs() != before) { return -9; }
     return 0;
 }"#
         ),
@@ -368,7 +376,7 @@ struct Point {
     int y;
     new(this.x = 0, this.y = 0) {}
 }
-test(): int {
+build(): int {
     var s = hash_set<Point>();
     var p = Point();
     p.x = 3;
@@ -387,6 +395,14 @@ test(): int {
     if (!s.remove(q)) { return -6; }
     if (s.count() != 2 || !s.contains(p) || !s.contains(r)) { return -7; }
     if (s.contains(q)) { return -8; }
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Every allocation must be freed when build's scope exits.
+    if (_pep_live_allocs() != before) { return -9; }
     return 0;
 }"#
         ),
@@ -417,9 +433,9 @@ test(): int {
 
 #[test]
 fn map_release_frees_contents() {
-    // No scope-exit destruction exists in Pepper, so the map is released
-    // explicitly: after `__release`, every allocation made for its contents
-    // (the Point keys, the string values, the arrays) must be freed.
+    // The map and its contents are allocated inside `build`; when build's
+    // scope exits, the automatic releases must free every allocation made
+    // for the map (Point keys, string values, arrays).
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -428,8 +444,7 @@ struct Point {
     int y;
     new(this.x = 0, this.y = 0) {}
 }
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var m = hash_map<Point, string>();
     var p1 = Point();
     p1.x = 1;
@@ -446,15 +461,14 @@ test(): int {
     if (!m.insert(p1, s1)) { return -1; }
     if (!m.insert(p2, s2)) { return -2; }
     if (!m.insert(p3, s3)) { return -3; }
-    # The map's slots hold one ref each (acquired on insert); drop the
-    # creators' refs so releasing the map frees everything.
-    p1.__release();
-    p2.__release();
-    p3.__release();
-    s1.__release();
-    s2.__release();
-    s3.__release();
-    m.__release();
+    # The map's slots hold one ref each (acquired on insert); build's
+    # scope exit drops the creators' refs.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
     # Every allocation made for the map and its contents must be freed.
     if (_pep_live_allocs() != before) { return -4; }
     return 0;
@@ -480,7 +494,7 @@ struct Point {
     int y;
     new(this.x = 0, this.y = 0) {}
 }
-test(): int {
+build(): int {
     var m = hash_map<Point, int>(8);
     var kept = array<Point>();
     var i = 0;
@@ -498,6 +512,14 @@ test(): int {
     fresh.x = 3;
     fresh.y = 6;
     if (m.contains(fresh)) { return -7; }
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Every allocation must be freed when build's scope exits.
+    if (_pep_live_allocs() != before) { return -8; }
     return 0;
 }"#
         ),
@@ -518,7 +540,7 @@ struct Point {
     int y;
     new(this.x = 0, this.y = 0) {}
 }
-test(): int {
+build(): int {
     var s = hash_set<Point>(8);
     var kept = array<Point>();
     var i = 0;
@@ -536,6 +558,14 @@ test(): int {
     fresh.x = 9;
     fresh.y = 9;
     if (s.contains(fresh)) { return -7; }
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Every allocation must be freed when build's scope exits.
+    if (_pep_live_allocs() != before) { return -8; }
     return 0;
 }"#
         ),

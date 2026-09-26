@@ -2,9 +2,8 @@
 //! containers must release every contained object exactly once when the
 //! owning structure dies. Each snippet is compiled with the runtime prelude
 //! and JIT-executed through `test`; the leak check compares
-//! `_pep_live_allocs()` before construction and after the owner's
-//! `__release` (Pepper has no scope-exit destruction, so explicit release
-//! stands in for going out of scope).
+//! `_pep_live_allocs()` before construction and after the allocation scope
+//! exits (RAII: locals are released automatically at scope exit).
 
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
@@ -45,8 +44,7 @@ fn nested_array_release_frees_inner_arrays() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<int>>(4);
     var a = array<int>(2);
     a.append(1);
@@ -63,12 +61,16 @@ test(): int {
     if (outer.count() != 3) { return -1; }
     if (outer[0][1] != 2) { return -2; }
     if (outer[2][0] != 5) { return -3; }
-    # The slots hold one ref each; drop the creators' refs so releasing
-    # the outer frees everything.
-    a.__release();
-    b.__release();
-    c.__release();
-    outer.__release();
+    # The slots hold one ref each; build's scope exit drops the creators'
+    # refs and releases everything.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Every inner array object, its buffer, and the outer's own buffer must
+    # be freed.
     if (_pep_live_allocs() != before) { return -4; }
     return 0;
 }"#
@@ -85,8 +87,7 @@ fn nested_array_insert_remove_swap_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<int>>(2);
     var a = array<int>(1);
     a.append(1);
@@ -113,13 +114,15 @@ test(): int {
     if (outer[0][0] != 4) { return -6; }
     if (outer[1][0] != 2) { return -7; }
     if (outer[2][0] != 3) { return -8; }
-    # `removed` is a local holding one ref to `a`; drop it too.
-    removed.__release();
-    a.__release();
-    b.__release();
-    c.__release();
-    d.__release();
-    outer.__release();
+    # `removed` is a local holding one ref to `a`; build's scope exit
+    # drops it along with the creators' refs.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Releasing the outer frees everything.
     if (_pep_live_allocs() != before) { return -9; }
     return 0;
 }"#
@@ -135,21 +138,26 @@ fn nested_array_growth_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<int>>(1);
     var i = 0;
     while (i < 10) {
         var inner = array<int>(1);
         inner.append(i * 10);
         outer.append(inner);
-        # The slot now holds the only creator-independent ref.
-        inner.__release();
+        # The slot holds the creator-independent ref; `inner`'s own ref
+        # is dropped when the loop body's scope exits.
         i = i + 1;
     }
     if (outer.count() != 10) { return -1; }
     if (outer[9][0] != 90) { return -2; }
-    outer.__release();
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # The old buffer must be freed and every inner array released.
     if (_pep_live_allocs() != before) { return -3; }
     return 0;
 }"#
@@ -165,8 +173,7 @@ fn nested_array_of_strings_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<string>>(2);
     var a = array<string>(1);
     var s1 = "one";
@@ -183,11 +190,14 @@ test(): int {
     # would allocate a temporary string that nothing releases.
     if (outer[0][0] != s1) { return -4; }
     if (outer[1][0] != s2) { return -5; }
-    s1.__release();
-    s2.__release();
-    a.__release();
-    b.__release();
-    outer.__release();
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Each inner array's string slots and the outer's inner-array slots
+    # must all release when build's scope exits.
     if (_pep_live_allocs() != before) { return -6; }
     return 0;
 }"#
@@ -203,8 +213,7 @@ fn nested_array_clear_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<int>>(2);
     var a = array<int>(1);
     a.append(1);
@@ -215,10 +224,15 @@ test(): int {
     if (outer.count() != 2) { return -1; }
     outer.clear();
     if (!outer.empty()) { return -2; }
-    # clear released the slots' refs; drop the creators' too.
-    a.__release();
-    b.__release();
-    outer.__release();
+    # clear released the slots' refs; build's scope exit drops the
+    # creators' too. The later destruct must then find nothing to release -
+    # no double free, no leak.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
     if (_pep_live_allocs() != before) { return -3; }
     return 0;
 }"#
@@ -235,8 +249,7 @@ fn nested_array_clone_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var outer = array<array<int>>(2);
     var a = array<int>(1);
     a.append(7);
@@ -249,9 +262,14 @@ test(): int {
     copy[0].append(8);
     if (outer[0].count() != 2) { return -3; }
     if (outer[0][1] != 8) { return -4; }
-    a.__release();
-    outer.__release();
-    copy.__release();
+    # The clone shares the inner array: build's scope exit releases both
+    # owners, freeing every inner array.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
     if (_pep_live_allocs() != before) { return -5; }
     return 0;
 }"#

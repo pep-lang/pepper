@@ -79,14 +79,14 @@ struct array<T> {
     void insert(ulong idx, T item) {
         assert(idx <= Size, "array insert index out of bounds");
         grow();
-        # Backward shift: each store releases the slot's old occupant and
-        # acquires the source value, so every moved reference is counted in
-        # its new slot. Iterating backward keeps the source ahead of the
-        # overwrite; a raw move would duplicate pointers without counting
-        # them, and the store into Data[idx] below would then undercount.
+        # Backward shift as a raw pointer move: each slot's reference is
+        # transferred to its new position without changing its count, exactly
+        # as moving `shared_ptr`s between slots would. A per-slot release/
+        # acquire store would destroy elements the array solely owns (their
+        # only reference) and churn counts of externally shared ones.
         ulong cursor = Size;
         while (cursor > idx) {
-            Data[cursor] = Data[cursor - 1];
+            _pep_move_ref(Data, sizeof<T>(), cursor - 1, cursor);
             cursor = cursor - 1;
         }
         Data[idx] = item;
@@ -95,13 +95,17 @@ struct array<T> {
     T remove_at(ulong idx) {
         assert(idx < Size, "array remove index out of bounds");
         T removed = Data[idx];
-        # Forward shift: each store releases the slot's old occupant and
-        # acquires the source value; the vacated tail is nulled so its
-        # reference is released. Iterating forward keeps the source behind
-        # the overwrite.
+        # The copy above acquired a reference for `removed`; release the
+        # slot's own reference now — the forward shift below overwrites this
+        # slot, and a shared_ptr move-assign would release its old occupant.
+        Data[idx] = __default<T>();
+        # Forward shift as a raw pointer move: each slot's reference is
+        # transferred to its new position without changing its count; the
+        # vacated tail is nulled so its reference is released. A per-slot
+        # release/acquire store would destroy elements the array solely owns.
         ulong cursor = idx;
         while (cursor + 1 < Size) {
-            Data[cursor] = Data[cursor + 1];
+            _pep_move_ref(Data, sizeof<T>(), cursor + 1, cursor);
             cursor = cursor + 1;
         }
         Data[Size - 1] = __default<T>();

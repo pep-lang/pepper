@@ -36,15 +36,6 @@ compile_error!(
      --features llvm18-1|llvm19-1|llvm20-1|llvm21-1|llvm22-1"
 );
 
-/// Filename of the pepper-support static library for the host platform.
-pub fn support_staticlib_name() -> &'static str {
-    if cfg!(windows) {
-        "pepper_support.lib"
-    } else {
-        "libpepper_support.a"
-    }
-}
-
 /// The link driver to invoke.
 pub fn link_driver() -> PathBuf {
     let exe = if cfg!(windows) { "clang.exe" } else { "clang" };
@@ -59,24 +50,12 @@ pub fn link_driver() -> PathBuf {
 
 /// System libraries every Pepper executable needs on this platform.
 ///
-/// The runtime support library is a Rust staticlib, so linking it drags in the
-/// Rust standard library's own native dependencies. clang supplies the C
-/// runtime and, on macOS, libSystem plus the SDK/platform flags itself; these
-/// are the ones it does not add.
+/// clang supplies the C runtime and, on macOS, libSystem plus the SDK/platform
+/// flags itself; these are the ones it does not add.
 fn default_system_libraries() -> &'static [&'static str] {
     if cfg!(windows) {
-        &[
-            // Pepper's documented Windows defaults (docs/pepper.md).
-            "kernel32", "user32", "shell32",
-            // Required by the Rust standard library inside pepper-support:
-            // sockets, user profile paths, NT syscalls, crypto RNG.
-            "ws2_32", "userenv", "ntdll", "advapi32", "bcrypt", "ole32", "oleaut32",
-        ]
-    } else if cfg!(target_os = "linux") {
-        // rustc's own native-static-libs line for a staticlib asks for these;
-        // clang's default link line supplies libc but not libm, and not
-        // libdl/libpthread before glibc 2.34 folded them in.
-        &["m", "dl", "pthread"]
+        // Pepper's documented Windows defaults (docs/pepper.md).
+        &["kernel32", "user32", "shell32"]
     } else {
         &[]
     }

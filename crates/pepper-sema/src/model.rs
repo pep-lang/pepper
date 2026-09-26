@@ -250,6 +250,14 @@ pub struct ReturnStatement {
     pub expr: Option<Expression>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopBreakKind { Break, Continue }
+
+#[derive(Debug, Clone)]
+pub struct LoopBreak {
+    pub kind: LoopBreakKind,
+}
+
 #[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
@@ -258,6 +266,7 @@ pub enum Statement {
     Branch(Branch),
     While(While),
     Return(ReturnStatement),
+    LoopBreak(LoopBreak),
 }
 
 // ── Declarations ─────────────────────────────────────────────────────────────

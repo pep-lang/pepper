@@ -98,10 +98,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return st.clone();
                 }
             }
-            if let Some(ty) = scopes.find_symbol(id) {
+            // Parameters shadow globals (C++ scoping): a function's own
+            // `s` is not the module-global `var s`.
+            if let Some(ty) = scopes.find_param(id) {
                 return ty;
             }
-            if let Some(ty) = scopes.find_param(id) {
+            if let Some(ty) = scopes.find_symbol(id) {
                 return ty;
             }
             // The symbol may be the name of a struct.
@@ -152,7 +154,14 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             ) {
                 TypeName::bool_()
             } else {
-                TypeName::auto()
+                // Arithmetic keeps the lhs type (pointer arithmetic stays a
+                // pointer); fall back to auto when the lhs is unknown.
+                let lhs_ty = type_of_expr(lhs, scopes, current_struct);
+                if lhs_ty.is_empty() || lhs_ty.to_string() == crate::type_name::AUTO {
+                    TypeName::auto()
+                } else {
+                    lhs_ty
+                }
             }
         }
         Expression::IntLiteral(_) => TypeName::new("i32"),
@@ -420,6 +429,7 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
                 resolve_expression(expr, scopes, current_struct, None);
             }
         }
+        Statement::LoopBreak(_) => {}
     }
 }
 

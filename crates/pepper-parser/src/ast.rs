@@ -357,6 +357,15 @@ pub struct ReturnStatement {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopBreakKind { Break, Continue }
+
+#[derive(Debug, Clone)]
+pub struct LoopBreak {
+    pub kind: LoopBreakKind,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
@@ -365,6 +374,7 @@ pub enum Statement {
     Branch(Branch),
     While(While),
     Return(ReturnStatement),
+    LoopBreak(LoopBreak),
 }
 
 impl Statement {
@@ -376,6 +386,7 @@ impl Statement {
             Statement::Branch(b) => b.span,
             Statement::While(w) => w.span,
             Statement::Return(r) => r.span,
+            Statement::LoopBreak(l) => l.span,
         }
     }
 }
@@ -634,6 +645,7 @@ impl Display for Statement {
             Statement::Branch(b) => write!(f, "{}", b),
             Statement::While(w) => write!(f, "{}", w),
             Statement::Return(r) => write!(f, "{};", r),
+            Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
         }
     }
 }

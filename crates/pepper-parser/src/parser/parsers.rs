@@ -998,11 +998,24 @@ fn statement(input: &mut &str) -> Result<Statement> {
     if input.starts_with("return") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::Return(return_statement(input)?));
     }
+    if input.starts_with("break") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        let start = pos(input);
+        *input = &input[5..];
+        ws(input)?;
+        return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Break, span: Span { start, end: pos(input) } }));
+    }
+    if input.starts_with("continue") && !input[8..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        let start = pos(input);
+        *input = &input[8..];
+        ws(input)?;
+        return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Continue, span: Span { start, end: pos(input) } }));
+    }
     // Variable declaration: `var`/`const` prefix OR `TypeName name = value` form
     let is_var_decl = (input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
         || (input.starts_with("const") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
         || (input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
             && !input.starts_with("if") && !input.starts_with("while") && !input.starts_with("return")
+            && !input.starts_with("break") && !input.starts_with("continue")
             && !input.starts_with("struct") && !input.starts_with("extern")
             && !input.starts_with("import") && !input.starts_with("use")
             && !input.starts_with("true") && !input.starts_with("false")

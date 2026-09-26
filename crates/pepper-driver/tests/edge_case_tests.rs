@@ -1342,3 +1342,51 @@ test(): int {
         8
     );
 }
+
+#[test]
+fn compound_assign_bool_is_nonzero_test() {
+    // C 6.3.1.4: conversion to _Bool is a nonzero test, not a low-bit
+    // truncation — `b += 2` from true must stay true (a trunc would give 0).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    bool b = true;
+    b += 2;
+    return b as int;
+}
+"#
+        ),
+        1
+    );
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    bool b = false;
+    b += 2;
+    return b as int;
+}
+"#
+        ),
+        1
+    );
+}
+
+#[test]
+fn compound_assign_u8_wraps_at_int_width() {
+    // C usual conversions: `u8 += u8` promotes both to int, adds there, then
+    // converts back — 200 + 100 = 300 wraps to 44 at the store.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    u8 x = 200;
+    x += 100;
+    return x as int + 1;
+}
+"#
+        ),
+        45
+    );
+}

@@ -207,6 +207,12 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, String> {
         ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
             expr: Some(expression(&ret.expr)?),
         })),
+        ast::Statement::LoopBreak(lb) => Ok(Statement::LoopBreak(LoopBreak {
+            kind: match lb.kind {
+                ast::LoopBreakKind::Break => LoopBreakKind::Break,
+                ast::LoopBreakKind::Continue => LoopBreakKind::Continue,
+            },
+        })),
     }
 }
 

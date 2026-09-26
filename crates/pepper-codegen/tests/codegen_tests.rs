@@ -21,6 +21,28 @@ fn compile_jit(source: &str) -> i32 {
     generator.jit_execute(&mut module, "test").expect("jit")
 }
 
+/// Like `compile_jit` but with the `runtime/` prelude merged in, so the test
+/// body can call `_pep_*` runtime functions (malloc, …).
+fn compile_jit_with_runtime(source: &str) -> i32 {
+    let mut module = SemaModule::default();
+    let (runtime_sources, _libs, _dirs) = pepper_files::runtime::discover();
+    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
+    for path in runtime_sources {
+        let content = std::fs::read_to_string(&path).expect("read runtime source");
+        let ast = parser::parse_source(&path.to_string_lossy(), &content)
+            .expect("parse runtime source");
+        module.merge(build(&ast).expect("build"));
+    }
+    let ast = parser::parse_source("test.pep", source).expect("parse error");
+    module.merge(build(&ast).expect("build"));
+    pepper_sema::apply_platform_filters(&mut module).expect("platform");
+    struct_body::apply(&mut module).expect("sema");
+    transform_pass(&mut module);
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.jit_execute(&mut module, "test").expect("jit")
+}
+
 const MATH_SOURCE: &str = r#"
 test(): int {
     const x: int = 1
@@ -182,7 +204,7 @@ fn float_math() {
 fn struct_member() {
     // Struct field read through ctor + member access.
     assert_eq!(
-        compile_jit(
+        compile_jit_with_runtime(
             r#"
 struct Test {
     var x: int = 7
@@ -200,7 +222,7 @@ test(): int {
 #[test]
 fn struct_field_write() {
     assert_eq!(
-        compile_jit(
+        compile_jit_with_runtime(
             r#"
 struct Test {
     var x: int = 7
@@ -220,7 +242,7 @@ test(): int {
 fn sizeof_struct() {
     // Struct Test has one i32 field → size 4 (plus __refcount u32 = 8).
     assert_eq!(
-        compile_jit(
+        compile_jit_with_runtime(
             r#"
 struct Test {
     var x: int = 0

@@ -7,12 +7,13 @@ struct string {
 
     new(__ptr<char> data = __null, this.Size = 0, this.Length = 0) {
         if (data) {
+            # Size is the authoritative byte length; inline NULs are legal in
+            # UTF-8 data, so it is never derived from a terminator. A raw
+            # `char*` with no size is a C string by contract: measure it once
+            # to bound the char-count derivation below.
             if (Size == 0) {
-                # This will either compute the size using the supplied length or it will find the 0 terminator
-                Size = _pep_utf8_size(data, Length);
-            }
-            if (Length == 0) {
-                Length = length_of(data);
+                var src = _pep_c_strlen(data);
+                Size = _pep_utf8_size(data, src, Length);
             }
             Data = _pep_malloc(Size + 1);
             memcpy(Data, data, Size);
@@ -24,8 +25,8 @@ struct string {
         _pep_free(Data);
     }
 
-    static ulong length_of(__ptr<char> c_str) {
-        return _pep_utf8_length(c_str);
+    static ulong length_of(__ptr<char> data, ulong size) {
+        return _pep_utf8_length(data, size);
     }
 
     ulong length() {
@@ -69,7 +70,7 @@ struct string {
         if (Size == 0) {
             return true;
         }
-        bool eq = _pep_utf8_compare(Data, rhs.Data, Size);
+        bool eq = _pep_utf8_compare(Data, Size, rhs.Data, rhs.Size, Size);
         return eq;
     }
 
@@ -109,7 +110,7 @@ struct string {
         if (prefix.Size == 0) {
             return true;
         }
-        return _pep_utf8_compare(Data, prefix.Data, prefix.Size);
+        return _pep_utf8_compare(Data, Size, prefix.Data, prefix.Size, prefix.Size);
     }
 
     bool ends_with(string suffix) {
@@ -119,7 +120,7 @@ struct string {
         if (suffix.Size == 0) {
             return true;
         }
-        return _pep_utf8_compare(Data + (Size - suffix.Size), suffix.Data, suffix.Size);
+        return _pep_utf8_compare(Data + (Size - suffix.Size), Size, suffix.Data, suffix.Size, suffix.Size);
     }
 
     string substr(ulong start, ulong count) {
@@ -128,7 +129,7 @@ struct string {
         }
         ulong begin = _pep_utf8_char_offset(Data, Size, start);
         # Clamp the requested character count to what remains in the string.
-        ulong avail = length_of(Data + begin);
+        ulong avail = length_of(Data + begin, Size - begin);
         if (count > avail) {
             count = avail;
         }

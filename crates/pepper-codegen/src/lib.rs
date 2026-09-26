@@ -15,7 +15,7 @@ use inkwell::values::{AsValueRef, BasicValueEnum, FunctionValue, GlobalValue, Po
 use inkwell::types::AnyType as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
-use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
+use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
 use pepper_sema::type_name::TypeName;
 use std::collections::HashMap;
 
@@ -60,6 +60,12 @@ pub struct CodeGenerator<'ctx> {
     /// File-scope globals: name → Address (frame locals miss falls back here).
     global_addrs: HashMap<String, Address<'ctx>>,
     frame: Frame<'ctx>,
+    /// Struct-reference slots alive in the current scopes, innermost last:
+    /// `(name, sema type name, slot pointer)`. Each scope exit releases its
+    /// occupants in reverse declaration order (shared_ptr semantics); a slot
+    /// lives in exactly one scope (the innermost at declaration), so shadowed
+    /// names release independently.
+    scopes: Vec<Vec<(String, String, PointerValue<'ctx>)>>,
 }
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
@@ -77,6 +83,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             global_strings: HashMap::new(),
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
+            scopes: Vec::new(),
         }
     }
 
@@ -237,6 +244,16 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.builder.position_at_end(entry);
             for (name, expr) in &non_const {
                 let value = self.codegen_expr(expr)?;
+                // A struct-ref global initialized from an lvalue read acquires
+                // exactly like `codegen_var_def` does: the global becomes the
+                // value's owner. (No process-exit release — globals live for
+                // the program's lifetime.)
+                let ty_string = self.global_addrs.get(name).unwrap().ty.to_string();
+                if self.structs.contains_key(&ty_string)
+                    && self.is_lvalue_read(expr)
+                {
+                    self.acquire_ref(&ty_string, value)?;
+                }
                 // Match the global's width (mirrors codegen_var_def).
                 let addr = self.global_addrs.get(name).unwrap();
                 let value = match (&value, addr.llvm_ty) {
@@ -297,34 +314,39 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// Compile + JIT a value-test module: returns the entry's return value.
-    pub fn jit_execute(&mut self, module: &mut SemaModule, entry: &str) -> Result<i32, String> {
+    /// Compile a module and hand back the execution engine (static ctors run).
+    pub fn jit_engine(
+        &mut self,
+        module: &mut SemaModule,
+    ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
         self.generate(module)?;
         let ee = self
             .module
             .create_jit_execution_engine(OptimizationLevel::None)
             .map_err(|e| format!("JIT failed: {}", e.to_string()))?;
-
-        // Bind the runtime support functions. The JIT cannot discover them on
-        // its own: they live in a static rlib linked into this executable, so
-        // they are absent from the process export table that MCJIT's symbol
-        // search consults, and calls would land on unresolved addresses.
-        for (name, addr) in pepper_support::support_symbols() {
-            if let Some(declared) = self.module.get_function(name) {
-                ee.add_global_mapping(&declared, addr);
-            }
-        }
         // Static ctors (llvm.global_ctors, e.g. __pep_global_init) do NOT run
         // at engine creation — MCJIT only runs them on explicit request.
-        // After the mappings so the ctor's runtime calls resolve.
         ee.run_static_constructors();
+        Ok(ee)
+    }
 
+    /// Call a zero-argument `int` entry point in an already-created engine.
+    pub fn jit_call_i32(
+        ee: &inkwell::execution_engine::ExecutionEngine<'ctx>,
+        entry: &str,
+    ) -> Result<i32, String> {
         unsafe {
             let f = ee
                 .get_function::<unsafe extern "C" fn() -> i32>(entry)
                 .map_err(|e| format!("entry {}: {:?}", entry, e))?;
             Ok(f.call())
         }
+    }
+
+    /// Compile + JIT a value-test module: returns the entry's return value.
+    pub fn jit_execute(&mut self, module: &mut SemaModule, entry: &str) -> Result<i32, String> {
+        let ee = self.jit_engine(module)?;
+        Self::jit_call_i32(&ee, entry)
     }
 
     // ── Struct instantiation (port of StructGen.cpp:57-106) ─────────────────
@@ -641,6 +663,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.retval = retval;
         self.frame.retval_type = Some(function.ty.to_string());
         self.frame.locals.clear();
+        // Fresh scope stack for this function: the body is one scope.
+        self.scopes.clear();
+        self.scopes.push(Vec::new());
 
         // Params must be alloca'd at the top of the entry block BEFORE the
         // body statements so they dominate all uses (LLVM dominance).
@@ -664,7 +689,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             .unwrap_or(false);
         if function.name.contains('.') && !is_static_method {
             let struct_name = function.name.split('.').next().unwrap_or("").to_string();
-            declared_params.insert(0, ("this".to_string(), format!("{}*", struct_name)));
+            // `this` is a plain struct reference (like any local of the
+            // struct type), not a pointer-typed slot: its sema name carries
+            // no `*`, so lvalue-read detection and return-site acquires see
+            // it exactly as they see `var x = Name(...)`.
+            declared_params.insert(0, ("this".to_string(), struct_name));
         }
         let param_allocas: Vec<(String, inkwell::values::PointerValue<'ctx>, inkwell::values::BasicValueEnum<'ctx>, String, BasicTypeEnum<'ctx>)> =
             declared_params
@@ -690,6 +719,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .map_err(|e| e.to_string())?;
             self.frame
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
+            // Pass-by-value struct parameter: a copy arrives (acquire), and
+            // the function's scope owns it until exit. `this` is never copied.
+            if name != "this" && self.structs.contains_key(ty_name) {
+                self.acquire_ref(ty_name, *arg)?;
+                self.track_scope_local(name, ty_name, *alloca);
+            }
         }
 
         let body = function.body.clone().unwrap_or_else(|| Block {
@@ -699,11 +734,30 @@ impl<'ctx> CodeGenerator<'ctx> {
         });
         self.codegen_block(&body)?;
 
-        // Terminate any orphaned trailing block (e.g. an `ifcont` after a
-        // branch whose paths both return) with a branch to the return block.
+        // Function end: release every tracked slot (fall-through path only —
+        // a `return` on the same path already released them; LLVM paths are
+        // disjoint, so emitting both is safe). Nothing may be emitted when
+        // the insert block is terminated.
         if let Some(current) = self.builder.get_insert_block() {
             if current.get_terminator().is_none() {
-                if let Some(return_block) = self.frame.return_block {
+                // Take the stack out temporarily (no outstanding borrow),
+                // release every scope innermost-first, then restore it.
+                let scopes = std::mem::take(&mut self.scopes);
+                for scope in scopes.iter().rev() {
+                    self.release_scope(scope)?;
+                }
+                self.scopes = scopes;
+            }
+        }
+        // Terminate every block left unterminated: the fall-through tail
+        // (when not already terminated), and any merge/continuation block
+        // whose predecessors all returned (e.g. an `ifcont` after a branch
+        // whose paths both return). Branching to the return block keeps the
+        // module verifiable; such blocks are unreachable in practice.
+        if let Some(return_block) = self.frame.return_block {
+            for bb in self.frame.function.expect("function").get_basic_blocks() {
+                if bb.get_terminator().is_none() {
+                    self.builder.position_at_end(bb);
                     self.builder
                         .build_unconditional_branch(return_block)
                         .map_err(|e| e.to_string())?;
@@ -740,18 +794,27 @@ impl<'ctx> CodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(fn_value, "block");
         self.builder.build_unconditional_branch(entry).map_err(|e| e.to_string())?;
         self.builder.position_at_end(entry);
+        // The `{ ... }` is its own scope: locals declared inside are released
+        // at the fall-through exit (a `return` inside already drained all).
+        self.scopes.push(Vec::new());
         self.codegen_block(inner)?;
 
         let current = self.builder.get_insert_block().expect("insert block");
         if current.get_terminator().is_none() {
-            // No return in the region: branch through to a continuation.
+            // No return in the region: release this scope's slots, then
+            // branch through to a continuation.
+            let scope = self.scopes.pop().unwrap_or_default();
+            self.release_scope(&scope)?;
             let cont = self.context.insert_basic_block_after(current, "blockcont");
             self.builder.build_unconditional_branch(cont).map_err(|e| e.to_string())?;
             self.builder.position_at_end(cont);
         } else {
-            // A return in the region: patch every unterminated block created
-            // by it to fall through, then land subsequent (dead) statements
-            // in a fresh unreachable block.
+            // A return in the region: every path through it exited, so this
+            // scope's slots are all released; pop it for stack balance and
+            // patch every unterminated block created by the region to fall
+            // through, then land subsequent (dead) statements in a fresh
+            // unreachable block.
+            self.scopes.pop();
             let blocks = fn_value.get_basic_blocks();
             let start = blocks.iter().position(|b| *b == entry).expect("entry block");
             for bb in &blocks[start..] {
@@ -770,7 +833,16 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn codegen_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::Expression(expr) => {
-                self.codegen_expr(expr)?;
+                let temp_ty = self.owned_temp_type(expr);
+                let value = self.codegen_expr(expr)?;
+                // A discarded owned rvalue is a temporary: shared_ptr destroys
+                // it at the end of the full expression. Lvalue reads carry no
+                // ref (nothing to release). `__index_set` results are owned
+                // temporaries too — its return site acquires a fresh ref for
+                // the returned value, so the temp is released here.
+                if let Some(ty) = temp_ty {
+                    self.release_temp(&ty, value)?;
+                }
             }
             Statement::Block(inner) => self.codegen_nested_block(inner)?,
             Statement::Declaration(Declaration::Variable(var)) => {
@@ -779,32 +851,51 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::Declaration(_) => {}
             Statement::Branch(branch) => self.codegen_branch(branch)?,
             Statement::While(wh) => self.codegen_while(wh)?,
+            Statement::LoopBreak(lb) => self.codegen_loop_break(lb)?,
             Statement::Return(ret) => {
                 let return_block = self
                     .frame
                     .return_block
                     .ok_or_else(|| "return outside function".to_string())?;
+                let mut value: Option<BasicValueEnum<'ctx>> = None;
                 if let Some(expr) = &ret.expr {
-                    let value = self.codegen_expr(expr)?;
-                    if let Some(retval) = self.frame.retval {
-                        // Coerce the value (e.g. an i1 compare result) to the
-                        // declared return type before the store.
-                        let retval_ty = self
-                            .frame
-                            .retval_type
-                            .clone()
-                            .unwrap_or_default();
-                        let coerced = llvm_ops::coerce(
-                            self.context,
-                            &self.builder,
-                            value,
-                            &value_type_name(&value),
-                            &retval_ty,
-                        );
-                        self.builder
-                            .build_store(retval, coerced)
-                            .map_err(|e| e.to_string())?;
+                    let v = self.codegen_expr(expr)?;
+                    // shared_ptr-by-value: returning a struct reference is a
+                    // copy of an lvalue (local, param, field, index slot, or
+                    // `this`), so acquire the new ref BEFORE releasing this
+                    // function's slots — for `this` that is
+                    // `shared_from_this` (`this` is untracked, so no exit
+                    // release cancels it). Function and method results are
+                    // owned rvalues: the callee's return site already
+                    // acquired, so they move here.
+                    if self.is_lvalue_read(expr) {
+                        let ty = self.value_sema_type(expr).unwrap_or_default();
+                        if !ty.is_empty() {
+                            self.acquire_ref(&ty, v)?;
+                        }
                     }
+                    value = Some(v);
+                }
+                // Early exit: release every tracked slot in every scope.
+                self.release_all_scopes()?;
+                if let (Some(value), Some(retval)) = (value, self.frame.retval) {
+                    // Coerce the value (e.g. an i1 compare result) to the
+                    // declared return type before the store.
+                    let retval_ty = self
+                        .frame
+                        .retval_type
+                        .clone()
+                        .unwrap_or_default();
+                    let coerced = llvm_ops::coerce(
+                        self.context,
+                        &self.builder,
+                        value,
+                        &value_type_name(&value),
+                        &retval_ty,
+                    );
+                    self.builder
+                        .build_store(retval, coerced)
+                        .map_err(|e| e.to_string())?;
                 }
                 self.builder
                     .build_unconditional_branch(return_block)
@@ -831,6 +922,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
         if let Some(default) = &var.default {
             let value = self.codegen_expr(default)?;
+            // Copying an existing struct reference into a fresh slot acquires
+            // (shared_ptr::operator=). Ctor and function/method results are
+            // excluded: their result already carries its creation ref — the
+            // callee's `return this` / return site acquired it, exactly as
+            // `make_shared` hands out a refcount-1 shared_ptr.
+            if is_struct_ref && self.is_lvalue_read(default) {
+                self.acquire_ref(&var.ty.to_string(), value)?;
+            }
             // Integer literals codegen as i32; adjust into the alloca's width
             // so the full word is defined (widen e.g. the ctor's `u64 size`,
             // truncate e.g. `u8 b = 200` — a mismatched-width store is invalid
@@ -876,6 +975,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .into()
                     }
                 }
+                (BasicValueEnum::FloatValue(v), BasicTypeEnum::FloatType(ft))
+                    if v.get_type() != ft =>
+                {
+                    // C 6.3.1.4: a float-typed var stores the value at its
+                    // own width (`float f = i * 1.5` is an f64 binary result
+                    // truncated to f32, not stored wide).
+                    if v.get_type().get_bit_width() < ft.get_bit_width() {
+                        self.builder
+                            .build_float_ext(*v, ft, &format!("{}f", var.name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    } else {
+                        self.builder
+                            .build_float_trunc(*v, ft, &format!("{}f", var.name))
+                            .map_err(|e| e.to_string())?
+                            .into()
+                    }
+                }
                 _ => value,
             };
             self.builder
@@ -902,6 +1019,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         self.frame
             .push_local(&var.name, Address::with_llvm_ty(&var.name, &var.ty.to_string(), ty, alloca));
+        // The scope owns the slot until exit (null occupants release to nothing).
+        // The ctor's `this` is excluded: the ctor's `return this` acquires at
+        // the return site, so the result leaves with rc == 1 — releasing `this`
+        // here would destroy a live object.
+        if is_struct_ref && var.name != "this" {
+            self.track_scope_local(&var.name, &var.ty.to_string(), alloca);
+        }
         Ok(())
     }
 
@@ -916,28 +1040,43 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|_| self.context.append_basic_block(fn_value, "else"));
         let merge_block = self.context.append_basic_block(fn_value, "ifcont");
 
+        let cond_temp = self.owned_temp_type(&branch.condition);
         let cond = self.codegen_expr(&branch.condition)?;
+        if let Some(ty) = cond_temp {
+            self.release_temp(&ty, cond)?;
+        }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, then_block, else_block.unwrap_or(merge_block))
             .map_err(|e| e.to_string())?;
 
+        // The then-arm is its own scope: its locals are released at the arm's
+        // fall-through tail, where they dominate (function-end release would
+        // load them from a block that does not dominate the tail).
+        self.scopes.push(Vec::new());
         self.builder.position_at_end(then_block);
         self.codegen_block(&branch.if_block)?;
-        // Branch to the merge block if the then block doesn't already
-        // terminate (a `return` inside the branch ends the path).
         let then_end = self.builder.get_insert_block().expect("insert block");
+        // Pop the arm scope for stack balance. A `return` inside already
+        // released every slot (scopes are non-consuming); on fall-through,
+        // release this arm's own slots at its tail, where they dominate.
+        let scope = self.scopes.pop().unwrap_or_default();
         if then_end.get_terminator().is_none() {
+            self.release_scope(&scope)?;
             self.builder
                 .build_unconditional_branch(merge_block)
                 .map_err(|e| e.to_string())?;
         }
 
         if let Some(else_b) = else_block {
+            // Same scope rule for the else-arm.
+            self.scopes.push(Vec::new());
             self.builder.position_at_end(else_b);
             self.codegen_block(branch.else_block.as_ref().expect("else block"))?;
             let else_end = self.builder.get_insert_block().expect("insert block");
+            let scope = self.scopes.pop().unwrap_or_default();
             if else_end.get_terminator().is_none() {
+                self.release_scope(&scope)?;
                 self.builder
                     .build_unconditional_branch(merge_block)
                     .map_err(|e| e.to_string())?;
@@ -950,24 +1089,62 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn codegen_while(&mut self, wh: &While) -> Result<(), String> {
         let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let cond_block = self.context.append_basic_block(fn_value, "whilecond");
         let body_block = self.context.append_basic_block(fn_value, "while");
         let merge_block = self.context.append_basic_block(fn_value, "whilecont");
 
         // Initial condition check.
+        let cond_temp = self.owned_temp_type(&wh.condition);
         let cond = self.codegen_expr(&wh.condition)?;
+        if let Some(ty) = cond_temp {
+            self.release_temp(&ty, cond)?;
+        }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
 
-        // Body.
-        self.builder.position_at_end(body_block);
-        self.codegen_block(&wh.block)?;
+        // break/continue targets for the body: `continue` re-checks the
+        // condition, `break` exits to the merge. With these the body's insert
+        // block may end in any of three terminators (fall-through, break,
+        // continue), so the back-edge re-check needs an explicit `cond_block`.
+        let saved = self.frame.loop_break;
+        self.frame.loop_break = Some((cond_block, merge_block));
 
-        // Re-evaluate condition after the body (port of LoopGen.cpp:29-32).
-        let after_body = self.builder.get_insert_block().expect("insert block");
-        self.builder.position_at_end(after_body);
+        // Body. The body is its own scope, re-created on every iteration:
+        // locals declared inside are released at the loop head (which
+        // dominates both the entry and back-edge paths) before the next
+        // condition check.
+        self.builder.position_at_end(body_block);
+        let body_scope = Vec::new();
+        self.scopes.push(body_scope);
+        self.codegen_block(&wh.block)?;
+        // A `return` inside already drained all scopes; pop the (now empty)
+        // body scope so the stack stays balanced.
+        let body_scope = self.scopes.pop().unwrap_or_default();
+
+        // Fall-through path: branch to the condition re-check. A `return`
+        // inside the body already terminated it; skip in that case.
+        let body_end = self.builder.get_insert_block().expect("insert block");
+        if body_end.get_terminator().is_none() {
+            self.builder.build_unconditional_branch(cond_block).map_err(|e| e.to_string())?;
+        }
+
+        self.frame.loop_break = saved;
+
+        // Back-edge: release this iteration's body locals, then re-check.
+        // `cond_block` is a single point every completed body iteration
+        // passes through (a `return` already drained the scopes, so an empty
+        // scope releases nothing).
+        self.builder.position_at_end(cond_block);
+        if !body_scope.is_empty() {
+            self.release_scope(&body_scope)?;
+        }
+        let cond_temp = self.owned_temp_type(&wh.condition);
         let cond = self.codegen_expr(&wh.condition)?;
+        if let Some(ty) = cond_temp {
+            self.release_temp(&ty, cond)?;
+        }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
@@ -977,10 +1154,36 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    fn codegen_loop_break(&mut self, lb: &LoopBreak) -> Result<(), String> {
+        let (cont, brk) = self
+            .frame
+            .loop_break
+            .ok_or_else(|| "break/continue outside a loop".to_string())?;
+        let target = match lb.kind {
+            LoopBreakKind::Continue => cont,
+            LoopBreakKind::Break => brk,
+        };
+        self.builder.build_unconditional_branch(target).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     /// Sema type string of an expression's value, as declared (pointer
-    /// suffix intact); `None` when it cannot be determined.
     fn value_sema_type(&self, expr: &Expression) -> Option<String> {
         match expr {
+            // Literals carry C's type directly (6.4.4): a bool literal is
+            // `bool`, an int-range integer literal is `int` (else `long`),
+            // a float literal is `double`. Naming them by their LLVM width
+            // (`value_type_name`) would classify an unsigned literal as
+            // signed and pick sdiv/SLT where C requires udiv/ULT.
+            Expression::BoolLiteral(_) => Some("bool".to_string()),
+            Expression::IntLiteral(v) => {
+                if (i32::MIN as i64) <= *v && *v <= (i32::MAX as i64) {
+                    Some("int".to_string())
+                } else {
+                    Some("long".to_string())
+                }
+            }
+            Expression::FloatLiteral(_) => Some("double".to_string()),
             Expression::SymbolRef { id, .. } => self
                 .frame
                 .find_local(id)
@@ -1085,6 +1288,141 @@ impl<'ctx> CodeGenerator<'ctx> {
         ty.split('<').next().filter(|n| !n.is_empty()).map(|s| s.to_string())
     }
 
+    /// True when an expression reads an existing struct reference (an lvalue
+    /// read of a tracked slot) rather than producing one: the loaded value
+    /// carries no ref of its own, so copying it into another reference slot
+    /// must `__acquire` the new occupant — exactly as `shared_ptr::operator=`
+    /// does. Ctor-style calls (`Name<...>(...)`) and free-function/method
+    /// results are excluded: their result already carries its creation ref.
+    /// A lowered indexer (`x[i]` → `x.__index_get(i)`) is an lvalue read only
+    /// when it takes the plain GEP + load path (receiver not pointer-typed,
+    /// receiver struct declares no indexer of its own — mirroring the
+    /// dispatch condition in `codegen_expr`, result type a registered
+    /// struct); container-declared indexers dispatch to a method that owns
+    /// its result. `this` is an lvalue read too: returning it acquires at
+    /// the return site, exactly as `shared_from_this` hands out a new ref.
+    fn is_lvalue_read(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::SymbolRef { .. }
+            | Expression::ThisRef
+            | Expression::MemberRef { .. }
+            | Expression::Index { .. }
+            | Expression::ArrayIndex { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
+            Expression::MethodCall { this, method, .. } if method == "__index_get" => {
+                let receiver_is_ptr = self
+                    .value_sema_type(this)
+                    .is_some_and(|ty| ty.ends_with('*'));
+                if receiver_is_ptr {
+                    return false;
+                }
+                let struct_name = self.struct_name_of(this).unwrap_or_default();
+                let has_indexer = self
+                    .structs
+                    .get(&struct_name)
+                    .map(|d| d.methods.contains_key(method))
+                    .unwrap_or(false);
+                !has_indexer && self.is_struct_ref_name(&self.value_sema_type(expr))
+            }
+            _ => false,
+        }
+    }
+
+    /// True when an expression's value is a freshly created owned reference
+    /// (shared_ptr rvalue): a function/method result whose declared type is a
+    /// registered struct. Ctor calls included — their `return this` acquires
+    /// at the return site, so the result carries its creation ref exactly as
+    /// `make_shared` hands out a refcount-1 shared_ptr. A discarded owned
+    /// rvalue is released at the end of its full expression, exactly as C++
+    /// destroys a temporary shared_ptr.
+    fn is_owned_rvalue(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::MethodCall { .. } | Expression::FunctionCall { .. } => {
+                self.is_struct_ref_name(&self.value_sema_type(expr))
+            }
+            _ => false,
+        }
+    }
+
+    /// True when a sema type name names a registered struct.
+    fn is_struct_ref_name(&self, ty: &Option<String>) -> bool {
+        match ty {
+            Some(t) => self.structs.contains_key(t),
+            None => false,
+        }
+    }
+
+    /// `T.__acquire(v)` for a struct-reference value (null-guarded inside).
+    fn acquire_ref(&mut self, ty_name: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
+        self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![val])?;
+        Ok(())
+    }
+
+    /// Sema type name when `expr` produces an owned rvalue temporary that a
+    /// consuming context must release once it is done with the value (a
+    /// shared_ptr destroyed at the end of its use). Lvalue reads carry no ref
+    /// of their own, so they are never temporaries.
+    fn owned_temp_type(&self, expr: &Expression) -> Option<String> {
+        if self.is_owned_rvalue(expr) && !self.is_lvalue_read(expr) {
+            self.value_sema_type(expr)
+        } else {
+            None
+        }
+    }
+
+    /// Release an owned rvalue temporary (`T.__release`), a no-op for empty
+    /// type names.
+    fn release_temp(&mut self, ty: &str, val: BasicValueEnum<'ctx>) -> Result<(), String> {
+        if !ty.is_empty() {
+            self.call_function(&format!("{}.{}", ty, "__release"), vec![val])?;
+        }
+        Ok(())
+    }
+
+    /// Track a struct-reference slot for scope-exit release. A slot lives in
+    /// exactly one scope (the innermost at declaration), so shadowed names
+    /// release independently when their own scopes exit.
+    fn track_scope_local(&mut self, name: &str, ty_name: &str, addr: PointerValue<'ctx>) {
+        // No live scope (dead code after an early return): nothing to release.
+        let Some(scope) = self.scopes.last_mut() else {
+            return;
+        };
+        scope.push((name.to_string(), ty_name.to_string(), addr));
+    }
+
+    /// Release every tracked slot in `scope` (reverse declaration order).
+    fn release_scope(
+        &mut self,
+        scope: &[(String, String, PointerValue<'ctx>)],
+    ) -> Result<(), String> {
+        for (_name, ty_name, addr) in scope.iter().rev() {
+            let val = self.builder.build_load(
+                self.context.ptr_type(inkwell::AddressSpace::default()),
+                *addr,
+                "scope_release",
+            )
+            .map_err(|e| e.to_string())?;
+            self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val])?;
+        }
+        Ok(())
+    }
+
+    /// Release every tracked slot in every enclosing scope (innermost last,
+    /// each in reverse declaration order) — the early-return path, which
+    /// skips the normal scope-exit releases. Scopes are NOT consumed: every
+    /// exit point emits its own releases, and LLVM paths are disjoint, so a
+    /// slot released here is never released again on the same runtime path.
+    fn release_all_scopes(&mut self) -> Result<(), String> {
+        // Take the stack out temporarily (no outstanding borrow), release
+        // every scope innermost-first, then restore it — scopes are
+        // non-consuming.
+        let scopes = std::mem::take(&mut self.scopes);
+        for scope in scopes.iter().rev() {
+            self.release_scope(scope)?;
+        }
+        self.scopes = scopes;
+        Ok(())
+    }
+
     /// LLVM element type behind a pointer/array receiver (`char*` → i8,
     /// `int[]`/`int*` → i32); i32 when the receiver's type is unknown.
     /// The exact name resolves first — specializations register under their
@@ -1104,15 +1442,32 @@ impl<'ctx> CodeGenerator<'ctx> {
             .value_sema_type(r)
             .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
             .or_else(|| self.value_sema_type(receiver).map(|t| t.to_string()));
-        let pointee = base.and_then(|b| {
-            self.types.get(&b).or_else(|| {
+        let pointee = base.as_deref().and_then(|b| {
+            // `void` (opaque) is registered as i32 in the type map, but an
+            // opaque pointer indexes at byte granularity — skip it so the
+            // lookup falls through to `pointee_llvm_type`.
+            if b == "void" {
+                return None;
+            }
+            self.types.get(b).or_else(|| {
                 b.split('<')
                     .next()
                     .filter(|n| !n.is_empty())
                     .and_then(|n| self.types.get(n))
             })
         });
-        pointee.unwrap_or_else(|| self.context.i32_type().into())
+        pointee.or_else(|| base.as_deref().map(|b| self.pointee_llvm_type(b)))
+            .unwrap_or_else(|| self.context.i32_type().into())
+    }
+
+    /// LLVM element type for an indexed receiver's pointee name. `void`
+    /// (opaque pointers) indexes at byte granularity; other unresolvable names
+    /// fall back to i32, matching the historical behavior of the index arms.
+    fn pointee_llvm_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
+        if name == "void" {
+            return self.context.i8_type().into();
+        }
+        self.types.get(name).unwrap_or_else(|| self.context.i32_type().into())
     }
 
     /// Value type of an indexed element: struct elements are stored as
@@ -1201,7 +1556,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// their own LLVM type; unresolvable names fall back to i32, matching
     /// the historical behavior of the index arms.
     fn buffer_element_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
-        self.types.get(name).unwrap_or_else(|| self.context.i32_type().into())
+        self.pointee_llvm_type(name)
     }
     /// GEP stride for an indexed element. Struct elements are stored as
     /// pointers, so every struct slot is exactly pointer-sized: correctly
@@ -1214,17 +1569,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         elem
     }
-    /// Release the old occupant and acquire the new value of a struct-reference
-    /// index slot. Arrays are just a collection of individual references, so
-    /// every store into one transfers ownership at the store site, regardless
-    /// of caller. Both methods null-guard themselves, so calling them on
-    /// zero-initialized slots is safe.
+    /// Store a struct-reference value into an array element slot, applying the
+    /// unified shared_ptr `operator=` rule (`store_refcount_ops`). Arrays are
+    /// just a collection of individual references, so every store into one
+    /// transfers ownership at the store site. Both methods null-guard
+    /// themselves, so calling them on zero-initialized slots is safe.
     fn index_refcount_ops(
         &mut self,
         elem_name: &str,
         value_ty: BasicTypeEnum<'ctx>,
         gep: PointerValue<'ctx>,
         new_val: BasicValueEnum<'ctx>,
+        source: &Expression,
     ) -> Result<(), String> {
         // The element needs refcount ops only when the buffer's own element
         // type is a struct (before the pointer stride): `__ptr<T>` and scalar
@@ -1235,23 +1591,19 @@ impl<'ctx> CodeGenerator<'ctx> {
         if !matches!(elem, BasicTypeEnum::StructType(_)) {
             return Ok(());
         }
-        let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
-        self.call_function(&format!("{}.{}", elem_name, "__acquire"), vec![new_val])?;
-        self.call_function(&format!("{}.{}", elem_name, "__release"), vec![old])?;
-        Ok(())
+        self.store_refcount_ops(elem_name, gep, value_ty, new_val, source)
     }
-    /// Release the old occupant of a struct-typed field. A field is one
-    /// reference slot: the stored value already carries its creation ref, so
-    /// a store transfers exactly that one ref — no acquire here (acquiring
-    /// would leave every ctor-initialized field at refcount 2 and nothing
-    /// would ever reach zero). Mirrors the load-old side of
-    /// `index_refcount_ops`. Struct values are references, so the slot holds a
-    /// pointer; `__release` null-guards itself, so storing over a
+    /// Store a struct-reference value into a struct-typed field, applying the
+    /// unified shared_ptr `operator=` rule (`store_refcount_ops`). A field is
+    /// one reference slot; struct values are references, so the slot holds a
+    /// pointer. Both methods null-guard themselves, so storing over a
     /// zero-initialized field is safe.
     fn field_refcount_ops(
         &mut self,
         lhs: &Expression,
         gep: PointerValue<'ctx>,
+        new_val: BasicValueEnum<'ctx>,
+        source: &Expression,
     ) -> Result<(), String> {
         let field_ty_name = match lhs {
             Expression::MemberRef { lhs, name } => {
@@ -1276,10 +1628,53 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             _ => return Ok(()),
         };
+        self.store_refcount_ops(&field_ty_name, gep, value_ty, new_val, source)
+    }
+
+    /// Store a struct-reference value into an existing reference slot: the
+    /// same shared_ptr `operator=` rule, one code path for every source kind.
+    /// Same pointer as the current occupant (self-assignment in any form) →
+    /// no-op; otherwise acquire the new occupant before releasing the old
+    /// one, so a genuine store cannot destroy its own value mid-statement.
+    /// Both methods null-guard themselves, so zero-initialized slots are
+    /// safe. `value_ty` is the slot's LLVM pointee type (pointer for struct
+    /// references); `source` is kept for the caller's diagnostics.
+    #[allow(unused_variables)]
+    fn store_refcount_ops(
+        &mut self,
+        ty_name: &str,
+        gep: PointerValue<'ctx>,
+        value_ty: BasicTypeEnum<'ctx>,
+        new_val: BasicValueEnum<'ctx>,
+        source: &Expression,
+    ) -> Result<(), String> {
         let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
-        // Release the old occupant with the FIELD type's __release (not the
-        // enclosing struct's): the slot holds a field-typed reference.
-        self.call_function(&format!("{}.{}", field_ty_name, "__release"), vec![old])?;
+        let i64 = self.context.i64_type();
+        let old_i = self
+            .builder
+            .build_ptr_to_int(old.into_pointer_value(), i64, "oldi")
+            .map_err(|e| e.to_string())?;
+        let new_i = self
+            .builder
+            .build_ptr_to_int(new_val.into_pointer_value(), i64, "newi")
+            .map_err(|e| e.to_string())?;
+        let same = self
+            .builder
+            .build_int_compare(inkwell::IntPredicate::EQ, old_i, new_i, "same")
+            .map_err(|e| e.to_string())?;
+        let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let ops_block = self.context.append_basic_block(fn_value, "rcops");
+        let cont_block = self.context.append_basic_block(fn_value, "cont");
+        self.builder
+            .build_conditional_branch(same, cont_block, ops_block)
+            .map_err(|e| e.to_string())?;
+        self.builder.position_at_end(ops_block);
+        self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
+        self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
+        self.builder
+            .build_unconditional_branch(cont_block)
+            .map_err(|e| e.to_string())?;
+        self.builder.position_at_end(cont_block);
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
@@ -1287,9 +1682,22 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::BoolLiteral(v) => Ok(BasicValueEnum::IntValue(
                 self.context.bool_type().const_int(*v as u64, false),
             )),
-            Expression::IntLiteral(v) => Ok(BasicValueEnum::IntValue(
-                self.context.i32_type().const_int(*v as u64, true),
-            )),
+            Expression::IntLiteral(v) => {
+                // C 6.4.4.1: an integer literal is `int` when it fits in the
+                // signed-int range, else `long`. Emitting i32 for int-range
+                // literals keeps mixed-type ops on the int path (`ulong * 1`
+                // must promote to u64, not force both sides to i64); values
+                // outside emit i64 so `long b = 2^40` does not wrap to zero.
+                if (i32::MIN as i64) <= *v && *v <= (i32::MAX as i64) {
+                    Ok(BasicValueEnum::IntValue(
+                        self.context.i32_type().const_int(*v as u64, true),
+                    ))
+                } else {
+                    Ok(BasicValueEnum::IntValue(
+                        self.context.i64_type().const_int(*v as u64, true),
+                    ))
+                }
+            }
             Expression::FloatLiteral(v) => Ok(BasicValueEnum::FloatValue(
                 self.context.f64_type().const_float(*v),
             )),
@@ -1331,6 +1739,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // The struct name comes from the lhs's static type, not the
                 // LLVM value (opaque pointers lose the type).
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
+                // An owned-rvalue receiver (`f().x`) is a temporary: its
+                // creation ref is released once the field load is done.
+                let lhs_temp = self.owned_temp_type(lhs);
                 let this_ptr = self.codegen_expr(lhs)?;
                 let base_ptr = match this_ptr {
                     BasicValueEnum::StructValue(_) => self.codegen_lvalue(lhs)?.ptr,
@@ -1357,16 +1768,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // Struct-typed fields store a reference (the heap object's
                 // pointer), exactly like struct locals and params — load the
                 // stored pointer, not the slot address.
-                match field_ty {
+                let value = match field_ty {
                     BasicTypeEnum::StructType(_) => self
                         .builder
                         .build_load(self.context.ptr_type(inkwell::AddressSpace::default()), gep, name)
-                        .map_err(|e| e.to_string()),
+                        .map_err(|e| e.to_string())?,
                     _ => self
                         .builder
                         .build_load(field_ty, gep, name)
-                        .map_err(|e| e.to_string()),
+                        .map_err(|e| e.to_string())?,
+                };
+                if let Some(ty) = lhs_temp {
+                    self.release_temp(&ty, this_ptr)?;
                 }
+                Ok(value)
             }
             Expression::Binary { op, lhs, rhs } => self.codegen_binary(op, lhs, rhs),
             Expression::Unary { op, operand } => self.codegen_unary(*op, operand),
@@ -1379,6 +1794,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array indexing.
                 let index = self.codegen_expr(rhs)?;
+                // An owned-rvalue receiver (`f()[i]`) is a temporary: its
+                // creation ref is released once the element load is done.
+                let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
                 // A nested index (`outer.Data[0][i]`) GEPs the inner
                 // struct's own `Data` buffer (the slot holds its reference);
@@ -1398,9 +1816,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_gep(element_ty, ptr, &[index.into_int_value()], "idx")
                         .map_err(|e| e.to_string())?
                 };
-                self.builder
+                let value = self
+                    .builder
                     .build_load(value_ty, gep, "loadidx")
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| e.to_string())?;
+                if let Some(ty) = lhs_temp {
+                    self.release_temp(&ty, slot_ptr.into())?;
+                }
+                Ok(value)
             }
             Expression::SizeOf(ty) => {
                 let name = ty.to_string();
@@ -1457,6 +1880,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Some(BasicTypeEnum::StructType(sct)) => sct,
                     _ => return Ok(self.context.i32_type().const_int(0, false).into()),
                 };
+                // An owned-rvalue argument is a temporary: its creation ref
+                // is released once the head field is read.
+                let arg_temp = self.owned_temp_type(arg);
                 let val = self.codegen_expr(arg)?;
                 let ptr = match val {
                     BasicValueEnum::PointerValue(p) => p,
@@ -1481,6 +1907,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| e.to_string())?
                 };
                 let loaded = self.builder.build_load(self.context.i32_type(), field, "refcount_val").map_err(|e| e.to_string())?;
+                if let Some(ty) = arg_temp {
+                    self.release_temp(&ty, val)?;
+                }
                 self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(merge_block);
                 let phi = self.builder.build_phi(self.context.i32_type(), "__refcount").map_err(|e| e.to_string())?;
@@ -1495,6 +1924,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let seed = i64.const_int(0xcbf29ce484222325, false);
                 match self.types.get(&ty.to_string()) {
                     Some(BasicTypeEnum::StructType(_)) => {
+                        // An owned-rvalue argument is a temporary: its
+                        // creation ref is released once the address is read.
+                        let arg_temp = self.owned_temp_type(arg);
                         let val = self.codegen_expr(arg)?;
                         let ptr = match val {
                             BasicValueEnum::PointerValue(p) => p,
@@ -1513,6 +1945,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // `_pep_malloc` result is pointer-aligned, so a raw
                         // `h & mask` would land all struct keys in bucket 0.
                         let folded = self.fnv_fold_8(seed, &ptr_int)?;
+                        if let Some(ty) = arg_temp {
+                            self.release_temp(&ty, val)?;
+                        }
                         self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
                         self.builder.position_at_end(merge_block);
                         let phi = self.builder.build_phi(i64, "__address").map_err(|e| e.to_string())?;
@@ -1570,13 +2005,26 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .unwrap_or(false);
                     let mangled = format!("{}.{}", pointee_struct, method);
                     let mut arg_vals = if is_static { vec![] } else { vec![elem_val] };
+                    // Owned-rvalue arguments are temporaries (shared_ptr): their
+                    // creation ref is released after the call, at the end of the
+                    // full expression. Lvalue reads are not — the callee's param
+                    // entry owns them.
+                    let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
                     for arg in args {
-                        arg_vals.push(self.codegen_expr(arg)?);
+                        let v = self.codegen_expr(arg)?;
+                        if let Some(ty) = self.owned_temp_type(arg) {
+                            owned_arg_temps.push((v, ty));
+                        }
+                        arg_vals.push(v);
                     }
                     for extra in self.missing_args(&mangled, args.len())? {
                         arg_vals.push(self.codegen_expr(&extra)?);
                     }
-                    return self.call_function(&mangled, arg_vals);
+                    let result = self.call_function(&mangled, arg_vals)?;
+                    for (temp, ty) in owned_arg_temps {
+                        self.release_temp(&ty, temp)?;
+                    }
+                    return Ok(result);
                 }
                 // Mangle: `<StructOf(this)>.<method>`. The struct name comes
                 // from the receiver's static type; non-struct receivers fall
@@ -1604,7 +2052,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 // The receiver is the instance pointer: loading the lhs gives
-                // exactly what the `this` parameter expects.
+                // exactly what the `this` parameter expects. When the receiver
+                // itself is an owned rvalue (`f().g()`), it is a temporary
+                // whose creation ref we release after the call.
+                let this_temp = self.owned_temp_type(this.as_ref());
                 let this_val = self.codegen_expr(this)?;
                 let mangled = format!("{}.{}", struct_name, method);
                 let is_static = self
@@ -1613,13 +2064,29 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map(|d| d.static_methods.contains(method.as_str()))
                     .unwrap_or(false);
                 let mut arg_vals = if is_static { vec![] } else { vec![this_val] };
+                // Owned-rvalue arguments are temporaries (shared_ptr): their
+                // creation ref is released after the call, at the end of the
+                // full expression. Lvalue reads are not — the callee's param
+                // entry owns them.
+                let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
                 for arg in args {
-                    arg_vals.push(self.codegen_expr(arg)?);
+                    let v = self.codegen_expr(arg)?;
+                    if let Some(ty) = self.owned_temp_type(arg) {
+                        owned_arg_temps.push((v, ty));
+                    }
+                    arg_vals.push(v);
                 }
                 for extra in self.missing_args(&mangled, args.len())? {
                     arg_vals.push(self.codegen_expr(&extra)?);
                 }
-                self.call_function(&mangled, arg_vals)
+                let result = self.call_function(&mangled, arg_vals)?;
+                if let Some(ty) = this_temp {
+                    self.release_temp(&ty, this_val)?;
+                }
+                for (temp, ty) in owned_arg_temps {
+                    self.release_temp(&ty, temp)?;
+                }
+                Ok(result)
             }
         }
     }
@@ -1693,8 +2160,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .build_load(value_ty, gep, "loadidx")
                 .map_err(|e| e.to_string())
         } else {
-            // __index_set: the value is args[1].
+            // __index_set: the value is args[1]. An owned-rvalue value is a
+            // temporary — the slot store acquires its own ref for the new
+            // occupant, so the temp's creation ref is released after the
+            // store.
             let value_expr = args.get(1).ok_or_else(|| "index set needs a value".to_string())?;
+            let value_temp = self.owned_temp_type(value_expr);
             let mut value = self.codegen_expr(value_expr)?;
             if let (BasicTypeEnum::IntType(target), BasicValueEnum::IntValue(iv)) =
                 (value_ty, &value)
@@ -1706,7 +2177,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     };
                 }
             }
-            self.index_refcount_ops(&self.index_receiver_pointee(this).unwrap_or_else(|| "i32".to_string()), value_ty, gep, value)?;
+            self.index_refcount_ops(&self.index_receiver_pointee(this).unwrap_or_else(|| "i32".to_string()), value_ty, gep, value, value_expr)?;
+            if let Some(ty) = value_temp {
+                self.release_temp(&ty, value)?;
+            }
             self.builder
                 .build_store(gep, value)
                 .map_err(|e| e.to_string())?;
@@ -1726,7 +2200,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Any other expression is lowered to `msg.c_str()`.
         if name == "assert" && args.len() == 2 {
             let cond = self.codegen_expr(&args[0])?;
-            let msg = match &args[1] {
+            // An owned-rvalue message (e.g. a `string` rvalue) is a temporary:
+            // it must live until `assert` returns, then its creation ref is
+            // released. A raw literal lowers to a global pointer — not an
+            // owned value — so it carries no temp.
+            let (msg_value, already_ptr, msg_temp) = match &args[1] {
                 Expression::FunctionCall { function, args: inner }
                     if function == "string"
                         && matches!(
@@ -1734,20 +2212,29 @@ impl<'ctx> CodeGenerator<'ctx> {
                             Some(Expression::StringLiteral { is_raw: true, .. })
                         ) =>
                 {
-                    self.codegen_expr(inner.first().unwrap())?
+                    (self.codegen_expr(inner.first().unwrap())?, true, None)
                 }
                 other => {
                     let v = self.codegen_expr(other)?;
                     // The message must be a `char*`: an argument already typed
                     // as a pointer (`char*`, `__ptr<T>`) is passed through,
                     // everything else (notably `string`) lowers via `c_str`.
-                    match self.value_sema_type(other) {
-                        Some(ty) if ty.ends_with('*') || ty.starts_with("__ptr<") => v,
-                        _ => self.call_function("string.c_str", vec![v])?,
-                    }
+                    let ptr = self
+                        .value_sema_type(other)
+                        .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<"));
+                    (v, ptr, self.owned_temp_type(other))
                 }
             };
-            return self.call_function("assert", vec![cond, msg]);
+            let msg = if already_ptr {
+                msg_value
+            } else {
+                self.call_function("string.c_str", vec![msg_value])?
+            };
+            let result = self.call_function("assert", vec![cond, msg])?;
+            if let Some(ty) = msg_temp {
+                self.release_temp(&ty, msg_value)?;
+            }
+            return Ok(result);
         }
         // release<T>(v): no-op for POD values (nothing to free), dispatches
         // to T.__release for struct references.
@@ -1797,18 +2284,33 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             name.split('<').next().unwrap_or(name).trim().to_string()
         };
+        // Owned-rvalue arguments are temporaries (shared_ptr): their creation
+        // ref is released after the call, at the end of the full expression.
+        // Lvalue reads are not — the callee's param entry owns them.
+        let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
         let mut arg_vals = vec![];
         for arg in args {
-            arg_vals.push(self.codegen_expr(arg)?);
+            let v = self.codegen_expr(arg)?;
+            if let Some(ty) = self.owned_temp_type(arg) {
+                owned_arg_temps.push((v, ty));
+            }
+            arg_vals.push(v);
         }
         for extra in self.missing_args(&target, args.len())? {
             arg_vals.push(self.codegen_expr(&extra)?);
         }
-        self.call_function(&target, arg_vals)
+        let result = self.call_function(&target, arg_vals)?;
+        for (temp, ty) in owned_arg_temps {
+            self.release_temp(&ty, temp)?;
+        }
+        Ok(result)
     }
 
     fn codegen_print(&mut self, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
         for arg in args {
+            // An owned-rvalue argument is a temporary: released once the
+            // print call has consumed it.
+            let value_temp = self.owned_temp_type(arg);
             let value = self.codegen_expr(arg)?;
             match value {
                 BasicValueEnum::PointerValue(_) => {
@@ -1832,6 +2334,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.call_function("_pep_print_float", vec![BasicValueEnum::FloatValue(double)])?;
                 }
                 _ => return Err("unsupported print arg".to_string()),
+            }
+            if let Some(ty) = value_temp {
+                self.release_temp(&ty, value)?;
             }
         }
         Ok(self.context.i32_type().const_zero().into())
@@ -1865,49 +2370,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         let fn_value = match self.functions.get(name) {
             Some(f) => *f,
-            None => {
-                // Declare an extern against the support library.
-                let i32t = self.context.i32_type();
-                let ptr_ty = self
-                    .context
-                    .i8_type()
-                    .ptr_type(inkwell::AddressSpace::default());
-                let (ret, params): (BasicTypeEnum<'ctx>, Vec<BasicTypeEnum<'ctx>>) = match name {
-                    "_pep_print" => (i32t.into(), vec![ptr_ty.into()]),
-                    "_pep_print_int" => (i32t.into(), vec![self.context.i64_type().into()]),
-                    "_pep_print_float" => (i32t.into(), vec![self.context.f64_type().into()]),
-                    "_pep_free" => (i32t.into(), vec![ptr_ty.into()]),
-                    "_pep_hash_bytes" => {
-                        (self.context.i64_type().into(), vec![ptr_ty.into(), self.context.i64_type().into()])
-                    }
-                    "_pep_malloc" | "_pep_realloc" => {
-                        (ptr_ty.into(), vec![self.context.i64_type().into()])
-                    }
-                    "_pep_live_allocs" => (self.context.i64_type().into(), vec![]),
-                    "trace_int" => (
-                        i32t.into(),
-                        vec![self.context.i64_type().into(), ptr_ty.into()],
-                    ),
-                    "trace_ptr" | "trace_region" => {
-                        // trace_region(ptr, size, name); trace_ptr(ptr, name).
-                        if *name == *"trace_region" {
-                            (
-                                i32t.into(),
-                                vec![ptr_ty.into(), self.context.i64_type().into(), ptr_ty.into()],
-                            )
-                        } else {
-                            (i32t.into(), vec![ptr_ty.into(), ptr_ty.into()])
-                        }
-                    }
-                    &_ => {
-                        return Err(format!("unknown function {}", name));
-                    }
-                };
-                let fn_type = llvm_fn_type(ret, &params, false);
-                let declared = self.module.add_function(name, fn_type, None);
-                self.functions.insert(name.to_string(), declared);
-                declared
-            }
+            None => return Err(format!("unknown function {}", name)),
         };
         // Coerce args to the declared param types (e.g. i32 refcount → i64
         // for trace_int).
@@ -1975,6 +2438,10 @@ impl<'ctx> CodeGenerator<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         // Assignment: store into the lhs address (OperatorGen.cpp:155-180).
         if op.is_assignment() {
+            // An owned-rvalue rhs (e.g. `a[i] = f()`) is a temporary: the
+            // slot store acquires its own ref for the new occupant, so the
+            // temp's creation ref is released after the store.
+            let rhs_temp = self.owned_temp_type(rhs);
             let rhs_val = self.codegen_expr(rhs)?;
             let lhs_addr = self.codegen_lvalue(lhs)?;
             let lhs_ty = lhs_addr.ty.clone();
@@ -2011,27 +2478,36 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .load(&self.builder)
                     .ok_or_else(|| "compound lhs load".to_string())?;
                 let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
-                // The compound op runs at the lhs's width: `coerced` is the
-                // rhs already converted to the lhs type, so the result fits
-                // the store. Feeding `rhs_val` (pre-conversion) would promote
-                // to a float for `x += 2.5` and then store an f64 into the
-                // i32/i8 slot — opaque pointers hide that from module verify,
-                // so it surfaces as garbage or an access violation at runtime.
-                let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&coerced));
+                // C: `x op= e` is `x = x op e` — the op runs on the usual
+                // conversion of (lhs type, rhs type), so feed the unconverted
+                // rhs (`int += 2.5` adds at f64; `u8 += 200` wraps at int).
+                let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
                 let result_ty = binary_result_type(&base_op, &lhs_name, &rhs_name);
                 let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
-                let rhs_c = llvm_ops::coerce(self.context, &self.builder, coerced, &rhs_name, &result_ty);
-                let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None)?;
+                let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
+                let result = apply_op(self.context, &self.builder, base_op, lhs_c, rhs_c, &result_ty, None, None)?;
+                // C: `x op= e` converts the converted operands to the usual
+                // conversion type (e.g. `int += 2.5` adds at f64), then the
+                // result is converted back to the lhs's type for the store.
+                let lhs_sema = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
+                let result = if result_ty != lhs_sema {
+                    llvm_ops::coerce(self.context, &self.builder, result, &result_ty, &lhs_sema)
+                } else {
+                    result
+                };
                 let fitted = fit(result);
                 if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                     // Compound store into a struct-reference slot transfers
                     // ownership like any other index store.
-                    self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, fitted)?;
+                    self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, fitted, rhs)?;
                 }
                 if let Expression::MemberRef { .. } = lhs {
                     // Compound store into a struct-typed field transfers
                     // ownership like any other reference-slot store.
-                    self.field_refcount_ops(lhs, lhs_addr.ptr)?;
+                    self.field_refcount_ops(lhs, lhs_addr.ptr, fitted, rhs)?;
+                }
+                if let Some(ty) = rhs_temp {
+                    self.release_temp(&ty, rhs_val)?;
                 }
                 lhs_addr
                     .store(&self.builder, fitted)
@@ -2041,19 +2517,33 @@ impl<'ctx> CodeGenerator<'ctx> {
             if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                 // The element type is resolved from the buffer's pointee
                 // (`Data`), not the index expression itself.
-                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced)?;
+                self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced, rhs)?;
             }
             if let Expression::MemberRef { .. } = lhs {
                 // A struct-typed field is one reference slot: storing over it
                 // releases the old occupant and acquires the new value.
-                    self.field_refcount_ops(lhs, lhs_addr.ptr)?;
+                self.field_refcount_ops(lhs, lhs_addr.ptr, coerced, rhs)?;
+            }
+            if let Expression::SymbolRef { .. } = lhs {
+                // A plain struct-reference local/global is one reference slot:
+                // the same shared_ptr `operator=` rule as index and field
+                // stores — same pointer (self-assignment in any form) is a
+                // no-op, otherwise acquire new then release old.
+                let ty_name = lhs_addr.ty.to_string();
+                if self.structs.contains_key(&ty_name) {
+                    self.store_refcount_ops(&ty_name, lhs_addr.ptr, lhs_addr.llvm_ty.unwrap(), coerced, rhs)?;
+                }
+            }
+            if let Some(ty) = rhs_temp {
+                self.release_temp(&ty, rhs_val)?;
             }
             lhs_addr
                 .store(&self.builder, coerced)
                 .ok_or_else(|| "assign store".to_string())?;
             return Ok(coerced);
         }
-
+        let lhs_temp = self.owned_temp_type(lhs);
+        let rhs_temp = self.owned_temp_type(rhs);
         let lhs_val = self.codegen_expr(lhs)?;
         let rhs_val = self.codegen_expr(rhs)?;
         let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
@@ -2067,8 +2557,22 @@ impl<'ctx> CodeGenerator<'ctx> {
         let ptr_elem = self
             .value_sema_type(lhs)
             .and_then(|ty| ty.strip_suffix('*').map(|s| s.to_string()))
+            .filter(|base| base != "void")
             .and_then(|base| self.types.get(&base));
-        apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem)
+        // Sema pointee name for the i8 fallback on opaque (`void*`) pointers.
+        let ptr_elem_name = self
+            .value_sema_type(lhs)
+            .and_then(|ty| ty.strip_suffix('*').map(str::to_string));
+        let result = apply_op(self.context, &self.builder, *op, lhs_c, rhs_c, &result_ty, ptr_elem, ptr_elem_name.as_deref())?;
+        // Owned-rvalue operands are temporaries: released once the op has
+        // consumed them.
+        if let Some(ty) = lhs_temp {
+            self.release_temp(&ty, lhs_val)?;
+        }
+        if let Some(ty) = rhs_temp {
+            self.release_temp(&ty, rhs_val)?;
+        }
+        Ok(result)
     }
 
     /// Resolve an lvalue expression to an Address (assignment target).
@@ -2087,6 +2591,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .ok_or_else(|| "no this".to_string()),
             Expression::MemberRef { lhs, name } => {
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
+                // An owned-rvalue receiver (`f().x = v`) is a temporary: its
+                // creation ref is released once the field address is built.
+                let lhs_temp = self.owned_temp_type(lhs);
                 let this_ptr = self.codegen_expr(lhs)?;
                 let base_ptr = match this_ptr {
                     BasicValueEnum::StructValue(_) => self.codegen_lvalue(lhs)?.ptr,
@@ -2111,11 +2618,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
                         .map_err(|e| e.to_string())?
                 };
+                if let Some(ty) = lhs_temp {
+                    self.release_temp(&ty, this_ptr)?;
+                }
                 Ok(Address::with_llvm_ty(name, &ty_name, field_ty, gep))
             }
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD array element store: `arr[i] = v` → GEP + store.
                 let index = self.codegen_expr(rhs)?;
+                // An owned-rvalue receiver (`f()[i] = v`) is a temporary: its
+                // creation ref is released once the slot address is built.
+                let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
                 // A nested index (`outer.Data[0][i] = v`) stores into the
                 // inner struct's own `Data` buffer, not its reference slot.
@@ -2133,6 +2646,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .build_gep(element_ty, ptr, &[index.into_int_value()], "idxl")
                         .map_err(|e| e.to_string())?
                 };
+                if let Some(ty) = lhs_temp {
+                    self.release_temp(&ty, slot_ptr.into())?;
+                }
                 Ok(Address::with_llvm_ty("idxl", &elem_name, value_ty, gep))
             }
             _ => Err("unsupported lvalue".to_string()),
@@ -2143,8 +2659,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         use UnaryOp::*;
         match op {
             Neg => {
+                let operand_temp = self.owned_temp_type(operand);
                 let value = self.codegen_expr(operand)?;
-                match value {
+                // C integer promotions apply to the unary operand first:
+                // `-x` on a narrower-than-int x negates at int width (a u8 1
+                // becomes -1, not 255). 64-bit operands already meet the
+                // minimum and are untouched.
+                let value = match (value, self.value_sema_type(operand)) {
+                    (BasicValueEnum::IntValue(v), Some(n))
+                        if v.get_type().get_bit_width() < 32 =>
+                    {
+                        llvm_ops::coerce(self.context, &self.builder, value, &n, "i32")
+                    }
+                    _ => value,
+                };
+                let result = match value {
                     BasicValueEnum::IntValue(v) => Ok(BasicValueEnum::IntValue(
                         self.builder.build_int_neg(v, "neg").map_err(|e| e.to_string())?,
                     )),
@@ -2154,24 +2683,47 @@ impl<'ctx> CodeGenerator<'ctx> {
                             .map_err(|e| e.to_string())?,
                     )),
                     _ => Err("unsupported neg operand".to_string()),
+                }?;
+                if let Some(ty) = operand_temp {
+                    self.release_temp(&ty, value)?;
                 }
+                Ok(result)
             }
             Pos => self.codegen_expr(operand),
             LogicalNot => {
+                let operand_temp = self.owned_temp_type(operand);
                 let value = self.codegen_expr(operand)?;
                 let b = llvm_ops::as_bool(self.context, &self.builder, value);
+                if let Some(ty) = operand_temp {
+                    self.release_temp(&ty, value)?;
+                }
                 Ok(BasicValueEnum::IntValue(
                     self.builder.build_not(b, "lnot").map_err(|e| e.to_string())?,
                 ))
             }
             BitNot => {
+                let operand_temp = self.owned_temp_type(operand);
                 let value = self.codegen_expr(operand)?;
-                match value {
+                // C integer promotions apply to the unary operand first
+                // (`~x` on a narrower-than-int x complements at int width).
+                let value = match (value, self.value_sema_type(operand)) {
+                    (BasicValueEnum::IntValue(v), Some(n))
+                        if v.get_type().get_bit_width() < 32 =>
+                    {
+                        llvm_ops::coerce(self.context, &self.builder, value, &n, "i32")
+                    }
+                    _ => value,
+                };
+                let result = match value {
                     BasicValueEnum::IntValue(v) => Ok(BasicValueEnum::IntValue(
                         self.builder.build_not(v, "bnot").map_err(|e| e.to_string())?,
                     )),
                     _ => Err("unsupported bitnot operand".to_string()),
+                }?;
+                if let Some(ty) = operand_temp {
+                    self.release_temp(&ty, value)?;
                 }
+                Ok(result)
             }
             PreInc | PostInc | PreDec | PostDec => {
                 // ++x / x++ / --x / x--: modify in place, return old/new.
@@ -2221,52 +2773,68 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// `expr as T` — static cast (spec docs/pepper.md: "equivalent of
     /// static_cast; compile error if the cast cannot succeed"). Numeric and
-    /// bool targets only; struct/pointer casts are rejected.
+    /// bool targets only; struct casts are rejected. A pointer may cast to an
+    /// integer (address-as-integer for C ABI interop).
     fn codegen_cast(&mut self, expr: &Expression, ty: &TypeName) -> Result<BasicValueEnum<'ctx>, String> {
         // Source signedness decides zext vs sext on widening (same rule as
         // ops::coerce); resolve it before codegen_expr mutates the frame.
         let source_name = self.value_sema_type(expr);
+        // An owned-rvalue source is a temporary: released once the cast has
+        // consumed it.
+        let src_temp = self.owned_temp_type(expr);
         let val = self.codegen_expr(expr)?;
         let name = ty.to_string();
         let target = self.types.get(&name).ok_or_else(|| format!("unknown cast target type {}", name))?;
-        match (val, target) {
+        // A no-op cast (identical LLVM types) is not a copy: the source keeps
+        // its ref, so an owned-rvalue source stays a live temporary.
+        let identity = match (val, target) {
+            (BasicValueEnum::IntValue(from), BasicTypeEnum::IntType(to)) => from.get_type() == to,
+            (BasicValueEnum::FloatValue(from), BasicTypeEnum::FloatType(to)) => from.get_type() == to,
+            _ => false,
+        };
+        let result = match (val, target) {
             (BasicValueEnum::IntValue(from), BasicTypeEnum::IntType(to)) => {
                 if from.get_type() == to {
-                    return Ok(val);
-                }
-                let v = if from.get_type().get_bit_width() < to.get_bit_width() {
-                    // 1-bit bool values and unsigned sources widen zero-extended
-                    // (`true` = 1, not -1; u8 200 stays positive); signed types
-                    // sign-extend.
-                    let unsigned = source_name.as_deref().is_some_and(|s| {
-                        matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
-                            || s == "bool"
-                    });
-                    if from.get_type().get_bit_width() == 1 || unsigned {
-                        self.builder.build_int_z_extend(from, to, "cast").map_err(|e| e.to_string())?
-                    } else {
-                        self.builder.build_int_s_extend(from, to, "cast").map_err(|e| e.to_string())?
-                    }
-                } else if to.get_bit_width() == 1 {
-                    // A 1-bit target is a bool: compare != 0 (`2 as bool` is
-                    // true); truncation would keep only the low bit.
-                    llvm_ops::as_bool(&self.context, &self.builder, val)
+                    val
                 } else {
-                    // Truncate: static_cast keeps the low bits (negative -> u8 wraps).
-                    self.builder.build_int_truncate(from, to, "cast").map_err(|e| e.to_string())?
-                };
-                Ok(BasicValueEnum::IntValue(v))
+                    let v = if from.get_type().get_bit_width() < to.get_bit_width() {
+                        // 1-bit bool values and unsigned sources widen zero-extended
+                        // (`true` = 1, not -1; u8 200 stays positive); signed types
+                        // sign-extend.
+                        let unsigned = source_name.as_deref().is_some_and(|s| {
+                            matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
+                                || s == "bool"
+                            // `void*` indexes load one byte (unsigned char in C);
+                            // a sign-extension would turn 0xC8 into all-F.
+                                || s == "void"
+                        });
+                        if from.get_type().get_bit_width() == 1 || unsigned {
+                            self.builder.build_int_z_extend(from, to, "cast").map_err(|e| e.to_string())?
+                        } else {
+                            self.builder.build_int_s_extend(from, to, "cast").map_err(|e| e.to_string())?
+                        }
+                    } else if to.get_bit_width() == 1 {
+                        // A 1-bit target is a bool: compare != 0 (`2 as bool` is
+                        // true); truncation would keep only the low bit.
+                        llvm_ops::as_bool(&self.context, &self.builder, val)
+                    } else {
+                        // Truncate: static_cast keeps the low bits (negative -> u8 wraps).
+                        self.builder.build_int_truncate(from, to, "cast").map_err(|e| e.to_string())?
+                    };
+                    BasicValueEnum::IntValue(v)
+                }
             }
             (BasicValueEnum::FloatValue(from), BasicTypeEnum::FloatType(to)) => {
                 if from.get_type() == to {
-                    return Ok(val);
-                }
-                let v = if from.get_type().get_bit_width() < to.get_bit_width() {
-                    self.builder.build_float_ext(from, to, "cast").map_err(|e| e.to_string())?
+                    val
                 } else {
-                    self.builder.build_float_trunc(from, to, "cast").map_err(|e| e.to_string())?
-                };
-                Ok(BasicValueEnum::FloatValue(v))
+                    let v = if from.get_type().get_bit_width() < to.get_bit_width() {
+                        self.builder.build_float_ext(from, to, "cast").map_err(|e| e.to_string())?
+                    } else {
+                        self.builder.build_float_trunc(from, to, "cast").map_err(|e| e.to_string())?
+                    };
+                    BasicValueEnum::FloatValue(v)
+                }
             }
             (BasicValueEnum::IntValue(from), BasicTypeEnum::FloatType(to)) => {
                 // Same signedness rule as the int->int widening arm: unsigned
@@ -2281,13 +2849,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 } else {
                     self.builder.build_signed_int_to_float(from, to, "cast").map_err(|e| e.to_string())?
                 };
-                Ok(BasicValueEnum::FloatValue(v))
+                BasicValueEnum::FloatValue(v)
             }
             (BasicValueEnum::FloatValue(from), BasicTypeEnum::IntType(to)) => {
                 if to.get_bit_width() == 1 {
                     // fptosi to i1 is poison outside -1..0; a bool target
                     // compares != 0 (as_bool handles the float compare).
-                    Ok(BasicValueEnum::IntValue(llvm_ops::as_bool(&self.context, &self.builder, val)))
+                    BasicValueEnum::IntValue(llvm_ops::as_bool(&self.context, &self.builder, val))
                 } else {
                     // fptosi is poison above the *signed* range of the target;
                     // unsigned targets (u8..ulong) need fptoui, mirroring the
@@ -2298,11 +2866,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                     } else {
                         self.builder.build_float_to_signed_int(from, to, "cast").map_err(|e| e.to_string())?
                     };
-                    Ok(BasicValueEnum::IntValue(v))
+                    BasicValueEnum::IntValue(v)
                 }
             }
-            _ => Err(format!("cannot cast to {}", name)),
+            (BasicValueEnum::PointerValue(from), BasicTypeEnum::IntType(to)) => {
+                // Address-as-integer for C ABI interop (e.g. hex-dumping a pointer).
+                BasicValueEnum::IntValue(
+                    self.builder.build_ptr_to_int(from, to, "ptrtoint").map_err(|e| e.to_string())?,
+                )
+            }
+            _ => return Err(format!("cannot cast to {}", name)),
+        };
+        if !identity {
+            if let Some(ty) = src_temp {
+                self.release_temp(&ty, val)?;
+            }
         }
+        Ok(result)
     }
 
     fn codegen_ternary(
@@ -2316,21 +2896,33 @@ impl<'ctx> CodeGenerator<'ctx> {
         let false_block = self.context.append_basic_block(fn_value, "false");
         let merge_block = self.context.append_basic_block(fn_value, "ternarycont");
 
+        let cond_temp = self.owned_temp_type(condition);
         let cond = self.codegen_expr(condition)?;
+        if let Some(ty) = cond_temp {
+            self.release_temp(&ty, cond)?;
+        }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
         self.builder
             .build_conditional_branch(cond_bool, true_block, false_block)
             .map_err(|e| e.to_string())?;
 
         self.builder.position_at_end(true_block);
+        let true_temp = self.owned_temp_type(true_expr);
         let true_val = self.codegen_expr(true_expr)?;
+        if let Some(ty) = true_temp {
+            self.release_temp(&ty, true_val)?;
+        }
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;
         let true_end = self.builder.get_insert_block().expect("insert block");
 
         self.builder.position_at_end(false_block);
+        let false_temp = self.owned_temp_type(false_expr);
         let false_val = self.codegen_expr(false_expr)?;
+        if let Some(ty) = false_temp {
+            self.release_temp(&ty, false_val)?;
+        }
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;
@@ -2405,22 +2997,30 @@ fn apply_op<'ctx>(
     rhs: BasicValueEnum<'ctx>,
     ty_name: &str,
     ptr_elem: Option<BasicTypeEnum<'ctx>>,
+    ptr_elem_name: Option<&str>,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match (lhs, rhs) {
         (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
             // Mixed widths: coerce both to the wider one before the op.
+            // Defensive — both call sites pre-coerce operands to a common
+            // width, so this only fires if that coercion failed. Width alone
+            // can't recover signedness, but 1-bit values (bools) are unsigned
+            // 0/1 and must zero-extend (`true` sign-extends to -1).
+            let ext = |src: inkwell::values::IntValue<'ctx>,
+                       dst: inkwell::types::IntType<'ctx>|
+                    -> inkwell::values::IntValue<'ctx> {
+                if src.get_type().get_bit_width() == 1 {
+                    builder.build_int_z_extend(src, dst, "argw").unwrap_or(src)
+                } else {
+                    builder.build_int_s_extend(src, dst, "argw").unwrap_or(src)
+                }
+            };
             let (l2, r2) = if l.get_type().get_bit_width() == r.get_type().get_bit_width() {
                 (l, r)
             } else if l.get_type().get_bit_width() > r.get_type().get_bit_width() {
-                let r2 = builder
-                    .build_int_s_extend(r, l.get_type(), "argw")
-                    .unwrap_or(r);
-                (l, r2)
+                (l, ext(r, l.get_type()))
             } else {
-                let l2 = builder
-                    .build_int_s_extend(l, r.get_type(), "argw")
-                    .unwrap_or(l);
-                (l2, r)
+                (ext(l, r.get_type()), r)
             };
             Ok(BasicValueEnum::IntValue(
                 llvm_ops::int_binary(context, builder, op, l2, r2, ty_name)
@@ -2460,9 +3060,16 @@ fn apply_op<'ctx>(
                         builder.build_int_neg(i, "negidx").unwrap_or(i)
                     };
                     // Stride by the pointer's element type (`char*` → i8,
-                    // `int*` → i32); opaque pointers carry no element info.
-                    let element_ty = match ptr_elem {
-                        Some(BasicTypeEnum::IntType(it)) => it,
+                    // `int*` → i32); opaque (`void*`) pointers stride by byte.
+                    // The declared result type is authoritative when the lhs
+                    // type did not resolve (a malloc'd buffer is `void*` with
+                    // no element), so a `void* + n` advances n bytes.
+                    let element_ty = match (ptr_elem, ptr_elem_name, ty_name) {
+                        (Some(BasicTypeEnum::IntType(it)), _, _) => it,
+                        (_, Some("void"), _) => context.i8_type(),
+                        // A declared pointer result whose element type did not
+                        // resolve (`void*` from a malloc'd buffer): stride by byte.
+                        (_, _, r) if r.ends_with('*') => context.i8_type(),
                         _ => context.i32_type(),
                     };
                     let advanced = unsafe {
@@ -2562,6 +3169,16 @@ fn is_float_valued(expr: &Expression) -> bool {
 fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
     if matches!(op, BinaryOp::LShift | BinaryOp::RShift) {
         llvm_ops::result_type(lhs_name, lhs_name)
+    } else if matches!(op, BinaryOp::Add | BinaryOp::Sub)
+        && (lhs_name.ends_with('*') || rhs_name.ends_with('*'))
+    {
+        // Pointer arithmetic produces a pointer: name the pointer operand so
+        // `coerce` does not ptrtoint the result into an integer.
+        if lhs_name.ends_with('*') {
+            lhs_name.to_string()
+        } else {
+            rhs_name.to_string()
+        }
     } else {
         llvm_ops::result_type(lhs_name, rhs_name)
     }

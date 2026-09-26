@@ -611,9 +611,9 @@ dependencies = [
  "llvm-sys 201.1.0",
  "llvm-sys 211.1.0",
  "llvm-sys 221.1.0",
+ "pepper-files",
  "pepper-parser",
  "pepper-sema",
- "pepper-support",
 ]
 
 [[package]]
@@ -631,7 +631,6 @@ dependencies = [
  "pepper-files",
  "pepper-parser",
  "pepper-sema",
- "pepper-support",
 ]
 
 [[package]]
@@ -663,13 +662,6 @@ name = "pepper-sema"
 version = "0.1.0"
 dependencies = [
  "pepper-parser",
-]
-
-[[package]]
-name = "pepper-support"
-version = "0.1.0"
-dependencies = [
- "libc",
 ]
 
 [[package]]

@@ -2,9 +2,8 @@
 //! keys or values are themselves heap containers must release every contained
 //! object exactly once when the owning structure dies. Each snippet is compiled
 //! with the runtime prelude and JIT-executed through `test`; the leak check
-//! compares `_pep_live_allocs()` before construction and after the owner's
-//! `__release` (Pepper has no scope-exit destruction, so explicit release stands
-//! in for going out of scope).
+//! compares `_pep_live_allocs()` before construction and after the allocation
+//! scope exits (RAII: locals are released automatically at scope exit).
 
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
@@ -44,8 +43,7 @@ fn hash_map_values_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var m = hash_map<int, array<string>>();
     var a1 = array<string>(1);
     var s1 = "one";
@@ -60,13 +58,16 @@ test(): int {
     # would allocate a temporary string that nothing releases.
     if (m[1][0] != s1) { return -4; }
     if (m[2][0] != s2) { return -5; }
-    # The map's slots hold one ref each (acquired on insert); drop the
-    # creators' refs so releasing the map frees everything.
-    s1.__release();
-    s2.__release();
-    a1.__release();
-    a2.__release();
-    m.__release();
+    # The map's slots hold one ref each (acquired on insert); build's scope
+    # exit drops the creators' refs and releases everything.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # Each value's string slots and the map's own value slots must all
+    # release on destruction.
     if (_pep_live_allocs() != before) { return -6; }
     return 0;
 }"#
@@ -84,23 +85,29 @@ fn hash_map_growth_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var m = hash_map<int, array<string>>();
     var i = 0;
     while (i < 5) {
         var a = array<string>(1);
         var s = "v";
         a.append(s);
-        # The slot now holds the only creator-independent ref.
-        s.__release();
+        # The slot holds the creator-independent ref; `s` and `a`'s own
+        # refs are dropped when the loop body's scope exits.
         m.insert(i, a);
-        a.__release();
         i = i + 1;
     }
     if (m.count() != 5) { return -1; }
     if (m[4][0].size() != 1) { return -2; }
-    m.__release();
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # grow() reinserted every value into fresh arrays and released the old
+    # keys/values/state arrays: any refcount slip shows up as a leak or
+    # double free here.
     if (_pep_live_allocs() != before) { return -3; }
     return 0;
 }"#
@@ -116,8 +123,7 @@ fn nested_hash_map_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var m = hash_map<string, hash_map<int, int>>();
     var k1 = "a";
     var inner1 = hash_map<int, int>();
@@ -131,12 +137,15 @@ test(): int {
     if (m.count() != 2) { return -3; }
     if (m[k1][1] != 10) { return -4; }
     if (m[k2][3] != 30) { return -5; }
-    # Drop the creators' refs: string keys and inner maps.
-    k1.__release();
-    k2.__release();
-    inner1.__release();
-    inner2.__release();
-    m.__release();
+    # build's scope exit drops the creators' refs: string keys and inner maps.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # The outer map's value slots hold refs to inner maps whose own
+    # keys/values arrays must all release.
     if (_pep_live_allocs() != before) { return -6; }
     return 0;
 }"#
@@ -152,8 +161,7 @@ fn hash_set_array_release_frees_all() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-test(): int {
-    long before = _pep_live_allocs();
+build(): int {
     var s = hash_set<array<int>>();
     var a1 = array<int>(2);
     a1.append(1);
@@ -164,10 +172,15 @@ test(): int {
     if (!s.insert(a1)) { return -1; }
     if (!s.insert(a2)) { return -2; }
     if (s.count() != 2) { return -3; }
-    # The set's slots hold one ref each; drop the creators' refs.
-    a1.__release();
-    a2.__release();
-    s.__release();
+    # The set's slots hold one ref each; build's scope exit drops the
+    # creators' refs.
+    return 0;
+}
+test(): int {
+    long before = _pep_live_allocs();
+    var r = build();
+    if (r != 0) { return r; }
+    # The set's key slots must release each array on death.
     if (_pep_live_allocs() != before) { return -4; }
     return 0;
 }"#

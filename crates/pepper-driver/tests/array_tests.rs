@@ -533,8 +533,11 @@ test(): int {
     var a = array<Point>();
     a.append(p);
     if (__refcount<Point>(p) != 2) { return -2; }
+    # pop returns a copy of the reference (shared_ptr semantics): the slot
+    # release and the return acquire cancel, so p's count is unchanged.
     var q = a.pop();
-    if (__refcount<Point>(p) != 1) { return -3; }
+    if (__refcount<Point>(p) != 2) { return -3; }
+    if (__refcount<Point>(q) != 2) { return -5; }
     if (q.x != 0) { return -4; }
     return 0;
 }"#
@@ -618,15 +621,20 @@ test(): int {
     p.x = 7;
     a.append(p);
     if (__refcount<Point>(p) != 2) { return -1; }
+    # clone copies every element reference: +1.
     var b = a.clone();
     if (__refcount<Point>(p) != 3) { return -2; }
+    # remove_at returns a copy of the reference: slot release and return
+    # acquire cancel, so p's count is unchanged; r holds its own ref.
     var r = b.remove_at(0);
-    if (__refcount<Point>(p) != 2) { return -3; }
+    if (__refcount<Point>(p) != 3) { return -3; }
+    if (__refcount<Point>(r) != 3) { return -8; }
     if (r.x != 7) { return -4; }
+    # clear releases every slot: b's copy of p drops.
     b.clear();
-    if (__refcount<Point>(p) != 2) { return -5; }
+    if (__refcount<Point>(p) != 3) { return -5; }
     a.clear();
-    if (__refcount<Point>(p) != 1) { return -6; }
+    if (__refcount<Point>(p) != 2) { return -6; }
     return 0;
 }"#
         ),
@@ -655,6 +663,9 @@ test(): int {
     if (__refcount<Point>(p2) != 2) { return -2; }
     var p3 = Point();
     p3.x = 3;
+    # insert shifts each moved reference into its new slot by moving the raw
+    # pointer (shared_ptr move semantics): no count changes at all, so every
+    # count is unchanged by the move (no churn).
     a.insert(0, p3);
     if (__refcount<Point>(p1) != 2) { return -3; }
     if (__refcount<Point>(p2) != 2) { return -4; }
@@ -681,8 +692,10 @@ test(): int {
     var outer = array<array<int>>();
     outer.append(inner);
     if (__refcount<array<int>>(inner) != 2) { return -2; }
+    # pop returns a copy of the reference: slot release and return acquire
+    # cancel, so inner's count is unchanged.
     var out = outer.pop();
-    if (__refcount<array<int>>(inner) != 1) { return -3; }
+    if (__refcount<array<int>>(inner) != 2) { return -3; }
     if (out[0] != 1) { return -4; }
     return 0;
 }"#
@@ -1036,3 +1049,4 @@ test(): int {
         0
     );
 }
+

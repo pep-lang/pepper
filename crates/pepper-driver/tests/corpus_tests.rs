@@ -2,8 +2,6 @@
 //! `unittests/main.cpp:27-35` — entry `main`, runtime on iff the source
 //! contains `import`; assert exit code 0.
 
-mod common;
-
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
 use pepper_sema::model::Module as SemaModule;
@@ -102,8 +100,7 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     // Link through the driver's own linker, same as compile_tests -- a second
     // hand-rolled `ld` invocation here would only drift from it (and could not
     // work on Windows at all).
-    let staticlib = common::support_staticlib();
-    pepper_driver::linker::link(&[obj_path, staticlib], &out_path, &[], &[])?;
+    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[])?;
 
     std::process::Command::new(&out_path)
         .status()

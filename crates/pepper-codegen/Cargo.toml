@@ -8,7 +8,6 @@ path = "src/lib.rs"
 
 [dependencies]
 pepper-sema = { path = "../pepper-sema" }
-pepper-support = { path = "../pepper-support" }
 
 # `target-all` (inkwell's default) emits initializers for every LLVM target,
 # including ones a given LLVM build omits, which fails at link time with
@@ -68,3 +67,4 @@ llvm22-1 = ["inkwell/llvm22-1", "llvm-sys-221"]
 
 [dev-dependencies]
 pepper-parser = { path = "../pepper-parser" }
+pepper-files = { path = "../pepper-files" }

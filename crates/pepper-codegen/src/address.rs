@@ -1,6 +1,7 @@
 //! Address: port of `source/CodeGen/LLVM/Address.h`.
 
 use inkwell::builder::Builder;
+use inkwell::basic_block::BasicBlock;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use std::rc::Rc;
@@ -62,7 +63,8 @@ pub struct Frame<'ctx> {
     pub retval: Option<PointerValue<'ctx>>,
     pub retval_type: Option<String>,
     pub locals: Vec<(String, Address<'ctx>)>,
-    pub tracked_locals: Vec<Address<'ctx>>,
+    /// Innermost enclosing while's `(continue, break)` blocks; `None` outside a loop.
+    pub loop_break: Option<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
 }
 
 impl<'ctx> Frame<'ctx> {
@@ -74,7 +76,7 @@ impl<'ctx> Frame<'ctx> {
             retval: None,
             retval_type: None,
             locals: vec![],
-            tracked_locals: vec![],
+            loop_break: None,
         }
     }
 

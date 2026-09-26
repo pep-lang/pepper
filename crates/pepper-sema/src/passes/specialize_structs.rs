@@ -119,6 +119,7 @@ fn substitute_statement(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
                 substitute_expression(expr, type_map);
             }
         }
+        Statement::LoopBreak(_) => {}
     }
 }
 

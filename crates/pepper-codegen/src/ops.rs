@@ -111,13 +111,46 @@ pub fn coerce<'ctx>(
             }
         }
         (true, false) => {
-            match builder.build_float_to_signed_int(value.into_float_value(), context.i32_type(), "f2i") {
-                Ok(v) => BasicValueEnum::IntValue(v),
-                Err(_) => value,
+            // C 6.3.1.4: float→int truncates toward zero into the *target*
+            // width; unsigned targets use fptoui (fptosi is poison above the
+            // signed range), bool compares != 0.
+            if to == "bool" || to == "i1" {
+                BasicValueEnum::IntValue(as_bool(context, builder, value))
+            } else {
+                let target = int_type_of_name(context, to);
+                let unsigned = matches!(to, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong");
+                let v = if unsigned {
+                    builder.build_float_to_unsigned_int(value.into_float_value(), target, "f2i")
+                } else {
+                    builder.build_float_to_signed_int(value.into_float_value(), target, "f2i")
+                };
+                match v {
+                    Ok(v) => BasicValueEnum::IntValue(v),
+                    Err(_) => value,
+                }
             }
         }
         (false, true) => {
-            match builder.build_signed_int_to_float(value.into_int_value(), context.f64_type(), "i2f") {
+            // C 6.3.1.4: int→float converts into the *target* float width;
+            // unsigned and 1-bit sources use uitofp (`u8 200 as float` must
+            // be 200.0, not -56.0).
+            let from_i = match value {
+                BasicValueEnum::IntValue(v) => v,
+                _ => return value,
+            };
+            let target = if matches!(to, "f64" | "double") {
+                context.f64_type()
+            } else {
+                context.f32_type()
+            };
+            let unsigned = from_i.get_type().get_bit_width() == 1
+                || matches!(from, "u8" | "byte" | "void" | "u32" | "uint" | "u64" | "ulong");
+            let v = if unsigned {
+                builder.build_unsigned_int_to_float(from_i, target, "i2f")
+            } else {
+                builder.build_signed_int_to_float(from_i, target, "i2f")
+            };
+            match v {
                 Ok(v) => BasicValueEnum::FloatValue(v),
                 Err(_) => value,
             }
@@ -134,8 +167,9 @@ pub fn coerce<'ctx>(
                 value
             } else if from_ty.get_bit_width() < to_ty.get_bit_width() {
                 // i1 (bool) and unsigned sources widen with zext, not sext —
-                // `u8 b = 200` must stay 200, not become -56.
-                let unsigned = matches!(from, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
+                // `u8 b = 200` must stay 200, not become -56. A void* byte
+                // load is an unsigned char in C, so "void" extends too.
+                let unsigned = matches!(from, "u8" | "byte" | "void" | "u32" | "uint" | "u64" | "ulong")
                     || from_ty.get_bit_width() == 1;
                 let ext = if unsigned {
                     builder.build_int_z_extend(from_i, to_i, "zext")
@@ -146,6 +180,10 @@ pub fn coerce<'ctx>(
                     Ok(v) => BasicValueEnum::IntValue(v),
                     Err(_) => value,
                 }
+            } else if to_ty.get_bit_width() == 1 {
+                // C 6.3.1.4: conversion to _Bool is a nonzero test, not a
+                // low-bit truncation (`bool b; b += 2` must be true).
+                BasicValueEnum::IntValue(as_bool(context, builder, value))
             } else {
                 match builder.build_int_truncate(from_i, to_i, "trunc") {
                     Ok(v) => BasicValueEnum::IntValue(v),

@@ -9,7 +9,6 @@ path = "src/lib.rs"
 [dependencies]
 pepper-parser = { path = "../pepper-parser" }
 pepper-sema = { path = "../pepper-sema" }
-pepper-support = { path = "../pepper-support" }
 pepper-files = { path = "../pepper-files" }
 pepper-codegen = { path = "../pepper-codegen", default-features = false }
 clap.workspace = true

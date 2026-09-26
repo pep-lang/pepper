@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     ".",
     "crates/pepper-parser",
-    "crates/pepper-support",
     "crates/pepper-sema",
     "crates/pepper-codegen",
     "crates/pepper-driver",

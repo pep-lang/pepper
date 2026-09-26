@@ -1,8 +1,6 @@
 //! End-to-end compile tests: JIT value tests (entry `test`) and a full
 //! obj+link+spawn run (entry `main`), ported from `unittests/*`.
 
-mod common;
-
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
 use pepper_sema::model::Module as SemaModule;
@@ -12,6 +10,28 @@ use pepper_sema::struct_body;
 fn compile_jit(source: &str) -> i32 {
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
     let mut module: SemaModule = build(&ast).expect("build");
+    pepper_sema::apply_platform_filters(&mut module).expect("platform");
+    struct_body::apply(&mut module).expect("sema");
+    transform_pass(&mut module);
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.jit_execute(&mut module, "test").expect("jit")
+}
+
+/// Like `compile_jit` but with the `runtime/` prelude merged in, so the test
+/// body can call `_pep_*` runtime functions (malloc, hashing, …).
+fn compile_jit_with_runtime(source: &str) -> i32 {
+    let mut module = SemaModule::default();
+    let (runtime_sources, _libs, _dirs) = pepper_driver::runtime::discover();
+    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
+    for path in runtime_sources {
+        let content = std::fs::read_to_string(&path).expect("read runtime source");
+        let ast = pepper_parser::parser::parse_source(&path.to_string_lossy(), &content)
+            .expect("parse runtime source");
+        module.merge(build(&ast).expect("build"));
+    }
+    let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
+    module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
     transform_pass(&mut module);
@@ -196,9 +216,7 @@ main(): int {
 
     // Link through the driver's own linker so this test exercises the real
     // link path instead of a hand-rolled duplicate of it.
-    let staticlib = common::support_staticlib();
-
-    pepper_driver::linker::link(&[obj_path, staticlib], &out_path, &[], &[]).expect("link");
+    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[]).expect("link");
 
     let run = std::process::Command::new(&out_path).status().unwrap();
     assert!(run.success(), "spawned binary failed");
@@ -271,5 +289,55 @@ fn nested_block_return_inside_if() {
                      return r;\n\
                  }"),
         3
+    );
+}
+
+// ── Runtime-backed language features (void* byte indexing, break/continue) ─
+
+#[test]
+fn void_ptr_byte_index() {
+    // `void*` indexes at byte granularity: p[1] is the second byte, not the
+    // second i32.
+    assert_eq!(
+        compile_jit_with_runtime("test(): int {\n\
+                                 var p = _pep_malloc(16);\n\
+                                 p[0] = 7;\n\
+                                 p[1] = 9;\n\
+                                 return p[1];\n\
+                             }"),
+        9
+    );
+}
+
+#[test]
+fn break_exits_loop() {
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var i = 0;\n\
+                     while (i < 10) {\n\
+                         if (i == 3) { break; }\n\
+                         i = i + 1;\n\
+                     }\n\
+                     return i;\n\
+                 }"),
+        3
+    );
+}
+
+#[test]
+fn continue_skips_iteration() {
+    // The increment runs before the continue check, so s = 1 + 3 + 4 + 5.
+    assert_eq!(
+        compile_jit("test(): int {\n\
+                     var i = 0;\n\
+                     var s = 0;\n\
+                     while (i < 5) {\n\
+                         i = i + 1;\n\
+                         if (i == 2) { continue; }\n\
+                         s = s + i;\n\
+                     }\n\
+                     return s;\n\
+                 }"),
+        13
     );
 }
