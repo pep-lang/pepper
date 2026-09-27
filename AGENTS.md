@@ -4,6 +4,18 @@ Conventions that apply to any agent (or person) working here. Tool-specific
 workflows live in `.agents/skills/`; this file is for rules that hold
 everywhere.
 
+## Workflow
+
+- Before doing any work, start a new branch from the current default.
+- When the todo list completes, open a pull request for that branch (use
+  `gh pr create --body-file` per the string rule above).
+
+## Response style
+
+- Keep responses as concise as possible.
+- Lead with the answer; no pleasantries.
+- Prefer bulleted lists to prose.
+
 ## Pass non-trivial strings to CLI tools through files, never inline
 
 Any string longer than a few plain words — commit messages, PR bodies, review
