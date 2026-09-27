@@ -366,12 +366,6 @@ FodyWeavers.xsd
 /Properties/launchSettings.json
 
 .idea/
-/build/
-Testing/
-CMakeFiles/
-llvm-project/
-out/
-tests/cmake_test_discovery*.json
 
 
 # Added by cargo

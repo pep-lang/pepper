@@ -1,4 +1,0 @@
-llvm-project/
-build/
-install/
-!CMakeLists.txt

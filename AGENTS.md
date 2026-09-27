@@ -123,7 +123,3 @@ The whole model, as a construct mapping:
 
 Everything else — scope exit, parameter exit, store-release-old — follows
 from "every owned value releases exactly once when it goes out of scope".
-
-`source/` (the original C++ implementation) is a historical archive only. It
-is NOT a source for behavior, design, or codegen decisions — derive everything
-from the shared_ptr model above.
