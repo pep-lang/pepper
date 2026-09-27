@@ -1,8 +1,7 @@
-//! Platform selection end-to-end: `OS(...)` / `Arch(...)` attributes gate
-//! top-level declarations and attributed blocks against the host (the
-//! compile target). Expected values are computed from
-//! `std::env::consts::{OS, ARCH}`, so the same assertions hold on any
-//! supported host.
+//! Platform selection end-to-end: the `Target(...)` attribute gates top-level
+//! declarations and attributed blocks against the host (the compile target).
+//! Expected values are computed from `std::env::consts::{OS, ARCH}`, so the
+//! same assertions hold on any supported host.
 
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
@@ -11,6 +10,13 @@ use pepper_sema::passes::transform_pass;
 use pepper_sema::struct_body;
 
 fn compile_jit(source: &str) -> i32 {
+    compile_jit_mapped(source, |_| None)
+}
+
+/// Run the full pipeline to a JIT engine, mapping host symbols for declared
+/// (not defined) functions before static ctors run — MCJIT resolves a declare
+/// lazily, and an unmapped one is not addressable.
+fn compile_jit_mapped(source: &str, map_global: impl Fn(&str) -> Option<usize>) -> i32 {
     // Struct constructors allocate via `_pep_malloc`, so the runtime prelude
     // must be linked (the support library's on-demand extern declaration is
     // gone).
@@ -30,7 +36,8 @@ fn compile_jit(source: &str) -> i32 {
     transform_pass(&mut module);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
+    let ee = generator.jit_engine_mapped(&mut module, map_global).expect("jit engine");
+    CodeGenerator::jit_call_i32(&ee, "test").expect("entry")
 }
 
 fn is_windows() -> bool {
@@ -49,8 +56,8 @@ fn block_os_match_kept() {
         compile_jit(
             "test(): int {\n\
              var r = 3;\n\
-             [OS(Windows)] { r = 1; }\n\
-             [!OS(Windows)] { r = 2; }\n\
+             [Target(OS(Windows))] { r = 1; }\n\
+             [Target(!OS(Windows))] { r = 2; }\n\
              return r;\n\
              }"
         ),
@@ -60,13 +67,13 @@ fn block_os_match_kept() {
 
 #[test]
 fn block_or_combination() {
-    // `[OS(Windows) || OS(Mac)]` matches on Windows and Mac, not Linux.
+    // `[Target(OS(Windows) || OS(Mac))]` matches on Windows and Mac, not Linux.
     let expected = if is_windows() || std::env::consts::OS == "macos" { 1 } else { 3 };
     assert_eq!(
         compile_jit(
             "test(): int {\n\
              var r = 3;\n\
-             [OS(Windows) || OS(Mac)] { r = 1; }\n\
+             [Target(OS(Windows) || OS(Mac))] { r = 1; }\n\
              return r;\n\
              }"
         ),
@@ -76,13 +83,29 @@ fn block_or_combination() {
 
 #[test]
 fn block_and_combination() {
-    // `[OS(Windows) && Arch(x64)]` matches only on a Windows x64 host.
+    // `[Target(OS(Windows) && Arch(x64))]` matches only on a Windows x64 host.
     let expected = if is_windows() && is_x64() { 1 } else { 3 };
     assert_eq!(
         compile_jit(
             "test(): int {\n\
              var r = 3;\n\
-             [OS(Windows) && Arch(x64)] { r = 1; }\n\
+             [Target(OS(Windows) && Arch(x64))] { r = 1; }\n\
+             return r;\n\
+             }"
+        ),
+        expected
+    );
+}
+
+#[test]
+fn block_negated_composite() {
+    // Negation wraps the whole composite: matches only on Linux.
+    let expected = if std::env::consts::OS == "linux" { 1 } else { 3 };
+    assert_eq!(
+        compile_jit(
+            "test(): int {\n\
+             var r = 3;\n\
+             [Target(!(OS(Windows) || OS(Mac)))] { r = 1; }\n\
              return r;\n\
              }"
         ),
@@ -99,8 +122,8 @@ fn block_nested_in_if() {
             "test(): int {\n\
              var r = 9;\n\
              if true {\n\
-                 [OS(Windows)] { r = 1; }\n\
-                 [!OS(Windows)] { r = 4; }\n\
+                 [Target(OS(Windows))] { r = 1; }\n\
+                 [Target(!OS(Windows))] { r = 4; }\n\
              }\n\
              return r;\n\
              }"
@@ -117,10 +140,10 @@ fn function_platform_split() {
     let expected = if is_windows() { 1 } else { 2 };
     assert_eq!(
         compile_jit(
-            "[OS(Windows)] win(): int {\n\
+            "[Target(OS(Windows))] win(): int {\n\
              return 1;\n\
              }\n\
-             [!OS(Windows)] win(): int {\n\
+             [Target(!OS(Windows))] win(): int {\n\
              return 2;\n\
              }\n\
              test(): int {\n\
@@ -132,38 +155,22 @@ fn function_platform_split() {
 }
 
 #[test]
-fn function_alias_names() {
-    // `Platform` and `Target` are aliases of `OS` and `Arch`.
-    let os_expected = if is_windows() { 1 } else { 2 };
+fn function_target_wraps_arch() {
+    // `Target` wraps an `Arch(...)` predicate for arch-specific code.
+    let expected = if is_x64() { 1 } else { 2 };
     assert_eq!(
         compile_jit(
-            "[Platform(Windows)] a(): int {\n\
+            "[Target(Arch(x64))] b(): int {\n\
              return 1;\n\
              }\n\
-             [!Platform(Windows)] a(): int {\n\
-             return 2;\n\
-             }\n\
-             test(): int {\n\
-             return a();\n\
-             }"
-        ),
-        os_expected
-    );
-
-    let arch_expected = if is_x64() { 1 } else { 2 };
-    assert_eq!(
-        compile_jit(
-            "[Target(x64)] b(): int {\n\
-             return 1;\n\
-             }\n\
-             [!Target(x64)] b(): int {\n\
+             [Target(!Arch(x64))] b(): int {\n\
              return 2;\n\
              }\n\
              test(): int {\n\
              return b();\n\
              }"
         ),
-        arch_expected
+        expected
     );
 }
 
@@ -173,14 +180,35 @@ fn function_case_insensitive_values() {
     let expected = if is_windows() { 1 } else { 2 };
     assert_eq!(
         compile_jit(
-            "[OS(windows)] c(): int {\n\
+            "[Target(OS(windows))] c(): int {\n\
              return 1;\n\
              }\n\
-             [!OS(windows)] c(): int {\n\
+             [Target(!OS(windows))] c(): int {\n\
              return 2;\n\
              }\n\
              test(): int {\n\
              return c();\n\
+             }"
+        ),
+        expected
+    );
+}
+
+#[test]
+fn multiple_attributes_anded() {
+    // Multiple attributes on one item are ANDed: the non-predicate ones are
+    // neutral, so exactly the matching `Target` definition survives.
+    let expected = if is_windows() { 1 } else { 2 };
+    assert_eq!(
+        compile_jit(
+            "[Target(OS(Windows))] [Export] f(): int {\n\
+             return 1;\n\
+             }\n\
+             [Target(!OS(Windows))] [Inline] f(): int {\n\
+             return 2;\n\
+             }\n\
+             test(): int {\n\
+             return f();\n\
              }"
         ),
         expected
@@ -195,11 +223,11 @@ fn struct_platform_split() {
     let expected = if is_windows() { 1 } else { 2 };
     assert_eq!(
         compile_jit(
-            "[OS(Windows)] struct P {\n\
+            "[Target(OS(Windows))] struct P {\n\
              int x;\n\
              new(this.x = 1) {}\n\
              }\n\
-             [!OS(Windows)] struct P {\n\
+             [Target(!OS(Windows))] struct P {\n\
              int x;\n\
              new(this.x = 2) {}\n\
              }\n\
@@ -226,7 +254,7 @@ fn extern_non_matching_dropped() {
     // A non-matching extern is dropped from the filtered module (asserted on
     // the model: an unreferenced LLVM declare would not fail MCJIT, so a JIT
     // compile alone cannot observe the drop).
-    let predicate = if is_windows() { "[!OS(Windows)]" } else { "[OS(Windows)]" };
+    let predicate = if is_windows() { "[Target(!OS(Windows))]" } else { "[Target(OS(Windows))]" };
     let module = filtered_module(&format!(
         "{predicate} extern int missing_symbol();\n\
          test(): int {{\n\
@@ -239,7 +267,7 @@ fn extern_non_matching_dropped() {
 #[test]
 fn extern_matching_kept() {
     // A matching extern survives filtering.
-    let predicate = if is_windows() { "[OS(Windows)]" } else { "[!OS(Windows)]" };
+    let predicate = if is_windows() { "[Target(OS(Windows))]" } else { "[Target(!OS(Windows))]" };
     let module = filtered_module(&format!(
         "{predicate} extern int present_symbol();\n\
          test(): int {{\n\
@@ -249,20 +277,76 @@ fn extern_matching_kept() {
     assert_eq!(module.externs.len(), 1, "matching extern was dropped");
 }
 
-// ── Error paths (review fixes) ────────────────────────────────────────────
+#[test]
+fn extern_composite_predicate() {
+    // A composite `Target` argument selects on both OS and Arch.
+    let expected = if is_windows() && is_x64() { 1 } else { 0 };
+    let module = filtered_module(
+        "[Target(OS(Windows) && Arch(x64))] extern int composite_symbol();\n\
+         test(): int {\n\
+         return 0;\n\
+         }",
+    );
+    assert_eq!(module.externs.len(), expected, "composite predicate mismatch");
+}
+
+// ── JIT invocation of per-arch symbols ─────────────────────────────────────
+
+/// Bespoke per-arch host symbols: the Pepper test calls whichever matches the
+/// host via a `Target(Arch(...))` gate, and MCJIT resolves it through the
+/// global mapping. The non-matching twin is dropped by the filter, so MCJIT
+/// never has to resolve it.
+#[unsafe(no_mangle)]
+pub extern "C" fn pep_test_arch_x64() -> i32 {
+    0x5836
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pep_test_arch_aarch64() -> i32 {
+    0x4141
+}
+
+#[test]
+fn extern_arch_symbol_invoked_in_jit() {
+    // End-to-end: the matching per-arch extern is declared, called through a
+    // gated block, and resolved by MCJIT to the host symbol.
+    let expected = if is_x64() { 0x5836 } else { 0x4141 };
+    assert_eq!(
+        compile_jit_mapped(
+            "[Target(Arch(x64))] extern int pep_test_arch_x64();\n\
+             [Target(Arch(aarch64))] extern int pep_test_arch_aarch64();\n\
+             arch_tag(): int {\n\
+             [Target(Arch(x64))] { return pep_test_arch_x64(); }\n\
+             [Target(Arch(aarch64))] { return pep_test_arch_aarch64(); }\n\
+             return 0;\n\
+             }\n\
+             test(): int {\n\
+             return arch_tag();\n\
+             }",
+            |name| match name {
+                "pep_test_arch_x64" => Some(pep_test_arch_x64 as *const () as usize),
+                "pep_test_arch_aarch64" => Some(pep_test_arch_aarch64 as *const () as usize),
+                _ => None,
+            },
+        ),
+        expected
+    );
+}
+
+// ── Error paths ────────────────────────────────────────────────────────────
 
 fn supported_host() -> bool {
     matches!(std::env::consts::OS, "windows" | "macos" | "linux")
         && matches!(std::env::consts::ARCH, "x86_64" | "aarch64")
 }
 
-/// A platform predicate that is false on the current host, for tests that
-/// need code to be dropped.
+/// A `Target(...)` attribute that is false on the current host, for tests
+/// that need code to be dropped.
 fn dropped_predicate() -> &'static str {
     if std::env::consts::OS == "linux" {
-        "OS(Windows)"
+        "[Target(OS(Windows))]"
     } else {
-        "OS(Linux)"
+        "[Target(OS(Linux))]"
     }
 }
 
@@ -278,10 +362,10 @@ fn unknown_os_value_errors() {
     if !supported_host() {
         return;
     }
-    let err = platform_err("[OS(Darwin)] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    let err = platform_err("[Target(OS(Darwin))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
     // The offending attribute is named in the diagnostic.
-    assert!(err.contains("[OS(Darwin)]"), "expected attribute context in: {err}");
+    assert!(err.contains("OS(Darwin)"), "expected attribute context in: {err}");
 }
 
 #[test]
@@ -290,22 +374,58 @@ fn unknown_arch_value_errors() {
     if !supported_host() {
         return;
     }
-    let err = platform_err("[Arch(arm64)] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    let err = platform_err("[Target(Arch(arm64))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("unknown Arch value"), "unexpected error: {err}");
 }
 
 #[test]
+fn target_two_arguments_errors() {
+    // `Target` takes exactly one value (a single boolean expression).
+    let err = platform_err("[Target(OS(Windows), Arch(x64))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    assert!(err.contains("Target takes exactly one value"), "unexpected error: {err}");
+}
+
+#[test]
+fn bare_target_errors() {
+    // A bare `Target` without a call is not an attribute.
+    let err = platform_err("[Target] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    assert!(err.contains("used without a value"), "unexpected error: {err}");
+}
+
+#[test]
+fn nested_target_errors() {
+    // `Target` cannot be nested inside its own argument.
+    let err = platform_err("[Target(Target(OS(Windows)))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    assert!(err.contains("cannot be nested"), "unexpected error: {err}");
+}
+
+#[test]
+fn unknown_predicate_inside_target_errors() {
+    // Only `OS` and `Arch` are valid inside `Target(...)`.
+    let err = platform_err("[Target(Foo(Windows))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    assert!(err.contains("unknown predicate"), "unexpected error: {err}");
+}
+
+#[test]
+fn bare_symbol_inside_target_errors() {
+    // A bare symbol is not a predicate; `OS(...)`/`Arch(...)` calls are.
+    let err = platform_err("[Target(Windows)] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    assert!(err.contains("not a predicate"), "unexpected error: {err}");
+}
+
+#[test]
 fn validation_not_short_circuited() {
-    // `[OS(Linux)] [OS()]`: on a non-Linux host the first predicate is false,
-    // but the malformed second attribute must still be reported.
-    let err = platform_err("[OS(Linux)] [OS()] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    // `[Target(OS(Linux))] [Target(OS())]`: on a non-Linux host the first
+    // predicate is false, but the malformed second attribute must still be
+    // reported.
+    let err = platform_err("[Target(OS(Linux))] [Target(OS())] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("exactly one value"), "unexpected error: {err}");
 }
 
 #[test]
 fn combined_body_not_short_circuited() {
-    // `[{false} && OS(Windwos)]`: the left half is false on every supported
-    // host, but the malformed right half must still be reported.
+    // `[Target({false} && OS(Windwos))]`: the left half is false on every
+    // supported host, but the malformed right half must still be reported.
     if !supported_host() {
         return;
     }
@@ -314,7 +434,7 @@ fn combined_body_not_short_circuited() {
         _ => "OS(Linux)",
     };
     let err = platform_err(&format!(
-        "[{false_half} && OS(Windwos)] f(): int {{\nreturn 0;\n}}\ntest(): int {{\nreturn 0;\n}}"
+        "[Target({false_half} && OS(Windwos))] f(): int {{\nreturn 0;\n}}\ntest(): int {{\nreturn 0;\n}}"
     ));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
@@ -322,7 +442,7 @@ fn combined_body_not_short_circuited() {
 #[test]
 fn non_symbol_argument_errors() {
     // A literal argument is not a platform symbol — hard error.
-    let err = platform_err("[OS(1)] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
+    let err = platform_err("[Target(OS(1))] f(): int {\nreturn 0;\n}\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("must be a symbol"), "unexpected error: {err}");
 }
 
@@ -335,51 +455,12 @@ fn method_platform_split() {
             "struct S {\n\
              int x;\n\
              new(this.x = 0) {}\n\
-             [OS(Windows)] int get() { return 7; }\n\
-             [!OS(Windows)] int get() { return 8; }\n\
+             [Target(OS(Windows))] int get() { return 7; }\n\
+             [Target(!OS(Windows))] int get() { return 8; }\n\
              }\n\
              test(): int {\n\
              var s = S();\n\
              return s.get();\n\
-             }"
-        ),
-        expected
-    );
-}
-
-#[test]
-fn negated_non_platform_attribute_does_not_drop() {
-    // `[!Export]` contains no platform predicate, so it is ignored by the
-    // selector even under negation — the function must survive.
-    assert_eq!(
-        compile_jit(
-            "[!Export] f(): int {\n\
-             return 5;\n\
-             }\n\
-             test(): int {\n\
-             return f();\n\
-             }"
-        ),
-        5
-    );
-}
-
-#[test]
-fn mixed_body_with_non_predicate_selects() {
-    // A body mixing a predicate with a negated non-predicate selects on the
-    // predicate half; `!Export` is neutral, not false. Before the fix both
-    // definitions were dropped and `f()` would not resolve.
-    let expected = if is_windows() { 1 } else { 2 };
-    assert_eq!(
-        compile_jit(
-            "[OS(Windows) && !Export] f(): int {\n\
-             return 1;\n\
-             }\n\
-             [!OS(Windows) && !Export] f(): int {\n\
-             return 2;\n\
-             }\n\
-             test(): int {\n\
-             return f();\n\
              }"
         ),
         expected
@@ -397,8 +478,8 @@ fn extension_method_platform_split() {
              new(this.x = 0) {}\n\
              }\n\
              extend S {\n\
-             [OS(Windows)] int get() { return 9; }\n\
-             [!OS(Windows)] int get() { return 10; }\n\
+             [Target(OS(Windows))] int get() { return 9; }\n\
+             [Target(!OS(Windows))] int get() { return 10; }\n\
              }\n\
              test(): int {\n\
              var s = S();\n\
@@ -417,15 +498,15 @@ fn trait_method_platform_split() {
     // below guard the trait-method retain itself, which has no downstream
     // consumer.
     let source = "trait T {\n\
-                 [OS(Windows)] int get();\n\
-                 [!OS(Windows)] int get();\n\
+                 [Target(OS(Windows))] int get();\n\
+                 [Target(!OS(Windows))] int get();\n\
                  }\n\
                  struct S {\n\
                  new() {}\n\
                  }\n\
                  extend S with T {\n\
-                 [OS(Windows)] int get() { return 11; }\n\
-                 [!OS(Windows)] int get() { return 12; }\n\
+                 [Target(OS(Windows))] int get() { return 11; }\n\
+                 [Target(!OS(Windows))] int get() { return 12; }\n\
                  }\n\
                  test(): int {\n\
                  var s = S();\n\
@@ -436,11 +517,11 @@ fn trait_method_platform_split() {
     let module = filtered_module(source);
     assert_eq!(module.traits[0].methods.len(), 1);
     // A trait dropped on this host disappears from the model entirely.
-    let dropped = filtered_module(&format!("[{d}] trait T {{\nint get();\n}}", d = dropped_predicate()));
+    let dropped = filtered_module(&format!("{d} trait T {{\nint get();\n}}", d = dropped_predicate()));
     assert!(dropped.traits.is_empty());
     // Same for a dropped extension.
     let dropped_ext = filtered_module(&format!(
-        "trait T {{\nint get();\n}}\nstruct S {{\nnew() {{}}\n}}\n[{d}] extend S with T {{\nint get() {{ return 1; }}\n}}",
+        "trait T {{\nint get();\n}}\nstruct S {{\nnew() {{}}\n}}\n{d} extend S with T {{\nint get() {{ return 1; }}\n}}",
         d = dropped_predicate()
     ));
     assert!(dropped_ext.extensions.is_empty());
@@ -449,11 +530,19 @@ fn trait_method_platform_split() {
 #[test]
 fn malformed_attribute_body_is_parse_error() {
     // A body that fails to parse inside `[...]` is a hard error at the
-    // brackets, not a misreported dangling `[` later.
+    // brackets, not a misreported dangling `[` later. Top-level boolean logic
+    // is also rejected: `[]` holds exactly one attribute.
     for source in [
         "[]\ntest(): int {\nreturn 0;\n}",
         "[*]\ntest(): int {\nreturn 0;\n}",
         "[if x { }]\ntest(): int {\nreturn 0;\n}",
+        // Top-level boolean logic is not an attribute.
+        "[OS(Windows) || OS(Mac)]\ntest(): int {\nreturn 0;\n}",
+        "[!OS(Windows)]\ntest(): int {\nreturn 0;\n}",
+        "[Target(OS(Windows)) && Export]\ntest(): int {\nreturn 0;\n}",
+        // `OS`/`Arch` are only valid inside `Target(...)`.
+        "[OS(Windows)]\ntest(): int {\nreturn 0;\n}",
+        "[Arch(x64)]\ntest(): int {\nreturn 0;\n}",
     ] {
         assert!(
             pepper_parser::parser::parse_source("test.pep", source).is_err(),
@@ -471,7 +560,7 @@ fn block_attribute_validated_on_all_hosts() {
         return;
     }
     let err = platform_err("test(): int {\n\
-                            [OS(Linux)] [OS(Windwos)] { return 1; }\n\
+                            [Target(OS(Linux))] [Target(OS(Windwos))] { return 1; }\n\
                             return 0;\n\
                             }");
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
@@ -485,7 +574,7 @@ fn nested_block_in_dropped_block_is_walked() {
         return;
     }
     let err = platform_err(&format!("test(): int {{\n\
-                            [{d}] {{ [OS(Windwos)] {{ }} }}\n\
+                            {d} {{ [Target(OS(Windwos))] {{ }} }}\n\
                             return 0;\n\
                             }}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
@@ -496,16 +585,16 @@ fn consecutive_non_matching_blocks_all_dropped() {
     // Removing one block must not skip the next one: both predicates below
     // are false on the current host, so `r` must stay 3.
     let (p1, p2) = match std::env::consts::OS {
-        "linux" => ("OS(Windows)", "OS(Mac)"),
-        "macos" => ("OS(Windows)", "OS(Linux)"),
-        _ => ("OS(Linux)", "OS(Mac)"),
+        "linux" => ("[Target(OS(Windows))]", "[Target(OS(Mac))]"),
+        "macos" => ("[Target(OS(Windows))]", "[Target(OS(Linux))]"),
+        _ => ("[Target(OS(Linux))]", "[Target(OS(Mac))]"),
     };
     assert_eq!(
         compile_jit(&format!(
             "test(): int {{\n\
              var r = 3;\n\
-             [{p1}] {{ r = 1; }}\n\
-             [{p2}] {{ r = 2; }}\n\
+             {p1} {{ r = 1; }}\n\
+             {p2} {{ r = 2; }}\n\
              return r;\n\
              }}"
         )),
@@ -523,13 +612,12 @@ fn block_after_dropped_block_is_validated() {
     }
     let dropped = dropped_predicate();
     let err = platform_err(&format!("test(): int {{\n\
-                            [{dropped}] {{ }}\n\
-                            [OS(Windwos)] {{ }}\n\
+                            {dropped} {{ }}\n\
+                            [Target(OS(Windwos))] {{ }}\n\
                             return 0;\n\
                             }}"));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
-
 #[test]
 fn dropped_function_body_is_walked() {
     // The predicate drops the function on this host, but a malformed
@@ -537,8 +625,8 @@ fn dropped_function_body_is_walked() {
     if !supported_host() {
         return;
     }
-    let err = platform_err(&format!("[{d}] f(): int {{\n\
-                           [OS(Windwos)] {{ return 1; }}\n\
+    let err = platform_err(&format!("{d} f(): int {{\n\
+                           [Target(OS(Windwos))] {{ return 1; }}\n\
                            return 0;\n\
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
@@ -552,7 +640,7 @@ fn constructor_attribute_validated() {
         return;
     }
     let err = platform_err("struct S {\n\
-                           [OS(Windwos)] new() {}\n\
+                           [Target(OS(Windwos))] new() {}\n\
                            }\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
@@ -564,8 +652,8 @@ fn dropped_struct_member_body_is_walked() {
     if !supported_host() {
         return;
     }
-    let err = platform_err(&format!("[{d}] struct S {{\n\
-                           [{d}] f(): int {{ [OS(Windwos)] {{ return 1; }} return 0; }}\n\
+    let err = platform_err(&format!("{d} struct S {{\n\
+                           {d} f(): int {{ [Target(OS(Windwos))] {{ return 1; }} return 0; }}\n\
                            new() {{}}\n\
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
@@ -578,8 +666,8 @@ fn dropped_struct_constructor_attribute_validated() {
     if !supported_host() {
         return;
     }
-    let err = platform_err(&format!("[{d}] struct S {{\n\
-                           [OS(Windwos)] new() {{}}\n\
+    let err = platform_err(&format!("{d} struct S {{\n\
+                           [Target(OS(Windwos))] new() {{}}\n\
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }

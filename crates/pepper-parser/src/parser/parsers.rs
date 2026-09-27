@@ -699,9 +699,10 @@ pub fn expression(input: &mut &str) -> Result<Expression> {
 
 // ── Attributes ────────────────────────────────────────────────────────────────
 
-/// A single attribute `[expr]`. The body is a full boolean expression, so
-/// simple attributes (`[A]`, `[A(1, 2)]`) and platform predicates
-/// (`[OS(Windows) || OS(Mac)]`, `[!OS(Windows)]`) share one grammar.
+/// A single attribute `[expr]`. The body is exactly one attribute: a bare
+/// symbol (`[Export]`) or a call (`[Target(OS(Windows) && Arch(x64))]`,
+/// `[Align(8)]`). There is no top-level boolean logic — `!`, `&&`, and `||`
+/// are only meaningful inside `Target(...)`'s single argument.
 fn attribute(input: &mut &str) -> Result<Attribute> {
     if !input.starts_with('[') { return Err(bt(input)); }
     let start = pos(input);
@@ -710,17 +711,28 @@ fn attribute(input: &mut &str) -> Result<Attribute> {
     // Inside the brackets, a failed body is a hard error: backtracking would
     // leave the dangling `[` to be misreported at the next declaration.
     let body = expression(input).map_err(|_| cut(input))?;
-    // The body must be a boolean predicate (symbols, calls, `!`, `&&`/`||`);
-    // anything else — literals, arithmetic, assignment — is a hard error.
+    // The body must be exactly one attribute (a symbol or a call); top-level
+    // boolean logic (`!`, `&&`, `||`) and literals are hard errors.
     if !is_predicate_body(&body) { return Err(cut(input)); }
+    // `OS(...)` / `Arch(...)` are only valid inside `Target(...)`; a top-level
+    // use is rejected here so it fails on every host, including fields (which
+    // the sema pass never validates).
+    if let Expression::FunctionCall { function, .. } = &body {
+        if let Expression::SymbolRef { id, .. } = function.as_ref() {
+            if is_os_or_arch_name(&id) {
+                return Err(cut(input));
+            }
+        }
+    }
     ws(input)?;
     if !input.starts_with(']') { return Err(cut(input)); }
     *input = &input[1..];
     Ok(Attribute { body, span: Span { start, end: pos(input) } })
 }
 
-/// Attribute bodies are boolean predicates over platform symbols: a bare
-/// symbol, a `Name(args)` call, `!`, and `&&`/`||` (with `and`/`or`).
+/// Attribute bodies are exactly one attribute: a bare symbol (`[Export]`) or
+/// a `Name(args)` call. Top-level `!` / `&&` / `||` is not an attribute — it
+/// has no context outside `Target(...)`'s argument.
 fn is_predicate_body(e: &Expression) -> bool {
     match e {
         Expression::SymbolRef { .. } => true,
@@ -728,45 +740,35 @@ fn is_predicate_body(e: &Expression) -> bool {
         Expression::FunctionCall { function, .. } => {
             matches!(function.as_ref(), Expression::SymbolRef { .. })
         }
-        Expression::Unary { op, prefix, operand, .. } => {
-            *prefix && op == "!" && is_predicate_body(operand)
-        }
-        Expression::Binary { lhs, op, rhs, .. } => {
-            (op == "&&" || op == "||" || op == "and" || op == "or")
-                && is_predicate_body(lhs)
-                && is_predicate_body(rhs)
-        }
         _ => false,
     }
 }
 
-/// True if the attribute body selects on a platform predicate in operand
-/// position: `OS`, `Arch`, `Platform`/`Target`, bare or called, under `!` and
-/// `&&`/`||`. A predicate nested inside another attribute's argument list
-/// (e.g. `[Align(OS(Windows))]`) is not a selection and is not reported here,
-/// matching the evaluator, which also ignores such arguments. Used to reject
-/// predicates on struct fields, which have no per-platform semantics —
-/// including mixed bodies like `[OS(Windows) && Export]`, where the predicate
-/// half would otherwise be silently ignored. Also used by the sema pass to
-/// skip attributes that contain no predicate at all.
+/// True if the attribute body is a platform selection: a top-level
+/// `Target(...)` call. Nested calls (`[Align(OS(Windows))]`) are not
+/// selections and are not reported here, matching the evaluator, which also
+/// ignores such arguments. Used to reject platform predicates on struct
+/// fields, which have no per-platform semantics. Also used by the sema pass
+/// to skip attributes that contain no predicate at all.
 pub fn contains_platform_predicate(e: &Expression) -> bool {
-    match e {
-        Expression::SymbolRef { id, .. } => is_platform_predicate_name(&id),
-        Expression::FunctionCall { function, .. } => {
-            matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id))
-        }
-        Expression::Unary { operand, .. } => contains_platform_predicate(operand),
-        Expression::Binary { lhs, rhs, .. } => {
-            contains_platform_predicate(lhs) || contains_platform_predicate(rhs)
-        }
-        _ => false,
-    }
+    matches!(
+        e,
+        Expression::FunctionCall { function, .. }
+            if matches!(function.as_ref(), Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id))
+    )
 }
 
-/// Predicate names recognized by platform selection. Shared with the sema
-/// pass so the parser's field rejection and the evaluator agree on the set.
+/// The platform-selection attribute name. Shared with the sema pass so the
+/// parser's field rejection and the evaluator agree on the set.
 pub fn is_platform_predicate_name(id: &str) -> bool {
-    matches!(id.to_ascii_lowercase().as_str(), "os" | "arch" | "platform" | "target")
+    id.to_ascii_lowercase() == "target"
+}
+
+/// The predicate names valid inside a `Target(...)` argument. Shared with
+/// the sema pass so the parser's top-level rejection and the evaluator agree
+/// on the set.
+pub fn is_os_or_arch_name(id: &str) -> bool {
+    matches!(id.to_ascii_lowercase().as_str(), "os" | "arch")
 }
 
 /// Zero or more attributes preceding a declaration or block.
@@ -2971,7 +2973,7 @@ mod tests {
         }
     }
 
-    // ── Platform selection attributes (OS / Arch / Platform / Target) ──
+    // ── Platform selection attribute (Target) ───────────────────────────────
     /// Returns `(name, args)` for an attribute body that is a `Name(args)` call.
     fn attr_call_name_args(body: &Expression) -> (&str, &[Expression]) {
         match body {
@@ -2990,6 +2992,15 @@ mod tests {
         }
     }
 
+    /// Asserts `e` is a `Target(...)` call with exactly one argument and
+    /// returns that argument.
+    fn target_argument(e: &Expression) -> &Expression {
+        let (name, args) = attr_call_name_args(e);
+        assert_eq!(name, "Target");
+        assert_eq!(args.len(), 1, "Target takes exactly one value");
+        &args[0]
+    }
+
     fn assert_os_call(e: &Expression, value: &str) {
         let (name, args) = attr_call_name_args(e);
         assert_eq!(name, "OS");
@@ -3001,13 +3012,14 @@ mod tests {
     }
 
     #[test]
-    fn test_platform_os_or_expression() {
-        // `[OS(Windows) || OS(Mac)]` is one attribute whose body is a binary OR.
-        let m = parse("[OS(Windows) || OS(Mac)] main(): int {\n    return 42;\n}");
+    fn test_platform_target_wraps_os_or() {
+        // `[Target(OS(Windows) || OS(Mac))]` is one attribute whose single
+        // argument is a binary OR over two OS calls.
+        let m = parse("[Target(OS(Windows) || OS(Mac))] main(): int {\n    return 42;\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert_eq!(f.attributes.len(), 1);
-                match &f.attributes[0].body {
+                match target_argument(&f.attributes[0].body) {
                     Expression::Binary { op, lhs, rhs, .. } => {
                         assert_eq!(op.as_str(), "||");
                         assert_os_call(lhs, "Windows");
@@ -3021,13 +3033,13 @@ mod tests {
     }
 
     #[test]
-    fn test_platform_negated_os() {
-        // `[!OS(Windows)]` is a single unary-`!` body.
-        let m = parse("[!OS(Windows)] main(): int {\n    return 42;\n}");
+    fn test_platform_negated_os_inside_target() {
+        // `[Target(!OS(Windows))]` is a single unary-`!` inside the argument.
+        let m = parse("[Target(!OS(Windows))] main(): int {\n    return 42;\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert_eq!(f.attributes.len(), 1);
-                match &f.attributes[0].body {
+                match target_argument(&f.attributes[0].body) {
                     Expression::Unary { op, prefix, operand, .. } => {
                         assert_eq!(op.as_str(), "!");
                         assert!(*prefix);
@@ -3041,17 +3053,24 @@ mod tests {
     }
 
     #[test]
-    fn test_platform_target_alias() {
-        // `Target(x64)` is an alias for `Arch(x64)`.
-        let m = parse("[Target(x64)] main(): int {\n    return 42;\n}");
+    fn test_platform_target_composite() {
+        // `[Target(OS(Windows) && Arch(x64))]` combines OS and Arch inside.
+        let m = parse("[Target(OS(Windows) && Arch(x64))] main(): int {\n    return 42;\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert_eq!(f.attributes.len(), 1);
-                let (name, args) = attr_call_name_args(&f.attributes[0].body);
-                assert_eq!(name, "Target");
-                match &args[0] {
-                    Expression::SymbolRef { id, .. } => assert_eq!(id, "x64"),
-                    other => panic!("expected SymbolRef x64, got {:?}", other),
+                match target_argument(&f.attributes[0].body) {
+                    Expression::Binary { op, lhs, rhs, .. } => {
+                        assert_eq!(op.as_str(), "&&");
+                        assert_os_call(lhs, "Windows");
+                        let (name, args) = attr_call_name_args(rhs);
+                        assert_eq!(name, "Arch");
+                        match &args[0] {
+                            Expression::SymbolRef { id, .. } => assert_eq!(id, "x64"),
+                            other => panic!("expected SymbolRef x64, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected && binary, got {:?}", other),
                 }
             }
             other => panic!("{:?}", other),
@@ -3061,7 +3080,7 @@ mod tests {
     #[test]
     fn test_platform_block_in_body() {
         // Attributed block inside a body carries the platform predicate.
-        let m = parse("main(): int {\n    [OS(Windows)] {\n        return 1;\n    }\n    return 2;\n}");
+        let m = parse("main(): int {\n    [Target(OS(Windows))] {\n        return 1;\n    }\n    return 2;\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 let body = f.body.as_ref().expect("body");
@@ -3069,7 +3088,7 @@ mod tests {
                 match &body.statements[0] {
                     Statement::Block(b) => {
                         assert_eq!(b.attributes.len(), 1);
-                        assert_os_call(&b.attributes[0].body, "Windows");
+                        assert_os_call(target_argument(&b.attributes[0].body), "Windows");
                     }
                     other => panic!("expected attributed block, got {:?}", other),
                 }
@@ -3082,11 +3101,16 @@ mod tests {
     fn test_malformed_attribute_body_is_hard_error() {
         // A body that fails to parse inside `[...]` is a hard error at the
         // brackets (cut), not a backtrack that leaves a dangling `[` to be
-        // misreported on the next declaration.
+        // misreported on the next declaration. Top-level boolean logic is
+        // also rejected: there is no context for it outside Target(...).
         for s in [
             "[]\ntest(): int {\n    return 0;\n}",
             "[*]\ntest(): int {\n    return 0;\n}",
             "[if x { }]\ntest(): int {\n    return 0;\n}",
+            // Top-level boolean logic is not an attribute.
+            "[OS(Windows) || OS(Mac)]\ntest(): int {\n    return 0;\n}",
+            "[!OS(Windows)]\ntest(): int {\n    return 0;\n}",
+            "[Target(OS(Windows)) && Export]\ntest(): int {\n    return 0;\n}",
         ] {
             let _guard = track_source(s.len());
             let mut input = s;
@@ -3099,13 +3123,9 @@ mod tests {
         // Platform predicates select whole declarations, not individual
         // fields — a predicate on a field is a hard parse error.
         for s in [
-            "struct S {\n    [OS(Windows)] int x;\n}",
-            "struct S {\n    [Arch(x64)] int x;\n}",
-            "struct S {\n    [!OS(Linux) || OS(Mac)] int x;\n}",
-            // Mixed bodies: the predicate half must be rejected too, not
-            // silently ignored.
-            "struct S {\n    [OS(Windows) && Export] int x;\n}",
-            "struct S {\n    [Export || Arch(x64)] int x;\n}",
+            "struct S {\n    [Target(OS(Windows))] int x;\n}",
+            "struct S {\n    [Target(Arch(x64))] int x;\n}",
+            "struct S {\n    [Target(!OS(Linux) || OS(Mac))] int x;\n}",
         ] {
             let _guard = track_source(s.len());
             let mut input = s;
@@ -3128,13 +3148,13 @@ mod tests {
 
     #[test]
     fn test_attribute_display_no_outer_parens() {
-        // A combined attribute body prints bare inside the brackets — the
-        // diagnostic must quote what the user typed.
-        let m = parse("[OS(Windows) || OS(Mac)] f(): int {\n    return 0;\n}");
+        // The argument prints bare inside the call parens — the diagnostic
+        // must quote what the user typed, without doubled parens.
+        let m = parse("[Target(OS(Windows) || OS(Mac))] f(): int {\n    return 0;\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert_eq!(f.attributes.len(), 1);
-                assert_eq!(f.attributes[0].to_string(), "[OS(Windows) || OS(Mac)]");
+                assert_eq!(f.attributes[0].to_string(), "[Target(OS(Windows) || OS(Mac))]");
             }
             other => panic!("expected function, got {:?}", other),
         }

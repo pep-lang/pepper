@@ -100,9 +100,9 @@ impl Display for TypeName {
 
 // ── Attributes ───────────────────────────────────────────────────────────────
 
-/// A single attribute: `[expr]`, where `expr` is a full boolean expression.
-/// Simple attributes are a symbol (`[A]`) or a call (`[A(1, 2)]`); platform
-/// selection allows combinations such as `[OS(Windows) || OS(Mac)]`.
+/// A single attribute: `[expr]`, where `expr` is exactly one attribute — a
+/// bare symbol (`[Export]`) or a call (`[Align(8)]`). Platform selection is
+/// `Target(OS(...) && Arch(...))`; boolean logic lives only inside it.
 #[derive(Debug, Clone)]
 pub struct Attribute {
     pub body: Expression,
@@ -453,10 +453,23 @@ impl Display for Expression {
 
 impl Display for Attribute {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // `Expression`'s Display parenthesizes every binary; an attribute body
-        // is already bracketed, so print the outermost one bare.
+        // `Expression`'s Display parenthesizes every binary; a top-level
+        // binary is already bracketed, and a single-argument call's binary
+        // argument is wrapped by the call parens — print both bare so
+        // diagnostics quote what the user typed.
         match &self.body {
             Expression::Binary { lhs, op, rhs, .. } => write!(f, "[{} {} {}]", lhs, op, rhs),
+            Expression::FunctionCall { function, arguments, .. }
+                if arguments.len() == 1
+                    && matches!(function.as_ref(), Expression::SymbolRef { .. }) =>
+            {
+                match &arguments[0] {
+                    Expression::Binary { lhs, op, rhs, .. } => {
+                        write!(f, "[{}({} {} {})]", function, lhs, op, rhs)
+                    }
+                    arg => write!(f, "[{}({})]", function, arg),
+                }
+            }
             body => write!(f, "[{}]", body),
         }
     }

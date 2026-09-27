@@ -1,21 +1,27 @@
-//! Platform selection: evaluates `OS(...)` / `Arch(...)` attribute predicates
-//! against the host (the compile target) and drops top-level declarations and
-//! attributed blocks that do not match. Runs before `struct_body::apply` so
-//! filtered-out code never reaches synthesis or codegen.
+//! Platform selection: evaluates `Target(...)` attribute predicates against the
+//! host (the compile target) and drops top-level declarations and attributed
+//! blocks that do not match. Runs before `struct_body::apply` so filtered-out
+//! code never reaches synthesis or codegen.
+//!
+//! The only platform-selection attribute is `Target(...)`, which takes exactly
+//! one argument: a boolean expression built from `OS(v)` / `Arch(v)` calls,
+//! combined with `&&`/`||` (and `and`/`or`) and negated with `!`. Example:
+//! `[Target(OS(Windows) && Arch(x64))]`.
 
 use crate::model::*;
 use pepper_parser::ast::{self, Expression};
-use pepper_parser::parser::parsers::{contains_platform_predicate, is_platform_predicate_name};
+use pepper_parser::parser::parsers::{
+    contains_platform_predicate, is_os_or_arch_name, is_platform_predicate_name,
+};
 use std::env::consts;
 
 /// Evaluate one attribute body against the host platform.
 ///
 /// - Bare symbols that are not predicates (`[Export]`, `[Inline]`) are ignored (true).
-/// - `OS(v)` / `Platform(v)`: v ∈ {Windows, Mac, MacOS, Linux}, case-insensitive.
-/// - `Arch(v)` / `Target(v)`: v ∈ {x64, aarch64}, case-insensitive.
-/// - Calls with other names are ignored (true).
-/// - `!` negates; `&&`/`||` (and `and`/`or`) combine.
-/// - Anything else is a hard error naming the attribute's span.
+/// - A bare `Target` without a call is an error.
+/// - `Target(expr)`: `expr` must be a single boolean predicate over `OS(v)` /
+///   `Arch(v)`; the declaration is kept iff it evaluates true on this host.
+/// - Calls with other names (`[Align(8)]`) are ignored (true).
 fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
     match body {
         Expression::SymbolRef { id, .. } => {
@@ -26,22 +32,45 @@ fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
             }
         }
         Expression::FunctionCall { function, arguments, .. } => match function.as_ref() {
-            Expression::SymbolRef { id, .. } => match id.to_ascii_lowercase().as_str() {
-                "os" | "platform" => os_matches(arguments, attr),
-                "arch" | "target" => arch_matches(arguments, attr),
-                // Non-predicate attribute call (`[Export("x")]`) — ignore.
-                _ => Ok(true),
-            },
+            Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id) => {
+                let [arg] = arguments.as_slice() else {
+                    return Err(format!(
+                        "Target takes exactly one value (a boolean over OS(...) and Arch(...)) in {attr}"
+                    ));
+                };
+                evaluate_predicate(arg, attr)
+            }
+            // Non-predicate attribute call (`[Export("x")]`) — ignore.
+            _ => Ok(true),
+        },
+        // Top-level `!` / `&&` / `||` is rejected by the parser; defensive.
+        _ => Err(bad_body(attr)),
+    }
+}
+
+/// Evaluate the single boolean argument of `Target(...)`: `OS(v)` / `Arch(v)`
+/// calls, `!`, and `&&`/`||` (with `and`/`or`).
+fn evaluate_predicate(e: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
+    match e {
+        Expression::FunctionCall { function, arguments, .. } => match function.as_ref() {
+            Expression::SymbolRef { id, .. } if is_os_or_arch_name(&id) => {
+                if id.to_ascii_lowercase() == "os" {
+                    os_matches(arguments, attr)
+                } else {
+                    arch_matches(arguments, attr)
+                }
+            }
+            Expression::SymbolRef { id, .. } if is_platform_predicate_name(&id) => Err(format!(
+                "`{id}` cannot be nested inside Target(...) in {attr}"
+            )),
+            Expression::SymbolRef { id, .. } => Err(format!(
+                "unknown predicate `{id}` (expected OS or Arch) in {attr}"
+            )),
             _ => Err(bad_body(attr)),
         },
         Expression::Unary { op, prefix, operand, .. } => {
             if *prefix && op == "!" {
-                // A negated non-predicate (`!Export`) is not a selection and
-                // stays neutral inside mixed bodies like [OS(Windows) && !Export].
-                if !contains_platform_predicate(operand) {
-                    return Ok(true);
-                }
-                Ok(!evaluate(operand, attr)?)
+                Ok(!evaluate_predicate(operand, attr)?)
             } else {
                 Err(bad_body(attr))
             }
@@ -50,15 +79,18 @@ fn evaluate(body: &Expression, attr: &ast::Attribute) -> Result<bool, String> {
             // Both operands are evaluated (no short-circuit) so a malformed
             // predicate in either half is reported on every host.
             "&&" | "and" => {
-                let (l, r) = (evaluate(lhs, attr)?, evaluate(rhs, attr)?);
+                let (l, r) = (evaluate_predicate(lhs, attr)?, evaluate_predicate(rhs, attr)?);
                 Ok(l && r)
             }
             "||" | "or" => {
-                let (l, r) = (evaluate(lhs, attr)?, evaluate(rhs, attr)?);
+                let (l, r) = (evaluate_predicate(lhs, attr)?, evaluate_predicate(rhs, attr)?);
                 Ok(l || r)
             }
             _ => Err(bad_body(attr)),
-        }
+        },
+        Expression::SymbolRef { id, .. } => Err(format!(
+            "bare symbol `{id}` is not a predicate; expected OS(...) or Arch(...) in {attr}"
+        )),
         _ => Err(bad_body(attr)),
     }
 }
@@ -69,13 +101,11 @@ fn bad_body(attr: &ast::Attribute) -> String {
 
 fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, String> {
     let [value] = arguments else {
-        return Err(format!(
-            "OS/Platform predicate takes exactly one value in {attr}"
-        ));
+        return Err(format!("OS predicate takes exactly one value in {attr}"));
     };
     let Expression::SymbolRef { id, .. } = value else {
         return Err(format!(
-            "OS/Platform predicate value must be a symbol (Windows, Mac, Linux) in {attr}"
+            "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux) in {attr}"
         ));
     };
     let host = match consts::OS {
@@ -106,13 +136,11 @@ fn matches_os_value(value: &str, host: &str, attr: &ast::Attribute) -> Result<bo
 
 fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, String> {
     let [value] = arguments else {
-        return Err(format!(
-            "Arch/Target predicate takes exactly one value in {attr}"
-        ));
+        return Err(format!("Arch predicate takes exactly one value in {attr}"));
     };
     let Expression::SymbolRef { id, .. } = value else {
         return Err(format!(
-            "Arch/Target predicate value must be a symbol (x64, aarch64) in {attr}"
+            "Arch predicate value must be a symbol (x64, aarch64) in {attr}"
         ));
     };
     let host = match consts::ARCH {
@@ -141,8 +169,8 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
 }
 
 /// Keep a node iff every attribute on it evaluates true (AND semantics).
-/// Attributes with no platform predicate at all (`[Export]`, `[!Inline]`) are
-/// not selection attributes and never drop anything.
+/// Attributes that are not `Target(...)` selections (`[Export]`, `[Align(8)]`)
+/// never drop anything.
 fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
     for attr in attributes {
         if !contains_platform_predicate(&attr.body) {

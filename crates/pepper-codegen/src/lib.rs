@@ -313,21 +313,42 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         Ok(())
     }
-
-    /// Compile a module and hand back the execution engine (static ctors run).
-    pub fn jit_engine(
+    /// Compile a module, register host addresses for the declared (not
+    /// defined) functions `map_global` names, then hand back the execution
+    /// engine with static ctors run. Mapping must use the module's own
+    /// function values — MCJIT resolves declares lazily and the engine's
+    /// lookup only sees materialized functions.
+    pub fn jit_engine_mapped(
         &mut self,
         module: &mut SemaModule,
+        map_global: impl Fn(&str) -> Option<usize>,
     ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
         self.generate(module)?;
         let ee = self
             .module
             .create_jit_execution_engine(OptimizationLevel::None)
             .map_err(|e| format!("JIT failed: {}", e.to_string()))?;
+        for f in self.module.get_functions() {
+            if f.count_basic_blocks() != 0 {
+                continue;
+            }
+            let name = f.get_name().to_string_lossy();
+            if let Some(addr) = map_global(name.as_ref()) {
+                ee.add_global_mapping(&f, addr);
+            }
+        }
         // Static ctors (llvm.global_ctors, e.g. __pep_global_init) do NOT run
         // at engine creation — MCJIT only runs them on explicit request.
         ee.run_static_constructors();
         Ok(ee)
+    }
+
+    /// Compile a module and hand back the execution engine (static ctors run).
+    pub fn jit_engine(
+        &mut self,
+        module: &mut SemaModule,
+    ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
+        self.jit_engine_mapped(module, |_| None)
     }
 
     /// Call a zero-argument `int` entry point in an already-created engine.

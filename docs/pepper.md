@@ -169,22 +169,23 @@ in the function signature are automatically lowered to C types, with object refe
 
 ## Platform selection
 
-The `[OS(...)]` and `[Arch(...)]` attributes select code for the compile target, which is always the host
-platform. They can be attached to top-level functions, externs, structs, traits, extensions, struct/trait/
+The `[Target(...)]` attribute selects code for the compile target, which is always the host
+platform. It takes exactly one argument: a boolean expression built from `OS(...)` and `Arch(...)`
+calls. It can be attached to top-level functions, externs, structs, traits, extensions, struct/trait/
 extension methods, and to blocks inside function bodies:
 
 ```
-[OS(Windows)]
+[Target(OS(Windows))]
 int window_width() { return 80; }
 
-[!OS(Windows)]
+[Target(!OS(Windows))]
 int window_width() { return 120; }
 
 main(): int {
-    [OS(Windows) || OS(Mac)] {
+    [Target(OS(Windows) || OS(Mac))] {
         // Windows- and Mac-only code.
     }
-    [Arch(aarch64)] {
+    [Target(Arch(aarch64))] {
         // ARM-specific code.
     }
     return window_width();
@@ -193,13 +194,14 @@ main(): int {
 
 - `OS` accepts `Windows`, `Mac`, and `Linux`; `Arch` accepts `x64` and `aarch64`. Values are matched
   case-insensitively.
-- `Platform(...)` is an alias of `OS(...)` and `Target(...)` is an alias of `Arch(...)`.
-- Predicate values combine with `&&`, `||` (or `and`/`or`) and negate with `!`, e.g.
-  `[OS(Linux) && Arch(x64)]` or `[!(OS(Windows) || OS(Mac))]`.
+- The argument combines with `&&`, `||` (or `and`/`or`) and negates with `!`, e.g.
+  `[Target(OS(Linux) && Arch(x64))]` or `[Target(!(OS(Windows) || OS(Mac)))]`.
 - Multiple attributes on one item are ANDed: the item is kept only if all of them match.
 - A block whose attribute does not match the host is removed entirely before compilation, so code that
   references platform-specific symbols (such as `extern` declarations) is fine as long as it is dropped on
   the current host.
+- `OS(...)` and `Arch(...)` are only valid inside `Target(...)`; a top-level use, or any boolean logic
+  directly in the brackets (`[Target(OS(Windows)) && Export]`), is a parse error.
 - Platform predicates on struct fields are a parse error; platform selection applies to whole declarations,
   not individual fields.
 

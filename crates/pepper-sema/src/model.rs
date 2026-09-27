@@ -228,7 +228,7 @@ pub enum Expression {
 pub struct Block {
     pub name: String,
     pub items: Vec<Statement>,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
@@ -295,7 +295,7 @@ pub struct FunctionDef {
     pub is_static: bool,
     pub is_indexer: bool,
     pub is_generic_func: bool,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
@@ -315,7 +315,7 @@ pub struct StructDef {
     pub acquire: FunctionDef,
     pub release: FunctionDef,
     pub traits: Vec<TypeName>,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
@@ -323,7 +323,7 @@ pub struct StructDef {
 pub struct TraitDef {
     pub name: String,
     pub methods: Vec<FunctionDef>,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
@@ -335,7 +335,7 @@ pub struct ExtensionDef {
     pub resolved: Option<String>,
     pub traits: Vec<TypeName>,
     pub methods: Vec<FunctionDef>,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
@@ -344,7 +344,7 @@ pub struct ExternDef {
     pub name: String,
     pub ty: TypeName,
     pub parameters: Vec<VariableDef>,
-    /// Source attributes (`[OS(Windows)]` etc.) carried from the AST.
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }
 
