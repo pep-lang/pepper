@@ -77,7 +77,12 @@ pub fn host_machine() -> Result<TargetMachine, String> {
             "generic",
             "",
             OptimizationLevel::None,
-            RelocMode::Default,
+            // PIC so the objects link into PIE executables. `Default` emits
+            // non-relocatable code, which GNU ld rejects once clang links with
+            // -pie (the Linux default): "relocation R_X86_64_32 ... can not be
+            // used when making a PIE object". PIC is also what macOS requires
+            // and a no-op on Windows.
+            RelocMode::PIC,
             CodeModel::Default,
         )
         .ok_or_else(|| {

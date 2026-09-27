@@ -13,6 +13,7 @@ use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{AsValueRef, BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 use inkwell::types::AnyType as _;
+use inkwell::values::AnyValue as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
@@ -71,6 +72,11 @@ impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
         let module = context.create_module(module_name);
         let builder = context.create_builder();
+        // The host's data layout drives alignment inference for atomic
+        // instructions; without it 8-byte atomics get `align 4` and lower to
+        // compiler-rt helpers MCJIT cannot resolve.
+        let machine = crate::target::host_machine().expect("host target machine");
+        module.set_data_layout(&machine.get_target_data().get_data_layout());
         CodeGenerator {
             context,
             module,
@@ -1349,6 +1355,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             // sema): report it so consumers (var defs, refcount helpers)
             // see the arm's type, not nothing.
             Expression::Ternary { true_expr, .. } => self.value_sema_type(true_expr),
+            // Atomic intrinsics: the load yields T, the store is void, the
+            // cmpxchg reports success as bool.
+            Expression::AtomicLoad(ty, _) => Some(ty.to_string()),
+            Expression::AtomicStore(..) => Some("void".to_string()),
+            Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
+            Expression::AtomicFetch(_, ty, _, _) => Some(ty.to_string()),
             _ => None,
         }
     }
@@ -1424,6 +1436,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Ternary { true_expr, false_expr, .. } => {
                 self.is_owned_rvalue(true_expr) && self.is_owned_rvalue(false_expr)
             }
+            // An atomic load yields a freshly acquired reference (struct T):
+            // an owned rvalue, released by the consuming context.
+            Expression::AtomicLoad(ty, _) => self.is_struct_ref_name(&Some(ty.to_string())),
+            // An atomic fetch returns the old slot occupant (struct T): the
+            // return site acquires it, so the result is an owned rvalue.
+            Expression::AtomicFetch(_, ty, _, _) => self.is_struct_ref_name(&Some(ty.to_string())),
             _ => false,
         }
     }
@@ -2047,6 +2065,203 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     None => Err(format!("__address: unknown type {}", ty)),
                 }
+            }
+            Expression::AtomicLoad(ty, arg) => {
+                // __atomic_load<T>(p): acquire-ordered load of the slot's
+                // T-sized value. Struct T stores a reference pointer; the
+                // loaded pointer is an owned ref (shared_ptr copy), so
+                // acquire it once. POD/float/pointer T: no ref work.
+                let ty_name = ty.to_string();
+                // Struct T occupies the slot as a reference pointer; track
+                // that before remapping `stored` to the pointer type.
+                let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
+                let stored = match self.types.get(&ty_name) {
+                    Some(BasicTypeEnum::StructType(_)) => {
+                        BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
+                    }
+                    Some(t) => t,
+                    None => return Err(format!("__atomic_load: unknown type {}", ty_name)),
+                };
+                let ptr = match self.codegen_expr(arg)? {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("__atomic_load expects a pointer, got {:?}", other)),
+                };
+                let loaded = self.builder.build_load(stored, ptr, "atomic_load").map_err(|e| e.to_string())?;
+                // inkwell 0.10 exposes no typed-atomic-load builder: set the
+                // ordering through the C API directly.
+                unsafe {
+                    inkwell::llvm_sys::core::LLVMSetOrdering(loaded.as_value_ref(), inkwell::AtomicOrdering::Acquire.into());
+                }
+                if is_struct {
+                    self.acquire_ref(&ty_name, loaded)?;
+                }
+                Ok(loaded)
+            }
+            Expression::AtomicStore(ty, arg_ptr, arg_val) => {
+                // __atomic_store<T>(p, v): release-ordered store ≡ shared_ptr
+                // `operator=`: acquire(v), release(old). Struct T must swap
+                // the slot atomically (a plain load of old would race a
+                // concurrent store and leak or double-free it), so it uses an
+                // atomic xchg on the pointer's i64 bits; POD/float/pointer T
+                // has no ref work, so a plain release store suffices.
+                let ty_name = ty.to_string();
+                // Struct T swaps the slot's reference pointer atomically;
+                // track that before remapping `stored` to the pointer type.
+                let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
+                let stored = match self.types.get(&ty_name) {
+                    Some(BasicTypeEnum::StructType(_)) => {
+                        BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
+                    }
+                    Some(t) => t,
+                    None => return Err(format!("__atomic_store: unknown type {}", ty_name)),
+                };
+                let ptr = match self.codegen_expr(arg_ptr)? {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("__atomic_store expects a pointer, got {:?}", other)),
+                };
+                // Owned-rvalue argument: its creation ref is released once the
+                // slot has taken over ownership (the store acquires it below).
+                let val_temp = self.owned_temp_type(arg_val);
+                let val = self.codegen_expr(arg_val)?;
+                if is_struct {
+                    self.acquire_ref(&ty_name, val)?;
+                    let i64 = self.context.i64_type();
+                    // Opaque pointers: no bitcast — go through integer bits.
+                    let new_bits = self.builder.build_ptr_to_int(val.into_pointer_value(), i64, "atomic_new").map_err(|e| e.to_string())?;
+                    let old_bits = self.builder.build_atomicrmw(inkwell::AtomicRMWBinOp::Xchg, ptr, new_bits, inkwell::AtomicOrdering::Release).map_err(|e| e.to_string())?;
+                    let old = self.builder.build_int_to_ptr(old_bits, self.context.ptr_type(inkwell::AddressSpace::default()), "atomic_old").map_err(|e| e.to_string())?;
+                    self.release_temp(&ty_name, old.into())?;
+                } else {
+                    let store = self.builder.build_store(ptr, val).map_err(|e| e.to_string())?;
+                    store.set_atomic_ordering(inkwell::AtomicOrdering::Release).map_err(|e| e.to_string())?;
+                }
+                if let Some(t) = val_temp {
+                    self.release_temp(&t, val)?;
+                }
+                // Void: the value is unused by every consuming context.
+                Ok(self.context.i32_type().const_zero().into())
+            }
+            Expression::AtomicCmpXchg(ty, arg_ptr, arg_expected, arg_desired) => {
+                // __atomic_cmpxchg<T>(p, expected, desired): acquire/release
+                // compare-and-exchange; returns success as i1. On success the
+                // slot now owns `desired` (acquire it) and drops `old`
+                // (release it); on failure nothing is released — both args
+                // remain owned by their callers.
+                let ty_name = ty.to_string();
+                // Struct T compares the slot's reference pointer; track that
+                // before remapping `stored` to the pointer type.
+                let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
+                let stored = match self.types.get(&ty_name) {
+                    Some(BasicTypeEnum::StructType(_)) => {
+                        BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
+                    }
+                    Some(t) => t,
+                    None => return Err(format!("__atomic_cmpxchg: unknown type {}", ty_name)),
+                };
+                let ptr = match self.codegen_expr(arg_ptr)? {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("__atomic_cmpxchg expects a pointer, got {:?}", other)),
+                };
+                let mut expected = self.codegen_expr(arg_expected)?;
+                let mut desired = self.codegen_expr(arg_desired)?;
+                // cmpxchg only accepts integers and pointers: bitcast floats.
+                match stored {
+                    BasicTypeEnum::FloatType(ft) => {
+                        let int_ty = match ft.get_bit_width() {
+                            32 => self.context.i32_type(),
+                            64 => self.context.i64_type(),
+                            w => return Err(format!("__atomic_cmpxchg: unsupported float width {}", w)),
+                        };
+                        expected = self.builder.build_bit_cast(expected, int_ty, "cas_e").map_err(|e| e.to_string())?;
+                        desired = self.builder.build_bit_cast(desired, int_ty, "cas_d").map_err(|e| e.to_string())?;
+                    }
+                    _ => {}
+                }
+                let res = self
+                    .builder
+                    .build_cmpxchg(ptr, expected, desired, inkwell::AtomicOrdering::AcquireRelease, inkwell::AtomicOrdering::Monotonic)
+                    .map_err(|e| e.to_string())?;
+                // `get_field_at_index` is broken for instruction results in
+                // inkwell 0.10 — extract via instructions instead.
+                let success = self.builder.build_extract_value(res, 1, "cas_ok").map_err(|e| e.to_string())?.into_int_value();
+                if is_struct {
+                    // Success only: the slot now owns `desired` and drops
+                    // `old`; failure leaves every ref where it was.
+                    let old = self.builder.build_extract_value(res, 0, "cas_old").map_err(|e| e.to_string())?;
+                    let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                    let then_block = self.context.append_basic_block(fn_value, "cas_ok");
+                    let merge_block = self.context.append_basic_block(fn_value, "cas_merge");
+                    self.builder.build_conditional_branch(success, then_block, merge_block).map_err(|e| e.to_string())?;
+                    self.builder.position_at_end(then_block);
+                    self.acquire_ref(&ty_name, desired)?;
+                    self.release_temp(&ty_name, old)?;
+                    self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
+                    self.builder.position_at_end(merge_block);
+                }
+                Ok(success.into())
+            }
+            Expression::AtomicFetch(op, ty, arg_ptr, arg_val) => {
+                // __atomic_fetch_{add,sub,and,or,xor}<T>(p, v): acquire/release
+                // atomic read-modify-write on the T-sized value at pointer p;
+                // returns the previous slot occupant. Integer T only (the
+                // runtime restricts fetch_* to numeric types), so no ref work:
+                // the old value is a plain integer, not an owned reference.
+                let ty_name = ty.to_string();
+                let stored = match self.types.get(&ty_name) {
+                    Some(BasicTypeEnum::IntType(it)) => it,
+                    _ => {
+                        // Non-integer T: the fetch operations are undefined
+                        // (as in C++'s std::atomic<T>::fetch_add for a
+                        // non-arithmetic T). Emit an abort — unreachable at
+                        // runtime; the constant return keeps the IR valid.
+                        let dummy = match self.types.get(&ty_name) {
+                            Some(BasicTypeEnum::StructType(_)) => {
+                                BasicValueEnum::PointerValue(
+                                    self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
+                                )
+                            }
+                            Some(BasicTypeEnum::FloatType(ft)) => {
+                                BasicValueEnum::FloatValue(ft.const_zero())
+                            }
+                            _ => BasicValueEnum::IntValue(self.context.i64_type().const_zero()),
+                        };
+                        self.call_function("abort", vec![])?;
+                        return Ok(dummy);
+                    }
+                };
+                let ptr = match self.codegen_expr(arg_ptr)? {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("__atomic_fetch expects a pointer, got {:?}", other)),
+                };
+                // Owned-rvalue argument: released once the RMW has consumed it.
+                let val_temp = self.owned_temp_type(arg_val);
+                let val = match self.codegen_expr(arg_val)? {
+                    BasicValueEnum::IntValue(v) => v,
+                    other => return Err(format!("__atomic_fetch expects an integer, got {:?}", other)),
+                };
+                // Match the slot's width (i32 int vs i64 long operands).
+                let val = if val.get_type() != stored {
+                    self.builder
+                        .build_int_cast(val, stored, "fetchv")
+                        .map_err(|e| e.to_string())?
+                } else {
+                    val
+                };
+                let rmw_op = match op {
+                    pepper_sema::model::AtomicFetchOp::Add => inkwell::AtomicRMWBinOp::Add,
+                    pepper_sema::model::AtomicFetchOp::Sub => inkwell::AtomicRMWBinOp::Sub,
+                    pepper_sema::model::AtomicFetchOp::And => inkwell::AtomicRMWBinOp::And,
+                    pepper_sema::model::AtomicFetchOp::Or => inkwell::AtomicRMWBinOp::Or,
+                    pepper_sema::model::AtomicFetchOp::Xor => inkwell::AtomicRMWBinOp::Xor,
+                };
+                let old = self
+                    .builder
+                    .build_atomicrmw(rmw_op, ptr, val, inkwell::AtomicOrdering::AcquireRelease)
+                    .map_err(|e| e.to_string())?;
+                if let Some(t) = val_temp {
+                    self.release_temp(&t, BasicValueEnum::IntValue(val))?;
+                }
+                Ok(old.into())
             }
             Expression::FunctionCall {
                 function: name,
@@ -3009,6 +3224,20 @@ impl<'ctx> CodeGenerator<'ctx> {
         let false_end = self.builder.get_insert_block().expect("insert block");
 
         self.builder.position_at_end(merge_block);
+        // Mixed-width arms (e.g. `cond ? sizeof<T>() : 8` — i64 vs an i32
+        // literal) must promote to a common type before the phi, mirroring
+        // binary-op promotion; equal LLVM types need no work.
+        let (true_val, false_val) = if true_val.get_type() == false_val.get_type() {
+            (true_val, false_val)
+        } else {
+            let true_name = self.value_sema_type(true_expr).unwrap_or_else(|| value_type_name(&true_val));
+            let false_name = self.value_sema_type(false_expr).unwrap_or_else(|| value_type_name(&false_val));
+            let common = llvm_ops::result_type(&true_name, &false_name);
+            (
+                llvm_ops::coerce(self.context, &self.builder, true_val, &value_type_name(&true_val), &common),
+                llvm_ops::coerce(self.context, &self.builder, false_val, &value_type_name(&false_val), &common),
+            )
+        };
         let phi = self
             .builder
             .build_phi(true_val.get_type(), "ternary")

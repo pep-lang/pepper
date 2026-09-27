@@ -153,13 +153,18 @@ void print_container<C>(C container) {
 ## Accessing C Functions
 
 Calling C functions from Pepper just requires that the function is declared using `extern`, and that a library
-containing the function is linked (using the `-l` flag to `pepper` when building or by adding a library to the
-`[link]` section in `pepper.toml`):
+containing the function is linked (using the `-l` flag to `pepper` when building, by adding a library to the
+`[link]` section in `pepper.toml`, or by attaching `[Link("name")]` to the extern itself):
 
 ```
 extern char getchar();
 extern void printf(char* fmt, ...);
+
+[Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int objid);
 ```
+
+A `[Link("name")]` attribute on an extern that survives platform filtering adds `-l{name}` to the link step;
+duplicates are linked once.
 
 ## Exporting functions
 
@@ -227,3 +232,19 @@ By default, executables will link the following libraries when built by `pepper`
 
 * `ld` will be invoked with `-platform_version [macos|ios] "12.1.0", "12.3"`
   and `-syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk`
+
+## Atomics
+
+`Atomic<T>` (in the runtime prelude) is a `std::atomic<T>`-equivalent wrapper. The slot holds the value in place for POD `T`, and the reference itself for struct `T`; every operation lowers to a native LLVM atomic instruction:
+
+```
+var c = Atomic<int>(0);
+c.store(1);              # release store
+c.load();                # acquire load
+c.fetch_add(5);          # returns the previous value (integer T)
+c.compare_exchange(1, 2);# true iff the slot was 1 and is now 2
+c.exchange(3);           # CAS loop; returns the previous value
+c.is_lock_free();        # true for POD T of <= 8 bytes and struct T
+```
+
+`fetch_sub`, `fetch_and`, `fetch_or`, and `fetch_xor` are provided alongside `fetch_add`. For struct `T`, `store`/`compare_exchange` swap the slot's reference atomically, so the usual shared-reference rules apply to the old and new values.

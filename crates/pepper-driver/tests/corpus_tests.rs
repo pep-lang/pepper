@@ -97,10 +97,11 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)
         .unwrap();
 
-    // Link through the driver's own linker, same as compile_tests -- a second
-    // hand-rolled `ld` invocation here would only drift from it (and could not
-    // work on Windows at all).
-    pepper_driver::linker::link(&[obj_path], &out_path, &[], &[])?;
+    // Link through the driver's own linker so this test exercises the real
+    // link path instead of a hand-rolled duplicate of it. `[Link("name")]`
+    // attributes on surviving externs add their libraries, same as the CLI.
+    let libraries = pepper_driver::link_libraries(&merged);
+    pepper_driver::linker::link(&[obj_path], &out_path, &libraries, &[])?;
 
     std::process::Command::new(&out_path)
         .status()

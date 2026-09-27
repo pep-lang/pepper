@@ -185,6 +185,17 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             match name {
                 "__address" => return TypeName::new("u64"),
                 "__refcount" => return TypeName::new("u32"),
+                // `__atomic_load<T>` yields T; the store is void and the
+                // cmpxchg reports success as bool.
+                "__atomic_load" => {
+                    let parsed = crate::passes::gather_generics::parse_type_string(function);
+                    if let Some(inner) = parsed.sub_types.into_iter().next() {
+                        return inner;
+                    }
+                    return TypeName::auto();
+                }
+                "__atomic_store" => return TypeName::new("void"),
+                "__atomic_cmpxchg" => return TypeName::new("bool"),
                 _ => {}
             }
             // Plain free-function call: its declared return type.
@@ -204,6 +215,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // `var x = __address<T>(v)` is not mis-inferred as i32.
         Expression::Address(..) => TypeName::new("u64"),
         Expression::RefCount(..) => TypeName::new("u32"),
+        Expression::AtomicLoad(ty, _) => ty.clone(),
+        Expression::AtomicStore(..) => TypeName::new("void"),
+        Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
+        Expression::AtomicFetch(_, ty, _, _) => ty.clone(),
         // `x as T` resolves to the cast target.
         Expression::Cast { ty, .. } => ty.clone(),
         // Both ternary arms have the same type (enforced by sema): report it

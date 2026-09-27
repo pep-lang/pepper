@@ -47,6 +47,9 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         substitute(&mut m.ty, &type_map);
         for param in &mut m.parameters {
             substitute(&mut param.ty, &type_map);
+            if let Some(default) = &mut param.default {
+                substitute_expression(default, &type_map);
+            }
         }
         if let Some(body) = &mut m.body {
             substitute_block(body, &type_map);
@@ -59,6 +62,9 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     substitute(&mut ctor.ty, &type_map);
     for param in &mut ctor.parameters {
         substitute(&mut param.ty, &type_map);
+        if let Some(default) = &mut param.default {
+            substitute_expression(default, &type_map);
+        }
     }
     if let Some(body) = &mut ctor.body {
         substitute_block(body, &type_map);
@@ -139,6 +145,10 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             | Expression::Cast { ty, .. } => substitute(ty, type_map),
             Expression::RefCount(ty, _) => substitute(ty, type_map),
             Expression::Address(ty, _) => substitute(ty, type_map),
+            Expression::AtomicLoad(ty, _)
+            | Expression::AtomicStore(ty, _, _)
+            | Expression::AtomicCmpXchg(ty, _, _, _) => substitute(ty, type_map),
+            Expression::AtomicFetch(_, ty, _, _) => substitute(ty, type_map),
             _ => {}
         }
         // Constructor calls inside method bodies (`array<T>(n)` →

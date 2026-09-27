@@ -29,6 +29,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
 
     let mut sema_module = compiler::compile(&options, &module_name)?;
+    let link_libraries = link_libraries(&sema_module);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, &module_name);
     generator.generate(&mut sema_module)?;
@@ -71,10 +72,34 @@ pub fn run(options: Options) -> Result<i32, String> {
             }
         }
     }
+    libraries.extend(link_libraries);
 
     linker::link(&[obj_path], &out_path, &libraries, &library_dirs)?;
 
     Ok(0)
+}
+
+/// Libraries named by `[Link("name")]` on surviving externs, deduplicated in
+/// declaration order. Shared by the CLI pipeline and the corpus harness so a
+/// fixture's link flags can't drift from the driver's.
+pub fn link_libraries(module: &pepper_sema::model::Module) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for ext in &module.externs {
+        for attr in &ext.attributes {
+            if let pepper_parser::ast::Expression::FunctionCall { function, arguments, .. } = &attr.body {
+                if let pepper_parser::ast::Expression::SymbolRef { id, .. } = function.as_ref() {
+                    if id == "Link" {
+                        if let Some(pepper_parser::ast::Expression::Literal { value: pepper_parser::ast::Literal::String(s), .. }) = arguments.first() {
+                            if !out.contains(s) {
+                                out.push(s.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Parse the primary source and dump its AST.

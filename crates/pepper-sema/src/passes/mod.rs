@@ -144,6 +144,20 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         }
         Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
         Expression::RefCount(_, arg) | Expression::Address(_, arg) => walk_expression(arg, f),
+        Expression::AtomicLoad(_, arg) => walk_expression(arg, f),
+        Expression::AtomicStore(_, ptr, val) => {
+            walk_expression(ptr, f);
+            walk_expression(val, f);
+        }
+        Expression::AtomicCmpXchg(_, ptr, expected, desired) => {
+            walk_expression(ptr, f);
+            walk_expression(expected, f);
+            walk_expression(desired, f);
+        }
+        Expression::AtomicFetch(_, _, ptr, val) => {
+            walk_expression(ptr, f);
+            walk_expression(val, f);
+        }
         Expression::FunctionCall { args, .. } => {
             for arg in args {
                 walk_expression(arg, f);

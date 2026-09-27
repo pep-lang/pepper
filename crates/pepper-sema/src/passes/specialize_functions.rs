@@ -42,6 +42,9 @@ pub fn specialize_functions(module: &mut Module) {
         specialized.is_generic_func = false;
         for param in &mut specialized.parameters {
             crate::type_name::replace_map(&mut param.ty, &type_map);
+            if let Some(default) = &mut param.default {
+                replace_expr_types(default, &type_map);
+            }
         }
         if let Some(body) = &mut specialized.body {
             replace_body_types(body, &type_map);
@@ -103,6 +106,12 @@ fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
             | Expression::Cast { ty, .. } => crate::type_name::replace_map(ty, type_map),
             Expression::RefCount(ty, _) => crate::type_name::replace_map(ty, type_map),
             Expression::Address(ty, _) => crate::type_name::replace_map(ty, type_map),
+            Expression::AtomicLoad(ty, _)
+            | Expression::AtomicStore(ty, _, _)
+            | Expression::AtomicCmpXchg(ty, _, _, _) => {
+                crate::type_name::replace_map(ty, type_map)
+            }
+            Expression::AtomicFetch(_, ty, _, _) => crate::type_name::replace_map(ty, type_map),
             _ => {}
         }
         // Generic calls inside bodies (`__address<T>(v)` → `__address<int>(v)`).

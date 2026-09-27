@@ -49,6 +49,54 @@ fn convert_expression(expr: &mut Expression) {
                 };
                 let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
                 *e = Expression::Address(ty, Box::new(arg));
+            } else if base == "__atomic_load" && args.len() == 1 {
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                *e = Expression::AtomicLoad(ty, Box::new(arg));
+            } else if base == "__atomic_store" && args.len() == 2 {
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let ptr = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
+                *e = Expression::AtomicStore(ty, Box::new(ptr), Box::new(val));
+            } else if base == "__atomic_cmpxchg" && args.len() == 3 {
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let ptr = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                let expected = std::mem::replace(&mut args[1], Expression::PointerLiteral);
+                let desired = std::mem::replace(&mut args[2], Expression::PointerLiteral);
+                *e = Expression::AtomicCmpXchg(ty, Box::new(ptr), Box::new(expected), Box::new(desired));
+            } else if base.starts_with("__atomic_fetch_") && args.len() == 2 {
+                let op = match base.strip_prefix("__atomic_fetch_").unwrap() {
+                    "add" => crate::model::AtomicFetchOp::Add,
+                    "sub" => crate::model::AtomicFetchOp::Sub,
+                    "and" => crate::model::AtomicFetchOp::And,
+                    "or" => crate::model::AtomicFetchOp::Or,
+                    "xor" => crate::model::AtomicFetchOp::Xor,
+                    _ => return,
+                };
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let ptr = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                let val = std::mem::replace(&mut args[1], Expression::PointerLiteral);
+                *e = Expression::AtomicFetch(op, ty, Box::new(ptr), Box::new(val));
             }
         }
     });

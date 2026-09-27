@@ -147,6 +147,16 @@ pub enum Kind {
 
 // ── Expressions ──────────────────────────────────────────────────────────────
 
+/// The read-modify-write operation of an `AtomicFetch` intrinsic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtomicFetchOp {
+    Add,
+    Sub,
+    And,
+    Or,
+    Xor,
+}
+
 #[derive(Debug, Clone)]
 pub enum Expression {
     /// Reference to a symbol by identifier, with an (optional, resolved) type.
@@ -209,6 +219,19 @@ pub enum Expression {
     /// `__address<T>(v)`: the pointer address of object `v` (identity
     /// hashing for structs); POD T folds the value's bytes instead.
     Address(TypeName, Box<Expression>),
+    /// `__atomic_load<T>(p)`: acquire-ordered atomic load of the T-sized
+    /// value at pointer `p` (the `Atomic<T>` storage slot).
+    AtomicLoad(TypeName, Box<Expression>),
+    /// `__atomic_store<T>(p, v)`: release-ordered atomic store of `v` into
+    /// the T-sized value at pointer `p`.
+    AtomicStore(TypeName, Box<Expression>, Box<Expression>),
+    /// `__atomic_cmpxchg<T>(p, expected, desired)`: acquire/release compare
+    /// and exchange; true iff `*p == expected` (in which case `*p = desired`).
+    AtomicCmpXchg(TypeName, Box<Expression>, Box<Expression>, Box<Expression>),
+    /// `__atomic_fetch_{add,sub,and,or,xor}<T>(p, v)`: acquire/release
+    /// atomic read-modify-write on the T-sized integer value at pointer `p`;
+    /// returns the previous value (the old occupant of the slot).
+    AtomicFetch(AtomicFetchOp, TypeName, Box<Expression>, Box<Expression>),
     /// Free function call by name (possibly specialized `name<args>`)
     FunctionCall {
         function: String,
