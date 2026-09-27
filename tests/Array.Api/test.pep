@@ -5,8 +5,8 @@ struct Widget {
 };
 
 main(): int {
-    var a = array<int>();
-    assert(a.empty(), "fresh array is empty");
+    var a = Array<int>();
+    assert(a.empty(), "fresh Array is empty");
     a.append(1);
     a.append(2);
     a.append(3);
@@ -25,7 +25,7 @@ main(): int {
     b.append(7);
     assert(b.count() == 3 && a.count() == 2, "clone is independent of the source");
     assert(a[1] == 2 && b[1] == 2, "clone copies element values");
-    var c = array<int>();
+    var c = Array<int>();
     c.append(9);
     c.append(2);
     assert(c == a, "element-wise equality holds");
@@ -35,7 +35,7 @@ main(): int {
     # Struct elements are references: stores into a slot acquire the new value
     # and release the old occupant, so refcounts track external refs plus live
     # slots.
-    var s = array<Widget>();
+    var s = Array<Widget>();
     var w = Widget(5);
     s.append(w);
     assert(__refcount<Widget>(w) == 2, "append acquires the element");
@@ -45,6 +45,6 @@ main(): int {
     var gone = s.remove_at(1);
     assert(gone.tag == 5 && __refcount<Widget>(w) == 1, "remove_at transfers the reference");
     s.clear();
-    assert(__refcount<Widget>(w) == 1, "clear releases the array's reference");
+    assert(__refcount<Widget>(w) == 1, "clear releases the Array's reference");
     return 0;
 }

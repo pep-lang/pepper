@@ -173,7 +173,7 @@ fn identifier(input: &mut &str) -> Result<String> {
 fn type_name(input: &mut &str) -> Result<TypeName> {
     let mut ty = type_name_base(input)?;
 
-    // array suffix: one or more `[]`  (e.g. int[], int[][], ptr<char>[]) 
+    // Array suffix: one or more `[]`  (e.g. int[], int[][], ptr<char>[]) 
     loop {
         ws(input)?;
         if input.starts_with('[') {
@@ -206,8 +206,8 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     Ok(ty)
 }
 
-/// Type name without a trailing array suffix, so indexer methods
-/// (`T [](params)`) are not mistaken for `T[]` array types.
+/// Type name without a trailing Array suffix, so indexer methods
+/// (`T [](params)`) are not mistaken for `T[]` Array types.
 fn type_name_base(input: &mut &str) -> Result<TypeName> {
     let start = pos(input);
     let name = identifier(input)?;
@@ -320,7 +320,7 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
         let n = numeric_constant(input)?;
         return Ok(Expression::Literal { value: n, span: Span { start, end: pos(input) } });
     }
-    // string
+    // String
     if input.starts_with('"') || input.starts_with('@') {
         let s = string_constant(input)?;
         return Ok(Expression::Literal { value: s, span: Span { start, end: pos(input) } });
@@ -352,7 +352,7 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
         }
         return Ok(Expression::SizeOf(ty)); // span carried by ty
     }
-    // symbol reference, or a generic type literal such as `array<int>` in `array<int>()`
+    // symbol reference, or a generic type literal such as `Array<int>` in `Array<int>()`
     let before = *input;
     let name = identifier(input)?;
     ws(input)?;
@@ -1422,7 +1422,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, attributes: &
 /// A method inside a struct or `extend` block:
 ///   - `static` modifier
 ///   - indexer method: `T [](params) { body }`
-///   - operator overload: `bool ==(x) { ... }` / `string +=(x) { ... }`
+///   - operator overload: `bool ==(x) { ... }` / `String +=(x) { ... }`
 ///   - `name(params) [: type] { body }` or `ReturnType name(params) { body }`
 fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionDecl> {
     let start = pos(input);
@@ -2052,7 +2052,7 @@ mod tests {
         let e = parse_expr("\"hello world\"");
         match e {
             Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "hello world"),
-            other => panic!("expected string, got {:?}", other),
+            other => panic!("expected String, got {:?}", other),
         }
     }
 
@@ -2332,9 +2332,9 @@ mod tests {
 
     #[test]
     fn test_type_name_generic() {
-        let mut input = "array<int>";
+        let mut input = "Array<int>";
         let ty = type_name(&mut input).unwrap();
-        assert_eq!(ty.name, "array");
+        assert_eq!(ty.name, "Array");
         assert_eq!(ty.generic_types.len(), 1);
         assert_eq!(ty.generic_types[0].name, "int");
     }
@@ -2669,14 +2669,14 @@ mod tests {
 
     #[test]
     fn test_generic_constructor_call() {
-        // `array<int>()` is a type-literal call with generic argument
-        let e = parse_expr("array<int>()");
+        // `Array<int>()` is a type-literal call with generic argument
+        let e = parse_expr("Array<int>()");
         match e {
             Expression::FunctionCall { function, arguments, .. } => {
                 assert!(arguments.is_empty());
                 match *function {
                     Expression::TypeLiteral(t) => {
-                        assert_eq!(t.name, "array");
+                        assert_eq!(t.name, "Array");
                         assert_eq!(t.generic_types.len(), 1);
                         assert_eq!(t.generic_types[0].name, "int");
                     }
@@ -2751,7 +2751,7 @@ mod tests {
     #[test]
     fn test_function_attributes_return_type_prefix() {
         // Syntax 2: `TypeName name(params) { body }` — attributes still attach to the function.
-        let m = parse("[Export(\"x\")] string hello() {\n    return \"\";\n}");
+        let m = parse("[Export(\"x\")] String hello() {\n    return \"\";\n}");
         match &m.declarations[0] {
             Declaration::Function(f) => {
                 assert_eq!(f.name, "hello");
@@ -2761,7 +2761,7 @@ mod tests {
                 assert_eq!(args.len(), 1);
                 match &args[0] {
                     Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "x"),
-                    other => panic!("expected string arg, got {:?}", other),
+                    other => panic!("expected String arg, got {:?}", other),
                 }
             }
             other => panic!("{:?}", other),

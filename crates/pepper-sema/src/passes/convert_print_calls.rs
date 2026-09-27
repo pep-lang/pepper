@@ -14,7 +14,7 @@ fn convert(expr: &mut Expression, table: &StructTable, current: Option<&TypeName
                 // A raw literal needs no ctor call at all: it becomes the
                 // global string pointer directly, so nothing is allocated.
                 if let Expression::FunctionCall { function, args: ctor_args } = arg {
-                    if function == "string" && ctor_args.len() >= 1 {
+                    if function == "String" && ctor_args.len() >= 1 {
                         if let Expression::StringLiteral { .. } = &ctor_args[0] {
                             let literal = std::mem::replace(&mut ctor_args[0], Expression::IntLiteral(0));
                             *arg = literal;
@@ -22,7 +22,7 @@ fn convert(expr: &mut Expression, table: &StructTable, current: Option<&TypeName
                         }
                     }
                 }
-                if static_type::of(arg, table, current).is_some_and(|ty| StructTable::base_name(&ty) == "string") {
+                if static_type::of(arg, table, current).is_some_and(|ty| StructTable::base_name(&ty) == "String") {
                     let lhs = std::mem::replace(arg, Expression::IntLiteral(0));
                     *arg = Expression::MemberRef { lhs: Box::new(lhs), name: "Data".to_string() };
                 }

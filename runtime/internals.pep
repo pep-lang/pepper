@@ -9,7 +9,7 @@ extern char* getenv(char* name);
 extern int puts(char* s);
 extern void abort();
 
-# The message is a raw `char*`, not a `string`: codegen passes string
+# The message is a raw `char*`, not a `String`: codegen passes string
 # literals as their global pointers (no temporary allocation), so hot paths
 # like array index bounds checks stay allocation-free. Non-literal messages
 # are lowered to `msg.c_str()` at the call site.
@@ -21,7 +21,7 @@ assert(condition: bool, msg: char*): void {
 
 # ── Live-allocation counter (leak tests) and trace gate ─────────────────────
 var _pep_live_allocs_count = 0;
-# `getenv` needs a NUL-terminated C string; a Pepper `string` buffer is not
+# `getenv` needs a NUL-terminated C string; a Pepper `String` buffer is not
 # guaranteed to be, so build the name in a helper (its c_str() is safe).
 _pep_trace_enabled(): bool {
     var name = "PEP_TRACE";

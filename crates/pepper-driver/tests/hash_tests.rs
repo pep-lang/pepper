@@ -1,4 +1,4 @@
-//! hash_map / hash_set API coverage: each snippet is compiled together with
+//! HashMap / HashSet API coverage: each snippet is compiled together with
 //! the runtime prelude and JIT-executed through the entry function `test`.
 
 use pepper_codegen::CodeGenerator;
@@ -41,7 +41,7 @@ test(): int {
     var a = hash<int>(5);
     var b = hash<int>(5);
     if (a != b) { return -1; }
-    if (hash<string>("hello") != hash<string>("hello")) { return -2; }
+    if (hash<String>("hello") != hash<String>("hello")) { return -2; }
     return 0;
 }"#
         ),
@@ -51,18 +51,18 @@ test(): int {
 
 #[test]
 fn hash_string_override() {
-    // The concrete `hash<string>` override must be used for string call
+    // The concrete `hash<String>` override must be used for String call
     // sites (not the generic base): equal strings at different addresses
-    // hash identically, and a different string hashes differently.
+    // hash identically, and a different String hashes differently.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
     var a = "hello";
     var b = "hello";
-    if (hash<string>(a) != hash<string>(b)) { return -1; }
+    if (hash<String>(a) != hash<String>(b)) { return -1; }
     var c = "world";
-    if (hash<string>(a) == hash<string>(c)) { return -2; }
+    if (hash<String>(a) == hash<String>(c)) { return -2; }
     return 0;
 }"#
         ),
@@ -76,7 +76,7 @@ fn empty_map() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     if (!m.empty()) { return -1; }
     if (m.count() != 0) { return -2; }
     if (m.contains(1)) { return -3; }
@@ -94,7 +94,7 @@ fn insert_get_contains() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     if (!m.insert(1, 10)) { return -1; }
     if (m.insert(2, 20) != true) { return -2; }
     if (m.count() != 2) { return -3; }
@@ -115,7 +115,7 @@ fn duplicate_key_overwrites() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     if (!m.insert(5, 1)) { return -1; }
     if (m.insert(5, 2) != false) { return -2; }
     if (m.count() != 1) { return -3; }
@@ -138,7 +138,7 @@ fn same_bucket_collision() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     if ((hash<int>(1) & 7) != (hash<int>(9) & 7)) { return -1; }
     if (!m.insert(1, 100)) { return -2; }
     if (!m.insert(9, 200)) { return -3; }
@@ -159,7 +159,7 @@ fn growth_preserves_entries() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     var i = 0;
     while (i < 25) {
         if (!m.insert(i, i * 10)) { return -1; }
@@ -185,7 +185,7 @@ fn remove_and_reinsert() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     if (!m.insert(3, 30)) { return -1; }
     if (!m.insert(11, 110)) { return -2; }
     if (m.remove(99) != false) { return -3; }
@@ -209,7 +209,7 @@ fn clear_empties_map() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, int>();
+    var m = HashMap<int, int>();
     m.insert(1, 1);
     m.insert(2, 2);
     m.clear();
@@ -237,7 +237,7 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 build(): int {
-    var m = hash_map<Point, int>();
+    var m = HashMap<Point, int>();
     var p = Point();
     p.x = 1;
     p.y = 2;
@@ -273,7 +273,7 @@ fn string_keys_by_content() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<string, int>();
+    var m = HashMap<String, int>();
     if (!m.insert("hello", 1)) { return -1; }
     var s = "hello";
     if (!m.contains(s)) { return -2; }
@@ -297,7 +297,7 @@ fn empty_set() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var s = hash_set<int>();
+    var s = HashSet<int>();
     if (!s.empty()) { return -1; }
     if (s.count() != 0) { return -2; }
     if (s.contains(1)) { return -3; }
@@ -315,7 +315,7 @@ fn set_insert_contains_remove() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var s = hash_set<int>();
+    var s = HashSet<int>();
     if (!s.insert(1)) { return -1; }
     if (s.insert(1) != false) { return -2; }
     if (s.count() != 1) { return -3; }
@@ -340,7 +340,7 @@ fn set_growth_and_clear() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var s = hash_set<int>();
+    var s = HashSet<int>();
     var i = 0;
     while (i < 20) {
         if (!s.insert(i)) { return -1; }
@@ -377,7 +377,7 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 build(): int {
-    var s = hash_set<Point>();
+    var s = HashSet<Point>();
     var p = Point();
     p.x = 3;
     p.y = 4;
@@ -416,7 +416,7 @@ fn map_string_values_refcounted() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var m = hash_map<int, string>();
+    var m = HashMap<int, String>();
     if (!m.insert(1, "alpha")) { return -1; }
     if (m[1] != "alpha") { return -2; }
     m[1] = "beta";
@@ -435,7 +435,7 @@ test(): int {
 fn map_release_frees_contents() {
     // The map and its contents are allocated inside `build`; when build's
     // scope exits, the automatic releases must free every allocation made
-    // for the map (Point keys, string values, arrays).
+    // for the map (Point keys, String values, arrays).
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -445,7 +445,7 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 build(): int {
-    var m = hash_map<Point, string>();
+    var m = HashMap<Point, String>();
     var p1 = Point();
     p1.x = 1;
     p1.y = 2;
@@ -495,8 +495,8 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 build(): int {
-    var m = hash_map<Point, int>(8);
-    var kept = array<Point>();
+    var m = HashMap<Point, int>(8);
+    var kept = Array<Point>();
     var i = 0;
     while (i < 4) {
         var p = Point();
@@ -529,7 +529,7 @@ test(): int {
 
 #[test]
 fn many_struct_set_members_same_bucket() {
-    // Same regression as `many_struct_keys_same_bucket`, for hash_set: four
+    // Same regression as `many_struct_keys_same_bucket`, for HashSet: four
     // distinct Point members must all be stored and found at capacity 8.
     // Identity-hashed, so lookups re-use the stored objects themselves.
     assert_eq!(
@@ -541,8 +541,8 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 build(): int {
-    var s = hash_set<Point>(8);
-    var kept = array<Point>();
+    var s = HashSet<Point>(8);
+    var kept = Array<Point>();
     var i = 0;
     while (i < 4) {
         var p = Point();

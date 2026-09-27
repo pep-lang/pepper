@@ -84,11 +84,11 @@ check("valid file has zero diagnostics", diags?.params.diagnostics.length === 0,
 
 // Hover over `s` in `s.append("ING");` (line 4 → LSP line 3, col 4).
 const hover = await request("textDocument/hover", { textDocument: { uri }, position: { line: 3, character: 4 } });
-check("hover on local var shows type", typeof hover?.contents?.value === "string" && hover.contents.value.includes("`s`") && hover.contents.value.includes("string"), hover);
+check("hover on local var shows type", typeof hover?.contents?.value === "string" && hover.contents.value.includes("`s`") && hover.contents.value.includes("String"), hover);
 
 // Hover over the string literal `"ING"` (line 4 → LSP line 3, col 14).
 const hoverLit = await request("textDocument/hover", { textDocument: { uri }, position: { line: 3, character: 14 } });
-check("hover on string literal shows `string`", typeof hoverLit?.contents?.value === "string" && hoverLit.contents.value.includes("`string`"), hoverLit);
+check("hover on string literal shows `String`", typeof hoverLit?.contents?.value === "string" && hoverLit.contents.value.includes("`String`"), hoverLit);
 
 // Document symbols.
 const syms = await request("textDocument/documentSymbol", { textDocument: { uri } });

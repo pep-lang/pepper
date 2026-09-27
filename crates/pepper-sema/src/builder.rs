@@ -7,14 +7,14 @@ use pepper_parser::ast;
 
 fn type_name_from(t: &ast::TypeName) -> TypeName {
     let args: Vec<TypeName> = t.generic_types.iter().map(type_name_from).collect();
-    // `int[]` → `array<int>`; applied innermost-first, so `int[][]` nests.
+    // `int[]` → `Array<int>`; applied innermost-first, so `int[][]` nests.
     if let Some(base) = t.name.strip_suffix("[]") {
         let element = type_name_from(&ast::TypeName {
             name: base.to_string(),
             generic_types: t.generic_types.clone(),
             span: ast::Span::none(),
         });
-        return TypeName::with_args("array", vec![element]);
+        return TypeName::with_args("Array", vec![element]);
     }
     if args.is_empty() {
         TypeName::new(&t.name)

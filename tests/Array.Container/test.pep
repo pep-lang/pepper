@@ -1,7 +1,7 @@
 
 
 main(): int {
-    var nums = array<int>();
+    var nums = Array<int>();
     nums.append(42);
     nums.append(12);
     nums[1] = 42;

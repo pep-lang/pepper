@@ -1,6 +1,6 @@
 import "internals";
 
-# Elements of a struct-typed array are references: the constructor initializes
+# Elements of a struct-typed Array are references: the constructor initializes
 # each to null (zero-init), every store into a slot releases the old occupant
 # and acquires the new value (codegen, at the store site), and every place an
 # element leaves the live range nulls its slot so the reference is released.
@@ -9,7 +9,7 @@ import "internals";
 # pointer slots via _pep_swap_refs because it moves two references without
 # changing their count.
 
-struct array<T> {
+struct Array<T> {
     __ptr<T> Data;
     ulong Size;
     ulong Capacity;
@@ -60,12 +60,12 @@ struct array<T> {
     }
 
     T [](ulong idx) {
-        assert(idx < Size, "array index read out of bounds");
+        assert(idx < Size, "Array index read out of bounds");
         return Data[idx];
     }
 
     T [](ulong idx, T value) {
-        assert(idx < Size, "array index write out of bounds");
+        assert(idx < Size, "Array index write out of bounds");
         Data[idx] = value;
         return Data[idx];
     }
@@ -77,12 +77,12 @@ struct array<T> {
     }
 
     void insert(ulong idx, T item) {
-        assert(idx <= Size, "array insert index out of bounds");
+        assert(idx <= Size, "Array insert index out of bounds");
         grow();
         # Backward shift as a raw pointer move: each slot's reference is
         # transferred to its new position without changing its count, exactly
         # as moving `shared_ptr`s between slots would. A per-slot release/
-        # acquire store would destroy elements the array solely owns (their
+        # acquire store would destroy elements the Array solely owns (their
         # only reference) and churn counts of externally shared ones.
         ulong cursor = Size;
         while (cursor > idx) {
@@ -93,7 +93,7 @@ struct array<T> {
         Size = Size + 1;
     }
     T remove_at(ulong idx) {
-        assert(idx < Size, "array remove index out of bounds");
+        assert(idx < Size, "Array remove index out of bounds");
         T removed = Data[idx];
         # The copy above acquired a reference for `removed`; release the
         # slot's own reference now — the forward shift below overwrites this
@@ -102,7 +102,7 @@ struct array<T> {
         # Forward shift as a raw pointer move: each slot's reference is
         # transferred to its new position without changing its count; the
         # vacated tail is nulled so its reference is released. A per-slot
-        # release/acquire store would destroy elements the array solely owns.
+        # release/acquire store would destroy elements the Array solely owns.
         ulong cursor = idx;
         while (cursor + 1 < Size) {
             _pep_move_ref(Data, sizeof<T>(), cursor + 1, cursor);
@@ -114,7 +114,7 @@ struct array<T> {
     }
 
     T pop() {
-        assert(Size > 0, "array pop on empty array");
+        assert(Size > 0, "Array pop on empty Array");
         T r = Data[Size - 1];
         Data[Size - 1] = __default<T>();
         Size = Size - 1;
@@ -122,12 +122,12 @@ struct array<T> {
     }
 
     T first() {
-        assert(Size > 0, "array first on empty array");
+        assert(Size > 0, "Array first on empty Array");
         return Data[0];
     }
 
     T last() {
-        assert(Size > 0, "array last on empty array");
+        assert(Size > 0, "Array last on empty Array");
         return Data[Size - 1];
     }
 
@@ -152,8 +152,8 @@ struct array<T> {
     }
 
     void swap(ulong a, ulong b) {
-        assert(a < Size, "array swap index out of bounds");
-        assert(b < Size, "array swap index out of bounds");
+        assert(a < Size, "Array swap index out of bounds");
+        assert(b < Size, "Array swap index out of bounds");
         _pep_swap_refs(Data, sizeof<T>(), a, b);
     }
 
@@ -184,7 +184,7 @@ struct array<T> {
         return find(item) >= 0;
     }
 
-    void append_all(array<T> rhs) {
+    void append_all(Array<T> rhs) {
         # Snapshot the bound: with `a += a` (rhs aliases this), appending
         # grows Size and an unbounded loop would never terminate.
         ulong n = rhs.Size;
@@ -196,13 +196,13 @@ struct array<T> {
         }
     }
 
-    array<T> clone() {
-        array<T> result = array<T>(Size);
+    Array<T> clone() {
+        Array<T> result = Array<T>(Size);
         result.append_all(this);
         return result;
     }
 
-    bool ==(array<T> rhs) {
+    bool ==(Array<T> rhs) {
         if (Size != rhs.Size) {
             return false;
         }
@@ -216,17 +216,17 @@ struct array<T> {
         return true;
     }
 
-    bool !=(array<T> rhs) {
+    bool !=(Array<T> rhs) {
         return !(this == rhs);
     }
 
-    array<T> +=(array<T> rhs) {
+    Array<T> +=(Array<T> rhs) {
         append_all(rhs);
         return this;
     }
 
-    array<T> +(array<T> rhs) {
-        array<T> result = clone();
+    Array<T> +(Array<T> rhs) {
+        Array<T> result = clone();
         result.append_all(rhs);
         return result;
     }

@@ -10,27 +10,27 @@ hash<T>(T value): u64 {
     return __address<T>(value);
 }
 
-# Concrete override: `hash<string>` is a distinct function from the generic
-# base and wins for string call sites (gather_generics rewrites it to its
+# Concrete override: `hash<String>` is a distinct function from the generic
+# base and wins for String call sites (gather_generics rewrites it to its
 # specialization form). Content hashing keeps equal strings in one bucket.
-hash<string>(string value): u64 {
+hash<String>(String value): u64 {
     return _pep_hash_bytes(value.Data, value.Size);
 }
 
-# ── hash_map<K, V> ───────────────────────────────────────────────────────────
+# ── HashMap<K, V> ───────────────────────────────────────────────────────────
 # Open addressing with triangular probing over a power-of-two table:
 # probe(i) = (h & mask) + i*(i+1)/2 visits every slot of the table, which
 # the 50% grow threshold keeps reachable. Slot occupancy is tracked in a parallel
-# state array (0 = empty, 1 = tombstone, 2 = occupied) so K can be any type;
+# state Array (0 = empty, 1 = tombstone, 2 = occupied) so K can be any type;
 # keys and values live in arrays, whose store protocol handles struct
 # reference counting for us. The map never uses the arrays' Size (it writes
-# Data[idx] directly), but it keeps Size == capacity so an array's destructor
+# Data[idx] directly), but it keeps Size == capacity so an Array's destructor
 # visits every slot when the map dies.
 
-struct hash_map<K, V> {
-    array<K> keys;
-    array<V> values;
-    array<int> state;
+struct HashMap<K, V> {
+    Array<K> keys;
+    Array<V> values;
+    Array<int> state;
     ulong capacity;   # power of two
     int size;
     int tombstones;
@@ -43,9 +43,9 @@ struct hash_map<K, V> {
         capacity = cap;
         size = 0;
         tombstones = 0;
-        keys = array<K>(cap);
-        values = array<V>(cap);
-        state = array<int>(cap);
+        keys = Array<K>(cap);
+        values = Array<V>(cap);
+        state = Array<int>(cap);
         keys.Size = cap;
         values.Size = cap;
         state.Size = cap;
@@ -76,15 +76,15 @@ struct hash_map<K, V> {
     }
 
     # Double the table and reinsert every occupied slot. Reinsertion goes
-    # through array store semantics (acquire), so the outgoing arrays can be
+    # through Array store semantics (acquire), so the outgoing arrays can be
     # dropped from the fields right after: the field store releases them,
     # their Size == capacity makes the destructor visit every slot, and the
     # buffer is freed.
     void grow() {
         ulong new_cap = capacity * 2;
-        array<K> new_keys = array<K>(new_cap);
-        array<V> new_values = array<V>(new_cap);
-        array<int> new_state = array<int>(new_cap);
+        Array<K> new_keys = Array<K>(new_cap);
+        Array<V> new_values = Array<V>(new_cap);
+        Array<int> new_state = Array<int>(new_cap);
         new_keys.Size = new_cap;
         new_values.Size = new_cap;
         new_state.Size = new_cap;
@@ -233,12 +233,12 @@ struct hash_map<K, V> {
     }
 }
 
-# ── hash_set<K> ──────────────────────────────────────────────────────────────
-# Same table machinery as hash_map without the value array.
+# ── HashSet<K> ──────────────────────────────────────────────────────────────
+# Same table machinery as HashMap without the value Array.
 
-struct hash_set<K> {
-    array<K> keys;
-    array<int> state;
+struct HashSet<K> {
+    Array<K> keys;
+    Array<int> state;
     ulong capacity;   # power of two
     int size;
     int tombstones;
@@ -251,8 +251,8 @@ struct hash_set<K> {
         capacity = cap;
         size = 0;
         tombstones = 0;
-        keys = array<K>(cap);
-        state = array<int>(cap);
+        keys = Array<K>(cap);
+        state = Array<int>(cap);
         keys.Size = cap;
         state.Size = cap;
     }
@@ -284,8 +284,8 @@ struct hash_set<K> {
     # and their Size == capacity makes the destructor visit every slot.
     void grow() {
         ulong new_cap = capacity * 2;
-        array<K> new_keys = array<K>(new_cap);
-        array<int> new_state = array<int>(new_cap);
+        Array<K> new_keys = Array<K>(new_cap);
+        Array<int> new_state = Array<int>(new_cap);
         new_keys.Size = new_cap;
         new_state.Size = new_cap;
         ulong mask = new_cap - 1;
@@ -412,9 +412,9 @@ struct hash_set<K> {
     }
 
     # No explicit slot loop here: each occupied slot holds exactly one ref
-    # (acquired on insert), and the keys array's destructor nulls every slot
+    # (acquired on insert), and the keys Array's destructor nulls every slot
     # (Size == capacity), releasing it exactly once. The field release that
-    # release_field_refs appends runs after this body, dropping the array's
+    # release_field_refs appends runs after this body, dropping the Array's
     # own ref last.
     destruct {
     }

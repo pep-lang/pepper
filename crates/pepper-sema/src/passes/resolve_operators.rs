@@ -1,5 +1,5 @@
 //! Port of `source/Sema/ResolveOperators.h`: index operations become
-//! `__index_get`/`__index_set` method calls or POD array indexing; binary
+//! `__index_get`/`__index_set` method calls or POD Array indexing; binary
 //! operator overloads become method calls. Conversion is gated on the lhs's
 //! static type naming a struct that declares the method, so plain field
 //! compares (`Size == 0`) and POD indexing stay untouched.
@@ -14,8 +14,8 @@ pub fn resolve_operators(module: &mut Module) {
     let table = StructTable::build(module);
 
     for st_idx in 0..module.structs.len() {
-        // Abstract generic bases (`array<T>`) have no concrete bodies to
-        // resolve; specializations (`array<int>`) are concrete and must be.
+        // Abstract generic bases (`Array<T>`) have no concrete bodies to
+        // resolve; specializations (`Array<int>`) are concrete and must be.
         // Rewriting operator dispatch inside a base body would bake the
         // method into an unsubstituted receiver, and specialization clones
         // that MethodCall verbatim (SymbolRef `ty` annotations are not
@@ -124,7 +124,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                     args: vec![rhs],
                 };
             } else if info.is_none() && static_type::of(lhs, table, current).is_some() {
-                // POD receiver with a known type: array indexing (element
+                // POD receiver with a known type: Array indexing (element
                 // type resolved at codegen). Unknown receivers are left
                 // alone — codegen handles `Index` like `ArrayIndex`.
                 let lhs = (**lhs).clone();
@@ -145,7 +145,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                 // `Data[idx] == key` on a raw buffer field: dispatch on the
                 // pointee (string content equality), which the receiver's
                 // own static type does not describe. Struct receivers
-                // (`array<string>`) already type as their element, so
+                // (`Array<String>`) already type as their element, so
                 // lhs_struct covers them.
                 let lhs_structured = index_pointee_declares(lhs, table, current, &op_name)
                     || lhs_struct(&**lhs, table, current).is_some_and(|info| info.methods.contains(&op_name));
@@ -271,8 +271,8 @@ fn lhs_struct<'a>(lhs: &Expression, table: &'a StructTable, current: Option<&Typ
 
 /// True when a binary op on an index (`recv[i] == x`) should dispatch on the
 /// index receiver's element: `static_type::of` types such a receiver as its
-/// declared buffer type (`string*`, `array<int>*`), so the pointee is what the
-/// operator applies to. Non-buffer receivers (a nested index typed `array<int>`)
+/// declared buffer type (`String*`, `Array<int>*`), so the pointee is what the
+/// operator applies to. Non-buffer receivers (a nested index typed `Array<int>`)
 /// carry no trailing `*` and are handled by lhs_struct instead.
 fn index_pointee_declares(lhs: &Expression, table: &StructTable, current: Option<&TypeName>, method: &str) -> bool {
     let (Expression::Index { lhs: receiver, .. } | Expression::ArrayIndex { lhs: receiver, .. }) = lhs
@@ -293,7 +293,7 @@ fn index_pointee_declares(lhs: &Expression, table: &StructTable, current: Option
 /// `T*`). Such indexes stay RAW — codegen GEPs through the pointer directly.
 /// Rewriting them to `__index_get` bakes the pointee's indexer into the
 /// receiver, and an operator on the result then mangles against the pointee's
-/// *pointee* (`array<int>*` element `==` → `int.==`, which does not exist).
+/// *pointee* (`Array<int>*` element `==` → `int.==`, which does not exist).
 fn is_raw_buffer_field(expr: &Expression, table: &StructTable, current: Option<&TypeName>) -> bool {
     static_type::of(expr, table, current)
         .is_some_and(|ty| ty.to_string().ends_with('*'))

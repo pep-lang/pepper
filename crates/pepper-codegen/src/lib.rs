@@ -99,8 +99,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
-        // declared later in the module (`hash_map<Point, int>` before
-        // `array<Point>`), and field lookup must not fall back to the base.
+        // declared later in the module (`HashMap<Point, int>` before
+        // `Array<Point>`), and field lookup must not fall back to the base.
         for idx in 0..module.structs.len() {
             let st = &module.structs[idx];
             if st.ty.is_generic() && st.name == st.ty.name {
@@ -112,7 +112,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.instantiate_struct(&module.structs[idx])?;
         }
         // ABI sizes are only correct once every body is set (a field may
-        // name a struct declared later, e.g. `Holder { array<int> items; }`),
+        // name a struct declared later, e.g. `Holder { Array<int> items; }`),
         // so measure after the whole registration pass.
         for desc in self.structs.values_mut() {
             let machine = crate::target::host_machine()?;
@@ -380,7 +380,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn instantiate_struct(&mut self, st: &StructDef) -> Result<(), String> {
         // Generic struct bases are abstract: skip `Name<...>` instances and
-        // generic bases (ty 'array<T>'); specializations were cloned with
+        // generic bases (ty 'Array<T>'); specializations were cloned with
         // concrete names by sema.
         if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
@@ -1344,8 +1344,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
             Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
-                // Indexed element: the receiver's pointee (`array<array<int>>`
-                // → `array<int>`), so method calls on a nested-array element
+                // Indexed element: the receiver's pointee (`Array<Array<int>>`
+                // → `Array<int>`), so method calls on a nested-Array element
                 // mangle against the element's struct.
                 self.index_receiver_pointee(lhs)
             }
@@ -1368,7 +1368,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// Best-effort struct name of an expression's value, for field/method
     /// access when the receiver is not a bare frame local (e.g. a parameter).
     /// The declared name resolves exactly first — only concrete
-    /// specializations are registered (`array<array<int>>`), never the base;
+    /// specializations are registered (`Array<Array<int>>`), never the base;
     /// unregistered names fall back to their base for abstract receivers.
     fn struct_name_of(&self, expr: &Expression) -> Option<String> {
         let ty = self.value_sema_type(expr)?.trim_end_matches('*').to_string();
@@ -1526,10 +1526,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// LLVM element type behind a pointer/array receiver (`char*` → i8,
+    /// LLVM element type behind a pointer/Array receiver (`char*` → i8,
     /// `int[]`/`int*` → i32); i32 when the receiver's type is unknown.
     /// The exact name resolves first — specializations register under their
-    /// full names (`array<int>`), and a nested index on a struct-reference
+    /// full names (`Array<int>`), and a nested index on a struct-reference
     /// slot (`outer.Data[0][0]`) must stride by pointer, not by the base
     /// struct's first field. Unregistered names fall back to their base —
     /// only base struct types are registered for abstract receivers.
@@ -1583,8 +1583,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         elem
     }
-    /// Sema type string of an indexed receiver's pointee (`array<array<int>>`
-    /// → `array<int>`); the element type for method mangling on a nested-array
+    /// Sema type string of an indexed receiver's pointee (`Array<Array<int>>`
+    /// → `Array<int>`); the element type for method mangling on a nested-Array
     /// index. Specialized names resolve through their base for struct lookup;
     /// `None` when the receiver's type is unknown.
     fn index_receiver_pointee(&self, receiver: &Expression) -> Option<String> {
@@ -1630,7 +1630,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map(|(i, (_, t))| {
                         // The Data field is a raw pointer buffer (`T*` after
                         // the `__ptr<T>` rewrite): its element is the pointee
-                        // (`int`, `array<int>`, …), which drives the GEP
+                        // (`int`, `Array<int>`, …), which drives the GEP
                         // stride and load/store value type. Non-pointer
                         // fields use their own type name.
                         let elem_name = t.strip_suffix('*').map(str::to_string).unwrap_or_else(|| t.clone());
@@ -1655,7 +1655,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(Some((buffer, data_name)))
     }
     /// LLVM type of a buffer field's element name for the GEP stride.
-    /// Element names are pointees (`int`, `array<int>`), so they resolve to
+    /// Element names are pointees (`int`, `Array<int>`), so they resolve to
     /// their own LLVM type; unresolvable names fall back to i32, matching
     /// the historical behavior of the index arms.
     fn buffer_element_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
@@ -1672,7 +1672,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         elem
     }
-    /// Store a struct-reference value into an array element slot, applying the
+    /// Store a struct-reference value into an Array element slot, applying the
     /// unified shared_ptr `operator=` rule (`store_refcount_ops`). Arrays are
     /// just a collection of individual references, so every store into one
     /// transfers ownership at the store site. Both methods null-guard
@@ -1895,7 +1895,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 false_expr,
             } => self.codegen_ternary(condition, true_expr, false_expr),
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
-                // POD array indexing.
+                // POD Array indexing.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i]`) is a temporary: its
                 // creation ref is released once the element load is done.
@@ -1959,7 +1959,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::Default(ty) => {
                 // __default<T>: the type's zero value — 0 for numerics, a null
-                // pointer for pointers and struct types (including `string`).
+                // pointer for pointers and struct types (including `String`).
                 let name = ty.to_string();
                 if let Some(ty) = self.types.get(&name) {
                     let any = match ty {
@@ -2270,7 +2270,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MethodCall { this, method, args } => {
                 // Receiver is a buffer slot (`Data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they
-                // address the pointee's own data (`s[0]` on `string s`), so
+                // address the pointee's own data (`s[0]` on `String s`), so
                 // they dispatch to the pointee when it declares them.
                 if matches!(this.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                     let lhs = match this.as_ref() {
@@ -2328,14 +2328,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 // Mangle: `<StructOf(this)>.<method>`. The struct name comes
                 // from the receiver's static type; non-struct receivers fall
-                // back to the method name as-is (array index methods resolve
+                // back to the method name as-is (Array index methods resolve
                 let struct_name = self.struct_name_of(this.as_ref()).unwrap_or_default();
                 if method.starts_with("__index_") {
-                    // POD array index set/get: direct GEP + load/store — but
+                    // POD Array index set/get: direct GEP + load/store — but
                     // only when the receiver's struct declares the indexer
                     // and the receiver is not itself a pointer. A pointer
                     // receiver (raw buffer field like `Data` on
-                    // `array<array<int>>`) must GEP the slot; dispatching
+                    // `Array<Array<int>>`) must GEP the slot; dispatching
                     // would call the pointee's indexer on the element's own
                     // data.
                     let receiver_is_ptr = self
@@ -2430,7 +2430,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             other => Err(format!("__address: cannot fold {:?}", other)),
         }
     }
-    /// POD array index get/set: `arr[i]` → load via GEP, `arr[i] = v` →
+    /// POD Array index get/set: `arr[i]` → load via GEP, `arr[i] = v` →
     /// store via GEP.
     fn codegen_index_method(
         &mut self,
@@ -2493,20 +2493,20 @@ impl<'ctx> CodeGenerator<'ctx> {
         if name == "print" {
             return self.codegen_print(args);
         }
-        // assert(condition, msg): the message is a raw `char*`. A string
+        // assert(condition, msg): the message is a raw `char*`. A String
         // literal (already rewritten by convert_string_literals into a
-        // `string(raw, size, len)` ctor call) lowers to its global pointer —
+        // `String(raw, size, len)` ctor call) lowers to its global pointer —
         // no temporary allocation on hot paths like index bounds checks.
         // Any other expression is lowered to `msg.c_str()`.
         if name == "assert" && args.len() == 2 {
             let cond = self.codegen_expr(&args[0])?;
-            // An owned-rvalue message (e.g. a `string` rvalue) is a temporary:
+            // An owned-rvalue message (e.g. a `String` rvalue) is a temporary:
             // it must live until `assert` returns, then its creation ref is
             // released. A raw literal lowers to a global pointer — not an
             // owned value — so it carries no temp.
             let (msg_value, already_ptr, msg_temp) = match &args[1] {
                 Expression::FunctionCall { function, args: inner }
-                    if function == "string"
+                    if function == "String"
                         && matches!(
                             inner.first(),
                             Some(Expression::StringLiteral { is_raw: true, .. })
@@ -2518,7 +2518,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     let v = self.codegen_expr(other)?;
                     // The message must be a `char*`: an argument already typed
                     // as a pointer (`char*`, `__ptr<T>`) is passed through,
-                    // everything else (notably `string`) lowers via `c_str`.
+                    // everything else (notably `String`) lowers via `c_str`.
                     let ptr = self
                         .value_sema_type(other)
                         .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<"));
@@ -2528,7 +2528,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let msg = if already_ptr {
                 msg_value
             } else {
-                self.call_function("string.c_str", vec![msg_value])?
+                self.call_function("String.c_str", vec![msg_value])?
             };
             let result = self.call_function("assert", vec![cond, msg])?;
             if let Some(ty) = msg_temp {
@@ -2577,7 +2577,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             return Ok(self.context.i32_type().const_zero().into());
         }
         // Constructor call `Name<...>(ctor_args)`: specializations are
-        // registered under their full name (`array<int>`); fall back to the
+        // registered under their full name (`Array<int>`); fall back to the
         // base name for non-generic ctors.
         let target = if self.functions.contains_key(name) {
             name.to_string()
@@ -2924,7 +2924,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(Address::with_llvm_ty(name, &ty_name, field_ty, gep))
             }
             Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
-                // POD array element store: `arr[i] = v` → GEP + store.
+                // POD Array element store: `arr[i] = v` → GEP + store.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i] = v`) is a temporary: its
                 // creation ref is released once the slot address is built.

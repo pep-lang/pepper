@@ -92,7 +92,7 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
 
-    // Global initializers: `var x = array<int>()` at file scope must register
+    // Global initializers: `var x = Array<int>()` at file scope must register
     // the specialization too.
     for var in &mut module.globals {
         let mut gather = |expr: &mut Expression| {
@@ -128,7 +128,7 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
 
-    // Local variable declarations (`array<int> a;` with no ctor call) are the
+    // Local variable declarations (`Array<int> a;` with no ctor call) are the
     // only place generic types can appear that fields/params/calls miss.
     for st in &module.structs {
         let params = st.generic_params.clone();
@@ -189,7 +189,7 @@ pub fn gather_generics(module: &mut Module) {
 }
 
 /// Concrete specializations written as definitions override generic bases:
-/// `hash<string>(string value)` is a distinct function from `hash<T>(T)`.
+/// `hash<String>(String value)` is a distinct function from `hash<T>(T)`.
 /// The parser cannot tell them apart (both parse as name + generic params),
 /// so this pass rewrites any free-function definition whose generic
 /// parameters are ALL concrete types into its specialization form, in place:
@@ -209,7 +209,7 @@ fn concrete_overrides(module: &mut Module) {
         let all_concrete = function
             .generic_params
             .iter()
-            .all(|p| p.sub_types.is_empty() && (crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "string"));
+            .all(|p| p.sub_types.is_empty() && (crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "String"));
         if !all_concrete {
             continue;
         }
@@ -228,7 +228,7 @@ fn concrete_overrides(module: &mut Module) {
 
 /// A type that references one of the enclosing generic parameters is unbound
 /// in this context; recording it as a spec would produce a specialization
-/// with no concrete argument (e.g. `array<V>` from hash_map's own field
+/// with no concrete argument (e.g. `Array<V>` from HashMap's own field
 /// list). Concrete uses are re-discovered from specialized bodies in the
 /// second gather round.
 fn contains_param(ty: &TypeName, params: &[TypeName]) -> bool {

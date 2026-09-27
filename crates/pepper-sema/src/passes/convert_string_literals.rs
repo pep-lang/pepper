@@ -13,7 +13,7 @@ fn convert(expr: &mut Expression) {
             return;
         }
         *expr = Expression::FunctionCall {
-            function: "string".to_string(),
+            function: "String".to_string(),
             args: vec![
                 Expression::StringLiteral {
                     value: value.clone(),

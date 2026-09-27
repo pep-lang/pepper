@@ -1,4 +1,4 @@
-//! Nested hash-container destruction coverage: `hash_map`/`hash_set` whose
+//! Nested hash-container destruction coverage: `HashMap`/`HashSet` whose
 //! keys or values are themselves heap containers must release every contained
 //! object exactly once when the owning structure dies. Each snippet is compiled
 //! with the runtime prelude and JIT-executed through `test`; the leak check
@@ -38,24 +38,24 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 
 #[test]
 fn hash_map_values_release_frees_all() {
-    // Values are `array<string>`: each value's string slots and the map's own
+    // Values are `Array<String>`: each value's String slots and the map's own
     // value slots must all release on destruction.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var m = hash_map<int, array<string>>();
-    var a1 = array<string>(1);
+    var m = HashMap<int, Array<String>>();
+    var a1 = Array<String>(1);
     var s1 = "one";
     a1.append(s1);
-    var a2 = array<string>(1);
+    var a2 = Array<String>(1);
     var s2 = "two";
     a2.append(s2);
     if (!m.insert(1, a1)) { return -1; }
     if (!m.insert(2, a2)) { return -2; }
     if (m.count() != 2) { return -3; }
     # Compare through the creator variables: a literal in the expression
-    # would allocate a temporary string that nothing releases.
+    # would allocate a temporary String that nothing releases.
     if (m[1][0] != s1) { return -4; }
     if (m[2][0] != s2) { return -5; }
     # The map's slots hold one ref each (acquired on insert); build's scope
@@ -66,7 +66,7 @@ test(): int {
     long before = _pep_live_allocs();
     var r = build();
     if (r != 0) { return r; }
-    # Each value's string slots and the map's own value slots must all
+    # Each value's String slots and the map's own value slots must all
     # release on destruction.
     if (_pep_live_allocs() != before) { return -6; }
     return 0;
@@ -86,10 +86,10 @@ fn hash_map_growth_release_frees_all() {
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var m = hash_map<int, array<string>>();
+    var m = HashMap<int, Array<String>>();
     var i = 0;
     while (i < 5) {
-        var a = array<string>(1);
+        var a = Array<String>(1);
         var s = "v";
         a.append(s);
         # The slot holds the creator-independent ref; `s` and `a`'s own
@@ -118,26 +118,26 @@ test(): int {
 
 #[test]
 fn nested_hash_map_release_frees_all() {
-    // `hash_map<string, hash_map<int,int>>`: the outer map's value slots hold
+    // `HashMap<String, HashMap<int,int>>`: the outer map's value slots hold
     // refs to inner maps whose own keys/values arrays must all release.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var m = hash_map<string, hash_map<int, int>>();
+    var m = HashMap<String, HashMap<int, int>>();
     var k1 = "a";
-    var inner1 = hash_map<int, int>();
+    var inner1 = HashMap<int, int>();
     inner1.insert(1, 10);
     inner1.insert(2, 20);
     var k2 = "b";
-    var inner2 = hash_map<int, int>();
+    var inner2 = HashMap<int, int>();
     inner2.insert(3, 30);
     if (!m.insert(k1, inner1)) { return -1; }
     if (!m.insert(k2, inner2)) { return -2; }
     if (m.count() != 2) { return -3; }
     if (m[k1][1] != 10) { return -4; }
     if (m[k2][3] != 30) { return -5; }
-    # build's scope exit drops the creators' refs: string keys and inner maps.
+    # build's scope exit drops the creators' refs: String keys and inner maps.
     return 0;
 }
 test(): int {
@@ -156,17 +156,17 @@ test(): int {
 
 #[test]
 fn hash_set_array_release_frees_all() {
-    // `hash_set<array<int>>`: arrays hash by identity, so distinct objects are
-    // distinct members; the set's key slots must release each array on death.
+    // `HashSet<Array<int>>`: arrays hash by identity, so distinct objects are
+    // distinct members; the set's key slots must release each Array on death.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var s = hash_set<array<int>>();
-    var a1 = array<int>(2);
+    var s = HashSet<Array<int>>();
+    var a1 = Array<int>(2);
     a1.append(1);
     a1.append(2);
-    var a2 = array<int>(2);
+    var a2 = Array<int>(2);
     a2.append(3);
     a2.append(4);
     if (!s.insert(a1)) { return -1; }
@@ -180,7 +180,7 @@ test(): int {
     long before = _pep_live_allocs();
     var r = build();
     if (r != 0) { return r; }
-    # The set's key slots must release each array on death.
+    # The set's key slots must release each Array on death.
     if (_pep_live_allocs() != before) { return -4; }
     return 0;
 }"#

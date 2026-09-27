@@ -167,7 +167,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::IntLiteral(_) => TypeName::new("i32"),
         Expression::FloatLiteral(_) => TypeName::new("f64"),
         Expression::BoolLiteral(_) => TypeName::bool_(),
-        Expression::StringLiteral { .. } => TypeName::new("string"),
+        Expression::StringLiteral { .. } => TypeName::new("String"),
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
         Expression::FunctionCall { function, .. } => {

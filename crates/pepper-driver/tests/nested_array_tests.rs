@@ -1,4 +1,4 @@
-//! Nested-array destruction coverage: `array<array<T>>` and other nested
+//! Nested-Array destruction coverage: `Array<Array<T>>` and other nested
 //! containers must release every contained object exactly once when the
 //! owning structure dies. Each snippet is compiled with the runtime prelude
 //! and JIT-executed through `test`; the leak check compares
@@ -38,21 +38,21 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 
 #[test]
 fn nested_array_release_frees_inner_arrays() {
-    // The outer array holds one ref per inner array (acquired on store).
+    // The outer Array holds one ref per inner Array (acquired on store).
     // Dropping the creators' refs and releasing the outer must free every
-    // inner array object, its buffer, and the outer's own buffer.
+    // inner Array object, its buffer, and the outer's own buffer.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<int>>(4);
-    var a = array<int>(2);
+    var outer = Array<Array<int>>(4);
+    var a = Array<int>(2);
     a.append(1);
     a.append(2);
-    var b = array<int>(2);
+    var b = Array<int>(2);
     b.append(3);
     b.append(4);
-    var c = array<int>(2);
+    var c = Array<int>(2);
     c.append(5);
     c.append(6);
     outer.append(a);
@@ -69,7 +69,7 @@ test(): int {
     long before = _pep_live_allocs();
     var r = build();
     if (r != 0) { return r; }
-    # Every inner array object, its buffer, and the outer's own buffer must
+    # Every inner Array object, its buffer, and the outer's own buffer must
     # be freed.
     if (_pep_live_allocs() != before) { return -4; }
     return 0;
@@ -82,20 +82,20 @@ test(): int {
 #[test]
 fn nested_array_insert_remove_swap_release_frees_all() {
     // Shift-based insert/remove and the raw-pointer swap must keep every
-    // inner array's refcount at exactly one per slot: after all operations,
+    // inner Array's refcount at exactly one per slot: after all operations,
     // releasing the outer frees everything.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<int>>(2);
-    var a = array<int>(1);
+    var outer = Array<Array<int>>(2);
+    var a = Array<int>(1);
     a.append(1);
-    var b = array<int>(1);
+    var b = Array<int>(1);
     b.append(2);
-    var c = array<int>(1);
+    var c = Array<int>(1);
     c.append(3);
-    var d = array<int>(1);
+    var d = Array<int>(1);
     d.append(4);
     outer.append(a);
     outer.append(b);
@@ -134,15 +134,15 @@ test(): int {
 #[test]
 fn nested_array_growth_release_frees_all() {
     // Appending past capacity reallocates the outer buffer; the old buffer
-    // must be freed and every inner array released exactly once.
+    // must be freed and every inner Array released exactly once.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<int>>(1);
+    var outer = Array<Array<int>>(1);
     var i = 0;
     while (i < 10) {
-        var inner = array<int>(1);
+        var inner = Array<int>(1);
         inner.append(i * 10);
         outer.append(inner);
         # The slot holds the creator-independent ref; `inner`'s own ref
@@ -157,7 +157,7 @@ test(): int {
     long before = _pep_live_allocs();
     var r = build();
     if (r != 0) { return r; }
-    # The old buffer must be freed and every inner array released.
+    # The old buffer must be freed and every inner Array released.
     if (_pep_live_allocs() != before) { return -3; }
     return 0;
 }"#
@@ -168,26 +168,26 @@ test(): int {
 
 #[test]
 fn nested_array_of_strings_release_frees_all() {
-    // Strings are struct elements too: each inner array's string slots and
-    // the outer's inner-array slots must all release on destruction.
+    // Strings are struct elements too: each inner Array's String slots and
+    // the outer's inner-Array slots must all release on destruction.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<string>>(2);
-    var a = array<string>(1);
+    var outer = Array<Array<String>>(2);
+    var a = Array<String>(1);
     var s1 = "one";
     a.append(s1);
     if (a.count() != 1) { return -1; }
     if (s1.size() != 3) { return -2; }
-    var b = array<string>(1);
+    var b = Array<String>(1);
     var s2 = "two";
     b.append(s2);
     outer.append(a);
     outer.append(b);
     if (outer.count() != 2) { return -3; }
     # Compare through the creator variables: a literal in the expression
-    # would allocate a temporary string that nothing releases.
+    # would allocate a temporary String that nothing releases.
     if (outer[0][0] != s1) { return -4; }
     if (outer[1][0] != s2) { return -5; }
     return 0;
@@ -196,7 +196,7 @@ test(): int {
     long before = _pep_live_allocs();
     var r = build();
     if (r != 0) { return r; }
-    # Each inner array's string slots and the outer's inner-array slots
+    # Each inner Array's String slots and the outer's inner-Array slots
     # must all release when build's scope exits.
     if (_pep_live_allocs() != before) { return -6; }
     return 0;
@@ -214,10 +214,10 @@ fn nested_array_clear_release_frees_all() {
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<int>>(2);
-    var a = array<int>(1);
+    var outer = Array<Array<int>>(2);
+    var a = Array<int>(1);
     a.append(1);
-    var b = array<int>(1);
+    var b = Array<int>(1);
     b.append(2);
     outer.append(a);
     outer.append(b);
@@ -245,25 +245,25 @@ test(): int {
 fn nested_array_clone_release_frees_all() {
     // clone() copies the reference slots (each copy acquires), so original
     // and clone share the inner arrays; both owners must be released for
-    // every inner array to free.
+    // every inner Array to free.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 build(): int {
-    var outer = array<array<int>>(2);
-    var a = array<int>(1);
+    var outer = Array<Array<int>>(2);
+    var a = Array<int>(1);
     a.append(7);
     outer.append(a);
     var copy = outer.clone();
     if (copy.count() != 1) { return -1; }
     if (copy[0][0] != 7) { return -2; }
-    # The clone shares the inner array: a mutation through the clone is
+    # The clone shares the inner Array: a mutation through the clone is
     # visible in the original.
     copy[0].append(8);
     if (outer[0].count() != 2) { return -3; }
     if (outer[0][1] != 8) { return -4; }
-    # The clone shares the inner array: build's scope exit releases both
-    # owners, freeing every inner array.
+    # The clone shares the inner Array: build's scope exit releases both
+    # owners, freeing every inner Array.
     return 0;
 }
 test(): int {

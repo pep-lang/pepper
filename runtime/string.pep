@@ -1,6 +1,6 @@
 import "internals";
 
-struct string {
+struct String {
     __ptr<char> Data;
     ulong Length;
     ulong Size;
@@ -9,7 +9,7 @@ struct string {
         if (data) {
             # Size is the authoritative byte length; inline NULs are legal in
             # UTF-8 data, so it is never derived from a terminator. A raw
-            # `char*` with no size is a C string by contract: measure it once
+            # `char*` with no size is a C String by contract: measure it once
             # to bound the char-count derivation below.
             if (Size == 0) {
                 var src = _pep_c_strlen(data);
@@ -41,7 +41,7 @@ struct string {
         }
     }
 
-    void append(string rhs) {
+    void append(String rhs) {
         ulong oldSize = Size;
         grow(Size + rhs.Size);
         memcpy(Data + oldSize, rhs.Data, rhs.Size);
@@ -49,7 +49,7 @@ struct string {
         Data[Size] = 0;
     }
 
-    string [](int idx) {
+    String [](int idx) {
         # Normalize a negative index to the end-relative offset *before* the
         # bounds check: `idx < Length` compares int against ulong, which
         # promotes to unsigned (a negative idx would wrap to ~2^64).
@@ -58,12 +58,12 @@ struct string {
                 idx += Length;
             }
         }
-        assert(idx < Length, "string[] idx must be < length");
+        assert(idx < Length, "String[] idx must be < length");
         ulong begin = _pep_utf8_char_offset(Data, Size, idx);
-        return string(Data + begin, 0, 1);
+        return String(Data + begin, 0, 1);
     }
 
-    bool ==(string rhs) {
+    bool ==(String rhs) {
         if (Length != rhs.Length) {
             return false;
         }
@@ -74,7 +74,7 @@ struct string {
         return eq;
     }
 
-    string +=(string rhs) {
+    String +=(String rhs) {
         append(rhs);
         return this;
     }
@@ -91,19 +91,19 @@ struct string {
         return Data;
     }
 
-    string clone() {
-        return string(Data, Size, Length);
+    String clone() {
+        return String(Data, Size, Length);
     }
 
-    long find(string needle) {
+    long find(String needle) {
         return _pep_utf8_find(Data, Size, needle.Data, needle.Size);
     }
 
-    bool contains(string needle) {
+    bool contains(String needle) {
         return find(needle) >= 0;
     }
 
-    bool starts_with(string prefix) {
+    bool starts_with(String prefix) {
         if (prefix.Size > Size) {
             return false;
         }
@@ -113,7 +113,7 @@ struct string {
         return _pep_utf8_compare(Data, Size, prefix.Data, prefix.Size, prefix.Size);
     }
 
-    bool ends_with(string suffix) {
+    bool ends_with(String suffix) {
         if (suffix.Size > Size) {
             return false;
         }
@@ -123,26 +123,26 @@ struct string {
         return _pep_utf8_compare(Data + (Size - suffix.Size), Size, suffix.Data, suffix.Size, suffix.Size);
     }
 
-    string substr(ulong start, ulong count) {
+    String substr(ulong start, ulong count) {
         if (start >= Length) {
-            return string();
+            return String();
         }
         ulong begin = _pep_utf8_char_offset(Data, Size, start);
-        # Clamp the requested character count to what remains in the string.
+        # Clamp the requested character count to what remains in the String.
         ulong avail = length_of(Data + begin, Size - begin);
         if (count > avail) {
             count = avail;
         }
         ulong len = _pep_utf8_char_offset(Data + begin, Size - begin, count);
-        return string(Data + begin, len, count);
+        return String(Data + begin, len, count);
     }
 
-    bool !=(string rhs) {
+    bool !=(String rhs) {
         return !(this == rhs);
     }
 
-    string +(string rhs) {
-        string result = clone();
+    String +(String rhs) {
+        String result = clone();
         result.append(rhs);
         return result;
     }

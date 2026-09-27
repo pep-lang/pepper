@@ -74,7 +74,7 @@ pub enum Literal {
 pub struct TypeName {
     pub name: String,
     pub generic_types: Vec<TypeName>,
-    /// Span of the whole type as written (`int[]`, `array<int>`, ...).
+    /// Span of the whole type as written (`int[]`, `Array<int>`, ...).
     pub span: Span,
 }
 
@@ -116,7 +116,7 @@ pub struct Attribute {
 pub enum Expression {
     Literal { value: Literal, span: Span },
     SymbolRef { id: String, span: Span },
-    /// A generic type reference in expression position, e.g. the `array<int>` in `array<int>()`.
+    /// A generic type reference in expression position, e.g. the `Array<int>` in `Array<int>()`.
     TypeLiteral(TypeName),
     SizeOf(TypeName),
     /// `op operand`  (prefix)  or  `operand op`  (postfix)

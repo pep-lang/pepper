@@ -42,7 +42,7 @@ impl StructTable {
                     .collect(),
             };
             structs.insert(name.clone(), info.clone());
-            // Also key the generic base (`array<T>` -> `array`) so pre-
+            // Also key the generic base (`Array<T>` -> `Array`) so pre-
             // specialization lookups resolve; never clobber a concrete entry.
             if name != st.ty.name {
                 structs.entry(st.ty.name.clone()).or_insert(info);
@@ -62,13 +62,13 @@ impl StructTable {
         self.structs.get(name)
     }
 
-    /// Base struct name of a type string (`string<...>` -> `string`).
+    /// Base struct name of a type string (`String<...>` -> `String`).
     pub(crate) fn base_name(ty: &TypeName) -> String {
         ty.to_string().split('<').next().unwrap_or("").to_string()
     }
 
-    /// Struct info for a type: the exact specialization first (`array<int>`),
-    /// then the generic base (`array`) for pre-specialization lookups.
+    /// Struct info for a type: the exact specialization first (`Array<int>`),
+    /// then the generic base (`Array`) for pre-specialization lookups.
     pub(crate) fn lookup(&self, ty: &TypeName) -> Option<&StructInfo> {
         self.structs
             .get(&ty.to_string())
@@ -88,21 +88,21 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             }
         }
         Expression::ThisRef => current.cloned(),
-        Expression::StringLiteral { .. } => Some(TypeName::new("string")),
+        Expression::StringLiteral { .. } => Some(TypeName::new("String")),
         Expression::PointerLiteral => Some(TypeName::void_ptr()),
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),
         Expression::IntLiteral(_) => Some(TypeName::new("i32")),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
         Expression::MemberRef { lhs, name } => {
             // Specialized clones keep unsubstituted annotations on bare
-            // symbols (`keys` typed `K*` in `hash_map<string, int>`), and a
+            // symbols (`keys` typed `K*` in `HashMap<String, int>`), and a
             // table lookup of the enclosing type may fall back to the
             // generic base entry (also unsubstituted). So both the
             // annotation and the enclosing struct's field table are tried as
             // lhs types; for pointer types the stripped pointee is tried
             // first, so `keys.Data` in a specialized body hits the exact
-            // `array<string>` entry before the base-name fallback reaches
-            // the unsubstituted generic `array`. The first candidate that
+            // `Array<String>` entry before the base-name fallback reaches
+            // the unsubstituted generic `Array`. The first candidate that
             // names the field wins.
             let mut candidates = Vec::new();
             if let Some(ty) = of(lhs, table, current) {
@@ -117,7 +117,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
                 }
             }
             for lhs_type in candidates {
-                // A starred type (`array<string>*`) must try its exact
+                // A starred type (`Array<String>*`) must try its exact
                 // specialized pointee first: `lookup` on the pointer falls
                 // straight through to the unsubstituted generic base, which
                 // would shadow the concrete entry.
@@ -145,10 +145,10 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             // Pointer receiver (`T*`): the element is the pointee, and the
             // indexing stays RAW (codegen GEPs through the pointer). Even
             // when the pointee is a struct with its own indexer — dispatching
-            // on it would route `Data[i] = v` inside an array of arrays to
+            // on it would route `Data[i] = v` inside an Array of arrays to
             // the element's `__index_set` instead of writing the slot. A
-            // generic pointee such as `array<int>*` is the exception: its
-            // specialized entry (`array<int>`) carries a concrete
+            // generic pointee such as `Array<int>*` is the exception: its
+            // specialized entry (`Array<int>`) carries a concrete
             // `__index_get` return, so use it — the base-template lookup
             // would otherwise yield the unsubstituted template param.
             if let Some(pointee) = lhs_type.to_string().strip_suffix('*') {

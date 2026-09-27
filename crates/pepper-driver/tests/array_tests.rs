@@ -33,7 +33,7 @@ fn append_and_count() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -52,7 +52,7 @@ fn growth_reallocates() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     var i = 0;
     while (i < 10) {
         a.append(i);
@@ -78,7 +78,7 @@ fn ctor_capacity() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>(8);
+    var a = Array<int>(8);
     if (a.capacity() < 8) { return -1; }
     if (a.count() != 0) { return -2; }
     if (!a.empty()) { return -3; }
@@ -95,7 +95,7 @@ fn reserve_never_shrinks() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.reserve(8);
     a.reserve(2);
     if (a.capacity() < 8) { return -1; }
@@ -112,7 +112,7 @@ fn index_get_and_set() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>(4);
+    var a = Array<int>(4);
     a.append(1);
     a.append(2);
     a.append(3);
@@ -132,7 +132,7 @@ fn insert_front_middle_end() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(5);
     a.insert(0, 1);
     a.insert(1, 3);
@@ -152,7 +152,7 @@ fn remove_at_shifts() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -172,7 +172,7 @@ fn pop_returns_last() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     var r = a.pop();
@@ -191,7 +191,7 @@ fn first_and_last() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -210,7 +210,7 @@ fn clear_then_reuse() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.clear();
     if (!a.empty()) { return -1; }
@@ -229,7 +229,7 @@ fn truncate_drops_tail() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -250,7 +250,7 @@ fn swap_and_reverse() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -271,7 +271,7 @@ fn find_and_contains() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -292,7 +292,7 @@ fn clone_is_independent() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     var b = a.clone();
     b.append(2);
@@ -311,9 +311,9 @@ fn append_all_and_plus_assign() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
-    var b = array<int>();
+    var b = Array<int>();
     b.append(2);
     b.append(3);
     a += b;
@@ -332,9 +332,9 @@ fn plus_operator_concatenates() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
-    var b = array<int>();
+    var b = Array<int>();
     b.append(2);
     var c = a + b;
     if (c.count() != 2) { return -1; }
@@ -353,17 +353,17 @@ fn equality_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
-    var b = array<int>();
+    var b = Array<int>();
     b.append(1);
     b.append(2);
     if (!(a == b)) { return -1; }
     b.append(3);
     if (a == b) { return -2; }
     b[0] = 9;
-    var c = array<int>();
+    var c = Array<int>();
     c.append(1);
     c.append(2);
     if (b == c) { return -3; }
@@ -380,9 +380,9 @@ fn inequality_operator() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
-    var b = array<int>();
+    var b = Array<int>();
     b.append(1);
     if (a != b) { return -1; }
     b.append(2);
@@ -405,7 +405,7 @@ struct Point {
     new(this.x = 0, this.y = 0) {}
 }
 test(): int {
-    var pts = array<Point>();
+    var pts = Array<Point>();
     var p = Point();
     p.x = 3;
     p.y = 4;
@@ -424,12 +424,12 @@ fn array_of_strings() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var s = array<string>();
+    var s = Array<String>();
     s.append("hello");
     s.append("world");
     if (s.find("world") != 1) { return -1; }
     if (!s.contains("hello")) { return -2; }
-    var t = array<string>();
+    var t = Array<String>();
     t.append("hello");
     t.append("world");
     if (!(s == t)) { return -3; }
@@ -446,8 +446,8 @@ fn nested_array() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var outer = array<array<int>>();
-    var inner = array<int>();
+    var outer = Array<Array<int>>();
+    var inner = Array<int>();
     inner.append(1);
     inner.append(2);
     outer.append(inner);
@@ -467,7 +467,7 @@ fn bracket_syntax_is_array() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    int[] xs = array<int>();
+    int[] xs = Array<int>();
     xs.append(1);
     xs.append(2);
     if (xs.count() != 2) { return -1; }
@@ -488,7 +488,7 @@ int[] echo(int[] in): int[] {
     return in;
 }
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(4);
     a.append(5);
     int[] r = echo(a);
@@ -501,7 +501,7 @@ test(): int {
     );
 }
 
-// ── __refcount<T>(t) intrinsic: array element reference semantics ───────────
+// ── __refcount<T>(t) intrinsic: Array element reference semantics ───────────
 
 #[test]
 fn refcount_pod_is_zero() {
@@ -530,7 +530,7 @@ struct Point {
 test(): int {
     var p = Point();
     if (__refcount<Point>(p) != 1) { return -1; }
-    var a = array<Point>();
+    var a = Array<Point>();
     a.append(p);
     if (__refcount<Point>(p) != 2) { return -2; }
     # pop returns a copy of the reference (shared_ptr semantics): the slot
@@ -560,7 +560,7 @@ struct Tally {
 }
 test(): int {
     var t = Tally();
-    var a = array<Tally>();
+    var a = Array<Tally>();
     a.append(t);
     a.append(Tally());
     if (__refcount<Tally>(t) != 2) { return -1; }
@@ -587,7 +587,7 @@ struct Tally {
     }
 }
 test(): int {
-    var a = array<Tally>();
+    var a = Array<Tally>();
     var t = Tally();
     a.append(t);
     a.append(Tally());
@@ -616,7 +616,7 @@ struct Point {
     new(this.x = 0) {}
 }
 test(): int {
-    var a = array<Point>();
+    var a = Array<Point>();
     var p = Point();
     p.x = 7;
     a.append(p);
@@ -652,7 +652,7 @@ struct Point {
     new(this.x = 0) {}
 }
 test(): int {
-    var a = array<Point>();
+    var a = Array<Point>();
     var p1 = Point();
     p1.x = 1;
     var p2 = Point();
@@ -686,16 +686,16 @@ fn refcount_nested_array() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var inner = array<int>();
+    var inner = Array<int>();
     inner.append(1);
-    if (__refcount<array<int>>(inner) != 1) { return -1; }
-    var outer = array<array<int>>();
+    if (__refcount<Array<int>>(inner) != 1) { return -1; }
+    var outer = Array<Array<int>>();
     outer.append(inner);
-    if (__refcount<array<int>>(inner) != 2) { return -2; }
+    if (__refcount<Array<int>>(inner) != 2) { return -2; }
     # pop returns a copy of the reference: slot release and return acquire
     # cancel, so inner's count is unchanged.
     var out = outer.pop();
-    if (__refcount<array<int>>(inner) != 2) { return -3; }
+    if (__refcount<Array<int>>(inner) != 2) { return -3; }
     if (out[0] != 1) { return -4; }
     return 0;
 }"#
@@ -706,7 +706,7 @@ test(): int {
 
 #[test]
 fn refcount_shift_of_unreferenced_element() {
-    // The array is the sole owner of these elements. A shift implemented as
+    // The Array is the sole owner of these elements. A shift implemented as
     // per-slot release/acquire stores would destroy them mid-move (their only
     // reference), so shifts must move raw pointer slots instead.
     assert_eq!(
@@ -720,7 +720,7 @@ struct Tally {
     }
 }
 test(): int {
-    var a = array<Tally>();
+    var a = Array<Tally>();
     a.append(Tally());
     a.append(Tally());
     a.insert(0, Tally());
@@ -747,12 +747,12 @@ fn empty_array_boundaries() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var e = array<int>();
+    var e = Array<int>();
     if (!e.empty()) { return -1; }
     if (e.count() != 0) { return -2; }
     if (e.find(1) != -1) { return -3; }
     if (e.contains(1)) { return -4; }
-    var f = array<int>();
+    var f = Array<int>();
     if (!(e == f)) { return -5; }
     e.truncate(0);
     if (!e.empty()) { return -6; }
@@ -769,7 +769,7 @@ fn growth_from_zero_capacity() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var g = array<int>();
+    var g = Array<int>();
     var i = 0;
     while (i < 10) {
         g.append(i * i);
@@ -795,7 +795,7 @@ fn self_append_terminates_and_doubles() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var h = array<int>();
+    var h = Array<int>();
     h.append(1);
     h.append(2);
     h += h;
@@ -814,13 +814,13 @@ fn plus_with_empty_operand() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var p = array<int>();
+    var p = Array<int>();
     p.append(5);
-    var q = p + array<int>();
+    var q = p + Array<int>();
     if (q.count() != 1) { return -1; }
     if (q[0] != 5) { return -2; }
     if (p.count() != 1) { return -3; }
-    var r = array<int>() + p;
+    var r = Array<int>() + p;
     if (r.count() != 1 || r[0] != 5) { return -4; }
     return 0;
 }"#
@@ -835,7 +835,7 @@ fn insert_into_empty_and_remove_only_element() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var r = array<int>();
+    var r = Array<int>();
     r.insert(0, 7);
     if (r.count() != 1 || r[0] != 7) { return -1; }
     var last = r.remove_at(0);
@@ -854,7 +854,7 @@ fn truncate_at_and_beyond_size() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var t = array<int>();
+    var t = Array<int>();
     t.append(1);
     t.append(2);
     t.truncate(2);
@@ -875,16 +875,16 @@ fn self_swap_and_tiny_reverses() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var w = array<int>();
+    var w = Array<int>();
     w.append(1);
     w.swap(0, 0);
     if (w[0] != 1) { return -1; }
     w.reverse();
     if (w.count() != 1 || w[0] != 1) { return -2; }
-    var z = array<int>();
+    var z = Array<int>();
     z.reverse();
     if (!z.empty()) { return -3; }
-    var two = array<int>();
+    var two = Array<int>();
     two.append(1);
     two.append(2);
     two.reverse();
@@ -902,7 +902,7 @@ fn index_set_returns_stored_value() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var v = array<int>();
+    var v = Array<int>();
     v.append(0);
     var rv = v[0] = 42;
     if (rv != 42) { return -1; }
@@ -920,7 +920,7 @@ fn reserve_zero_then_append() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var s = array<int>();
+    var s = Array<int>();
     s.reserve(0);
     s.append(3);
     if (s.count() != 1 || s[0] != 3) { return -1; }
@@ -937,15 +937,15 @@ fn nested_clone_shares_inner_arrays() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var n = array<array<int>>();
-    var inner = array<int>();
+    var n = Array<Array<int>>();
+    var inner = Array<int>();
     inner.append(1);
     inner.append(2);
     n.append(inner);
     var nc = n.clone();
     nc[0].append(3);
     if (nc[0][2] != 3) { return -1; }
-    # struct-typed elements are references: the clone shares the inner array,
+    # struct-typed elements are references: the clone shares the inner Array,
     # so the append is visible through both views.
     if (n[0].count() != 3) { return -2; }
     if (nc[0].count() != 3) { return -3; }
@@ -962,13 +962,13 @@ fn array_of_strings_compares_by_value() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var st = array<string>();
+    var st = Array<String>();
     st.append("ab");
     st.append("cd");
     if (st.find("cd") != 1) { return -1; }
     if (!st.contains("ab")) { return -2; }
     if (!(st[0] == "ab")) { return -3; }
-    var other = array<string>();
+    var other = Array<String>();
     other.append("ab");
     other.append("cd");
     if (!(st == other)) { return -4; }
@@ -989,7 +989,7 @@ roundtrip(int[] xs): int[] {
     return xs;
 }
 test(): int {
-    var out = roundtrip(array<int>());
+    var out = roundtrip(Array<int>());
     if (out.count() != 1) { return -1; }
     if (out[0] != 9) { return -2; }
     return 0;
@@ -1002,21 +1002,21 @@ test(): int {
 #[test]
 fn nested_array_raw_buffer_write() {
     // Regression: a raw-buffer field write (`Data[i] = v`) inside an
-    // `array<array<int>>` body must stay a buffer store, not be rewritten to
+    // `Array<Array<int>>` body must stay a buffer store, not be rewritten to
     // the element type's `__index_set` with the raw pointer as receiver.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var outer = array<array<int>>(4);
+    var outer = Array<Array<int>>(4);
     outer.Size = 4;
-    var inner = array<int>(3);
+    var inner = Array<int>(3);
     inner.append(10);
     inner.append(20);
     outer.Data[0] = inner;
     if (outer.Data[0].count() != 2) { return -1; }
     if (outer.Data[0][1] != 20) { return -2; }
-    var empty = array<int>();
+    var empty = Array<int>();
     outer.Data[1] = empty;
     if (!outer.Data[1].empty()) { return -3; }
     return 0;

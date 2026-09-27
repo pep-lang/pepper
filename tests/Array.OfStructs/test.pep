@@ -7,7 +7,7 @@ struct Test {
 };
 
 main(): int {
-    var tests = array<Test>();
+    var tests = Array<Test>();
     tests.append(Test(42));
     tests.append(Test(12));
     tests[1] = Test(42);

@@ -92,7 +92,7 @@ fn append_read_back_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -112,7 +112,7 @@ fn append_read_back_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p = Point();
     p.x = 5;
     a.append(p);
@@ -136,9 +136,9 @@ fn plus_assign_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
-    var b = array<int>();
+    var b = Array<int>();
     b.append(2);
     b.append(3);
     a += b;
@@ -160,11 +160,11 @@ fn plus_assign_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p1 = Point();
     p1.x = 1;
     a.append(p1);
-    var b = array<Point>();
+    var b = Array<Point>();
     var p2 = Point();
     p2.x = 2;
     b.append(p2);
@@ -193,7 +193,7 @@ fn self_append_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var h = array<int>();
+    var h = Array<int>();
     h.append(1);
     h.append(2);
     h += h;
@@ -213,14 +213,14 @@ fn self_append_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var h = array<Point>();
+    var h = Array<Point>();
     var p = Point();
     p.x = 9;
     h.append(p);
     if (__refcount<Point>(p) != 2) {{ return -1; }}
     h += h;
     if (h.count() != 2) {{ return -2; }}
-    # Each element now has two references in the array plus p's own.
+    # Each element now has two references in the Array plus p's own.
     if (__refcount<Point>(p) != 3) {{ return -3; }}
     if (h[0].x != 9 || h[1].x != 9) {{ return -4; }}
     return 0;
@@ -240,7 +240,7 @@ fn pop_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     var v = a.pop();
@@ -260,7 +260,7 @@ fn pop_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p = Point();
     p.x = 7;
     a.append(p);
@@ -286,7 +286,7 @@ fn remove_at_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -307,7 +307,7 @@ fn remove_at_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p1 = Point();
     p1.x = 1;
     var p2 = Point();
@@ -341,7 +341,7 @@ fn clear_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.clear();
@@ -361,7 +361,7 @@ fn clear_struct() {
                 r#"{tally}
 test(): int {{
     var t = Tally();
-    var a = array<Tally>();
+    var a = Array<Tally>();
     a.append(t);
     a.append(Tally());
     if (__refcount<Tally>(t) != 2) {{ return -1; }}
@@ -384,7 +384,7 @@ fn clone_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     var b = a.clone();
     b.append(2);
@@ -404,7 +404,7 @@ fn clone_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p = Point();
     p.x = 4;
     a.append(p);
@@ -431,7 +431,7 @@ fn first_last_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     if (a.first() != 1) { return -1; }
@@ -450,7 +450,7 @@ fn first_last_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p1 = Point();
     p1.x = 1;
     var p2 = Point();
@@ -479,7 +479,7 @@ fn index_read_store_pod() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     var v = a[0];
@@ -500,7 +500,7 @@ fn index_read_store_struct() {
             &format!(
                 r#"{point}
 test(): int {{
-    var a = array<Point>();
+    var a = Array<Point>();
     var p1 = Point();
     p1.x = 1;
     a.append(p1);
@@ -534,7 +534,7 @@ fn census_append_pop_struct() {
         &format!(
             r#"{tally}
 test(): int {{
-    var a = array<Tally>();
+    var a = Array<Tally>();
     a.append(Tally());
     var t = a.pop();
     # t escapes the scope; its reference is the one that should remain.
@@ -555,8 +555,8 @@ fn census_plus_assign_struct() {
         &format!(
             r#"{tally}
 test(): int {{
-    var a = array<Tally>();
-    var b = array<Tally>();
+    var a = Array<Tally>();
+    var b = Array<Tally>();
     b.append(Tally());
     a += b;
     return 0;

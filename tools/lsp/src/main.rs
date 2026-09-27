@@ -72,7 +72,7 @@ struct Symbol {
     name: String,
     /// Span of the declared name token.
     name_span: Span,
-    /// Rendered type (`int`, `array<int>`, function signature).
+    /// Rendered type (`int`, `Array<int>`, function signature).
     ty: String,
 }
 
@@ -122,7 +122,7 @@ fn variable_type(v: &ast::VariableDecl) -> String {
     {
         return match init {
             ast::Expression::Literal { value, .. } => match value {
-                ast::Literal::String(_) => "string".to_string(),
+                ast::Literal::String(_) => "String".to_string(),
                 ast::Literal::Integer(_) => "int".to_string(),
                 ast::Literal::Float(_) => "float".to_string(),
                 ast::Literal::Bool(_) => "bool".to_string(),
@@ -517,7 +517,7 @@ impl PepperLsp {
         match expr {
             ast::Expression::Literal { value, .. } => {
                 let ty = match value {
-                    ast::Literal::String(_) => "string",
+                    ast::Literal::String(_) => "String",
                     ast::Literal::Integer(_) => "int",
                     ast::Literal::Float(_) => "float",
                     ast::Literal::Bool(_) => "bool",

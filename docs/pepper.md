@@ -10,8 +10,15 @@
 
 ### Built-in Types
 
-* `string` - A UTF-8 encoded string of code points
-* `array<T>` - A dynamic array of `T`s.
+* `String` - A UTF-8 encoded string of code points
+* `Array<T>` - A dynamic array of `T`s.
+
+### Naming conventions
+
+Primitives and keywords are lowercase (`int`, `float`, `bool`, `var`, ...).
+Runtime/prelude structs are PascalCase: `String`, `Array<T>`, `HashMap<K, V>`,
+`HashSet<K>`, `Atomic<T>`. New runtime structs MUST use PascalCase. `int[]` is
+sugar for `Array<int>` (nested brackets nest: `int[][]` is `Array<Array<int>>`).
 
 ## Variables
 
@@ -73,8 +80,8 @@ while (idx < nums.size()) {
 Functions in Pepper can be defined as free functions (in file/module scope) or as struct methods.
 
 ```
-array<uint> fibonacci_sequence(uint count) {
-    array<uint> nums(count);
+Array<uint> fibonacci_sequence(uint count) {
+    Array<uint> nums(count);
     uint num = 1;
     nums.append(1);
     for (1...count) {

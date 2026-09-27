@@ -151,8 +151,8 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             Expression::AtomicFetch(_, ty, _, _) => substitute(ty, type_map),
             _ => {}
         }
-        // Constructor calls inside method bodies (`array<T>(n)` →
-        // `array<int>(n)`): parse the name, substitute, re-emit.
+        // Constructor calls inside method bodies (`Array<T>(n)` →
+        // `Array<int>(n)`): parse the name, substitute, re-emit.
         if let Expression::FunctionCall { function, .. } = e {
             let mut parsed = crate::passes::gather_generics::parse_type_string(function);
             substitute(&mut parsed, type_map);

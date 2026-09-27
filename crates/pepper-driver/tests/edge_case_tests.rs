@@ -243,7 +243,7 @@ fn compound_assign_indexed() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a[0] += 10;
@@ -264,7 +264,7 @@ fn compound_assign_indexed_nested() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     var i = 0;
     while (i < 2) {
@@ -385,7 +385,7 @@ fn array_pass_by_ref() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-sum(a: array<int>): int {
+sum(a: Array<int>): int {
     var s = 0;
     var i = 0;
     while (i < a.count()) {
@@ -395,7 +395,7 @@ sum(a: array<int>): int {
     return s;
 }
 test(): int {
-    var a = array<int>();
+    var a = Array<int>();
     a.append(1);
     a.append(2);
     a.append(3);
@@ -757,7 +757,7 @@ fn chained_pointer_arithmetic() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    string s = "abcdef";
+    String s = "abcdef";
     char* p = s.c_str();
     char* r = p + 1 + 1;
     return r[0] as int - 99;
@@ -1178,7 +1178,7 @@ fn string_in_array() {
         compile_jit_with_runtime(
             r#"
 test(): int {
-    var a = array<string>();
+    var a = Array<String>();
     a.append("ab");
     a.append("cd");
     a[0].append("ef");
@@ -1196,12 +1196,12 @@ fn struct_field_of_array() {
         compile_jit_with_runtime(
             r#"
 struct Holder {
-    array<int> items;
+    Array<int> items;
     new() {}
 }
 test(): int {
     var h = Holder();
-    h.items = array<int>();
+    h.items = Array<int>();
     h.items.append(5);
     h.items.append(6);
     return h.items[0] + h.items[1] - 11;
@@ -1249,7 +1249,7 @@ test(): int {
 fn nonconst_global_init() {
     // Non-constant global initializers are stored by __pep_global_init, which
     // only runs if the JIT calls run_static_constructors — without it every
-    // such global (including every string global) stays at its null/zero base.
+    // such global (including every String global) stays at its null/zero base.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -1264,7 +1264,7 @@ test(): int { return g - 5; }
 
 #[test]
 fn string_global_init() {
-    // String globals are `string(...)` ctor calls (non-constant) — the same
+    // String globals are `String(...)` ctor calls (non-constant) — the same
     // __pep_global_init path; a null global faults on first use.
     assert_eq!(
         compile_jit_with_runtime(

@@ -133,8 +133,8 @@ fn auto_var_resolves_from_default() {
 #[test]
 fn type_name_to_string_generics() {
     assert_eq!(TypeName::new("int").to_string(), "int");
-    let generic = TypeName::with_args("array", vec![TypeName::new("int")]);
-    assert_eq!(generic.to_string(), "array<int>");
+    let generic = TypeName::with_args("Array", vec![TypeName::new("int")]);
+    assert_eq!(generic.to_string(), "Array<int>");
     assert!(generic.is_generic());
     assert!(!TypeName::new("int").is_generic());
     let ptr = TypeName::new("char*");
@@ -143,11 +143,11 @@ fn type_name_to_string_generics() {
 
 #[test]
 fn bracket_type_lowers_to_array() {
-    // `int[]` is the spelling of `array<int>`; nested brackets nest.
+    // `int[]` is the spelling of `Array<int>`; nested brackets nest.
     let module = compile(
         "test(): int {
-            int[] xs = array<int>();
-            int[][] ys = array<array<int>>();
+            int[] xs = Array<int>();
+            int[][] ys = Array<Array<int>>();
             return 0
         }",
     );
@@ -158,7 +158,7 @@ fn bracket_type_lowers_to_array() {
             types.push(v.ty.to_string());
         }
     }
-    assert_eq!(types, vec!["array<int>".to_string(), "array<array<int>>".to_string()]);
+    assert_eq!(types, vec!["Array<int>".to_string(), "Array<Array<int>>".to_string()]);
 }
 
 #[test]
