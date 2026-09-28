@@ -1126,18 +1126,27 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
     Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
 }
 
-fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
+fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
     if !input.starts_with('<') { return Err(cut(input)); }
     *input = &input[1..];
-    let mut types = vec![];
+    let mut params = vec![];
     loop {
         ws(input)?;
         if input.starts_with('>') {
             *input = &input[1..];
             break;
         }
-        types.push(type_name(input)?);
+        let name = identifier(input)?;
         ws(input)?;
+        // Optional default: `T=Default` (a single `=`; `==` is an operator).
+        let mut default = None;
+        if input.starts_with('=') && !input[1..].starts_with('=') {
+            *input = &input[1..];
+            ws(input)?;
+            default = Some(type_name(input)?);
+            ws(input)?;
+        }
+        params.push(GenericParam { name, default });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -1148,7 +1157,7 @@ fn generic_params(input: &mut &str) -> Result<Vec<TypeName>> {
         }
         return Err(cut(input));
     }
-    Ok(types)
+    Ok(params)
 }
 
 /// Function declaration — supports two syntaxes:
@@ -2432,6 +2441,22 @@ mod tests {
             Declaration::Struct(s) => {
                 assert_eq!(s.name, "Pair");
                 assert_eq!(s.generic_params.len(), 2);
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_module_struct_generic_default_param() {
+        let m = parse("struct Result<TValue, TError=MyError> {\n    TValue value;\n}");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert_eq!(s.generic_params.len(), 2);
+                assert_eq!(s.generic_params[0].name, "TValue");
+                assert!(s.generic_params[0].default.is_none());
+                assert_eq!(s.generic_params[1].name, "TError");
+                let d = s.generic_params[1].default.as_ref().expect("default present");
+                assert_eq!(d.name, "MyError");
             }
             other => panic!("{:?}", other),
         }

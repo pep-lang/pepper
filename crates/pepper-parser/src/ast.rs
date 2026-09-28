@@ -228,7 +228,7 @@ pub struct FunctionDecl {
     pub name: String,
     /// Span of the function name token.
     pub name_span: Span,
-    pub generic_params: Vec<TypeName>,
+    pub generic_params: Vec<GenericParam>,
     pub return_type: TypeName,
     pub parameters: Vec<VariableDecl>,
     pub external: bool,
@@ -242,12 +242,21 @@ pub struct FunctionDecl {
     pub attributes: Vec<Attribute>,
 }
 
+/// A generic type parameter, optionally with a default (`TError=Error` in
+/// `Result<TValue, TError=Error>`).
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub name: String,
+    /// Default type substituted when a use omits this argument.
+    pub default: Option<TypeName>,
+}
+
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
     /// Span of the struct name token.
     pub name_span: Span,
-    pub generic_params: Vec<TypeName>,
+    pub generic_params: Vec<GenericParam>,
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
     /// `new(...)` / `construct(...)` constructor
@@ -266,7 +275,7 @@ pub struct TraitDecl {
     pub name: String,
     /// Span of the trait name token.
     pub name_span: Span,
-    pub generic_params: Vec<TypeName>,
+    pub generic_params: Vec<GenericParam>,
     pub methods: Vec<FunctionDecl>,
     pub span: Span,
 }
@@ -504,6 +513,16 @@ impl Display for VariableDecl {
         write!(f, "{}{}: {}", spec, self.name, self.type_name)?;
         if let Some(v) = &self.default_value {
             write!(f, " = {}", v)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for GenericParam {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(d) = &self.default {
+            write!(f, "={}", d)?;
         }
         Ok(())
     }

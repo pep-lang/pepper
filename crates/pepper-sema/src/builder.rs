@@ -23,6 +23,13 @@ fn type_name_from(t: &ast::TypeName) -> TypeName {
     }
 }
 
+fn generic_param_from(p: &ast::GenericParam) -> GenericParam {
+    GenericParam {
+        name: p.name.clone(),
+        default: p.default.as_ref().map(type_name_from),
+    }
+}
+
 fn binary_op(op: &str) -> Option<BinaryOp> {
     Some(match op {
         "+" => BinaryOp::Add,
@@ -226,7 +233,7 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Func
     Ok(FunctionDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
-        generic_params: decl.generic_params.iter().map(type_name_from).collect(),
+        generic_params: decl.generic_params.iter().map(generic_param_from).collect(),
         parameters,
         body,
         parent,
@@ -261,12 +268,12 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, String> {
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
 fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
-    let generic_params: Vec<TypeName> = decl.generic_params.iter().map(type_name_from).collect();
+    let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
     let base_name = decl.name.clone();
     let ty = if generic_params.is_empty() {
         TypeName::new(&base_name)
     } else {
-        TypeName::with_args(&base_name, generic_params.clone())
+        TypeName::with_args(&base_name, generic_params.iter().map(|p| TypeName::new(&p.name)).collect())
     };
     let field_members: Vec<VariableDef> = decl
         .fields

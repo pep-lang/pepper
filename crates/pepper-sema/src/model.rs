@@ -306,11 +306,20 @@ pub struct VariableDef {
 }
 
 #[derive(Debug, Clone)]
+/// A generic type parameter, optionally with a default (`TError=Error` in
+/// `Result<TValue, TError=Error>`).
+pub struct GenericParam {
+    pub name: String,
+    /// Default type substituted when a use omits this argument.
+    pub default: Option<TypeName>,
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionDef {
     pub name: String,
     pub ty: TypeName,
     /// Generic parameters (`T` in `hash<T>`), in declaration order.
-    pub generic_params: Vec<TypeName>,
+    pub generic_params: Vec<GenericParam>,
     pub parameters: Vec<VariableDef>,
     pub body: Option<Block>,
     /// Owning struct for methods.
@@ -330,7 +339,7 @@ pub struct StructDef {
     /// Base generic type (`Test` for `Test<int>`; name without args for
     /// non-generic structs).
     pub ty: TypeName,
-    pub generic_params: Vec<TypeName>,
+    pub generic_params: Vec<GenericParam>,
     pub field_members: Vec<VariableDef>,
     pub method_members: Vec<FunctionDef>,
     pub constructor: FunctionDef,

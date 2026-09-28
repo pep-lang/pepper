@@ -14,7 +14,7 @@ pub fn gather_generics(module: &mut Module) {
 
     // Walk struct bodies for generic calls and TypeLiteral-based generics.
     for st in &mut module.structs {
-        let params = st.generic_params.clone();
+        let params = param_names(&st.generic_params);
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
@@ -66,7 +66,7 @@ pub fn gather_generics(module: &mut Module) {
     }
 
     for function in &mut module.functions {
-        let params = function.generic_params.clone();
+        let params = param_names(&function.generic_params);
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
@@ -131,7 +131,7 @@ pub fn gather_generics(module: &mut Module) {
     // Local variable declarations (`Array<int> a;` with no ctor call) are the
     // only place generic types can appear that fields/params/calls miss.
     for st in &module.structs {
-        let params = st.generic_params.clone();
+        let params = param_names(&st.generic_params);
         for method in &st.method_members {
             if let Some(body) = &method.body {
                 gather_local_declarations(body, &mut structs, &params);
@@ -142,7 +142,7 @@ pub fn gather_generics(module: &mut Module) {
         }
     }
     for function in &module.functions {
-        let params = function.generic_params.clone();
+        let params = param_names(&function.generic_params);
         if let Some(body) = &function.body {
             gather_local_declarations(body, &mut structs, &params);
         }
@@ -209,11 +209,11 @@ fn concrete_overrides(module: &mut Module) {
         let all_concrete = function
             .generic_params
             .iter()
-            .all(|p| p.sub_types.is_empty() && (crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "String"));
+            .all(|p| crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "String");
         if !all_concrete {
             continue;
         }
-        let args = function.generic_params.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ");
+        let args = function.generic_params.iter().map(|p| p.name.clone()).collect::<Vec<_>>().join(", ");
         rewrites.push((idx, format!("{}<{}>", function.name, args)));
     }
     for (idx, new_name) in rewrites {
@@ -236,6 +236,11 @@ fn contains_param(ty: &TypeName, params: &[TypeName]) -> bool {
         return true;
     }
     ty.sub_types.iter().any(|s| contains_param(s, params))
+}
+
+/// Generic parameter names as bare TypeNames (for `contains_param`).
+fn param_names(params: &[crate::model::GenericParam]) -> Vec<TypeName> {
+    params.iter().map(|p| TypeName::new(&p.name)).collect()
 }
 
 /// Parse `Name<a, b>` back into a TypeName (specs are carried as TypeNames).

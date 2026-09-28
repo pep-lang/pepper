@@ -15,8 +15,10 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     // map generic_params[idx] -> spec.type.sub_types[idx]
     let mut type_map: Vec<(String, TypeName)> = vec![];
     for (idx, param) in base.generic_params.iter().enumerate() {
-        if let Some(arg) = spec_type.sub_types.get(idx) {
-            type_map.push((param.name.clone(), arg.clone()));
+        // Missing arguments fall back to the parameter's default.
+        let arg = spec_type.sub_types.get(idx).cloned().or_else(|| param.default.clone());
+        if let Some(arg) = arg {
+            type_map.push((param.name.clone(), arg));
         }
     }
 

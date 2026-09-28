@@ -154,7 +154,7 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
                 name_span: s.name_span,
                 ty: format!("struct {}", type_string(&ast::TypeName {
                     name: s.name.clone(),
-                    generic_types: s.generic_params.clone(),
+                    generic_types: s.generic_params.iter().map(|p| ast::TypeName { name: p.name.clone(), generic_types: vec![], span: Span::none() }).collect(),
                     span: Span::none(),
                 })),
             }),

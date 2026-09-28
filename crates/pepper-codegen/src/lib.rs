@@ -2354,16 +2354,23 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // The receiver is the instance pointer: loading the lhs gives
                 // exactly what the `this` parameter expects. When the receiver
                 // itself is an owned rvalue (`f().g()`), it is a temporary
-                // whose creation ref we release after the call.
-                let this_temp = self.owned_temp_type(this.as_ref());
-                let this_val = self.codegen_expr(this)?;
+                // whose creation ref we release after the call. A static call
+                // on a type literal (`Result<int>.ok(5)`) lowers its receiver
+                // to a ctor-style call that must NOT run — no instance exists.
                 let mangled = format!("{}.{}", struct_name, method);
                 let is_static = self
                     .structs
                     .get(&struct_name)
                     .map(|d| d.static_methods.contains(method.as_str()))
                     .unwrap_or(false);
-                let mut arg_vals = if is_static { vec![] } else { vec![this_val] };
+                let this_temp = if is_static { None } else { self.owned_temp_type(this.as_ref()) };
+                let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![];
+                let mut this_val_opt: Option<BasicValueEnum<'ctx>> = None;
+                if !is_static {
+                    let this_val = self.codegen_expr(this)?;
+                    this_val_opt = Some(this_val);
+                    arg_vals.push(this_val);
+                }
                 // Owned-rvalue arguments are temporaries (shared_ptr): their
                 // creation ref is released after the call, at the end of the
                 // full expression. Lvalue reads are not — the callee's param
@@ -2380,7 +2387,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     arg_vals.push(self.codegen_expr(&extra)?);
                 }
                 let result = self.call_function(&mangled, arg_vals)?;
-                if let Some(ty) = this_temp {
+                if let (Some(ty), Some(this_val)) = (this_temp, this_val_opt) {
                     self.release_temp(&ty, this_val)?;
                 }
                 for (temp, ty) in owned_arg_temps {

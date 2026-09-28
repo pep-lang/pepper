@@ -12,12 +12,14 @@
 
 * `String` - A UTF-8 encoded string of code points
 * `Array<T>` - A dynamic array of `T`s.
+* `Result<TValue, TError=Error>` - A success-or-failure value (Rust `Result`-analogous); see [Results](#results).
+* `Error` - The default error type for `Result`: a struct holding a `String Message`.
 
 ### Naming conventions
 
 Primitives and keywords are lowercase (`int`, `float`, `bool`, `var`, ...).
 Runtime/prelude structs are PascalCase: `String`, `Array<T>`, `HashMap<K, V>`,
-`HashSet<K>`, `Atomic<T>`. New runtime structs MUST use PascalCase. `int[]` is
+`HashSet<K>`, `Atomic<T>`, `Result<TValue, TError>`. New runtime structs MUST use PascalCase. `int[]` is
 sugar for `Array<int>` (nested brackets nest: `int[][]` is `Array<Array<int>>`).
 
 ## Variables
@@ -153,6 +155,8 @@ void print_container<C>(C container) {
 }
 ```
 
+Generic parameters may carry a default type, used when a use omits that argument: `struct Result<TValue, TError=Error>` lets both `Result<int>` and `Result<int, MyErr>` name the same base. Defaults are filled in at specialization; the specialized instance keeps the name as written (`Result<int>` is its own specialization, distinct from `Result<int, Error>`).
+
 ## Traits
 
 ## Extensions
@@ -255,3 +259,18 @@ c.is_lock_free();        # true for POD T of <= 8 bytes and struct T
 ```
 
 `fetch_sub`, `fetch_and`, `fetch_or`, and `fetch_xor` are provided alongside `fetch_add`. For struct `T`, `store`/`compare_exchange` swap the slot's reference atomically, so the usual shared-reference rules apply to the old and new values.
+
+## Results
+
+`Result<TValue, TError>` (in the runtime prelude) is a Rust-`Result`-analogous success-or-failure value. `TError` defaults to `Error`, so `Result<int>` and `Result<int, Error>` are equivalent in use — values interoperate freely, though each spelling produces its own specialization. Pepper has no unions: both `Value` and `Error` always exist, and `IsOk` selects the live one (the dead field stays at its default/null value).
+
+```
+var ok = Result<int>.ok(42);        # IsOk = true, Value = 42
+var err = Result<int>.err(Error("boom"));
+ok.is_ok();                          # true
+err.is_err();                        # true
+ok.unwrap();                         # 42; panics on an Err
+err.ok_or(-1);                       # -1 (fallback when IsOk is false)
+```
+
+`Error` is a struct with a single `String Message` field: `var e = Error("boom"); e.Message`.

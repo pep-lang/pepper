@@ -30,8 +30,10 @@ pub fn specialize_functions(module: &mut Module) {
         // map base generic_params[idx] -> spec sub_types[idx]
         let mut type_map: Vec<(String, TypeName)> = vec![];
         for (idx, param) in base.generic_params.iter().enumerate() {
-            if let Some(arg) = spec.sub_types.get(idx) {
-                type_map.push((param.name.clone(), arg.clone()));
+            // Missing arguments fall back to the parameter's default.
+            let arg = spec.sub_types.get(idx).cloned().or_else(|| param.default.clone());
+            if let Some(arg) = arg {
+                type_map.push((param.name.clone(), arg));
             }
         }
         let mut specialized = base.clone();
