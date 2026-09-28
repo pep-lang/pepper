@@ -219,3 +219,144 @@ fn globals_land_in_module_globals() {
     assert_eq!(module.globals[0].name, "counter");
     assert_eq!(module.globals[0].ty.to_string(), "i32");
 }
+
+#[test]
+fn type_alias_expands_in_model() {
+    let module = compile(
+        r#"
+type I = int;
+type P = Result<int, Error>;
+f(): P {
+    var x: I = 0
+    return x
+}
+"#,
+    );
+    assert!(module.type_aliases.is_empty(), "aliases must be expanded away");
+    let f = module.functions.iter().find(|f| f.name == "f").expect("fn f");
+    assert_eq!(f.ty.to_string(), "Result<int, Error>");
+    match &f.body.as_ref().expect("body").items[0] {
+        crate::model::Statement::Declaration(crate::model::Declaration::Variable(var)) => {
+            assert_eq!(var.name, "x");
+            assert_eq!(var.ty.to_string(), "int");
+        }
+        other => panic!("expected var decl, got {:?}", other),
+    }
+}
+
+#[test]
+fn generic_type_alias_substitutes_params_and_defaults() {
+    let module = compile(
+        r#"
+type R<T, E=Error> = Result<T, E>;
+f(): R<u32> { return 0 }
+g(): R<i64, int> { return 0 }
+h(): R<u8> { return 0 }
+"#,
+    );
+    let ty_of = |name: &str| -> String {
+        module
+            .functions
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap()
+            .ty
+            .to_string()
+    };
+    assert_eq!(ty_of("f"), "Result<u32, Error>");
+    assert_eq!(ty_of("g"), "Result<i64, int>");
+    assert_eq!(ty_of("h"), "Result<u8, Error>");
+}
+
+#[test]
+fn type_alias_chain_expands() {
+    let module = compile(
+        r#"
+type A = B;
+type B = Result<int, Error>;
+var g: A = 0;
+"#,
+    );
+    assert_eq!(module.globals.len(), 1);
+    assert_eq!(module.globals[0].ty.to_string(), "Result<int, Error>");
+}
+
+#[test]
+fn type_alias_in_struct_fields_expands() {
+    let module = compile(
+        r#"
+type I = int;
+struct S { var x: I }
+"#,
+    );
+    let st = module.structs.iter().find(|s| s.name == "S").expect("struct S");
+    assert_eq!(st.field_members[0].ty.to_string(), "u32");
+}
+
+#[test]
+fn type_alias_in_call_strings_expands() {
+    let module = compile(
+        r#"
+type I = int;
+type Pair = Result<int, Error>;
+f(): int {
+    var b = Pair.ok(7);
+    var c = g<I>(5);
+    return 0
+}
+"#,
+    );
+    let f = module.functions.iter().find(|f| f.name == "f").expect("fn f");
+    let dumped = format!("{:?}", f.body.as_ref().expect("body"));
+    assert!(
+        dumped.contains("\"Result<int, Error>\""),
+        "static call string must expand to the target: {}",
+        dumped
+    );
+    assert!(dumped.contains("\"g<int>\""), "generic call args must expand: {}", dumped);
+    assert!(!dumped.contains("Pair"), "alias name must not survive: {}", dumped);
+}
+
+#[test]
+fn type_alias_value_shadow_not_rewritten() {
+    // A value symbol (global) that shares an alias's name must keep its
+    // meaning: `S.m()` on the variable S is not a static call through the
+    // alias.
+    let module = compile(
+        r#"
+struct A { new() {} m(): int { return 1; } }
+struct B { new() {} m(): int { return 2; } }
+type S = B;
+var S: A = A();
+main(): int { return S.m(); }
+"#,
+    );
+    let main = module.functions.iter().find(|f| f.name == "main").expect("fn main");
+    let dumped = format!("{:?}", main.body.as_ref().expect("body"));
+    assert!(
+        dumped.contains("SymbolRef { id: \"S\""),
+        "value S must keep its receiver, not be rewritten to the alias target: {}",
+        dumped
+    );
+}
+
+#[test]
+fn type_alias_free_function_not_rewritten() {
+    // A free function sharing an alias's name must keep being called as a
+    // function, not rewritten to the alias target's ctor form.
+    let module = compile(
+        r#"
+struct B { new() {} }
+type S = B;
+S(x: int): int { return x + 100; }
+main(): int { return S(5); }
+"#,
+    );
+    let main = module.functions.iter().find(|f| f.name == "main").expect("fn main");
+    let dumped = format!("{:?}", main.body.as_ref().expect("body"));
+    assert!(
+        dumped.contains("\"S\""),
+        "free function S must keep its call string, not be rewritten to the alias target: {}",
+        dumped
+    );
+}

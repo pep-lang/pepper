@@ -85,7 +85,7 @@ const RESERVED: &[&str] = &[
     "if", "else", "while", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
-    "trait", "extend",
+    "trait", "extend", "type",
 ];
 
 /// Operators that may appear as method names (overloadable operators), longest first.
@@ -1872,6 +1872,35 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs })
 }
 
+fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TypeAliasDecl> {
+    let start = pos(input);
+    // Widen the node span to cover any preceding attributes.
+    let decl_start = attrs.first().map(|a| a.span.start).unwrap_or(start);
+    if !input.starts_with("type") || input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(bt(input));
+    }
+    *input = &input[4..];
+    ws(input)?;
+
+    let name_span_start = pos(input);
+    let name = identifier(input)?;
+    let name_span_end = pos(input);
+    ws(input)?;
+    let generic_params = if input.starts_with('<') {
+        generic_params(input)?
+    } else {
+        vec![]
+    };
+    ws(input)?;
+
+    if !input.starts_with('=') { return Err(cut(input)); }
+    *input = &input[1..];
+    ws(input)?;
+    let target = type_name(input)?;
+
+    Ok(TypeAliasDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, target, span: Span { start: decl_start, end: pos(input) }, attributes: attrs })
+}
+
 fn declaration(input: &mut &str) -> Result<Declaration> {
     ws(input)?;
 
@@ -1886,6 +1915,9 @@ fn declaration(input: &mut &str) -> Result<Declaration> {
     }
     if input.starts_with("extend") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Extend(extend_declaration(input, leading)?));
+    }
+    if input.starts_with("type") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Ok(Declaration::TypeAlias(type_alias_declaration(input, leading)?));
     }
     if input.starts_with("extern") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Function(extern_function_declaration(input, leading)?));
@@ -2459,6 +2491,67 @@ mod tests {
                 assert_eq!(d.name, "MyError");
             }
             other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_module_type_alias() {
+        let m = parse("type I = int;");
+        assert_eq!(m.declarations.len(), 1);
+        match &m.declarations[0] {
+            Declaration::TypeAlias(t) => {
+                assert_eq!(t.name, "I");
+                assert!(t.generic_params.is_empty());
+                assert_eq!(t.target.name, "int");
+                assert!(t.target.generic_types.is_empty());
+            }
+            other => panic!("expected type alias, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_module_type_alias_generic_target() {
+        let m = parse("type Pair = Result<int, Error>;");
+        match &m.declarations[0] {
+            Declaration::TypeAlias(t) => {
+                assert_eq!(t.name, "Pair");
+                assert_eq!(t.target.name, "Result");
+                assert_eq!(t.target.generic_types.len(), 2);
+                assert_eq!(t.target.generic_types[0].name, "int");
+                assert_eq!(t.target.generic_types[1].name, "Error");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_module_type_alias_generic_params() {
+        let m = parse("type R<T, E=Error> = Result<T, E>;");
+        match &m.declarations[0] {
+            Declaration::TypeAlias(t) => {
+                assert_eq!(t.generic_params.len(), 2);
+                assert_eq!(t.generic_params[0].name, "T");
+                assert!(t.generic_params[0].default.is_none());
+                assert_eq!(t.generic_params[1].name, "E");
+                let d = t.generic_params[1].default.as_ref().expect("default present");
+                assert_eq!(d.name, "Error");
+                assert_eq!(t.target.name, "Result");
+                assert_eq!(t.target.generic_types[0].name, "T");
+                assert_eq!(t.target.generic_types[1].name, "E");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_type_alias_rejects_bad_forms() {
+        for src in [
+            "type X;",      // missing `= Target`
+            "type X = ;",   // missing target
+            "type = int;",  // missing alias name
+        ] {
+            let mut input = src;
+            assert!(parse_module(&mut input).is_err(), "should reject: {}", src);
         }
     }
 

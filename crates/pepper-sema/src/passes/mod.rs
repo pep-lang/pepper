@@ -8,6 +8,7 @@ use crate::type_name::{self, TypeName};
 use std::mem;
 
 pub mod resolve_literals;
+pub mod resolve_type_aliases;
 pub mod tag_generics;
 pub mod convert_string_literals;
 pub mod gather_generics;

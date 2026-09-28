@@ -320,8 +320,10 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 }
 
 /// Apply both the constructor bodies and the synthesized members to every
-/// struct in the module.
+/// struct in the module. Type aliases expand first so synthesis sees only
+/// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), String> {
+    crate::passes::resolve_type_aliases::resolve_type_aliases(module);
     for st in &mut module.structs {
         apply_synthesized(st);
         finish(st)?;

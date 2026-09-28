@@ -380,6 +380,15 @@ pub struct ExternDef {
     pub attributes: Vec<ast::Attribute>,
 }
 
+/// Type alias definition: `type Name<P1, P2=Default> = Target;`. The target
+/// may reference the alias's parameters; uses are expanded at resolution.
+#[derive(Debug, Clone)]
+pub struct TypeAliasDef {
+    pub name: String,
+    pub generic_params: Vec<GenericParam>,
+    pub target: TypeName,
+}
+
 #[derive(Debug, Clone)]
 pub enum Declaration {
     Variable(VariableDef),
@@ -388,6 +397,7 @@ pub enum Declaration {
     Trait(TraitDef),
     Extension(ExtensionDef),
     Extern(ExternDef),
+    TypeAlias(TypeAliasDef),
 }
 
 /// Generic instantiation request: struct or function, keyed by concrete `TypeName`.
@@ -410,6 +420,9 @@ pub struct Module {
     pub globals: Vec<VariableDef>,
     pub struct_specs: Vec<TypeName>,
     pub func_specs: Vec<TypeName>,
+    /// Type aliases (`type Name = Target;`), expanded away by
+    /// `resolve_type_aliases` before any other pass.
+    pub type_aliases: Vec<TypeAliasDef>,
 }
 
 impl Module {
@@ -423,5 +436,6 @@ impl Module {
         self.globals.extend(other.globals);
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
+        self.type_aliases.extend(other.type_aliases);
     }
 }

@@ -280,6 +280,21 @@ pub struct TraitDecl {
     pub span: Span,
 }
 
+/// A type alias: `type Name<P1, P2=Default> = TargetType;`. The target may be
+/// generic; the alias's own parameters are substituted into it at each use.
+#[derive(Debug, Clone)]
+pub struct TypeAliasDecl {
+    /// Attributes preceding the `type` keyword.
+    pub attributes: Vec<Attribute>,
+    pub name: String,
+    /// Span of the alias name token.
+    pub name_span: Span,
+    pub generic_params: Vec<GenericParam>,
+    /// The type being aliased (may reference the alias's parameters).
+    pub target: TypeName,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ExtendDecl {
     /// Attributes preceding the `extend` keyword.
@@ -299,6 +314,7 @@ pub enum Declaration {
     Struct(StructDecl),
     Trait(TraitDecl),
     Extend(ExtendDecl),
+    TypeAlias(TypeAliasDecl),
 }
 
 impl Declaration {
@@ -309,6 +325,7 @@ impl Declaration {
             Declaration::Struct(s) => &s.name,
             Declaration::Trait(t) => &t.name,
             Declaration::Extend(e) => e.target.name.as_str(),
+            Declaration::TypeAlias(t) => &t.name,
         }
     }
 
@@ -320,6 +337,7 @@ impl Declaration {
             Declaration::Struct(s) => s.name_span,
             Declaration::Trait(t) => t.name_span,
             Declaration::Extend(e) => e.target.span,
+            Declaration::TypeAlias(t) => t.name_span,
         }
     }
 
@@ -330,6 +348,7 @@ impl Declaration {
             Declaration::Struct(s) => s.span,
             Declaration::Trait(t) => t.span,
             Declaration::Extend(e) => e.span,
+            Declaration::TypeAlias(t) => t.span,
         }
     }
 }
@@ -635,6 +654,17 @@ impl Display for ExtendDecl {
     }
 }
 
+impl Display for TypeAliasDecl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write_attributes(f, &self.attributes)?;
+        write!(f, "type {}", self.name)?;
+        if !self.generic_params.is_empty() {
+            write!(f, "<{}>", join(&self.generic_params, ", "))?;
+        }
+        write!(f, " = {}", self.target)
+    }
+}
+
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
@@ -674,6 +704,7 @@ impl Display for Statement {
             Statement::Declaration(Declaration::Struct(s)) => write!(f, "{}", s),
             Statement::Declaration(Declaration::Trait(t)) => write!(f, "{}", t),
             Statement::Declaration(Declaration::Extend(e)) => write!(f, "{}", e),
+            Statement::Declaration(Declaration::TypeAlias(t)) => write!(f, "{};", t),
             Statement::Branch(b) => write!(f, "{}", b),
             Statement::While(w) => write!(f, "{}", w),
             Statement::Return(r) => write!(f, "{};", r),
@@ -708,6 +739,7 @@ impl Display for Module {
                 Declaration::Struct(s) => writeln!(f, "{}", s)?,
                 Declaration::Trait(t) => writeln!(f, "{}", t)?,
                 Declaration::Extend(e) => writeln!(f, "{}", e)?,
+                Declaration::TypeAlias(t) => writeln!(f, "{};", t)?,
             }
         }
         Ok(())

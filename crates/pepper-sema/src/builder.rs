@@ -263,6 +263,7 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, String> {
             methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
             attributes: e.attributes.clone(),
         })),
+        ast::Declaration::TypeAlias(_) => Err("type aliases are top-level declarations".into()),
     }
 }
 /// Build a `StructDef` from an AST struct declaration, including constructor
@@ -416,6 +417,11 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                 traits: e.traits.iter().map(type_name_from).collect(),
                 methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
                 attributes: e.attributes.clone(),
+            }),
+            ast::Declaration::TypeAlias(t) => out.type_aliases.push(TypeAliasDef {
+                name: t.name.clone(),
+                generic_params: t.generic_params.iter().map(generic_param_from).collect(),
+                target: type_name_from(&t.target),
             }),
         }
     }

@@ -157,6 +157,20 @@ void print_container<C>(C container) {
 
 Generic parameters may carry a default type, used when a use omits that argument: `struct Result<TValue, TError=Error>` lets both `Result<int>` and `Result<int, MyErr>` name the same base. Defaults are filled in at specialization; the specialized instance keeps the name as written (`Result<int>` is its own specialization, distinct from `Result<int, Error>`).
 
+## Type aliases
+
+A `type` declaration names an existing type, optionally with its own generic parameters:
+
+```
+type I = int;
+type Pair = Result<int, Error>;
+type R<T, E=Error> = Result<T, E>;
+```
+
+Aliases are expanded at every use site before any other pass runs, so downstream code and the compiler see only the target type — an alias is a spelling, not a new type. Generic aliases fill their parameters positionally from the arguments given at the use site; omitted arguments fall back to parameter defaults (`R<u32>` is `Result<u32, Error>`, exactly as with generic structs). An alias may be used in any type position: locals, globals, function signatures, struct fields, casts. Aliases work across files — a module may define an alias and other modules that import it may use it.
+
+An alias must not reference itself, directly or through a chain of aliases; the compiler aborts with an error naming the cycle.
+
 ## Traits
 
 ## Extensions

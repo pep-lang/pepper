@@ -164,6 +164,24 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
                 ty: "trait".to_string(),
             }),
             ast::Declaration::Extend(_) => {}
+            ast::Declaration::TypeAlias(t) => {
+                let params = t
+                    .generic_params
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let ty = if params.is_empty() {
+                    format!("type {} = {}", t.name, t.target)
+                } else {
+                    format!("type {}<{}> = {}", t.name, params, t.target)
+                };
+                out.push(Symbol {
+                    name: t.name.clone(),
+                    name_span: t.name_span,
+                    ty,
+                });
+            }
         }
     }
     out
@@ -692,6 +710,16 @@ impl PepperLsp {
                     deprecated: None,
                     range: span_to_range(&text, e.span),
                     selection_range: span_to_range(&text, e.target.span),
+                    children: None,
+                }),
+                ast::Declaration::TypeAlias(t) => out.push(DocumentSymbol {
+                    name: t.name.clone(),
+                    detail: Some("type".to_string()),
+                    kind: SymbolKind::STRUCT,
+                    tags: None,
+                    deprecated: None,
+                    range: span_to_range(&text, t.span),
+                    selection_range: span_to_range(&text, t.name_span),
                     children: None,
                 }),
             }
