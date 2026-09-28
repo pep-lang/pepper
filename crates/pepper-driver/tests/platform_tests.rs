@@ -30,6 +30,7 @@ fn compile_jit_mapped(source: &str, map_global: impl Fn(&str) -> Option<usize>) 
         module.merge(build(&ast).expect("build"));
     }
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
+    pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");

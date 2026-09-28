@@ -2,8 +2,9 @@
 
 use std::path::PathBuf;
 
-/// Search `runtime`, `.pep/runtime`, then 1..5 levels of `../runtime`;
-/// collect `.pep` sources + `.a` libs + the dir for import search paths.
+/// Search `runtime`, `.pep/runtime`, then 1..5 levels of `../runtime`; the
+/// first with `.pep` sources wins. Returns its `.pep` sources + `.a` libs,
+/// plus the existing dirs scanned up to it, for import search paths.
 pub fn discover() -> (Vec<PathBuf>, Vec<PathBuf>, Vec<PathBuf>) {
     let cwd = std::env::current_dir().unwrap_or_default();
     let mut candidates: Vec<PathBuf> = vec![cwd.join("runtime"), cwd.join(".pep").join("runtime")];
@@ -36,6 +37,12 @@ pub fn discover() -> (Vec<PathBuf>, Vec<PathBuf>, Vec<PathBuf>) {
             } else if path.extension().and_then(|e| e.to_str()) == Some("a") {
                 libs.push(path);
             }
+        }
+        // The nearest runtime wins: merging a second copy (say, a checkout's
+        // runtime inside a worktree nested under another checkout) would
+        // declare every runtime symbol twice.
+        if !sources.is_empty() {
+            break;
         }
     }
     (sources, libs, import_dirs)

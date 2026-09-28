@@ -48,6 +48,14 @@ pub static INTEGRAL_TYPES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     ])
 });
 
+/// Whether a generic function's parameter list, as spelled, makes it a
+/// concrete override (`hash<String>`) of the generic base of the same name
+/// (`hash<T>`) rather than another generic base: every parameter must name a
+/// primitive or `String`.
+pub fn is_concrete_override<'a>(mut params: impl Iterator<Item = &'a str>) -> bool {
+    params.all(|p| INTEGRAL_TYPES.contains(p) || p == "String")
+}
+
 impl TypeName {
     pub fn new(name: &str) -> Self {
         Self {

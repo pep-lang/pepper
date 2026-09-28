@@ -171,7 +171,7 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
 /// Keep a node iff every attribute on it evaluates true (AND semantics).
 /// Attributes that are not `Target(...)` selections (`[Export]`, `[Align(8)]`)
 /// never drop anything.
-fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
+pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
     for attr in attributes {
         if !contains_platform_predicate(&attr.body) {
             continue;

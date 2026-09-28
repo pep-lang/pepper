@@ -4,7 +4,7 @@
 
 import "internals";
 
-struct Error {
+export struct Error {
     String Message;
 
     new(String message = "") {
@@ -12,7 +12,7 @@ struct Error {
     }
 }
 
-struct Result<TValue, TError=Error> {
+export struct Result<TValue, TError=Error> {
     bool IsOk;
     TValue Value;
     TError Error;

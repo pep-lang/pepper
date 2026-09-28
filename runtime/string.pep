@@ -1,6 +1,6 @@
 import "internals";
 
-struct String {
+export struct String {
     __ptr<char> Data;
     ulong Length;
     ulong Size;

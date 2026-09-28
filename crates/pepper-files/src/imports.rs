@@ -22,3 +22,10 @@ pub fn resolve(module_path: &Path, import_name: &str, local: bool, search_paths:
         None
     }
 }
+
+/// A path's identity for "already loaded" checks: canonical when the file
+/// exists, so `runtime/x.pep`, `D:\src\runtime\x.pep`, and the `\\?\`
+/// form `canonicalize` returns on Windows all compare equal.
+pub fn path_key(path: &Path) -> String {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned()
+}

@@ -9,7 +9,7 @@ import "internals";
 # pointer slots via _pep_swap_refs because it moves two references without
 # changing their count.
 
-struct Array<T> {
+export struct Array<T> {
     __ptr<T> Data;
     ulong Size;
     ulong Capacity;

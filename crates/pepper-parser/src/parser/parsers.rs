@@ -85,7 +85,7 @@ const RESERVED: &[&str] = &[
     "if", "else", "while", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
-    "trait", "extend", "type",
+    "trait", "extend", "type", "export",
 ];
 
 /// Operators that may appear as method names (overloadable operators), longest first.
@@ -815,7 +815,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) }, is_exported: false });
     }
     if input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[3..];
@@ -840,7 +840,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             // the statement separator.
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
     }
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
@@ -874,7 +874,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         skip_inline_ws(input);
     }
 
-    Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
+    Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
 }
 
 fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
@@ -1106,7 +1106,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
             dv = Some(expression(input)?);
             skip_inline_ws(input);
         }
-        return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } });
+        return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
     }
     // C style: `Type name`.
     *input = before;
@@ -1123,7 +1123,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
         dv = Some(expression(input)?);
         skip_inline_ws(input);
     }
-    Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) } })
+    Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
 }
 
 fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
@@ -1202,6 +1202,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         ws(input)?;
 
         return Ok(FunctionDecl {
+            is_exported: false,
             name: first,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params,
@@ -1256,6 +1257,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         ws(input)?;
 
         return Ok(FunctionDecl {
+            is_exported: false,
             name,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params: vec![],
@@ -1304,7 +1306,7 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
         let name_span_end = pos(input);
         ws(input)?;
         let span_start = ty.span.start;
-        params.push(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) } });
+        params.push(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) }, is_exported: false });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -1341,6 +1343,7 @@ fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> 
     }
 
     Ok(FunctionDecl {
+        is_exported: false,
         name,
         name_span: Span { start: name_span_start, end: name_span_end },
         generic_params: vec![],
@@ -1381,6 +1384,7 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
             is_const: false,
             attributes: vec![],
             span: Span { start, end: pos(input) },
+            is_exported: false,
         });
     }
     variable_declaration(input, vec![])
@@ -1414,6 +1418,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, attributes: &
     let body = block(input, vec![])?;
     ws(input)?;
     Ok(FunctionDecl {
+        is_exported: false,
         name,
         name_span,
         generic_params,
@@ -1461,6 +1466,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
                 ws(&mut after)?;
                 *input = after;
                 return Ok(FunctionDecl {
+                    is_exported: false,
                     name: if parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() },
                     name_span: ty.span,
                     generic_params: vec![],
@@ -1521,6 +1527,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
             ws(&mut after)?;
             *input = after;
             return Ok(FunctionDecl {
+                is_exported: false,
                 name: mname,
                 name_span: Span { start: mname_span_start, end: mname_span_end },
                 generic_params: vec![],
@@ -1593,6 +1600,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         }
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
+            is_exported: false,
             name: first,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params: vec![],
@@ -1626,6 +1634,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         ws(input)?;
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
+            is_exported: false,
             name,
             name_span: Span { start: name_span2_start, end: name_span2_end },
             generic_params: vec![],
@@ -1686,7 +1695,7 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) } })
+    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
 }
 
 /// `extend TypeName[<...>] [with Trait, ...] { methods }`
@@ -1739,7 +1748,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { attributes: attrs, target, traits, methods, span: Span { start: decl_start, end: pos(input) } })
+    Ok(ExtendDecl { attributes: attrs, target, traits, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
 }
 
 fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDecl> {
@@ -1807,6 +1816,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             let body = block(input, vec![])?;
             ws(input)?;
             constructor = Some(FunctionDecl {
+                is_exported: false,
                 name: "new".into(),
                 name_span: Span { start: new_span_start, end: new_span_end },
                 generic_params: vec![],
@@ -1869,7 +1879,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false })
 }
 
 fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TypeAliasDecl> {
@@ -1898,14 +1908,51 @@ fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<Typ
     ws(input)?;
     let target = type_name(input)?;
 
-    Ok(TypeAliasDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, target, span: Span { start: decl_start, end: pos(input) }, attributes: attrs })
+    Ok(TypeAliasDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, target, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false })
 }
 
+/// Consume keyword `kw` if it is next (followed by a non-identifier char).
+fn keyword(input: &mut &str, kw: &str) -> bool {
+    if input.starts_with(kw) && !input[kw.len()..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        *input = &input[kw.len()..];
+        true
+    } else {
+        false
+    }
+}
+
+/// A top-level declaration, with an optional `export` modifier after its
+/// attributes (`[A] export f()`; `export [A] f()` is an error). Every
+/// top-level declaration is private to its file without `export`.
 fn declaration(input: &mut &str) -> Result<Declaration> {
     ws(input)?;
-
+    let start = pos(input);
     // Attributes may precede any top-level declaration.
     let leading = attributes(input)?;
+    ws(input)?;
+    let is_exported = keyword(input, "export");
+    if is_exported {
+        ws(input)?;
+        // `export` goes after the attributes, never before them.
+        if input.starts_with('[') {
+            return Err(cut(input));
+        }
+    }
+    let mut decl = declaration_body(input, leading)?;
+    if is_exported {
+        match &mut decl {
+            Declaration::Function(f) => { f.is_exported = true; f.span.start = f.span.start.min(start); }
+            Declaration::Struct(s) => { s.is_exported = true; s.span.start = s.span.start.min(start); }
+            Declaration::TypeAlias(t) => { t.is_exported = true; t.span.start = t.span.start.min(start); }
+            Declaration::Trait(t) => { t.is_exported = true; t.span.start = t.span.start.min(start); }
+            Declaration::Extend(e) => { e.is_exported = true; e.span.start = e.span.start.min(start); }
+            Declaration::Variable(v) => { v.is_exported = true; v.span.start = v.span.start.min(start); }
+        }
+    }
+    Ok(decl)
+}
+
+fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declaration> {
 
     if input.starts_with("struct") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::Struct(struct_declaration(input, leading)?));
@@ -3277,5 +3324,61 @@ mod tests {
             other => panic!("expected function, got {:?}", other),
         }
     }
-}
 
+    #[test]
+    fn test_export_modifier() {
+        let m = parse(
+            "export struct S { }
+struct P { }
+export type T = int;
+type U = int;
+             export f(): int { return 0; }
+g(): int { return 0; }
+             [Target(OS(Linux))] export h() { }
+             export extern void abort();
+extern int puts(char* s);
+             export trait Tr { }
+trait Tq { }
+export extend S { }
+extend P { }
+             export var x = 1;
+var y = 2;
+export const z = 3;",
+        );
+        let exported: Vec<(String, bool)> = m
+            .declarations
+            .iter()
+            .map(|d| match d {
+                Declaration::Struct(s) => (s.name.clone(), s.is_exported),
+                Declaration::TypeAlias(t) => (t.name.clone(), t.is_exported),
+                Declaration::Function(f) => (f.name.clone(), f.is_exported),
+                Declaration::Trait(t) => (t.name.clone(), t.is_exported),
+                Declaration::Extend(e) => (format!("extend {}", e.target.name), e.is_exported),
+                Declaration::Variable(v) => (v.name.clone(), v.is_exported),
+            })
+            .collect();
+        let expected: Vec<(String, bool)> = [
+            ("S", true), ("P", false), ("T", true), ("U", false), ("f", true), ("g", false),
+            ("h", true), ("abort", true), ("puts", false), ("Tr", true), ("Tq", false),
+            ("extend S", true), ("extend P", false), ("x", true), ("y", false), ("z", true),
+        ]
+        .iter()
+        .map(|&(n, e)| (n.to_string(), e))
+        .collect();
+        assert_eq!(exported, expected);
+        // Display round-trips the modifier, after any attributes.
+        let text = m.to_string();
+        for needle in [
+            "export struct S", "export type T = int", "[Target(OS(Linux))] export h()", "export trait Tr",
+            "export extend S", "export var x", "export const z",
+        ] {
+            assert!(text.contains(needle), "missing {:?} in {}", needle, text);
+        }
+    }
+
+    #[test]
+    fn test_export_before_attributes_is_rejected() {
+        assert!(crate::parser::parse_source("t.pep", "export [Target(OS(Linux))] f() { }").is_err());
+        assert!(crate::parser::parse_source("t.pep", "[Target(OS(Linux))] export f() { }").is_ok());
+    }
+}

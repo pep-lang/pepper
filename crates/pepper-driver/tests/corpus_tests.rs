@@ -18,16 +18,14 @@ fn tests_dir() -> PathBuf {
         .join("tests")
 }
 
-/// Compile a `.pep` source with the runtime discovery ON (imports resolved
-/// from tests/ and runtime/), emit + link, then spawn the binary.
-fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
+type Parsed = Vec<(String, String, pepper_parser::ast::Module)>;
+
+/// Parse `entry`, everything it imports (from tests/ and runtime/), and the
+/// runtime sources, the set of files a CLI compile of it would see.
+fn collect_sources(entry: &Path) -> Result<Parsed, String> {
     // Runtime discovery uses the CWD; chdir to the repo root.
     let repo_root = tests_dir().parent().unwrap().to_path_buf();
     std::env::set_current_dir(&repo_root).unwrap();
-
-    let content = std::fs::read_to_string(entry)
-        .map_err(|e| format!("cannot read {}: {}", entry.display(), e))?;
-    let ast = pepper_parser::parser::parse_source(&entry.to_string_lossy(), &content)?;
 
     // Import search paths: tests/ (for `use "../string"`) and runtime/.
     let tests_dir = tests_dir();
@@ -39,31 +37,24 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut queue: Vec<PathBuf> = vec![entry.to_path_buf()];
     seen.insert(entry.to_string_lossy().into_owned());
-    let mut merged = SemaModule::default();
+    let mut parsed: Parsed = vec![];
     while let Some(source_file) = queue.pop() {
         let content = std::fs::read_to_string(&source_file)
             .map_err(|e| format!("cannot read {}: {}", source_file.display(), e))?;
-        let ast = pepper_parser::parser::parse_source(&source_file.to_string_lossy(), &content)?;
-        let mut built = build(&ast)?;
-        // Resolve imports from THIS file's AST (the merged module's import
-        // list accumulates across files and would resolve against the wrong
-        // source dir).
-        let this_imports: Vec<(String, bool)> = built
-            .imports
-            .iter()
-            .map(|i| (i.name.clone(), i.is_local))
-            .collect();
-        merged.merge(std::mem::take(&mut built));
-        for (name, is_local) in &this_imports {
+        let name = source_file.to_string_lossy().into_owned();
+        let ast = pepper_parser::parser::parse_source(&name, &content)?;
+        // Resolve imports from THIS file's AST, relative to this file.
+        for import in &ast.imports {
             let path =
-                pepper_driver::imports::resolve(&source_file, name, *is_local, &search_paths)
-                    .ok_or_else(|| format!("Cannot resolve import {}", name))?;
+                pepper_driver::imports::resolve(&source_file, &import.name, import.is_local, &search_paths)
+                    .ok_or_else(|| format!("Cannot resolve import {}", import.name))?;
             let key = path.to_string_lossy().into_owned();
             if !seen.contains(&key) {
                 seen.insert(key);
                 queue.push(path);
             }
         }
+        parsed.push((name, content, ast));
     }
 
     // Runtime sources compile into the module.
@@ -73,9 +64,35 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         }
         let content = std::fs::read_to_string(source)
             .map_err(|e| format!("cannot read {}: {}", source.display(), e))?;
-        let ast = pepper_parser::parser::parse_source(&source.to_string_lossy(), &content)?;
-        let mut built = build(&ast).expect("build");
-        merged.merge(std::mem::take(&mut built));
+        let name = source.to_string_lossy().into_owned();
+        let ast = pepper_parser::parser::parse_source(&name, &content)?;
+        parsed.push((name, content, ast));
+    }
+    Ok(parsed)
+}
+
+/// Every `tests/*/test.pep` fixture.
+fn corpus_fixtures() -> Vec<(String, PathBuf)> {
+    let Ok(entries) = std::fs::read_dir(tests_dir()) else {
+        return vec![]; // tests/ not present in a subcrate checkout
+    };
+    let mut out: Vec<(String, PathBuf)> = entries
+        .flatten()
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path().join("test.pep")))
+        .filter(|(_, p)| p.is_file())
+        .collect();
+    out.sort();
+    out
+}
+
+/// Compile a `.pep` source with the runtime discovery ON (imports resolved
+/// from tests/ and runtime/), emit + link, then spawn the binary.
+fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
+    let parsed = collect_sources(entry)?;
+    pepper_driver::compiler::check_visibility(&parsed)?;
+    let mut merged = SemaModule::default();
+    for (_, _, ast) in &parsed {
+        merged.merge(build(ast)?);
     }
 
     pepper_sema::apply_platform_filters(&mut merged)?;
@@ -116,19 +133,9 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
 #[test]
 #[ignore = "1/17 corpus fixture fails: trait dispatch — tracked feature work"]
 fn corpus_files_compile_and_run() {
-    let dir = tests_dir();
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(_) => return, // tests/ not present in a subcrate checkout
-    };
     let mut tested = 0usize;
     let mut failures: Vec<String> = vec![];
-    for entry in entries.flatten() {
-        let test_path = entry.path().join("test.pep");
-        if !test_path.is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
+    for (name, test_path) in corpus_fixtures() {
         tested += 1;
         let result = compile_and_run(&test_path);
         match result {
@@ -144,4 +151,23 @@ fn corpus_files_compile_and_run() {
         failures.len(),
         failures.join("\n")
     );
+}
+
+/// Every fixture only reaches symbols its own files declare or other files
+/// `export` — the runtime's public surface included. Unlike the run above,
+/// this needs no codegen, so it is not ignored.
+#[test]
+fn corpus_files_respect_visibility() {
+    let fixtures = corpus_fixtures();
+    assert!(!fixtures.is_empty(), "no corpus tests found");
+    let failures: Vec<String> = fixtures
+        .iter()
+        .filter_map(|(name, path)| {
+            collect_sources(path)
+                .and_then(|parsed| pepper_driver::compiler::check_visibility(&parsed))
+                .err()
+                .map(|e| format!("{}: {}", name, e))
+        })
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

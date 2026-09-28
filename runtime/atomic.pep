@@ -7,7 +7,7 @@
 
 import "internals";
 
-struct Atomic<T> {
+export struct Atomic<T> {
     __ptr<T> Data;
 
     new(T value = __default<T>()) {

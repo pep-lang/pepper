@@ -25,6 +25,7 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
         module.merge(build(&ast).expect("build"));
     }
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
+    pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
@@ -48,6 +49,7 @@ fn compile_jit_census(source: &str) -> (i32, i64) {
         module.merge(build(&ast).expect("build"));
     }
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
+    pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");

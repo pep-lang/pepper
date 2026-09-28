@@ -1,4 +1,4 @@
 
-int sum(int x, int y) {
+export int sum(int x, int y) {
     return x + y;
 }

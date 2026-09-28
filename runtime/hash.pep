@@ -6,14 +6,14 @@ import "internals";
 # spread across buckets), so two equal-valued objects are distinct keys;
 # strings hash by content via the concrete override below, so equal strings
 # at different addresses collide.
-hash<T>(T value): u64 {
+export hash<T>(T value): u64 {
     return __address<T>(value);
 }
 
 # Concrete override: `hash<String>` is a distinct function from the generic
 # base and wins for String call sites (gather_generics rewrites it to its
 # specialization form). Content hashing keeps equal strings in one bucket.
-hash<String>(String value): u64 {
+export hash<String>(String value): u64 {
     return _pep_hash_bytes(value.Data, value.Size);
 }
 
@@ -27,7 +27,7 @@ hash<String>(String value): u64 {
 # Data[idx] directly), but it keeps Size == capacity so an Array's destructor
 # visits every slot when the map dies.
 
-struct HashMap<K, V> {
+export struct HashMap<K, V> {
     Array<K> keys;
     Array<V> values;
     Array<int> state;
@@ -236,7 +236,7 @@ struct HashMap<K, V> {
 # ── HashSet<K> ──────────────────────────────────────────────────────────────
 # Same table machinery as HashMap without the value Array.
 
-struct HashSet<K> {
+export struct HashSet<K> {
     Array<K> keys;
     Array<int> state;
     ulong capacity;   # power of two

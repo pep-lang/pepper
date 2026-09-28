@@ -167,9 +167,70 @@ type Pair = Result<int, Error>;
 type R<T, E=Error> = Result<T, E>;
 ```
 
-Aliases are expanded at every use site before any other pass runs, so downstream code and the compiler see only the target type — an alias is a spelling, not a new type. Generic aliases fill their parameters positionally from the arguments given at the use site; omitted arguments fall back to parameter defaults (`R<u32>` is `Result<u32, Error>`, exactly as with generic structs). An alias may be used in any type position: locals, globals, function signatures, struct fields, casts. Aliases work across files — a module may define an alias and other modules that import it may use it.
+Aliases are expanded at every use site before any other pass runs, so downstream code and the compiler see only the target type — an alias is a spelling, not a new type. Generic aliases fill their parameters positionally from the arguments given at the use site; omitted arguments fall back to parameter defaults (`R<u32>` is `Result<u32, Error>`, exactly as with generic structs). An alias may be used in any type position: locals, globals, function signatures, struct fields, casts. Aliases work across files — a module may define an `export`ed alias and other modules that import it may use it (see [Visibility](#visibility)).
 
 An alias must not reference itself, directly or through a chain of aliases; the compiler aborts with an error naming the cycle.
+
+## Visibility
+
+Every top-level declaration — functions (including `extern` declarations), structs, type aliases, traits,
+extensions, and module-scope variables — is private to the file that declares it. Prefix the declaration with
+`export` to make it usable from other files:
+
+```
+# lib.pep
+export struct Point {
+    var x: int;
+    var y: int;
+}
+export type Points = Point[];
+export trait Printable { print(); }
+export var origin_count = 0;
+export origin(): Point { return make(0, 0); }
+make(x: int, y: int): Point { ... }     # private: only lib.pep can call it
+
+export extend Point with Printable {
+    print() { ... }
+}
+extend Point {
+    norm(): int { ... }                 # private extension: only lib.pep can call p.norm()
+}
+
+# main.pep
+use "lib";
+main(): int {
+    var p = origin();   # ok
+    p.print();          # ok: exported extension
+    var q = make(1, 2); # error: 'make' is private to lib.pep
+    var n = p.norm();   # error: 'norm' is declared in a private extension in lib.pep
+    return p.x;
+}
+```
+
+`export` goes directly before the declaration's keyword or name, after any attributes:
+`[Target(OS(Windows))] export f()`. Writing it before the attributes (`export [Target(OS(Windows))] f()`) is a
+parse error.
+
+Fields and methods declared in a struct's body are reached through the struct, so they share its visibility.
+Methods added by an extension share the extension's visibility instead: a private extension's methods can be
+called only from the file that declares it, even on an exported struct, and a trait it implements is only
+available through it in that file. Visibility is checked before types are known, so members are matched by
+name: a call `x.m()` from another file is accepted if any struct body or extension visible to the calling file
+(its own, or exported) declares an `m`. Extending a struct does not make a private struct visible. The runtime's
+public surface (`String`, `Array`, `HashMap`, `HashSet`, `Atomic`, `Result`, `Error`, `hash`, `assert`, `panic`,
+…) is exported this way.
+
+All files of a program still share one namespace, so a private name must not also be declared in another file;
+the compiler reports `private 'helper' is also declared in b.pep`. `extern` declarations are exempt, since every
+declaration of an extern names the same C function; so is a concrete override such as `hash<int>` of an
+exported generic `hash<T>`, and so are declarations that a `[Target(...)]` attribute drops for the current
+platform. Overriding one the runtime already provides, such as `hash<String>`, is a duplicate.
+Concrete overrides are only supported for primitive types and `String`: `hash<Point>` declares a second generic
+function with a type parameter named `Point`, which collides with `hash<T>`. Type parameters are compared by
+position, not name, so a private `pick<U>` also collides with `pick<T>`.
+
+`export` controls visibility between Pepper files only; C linkage is the separate `[Export]` attribute described
+in [Exporting functions](#exporting-functions).
 
 ## Traits
 
@@ -193,7 +254,7 @@ duplicates are linked once.
 
 ## Exporting functions
 
-The `[export]` attribute attached to any global function will create a C linkage exported function. Types used
+The `[Export]` attribute attached to any global function will create a C linkage exported function. Types used
 in the function signature are automatically lowered to C types, with object references becoming opaque handles
 (effectively `void*` from C's perspective).
 

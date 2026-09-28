@@ -206,10 +206,7 @@ fn concrete_overrides(module: &mut Module) {
         if function.generic_params.is_empty() {
             continue;
         }
-        let all_concrete = function
-            .generic_params
-            .iter()
-            .all(|p| crate::type_name::INTEGRAL_TYPES.contains(p.name.as_str()) || p.name == "String");
+        let all_concrete = crate::type_name::is_concrete_override(function.generic_params.iter().map(|p| p.name.as_str()));
         if !all_concrete {
             continue;
         }

@@ -221,6 +221,9 @@ pub struct VariableDecl {
     pub is_const: bool,
     /// Span from the declaration's first token to its last.
     pub span: Span,
+    /// `export` modifier (module-scope variables only): visible outside the
+    /// declaring file.
+    pub is_exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -240,6 +243,9 @@ pub struct FunctionDecl {
     pub span: Span,
     /// Attributes preceding the function (`[Name(args)]`).
     pub attributes: Vec<Attribute>,
+    /// `export` modifier: visible outside the declaring file. Top-level
+    /// functions (and externs) are private to their file without it.
+    pub is_exported: bool,
 }
 
 /// A generic type parameter, optionally with a default (`TError=Error` in
@@ -266,6 +272,8 @@ pub struct StructDecl {
     pub span: Span,
     /// Attributes preceding the struct (`[Name(args)]`).
     pub attributes: Vec<Attribute>,
+    /// `export` modifier: visible outside the declaring file.
+    pub is_exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -278,6 +286,8 @@ pub struct TraitDecl {
     pub generic_params: Vec<GenericParam>,
     pub methods: Vec<FunctionDecl>,
     pub span: Span,
+    /// `export` modifier: visible outside the declaring file.
+    pub is_exported: bool,
 }
 
 /// A type alias: `type Name<P1, P2=Default> = TargetType;`. The target may be
@@ -293,6 +303,8 @@ pub struct TypeAliasDecl {
     /// The type being aliased (may reference the alias's parameters).
     pub target: TypeName,
     pub span: Span,
+    /// `export` modifier: visible outside the declaring file.
+    pub is_exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -305,6 +317,9 @@ pub struct ExtendDecl {
     pub traits: Vec<TypeName>,
     pub methods: Vec<FunctionDecl>,
     pub span: Span,
+    /// `export` modifier: the extension's methods are usable outside the
+    /// declaring file.
+    pub is_exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -529,6 +544,9 @@ impl Display for VariableDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let spec = if self.is_const { "const " } else { "var " };
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         write!(f, "{}{}: {}", spec, self.name, self.type_name)?;
         if let Some(v) = &self.default_value {
             write!(f, " = {}", v)?;
@@ -550,6 +568,9 @@ impl Display for GenericParam {
 impl Display for FunctionDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         if self.external {
             write!(f, "extern {} {}({})", self.return_type, self.name, join(&self.parameters, ", "))?;
             return Ok(());
@@ -583,6 +604,9 @@ impl Display for FunctionDecl {
 impl Display for StructDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         write!(f, "struct {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
@@ -621,6 +645,9 @@ impl Display for StructDecl {
 impl Display for TraitDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         write!(f, "trait {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
@@ -639,6 +666,9 @@ impl Display for TraitDecl {
 impl Display for ExtendDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         write!(f, "extend {}", self.target)?;
         if !self.traits.is_empty() {
             write!(f, " with {}", join(&self.traits, ", "))?;
@@ -657,6 +687,9 @@ impl Display for ExtendDecl {
 impl Display for TypeAliasDecl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write_attributes(f, &self.attributes)?;
+        if self.is_exported {
+            write!(f, "export ")?;
+        }
         write!(f, "type {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
