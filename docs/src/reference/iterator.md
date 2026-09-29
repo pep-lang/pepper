@@ -92,6 +92,213 @@ is an error; the runtime's iterators panic in that case.
 **Returns**
 - the current element
 
+#### map
+
+```pepper
+map<U>(transform: (T) => U): MapIterator<T, U>
+```
+
+Returns an iterator over `transform` applied to each element, in order.
+
+Lazy: `transform` runs once per element, as the result is advanced, and
+the result advances this iterator. Every type that declares
+`Iterator<T>` gets this method.
+
+**Type parameters**
+- `U` — the type `transform` returns
+
+**Parameters**
+- `transform` — the function applied to each element
+
+**Returns**
+- a `MapIterator<T, U>` over the transformed elements
+
+**Example**
+```pepper
+    var names = Array<String>();
+    for (var size in names.iterate().map((name) => name.size())) {
+        print(size);
+    }
+```
+
+#### filter
+
+```pepper
+filter(keep: (T) => bool): FilterIterator<T>
+```
+
+Returns an iterator over the elements for which `keep` returns true, in
+order.
+
+Lazy: `keep` runs once per element, as the result is advanced, and the
+result advances this iterator. Every type that declares `Iterator<T>`
+gets this method.
+
+**Parameters**
+- `keep` — the test an element must pass
+
+**Returns**
+- a `FilterIterator<T>` over the elements that pass
+
+**Example**
+```pepper
+    var nums = Array<int>();
+    for (var even in nums.iterate().filter((n) => n % 2 == 0)) {
+        print(even);
+    }
+```
+
+## MapIterator
+
+```pepper
+struct MapIterator<T, U>
+```
+
+The iterator `Iterator.map` returns: each element of `Source`, passed
+through `Transform`.
+
+**Type parameters**
+- `T` — the type of the source's elements
+- `U` — the type of the elements produced
+
+**See also**
+- `Iterator.map`
+
+### Fields
+
+#### Source
+
+```pepper
+Iterator<T> Source
+```
+
+The iterator whose elements are transformed.
+
+#### Transform
+
+```pepper
+(T) => U Transform
+```
+
+The function applied to each element.
+
+#### Value
+
+```pepper
+U Value
+```
+
+The current element, `Transform` of the source's current element.
+
+### Constructor
+
+#### MapIterator()
+
+```pepper
+construct(Iterator<T> source, (T) => U transform)
+```
+
+Makes an iterator over `transform` applied to the elements of `source`.
+
+**Parameters**
+- `source` — the iterator to transform
+- `transform` — the function applied to each element
+
+### Methods
+
+#### next
+
+```pepper
+bool next()
+```
+
+Advances to the next element, and applies `Transform` to it.
+
+**Returns**
+- true if there is a current element, false when the source is exhausted
+
+#### current
+
+```pepper
+U current()
+```
+
+Returns the transformed element the last successful `next()` produced.
+
+**Returns**
+- the current element
+
+## FilterIterator
+
+```pepper
+struct FilterIterator<T>
+```
+
+The iterator `Iterator.filter` returns: the elements of `Source` that
+`Keep` accepts.
+
+**Type parameters**
+- `T` — the type of the elements
+
+**See also**
+- `Iterator.filter`
+
+### Fields
+
+#### Source
+
+```pepper
+Iterator<T> Source
+```
+
+The iterator whose elements are tested.
+
+#### Keep
+
+```pepper
+(T) => bool Keep
+```
+
+The test an element must pass.
+
+### Constructor
+
+#### FilterIterator()
+
+```pepper
+construct(Iterator<T> source, (T) => bool keep)
+```
+
+Makes an iterator over the elements of `source` that `keep` accepts.
+
+**Parameters**
+- `source` — the iterator to filter
+- `keep` — the test an element must pass
+
+### Methods
+
+#### next
+
+```pepper
+bool next()
+```
+
+Advances to the next element that `Keep` accepts.
+
+**Returns**
+- true if there is a current element, false when the source is exhausted
+
+#### current
+
+```pepper
+T current()
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
+
 ## Iterable
 
 ```pepper

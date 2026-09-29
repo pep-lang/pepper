@@ -29,6 +29,8 @@ pub mod lower_with_blocks;
 pub mod weak_types;
 pub mod closures;
 pub mod function_references;
+pub mod generic_methods;
+pub mod type_arguments;
 pub mod convert_to_traits;
 
 use apply_extensions::apply_extensions;
@@ -75,6 +77,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(apply_extensions(module, false)); // apply generic/concrete extensions
     step!(specialize_structs(module));
     step!(specialize_functions(module));
+    step!(generic_methods::specialize_methods(module));
     step!(synthesize_function_types(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false)); // resolve what remains
@@ -93,7 +96,14 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         step!(gather_generics(module));
         step!(specialize_structs(module));
         step!(specialize_functions(module));
-        if (module.structs.len(), module.functions.len()) == before {
+        // A generic method call on a value whose type the round just
+        // specialized (`c.map(f)` with `c: Box<long>`) is typed, and its type
+        // arguments inferred, only now.
+        if generic_methods::has_generic_methods(module) {
+            step!(resolve_implicit_types(module));
+        }
+        let methods_added = generic_methods::specialize_methods(module);
+        if (module.structs.len(), module.functions.len()) == before && !methods_added {
             break;
         }
     }
@@ -109,6 +119,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(function_references::reference_functions(module));
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
+    step!(type_arguments::check_type_arguments(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
     step!(convert_print_calls(module));
     step!(resolve_resolvables(module, true));

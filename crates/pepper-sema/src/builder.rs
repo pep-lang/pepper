@@ -579,11 +579,13 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         .iter()
         .map(|f| variable_def(f, Kind::Field))
         .collect::<Result<Vec<_>, _>>()?;
-    let method_members: Vec<FunctionDef> = decl
+    let (generic_methods, method_members): (Vec<FunctionDef>, Vec<FunctionDef>) = decl
         .methods
         .iter()
         .map(|m| function_def(m, Some(base_name.clone())))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .partition(|m| m.is_generic_func);
 
     let constructor = match &decl.constructor {
         Some(ctor) => {
@@ -650,6 +652,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         generic_params,
         field_members,
         method_members,
+        generic_methods,
         constructor,
         destructor,
         acquire: empty_method(&base_name, "__acquire"),

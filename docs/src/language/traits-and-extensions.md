@@ -91,6 +91,11 @@ extend Square with Shape {
 
 Here `Square(3).sides()` returns 4.
 
+A default method can have type parameters of its own (see
+[Generic methods](generics.md#generic-methods)). The runtime's `Iterator<T>`
+uses this for its `map<U>` and `filter` [adapters](iteration.md#adapters),
+which every type that declares `Iterator<T>` gets.
+
 > **Known problem:** a default body that uses a string literal does not work
 > yet: it fails to compile (`not a struct`) or the program crashes. Write such a
 > method in each extension instead.
@@ -123,7 +128,8 @@ calling a method on it runs that struct's own method:
   struct value (see [Memory](memory.md)). When the last reference goes away,
   whether it was a `Shape` or a `Square`, the struct's own destructor runs.
 - **Only instance methods are callable through the trait.** Static methods,
-  and methods whose signature uses `this` as a type, need the concrete type;
+  generic methods, and methods whose signature uses `this` as a type, need the
+  concrete type;
   calling one through a trait value is an error.
 - **Methods must match the trait's signature.** An implementation with
   different parameter or return types is an error. The one exception is a

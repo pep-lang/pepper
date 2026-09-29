@@ -55,7 +55,7 @@ pub fn specialize_functions(module: &mut Module) {
     }
 }
 
-fn replace_body_types(block: &mut Block, type_map: &[(String, TypeName)]) {
+pub(crate) fn replace_body_types(block: &mut Block, type_map: &[(String, TypeName)]) {
     for stmt in &mut block.items {
         replace_stmt_types(stmt, type_map);
     }
@@ -92,7 +92,7 @@ fn replace_stmt_types(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
     }
 }
 
-fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
+pub(crate) fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         // `SizeOf<T>` in specialized bodies: substitute the generic arg.
         if let Expression::SizeOf(ty) = e {

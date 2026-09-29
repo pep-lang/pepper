@@ -199,6 +199,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     types.insert(&s.name);
                     decls.entry(&s.name).or_default().push(decl(s.is_exported, s.name_span));
                     members.of_struct.entry(&s.name).or_default().extend(struct_member_names(s));
+                    members.struct_params.insert(&s.name, s.generic_params.iter().map(|g| g.name.as_str()).collect());
                     for m in struct_member_names(s) {
                         members.in_struct_bodies.entry(m).or_default().push((i, s.is_exported));
                     }
@@ -313,6 +314,8 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
 /// and for `x.m` accesses. Each entry is (declaring file, exported).
 #[derive(Default)]
 struct Members<'a> {
+    /// Struct name -> its generic parameter names.
+    struct_params: HashMap<&'a str, Vec<&'a str>>,
     /// struct name -> names declared in its body (fields + methods).
     of_struct: HashMap<&'a str, HashSet<&'a str>>,
     /// member name -> the structs whose bodies declare it (fields + methods).
@@ -404,12 +407,21 @@ impl ScopeWalk for Checker<'_, '_> {
 
     /// `extend Foo<T>` introduces T as a generic parameter. A name the
     /// program declares as a type specializes instead (`extend
-    /// Array<Point>`), and is checked like any reference.
+    /// Array<Point>`), and is checked like any reference, unless it is the
+    /// struct's own parameter at that position (`extend Box<T>` of
+    /// `struct Box<T>`), which always extends the generic base.
     fn extend_params(&self, target: &TypeName) -> HashSet<String> {
+        let own_params = self.members.struct_params.get(target.name.as_str());
         target
             .generic_types
             .iter()
-            .filter(|t| t.generic_types.is_empty() && !self.types.contains(t.name.as_str()))
+            .enumerate()
+            .filter(|(i, t)| {
+                t.generic_types.is_empty()
+                    && (!self.types.contains(t.name.as_str())
+                        || own_params.is_some_and(|p| p.get(*i).is_some_and(|p| *p == t.name.as_str())))
+            })
+            .map(|(_, t)| t)
             .map(|t| t.name.clone())
             .collect()
     }

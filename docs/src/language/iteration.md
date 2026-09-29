@@ -91,6 +91,30 @@ main.pep:4:19: error: type 'Foo' is not iterable: implement Iterable<T> (iterate
 `HashMap` and `HashSet` do not implement the protocol yet, so they cannot be
 used in a `for` loop.
 
+## Adapters
+
+`Iterator<T>` has two default methods that wrap an iterator in another one.
+Each one works lazily, one element at a time as the loop asks for it:
+
+- `map(transform)` yields `transform(x)` for each element `x`; its element
+  type is whatever `transform` returns.
+- `filter(keep)` yields only the elements for which `keep(x)` is `true`.
+
+Both return iterators, so they chain, and a `for` loop can use the result
+directly:
+
+```pepper
+{{#include ../../examples/iteration-adapters.pep}}
+```
+
+Every type that declares `Iterator<T>` gets them: `ArrayIterator<T>` (from
+`Array.iterate()`), `StringIterator`, and your own iterators once you write
+`extend YourType with Iterator<T> {}`. The adapter holds a reference to the
+iterator it wraps, so a chain built from a temporary stays alive while the
+loop runs. They are generic methods (see
+[Generics](generics.md#generic-methods)), so they are not callable through an
+`Iterator<T>` trait value.
+
 ## Writing your own iterator
 
 To make your own type work in a `for` loop, give it `next()` and `current()`
@@ -108,7 +132,8 @@ Some things to keep in mind:
   intent, and the compiler then checks that `Countdown` has both `next()` and
   `current()` (see [Traits and extensions](traits-and-extensions.md)).
   Declaring it also lets the type be used as an `Iterator<int>` value, and a
-  `for` loop over such a value calls the methods through the trait.
+  `for` loop over such a value calls the methods through the trait. It also
+  gives the type the [adapters](#adapters) `map` and `filter`.
 - **Looping over an iterator uses it up.** When the source is itself an
   iterator stored in a variable, the loop drives that same object, so it is
   exhausted afterwards. An iterable starts a new, independent pass every time

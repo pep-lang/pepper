@@ -82,11 +82,13 @@ pub fn gather_generics(module: &mut Module) {
             }
         };
         walk_function(function, &mut gather);
-        if function.ty.is_generic() && !function.ty.name.starts_with("__") {
+        // A generic function's own parameters (`Array<U>` in `f<U>`) are
+        // not a use; its specializations' concrete types are.
+        if function.ty.is_generic() && !function.ty.name.starts_with("__") && !contains_param(&function.ty, &params) {
             structs.insert(function.ty.to_string());
         }
         for param in &function.parameters {
-            if param.ty.is_generic() && !param.ty.name.starts_with("__") {
+            if param.ty.is_generic() && !param.ty.name.starts_with("__") && !contains_param(&param.ty, &params) {
                 structs.insert(param.ty.to_string());
             }
         }

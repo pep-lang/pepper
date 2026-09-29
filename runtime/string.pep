@@ -462,3 +462,5 @@ export struct StringIterator {
         return String(Source.Data + Offset, NextOffset - Offset, 1);
     }
 }
+
+extend StringIterator with Iterator<String> {}

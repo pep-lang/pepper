@@ -21,7 +21,12 @@ fn clone_method(method: &FunctionDef, parent: &str) -> FunctionDef {
 
 fn apply_to_struct(st: &mut StructDef, ext: &ExtensionDef, traits: &[TraitDef]) {
     for method in &ext.methods {
-        st.method_members.push(clone_method(method, &st.name));
+        let method = clone_method(method, &st.name);
+        if method.is_generic_func {
+            st.generic_methods.push(method);
+        } else {
+            st.method_members.push(method);
+        }
     }
     for trait_name in &ext.traits {
         st.traits.push(trait_name.clone());
@@ -50,6 +55,9 @@ fn conform(
         .collect();
     type_map.push(("this".to_string(), st.ty.clone()));
     for required in &def.methods {
+        if required.is_generic_func && st.generic_methods.iter().any(|m| m.name == required.name) {
+            continue;
+        }
         if let Some(have) = st.method_members.iter().find(|m| m.name == required.name) {
             check_signature(st, have, required, trait_name, &type_map, traits);
             continue;
@@ -64,7 +72,12 @@ fn conform(
                 if let Some(body) = &mut method.body {
                     substitute_block(body, &type_map);
                 }
-                st.method_members.push(method);
+                // A generic default method (`map<U>`) is specialized per call.
+                if method.is_generic_func {
+                    st.generic_methods.push(method);
+                } else {
+                    st.method_members.push(method);
+                }
             }
             None => crate::errors::report(
                 Diagnostic::error(format!(

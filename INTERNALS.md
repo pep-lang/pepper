@@ -146,7 +146,10 @@ with no extension, and `module_name()` is the output's stem.
   traits, `ScopeWalkMut` (linking's `Rewriter`, which rewrites the AST) and
   `ScopeWalk` (visibility's `Checker`, which only reads it); each pass
   implements the hooks for references, member names, type names, visible
-  members, and `extend` parameters.
+  members, and `extend` parameters. In `extend Box<T>`, a name equal to
+  `Box`'s own parameter at that position is always the parameter, even when
+  the program also declares a struct `T` (a runtime `extend ArrayIterator<T>`
+  must not see a user's `struct T`).
 - **`Program::check`** reports link errors first and then
   `visibility::check_visibility`. That check covers private symbols, symbols
   that were not imported, private names declared in several files (they
@@ -171,6 +174,11 @@ with no extension, and `module_name()` is the output's stem.
   `parse_module` is the top-level loop: imports, `export` re-exports, then
   `declaration`. Rules return `ErrMode::Backtrack` (via `bt`) to let an
   alternative try, or `ErrMode::Cut` (via `cut`/`cut_expecting`) to commit.
+- **Generic method calls.** In postfix position, `.name<types>(` is a call
+  with type arguments only when `<` follows the name and `(` follows `>`
+  with no whitespace; the method name becomes the string `"map<long>"`.
+  Otherwise `a.b < c, d > (e)` stays two comparisons. Struct and trait
+  methods accept their own type parameters (`map<U>(…)`) through a probe.
 - **Comments.** The only comment form is `#` to end of line (`ws`). A doc
   comment is a run of consecutive `##` lines directly above a declaration.
   Attributes and `export`/`static` may sit between the comment and the
@@ -246,7 +254,9 @@ with no extension, and `module_name()` is the output's stem.
 - **Model** (`model.rs`): `Module { structs, traits, extensions, functions,
   externs, globals, type_aliases, struct_specs, func_specs, trait_types,
   imports, sources: SourceMap }`. Nodes are owned enum trees with no `Rc`/`RefCell`;
-  passes mutate `&mut Module` in place. The main node types are `StructDef`,
+  passes mutate `&mut Module` in place. The main node types are `StructDef`
+  (a method with type parameters of its own, `map<U>`, sits in
+  `generic_methods` rather than `method_members` until specialized),
   `FunctionDef` (methods have `parent: Some(struct)`), `ExternDef` (with
   `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
@@ -346,20 +356,22 @@ several passes run more than once on purpose.
 | 4 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
 | 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
-| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). |
+| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). A call to a generic function or method without type arguments (`larger(3, 9)`, `b.map(f)`) gets them from its arguments' types through `type_arguments::GenericSignature` (bind each parameter type against an argument type, `unify`), and is renamed to the specialization (`larger<int>`, `map<long>`); a closure argument receives the partly bound parameter type as its expected type, so inference runs across fixpoint rounds. |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
-| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. A `void` argument erases what it types (`erase_void`): fields and parameters of that type, stores of them, and a `return` of one, so `Result<void>` has no `Value` and `ok()` takes no argument. |
+| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. A `void` argument erases what it types (`erase_void`): fields and parameters of that type, stores of them, and a `return` of one, so `Result<void>` has no `Value` and `ok()` takes no argument. A generic struct's `generic_methods` are cloned with the struct's parameters substituted and keep their own. |
+| 11b | `specialize_methods` (`generic_methods.rs`) | For each method call named `m<args>` on a struct with a generic method `m`, clones `m` into `method_members` as `m<args>` with its own parameters substituted. `apply_extensions` routes generic extension methods and generic trait default methods (`Iterator<T>.map<U>`) to `generic_methods`; `traits::is_dispatchable` excludes them, since a vtable has one slot per method. |
 | 12 | `synthesize_function_types` | For function types that specialization exposed. |
 | 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`, including the `T` of intrinsic nodes that specialization substituted. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes, and `__function_pointer(f)` into `Expression::FunctionPointer` (a free function, or a static method of the enclosing struct, whose owner type specialization substitutes). |
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
 | 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). |
 | 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`BinaryOp::identity_as_equality`), addresses for references. |
-| loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions` | Repeats until the counts of structs and functions stop growing (specializing exposes new uses). Bounded because a self-nesting generic never converges. |
+| loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions`, `specialize_methods` | Repeats until the counts of structs, functions and methods stop growing (specializing exposes new uses). When the module has generic methods, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. |
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `check_type_arguments` (`type_arguments.rs`) | Reports a generic call whose type arguments the arguments did not determine (`cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)`, with a note at the declaration). |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`StructDef::implicit_from`) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |

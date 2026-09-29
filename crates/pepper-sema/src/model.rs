@@ -557,6 +557,10 @@ pub struct StructDef {
     pub generic_params: Vec<GenericParam>,
     pub field_members: Vec<VariableDef>,
     pub method_members: Vec<FunctionDef>,
+    /// Methods with type parameters of their own (`map<U>(...)`), kept
+    /// apart: only their specializations (`map<long>`, added to
+    /// `method_members` by `generic_methods`) are compiled.
+    pub generic_methods: Vec<FunctionDef>,
     pub constructor: FunctionDef,
     pub destructor: FunctionDef,
     pub acquire: FunctionDef,

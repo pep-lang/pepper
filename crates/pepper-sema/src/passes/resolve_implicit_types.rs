@@ -18,8 +18,10 @@ struct Scopes {
     functions: Vec<(String, TypeName)>,
     /// Free functions usable as values: name → function type.
     function_types: Vec<(String, TypeName)>,
-    /// Generic free functions: name → generic parameter names.
-    generic_functions: Vec<(String, Vec<String>)>,
+    /// Generic methods: struct type string → (method name → declaration).
+    generic_methods: std::rc::Rc<std::collections::HashMap<String, Vec<(String, crate::passes::type_arguments::GenericSignature)>>>,
+    /// Generic free functions: name → declaration.
+    generic_functions: Vec<(String, crate::passes::type_arguments::GenericSignature)>,
     /// While walking a function with no declared return type: the types of
     /// its `return <value>` statements.
     returns: Option<Vec<TypeName>>,
@@ -36,6 +38,7 @@ impl Scopes {
             functions: vec![],
             function_types: vec![],
             generic_functions: vec![],
+            generic_methods: Default::default(),
             returns: None,
         }
     }
@@ -290,6 +293,11 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     }
                 }
             }
+            // A generic function called without type arguments has no type
+            // until they are inferred (`infer_type_arguments`).
+            if !function.contains('<') && scopes.generic_functions.iter().any(|(n, _)| n == function) {
+                return TypeName::auto();
+            }
             // Specialized call `name<args>`: the instance (not the base)
             // carries the substituted return type.
             if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == function) {
@@ -320,7 +328,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // A generic call spelled with its arguments (`twice<int>(f)`)
             // before it is specialized: the base's return type with the
             // arguments substituted.
-            if let Some((_, params)) = scopes.generic_functions.iter().find(|(n, _)| n == name) {
+            if let Some((_, signature)) = scopes.generic_functions.iter().find(|(n, _)| n == name) {
+                let params: Vec<String> = signature.params.iter().map(|p| p.name.clone()).collect();
                 if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
                     let args = crate::passes::gather_generics::parse_type_string(function).sub_types;
                     if !args.is_empty() {
@@ -446,6 +455,22 @@ fn resolve_once(module: &mut Module) -> bool {
         })
         .collect();
     // Struct method table: return type per method name.
+    let generic_methods: std::rc::Rc<std::collections::HashMap<String, Vec<(String, crate::passes::type_arguments::GenericSignature)>>> =
+        std::rc::Rc::new(
+            module
+                .structs
+                .iter()
+                .filter(|st| !st.generic_methods.is_empty())
+                .map(|st| {
+                    let methods = st
+                        .generic_methods
+                        .iter()
+                        .map(|m| (m.name.clone(), crate::passes::type_arguments::GenericSignature::of(m)))
+                        .collect();
+                    (st.ty.to_string(), methods)
+                })
+                .collect(),
+        );
     let struct_methods: Vec<(String, Vec<(String, TypeName)>)> = module
         .structs
         .iter()
@@ -469,11 +494,11 @@ fn resolve_once(module: &mut Module) -> bool {
         function_returns.push((e.name.clone(), e.ty.clone()));
     }
 
-    let generic_functions: Vec<(String, Vec<String>)> = module
+    let generic_functions: Vec<(String, crate::passes::type_arguments::GenericSignature)> = module
         .functions
         .iter()
         .filter(|f| f.is_generic_func)
-        .map(|f| (f.name.clone(), f.generic_params.iter().map(|p| p.name.clone()).collect()))
+        .map(|f| (f.name.clone(), crate::passes::type_arguments::GenericSignature::of(f)))
         .collect();
 
     // Free functions usable as values (`var f = square;`).
@@ -500,6 +525,7 @@ fn resolve_once(module: &mut Module) -> bool {
         scopes.functions = function_returns.clone();
         scopes.function_types = function_values.clone();
         scopes.generic_functions = generic_functions.clone();
+        scopes.generic_methods = generic_methods.clone();
         scopes.symbols[0].extend(global_symbols.iter().cloned());
 
         // Resolve field types with defaults.
@@ -582,6 +608,7 @@ fn resolve_once(module: &mut Module) -> bool {
             scopes.functions = function_returns.clone();
             scopes.function_types = function_values.clone();
             scopes.generic_functions = generic_functions.clone();
+        scopes.generic_methods = generic_methods.clone();
             scopes.symbols[0].extend(global_symbols.iter().cloned());
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
@@ -600,6 +627,7 @@ fn resolve_once(module: &mut Module) -> bool {
     scopes.functions = function_returns.clone();
     scopes.function_types = function_values.clone();
     scopes.generic_functions = generic_functions.clone();
+        scopes.generic_methods = generic_methods.clone();
     scopes.symbols[0].extend(global_symbols.iter().cloned());
     for var in &mut module.globals {
         if var.ty.to_string() == crate::type_name::AUTO {
@@ -694,6 +722,58 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
     }
 }
 
+/// A call to a generic free function without type arguments,
+/// `larger(3, 9)`, becomes a call to the specialization its arguments
+/// select, `larger<i32>(3, 9)` (see `type_arguments`).
+fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    if let Expression::MethodCall { this, method, args, .. } = e {
+        // `x.map(f)` calling a generic method: `x.map<U>(f)`.
+        if method.contains('<') {
+            return;
+        }
+        let owner = type_of_expr(this, scopes, current);
+        if owner.contains_auto() || scopes.has_method(&owner, method) {
+            return;
+        }
+        let key = owner.to_string();
+        let Some(methods) = scopes.generic_methods.get(key.trim_end_matches('*')) else { return };
+        let Some((_, signature)) = methods.iter().find(|(n, _)| n == method) else { return };
+        let types = argument_types(args, scopes, current);
+        if let Some(type_args) = signature.infer(&types) {
+            *method = crate::passes::type_arguments::specialization(method, type_args);
+        }
+        return;
+    }
+    let Expression::FunctionCall { function, args, .. } = e else { return };
+    if function.contains('<') || scopes.value_callee(function, current).is_some() {
+        return;
+    }
+    // Inside a method, a bare call may be one of the struct's methods,
+    // which `convert_member_refs` has not turned into a method call yet.
+    if current.is_some_and(|st| scopes.has_method(st, function) || scopes.field_type(st, function).is_some()) {
+        return;
+    }
+    let Some((_, signature)) = scopes.generic_functions.iter().find(|(n, _)| n == function) else { return };
+    let types = argument_types(args, scopes, current);
+    if let Some(type_args) = signature.infer(&types) {
+        *function = crate::passes::type_arguments::specialization(function, type_args);
+    }
+}
+
+/// What each argument's type says about a generic call's type arguments.
+fn argument_types(args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) -> Vec<Option<TypeName>> {
+    args.iter()
+        .map(|arg| match arg {
+            // A closure's type binds what it already knows.
+            Expression::MakeClosure { ty, .. } => Some(ty.clone()),
+            _ => {
+                let ty = type_of_expr(arg, scopes, current);
+                (!ty.is_empty() && !ty.contains_auto()).then_some(ty)
+            }
+        })
+        .collect()
+}
+
 fn resolve_expression(
     expr: &mut Expression,
     scopes: &mut Scopes,
@@ -702,6 +782,7 @@ fn resolve_expression(
 ) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
+        infer_type_arguments(e, scopes, current);
         // Calls through function values: `f(x)` on a local, parameter,
         // global or field of function type, and `obj.callback(x)`.
         if let Expression::FunctionCall { function, args, .. } = e {

@@ -36,15 +36,24 @@ A free function takes type parameters the same way:
 {{#include ../../examples/generics-functions.pep}}
 ```
 
-Write the type arguments at every call, `larger<int>(3, 9)`. Pepper does not
-infer them from the arguments yet; leaving them out is reported as a call to
-an unknown function:
+Pepper infers the type arguments from the arguments, so `larger(3, 9)` calls
+`larger<int>`. You can always write them out, `larger<float>(2.5, 1.5)`, and
+must when the arguments do not determine every type parameter, for example one
+that appears only in the return type:
 
 ```text
-main.pep:7:12: error: call to undeclared function 'larger'
-    7 |     return larger(3, 9);
-      |            ^~~~~~
+main.pep:4:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)
+    4 |     var b = make();
+      |             ^~~~
+main.pep:1:1: note: declared here
+    1 | make<T>(): Box<T> { return Box<T>(); }
+      | ^~~~
 ```
+
+Inference works through closures in both directions. In
+`transform(words, (w) => w.size())`, where `transform<T, U>(items: Array<T>,
+f: (T) => U)`, `words` gives `T`, which types the closure's parameter `w`, and
+the closure's result gives `U`.
 
 Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. `total_area<T>`
@@ -53,8 +62,22 @@ returning a number, and using it with a type that lacks one is a compile
 error. Pepper does not yet let you state such requirements up front with a
 [trait](traits-and-extensions.md#traits).
 
-Methods cannot have type parameters of their own yet; only structs and free
-functions can.
+## Generic methods
+
+A method can have type parameters of its own, in a struct, a generic struct,
+an extension, or a trait's default method. They are inferred at each call like
+a function's, or written after the method name:
+
+```pepper
+{{#include ../../examples/generics-methods.pep}}
+```
+
+- Write the type arguments with no space before `<` or after `>`:
+  `b.map<long>(f)`. With a space, `a.b < c` is a comparison.
+- A generic method cannot be called through a [trait value](traits-and-extensions.md#traits-as-types),
+  since each of its uses is compiled separately. Call it on the concrete type.
+- The iterator adapters `map` and `filter` are generic default methods of
+  `Iterator<T>`; see [Iteration](iteration.md#adapters).
 
 ## Default type arguments
 

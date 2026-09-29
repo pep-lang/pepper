@@ -26,14 +26,14 @@ total_area<T>(shapes: Array<T>): int {
 }
 
 main(): int {
-    # Type arguments are written explicitly at the call.
-    assert(larger<int>(3, 9) == 9, "ints");
+    # Type arguments come from the arguments, or can be written out.
+    assert(larger(3, 9) == 9, "ints");
     assert(larger<float>(2.5, 1.5) == 2.5, "floats");
 
     var circles = Array<Circle>();
     circles.append(Circle());
     circles.append(Circle());
-    assert(total_area<Circle>(circles) == 6, "circles");
+    assert(total_area(circles) == 6, "circles");
 
     var squares = Array<Square>();
     squares.append(Square());

@@ -248,6 +248,7 @@ fn function_struct(ty: &TypeName) -> StructDef {
         generic_params: vec![],
         field_members: vec![pointer_field(INVOKE_FIELD), pointer_field(DESTROY_FIELD)],
         method_members: vec![],
+        generic_methods: vec![],
         constructor: empty_function(&name, ty.clone(), &name),
         destructor: destructor(&name),
         acquire: empty_function("__acquire", TypeName::void(), &name),

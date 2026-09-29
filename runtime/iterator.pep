@@ -75,7 +75,129 @@ export trait Iterator<T> {
     ##
     ## @returns the current element
     T current();
+
+    ## Returns an iterator over `transform` applied to each element, in order.
+    ##
+    ## Lazy: `transform` runs once per element, as the result is advanced, and
+    ## the result advances this iterator. Every type that declares
+    ## `Iterator<T>` gets this method.
+    ##
+    ## @typeParam U the type `transform` returns
+    ## @param transform the function applied to each element
+    ## @returns a `MapIterator<T, U>` over the transformed elements
+    ## @example
+    ##     var names = Array<String>();
+    ##     for (var size in names.iterate().map((name) => name.size())) {
+    ##         print(size);
+    ##     }
+    map<U>(transform: (T) => U): MapIterator<T, U> {
+        return MapIterator<T, U>(this, transform);
+    }
+
+    ## Returns an iterator over the elements for which `keep` returns true, in
+    ## order.
+    ##
+    ## Lazy: `keep` runs once per element, as the result is advanced, and the
+    ## result advances this iterator. Every type that declares `Iterator<T>`
+    ## gets this method.
+    ##
+    ## @param keep the test an element must pass
+    ## @returns a `FilterIterator<T>` over the elements that pass
+    ## @example
+    ##     var nums = Array<int>();
+    ##     for (var even in nums.iterate().filter((n) => n % 2 == 0)) {
+    ##         print(even);
+    ##     }
+    filter(keep: (T) => bool): FilterIterator<T> {
+        return FilterIterator<T>(this, keep);
+    }
 }
+
+## The iterator `Iterator.map` returns: each element of `Source`, passed
+## through `Transform`.
+##
+## @typeParam T the type of the source's elements
+## @typeParam U the type of the elements produced
+## @see Iterator.map
+export struct MapIterator<T, U> {
+    ## The iterator whose elements are transformed.
+    Iterator<T> Source;
+    ## The function applied to each element.
+    (T) => U Transform;
+    ## The current element, `Transform` of the source's current element.
+    U Value;
+
+    ## Makes an iterator over `transform` applied to the elements of `source`.
+    ##
+    ## @param source the iterator to transform
+    ## @param transform the function applied to each element
+    construct(Iterator<T> source, (T) => U transform) {
+        Source = source;
+        Transform = transform;
+    }
+
+    ## Advances to the next element, and applies `Transform` to it.
+    ##
+    ## @returns true if there is a current element, false when the source is exhausted
+    bool next() {
+        if (Source.next()) {
+            Value = Transform(Source.current());
+            return true;
+        }
+        return false;
+    }
+
+    ## Returns the transformed element the last successful `next()` produced.
+    ##
+    ## @returns the current element
+    U current() {
+        return Value;
+    }
+}
+
+extend MapIterator<T, U> with Iterator<U> {}
+
+## The iterator `Iterator.filter` returns: the elements of `Source` that
+## `Keep` accepts.
+##
+## @typeParam T the type of the elements
+## @see Iterator.filter
+export struct FilterIterator<T> {
+    ## The iterator whose elements are tested.
+    Iterator<T> Source;
+    ## The test an element must pass.
+    (T) => bool Keep;
+
+    ## Makes an iterator over the elements of `source` that `keep` accepts.
+    ##
+    ## @param source the iterator to filter
+    ## @param keep the test an element must pass
+    construct(Iterator<T> source, (T) => bool keep) {
+        Source = source;
+        Keep = keep;
+    }
+
+    ## Advances to the next element that `Keep` accepts.
+    ##
+    ## @returns true if there is a current element, false when the source is exhausted
+    bool next() {
+        while (Source.next()) {
+            if (Keep(Source.current())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    T current() {
+        return Source.current();
+    }
+}
+
+extend FilterIterator<T> with Iterator<T> {}
 
 ## Something that hands out an `Iterator<T>` over its elements, such as
 ## `Array<T>` and `String` (which yields one code point at a time, as a

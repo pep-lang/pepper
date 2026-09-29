@@ -423,6 +423,7 @@ pub(crate) fn closure_struct(
         generic_params: generics.to_vec(),
         field_members: fields,
         method_members: vec![call],
+        generic_methods: vec![],
         constructor,
         destructor: empty_function("__dtor", TypeName::void(), base),
         acquire: empty_function("__acquire", TypeName::void(), base),
@@ -546,7 +547,7 @@ pub fn lift_closures(module: &mut Module) {
         }
         lift_function(&mut st.constructor, ctx, &mut lifted);
         lift_function(&mut st.destructor, ctx, &mut lifted);
-        for method in &mut st.method_members {
+        for method in st.method_members.iter_mut().chain(st.generic_methods.iter_mut()) {
             lift_function(method, ctx, &mut lifted);
         }
     }
@@ -599,7 +600,10 @@ pub fn sync_closures(module: &mut Module) -> bool {
             let Expression::MakeClosure { value, closure, .. } = expr else { return };
             let entry = learned.entry(closure.clone()).or_default();
             if let Some(ty) = expected.filter(|t| t.is_function_type()) {
-                entry.expected.get_or_insert_with(|| ty.clone());
+                // A fully known type wins over a partly known one.
+                if entry.expected.as_ref().is_none_or(|e| e.contains_auto() && !ty.contains_auto()) {
+                    entry.expected = Some(ty.clone());
+                }
             }
             if let Expression::FunctionCall { args, .. } = value.as_ref() {
                 if entry.captures.len() < args.len() {
@@ -772,6 +776,10 @@ struct Table {
     /// Struct type string → (method name → parameter types).
     methods: HashMap<String, HashMap<String, Vec<TypeName>>>,
     globals: HashMap<String, TypeName>,
+    /// Generic free functions, for calls whose type arguments are inferred.
+    generics: HashMap<String, crate::passes::type_arguments::GenericSignature>,
+    /// Struct type string → generic methods, likewise.
+    generic_methods: HashMap<String, HashMap<String, crate::passes::type_arguments::GenericSignature>>,
     statics: crate::static_type::StructTable,
 }
 
@@ -798,12 +806,49 @@ impl Table {
             );
         }
         let globals = module.globals.iter().map(|g| (g.name.clone(), g.ty.clone())).collect();
-        Table { callables, fields, methods, globals, statics: crate::static_type::StructTable::build(module) }
+        let generics = module
+            .functions
+            .iter()
+            .filter(|f| f.is_generic_func)
+            .map(|f| (f.name.clone(), crate::passes::type_arguments::GenericSignature::of(f)))
+            .collect();
+        let generic_methods = module
+            .structs
+            .iter()
+            .filter(|s| s.generic_params.is_empty() && !s.generic_methods.is_empty())
+            .map(|s| {
+                let methods = s
+                    .generic_methods
+                    .iter()
+                    .map(|m| (m.name.clone(), crate::passes::type_arguments::GenericSignature::of(m)))
+                    .collect();
+                (s.ty.to_string(), methods)
+            })
+            .collect();
+        Table { callables, fields, methods, globals, generics, generic_methods, statics: crate::static_type::StructTable::build(module) }
     }
 
     fn field(&self, owner: &TypeName, name: &str) -> Option<TypeName> {
         let owner = owner.to_string();
         self.fields.get(owner.trim_end_matches('*'))?.get(name).cloned()
+    }
+
+    /// A generic call's parameter types, with what its arguments bind.
+    fn generic_parameters(
+        &self,
+        signature: &crate::passes::type_arguments::GenericSignature,
+        args: &[Expression],
+        current: Option<&TypeName>,
+    ) -> Option<Vec<TypeName>> {
+        let types: Vec<Option<TypeName>> = args
+            .iter()
+            .map(|arg| match arg {
+                Expression::MakeClosure { ty, .. } => Some(ty.clone()),
+                _ => self.type_of(arg, current),
+            })
+            .collect();
+        let bindings = signature.bind(&types);
+        (0..signature.parameter_types.len()).map(|i| signature.expected(i, &bindings)).collect()
     }
 
     /// Best-effort static type of `expr` in a body of struct `current`.
@@ -918,14 +963,25 @@ fn sites_in_expression(
     current: Option<&TypeName>,
     visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
-    let known = |t: &TypeName| (!t.contains_auto()).then(|| t.clone());
+    // A function type may be partly known (a generic call's parameter
+    // before every type argument is bound): its known parts still type the
+    // closure.
+    let known = |t: &TypeName| (!t.contains_auto() || t.is_function_type()).then(|| t.clone());
     visit(expr, expected.and_then(known).as_ref(), current);
     // The parameter types a call's arguments flow into.
     let params: Option<Vec<TypeName>> = match expr {
-        Expression::FunctionCall { function, .. } => table.callables.get(function).cloned(),
-        Expression::MethodCall { this, method, .. } => table
-            .type_of(this, current)
-            .and_then(|t| table.methods.get(&t.to_string()).and_then(|m| m.get(method)).cloned()),
+        Expression::FunctionCall { function, args, .. } => table.callables.get(function).cloned().or_else(|| {
+            // A generic function called without type arguments: the
+            // parameter types, with what the other arguments bind.
+            table.generic_parameters(table.generics.get(function)?, args, current)
+        }),
+        Expression::MethodCall { this, method, args, .. } => table.type_of(this, current).and_then(|t| {
+            let owner = t.to_string();
+            table.methods.get(&owner).and_then(|m| m.get(method)).cloned().or_else(|| {
+                let signature = table.generic_methods.get(&owner)?.get(method)?;
+                table.generic_parameters(signature, args, current)
+            })
+        }),
         Expression::Invoke { callee, .. } => table.type_of(callee, current).map(|t| t.function_params().to_vec()),
         _ => None,
     };

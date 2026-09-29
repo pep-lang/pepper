@@ -103,7 +103,10 @@ expression or a block:
 - **Parameter types.** `(x: int) => x * 2` writes the parameter type. When the
   closure goes straight into a slot of function type (a typed variable, a
   parameter, an assignment, a `return`, a field), the types come from that
-  slot, so `(a, b) => a + b` is enough. With no slot to take them from, a
+  slot, so `(a, b) => a + b` is enough. A parameter of a generic function
+  counts too: passing `(x) => x + 1` to `apply<T>(f: (T) => T, x: T)` with
+  `x` an `int` types the closure's `x` as `int` (see
+  [Generics](generics.md#generic-functions)). With no slot to take them from, a
   parameter without a type is an error:
 
   ```
@@ -221,13 +224,10 @@ and when the last reference goes, the object releases what it captured.
   be referenced as values. `larger` alone is not a value even where the
   expected type would pick `larger<int>`. To use an `extern` function as a
   value, wrap it in a closure: `(x: int) => abs(x)`.
+- **Generic methods** cannot be referenced as values: `b.map<long>` is not
+  a value. Wrap the call in a closure: `(f: (int) => long) => b.map(f)`.
 - **A bare method name inside a method** (`var f = norm;`) is not a value;
   write `this.norm`.
-- **Parameter types from generic calls.** A closure's parameter types come
-  from a slot whose type is known where the closure is written. Passing
-  `(x) => x + 1` to a generic function whose parameter is `(T) => T` does not
-  infer `T`; write the argument `apply<int>((x) => x + 1, 2)` or the
-  parameter type `(x: int) => x + 1`.
 - **Closures in trait default methods** cannot use `this` or the members of
   the struct yet.
 - **C callbacks.** A closure cannot be passed to a C function that expects a

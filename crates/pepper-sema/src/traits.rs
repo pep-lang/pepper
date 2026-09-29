@@ -33,9 +33,12 @@ fn mentions_this(ty: &TypeName) -> bool {
 }
 
 /// Whether a trait member can be called through a value of the trait type:
-/// an instance method whose signature does not name `this` as a type.
+/// an instance method whose signature does not name `this` as a type, and
+/// that has no type parameters of its own (a vtable holds one function per
+/// member, not one per specialization).
 pub fn is_dispatchable(method: &FunctionDef) -> bool {
     !method.is_static
+        && !method.is_generic_func
         && !mentions_this(&method.ty)
         && !method.parameters.iter().any(|p| mentions_this(&p.ty))
 }

@@ -48,9 +48,11 @@ Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
 ## Current status
 
 Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, generics, type aliases,
+structs with constructors, destructors and methods, generics (with type
+arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules, `Result`-based error handling, iteration,
+closures, modules, `Result`-based error handling, iteration (with `map` and
+`filter` adapters),
 `with` blocks, weak references, and calling C. The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.

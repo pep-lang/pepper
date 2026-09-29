@@ -28,6 +28,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         generic_params: vec![],
         field_members: vec![],
         method_members: vec![],
+        generic_methods: vec![],
         constructor: base.constructor.clone(),
         destructor: base.destructor.clone(),
         acquire: base.acquire.clone(),
@@ -50,7 +51,22 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         specialized.field_members.push(f);
     }
 
-    // Methods: clone then substitute types.
+    // Methods: clone then substitute types. A generic method keeps its own
+    // type parameters (`map<U>` of `Box<int>`).
+    for method in &base.generic_methods {
+        let mut m = method.clone();
+        substitute(&mut m.ty, &type_map);
+        for param in &mut m.parameters {
+            substitute(&mut param.ty, &type_map);
+            if let Some(default) = &mut param.default {
+                substitute_expression(default, &type_map);
+            }
+        }
+        if let Some(body) = &mut m.body {
+            substitute_block(body, &type_map);
+        }
+        specialized.generic_methods.push(m);
+    }
     for method in &base.method_members {
         let mut m = method.clone();
         substitute(&mut m.ty, &type_map);
@@ -256,9 +272,11 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             *function = parsed.to_string();
         }
         // A constructor's `__init_<field>` parameter is typed like its field
-        // (`T`, `(T) => T`) when `finish` synthesizes it.
+        // (`T`, `(T) => T`) when `finish` synthesizes it, and a symbol of a
+        // compound type naming the parameters (`Seq<T>`, `(T) => U`) must
+        // not keep them. A bare `T` symbol is left for type resolution.
         if let Expression::SymbolRef { id, ty, .. } = e {
-            if id.starts_with("__init_") {
+            if id.starts_with("__init_") || !ty.sub_types.is_empty() {
                 substitute(ty, type_map);
             }
         }

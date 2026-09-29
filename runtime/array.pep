@@ -599,3 +599,5 @@ export struct ArrayIterator<T> {
         return Source[Index];
     }
 }
+
+extend ArrayIterator<T> with Iterator<T> {}

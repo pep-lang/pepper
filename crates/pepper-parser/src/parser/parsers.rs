@@ -810,10 +810,24 @@ fn postfix(input: &mut &str) -> Result<Expression> {
         if input.starts_with('.') {
             *input = &input[1..];
             ws(input)?;
-            let name = identifier(input).inspect_err(|_| expected(input, "member name"))?;
-            let name_len = name.len();
+            let name_start: &str = input;
+            let mut name = identifier(input).inspect_err(|_| expected(input, "member name"))?;
+            let name_span = Span { start: pos(input) - name.len(), end: pos(input) };
+            // `x.map<long>(f)`: a generic method called with its type
+            // arguments, written with `<` right after the name and `(`
+            // right after the `>`. Anything else is a comparison:
+            // `f(a.b < c, d > (e))`.
+            if input.starts_with('<') {
+                let mut probe: &str = name_start;
+                if let Ok(ty) = probe_type_name(&mut probe) {
+                    if !ty.generic_types.is_empty() && probe.starts_with('(') {
+                        name = ty.to_string();
+                        *input = probe;
+                    }
+                }
+            }
             let start = expr.span().start;
-            expr = Expression::MemberAccess { lhs: Box::new(expr), name, name_span: Span { start: pos(input) - name_len, end: pos(input) }, span: Span { start, end: pos(input) } };
+            expr = Expression::MemberAccess { lhs: Box::new(expr), name, name_span, span: Span { start, end: pos(input) } };
             continue;
         }
         if input.starts_with('[') {
@@ -2061,8 +2075,14 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
     let name_span_end = pos(input);
     ws(input)?;
 
-    if input.starts_with('(') {
-        // `name(params) [: type] { body }`
+    // `name<U>(params)`: a generic method. `Array<T> items()` also starts
+    // with a name and `<`, but no `(` follows its `>`.
+    let generic_method = input.starts_with('<') && {
+        let mut probe: &str = input;
+        generic_params(&mut probe).is_ok() && ws(&mut probe).is_ok() && probe.starts_with('(')
+    };
+    if input.starts_with('(') || generic_method {
+        // `name[<params>](params) [: type] { body }`
         let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end }, attributes)?;
         f.is_static = is_static;
         return Ok(f);
@@ -2156,6 +2176,18 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         Err(cut_expecting(input, "'{' or ';'"))
     }
 
+    // `name<U>(params)`: a generic default method.
+    let generic_method = input.starts_with('<') && !first.contains('.') && {
+        let mut probe: &str = input;
+        generic_params(&mut probe).is_ok() && ws(&mut probe).is_ok() && probe.starts_with('(')
+    };
+    let generic_params = if generic_method {
+        let params = generic_params(input)?;
+        ws(input)?;
+        params
+    } else {
+        vec![]
+    };
     if input.starts_with('(') && !first.contains('.') {
         let parameters = function_parameters(input)?;
         ws(input)?;
@@ -2172,7 +2204,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
             is_exported: false,
             name: first,
             name_span: Span { start: name_span_start, end: name_span_end },
-            generic_params: vec![],
+            generic_params,
             return_type,
             parameters,
             external: false,

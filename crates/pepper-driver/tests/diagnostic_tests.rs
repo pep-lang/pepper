@@ -642,6 +642,19 @@ fn method_of_this_stored_in_a_field() {
 }
 
 #[test]
+fn type_arguments_not_inferred() {
+    assert_eq!(
+        error_of("type_arguments_not_inferred", "make<T>(): T { return __default<T>(); }\nmain(): int {\n    var x = make();\n    return 0;\n}\n"),
+        "main.pep:3:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)\n\
+         \x20   3 |     var x = make();\n\
+         \x20     |             ^~~~\n\
+         main.pep:1:1: note: declared here\n\
+         \x20   1 | make<T>(): T { return __default<T>(); }\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
 fn implicit_on_a_constructor_that_takes_two_arguments() {
     assert_eq!(
         error_of(
