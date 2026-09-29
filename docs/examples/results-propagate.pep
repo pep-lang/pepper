@@ -49,21 +49,21 @@ add_numbers(String a, String b): Result<int, ParseError> {
 }
 
 # Convert an error into another type on the way out.
-check_total(String a, String b, int limit): Result<None> {
+check_total(String a, String b, int limit): Result<void> {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.Error;
-        return Result<None>.err(Error("bad number '" + e.Input + "'"));
+        return Result<void>.err(Error("bad number '" + e.Input + "'"));
     }
     if (sum.Value > limit) {
-        return Result<None>.err(Error("total is over the limit"));
+        return Result<void>.err(Error("total is over the limit"));
     }
-    return Result<None>.ok(None());
+    return Result<void>.ok();
 }
 
 main(): int {
     var sum = add_numbers("40", "2");
-    assert(sum.unwrap() == 42, "40 + 2");
+    assert(sum.value() == 42, "40 + 2");
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");

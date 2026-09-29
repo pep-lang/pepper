@@ -414,20 +414,14 @@ fn trace_and_print_free_their_buffers() {
         "trace_leaks",
         r#"
 main(): int {
-    var word = _pep_malloc(8);
-    word[0] = 2;
-    word[1] = 1;
     var answer = "answer";
     var nothing = "nothing";
-    var name = "word";
     var before = _pep_live_allocs();
-    trace_int(-42, answer.c_str());
-    trace_ptr(__null, nothing.c_str());
-    trace_region(word, 8, name.c_str());
+    _pep_trace_int(-42, answer.c_str());
+    _pep_trace_ptr(__null, nothing.c_str());
     print(7);
     print(0.5);
     print(_pep_live_allocs() - before);
-    _pep_free(word);
     return 0;
 }
 "#,
@@ -439,8 +433,6 @@ main(): int {
     let line = |prefix: &str| *lines.iter().find(|l| l.starts_with(prefix)).unwrap_or_else(|| panic!("no {prefix} line in {out}"));
     assert_eq!(line("answer: "), "answer: -42");
     assert_eq!(line("nothing: "), "nothing: 0000000000000000");
-    let word = line("word: ");
-    assert!(word.ends_with("0000000000000102") && word.len() == 6 + 32, "{out}");
     let printed: Vec<&str> = lines.iter().copied().filter(|l| !l.contains(": ")).collect();
     assert_eq!(printed, ["7", "0.500000", "0"]);
 }

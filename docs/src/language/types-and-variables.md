@@ -114,7 +114,7 @@ main.pep:2:13: error: unknown escape sequence '\q'
   and `int[][]` for `Array<Array<int>>`. See [`Array`](../reference/array.md).
 - `HashMap<K, V>` and `HashSet<K>` are hash tables. See
   [HashMap and HashSet](../reference/hash.md).
-- `Result<TValue, TError>`, `Error` and `None` describe operations that can
+- `Result<TValue, TError>` and `Error` describe operations that can
   fail. See [Error handling with Result](results.md).
 - `Atomic<T>` is a value that threads can update safely. See
   [Atomics](atomics.md) and [Threads and shared data](threads.md).
@@ -260,7 +260,7 @@ conversions"), so code ported from C gives the same results:
 |---|---|
 | Arithmetic | `+` `-` `*` `/` `%` `**`, unary `-` and `+` |
 | Comparison | `==` `!=` `<` `<=` `>` `>=` |
-| Identity | `===` (two references to the same object) |
+| Identity | `===` `!==` (two references to the same object; plain equality for numbers and `bool`) |
 | Logical | `&&` (or `and`), `\|\|` (or `or`), `!` |
 | Bitwise | `&` `\|` `^` `~` `<<` `>>` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` `\|=` `^=` |
@@ -280,7 +280,6 @@ Some operators have limits today:
 
 - **`**` works only on integers.** A floating-point operand is a compile error
   (`unsupported op Pow`).
-- **`===`** compares struct references. It is not supported for numbers.
 
 Operators bind in this order, tightest first:
 
@@ -293,7 +292,7 @@ Operators bind in this order, tightest first:
 7. `+`, `-`
 8. `<<`, `>>`
 9. `<`, `<=`, `>`, `>=`
-10. `==`, `!=`, `===`
+10. `==`, `!=`, `===`, `!==`
 11. `&`
 12. `|`, `^`
 13. `&&`, `and`

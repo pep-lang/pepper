@@ -16,6 +16,8 @@ import "thread_local";
 import "sys_posix";
 import "sys_windows";
 
+extern void memcpy(void* dest, void* src, ulong n);
+
 ## Identifies a thread for as long as the program runs: every thread,
 ## whether started with `Thread.spawn` or not, gets a distinct id the first
 ## time it is asked for one, and ids are never reused.

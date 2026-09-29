@@ -1026,6 +1026,7 @@ fn relational(input: &mut &str) -> Result<Expression> {
 fn equality(input: &mut &str) -> Result<Expression> {
     binary_left(input, relational, |s: &str| {
         if s.starts_with("===") { return Some("==="); }
+        if s.starts_with("!==") { return Some("!=="); }
         if s.starts_with("==") { return Some("=="); }
         if s.starts_with("!=") { return Some("!="); }
         None
@@ -3989,6 +3990,12 @@ f() { var r = c.Result<int>.ok(1); }");
         let e = parse_expr("a == b");
         match e {
             Expression::Binary { op, .. } => assert_eq!(op, "=="),
+            other => panic!("{:?}", other),
+        }
+        // `!==` is one operator, not `!=` followed by `=`
+        let e = parse_expr("a !== b");
+        match e {
+            Expression::Binary { op, .. } => assert_eq!(op, "!=="),
             other => panic!("{:?}", other),
         }
     }

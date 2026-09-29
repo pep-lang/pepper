@@ -141,8 +141,8 @@ color off. The chapter on [compiler errors](../language/compiler-errors.md)
 covers them in more detail.
 
 A failed `assert` or a `panic` at run time prints its message and stops the
-program abnormally. For example, `unwrap()` on a failed `Result` prints
-`Result::unwrap on an Err value`.
+program abnormally. For example, `value()` on a failed `Result` prints
+`Result.value on an Err value`.
 
 ## Useful compiler options
 

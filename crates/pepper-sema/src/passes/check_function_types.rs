@@ -3,7 +3,9 @@
 //! type, so a mismatch that reached codegen would call a function with the
 //! wrong arguments. This pass rejects, wherever a function value flows into a
 //! typed slot (variable initializer, assignment, argument, return), a value
-//! whose function type differs from the slot's.
+//! whose function type differs from the slot's. It also rejects a call that
+//! returns `void` used as a value: stored, passed, returned, as an operand,
+//! or as a condition.
 
 use crate::model::*;
 use crate::static_type::{self, StructTable};
@@ -131,7 +133,7 @@ impl<'a> Checker<'a> {
         let mismatch = match (expected_kind, actual_kind) {
             (Kind::Numeric, Kind::Numeric) => false,
             // Different structs; type arguments are not compared, since
-            // defaults (`Result<None>` is `Result<None, Error>`) and
+            // defaults (`Result<int>` is `Result<int, Error>`) and
             // aliases may spell one specialization two ways.
             (Kind::Struct, Kind::Struct) => canonical(expected).name != canonical(&actual).name,
             _ => true,
@@ -142,8 +144,24 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// A call that returns nothing (`f()` on a `void` function, `r.value()`
+    /// on a `Result<void>`) used as a value: reports it and returns true.
+    fn void_used(&mut self, value: &Expression, current: Option<&TypeName>, slot: &Slot) -> bool {
+        let void = matches!(value, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. })
+            && static_type::of(value, &self.table, current)
+                .is_some_and(|t| t.name == crate::type_name::VOID && t.sub_types.is_empty());
+        if void {
+            let message = format!("cannot use a value of type 'void' as {}", (slot.what)());
+            self.report(message, value, slot);
+        }
+        void
+    }
+
     /// `value` flows into a slot of type `expected`.
     fn flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
+        if self.void_used(value, current, slot) {
+            return;
+        }
         if self.weak_flows_into(value, expected, current, slot) {
             return;
         }
@@ -236,7 +254,7 @@ impl<'a> Checker<'a> {
         let mut copy = expr.clone();
         let mut nodes: Vec<Expression> = vec![];
         crate::passes::walk_expression(&mut copy, &mut |e: &mut Expression| {
-            if matches!(e, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. } | Expression::Binary { op: BinaryOp::Assign, .. }) {
+            if matches!(e, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. } | Expression::Binary { .. } | Expression::Unary { .. }) {
                 nodes.push(e.clone());
             }
         });
@@ -273,13 +291,25 @@ impl<'a> Checker<'a> {
                         }
                     }
                 }
+                Expression::Binary { op, lhs, rhs, loc } if *op != BinaryOp::Assign => {
+                    let what = || "an operand".to_string();
+                    let mismatch = |_: &str, _: &str| String::new();
+                    let slot = Slot { what: &what, mismatch: &mismatch, fallback: *loc };
+                    self.void_used(lhs, current, &slot);
+                    self.void_used(rhs, current, &slot);
+                }
+                Expression::Unary { operand, loc, .. } => {
+                    let what = || "an operand".to_string();
+                    let mismatch = |_: &str, _: &str| String::new();
+                    self.void_used(operand, current, &Slot { what: &what, mismatch: &mismatch, fallback: *loc });
+                }
                 Expression::Binary { op: BinaryOp::Assign, lhs, rhs, loc } => {
                     // A raw buffer slot (`Data[i] = v`) has no reliable
                     // static type.
                     let raw_slot = matches!(**lhs, Expression::Index { .. } | Expression::ArrayIndex { .. });
                     if let Some(lhs_type) = static_type::of(lhs, &self.table, current).filter(|t| !raw_slot || t.is_function_type()) {
                         let mismatch = |expected: &str, actual: &str| format!("cannot assign a value of type '{}' to a variable of type '{}'", actual, expected);
-                        self.flows_into(rhs, &lhs_type, current, &Slot { what: &|| "assignment".to_string(), mismatch: &mismatch, fallback: *loc });
+                        self.flows_into(rhs, &lhs_type, current, &Slot { what: &|| "the value of an assignment".to_string(), mismatch: &mismatch, fallback: *loc });
                     }
                 }
                 _ => {}
@@ -288,6 +318,16 @@ impl<'a> Checker<'a> {
     }
 
     fn block(&mut self, block: &Block, function: &FunctionDef, current: Option<&TypeName>) {
+        // A `with` block is [scope, value = scope.enter(), Branch(WithEntered)]
+        // until `lower_with_blocks`, which explains a `void` binding itself.
+        let with_value = match &block.items[..] {
+            [Statement::Declaration(Declaration::Variable(_)), Statement::Declaration(Declaration::Variable(value)), Statement::Branch(branch)]
+                if matches!(branch.condition, Expression::WithEntered(_)) =>
+            {
+                Some(value.name.clone())
+            }
+            _ => None,
+        };
         for stmt in &block.items {
             match stmt {
                 Statement::Expression(expr) => self.expression(expr, current),
@@ -298,12 +338,15 @@ impl<'a> Checker<'a> {
                 Statement::Declaration(Declaration::Variable(var)) => {
                     if let Some(default) = &var.default {
                         self.expression(default, current);
-                        self.variable(var, default, current);
+                        if with_value.as_deref() != Some(var.name.as_str()) {
+                            self.variable(var, default, current);
+                        }
                     }
                 }
                 Statement::Declaration(_) => {}
                 Statement::Branch(branch) => {
                     self.expression(&branch.condition, current);
+                    self.condition(&branch.condition, current);
                     self.block(&branch.if_block, function, current);
                     if let Some(else_block) = &branch.else_block {
                         self.block(else_block, function, current);
@@ -311,6 +354,7 @@ impl<'a> Checker<'a> {
                 }
                 Statement::While(wh) => {
                     self.expression(&wh.condition, current);
+                    self.condition(&wh.condition, current);
                     self.block(&wh.block, function, current);
                 }
                 Statement::Return(ret) => {
@@ -330,6 +374,13 @@ impl<'a> Checker<'a> {
                 Statement::LoopBreak(_) => {}
             }
         }
+    }
+
+    /// A `void` call cannot be an `if` or `while` condition.
+    fn condition(&mut self, condition: &Expression, current: Option<&TypeName>) {
+        let what = || "a condition".to_string();
+        let mismatch = |_: &str, _: &str| String::new();
+        self.void_used(condition, current, &Slot { what: &what, mismatch: &mismatch, fallback: condition.loc() });
     }
 
     /// A variable's initializer flows into the variable.

@@ -17,7 +17,7 @@ main(): int {
 
     # Generic alias with both arguments.
     var b: R<int, Error> = Result<int>.ok(7);
-    if (!b.is_ok() || b.unwrap() != 7) { return 2; }
+    if (!b.is_ok() || b.value() != 7) { return 2; }
 
     # Omitted second argument uses the parameter default (Error).
     var c: R<u32> = Result<u32>.err(Error("x"));
@@ -26,10 +26,10 @@ main(): int {
 
     # Alias as a function return type.
     var d: R<int> = make();
-    if (!d.is_ok() || d.unwrap() != 5) { return 5; }
+    if (!d.is_ok() || d.value() != 5) { return 5; }
     # Alias as the static-call target of a method.
     var p = Pair.ok(13);
-    if (!p.is_ok() || p.unwrap() != 13) { return 8; }
+    if (!p.is_ok() || p.value() != 13) { return 8; }
 
     # Alias in a struct field and module global.
     var s = Box();

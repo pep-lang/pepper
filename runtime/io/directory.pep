@@ -140,12 +140,12 @@ export struct Directory {
     ## umask; `CreateDirectoryW` on Windows). Its parent must already exist.
     ##
     ## @param path the directory to create
-    ## @returns `None` on success; an error when the directory cannot be
+    ## @returns an Ok result on success; an error when the directory cannot be
     ## created: `is_already_exists()` when anything (a file too) is already
     ## at `path`, `is_not_found()` when the parent is missing or the path is
     ## empty, `is_permission_denied()` when the parent is not writable
     ## @see create_all
-    static IoResult<None> create(Path path) {
+    static IoResult<void> create(Path path) {
         return _io_sys_mkdir(path);
     }
 
@@ -157,7 +157,7 @@ export struct Directory {
     ## directories at the same time.
     ##
     ## @param path the directory to create, with its parents
-    ## @returns `None` on success; an error when a directory cannot be
+    ## @returns an Ok result on success; an error when a directory cannot be
     ## created: `is_already_exists()` when a file (not a directory) is at
     ## `path` or at one of its parents, `is_permission_denied()`, and so on.
     ## Parents created before the failure are left in place
@@ -165,12 +165,12 @@ export struct Directory {
     ##     import io;
     ##
     ##     var r = io.Directory.create_all(io.Path("build").join_str("out").join_str("logs"));
-    static IoResult<None> create_all(Path path) {
+    static IoResult<void> create_all(Path path) {
         if (path.Value.Size == 0) {
-            return _io_ok_none();
+            return _io_ok_void();
         }
         if (path.is_dir()) {
-            return _io_ok_none();
+            return _io_ok_void();
         }
         var parent = path.parent();
         if (parent.Value.Size > 0) {
@@ -184,7 +184,7 @@ export struct Directory {
         # fine as long as a directory is there now.
         if (r.is_err()) {
             if (path.is_dir()) {
-                return _io_ok_none();
+                return _io_ok_void();
             }
         }
         return r;
@@ -194,12 +194,12 @@ export struct Directory {
     ## Windows).
     ##
     ## @param path the directory to remove; it must be empty
-    ## @returns `None` on success; an error when it cannot be removed:
+    ## @returns an Ok result on success; an error when it cannot be removed:
     ## `is_directory_not_empty()` when it still has entries, `is_not_found()`
     ## when it is missing or the path is empty, `is_not_a_directory()` when
     ## `path` is a file, `is_permission_denied()`
     ## @see remove_all
-    static IoResult<None> remove(Path path) {
+    static IoResult<void> remove(Path path) {
         return _io_sys_rmdir(path);
     }
 
@@ -213,7 +213,7 @@ export struct Directory {
     ## (`is_permission_denied()`).
     ##
     ## @param path the file, symlink or directory tree to remove
-    ## @returns `None` on success; an error when something cannot be
+    ## @returns an Ok result on success; an error when something cannot be
     ## removed: `is_not_found()` when `path` does not exist (unlike
     ## `rm -rf`, a missing path is an error) or is empty,
     ## `is_permission_denied()`, and so on
@@ -226,17 +226,17 @@ export struct Directory {
     ##         print(r.Error.Message);
     ##     }
     ## @see remove
-    static IoResult<None> remove_all(Path path) {
+    static IoResult<void> remove_all(Path path) {
         var m = _io_sys_stat(path, false);
         if (m.is_err()) {
-            return IoResult<None>.err(m.Error);
+            return IoResult<void>.err(m.Error);
         }
         if (m.Value.IsSymlink || !m.Value.IsDir) {
             return _io_sys_remove_link(path, m.Value.IsDir);
         }
         var list = _io_sys_list(path);
         if (list.is_err()) {
-            return IoResult<None>.err(list.Error);
+            return IoResult<void>.err(list.Error);
         }
         var entries = list.Value;
         ulong i = 0;
@@ -276,11 +276,11 @@ export struct Directory {
     ##
     ## @param path the new current directory; a relative path is resolved
     ## against the old one
-    ## @returns `None` on success; an error when the directory cannot be
+    ## @returns an Ok result on success; an error when the directory cannot be
     ## entered: `is_not_found()` when it is missing or the path is empty,
     ## `is_not_a_directory()` when it is a file, `is_permission_denied()`
     ## @see current
-    static IoResult<None> set_current(Path path) {
+    static IoResult<void> set_current(Path path) {
         return _io_sys_chdir(path);
     }
 

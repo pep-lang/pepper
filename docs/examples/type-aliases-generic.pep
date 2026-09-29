@@ -36,7 +36,7 @@ main(): int {
     assert(ages.contains("Ada"), "Lookup<int> is HashMap<String, int>");
 
     # Outcome<int> fills E with its default: Result<int, Error>.
-    assert(parse_digit("7").unwrap() == 7, "ok");
+    assert(parse_digit("7").value() == 7, "ok");
     assert(parse_digit("x").is_err(), "err");
     return 0;
 }

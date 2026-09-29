@@ -21,7 +21,7 @@ main(): int {
 
     var result = count_file(path);
     assert(result.is_ok(), "the file we just wrote can be read");
-    var counter = result.unwrap();
+    var counter = result.value();
     for (var word in counter.order) {
         print(word);
         print(counter.count(word));

@@ -20,7 +20,7 @@ main(): int {
     var path = dir.join_str("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
 
-    IoResult<None> written = File.write_text(path, "blue");
+    IoResult<void> written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");
     assert(read_setting(path) == "blue", "the file's contents");
 

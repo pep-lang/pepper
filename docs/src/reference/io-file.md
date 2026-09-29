@@ -224,7 +224,7 @@ Opens `path` with these options. The same as
 
 **Example**
 ```pepper
-    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).unwrap();
+    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     log.write_string("started");
 ```
 
@@ -379,10 +379,10 @@ kinds apart portably.
 
 **Example**
 ```pepper
-    var f = File.create(Path("out.txt")).unwrap();
+    var f = File.create(Path("out.txt")).value();
     f.write_string("hello");
     f.close();
-    var text = File.read_to_string(Path("out.txt")).unwrap();   # "hello"
+    var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 ```
 
 ### Fields
@@ -474,7 +474,7 @@ On POSIX a created file gets mode 0666 less the process umask.
 
 **Example**
 ```pepper
-    var f = File.create(Path("report.txt")).unwrap();
+    var f = File.create(Path("report.txt")).value();
     f.write_string("done");
 ```
 
@@ -627,7 +627,7 @@ Reads the whole file at `path` as UTF-8 text (Rust's
 #### write_bytes
 
 ```pepper
-static IoResult<None> write_bytes(Path path, u8[] data)
+static IoResult<void> write_bytes(Path path, u8[] data)
 ```
 
 Writes `data` as the whole contents of the file at `path`, creating
@@ -641,7 +641,7 @@ leaves it truncated or partly written.
 - `data` — the new contents
 
 **Returns**
-- `None` once the data is written and the file closed; an error as for `File.create` (such as `is_not_found()` for a missing parent directory), `write_all`, or `close`
+- an Ok result once the data is written and the file closed; an error as for `File.create` (such as `is_not_found()` for a missing parent directory), `write_all`, or `close`
 
 **Example**
 ```pepper
@@ -653,7 +653,7 @@ leaves it truncated or partly written.
 #### write_text
 
 ```pepper
-static IoResult<None> write_text(Path path, String s)
+static IoResult<void> write_text(Path path, String s)
 ```
 
 Writes `s` as UTF-8 as the whole contents of the file at `path`,
@@ -668,7 +668,7 @@ leaves it truncated or partly written.
 - `s` — the new contents
 
 **Returns**
-- `None` once the text is written and the file closed; an error as for `File.create` (such as `is_not_found()` for a missing parent directory), `write_all`, or `close`
+- an Ok result once the text is written and the file closed; an error as for `File.create` (such as `is_not_found()` for a missing parent directory), `write_all`, or `close`
 
 **Note**
 - this is the design proposal's `write_to_string`, renamed because `write_string` is the instance method's name and methods do not overload
@@ -703,13 +703,13 @@ part way leaves `to` partly written.
 
 **Example**
 ```pepper
-    var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();
+    var n = File.copy(Path("a.txt"), Path("b.txt")).value();
 ```
 
 #### rename
 
 ```pepper
-static IoResult<None> rename(Path from, Path to)
+static IoResult<void> rename(Path from, Path to)
 ```
 
 Renames or moves `from` to `to`, replacing an existing file at `to`
@@ -724,7 +724,7 @@ fails rather than copying.
 - `to` — the new path
 
 **Returns**
-- `None` on success; an error with `is_not_found()` when `from` (or the parent of `to`) does not exist or, on POSIX, either path is empty, `is_permission_denied()` when access is refused, or another platform error
+- an Ok result on success; an error with `is_not_found()` when `from` (or the parent of `to`) does not exist or, on POSIX, either path is empty, `is_permission_denied()` when access is refused, or another platform error
 
 **Example**
 ```pepper
@@ -734,7 +734,7 @@ fails rather than copying.
 #### remove
 
 ```pepper
-static IoResult<None> remove(Path path)
+static IoResult<void> remove(Path path)
 ```
 
 Deletes the file at `path`. A symlink is removed itself, not its
@@ -745,7 +745,7 @@ target. Directories are not removed: use `Directory.remove` or
 - `path` — the file to delete
 
 **Returns**
-- `None` on success; an error with `is_not_found()` when the path does not exist (on POSIX, also when it is empty); when it is a directory, `is_is_a_directory()` on Linux and `is_permission_denied()` on macOS and Windows; `is_permission_denied()` when access is refused (on Windows also for a read-only file); or another platform error
+- an Ok result on success; an error with `is_not_found()` when the path does not exist (on POSIX, also when it is empty); when it is a directory, `is_is_a_directory()` on Linux and `is_permission_denied()` on macOS and Windows; `is_permission_denied()` when access is refused (on Windows also for a read-only file); or another platform error
 
 **Example**
 ```pepper
@@ -773,13 +773,13 @@ opened.
 #### check_open
 
 ```pepper
-IoResult<None> check_open()
+IoResult<void> check_open()
 ```
 
 Checks that the File is open, for use before an operation.
 
 **Returns**
-- `None` when the File is open; an error with the message "file is closed" otherwise (code `EBADF` on POSIX, `ERROR_INVALID_HANDLE` on Windows; no `IoError` predicate holds)
+- an Ok result when the File is open; an error with the message "file is closed" otherwise (code `EBADF` on POSIX, `ERROR_INVALID_HANDLE` on Windows; no `IoError` predicate holds)
 
 #### read
 
@@ -867,7 +867,7 @@ write (`EINTR`) is retried.
 #### write_all
 
 ```pepper
-IoResult<None> write_all(u8[] data)
+IoResult<void> write_all(u8[] data)
 ```
 
 Writes all of `data`, repeating the write until every byte is
@@ -879,12 +879,12 @@ If an error occurs part of `data` may already have been written.
 - `data` — the bytes to write
 
 **Returns**
-- `None` once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress ("failed to write the whole buffer", with code `EIO` on POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
+- an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress ("failed to write the whole buffer", with code `EIO` on POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
 
 #### write_string
 
 ```pepper
-IoResult<None> write_string(String s)
+IoResult<void> write_string(String s)
 ```
 
 Writes all of the UTF-8 bytes of `s`, as `write_all` does. No newline
@@ -894,11 +894,11 @@ or terminator is added.
 - `s` — the text to write
 
 **Returns**
-- `None` once every byte is written; an error as for `write_all`
+- an Ok result once every byte is written; an error as for `write_all`
 
 **Example**
 ```pepper
-    var f = File.create(Path("greeting.txt")).unwrap();
+    var f = File.create(Path("greeting.txt")).value();
     var r = f.write_string("hello, world");
     if (r.is_err()) {
         return 1;
@@ -984,7 +984,7 @@ and has platform-defined results on Windows.
 #### set_len
 
 ```pepper
-IoResult<None> set_len(ulong size)
+IoResult<void> set_len(ulong size)
 ```
 
 Truncates or extends the file to exactly `size` bytes; bytes added
@@ -996,12 +996,12 @@ The File must have been opened for writing.
 - `size` — the new length, in bytes
 
 **Returns**
-- `None` on success; an error when the File is closed, was not opened for writing, or the system refuses the size
+- an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size
 
 #### sync
 
 ```pepper
-IoResult<None> sync()
+IoResult<void> sync()
 ```
 
 Flushes the file's contents and metadata to the storage device,
@@ -1012,7 +1012,7 @@ process; this forces them out of the operating system's cache.
 On Windows the File must have been opened with write access.
 
 **Returns**
-- `None` once the data is durable; an error when the File is closed or the device reports a failure, or another platform error
+- an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error
 
 #### metadata
 
@@ -1035,7 +1035,7 @@ permission bits and timestamps.
 #### close
 
 ```pepper
-IoResult<None> close()
+IoResult<void> close()
 ```
 
 Closes the File now, to observe the error the system reports (for
@@ -1048,11 +1048,11 @@ is never closed twice. A standard stream is only marked closed: the
 stream stays open, and `File.stdout()` and the like still work.
 
 **Returns**
-- `None` on success or when already closed; the platform error when closing an owned handle fails
+- an Ok result on success or when already closed; the platform error when closing an owned handle fails
 
 **Example**
 ```pepper
-    var f = File.create(Path("out.bin")).unwrap();
+    var f = File.create(Path("out.bin")).value();
     f.write_string("data");
     if (f.close().is_err()) {
         return 1;

@@ -244,6 +244,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     | BinaryOp::LogicalAnd
                     | BinaryOp::LogicalOr
                     | BinaryOp::Identical
+                    | BinaryOp::NotIdentical
             ) {
                 TypeName::bool_()
             } else {

@@ -458,6 +458,55 @@ fn function_pointer_undeclared() {
 }
 
 #[test]
+fn result_void_has_no_value() {
+    // A `void` type argument erases the parameter and the field it types.
+    assert_eq!(
+        error_of("result_void_ok_argument", "main(): int {\n    var r = Result<void>.ok(1);\n    return 0;\n}\n"),
+        "main.pep:2:26: error: too many arguments to 'Result<void, Error>.ok': expected 0, have 1\n\
+         \x20   2 |     var r = Result<void>.ok(1);\n\
+         \x20     |                          ^~"
+    );
+    assert_eq!(
+        error_of("result_void_value_field", "main(): int {\n    var r = Result<void>.ok();\n    return r.Value;\n}\n"),
+        "main.pep:3:14: error: no member named 'Value' in 'Result<void, Error>'\n\
+         \x20   3 |     return r.Value;\n\
+         \x20     |              ^~~~~"
+    );
+}
+
+#[test]
+fn result_unwrap_is_now_value() {
+    assert_eq!(
+        error_of("result_unwrap", "main(): int {\n    return Result<int>.ok(1).unwrap();\n}\n"),
+        "main.pep:2:30: error: no member named 'unwrap' in 'Result<int, Error>'\n\
+         \x20   2 |     return Result<int>.ok(1).unwrap();\n\
+         \x20     |                              ^~~~~~"
+    );
+}
+
+#[test]
+fn void_call_used_as_a_value() {
+    assert_eq!(
+        error_of("void_result_value", "main(): int {\n    var r = Result<void>.ok();\n    var x = r.value();\n    return 0;\n}\n"),
+        "main.pep:3:15: error: cannot use a value of type 'void' as variable 'x'\n\
+         \x20   3 |     var x = r.value();\n\
+         \x20     |               ^~~~~"
+    );
+    assert_eq!(
+        error_of("void_argument", "f() { }\ng(n: int): int { return n; }\nmain(): int {\n    return g(f());\n}\n"),
+        "main.pep:4:14: error: cannot use a value of type 'void' as argument 1 of 'g'\n\
+         \x20   4 |     return g(f());\n\
+         \x20     |              ^"
+    );
+    assert_eq!(
+        error_of("void_condition", "f() { }\nmain(): int {\n    if (f()) { return 1; }\n    return 0;\n}\n"),
+        "main.pep:3:9: error: cannot use a value of type 'void' as a condition\n\
+         \x20   3 |     if (f()) { return 1; }\n\
+         \x20     |         ^"
+    );
+}
+
+#[test]
 fn method_of_this_stored_in_a_field() {
     assert_eq!(
         error_of(

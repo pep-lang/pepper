@@ -2,17 +2,7 @@
 extern void* malloc(ulong size);
 extern void free(void* p);
 extern void* realloc(void* p, ulong size);
-## Copies `n` bytes from `src` to `dest` (the C library's `memcpy`).
-##
-## The regions must not overlap, and both must be valid for `n` bytes.
-## Nothing is bounds-checked, and no reference counts change: copying a
-## struct reference with it neither acquires nor releases. Runs in O(n).
-## This declaration discards C's return value.
-##
-## @param dest the start of the destination region, a `__ptr<void>`
-## @param src the start of the source region, a `__ptr<void>`
-## @param n the number of bytes to copy; 0 copies nothing
-export extern void memcpy(void* dest, void* src, ulong n);
+extern void memcpy(void* dest, void* src, ulong n);
 extern void memset(void* p, int c, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
 extern char* getenv(char* name);
@@ -20,23 +10,31 @@ extern int puts(char* s);
 extern void abort();
 extern int fflush(void* stream);
 
-## Panics with `msg` when `condition` is false; otherwise does nothing.
+## Panics with `message` when `condition` is false; otherwise does nothing.
 ##
-## The check always runs; there is no release mode that removes it.
-## The message is a raw `__ptr<char>` (C `char*`), not a `String`. A string
-## literal is passed as its global pointer with no temporary allocation,
-## which keeps hot paths like array index bounds checks allocation-free. A
-## non-literal `String` message is lowered to `msg.c_str()` at the call site.
+## The check always runs; there is no release mode that removes it. A
+## string literal message costs nothing when the assertion holds: the
+## compiler passes the literal's constant bytes to the runtime without
+## building a `String`. Any other message is evaluated before the call.
 ##
 ## @param condition the condition that must hold
-## @param msg the NUL-terminated message to print on failure; `__null` prints
-##   a generic message
-## @panics if `condition` is false: prints `msg` and aborts (see `panic`)
+## @param message the text to print on failure; a null `String` prints a
+##   generic message
+## @panics if `condition` is false: prints `message` and aborts (see `panic`)
 ## @example
 ##     assert(count > 0, "count must be positive");
-export assert(condition: bool, msg: __ptr<char>): void {
+export assert(condition: bool, message: String): void {
     if (!condition) {
-        panic(msg);
+        panic(message);
+    }
+}
+
+# The allocation-free form of `assert` that compiler-generated checks (index
+# bounds, null function and trait values) and string-literal messages lower
+# to: `message` is a NUL-terminated C string, or `__null`.
+export _pep_assert(condition: bool, message: __ptr<char>): void {
+    if (!condition) {
+        _pep_panic(message);
     }
 }
 
@@ -97,23 +95,33 @@ export _pep_live_allocs(): long {
     return __atomic_load<long>(_pep_live_allocs_counter());
 }
 
-## Prints `msg` and aborts the program. It never returns.
+## Prints `message` and aborts the program. It never returns.
 ##
-## Writes `msg` and a newline to standard output with `puts`, or
-## "Assertion failed with no additional information" when `msg` is
-## `__null`. Then it flushes every C output stream, so the message is not
-## lost when stdout is a pipe, and calls C `abort()`. No destructors or
-## releases run, and the process ends abnormally (SIGABRT on POSIX).
+## Writes `message` and a newline to standard output, or "Assertion failed
+## with no additional information" when `message` is null. Then it flushes
+## every C output stream, so the message is not lost when stdout is a pipe,
+## and calls C `abort()`. No destructors or releases run, and the process
+## ends abnormally (SIGABRT on POSIX).
 ##
-## @param msg the NUL-terminated message to print, or `__null`
+## @param message the text to print
 ## @panics always
 ## @example
 ##     panic("unreachable");
-export panic(msg: __ptr<char>) {
-    if (msg == __null) {
+export panic(message: String) {
+    if (message === __null) {
+        _pep_panic(__null);
+    }
+    _pep_panic(message.c_str());
+}
+
+# `panic` on a NUL-terminated C string (`__null` prints a generic message).
+# String-literal messages and compiler-generated checks lower to this, so a
+# panic never has to allocate.
+export _pep_panic(message: __ptr<char>) {
+    if (message == __null) {
         puts("Assertion failed with no additional information");
     } else {
-        puts(msg);
+        puts(message);
     }
     # stdout is fully buffered when it is a pipe: flush it, or abort() drops
     # the message just printed.
@@ -233,55 +241,11 @@ _pep_trace_emit(buf: __ptr<char>) {
     _pep_free(buf);
 }
 
-## Prints `name`, the address `ptr`, and the first 8 bytes at `ptr` when
-## tracing is on. Does nothing otherwise.
-##
-## Tracing is on when the `PEP_TRACE` environment variable is set to any
-## value, even an empty one. It is read once at program start. The line has
-## the form `name: AAAAAAAAAAAAAAAAWWWWWWWWWWWWWWWW`: 16 uppercase hex
-## digits of the address, then, with no separator, the first 8 bytes read as
-## a little-endian 64-bit word. The word is omitted when `ptr` is `__null`
-## or `size` is less than 8. Only those 8 bytes are read, whatever `size` is.
-## The line goes to standard output.
-##
-## A traced call frees what it allocates. Only the first 400 bytes of
-## `name` are printed.
-##
-## @param ptr the start of the region to trace
-## @param size the region's size in bytes; the word is printed only when it
-##   is at least 8
-## @param name a NUL-terminated label for the line, or `__null` for none
-export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
-    if (_pep_trace_on) {
-        var buf = _pep_malloc(512);
-        var n = _pep_trace_prefix(buf, name);
-        var address = hex(ptr as ulong);
-        n = _pep_trace_append(buf, n, address);
-        if (ptr != __null && size >= 8) {
-            # Build the word at ulong width: each byte zero-extends (u8 →
-            # u64), so bytes >= 0x80 stay positive and the full 64-bit word
-            # is defined. An i32-wide chain would sign-extend to all-F when
-            # hex() takes it as ulong.
-            var w = hex((ptr[0] as ulong) | ((ptr[1] as ulong) << 8) | ((ptr[2] as ulong) << 16)
-                        | ((ptr[3] as ulong) << 24) | ((ptr[4] as ulong) << 32)
-                        | ((ptr[5] as ulong) << 40) | ((ptr[6] as ulong) << 48)
-                        | ((ptr[7] as ulong) << 56));
-            n = _pep_trace_append(buf, n, w);
-        }
-        _pep_trace_emit(buf);
-    }
-}
-
-## Prints `name: ` followed by the address `ptr` as 16 uppercase hex digits
-## when tracing is on (the `PEP_TRACE` environment variable is set, checked
-## once at program start). Does nothing otherwise.
-##
-## A traced call frees what it allocates. Only the first 400 bytes of
-## `name` are printed.
-##
-## @param ptr the address to print; it is not dereferenced
-## @param name a NUL-terminated label for the line, or `__null` for none
-export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
+# Debugging aid for compiler work: prints `name: ` and the address `ptr` as
+# 16 hex digits when `PEP_TRACE` is set (read once at program start). The
+# synthesized constructor, `__acquire` and `__release` call it; it is not
+# part of the language's API.
+export _pep_trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
         var n = _pep_trace_prefix(buf, name);
@@ -291,18 +255,10 @@ export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     }
 }
 
-## Prints `name: ` followed by `value` in signed decimal when tracing is on
-## (the `PEP_TRACE` environment variable is set, checked once at program
-## start). Does nothing otherwise.
-##
-## A traced call frees what it allocates. Only the first 400 bytes of
-## `name` are printed.
-##
-## @param value the number to print
-## @param name a NUL-terminated label for the line, or `__null` for none
-## @example
-##     trace_int(count, "count");   # prints "count: 3" under PEP_TRACE=1
-export trace_int(value: long, name: __ptr<char>) {
+# Debugging aid for compiler work: prints `name: ` and `value` in decimal
+# when `PEP_TRACE` is set. The synthesized `__acquire` and `__release` call
+# it with the new reference count.
+export _pep_trace_int(value: long, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
         var n = _pep_trace_prefix(buf, name);

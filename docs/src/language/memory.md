@@ -34,8 +34,9 @@ field or an array shares the object. Nothing is copied.
 
 A struct-typed variable or field that has not been given a value, such as
 `var next: Account;`, is *null*: it refers to no object. Reading a field or
-calling a method through a null reference crashes the program. Use `===` to
-check whether two references name the same object.
+calling a method through a null reference crashes the program. Use `===` or
+`!==` to check whether two references name the same object, or whether one is
+null (`next === __null`).
 
 ## When objects are destroyed
 

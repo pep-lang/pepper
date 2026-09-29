@@ -343,7 +343,7 @@ type IoResult<T> = Result<T, IoError>
 
 The result of an io operation: `Value` on success, an `IoError` on
 failure. Check `is_ok()` / `is_err()` before reading `Value` or `Error`;
-operations that produce nothing return `IoResult<None>`.
+operations that produce nothing return `IoResult<void>`.
 
 **Type parameters**
 - `T` — the value an operation produces on success

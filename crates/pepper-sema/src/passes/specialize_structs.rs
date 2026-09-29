@@ -98,7 +98,88 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     }
     specialized.release = release;
 
+    erase_void(&mut specialized);
     specialized
+}
+
+/// A `void` type argument (`Result<void>`) erases what it types, as Rust's
+/// `()` carries nothing: fields and parameters of type `void` are removed,
+/// along with the statements that only move them. Removed are an
+/// assignment to a removed field of `this` (the constructor's zero
+/// initialization, `this.Value = v`), an assignment whose value is a
+/// removed parameter (`r.Value = v`), and the value of a `return` that
+/// returns either one (`return this.Value;` in a method whose return type
+/// became `void`). Any other use is left in place, so it is reported as
+/// the missing member or symbol it now is.
+fn erase_void(st: &mut StructDef) {
+    let is_void = |ty: &TypeName| ty.name == crate::type_name::VOID && ty.sub_types.is_empty();
+    let fields: Vec<String> = st
+        .field_members
+        .iter()
+        .filter(|f| is_void(&f.ty))
+        .map(|f| f.name.clone())
+        .collect();
+    let has_void_param = |f: &FunctionDef| f.parameters.iter().any(|p| is_void(&p.ty));
+    if fields.is_empty()
+        && !st.method_members.iter().any(has_void_param)
+        && !has_void_param(&st.constructor)
+    {
+        return;
+    }
+    st.field_members.retain(|f| !is_void(&f.ty));
+    let erase_function = |f: &mut FunctionDef| {
+        let params: Vec<String> = f
+            .parameters
+            .iter()
+            .filter(|p| is_void(&p.ty))
+            .map(|p| p.name.clone())
+            .collect();
+        f.parameters.retain(|p| !is_void(&p.ty));
+        let returns_void = is_void(&f.ty);
+        if let Some(body) = &mut f.body {
+            erase_void_block(body, &fields, &params, returns_void);
+        }
+    };
+    for method in &mut st.method_members {
+        erase_function(method);
+    }
+    erase_function(&mut st.constructor);
+}
+
+fn erase_void_block(block: &mut Block, fields: &[String], params: &[String], returns_void: bool) {
+    let erased = |e: &Expression| match e {
+        Expression::SymbolRef { id, .. } => params.contains(id),
+        Expression::MemberRef { lhs, name, .. } => {
+            matches!(**lhs, Expression::ThisRef) && fields.contains(name)
+        }
+        _ => false,
+    };
+    block.items.retain(|stmt| match stmt {
+        Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. }) => {
+            let field_store = matches!(&**lhs, Expression::MemberRef { .. }) && erased(lhs);
+            let param_value = matches!(&**rhs, Expression::SymbolRef { .. }) && erased(rhs);
+            !(field_store || param_value)
+        }
+        _ => true,
+    });
+    for stmt in &mut block.items {
+        match stmt {
+            Statement::Block(inner) => erase_void_block(inner, fields, params, returns_void),
+            Statement::Branch(branch) => {
+                erase_void_block(&mut branch.if_block, fields, params, returns_void);
+                if let Some(else_block) = &mut branch.else_block {
+                    erase_void_block(else_block, fields, params, returns_void);
+                }
+            }
+            Statement::While(wh) => erase_void_block(&mut wh.block, fields, params, returns_void),
+            Statement::Return(ret) if returns_void => {
+                if ret.expr.as_ref().is_some_and(|e| erased(e)) {
+                    ret.expr = None;
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 pub(crate) fn substitute_block(block: &mut Block, type_map: &[(String, TypeName)]) {

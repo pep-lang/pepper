@@ -157,14 +157,14 @@ pub fn apply_synthesized(st: &mut StructDef) {
             null_guard(),
             count_local(CountField::Strong, true, atomic),
             call(
-                "trace_ptr",
+                "_pep_trace_ptr",
                 vec![
                     Expression::ThisRef,
                     str_lit(format!("acquire: {}", struct_name)),
                 ],
             ),
             call(
-                "trace_int",
+                "_pep_trace_int",
                 vec![
                     count_ref(),
                     str_lit(format!("  refcount: {}", struct_name)),
@@ -181,14 +181,14 @@ pub fn apply_synthesized(st: &mut StructDef) {
             null_guard(),
             count_local(CountField::Strong, false, atomic),
             call(
-                "trace_ptr",
+                "_pep_trace_ptr",
                 vec![
                     Expression::ThisRef,
                     str_lit(format!("release: {}", struct_name)),
                 ],
             ),
             call(
-                "trace_int",
+                "_pep_trace_int",
                 vec![
                     count_ref(),
                     str_lit(format!("  refcount: {}", struct_name)),
@@ -198,7 +198,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                 is_zero(count_ref()),
                 vec![
                     call(
-                        "trace_ptr",
+                        "_pep_trace_ptr",
                         vec![Expression::ThisRef, str_lit(format!("dtor: {}", struct_name))],
                     ),
                     // The strong references' weak reference is still held
@@ -290,7 +290,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             false,
         ))),
         call(
-            "trace_ptr",
+            "_pep_trace_ptr",
             vec![Expression::ThisRef, str_lit(format!("ctor: {}", struct_name))],
         ),
     ];

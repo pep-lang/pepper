@@ -18,6 +18,6 @@ main(): int {
     # The standard library's Result uses a default the same way:
     # Result<int> means Result<int, Error>.
     var ok = Result<int>.ok(42);
-    assert(ok.unwrap() == 42, "Result with the default error type");
+    assert(ok.value() == 42, "Result with the default error type");
     return 0;
 }

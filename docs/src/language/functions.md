@@ -67,6 +67,10 @@ log_positive(n: int) {
 }
 ```
 
+A call to such a function has no value, so it cannot be stored, passed,
+returned, or used as an operand or condition: `var x = log("hi");` reports
+`cannot use a value of type 'void' as variable 'x'`.
+
 In a function that returns a value, `return;` is an error:
 
 ```text
@@ -136,7 +140,10 @@ A `float` or `double` prints with six digits after the decimal point, rounded:
 
 For checks in your programs, the runtime also provides `assert(condition,
 message)`, which stops the program with `message` when `condition` is false, and
-`panic(message)`. See [Built-in functions](../reference/internals.md).
+`panic(message)`, which always stops it. Both take the message as a `String`, so
+it can be built at run time (`assert(n > 0, name + " must be positive")`); a
+string literal message costs nothing when the assertion holds. See
+[Built-in functions](../reference/internals.md).
 
 ## Functions as values
 

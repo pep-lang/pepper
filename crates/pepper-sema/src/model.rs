@@ -17,6 +17,7 @@ pub enum BinaryOp {
     Mod,
     Pow,
     Identical,
+    NotIdentical,
     Equal,
     NotEqual,
     Less,
@@ -66,7 +67,7 @@ impl BinaryOp {
             BinaryOp::BitXor => "^",
             BinaryOp::LogicalAnd => "&&",
             BinaryOp::LogicalOr => "||",
-            BinaryOp::Identical => "",
+            BinaryOp::Identical | BinaryOp::NotIdentical => "",
             BinaryOp::Assign => "",
             BinaryOp::AddAssign => "+=",
             BinaryOp::SubAssign => "-=",
@@ -118,10 +119,22 @@ impl BinaryOp {
 
     /// Comparison ops (`==`, `!=`, `<`, `<=`, `>`, `>=`, identical): their
     /// result type is `bool`.
+    /// `===`/`!==` as the raw `==`/`!=` codegen performs for them: after
+    /// sema no operator method stands behind either, so both compare the
+    /// operands' own values (addresses for references). Other operators are
+    /// returned unchanged.
+    pub fn identity_as_equality(&self) -> BinaryOp {
+        match self {
+            BinaryOp::Identical => BinaryOp::Equal,
+            BinaryOp::NotIdentical => BinaryOp::NotEqual,
+            other => *other,
+        }
+    }
+
     pub fn is_comparison(&self) -> bool {
         matches!(
             self,
-            BinaryOp::Identical | BinaryOp::Equal | BinaryOp::NotEqual | BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual
+            BinaryOp::Identical | BinaryOp::NotIdentical | BinaryOp::Equal | BinaryOp::NotEqual | BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual
         )
     }
 }

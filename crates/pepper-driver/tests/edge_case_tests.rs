@@ -1375,19 +1375,72 @@ test(): int {
 
 #[test]
 fn assert_with_null_message() {
-    // `__null` is already a `char*`: the message used to be lowered through
-    // `String.c_str`, which dereferenced null even when the assert held.
+    // A null `String` message is only read when the assertion fails.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
 test(): int {
     assert(true, __null);
-    var p: __ptr<char> = __null;
-    assert(1 < 2, p);
+    var message: String = __null;
+    assert(1 < 2, message);
     return 7;
 }
 "#
         ),
         7
+    );
+}
+
+// ── Identity comparison: `===` and `!==` ────────────────────────────────────
+
+#[test]
+fn identity_comparison() {
+    // References compare addresses, even when the type defines `==`
+    // (`String` compares content); POD values compare like `==`/`!=`.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct S { int x = 0; }
+test(): int {
+    var a = 3;
+    var b = 3.5;
+    var s = S();
+    var t = s;
+    var u = S();
+    var r = 0;
+    if (a === 3) { r = r + 1; }
+    if (b === 3.5 && !(b !== 3.5)) { r = r + 2; }
+    if (s === t && !(s !== t)) { r = r + 4; }
+    if (s !== u) { r = r + 8; }
+    if (a !== 4) { r = r + 16; }
+    var x = "hi";
+    var y = "hi";
+    if (x == y && x !== y && x === x) { r = r + 32; }
+    if (s !== __null) { r = r + 64; }
+    return r;
+}
+"#
+        ),
+        127
+    );
+}
+
+// ── panic and assert take a String ──────────────────────────────────────────
+
+#[test]
+fn assert_takes_a_string_message() {
+    // A computed message is an ordinary `String` argument.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var name = "count";
+    assert(1 + 1 == 2, name + " must add up");
+    assert(true, "literal");
+    return 5;
+}
+"#
+        ),
+        5
     );
 }

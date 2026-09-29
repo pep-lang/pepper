@@ -110,7 +110,7 @@ import io;
             siblings = io.File.read_to_string(io.Path(topology + "thread_siblings_list"));
         }
         if (siblings.is_ok()) {
-            cores.insert(siblings.unwrap());
+            cores.insert(siblings.value());
         }
         cpu = cpu + 1;
     }

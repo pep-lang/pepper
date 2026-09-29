@@ -10,7 +10,7 @@ main(): int {
     var good = parse_digit("2");
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
-    assert(good.unwrap() == 2, "unwrap returns the value");
+    assert(good.value() == 2, "value() returns the value");
     assert(good.Value == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
@@ -23,15 +23,15 @@ main(): int {
 
     # Result<int> is short for Result<int, Error>.
     Result<int, Error> spelled_out = good;
-    assert(spelled_out.unwrap() == 2, "the same type");
+    assert(spelled_out.value() == 2, "the same type");
 
     # A default-constructed Result is an Err with a default error.
     var empty = Result<int>();
     assert(empty.is_err(), "Result() is an Err");
 
-    # An operation with no value to return uses None.
-    var done = Result<None>.ok(None());
-    var failed = Result<None>.err(Error("disk full"));
-    assert(done.is_ok() && failed.is_err(), "Result<None> works like any other");
+    # An operation with no value to return uses void.
+    var done = Result<void>.ok();
+    var failed = Result<void>.err(Error("disk full"));
+    assert(done.is_ok() && failed.is_err(), "Result<void> works like any other");
     return 0;
 }

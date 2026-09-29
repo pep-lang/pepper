@@ -41,27 +41,6 @@ Creates an Error carrying `message`.
 **Parameters**
 - `message` — the description of the failure; defaults to the empty string
 
-## None
-
-```pepper
-struct None
-```
-
-The value of a result that carries no value on success, like Rust's `()`
-in `Result<(), E>`: `Result<None>.ok(None())`.
-
-Has no fields; every `None` is interchangeable with any other.
-
-**Example**
-```pepper
-    check(bool good): Result<None> {
-        if (good) {
-            return Result<None>.ok(None());
-        }
-        return Result<None>.err(Error("bad"));
-    }
-```
-
 ## Result
 
 ```pepper
@@ -78,15 +57,20 @@ meaningful, and the other keeps its default (zero for a POD type, null for
 a struct type, so do not read through it). `TError` defaults to `Error`,
 so `Result<int>` is `Result<int, Error>`.
 
+`Result<void>` is the result of an operation that returns nothing on
+success, like Rust's `Result<(), E>`. A `void` type argument erases what
+it types: that instance has no `Value` field, `ok()` takes no argument,
+and `value()` returns nothing, so it only checks that the result is Ok.
+
 **Type parameters**
-- `TValue` — the type of the value an Ok result carries; use `None` when there is no value
+- `TValue` — the type of the value an Ok result carries; `void` when there is none
 - `TError` — the type of the error an Err result carries; defaults to `Error`
 
 **Example**
 ```pepper
     main(): int {
         var a = Result<int>.ok(42);
-        if (a.unwrap() != 42) { return 1; }
+        if (a.value() != 42) { return 1; }
         var b = Result<int>.err(Error("boom"));
         if (!b.is_err()) { return 2; }
         return b.ok_or(0);   # 0
@@ -149,6 +133,8 @@ Returns an Ok result holding `v`.
 
 For a struct `TValue` the result acquires a reference to `v`.
 
+For `Result<void>`, `ok()` takes no argument.
+
 **Parameters**
 - `v` — the success value
 
@@ -158,6 +144,7 @@ For a struct `TValue` the result acquires a reference to `v`.
 **Example**
 ```pepper
     var r = Result<int>.ok(42);
+    var done = Result<void>.ok();
 ```
 
 #### err
@@ -205,10 +192,10 @@ Reports whether this result is Err.
 **Returns**
 - true when `Error` holds the outcome
 
-#### unwrap
+#### value
 
 ```pepper
-TValue unwrap()
+TValue value()
 ```
 
 Returns the success value, panicking if this result is Err.
@@ -216,15 +203,18 @@ Returns the success value, panicking if this result is Err.
 For a struct `TValue` the caller gets its own reference; the result
 keeps its reference too.
 
+For `Result<void>` it returns nothing: calling it only checks that the
+result is Ok.
+
 **Returns**
 - the `Value` of an Ok result
 
 **Panics**
-- if `this.IsOk` does not hold, that is, the result is Err ("Result::unwrap on an Err value")
+- if `this.IsOk` does not hold, that is, the result is Err ("Result.value on an Err value")
 
 **Example**
 ```pepper
-    var n = Result<int>.ok(42).unwrap();   # 42
+    var n = Result<int>.ok(42).value();   # 42
 ```
 
 #### ok_or

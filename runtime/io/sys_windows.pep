@@ -137,11 +137,11 @@ import "directory";
 [Target(OS(Windows))] export _io_sys_code_write_zero(): ErrorCode { return 29; }        # WRITE_FAULT
 
 # A BOOL result: nonzero -> Ok, 0 -> the GetLastError() error.
-[Target(OS(Windows))] export _io_win_check(ok: int): IoResult<None> {
+[Target(OS(Windows))] export _io_win_check(ok: int): IoResult<void> {
     if (ok != 0) {
-        return _io_ok_none();
+        return _io_ok_void();
     }
-    return IoResult<None>.err(IoError.last());
+    return IoResult<void>.err(IoError.last());
 }
 
 # ── Handles ──────────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ import "directory";
     return _io_win_create(path, access, disposition, 0);
 }
 
-[Target(OS(Windows))] export _io_sys_close(h: FileHandle): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_close(h: FileHandle): IoResult<void> {
     return _io_win_check(CloseHandle(h));
 }
 
@@ -268,19 +268,19 @@ import "directory";
 
 # FILE_END_OF_FILE_INFO through SetFileInformationByHandle(FileEndOfFileInfo):
 # unlike SetEndOfFile it leaves the file pointer where it is.
-[Target(OS(Windows))] export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
     var info = _pep_malloc(8) as __ptr<long>;
     info[0] = size as long;
     var ok = SetFileInformationByHandle(h, 6, info, 8);
     var code = GetLastError();
     _pep_free(info);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
-[Target(OS(Windows))] export _io_sys_sync(h: FileHandle): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_sync(h: FileHandle): IoResult<void> {
     return _io_win_check(FlushFileBuffers(h));
 }
 
@@ -409,42 +409,42 @@ import "directory";
     return IoResult<DirEntry[]>.ok(out);
 }
 
-[Target(OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<void> {
     var w = _io_win_wide(path.Value);
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
     _pep_free(w);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
-[Target(OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<void> {
     var w = _io_win_wide(path.Value);
     var ok = RemoveDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
-[Target(OS(Windows))] export _io_sys_unlink(path: Path): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_unlink(path: Path): IoResult<void> {
     var w = _io_win_wide(path.Value);
     var ok = DeleteFileW(w);
     var code = GetLastError();
     _pep_free(w);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
 # A directory symlink (junction) is removed with RemoveDirectoryW, anything
 # else with DeleteFileW.
-[Target(OS(Windows))] export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
     if (is_dir) {
         return _io_sys_rmdir(path);
     }
@@ -452,7 +452,7 @@ import "directory";
 }
 
 # MOVEFILE_REPLACE_EXISTING, as POSIX rename replaces.
-[Target(OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<void> {
     var wf = _io_win_wide(from.Value);
     var wt = _io_win_wide(to.Value);
     var ok = MoveFileExW(wf, wt, 1);
@@ -460,9 +460,9 @@ import "directory";
     _pep_free(wf);
     _pep_free(wt);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
 [Target(OS(Windows))] export _io_sys_getcwd(): IoResult<Path> {
@@ -482,15 +482,15 @@ import "directory";
     return IoResult<Path>.ok(p);
 }
 
-[Target(OS(Windows))] export _io_sys_chdir(path: Path): IoResult<None> {
+[Target(OS(Windows))] export _io_sys_chdir(path: Path): IoResult<void> {
     var w = _io_win_wide(path.Value);
     var ok = SetCurrentDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
     if (ok == 0) {
-        return IoResult<None>.err(IoError(code, _io_sys_error_message(code)));
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
 # GetFinalPathNameByHandleW answers `\\?\C:\x` or `\\?\UNC\server\share`;

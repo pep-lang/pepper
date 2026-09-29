@@ -66,6 +66,7 @@ fn binary_op(op: &str) -> Option<BinaryOp> {
         "!=" => BinaryOp::NotEqual,
         "**" => BinaryOp::Pow,
         "===" => BinaryOp::Identical,
+        "!==" => BinaryOp::NotIdentical,
         "=" => BinaryOp::Assign,
         "+=" => BinaryOp::AddAssign,
         "-=" => BinaryOp::SubAssign,

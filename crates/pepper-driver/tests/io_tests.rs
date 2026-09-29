@@ -217,7 +217,7 @@ import [File, OpenOptions, Directory, DirEntry, Path, IoError, IoResult, Metadat
 [Target(!OS(Windows))] extern int symlink(char* target, char* link);
 
 text(f: Path): String {
-    return File.read_to_string(f).unwrap();
+    return File.read_to_string(f).value();
 }
 
 bytes_of(s: String): u8[] {
@@ -549,16 +549,16 @@ churn(p: Path) {
         # A dropped File's descriptor is the lowest free one again.
         var first = -1;
         {
-            var f = File.open(p).unwrap();
+            var f = File.open(p).value();
             first = f.Handle;
         }
-        var again = File.open(p).unwrap();
+        var again = File.open(p).value();
         assert(again.Handle == first, "descriptor not closed by the destructor");
     }
     [Target(OS(Windows))] {
         # A dropped File's HANDLE is no longer valid. (The temporary File
         # is released at the end of the declaration.)
-        var h = File.open(p).unwrap().Handle;
+        var h = File.open(p).value().Handle;
         var flags = _pep_malloc(4);
         assert(GetHandleInformation(h, flags) == 0, "handle not closed by the destructor");
         _pep_free(flags);

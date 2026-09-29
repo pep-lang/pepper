@@ -30,7 +30,8 @@ Things to notice:
 - A struct with no constructor can be created with its name and empty
   parentheses, `Point()`. There is no `new` keyword at the call site.
 - `p.x` reads a field and `p.x = 3` writes it.
-- `a === b` is true when `a` and `b` refer to the same object. See
+- `a === b` is true when `a` and `b` refer to the same object, and `a !== b`
+  when they do not. See
   [Comparing structs](#comparing-structs) for `==`.
 
 A struct can have a field whose type is a struct declared later in the file.
@@ -180,8 +181,9 @@ The result of an operator has the type its method returns, so with
 Without an `==` method, `a == b` on two structs compares identity: it is true
 only when both refer to the same object, exactly like `a === b`. The same goes
 for `!=`. Define `==` when two distinct objects with the same contents should
-count as equal, as `String` and `Array` do; `!=` then follows from it. `===` always
-compares identity, whatever methods the struct declares.
+count as equal, as `String` and `Array` do; `!=` then follows from it. `===` and
+`!==` always compare identity, whatever methods the struct declares, so
+`"a" + "b" == "ab"` is true while `"a" + "b" === "ab"` is false.
 
 ### Indexers
 

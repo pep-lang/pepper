@@ -17,7 +17,7 @@ parse_number(text: String): Result<int> {
 main(): int {
     var good = parse_number("2026");
     assert(good.is_ok(), "digits parse");
-    assert(good.unwrap() == 2026, "unwrap returns the value");
+    assert(good.value() == 2026, "value() returns the value");
 
     var bad = parse_number("12x");
     assert(bad.is_err(), "x is not a digit");

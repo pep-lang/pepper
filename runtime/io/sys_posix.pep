@@ -91,14 +91,14 @@ import "directory";
 [Target(!OS(Windows))] export _io_sys_code_bad_handle(): ErrorCode { return 9; }        # EBADF
 [Target(!OS(Windows))] export _io_sys_code_write_zero(): ErrorCode { return 5; }        # EIO
 
-[Target(!OS(Windows))] export _io_posix_err_none(): IoResult<None> {
-    return IoResult<None>.err(IoError.last());
+[Target(!OS(Windows))] export _io_posix_err_none(): IoResult<void> {
+    return IoResult<void>.err(IoError.last());
 }
 
 # 0 -> Ok, -1 -> the errno error.
-[Target(!OS(Windows))] export _io_posix_check(rc: int): IoResult<None> {
+[Target(!OS(Windows))] export _io_posix_check(rc: int): IoResult<void> {
     if (rc == 0) {
-        return _io_ok_none();
+        return _io_ok_void();
     }
     return _io_posix_err_none();
 }
@@ -169,7 +169,7 @@ import "directory";
     return IoResult<FileHandle>.err(IoError(4, "interrupted"));
 }
 
-[Target(!OS(Windows))] export _io_sys_close(h: FileHandle): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_close(h: FileHandle): IoResult<void> {
     return _io_posix_check(close(h));
 }
 
@@ -219,11 +219,11 @@ import "directory";
     return IoResult<Offset>.ok(r);
 }
 
-[Target(!OS(Windows))] export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
     return _io_posix_check(ftruncate(h, size as long));
 }
 
-[Target(!OS(Windows))] export _io_sys_sync(h: FileHandle): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_sync(h: FileHandle): IoResult<void> {
     return _io_posix_check(fsync(h));
 }
 
@@ -406,35 +406,35 @@ import "directory";
     return IoResult<DirEntry[]>.ok(out);
 }
 
-[Target(!OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<void> {
     if (path.Value.Size == 0) {
-        return IoResult<None>.err(_io_posix_empty_path());
+        return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(mkdir(path.Value.c_str(), 511));   # 0777, less the umask
 }
 
-[Target(!OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<void> {
     if (path.Value.Size == 0) {
-        return IoResult<None>.err(_io_posix_empty_path());
+        return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rmdir(path.Value.c_str()));
 }
 
-[Target(!OS(Windows))] export _io_sys_unlink(path: Path): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_unlink(path: Path): IoResult<void> {
     if (path.Value.Size == 0) {
-        return IoResult<None>.err(_io_posix_empty_path());
+        return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(unlink(path.Value.c_str()));
 }
 
 # Remove a non-directory or a symlink (to anything); `unlink` handles both.
-[Target(!OS(Windows))] export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
     return _io_sys_unlink(path);
 }
 
-[Target(!OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<void> {
     if (from.Value.Size == 0 || to.Value.Size == 0) {
-        return IoResult<None>.err(_io_posix_empty_path());
+        return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rename(from.Value.c_str(), to.Value.c_str()));
 }
@@ -459,9 +459,9 @@ import "directory";
     return IoResult<Path>.err(IoError(34, "path too long"));
 }
 
-[Target(!OS(Windows))] export _io_sys_chdir(path: Path): IoResult<None> {
+[Target(!OS(Windows))] export _io_sys_chdir(path: Path): IoResult<void> {
     if (path.Value.Size == 0) {
-        return IoResult<None>.err(_io_posix_empty_path());
+        return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(chdir(path.Value.c_str()));
 }

@@ -132,7 +132,7 @@ export struct OpenOptions {
     ##   (`is_permission_denied()` and others)
     ## @see File.open_with
     ## @example
-    ##     var log = OpenOptions().append(true).create(true).open(Path("log.txt")).unwrap();
+    ##     var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     ##     log.write_string("started");
     IoResult<File> open(Path path) {
         return File.open_with(path, this);
@@ -195,19 +195,19 @@ export _io_chunk_size(): ulong {
 }
 
 # Write all `n` bytes at `p`, looping over partial writes.
-export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<None> {
+export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> {
     ulong done = 0;
     while (done < n) {
         var r = _io_sys_write(h, p + done, n - done);
         if (r.is_err()) {
-            return IoResult<None>.err(r.Error);
+            return IoResult<void>.err(r.Error);
         }
         if (r.Value == 0) {
-            return IoResult<None>.err(IoError(_io_sys_code_write_zero(), "failed to write the whole buffer"));
+            return IoResult<void>.err(IoError(_io_sys_code_write_zero(), "failed to write the whole buffer"));
         }
         done = done + r.Value;
     }
-    return _io_ok_none();
+    return _io_ok_void();
 }
 
 ## An open file, or a standard stream, read and written through its
@@ -236,10 +236,10 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<None> 
 ## kinds apart portably.
 ##
 ## @example
-##     var f = File.create(Path("out.txt")).unwrap();
+##     var f = File.create(Path("out.txt")).value();
 ##     f.write_string("hello");
 ##     f.close();
-##     var text = File.read_to_string(Path("out.txt")).unwrap();   # "hello"
+##     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 export struct File {
     ## The platform handle: a file descriptor on POSIX (-1 when closed), a
     ## `HANDLE` on Windows (null when closed).
@@ -300,7 +300,7 @@ export struct File {
     ##   another platform error (on POSIX, `is_is_a_directory()` when the path
     ##   is a directory)
     ## @example
-    ##     var f = File.create(Path("report.txt")).unwrap();
+    ##     var f = File.create(Path("report.txt")).value();
     ##     f.write_string("done");
     static IoResult<File> create(Path path) {
         return File.open_with(path, OpenOptions().write(true).create(true).truncate(true));
@@ -417,14 +417,14 @@ export struct File {
 
     ## Checks that the File is open, for use before an operation.
     ##
-    ## @returns `None` when the File is open; an error with the message
+    ## @returns an Ok result when the File is open; an error with the message
     ##   "file is closed" otherwise (code `EBADF` on POSIX,
     ##   `ERROR_INVALID_HANDLE` on Windows; no `IoError` predicate holds)
-    IoResult<None> check_open() {
+    IoResult<void> check_open() {
         if (!_io_sys_handle_valid(Handle)) {
-            return IoResult<None>.err(IoError(_io_sys_code_bad_handle(), "file is closed"));
+            return IoResult<void>.err(IoError(_io_sys_code_bad_handle(), "file is closed"));
         }
-        return _io_ok_none();
+        return _io_ok_void();
     }
 
     ## Reads up to `max` bytes from the current position and appends them
@@ -537,11 +537,11 @@ export struct File {
     ## If an error occurs part of `data` may already have been written.
     ##
     ## @param data the bytes to write
-    ## @returns `None` once every byte is written; an error when the File is
+    ## @returns an Ok result once every byte is written; an error when the File is
     ##   closed or was not opened for writing, when a write makes no
     ##   progress ("failed to write the whole buffer", with code `EIO` on
     ##   POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
-    IoResult<None> write_all(u8[] data) {
+    IoResult<void> write_all(u8[] data) {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -553,14 +553,14 @@ export struct File {
     ## or terminator is added.
     ##
     ## @param s the text to write
-    ## @returns `None` once every byte is written; an error as for `write_all`
+    ## @returns an Ok result once every byte is written; an error as for `write_all`
     ## @example
-    ##     var f = File.create(Path("greeting.txt")).unwrap();
+    ##     var f = File.create(Path("greeting.txt")).value();
     ##     var r = f.write_string("hello, world");
     ##     if (r.is_err()) {
     ##         return 1;
     ##     }
-    IoResult<None> write_string(String s) {
+    IoResult<void> write_string(String s) {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -636,9 +636,9 @@ export struct File {
     ## The File must have been opened for writing.
     ##
     ## @param size the new length, in bytes
-    ## @returns `None` on success; an error when the File is closed, was not
+    ## @returns an Ok result on success; an error when the File is closed, was not
     ##   opened for writing, or the system refuses the size
-    IoResult<None> set_len(ulong size) {
+    IoResult<void> set_len(ulong size) {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -653,9 +653,9 @@ export struct File {
     ##
     ## On Windows the File must have been opened with write access.
     ##
-    ## @returns `None` once the data is durable; an error when the File is
+    ## @returns an Ok result once the data is durable; an error when the File is
     ##   closed or the device reports a failure, or another platform error
-    IoResult<None> sync() {
+    IoResult<void> sync() {
         var c = check_open();
         if (c.is_err()) {
             return c;
@@ -688,22 +688,22 @@ export struct File {
     ## is never closed twice. A standard stream is only marked closed: the
     ## stream stays open, and `File.stdout()` and the like still work.
     ##
-    ## @returns `None` on success or when already closed; the platform
+    ## @returns an Ok result on success or when already closed; the platform
     ##   error when closing an owned handle fails
     ## @example
-    ##     var f = File.create(Path("out.bin")).unwrap();
+    ##     var f = File.create(Path("out.bin")).value();
     ##     f.write_string("data");
     ##     if (f.close().is_err()) {
     ##         return 1;
     ##     }
-    IoResult<None> close() {
+    IoResult<void> close() {
         if (!_io_sys_handle_valid(Handle)) {
-            return _io_ok_none();
+            return _io_ok_void();
         }
         var h = Handle;
         Handle = _io_sys_invalid_handle();
         if (!Owned) {
-            return _io_ok_none();
+            return _io_ok_void();
         }
         return _io_sys_close(h);
     }
@@ -758,17 +758,17 @@ export struct File {
     ##
     ## @param path the file to write
     ## @param data the new contents
-    ## @returns `None` once the data is written and the file closed; an error
+    ## @returns an Ok result once the data is written and the file closed; an error
     ##   as for `File.create` (such as `is_not_found()` for a missing parent
     ##   directory), `write_all`, or `close`
     ## @example
     ##     var data = Array<u8>();
     ##     data.append(1 as u8);
     ##     File.write_bytes(Path("one.bin"), data);
-    static IoResult<None> write_bytes(Path path, u8[] data) {
+    static IoResult<void> write_bytes(Path path, u8[] data) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<None>.err(f.Error);
+            return IoResult<void>.err(f.Error);
         }
         var file = f.Value;
         var w = file.write_all(data);
@@ -787,7 +787,7 @@ export struct File {
     ##
     ## @param path the file to write
     ## @param s the new contents
-    ## @returns `None` once the text is written and the file closed; an error
+    ## @returns an Ok result once the text is written and the file closed; an error
     ##   as for `File.create` (such as `is_not_found()` for a missing parent
     ##   directory), `write_all`, or `close`
     ## @note this is the design proposal's `write_to_string`, renamed because
@@ -798,10 +798,10 @@ export struct File {
     ##     if (r.is_err()) {
     ##         return 1;
     ##     }
-    static IoResult<None> write_text(Path path, String s) {
+    static IoResult<void> write_text(Path path, String s) {
         var f = File.create(path);
         if (f.is_err()) {
-            return IoResult<None>.err(f.Error);
+            return IoResult<void>.err(f.Error);
         }
         var file = f.Value;
         var w = file.write_string(s);
@@ -826,7 +826,7 @@ export struct File {
     ##   as for `File.open` on `from` (such as `is_not_found()`),
     ##   `File.create` on `to`, or a read, write or close failure
     ## @example
-    ##     var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();
+    ##     var n = File.copy(Path("a.txt"), Path("b.txt")).value();
     static IoResult<ulong> copy(Path from, Path to) {
         var src = File.open(from);
         if (src.is_err()) {
@@ -876,14 +876,14 @@ export struct File {
     ##
     ## @param from the existing path
     ## @param to the new path
-    ## @returns `None` on success; an error with `is_not_found()` when `from`
+    ## @returns an Ok result on success; an error with `is_not_found()` when `from`
     ##   (or the parent of `to`) does not exist or, on POSIX, either path is
     ##   empty,
     ##   `is_permission_denied()` when access is refused, or another
     ##   platform error
     ## @example
     ##     File.rename(Path("draft.txt"), Path("final.txt"));
-    static IoResult<None> rename(Path from, Path to) {
+    static IoResult<void> rename(Path from, Path to) {
         return _io_sys_rename(from, to);
     }
 
@@ -892,7 +892,7 @@ export struct File {
     ## `Directory.remove_all`.
     ##
     ## @param path the file to delete
-    ## @returns `None` on success; an error with `is_not_found()` when the
+    ## @returns an Ok result on success; an error with `is_not_found()` when the
     ##   path does not exist (on POSIX, also when it is empty); when it is a
     ##   directory,
     ##   `is_is_a_directory()` on Linux and `is_permission_denied()` on macOS
@@ -903,7 +903,7 @@ export struct File {
     ##     if (r.is_err() && !r.Error.is_not_found()) {
     ##         return 1;
     ##     }
-    static IoResult<None> remove(Path path) {
+    static IoResult<void> remove(Path path) {
         return _io_sys_unlink(path);
     }
 }

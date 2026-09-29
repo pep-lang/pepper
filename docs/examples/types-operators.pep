@@ -14,6 +14,8 @@ main(): int {
     var small = 3 < 5;
     assert(small, "3 < 5");
     assert(5 >= 5 && 4 <= 5 && 6 > 5 && 5 == 5 && 5 != 6, "comparisons");
+    # On numbers, `===` and `!==` are the same as `==` and `!=`.
+    assert(5 === 5 && 5 !== 6, "identity on numbers");
 
     # Logical operators; 'and' and 'or' are spellings of && and ||.
     var t = true;

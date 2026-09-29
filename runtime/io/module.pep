@@ -17,7 +17,7 @@
 ##     main(): int {
 ##         var path = io.Directory.temp().join_str("greeting.txt");
 ##         assert(io.File.write_text(path, "hello").is_ok(), "write");
-##         assert(io.File.read_to_string(path).unwrap() == "hello", "read back");
+##         assert(io.File.read_to_string(path).value() == "hello", "read back");
 ##         io.File.remove(path);
 ##         return 0;
 ##     }

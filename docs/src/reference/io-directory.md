@@ -186,7 +186,7 @@ can still be renamed or removed afterwards.
 #### create
 
 ```pepper
-static IoResult<None> create(Path path)
+static IoResult<void> create(Path path)
 ```
 
 Creates one directory (`mkdir` on POSIX, with mode 0777 less the
@@ -196,7 +196,7 @@ umask; `CreateDirectoryW` on Windows). Its parent must already exist.
 - `path` — the directory to create
 
 **Returns**
-- `None` on success; an error when the directory cannot be created: `is_already_exists()` when anything (a file too) is already at `path`, `is_not_found()` when the parent is missing or the path is empty, `is_permission_denied()` when the parent is not writable
+- an Ok result on success; an error when the directory cannot be created: `is_already_exists()` when anything (a file too) is already at `path`, `is_not_found()` when the parent is missing or the path is empty, `is_permission_denied()` when the parent is not writable
 
 **See also**
 - `create_all`
@@ -204,7 +204,7 @@ umask; `CreateDirectoryW` on Windows). Its parent must already exist.
 #### create_all
 
 ```pepper
-static IoResult<None> create_all(Path path)
+static IoResult<void> create_all(Path path)
 ```
 
 Creates a directory and any missing parents, like `mkdir -p`.
@@ -218,7 +218,7 @@ directories at the same time.
 - `path` — the directory to create, with its parents
 
 **Returns**
-- `None` on success; an error when a directory cannot be created: `is_already_exists()` when a file (not a directory) is at `path` or at one of its parents, `is_permission_denied()`, and so on. Parents created before the failure are left in place
+- an Ok result on success; an error when a directory cannot be created: `is_already_exists()` when a file (not a directory) is at `path` or at one of its parents, `is_permission_denied()`, and so on. Parents created before the failure are left in place
 
 **Example**
 ```pepper
@@ -230,7 +230,7 @@ directories at the same time.
 #### remove
 
 ```pepper
-static IoResult<None> remove(Path path)
+static IoResult<void> remove(Path path)
 ```
 
 Removes an empty directory (`rmdir` on POSIX, `RemoveDirectoryW` on
@@ -240,7 +240,7 @@ Windows).
 - `path` — the directory to remove; it must be empty
 
 **Returns**
-- `None` on success; an error when it cannot be removed: `is_directory_not_empty()` when it still has entries, `is_not_found()` when it is missing or the path is empty, `is_not_a_directory()` when `path` is a file, `is_permission_denied()`
+- an Ok result on success; an error when it cannot be removed: `is_directory_not_empty()` when it still has entries, `is_not_found()` when it is missing or the path is empty, `is_not_a_directory()` when `path` is a file, `is_permission_denied()`
 
 **See also**
 - `remove_all`
@@ -248,7 +248,7 @@ Windows).
 #### remove_all
 
 ```pepper
-static IoResult<None> remove_all(Path path)
+static IoResult<void> remove_all(Path path)
 ```
 
 Removes `path` and, if it is a directory, everything inside it,
@@ -264,7 +264,7 @@ Windows a read-only file inside the tree is such a failure
 - `path` — the file, symlink or directory tree to remove
 
 **Returns**
-- `None` on success; an error when something cannot be removed: `is_not_found()` when `path` does not exist (unlike `rm -rf`, a missing path is an error) or is empty, `is_permission_denied()`, and so on
+- an Ok result on success; an error when something cannot be removed: `is_not_found()` when `path` does not exist (unlike `rm -rf`, a missing path is an error) or is empty, `is_permission_denied()`, and so on
 
 **See also**
 - `remove`
@@ -298,7 +298,7 @@ are resolved (`getcwd` on POSIX, `GetCurrentDirectoryW` on Windows).
 #### set_current
 
 ```pepper
-static IoResult<None> set_current(Path path)
+static IoResult<void> set_current(Path path)
 ```
 
 Changes the process's current directory (`chdir` on POSIX,
@@ -310,7 +310,7 @@ resolve against the new directory.
 - `path` — the new current directory; a relative path is resolved against the old one
 
 **Returns**
-- `None` on success; an error when the directory cannot be entered: `is_not_found()` when it is missing or the path is empty, `is_not_a_directory()` when it is a file, `is_permission_denied()`
+- an Ok result on success; an error when the directory cannot be entered: `is_not_found()` when it is missing or the path is empty, `is_not_a_directory()` when it is a file, `is_permission_denied()`
 
 **See also**
 - `current`

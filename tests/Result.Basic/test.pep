@@ -1,8 +1,8 @@
 main(): int {
-    # ok: is_ok true, unwrap returns the value.
+    # ok: is_ok true, value() returns the value.
     var a = Result<int>.ok(42);
     if (!a.is_ok()) { return 1; }
-    if (a.unwrap() != 42) { return 2; }
+    if (a.value() != 42) { return 2; }
 
     # err: is_err true, error message preserved.
     var b = Result<int>.err(Error("boom"));
@@ -24,10 +24,10 @@ main(): int {
     var e = Result<int>();
     if (e.is_ok()) { return 10; }
 
-    # None: the value type of a result with nothing to return.
-    var n = Result<None>.ok(None());
+    # void: the value type of a result with nothing to return.
+    var n = Result<void>.ok();
     if (!n.is_ok()) { return 11; }
-    var m = Result<None>.err(Error("no"));
+    var m = Result<void>.err(Error("no"));
     if (!m.is_err() || m.Error.Message.length() != 2) { return 12; }
 
     return 0;

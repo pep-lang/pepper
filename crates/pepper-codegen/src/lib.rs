@@ -74,6 +74,9 @@ pub struct CodeGenerator<'ctx> {
     /// order (keyed like `functions`); trailing missing args are padded from
     /// these at the call site.
     param_defaults: HashMap<String, Vec<Option<Expression>>>,
+    /// Declared parameter types and the declaring location of each free
+    /// function, for the string-literal fast path of `assert` and `panic`.
+    fn_signatures: HashMap<String, (Vec<String>, Loc)>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
     /// File-scope globals: name → Address (frame locals miss falls back here).
@@ -120,6 +123,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
+            fn_signatures: HashMap::new(),
             global_strings: HashMap::new(),
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
@@ -692,6 +696,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             function.name.clone(),
             function.parameters.iter().map(|p| p.default.clone()).collect(),
         );
+        self.fn_signatures.insert(
+            function.name.clone(),
+            (function.parameters.iter().map(|p| p.ty.to_string()).collect(), function.loc),
+        );
         Ok(())
     }
 
@@ -929,7 +937,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let value = thunk.get_nth_param(0).expect("this").into_array_value();
         let object = self.object_pointer(value.into())?;
         // Calling through a null trait value panics, never jumps through null.
-        if self.functions.contains_key("assert") {
+        if self.functions.contains_key("_pep_assert") {
             let is_set = self
                 .builder
                 .build_is_not_null(object, "is_set")
@@ -940,7 +948,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .build_global_string_ptr(&message, "str")
                 .map_err(|e| e.to_string())?
                 .as_pointer_value();
-            self.call_function("assert", vec![is_set.into(), msg.into()])?;
+            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
         }
         let target = self.vtable_entry(value, slot)?;
         let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![object.into()];
@@ -3382,51 +3390,52 @@ impl<'ctx> CodeGenerator<'ctx> {
         if name == "print" {
             return self.codegen_print(args);
         }
-        // assert(condition, msg): the message is a raw `char*`. A String
-        // literal (already rewritten by convert_string_literals into a
-        // `String(raw, size, len)` ctor call) lowers to its global pointer —
-        // no temporary allocation on hot paths like index bounds checks.
-        // Any other expression is lowered to `msg.c_str()`.
-        if name == "assert" && args.len() == 2 {
-            let cond = self.codegen_expr(&args[0])?;
-            // An owned-rvalue message (e.g. a `String` rvalue) is a temporary:
-            // it must live until `assert` returns, then its creation ref is
-            // released. A raw literal lowers to a global pointer — not an
-            // owned value — so it carries no temp.
-            let (msg_value, already_ptr, msg_temp) = match &args[1] {
-                Expression::FunctionCall { function, args: inner, .. }
-                    if function == "String"
-                        && matches!(
-                            inner.first(),
-                            Some(Expression::StringLiteral { is_raw: true, .. })
-                        ) =>
-                {
-                    (self.codegen_expr(inner.first().unwrap())?, true, None)
+        // assert(condition, message) and panic(message) take a `String`. A
+        // string-literal message (already rewritten by
+        // convert_string_literals into a `String(raw, size, len)` ctor call)
+        // skips building the String, so hot paths like index bounds checks
+        // never allocate:
+        // - the runtime's own `assert`/`panic` (declared in the same file as
+        //   `_pep_assert`/`_pep_panic`) lower to those, with the literal's
+        //   global pointer;
+        // - a replacement whose message parameter is a raw pointer (a forced
+        //   import may declare `assert(bool, __ptr<char>)`) gets the global
+        //   pointer itself.
+        // Any other message, or a replacement taking a `String`, is an
+        // ordinary call.
+        // TODO: this identifies "the runtime's own" by declaring file only
+        // because forced imports are the one way to replace a runtime
+        // function today. Revisit it when function overrides are
+        // implemented: an override must receive literal messages too.
+        if let Some((raw_name, message_index)) = match (name, args.len()) {
+            ("assert", 2) => Some(("_pep_assert", 1)),
+            ("panic", 1) => Some(("_pep_panic", 0)),
+            _ => None,
+        } {
+            if let Expression::FunctionCall { function, args: inner, .. } = &args[message_index] {
+                let literal = function == "String"
+                    && matches!(inner.first(), Some(Expression::StringLiteral { is_raw: true, .. }));
+                let target = match (self.fn_signatures.get(name), self.fn_signatures.get(raw_name)) {
+                    _ if !literal => None,
+                    (Some((params, _)), _)
+                        if params
+                            .get(message_index)
+                            .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<")) =>
+                    {
+                        Some(name)
+                    }
+                    (Some((_, loc)), Some((_, raw_loc))) if loc.file == raw_loc.file => Some(raw_name),
+                    _ => None,
+                };
+                if let Some(target) = target {
+                    let mut lowered = Vec::with_capacity(args.len());
+                    for (i, arg) in args.iter().enumerate() {
+                        let arg = if i == message_index { inner.first().unwrap() } else { arg };
+                        lowered.push(self.codegen_expr(arg)?.into());
+                    }
+                    return self.call_function(target, lowered);
                 }
-                other => {
-                    let v = self.codegen_expr(other)?;
-                    // The message must be a `char*`: an argument already typed
-                    // as a pointer (`char*`, `__ptr<T>`) is passed through,
-                    // everything else (notably `String`) lowers via `c_str`.
-                    // `__null` is a pointer too: calling `c_str` on it would
-                    // dereference null before `assert` even runs.
-                    let ptr = matches!(other, Expression::PointerLiteral)
-                        || self
-                            .value_sema_type(other)
-                            .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<"));
-                    (v, ptr, self.owned_temp_type(other))
-                }
-            };
-            let msg = if already_ptr {
-                msg_value
-            } else {
-                self.call_function("String.c_str", vec![msg_value])?
-            };
-            let result = self.call_function("assert", vec![cond, msg])?;
-            if let Some(ty) = msg_temp {
-                self.release_temp(&ty, msg_value)?;
             }
-            return Ok(result);
         }
         // release<T>(v): no-op for POD values (nothing to free), dispatches
         // to T.__release for struct references.
@@ -3785,14 +3794,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         let callee_temp = self.owned_temp_type(callee);
         let object = self.codegen_expr(callee)?.into_pointer_value();
         // Calling a null function value panics, never jumps through null.
-        if self.functions.contains_key("assert") {
+        if self.functions.contains_key("_pep_assert") {
             let is_set = self.builder.build_is_not_null(object, "fn_set").map_err(|e| e.to_string())?;
             let msg = self
                 .builder
                 .build_global_string_ptr("called a null function value", "str")
                 .map_err(|e| e.to_string())?
                 .as_pointer_value();
-            self.call_function("assert", vec![is_set.into(), msg.into()])?;
+            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
         }
         let slot = self
             .builder
@@ -4203,6 +4212,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
             return self.codegen_logical(*op, lhs, rhs);
         }
+        // `===`/`!==` are identity comparisons. Sema never turns them into
+        // operator calls, so by here they compare the raw values: addresses
+        // for references (struct, pointer, function and trait values) and
+        // plain values for POD types, exactly what `==`/`!=` do on the same
+        // raw values.
+        let op = &op.identity_as_equality();
         let lhs_temp = self.owned_temp_type(lhs);
         let rhs_temp = self.owned_temp_type(rhs);
         let lhs_val = self.codegen_expr(lhs)?;
@@ -4901,7 +4916,7 @@ fn is_comparison(op: BinaryOp) -> bool {
     use BinaryOp::*;
     matches!(
         op,
-        Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual | Identical
+        Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual | Identical | NotIdentical
     )
 }
 

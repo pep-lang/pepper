@@ -1,5 +1,7 @@
 import "internals";
 
+extern void memcpy(void* dest, void* src, ulong n);
+
 ## A mutable, reference-counted string of UTF-8 text. String literals
 ## (`"text"`) are `String` values.
 ##

@@ -95,7 +95,7 @@ what went wrong.
   `Result<int>.ok(value)` or `Result<int>.err(Error("message"))`.
 - `is_ok()` and `is_err()` tell you which one you have. `Value` and `Error`
   are its fields; `Error.Message` is the error's text.
-- `unwrap()` returns the value, and stops the program if there is none. Use it
+- `value()` returns the value, and stops the program if there is none. Use it
   only when an error would be a bug. `ok_or(fallback)` returns the value, or
   `fallback` if there is none.
 

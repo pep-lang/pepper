@@ -339,12 +339,12 @@ several passes run more than once on purpose.
 | 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
-| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
+| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. A `void` argument erases what it types (`erase_void`): fields and parameters of that type, stores of them, and a `return` of one, so `Result<void>` has no `Value` and `ok()` takes no argument. |
 | 12 | `synthesize_function_types` | For function types that specialization exposed. |
 | 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`, including the `T` of intrinsic nodes that specialization substituted. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes, and `__function_pointer(f)` into `Expression::FunctionPointer` (a free function, or a static method of the enclosing struct, whose owner type specialization substitutes). |
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
 | 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). |
-| 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. |
+| 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`BinaryOp::identity_as_equality`), addresses for references. |
 | loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions` | Repeats until the counts of structs and functions stop growing (specializing exposes new uses). Bounded because a self-nesting generic never converges. |
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
@@ -352,7 +352,7 @@ several passes run more than once on purpose.
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
-| final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). Errors are located `Diagnostic`s. |
+| final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
@@ -415,8 +415,12 @@ How the language lowers:
   literal passed to an extern is passed as its raw NUL-terminated global.
 - **Builtins resolved by name in `codegen_call`**: `print`
   (`codegen_print` → `_pep_print`, `_pep_print_int`, or `_pep_print_float`
-  by argument type), `assert(cond, msg)` (a literal message is passed as
-  its raw global, anything else through `String.c_str`), `release<T>(v)`,
+  by argument type), `assert(cond, message)` and `panic(message)` (a
+  string-literal message to the runtime's own functions calls
+  `_pep_assert`/`_pep_panic` with its raw global, so no `String` is built;
+  a replacement declared with a `__ptr<char>` message gets the raw global
+  itself; anything else is an ordinary call with a `String`; to revisit when
+  function overrides land), `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.
 - **Intrinsic nodes** in `codegen_expr_unlocated`: `SizeOf`, `Default` (zero
@@ -540,8 +544,9 @@ are null-safe.
 | `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0), atomic when `T` is `[Shared]`. `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `__weak_upgrade` is a compare-and-swap loop that increments the strong count only while it is non-zero (`weak_ptr::lock`). `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
 | Threads | Counts are plain by default. A `[Shared]` struct (`StructDef::is_shared`) and every function type step them atomically (`CountStep`), like `std::shared_ptr`'s control block; `passes/check_shared_types.rs` keeps non-thread-safe values out of shared structs. |
 
-Debugging aids: set `PEP_TRACE` to make the runtime's `trace_ptr`,
-`trace_int`, and `trace_region` print. `_pep_live_allocs()` counts live
+Debugging aids: set `PEP_TRACE` to make `_pep_trace_ptr` and
+`_pep_trace_int` (internal runtime helpers, not part of the language's API)
+print every constructor, acquire, release, and destructor with the new count. `_pep_live_allocs()` counts live
 allocations (an atomic counter, since threads allocate concurrently);
 leak-census tests (`crates/pepper-driver/tests/shared_ptr_semantics_tests.rs`)
 read it through the JIT. The counter is process-wide, so those tests have to
@@ -580,7 +585,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …), `assert`, `panic`, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, the trace functions, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), UTF-8 helpers, and `_pep_print*`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` and their `char*` forms `_pep_assert`/`_pep_panic`, `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, the `PEP_TRACE` helpers `_pep_trace_ptr`/`_pep_trace_int`, `_pep_swap_refs`/`_pep_move_ref` (raw slot moves for containers), `_pep_hash_bytes` (FNV-1a), UTF-8 helpers, and `_pep_print*`. |
 | `string.pep` | `String` (fields `Data`, `Length`, `Size`, `Version`) and `StringIterator`. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
@@ -602,8 +607,9 @@ diagnostics"). The mechanics:
   public types).
 - **Lowered by name.** `print` → `_pep_print`/`_pep_print_int`/
   `_pep_print_float`. Every constructor calls `_pep_malloc`, and `__release`
-  calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `trace_ptr`
-  and `trace_int`. `assert` (a runtime function) receives a raw `char*`.
+  calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `_pep_trace_ptr`
+  and `_pep_trace_int`. Compiler-generated checks (null function and trait
+  values) call `_pep_assert`, which takes a raw `char*`.
   Codegen calls these by name after visibility has run, so `_pep_print*`
   need not be exported.
 - **Intrinsics available to runtime code**: `__ptr<T>` (a raw pointer, the

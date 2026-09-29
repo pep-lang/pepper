@@ -220,7 +220,7 @@ export struct IoError {
 
 ## The result of an io operation: `Value` on success, an `IoError` on
 ## failure. Check `is_ok()` / `is_err()` before reading `Value` or `Error`;
-## operations that produce nothing return `IoResult<None>`.
+## operations that produce nothing return `IoResult<void>`.
 ##
 ## @typeParam T the value an operation produces on success
 ## @example
@@ -328,14 +328,14 @@ export _io_utf8_valid(p: __ptr<char>, n: ulong): bool {
     return true;
 }
 
-export _io_ok_none(): IoResult<None> {
-    return IoResult<None>.ok(None());
+export _io_ok_void(): IoResult<void> {
+    return IoResult<void>.ok();
 }
 
-export _io_err_none(e: IoError): IoResult<None> {
-    return IoResult<None>.err(e);
+export _io_err_void(e: IoError): IoResult<void> {
+    return IoResult<void>.err(e);
 }
 
-export _io_last_none(): IoResult<None> {
-    return IoResult<None>.err(IoError.last());
+export _io_last_void(): IoResult<void> {
+    return IoResult<void>.err(IoError.last());
 }

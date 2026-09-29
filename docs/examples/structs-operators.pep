@@ -48,6 +48,10 @@ main(): int {
     var price = Money(250);
     assert(price == Money(250), "== compares cents");
     assert(price != Money(100), "!= compares cents");
+    # `===` and `!==` always compare identity: equal cents, different objects.
+    assert(price !== Money(250), "!== compares identity");
+    var same = price;
+    assert(same === price, "=== is true for the same object");
 
     var total = price + Money(50);
     assert(total.cents == 300, "+ makes a new value");

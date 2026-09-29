@@ -7,7 +7,7 @@ exceptions, so `Result` is how a function reports a failure the caller is
 expected to handle. For a failure that should stop the program, such as a
 broken invariant, use `assert` or `panic` instead.
 
-`Result`, `Error`, and `None` are part of the runtime, so you can use them
+`Result` and `Error` are part of the runtime, so you can use them
 without an import. The [Result reference](../reference/result.md) lists every
 member.
 
@@ -28,7 +28,7 @@ The pieces:
 | `Result<T>.ok(value)` | Creates an Ok result holding `value`. |
 | `Result<T>.err(error)` | Creates an Err result holding `error`. |
 | `is_ok()`, `is_err()` | Report which kind the result is. |
-| `unwrap()` | Returns the value; panics with `Result::unwrap on an Err value` if the result is an Err. |
+| `value()` | Returns the value; panics with `Result.value on an Err value` if the result is an Err. |
 | `ok_or(fallback)` | Returns the value, or `fallback` if the result is an Err. Never panics. |
 | `Value`, `Error`, `IsOk` | The fields behind the methods. |
 
@@ -37,7 +37,7 @@ values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). `Error` is a struct
 with one field, `String Message`: `Error("boom").Message` is `"boom"`.
 
-Use `unwrap()` when an Err would be a bug in your program, since it stops the
+Use `value()` when an Err would be a bug in your program, since it stops the
 program. When an Err is an expected outcome, test with `is_ok()` or `is_err()`,
 or supply a fallback with `ok_or`.
 
@@ -52,12 +52,16 @@ field through a null struct reference crashes the program.
 ### Results with no value
 
 An operation that has nothing to return on success, such as deleting a file,
-uses `None` as its value type, like `Result<(), E>` in Rust. `None` is an empty
-struct:
+uses `void` as its value type, like `Result<(), E>` in Rust. A `void` type
+argument erases what it types, so `Result<void>` has no `Value` field, `ok()`
+takes no argument, and `value()` returns nothing: calling it only checks that
+the result is Ok. Using that call as a value, as in `var x = done.value();`, is
+a compile error, as it is for any function that returns `void`.
 
 ```pepper
-var done = Result<None>.ok(None());
-var failed = Result<None>.err(Error("disk full"));
+var done = Result<void>.ok();
+var failed = Result<void>.err(Error("disk full"));
+done.value();   # panics if `done` is an Err
 ```
 
 ## Custom error types and propagation
@@ -80,7 +84,7 @@ as shown above.
 The [io module](../reference/io-module.md) is a good model of a library built
 on `Result`. Every operation that can fail returns an `IoResult<T>`, a type
 alias for `Result<T, IoError>`, and operations with nothing to return use
-`IoResult<None>`. `IoError` holds the platform's error `Code` and a `Message`,
+`IoResult<void>`. `IoError` holds the platform's error `Code` and a `Message`,
 and has predicates such as `is_not_found()` and `is_permission_denied()` for
 deciding what to do about the failure:
 

@@ -21,21 +21,6 @@ export struct Error {
     }
 }
 
-## The value of a result that carries no value on success, like Rust's `()`
-## in `Result<(), E>`: `Result<None>.ok(None())`.
-##
-## Has no fields; every `None` is interchangeable with any other.
-##
-## @example
-##     check(bool good): Result<None> {
-##         if (good) {
-##             return Result<None>.ok(None());
-##         }
-##         return Result<None>.err(Error("bad"));
-##     }
-export struct None {
-}
-
 ## The outcome of an operation that can fail: either Ok, holding a `TValue`,
 ## or Err, holding a `TError`, like Rust's `Result<T, E>`.
 ##
@@ -46,12 +31,17 @@ export struct None {
 ## a struct type, so do not read through it). `TError` defaults to `Error`,
 ## so `Result<int>` is `Result<int, Error>`.
 ##
-## @typeParam TValue the type of the value an Ok result carries; use `None` when there is no value
+## `Result<void>` is the result of an operation that returns nothing on
+## success, like Rust's `Result<(), E>`. A `void` type argument erases what
+## it types: that instance has no `Value` field, `ok()` takes no argument,
+## and `value()` returns nothing, so it only checks that the result is Ok.
+##
+## @typeParam TValue the type of the value an Ok result carries; `void` when there is none
 ## @typeParam TError the type of the error an Err result carries; defaults to `Error`
 ## @example
 ##     main(): int {
 ##         var a = Result<int>.ok(42);
-##         if (a.unwrap() != 42) { return 1; }
+##         if (a.value() != 42) { return 1; }
 ##         var b = Result<int>.err(Error("boom"));
 ##         if (!b.is_err()) { return 2; }
 ##         return b.ok_or(0);   # 0
@@ -79,10 +69,13 @@ export struct Result<TValue, TError=Error> {
     ##
     ## For a struct `TValue` the result acquires a reference to `v`.
     ##
+    ## For `Result<void>`, `ok()` takes no argument.
+    ##
     ## @param v the success value
     ## @returns an Ok result whose `Value` is `v`
     ## @example
     ##     var r = Result<int>.ok(42);
+    ##     var done = Result<void>.ok();
     static Result<TValue, TError> ok(TValue v) {
         var r = Result<TValue, TError>();
         r.IsOk = true;
@@ -124,12 +117,15 @@ export struct Result<TValue, TError=Error> {
     ## For a struct `TValue` the caller gets its own reference; the result
     ## keeps its reference too.
     ##
+    ## For `Result<void>` it returns nothing: calling it only checks that the
+    ## result is Ok.
+    ##
     ## @returns the `Value` of an Ok result
-    ## @panics if `this.IsOk` does not hold, that is, the result is Err ("Result::unwrap on an Err value")
+    ## @panics if `this.IsOk` does not hold, that is, the result is Err ("Result.value on an Err value")
     ## @example
-    ##     var n = Result<int>.ok(42).unwrap();   # 42
-    TValue unwrap() {
-        assert(this.IsOk, "Result::unwrap on an Err value");
+    ##     var n = Result<int>.ok(42).value();   # 42
+    TValue value() {
+        assert(this.IsOk, "Result.value on an Err value");
         return this.Value;
     }
 

@@ -34,7 +34,7 @@ fn ok_pod() {
 test(): int {
     var r = Result<int>.ok(42);
     if (!r.is_ok()) { return -1; }
-    if (r.unwrap() != 42) { return -2; }
+    if (r.value() != 42) { return -2; }
     return 0;
 }"#
         ),
@@ -71,7 +71,7 @@ struct Point {
 test(): int {
     var r = Result<Point>.ok(Point(7));
     if (!r.is_ok()) { return -1; }
-    if (r.unwrap().x != 7) { return -2; }
+    if (r.value().x != 7) { return -2; }
     return 0;
 }"#
         ),
@@ -132,7 +132,7 @@ test(): int {
     if (r.is_ok()) { return -1; }
     if (r.Error.Value != 500) { return -2; }
     var ok = Result<int, Code>.ok(3);
-    if (!ok.is_ok() || ok.unwrap() != 3) { return -3; }
+    if (!ok.is_ok() || ok.value() != 3) { return -3; }
     return 0;
 }"#
         ),
@@ -193,7 +193,7 @@ test(): int {
     var before = _pep_live_allocs();
     {
         var r = Result<Point>.ok(Point(7));
-        var p = r.unwrap();
+        var p = r.value();
         if (p.x != 7) { return -1; }
     }
     var after = _pep_live_allocs();
@@ -205,27 +205,28 @@ test(): int {
     );
 }
 
-// ── None: the value type of a result with nothing to return ─────────────────
+// ── Result<void>: a result with nothing to return ───────────────────────────
 
 #[test]
-fn none_value() {
-    // Ok and Err of Result<None>, and a function returning one; the None
-    // instances must be released (live-alloc counter back to baseline).
+fn void_value() {
+    // Ok and Err of Result<void>, and a function returning one; `ok()`
+    // takes no argument, `value()` only checks, and every result is released
+    // (live-alloc counter back to baseline).
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-check(bool good): Result<None> {
+check(bool good): Result<void> {
     if (good) {
-        return Result<None>.ok(None());
+        return Result<void>.ok();
     }
-    return Result<None>.err(Error("bad"));
+    return Result<void>.err(Error("bad"));
 }
 test(): int {
     var before = _pep_live_allocs();
     {
         var ok = check(true);
         if (!ok.is_ok()) { return -1; }
-        var n = ok.unwrap();
+        ok.value();
         var err = check(false);
         if (!err.is_err()) { return -2; }
         if (err.Error.Message.length() != 3) { return -3; }
