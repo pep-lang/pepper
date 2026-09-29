@@ -1,0 +1,9 @@
+.version-switcher {
+    margin: 0 0.5em;
+    padding: 0.2em 0.4em;
+    font-size: 1.4rem;
+    color: var(--icons);
+    background: var(--bg);
+    border: 1px solid var(--searchbar-border-color);
+    border-radius: 4px;
+}
