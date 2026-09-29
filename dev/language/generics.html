@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49e29622.js";
+            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -291,14 +291,14 @@ total_area&lt;T&gt;(shapes: Array&lt;T&gt;): int {
 }
 
 main(): int {
-    # Type arguments are written explicitly at the call.
-    assert(larger&lt;int&gt;(3, 9) == 9, "ints");
+    # Type arguments come from the arguments, or can be written out.
+    assert(larger(3, 9) == 9, "ints");
     assert(larger&lt;float&gt;(2.5, 1.5) == 2.5, "floats");
 
     var circles = Array&lt;Circle&gt;();
     circles.append(Circle());
     circles.append(Circle());
-    assert(total_area&lt;Circle&gt;(circles) == 6, "circles");
+    assert(total_area(circles) == 6, "circles");
 
     var squares = Array&lt;Square&gt;();
     squares.append(Square());
@@ -306,21 +306,64 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Write the type arguments at every call, <code>larger&lt;int&gt;(3, 9)</code>. Pepper does not
-infer them from the arguments yet; leaving them out is reported as a call to
-an unknown function:</p>
-<pre><code class="language-text">main.pep:7:12: error: call to undeclared function 'larger'
-    7 |     return larger(3, 9);
-      |            ^~~~~~
+<p>Pepper infers the type arguments from the arguments, so <code>larger(3, 9)</code> calls
+<code>larger&lt;int&gt;</code>. You can always write them out, <code>larger&lt;float&gt;(2.5, 1.5)</code>, and
+must when the arguments do not determine every type parameter, for example one
+that appears only in the return type:</p>
+<pre><code class="language-text">main.pep:4:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make&lt;T&gt;(...)
+    4 |     var b = make();
+      |             ^~~~
+main.pep:1:1: note: declared here
+    1 | make&lt;T&gt;(): Box&lt;T&gt; { return Box&lt;T&gt;(); }
+      | ^~~~
 </code></pre>
+<p>Inference works through closures in both directions. In
+<code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
+the closure’s result gives <code>U</code>.</p>
 <p>Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>
 calls <code>shape.area()</code>, so it works with any <code>T</code> that has an <code>area()</code> method
 returning a number, and using it with a type that lacks one is a compile
 error. Pepper does not yet let you state such requirements up front with a
 <a href="traits-and-extensions.html#traits">trait</a>.</p>
-<p>Methods cannot have type parameters of their own yet; only structs and free
-functions can.</p>
+<h2 id="generic-methods"><a class="header" href="#generic-methods">Generic methods</a></h2>
+<p>A method can have type parameters of its own, in a struct, a generic struct,
+an extension, or a trait’s default method. They are inferred at each call like
+a function’s, or written after the method name:</p>
+<pre><code class="language-pepper">struct Box&lt;T&gt; {
+    T value;
+    construct(T v) { value = v; }
+
+    # A method with a type parameter of its own: `U` is chosen per call.
+    map&lt;U&gt;(f: (T) =&gt; U): Box&lt;U&gt; {
+        return Box&lt;U&gt;(f(value));
+    }
+}
+
+main(): int {
+    var b = Box&lt;int&gt;(4);
+
+    # `U` comes from what the closure returns...
+    var tens = b.map((x) =&gt; x * 10);
+    assert(tens.value == 40, "tens");
+
+    var text = tens.map((x) =&gt; "forty");
+    assert(text.value == "forty", "text");
+
+    # ...or is written after the method name.
+    var wide = b.map&lt;long&gt;((x: int): long =&gt; x + 1);
+    assert(wide.value == 5, "wide");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Write the type arguments with no space before <code>&lt;</code> or after <code>&gt;</code>:
+<code>b.map&lt;long&gt;(f)</code>. With a space, <code>a.b &lt; c</code> is a comparison.</li>
+<li>A generic method cannot be called through a <a href="traits-and-extensions.html#traits-as-types">trait value</a>,
+since each of its uses is compiled separately. Call it on the concrete type.</li>
+<li>The iterator adapters <code>map</code> and <code>filter</code> are generic default methods of
+<code>Iterator&lt;T&gt;</code>; see <a href="iteration.html#adapters">Iteration</a>.</li>
+</ul>
 <h2 id="default-type-arguments"><a class="header" href="#default-type-arguments">Default type arguments</a></h2>
 <p>A type parameter can have a default, written <code>Name=Type</code>. When a use leaves
 that argument out, the default fills it in:</p>

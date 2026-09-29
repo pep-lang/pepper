@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49e29622.js";
+            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -357,6 +357,53 @@ neither is a compile error:</p>
 </code></pre>
 <p><code>HashMap</code> and <code>HashSet</code> do not implement the protocol yet, so they cannot be
 used in a <code>for</code> loop.</p>
+<h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
+<p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
+Each one works lazily, one element at a time as the loop asks for it:</p>
+<ul>
+<li><code>map(transform)</code> yields <code>transform(x)</code> for each element <code>x</code>; its element
+type is whatever <code>transform</code> returns.</li>
+<li><code>filter(keep)</code> yields only the elements for which <code>keep(x)</code> is <code>true</code>.</li>
+</ul>
+<p>Both return iterators, so they chain, and a <code>for</code> loop can use the result
+directly:</p>
+<pre><code class="language-pepper">struct Person {
+    String name;
+    int age;
+    construct(this.name = "", this.age = 0) {}
+}
+
+main(): int {
+    var people = Array&lt;Person&gt;();
+    people.append(Person("Ada", 36));
+    people.append(Person("Bo", 12));
+    people.append(Person("Cyd", 40));
+
+    # filter keeps the adults, map turns each one into a name.
+    var names = Array&lt;String&gt;();
+    for (var name in people.iterate().filter((p) =&gt; p.age &gt;= 18).map((p) =&gt; p.name)) {
+        names.append(name);
+    }
+    assert(names.count() == 2, "two adults");
+    assert(names[0] == "Ada", "Ada first");
+    assert(names[1] == "Cyd", "then Cyd");
+
+    # Adapters work on any Iterator, including a String's.
+    var kept = 0;
+    for (var c in "hello".iterate().filter((c) =&gt; c != "l")) {
+        kept += 1;
+    }
+    assert(kept == 3, "h, e, o");
+    return 0;
+}
+</code></pre>
+<p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
+<code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
+<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds a reference to the
+iterator it wraps, so a chain built from a temporary stays alive while the
+loop runs. They are generic methods (see
+<a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
+<code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
 <p>To make your own type work in a <code>for</code> loop, give it <code>next()</code> and <code>current()</code>
 (an iterator), or give it an <code>iterate()</code> method that returns such a type (an
@@ -458,7 +505,8 @@ type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> docu
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
 <code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
-<code>for</code> loop over such a value calls the methods through the trait.</li>
+<code>for</code> loop over such a value calls the methods through the trait. It also
+gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that same object, so it is
 exhausted afterwards. An iterable starts a new, independent pass every time

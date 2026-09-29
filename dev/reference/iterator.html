@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49e29622.js";
+            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -257,6 +257,156 @@ is an error; the runtime’s iterators panic in that case.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h4 id="map"><a class="header" href="#map">map</a></h4>
+<pre><code class="language-pepper">map&lt;U&gt;(transform: (T) =&gt; U): MapIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over <code>transform</code> applied to each element, in order.</p>
+<p>Lazy: <code>transform</code> runs once per element, as the result is advanced, and
+the result advances this iterator. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type <code>transform</code> returns</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transform</code> — the function applied to each element</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>MapIterator&lt;T, U&gt;</code> over the transformed elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    for (var size in names.iterate().map((name) =&gt; name.size())) {
+        print(size);
+    }
+</code></pre>
+<h4 id="filter"><a class="header" href="#filter">filter</a></h4>
+<pre><code class="language-pepper">filter(keep: (T) =&gt; bool): FilterIterator&lt;T&gt;
+</code></pre>
+<p>Returns an iterator over the elements for which <code>keep</code> returns true, in
+order.</p>
+<p>Lazy: <code>keep</code> runs once per element, as the result is advanced, and the
+result advances this iterator. Every type that declares <code>Iterator&lt;T&gt;</code>
+gets this method.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>keep</code> — the test an element must pass</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>FilterIterator&lt;T&gt;</code> over the elements that pass</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var nums = Array&lt;int&gt;();
+    for (var even in nums.iterate().filter((n) =&gt; n % 2 == 0)) {
+        print(even);
+    }
+</code></pre>
+<h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
+<pre><code class="language-pepper">struct MapIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.map</code> returns: each element of <code>Source</code>, passed
+through <code>Transform</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>U</code> — the type of the elements produced</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.map</code></li>
+</ul>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="source"><a class="header" href="#source">Source</a></h4>
+<pre><code class="language-pepper">Iterator&lt;T&gt; Source
+</code></pre>
+<p>The iterator whose elements are transformed.</p>
+<h4 id="transform"><a class="header" href="#transform">Transform</a></h4>
+<pre><code class="language-pepper">(T) =&gt; U Transform
+</code></pre>
+<p>The function applied to each element.</p>
+<h4 id="value"><a class="header" href="#value">Value</a></h4>
+<pre><code class="language-pepper">U Value
+</code></pre>
+<p>The current element, <code>Transform</code> of the source’s current element.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
+<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
+</code></pre>
+<p>Makes an iterator over <code>transform</code> applied to the elements of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to transform</li>
+<li><code>transform</code> — the function applied to each element</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">bool next()
+</code></pre>
+<p>Advances to the next element, and applies <code>Transform</code> to it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<pre><code class="language-pepper">U current()
+</code></pre>
+<p>Returns the transformed element the last successful <code>next()</code> produced.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="filteriterator"><a class="header" href="#filteriterator">FilterIterator</a></h2>
+<pre><code class="language-pepper">struct FilterIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.filter</code> returns: the elements of <code>Source</code> that
+<code>Keep</code> accepts.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.filter</code></li>
+</ul>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="source-1"><a class="header" href="#source-1">Source</a></h4>
+<pre><code class="language-pepper">Iterator&lt;T&gt; Source
+</code></pre>
+<p>The iterator whose elements are tested.</p>
+<h4 id="keep"><a class="header" href="#keep">Keep</a></h4>
+<pre><code class="language-pepper">(T) =&gt; bool Keep
+</code></pre>
+<p>The test an element must pass.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
+<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; bool keep)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> that <code>keep</code> accepts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to filter</li>
+<li><code>keep</code> — the test an element must pass</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<pre><code class="language-pepper">bool next()
+</code></pre>
+<p>Advances to the next element that <code>Keep</code> accepts.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<pre><code class="language-pepper">T current()
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
 <h2 id="iterable"><a class="header" href="#iterable">Iterable</a></h2>
 <pre><code class="language-pepper">trait Iterable&lt;T&gt;
 </code></pre>
@@ -283,7 +433,7 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
         total = total + x;
     }
 </code></pre>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>

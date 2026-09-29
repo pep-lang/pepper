@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-49e29622.js";
+            window.path_to_searchindex_js = "searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -224,9 +224,11 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, generics, type aliases,
+structs with constructors, destructors and methods, generics (with type
+arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules, <code>Result</code>-based error handling, iteration,
+closures, modules, <code>Result</code>-based error handling, iteration (with <code>map</code> and
+<code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.

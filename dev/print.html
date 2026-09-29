@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-49e29622.js";
+            window.path_to_searchindex_js = "searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -222,9 +222,11 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, generics, type aliases,
+structs with constructors, destructors and methods, generics (with type
+arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules, <code>Result</code>-based error handling, iteration,
+closures, modules, <code>Result</code>-based error handling, iteration (with <code>map</code> and
+<code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.
@@ -1983,7 +1985,10 @@ main(): int {
 <p><strong>Parameter types.</strong> <code>(x: int) =&gt; x * 2</code> writes the parameter type. When the
 closure goes straight into a slot of function type (a typed variable, a
 parameter, an assignment, a <code>return</code>, a field), the types come from that
-slot, so <code>(a, b) =&gt; a + b</code> is enough. With no slot to take them from, a
+slot, so <code>(a, b) =&gt; a + b</code> is enough. A parameter of a generic function
+counts too: passing <code>(x) =&gt; x + 1</code> to <code>apply&lt;T&gt;(f: (T) =&gt; T, x: T)</code> with
+<code>x</code> an <code>int</code> types the closure’s <code>x</code> as <code>int</code> (see
+<a href="#generic-functions-1">Generics</a>). With no slot to take them from, a
 parameter without a type is an error:</p>
 <pre><code>main.pep:2:14: error: cannot infer the type of parameter 'x'; write it: (x: Type) =&gt; ...
 </code></pre>
@@ -2075,13 +2080,10 @@ and when the last reference goes, the object releases what it captured.</p>
 be referenced as values. <code>larger</code> alone is not a value even where the
 expected type would pick <code>larger&lt;int&gt;</code>. To use an <code>extern</code> function as a
 value, wrap it in a closure: <code>(x: int) =&gt; abs(x)</code>.</li>
+<li><strong>Generic methods</strong> cannot be referenced as values: <code>b.map&lt;long&gt;</code> is not
+a value. Wrap the call in a closure: <code>(f: (int) =&gt; long) =&gt; b.map(f)</code>.</li>
 <li><strong>A bare method name inside a method</strong> (<code>var f = norm;</code>) is not a value;
 write <code>this.norm</code>.</li>
-<li><strong>Parameter types from generic calls.</strong> A closure’s parameter types come
-from a slot whose type is known where the closure is written. Passing
-<code>(x) =&gt; x + 1</code> to a generic function whose parameter is <code>(T) =&gt; T</code> does not
-infer <code>T</code>; write the argument <code>apply&lt;int&gt;((x) =&gt; x + 1, 2)</code> or the
-parameter type <code>(x: int) =&gt; x + 1</code>.</li>
 <li><strong>Closures in trait default methods</strong> cannot use <code>this</code> or the members of
 the struct yet.</li>
 <li><strong>C callbacks.</strong> A closure cannot be passed to a C function that expects a
@@ -2962,14 +2964,14 @@ total_area&lt;T&gt;(shapes: Array&lt;T&gt;): int {
 }
 
 main(): int {
-    # Type arguments are written explicitly at the call.
-    assert(larger&lt;int&gt;(3, 9) == 9, "ints");
+    # Type arguments come from the arguments, or can be written out.
+    assert(larger(3, 9) == 9, "ints");
     assert(larger&lt;float&gt;(2.5, 1.5) == 2.5, "floats");
 
     var circles = Array&lt;Circle&gt;();
     circles.append(Circle());
     circles.append(Circle());
-    assert(total_area&lt;Circle&gt;(circles) == 6, "circles");
+    assert(total_area(circles) == 6, "circles");
 
     var squares = Array&lt;Square&gt;();
     squares.append(Square());
@@ -2977,21 +2979,64 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Write the type arguments at every call, <code>larger&lt;int&gt;(3, 9)</code>. Pepper does not
-infer them from the arguments yet; leaving them out is reported as a call to
-an unknown function:</p>
-<pre><code class="language-text">main.pep:7:12: error: call to undeclared function 'larger'
-    7 |     return larger(3, 9);
-      |            ^~~~~~
+<p>Pepper infers the type arguments from the arguments, so <code>larger(3, 9)</code> calls
+<code>larger&lt;int&gt;</code>. You can always write them out, <code>larger&lt;float&gt;(2.5, 1.5)</code>, and
+must when the arguments do not determine every type parameter, for example one
+that appears only in the return type:</p>
+<pre><code class="language-text">main.pep:4:13: error: cannot infer the type arguments of 'make' from its arguments; write them: make&lt;T&gt;(...)
+    4 |     var b = make();
+      |             ^~~~
+main.pep:1:1: note: declared here
+    1 | make&lt;T&gt;(): Box&lt;T&gt; { return Box&lt;T&gt;(); }
+      | ^~~~
 </code></pre>
+<p>Inference works through closures in both directions. In
+<code>transform(words, (w) =&gt; w.size())</code>, where <code>transform&lt;T, U&gt;(items: Array&lt;T&gt;, f: (T) =&gt; U)</code>, <code>words</code> gives <code>T</code>, which types the closure’s parameter <code>w</code>, and
+the closure’s result gives <code>U</code>.</p>
 <p>Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>
 calls <code>shape.area()</code>, so it works with any <code>T</code> that has an <code>area()</code> method
 returning a number, and using it with a type that lacks one is a compile
 error. Pepper does not yet let you state such requirements up front with a
 <a href="#traits">trait</a>.</p>
-<p>Methods cannot have type parameters of their own yet; only structs and free
-functions can.</p>
+<h2 id="generic-methods"><a class="header" href="#generic-methods">Generic methods</a></h2>
+<p>A method can have type parameters of its own, in a struct, a generic struct,
+an extension, or a trait’s default method. They are inferred at each call like
+a function’s, or written after the method name:</p>
+<pre><code class="language-pepper">struct Box&lt;T&gt; {
+    T value;
+    construct(T v) { value = v; }
+
+    # A method with a type parameter of its own: `U` is chosen per call.
+    map&lt;U&gt;(f: (T) =&gt; U): Box&lt;U&gt; {
+        return Box&lt;U&gt;(f(value));
+    }
+}
+
+main(): int {
+    var b = Box&lt;int&gt;(4);
+
+    # `U` comes from what the closure returns...
+    var tens = b.map((x) =&gt; x * 10);
+    assert(tens.value == 40, "tens");
+
+    var text = tens.map((x) =&gt; "forty");
+    assert(text.value == "forty", "text");
+
+    # ...or is written after the method name.
+    var wide = b.map&lt;long&gt;((x: int): long =&gt; x + 1);
+    assert(wide.value == 5, "wide");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Write the type arguments with no space before <code>&lt;</code> or after <code>&gt;</code>:
+<code>b.map&lt;long&gt;(f)</code>. With a space, <code>a.b &lt; c</code> is a comparison.</li>
+<li>A generic method cannot be called through a <a href="#traits-as-types">trait value</a>,
+since each of its uses is compiled separately. Call it on the concrete type.</li>
+<li>The iterator adapters <code>map</code> and <code>filter</code> are generic default methods of
+<code>Iterator&lt;T&gt;</code>; see <a href="#adapters">Iteration</a>.</li>
+</ul>
 <h2 id="default-type-arguments"><a class="header" href="#default-type-arguments">Default type arguments</a></h2>
 <p>A type parameter can have a default, written <code>Name=Type</code>. When a use leaves
 that argument out, the default fills it in:</p>
@@ -3368,6 +3413,10 @@ extend Square with Shape {
 }
 </code></pre>
 <p>Here <code>Square(3).sides()</code> returns 4.</p>
+<p>A default method can have type parameters of its own (see
+<a href="#generic-methods">Generic methods</a>). The runtime’s <code>Iterator&lt;T&gt;</code>
+uses this for its <code>map&lt;U&gt;</code> and <code>filter</code> <a href="#adapters">adapters</a>,
+which every type that declares <code>Iterator&lt;T&gt;</code> gets.</p>
 <blockquote>
 <p><strong>Known problem:</strong> a default body that uses a string literal does not work
 yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
@@ -3454,7 +3503,8 @@ whether it was a <code>Shape</code> or a <code>Square</code>, the struct’s own
 </li>
 <li>
 <p><strong>Only instance methods are callable through the trait.</strong> Static methods,
-and methods whose signature uses <code>this</code> as a type, need the concrete type;
+generic methods, and methods whose signature uses <code>this</code> as a type, need the
+concrete type;
 calling one through a trait value is an error.</p>
 </li>
 <li>
@@ -3657,6 +3707,53 @@ neither is a compile error:</p>
 </code></pre>
 <p><code>HashMap</code> and <code>HashSet</code> do not implement the protocol yet, so they cannot be
 used in a <code>for</code> loop.</p>
+<h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
+<p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
+Each one works lazily, one element at a time as the loop asks for it:</p>
+<ul>
+<li><code>map(transform)</code> yields <code>transform(x)</code> for each element <code>x</code>; its element
+type is whatever <code>transform</code> returns.</li>
+<li><code>filter(keep)</code> yields only the elements for which <code>keep(x)</code> is <code>true</code>.</li>
+</ul>
+<p>Both return iterators, so they chain, and a <code>for</code> loop can use the result
+directly:</p>
+<pre><code class="language-pepper">struct Person {
+    String name;
+    int age;
+    construct(this.name = "", this.age = 0) {}
+}
+
+main(): int {
+    var people = Array&lt;Person&gt;();
+    people.append(Person("Ada", 36));
+    people.append(Person("Bo", 12));
+    people.append(Person("Cyd", 40));
+
+    # filter keeps the adults, map turns each one into a name.
+    var names = Array&lt;String&gt;();
+    for (var name in people.iterate().filter((p) =&gt; p.age &gt;= 18).map((p) =&gt; p.name)) {
+        names.append(name);
+    }
+    assert(names.count() == 2, "two adults");
+    assert(names[0] == "Ada", "Ada first");
+    assert(names[1] == "Cyd", "then Cyd");
+
+    # Adapters work on any Iterator, including a String's.
+    var kept = 0;
+    for (var c in "hello".iterate().filter((c) =&gt; c != "l")) {
+        kept += 1;
+    }
+    assert(kept == 3, "h, e, o");
+    return 0;
+}
+</code></pre>
+<p>Every type that declares <code>Iterator&lt;T&gt;</code> gets them: <code>ArrayIterator&lt;T&gt;</code> (from
+<code>Array.iterate()</code>), <code>StringIterator</code>, and your own iterators once you write
+<code>extend YourType with Iterator&lt;T&gt; {}</code>. The adapter holds a reference to the
+iterator it wraps, so a chain built from a temporary stays alive while the
+loop runs. They are generic methods (see
+<a href="#generic-methods">Generics</a>), so they are not callable through an
+<code>Iterator&lt;T&gt;</code> trait value.</p>
 <h2 id="writing-your-own-iterator"><a class="header" href="#writing-your-own-iterator">Writing your own iterator</a></h2>
 <p>To make your own type work in a <code>for</code> loop, give it <code>next()</code> and <code>current()</code>
 (an iterator), or give it an <code>iterate()</code> method that returns such a type (an
@@ -3758,7 +3855,8 @@ type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> docu
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
 <code>current()</code> (see <a href="#traits-and-extensions">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
-<code>for</code> loop over such a value calls the methods through the trait.</li>
+<code>for</code> loop over such a value calls the methods through the trait. It also
+gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that same object, so it is
 exhausted afterwards. An iterable starts a new, independent pass every time
@@ -7632,6 +7730,156 @@ is an error; the runtime’s iterators panic in that case.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h4 id="map"><a class="header" href="#map">map</a></h4>
+<pre><code class="language-pepper">map&lt;U&gt;(transform: (T) =&gt; U): MapIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over <code>transform</code> applied to each element, in order.</p>
+<p>Lazy: <code>transform</code> runs once per element, as the result is advanced, and
+the result advances this iterator. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type <code>transform</code> returns</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transform</code> — the function applied to each element</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>MapIterator&lt;T, U&gt;</code> over the transformed elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    for (var size in names.iterate().map((name) =&gt; name.size())) {
+        print(size);
+    }
+</code></pre>
+<h4 id="filter"><a class="header" href="#filter">filter</a></h4>
+<pre><code class="language-pepper">filter(keep: (T) =&gt; bool): FilterIterator&lt;T&gt;
+</code></pre>
+<p>Returns an iterator over the elements for which <code>keep</code> returns true, in
+order.</p>
+<p>Lazy: <code>keep</code> runs once per element, as the result is advanced, and the
+result advances this iterator. Every type that declares <code>Iterator&lt;T&gt;</code>
+gets this method.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>keep</code> — the test an element must pass</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>FilterIterator&lt;T&gt;</code> over the elements that pass</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var nums = Array&lt;int&gt;();
+    for (var even in nums.iterate().filter((n) =&gt; n % 2 == 0)) {
+        print(even);
+    }
+</code></pre>
+<h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
+<pre><code class="language-pepper">struct MapIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.map</code> returns: each element of <code>Source</code>, passed
+through <code>Transform</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>U</code> — the type of the elements produced</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.map</code></li>
+</ul>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h4 id="source-2"><a class="header" href="#source-2">Source</a></h4>
+<pre><code class="language-pepper">Iterator&lt;T&gt; Source
+</code></pre>
+<p>The iterator whose elements are transformed.</p>
+<h4 id="transform"><a class="header" href="#transform">Transform</a></h4>
+<pre><code class="language-pepper">(T) =&gt; U Transform
+</code></pre>
+<p>The function applied to each element.</p>
+<h4 id="value"><a class="header" href="#value">Value</a></h4>
+<pre><code class="language-pepper">U Value
+</code></pre>
+<p>The current element, <code>Transform</code> of the source’s current element.</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
+<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
+</code></pre>
+<p>Makes an iterator over <code>transform</code> applied to the elements of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to transform</li>
+<li><code>transform</code> — the function applied to each element</li>
+</ul>
+<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
+<h4 id="next-1-1"><a class="header" href="#next-1-1">next</a></h4>
+<pre><code class="language-pepper">bool next()
+</code></pre>
+<p>Advances to the next element, and applies <code>Transform</code> to it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-1-1"><a class="header" href="#current-1-1">current</a></h4>
+<pre><code class="language-pepper">U current()
+</code></pre>
+<p>Returns the transformed element the last successful <code>next()</code> produced.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="filteriterator"><a class="header" href="#filteriterator">FilterIterator</a></h2>
+<pre><code class="language-pepper">struct FilterIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.filter</code> returns: the elements of <code>Source</code> that
+<code>Keep</code> accepts.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.filter</code></li>
+</ul>
+<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
+<h4 id="source-1-1"><a class="header" href="#source-1-1">Source</a></h4>
+<pre><code class="language-pepper">Iterator&lt;T&gt; Source
+</code></pre>
+<p>The iterator whose elements are tested.</p>
+<h4 id="keep"><a class="header" href="#keep">Keep</a></h4>
+<pre><code class="language-pepper">(T) =&gt; bool Keep
+</code></pre>
+<p>The test an element must pass.</p>
+<h3 id="constructor-1-2"><a class="header" href="#constructor-1-2">Constructor</a></h3>
+<h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
+<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; bool keep)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> that <code>keep</code> accepts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to filter</li>
+<li><code>keep</code> — the test an element must pass</li>
+</ul>
+<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h4 id="next-2-1"><a class="header" href="#next-2-1">next</a></h4>
+<pre><code class="language-pepper">bool next()
+</code></pre>
+<p>Advances to the next element that <code>Keep</code> accepts.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-2-1"><a class="header" href="#current-2-1">current</a></h4>
+<pre><code class="language-pepper">T current()
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
 <h2 id="iterable"><a class="header" href="#iterable">Iterable</a></h2>
 <pre><code class="language-pepper">trait Iterable&lt;T&gt;
 </code></pre>
@@ -7658,7 +7906,7 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
         total = total + x;
     }
 </code></pre>
-<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
+<h3 id="methods-3-1"><a class="header" href="#methods-3-1">Methods</a></h3>
 <h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
@@ -7783,12 +8031,12 @@ freely.</p>
         }
     }
 </code></pre>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="target"><a class="header" href="#target">Target</a></h4>
 <pre><code class="language-pepper">__weak&lt;T&gt; Target
 </code></pre>
 <p>The weak reference itself.</p>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(T target)
 </code></pre>
@@ -7832,12 +8080,12 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
     var n = r.Error.Message.length();   # 4
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">Message</a></h4>
 <pre><code class="language-pepper">String Message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String message = "")
 </code></pre>
@@ -7877,12 +8125,12 @@ and <code>value()</code> returns nothing, so it only checks that the result is O
         return b.ok_or(0);   # 0
     }
 </code></pre>
-<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
+<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
 <h4 id="isok"><a class="header" href="#isok">IsOk</a></h4>
 <pre><code class="language-pepper">bool IsOk
 </code></pre>
 <p>Whether this result is Ok (<code>Value</code> is live) rather than Err (<code>Error</code> is live).</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
+<h4 id="value-1"><a class="header" href="#value-1">Value</a></h4>
 <pre><code class="language-pepper">TValue Value
 </code></pre>
 <p>The success value; meaningful only when <code>IsOk</code> is true, otherwise the default of <code>TValue</code>.</p>
@@ -7890,7 +8138,7 @@ and <code>value()</code> returns nothing, so it only checks that the result is O
 <pre><code class="language-pepper">TError Error
 </code></pre>
 <p>The failure value; meaningful only when <code>IsOk</code> is false, otherwise the default of <code>TError</code>.</p>
-<h3 id="constructor-1-2"><a class="header" href="#constructor-1-2">Constructor</a></h3>
+<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
 <h4 id="result-2"><a class="header" href="#result-2">Result()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -7952,7 +8200,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <ul>
 <li>true when <code>Error</code> holds the outcome</li>
 </ul>
-<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<h4 id="value-1-1"><a class="header" href="#value-1-1">value</a></h4>
 <pre><code class="language-pepper">TValue value()
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
@@ -8019,7 +8267,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
         return 0;
     }
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="data-2"><a class="header" href="#data-2">Data</a></h4>
 <pre><code class="language-pepper">const Data: __ptr&lt;T&gt;
 </code></pre>
@@ -8027,7 +8275,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 or one reference pointer for a struct <code>T</code>. Allocated by the
 constructor and never null afterwards. Internal storage; access it only
 through the methods, which keep every access atomic.</p>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
 </code></pre>
@@ -8351,7 +8599,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
         }
     }
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">Code</a></h4>
 <pre><code class="language-pepper">ErrorCode Code
 </code></pre>
@@ -8364,7 +8612,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(ErrorCode code = 0, String message = "")
 </code></pre>
@@ -8537,13 +8785,13 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="value-2"><a class="header" href="#value-2">Value</a></h4>
 <pre><code class="language-pepper">String Value
 </code></pre>
 <p>The path’s text, exactly as given or built: UTF-8, not normalized,
 possibly empty.</p>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String value = "")
 </code></pre>
@@ -8973,7 +9221,7 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.Value;
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="read"><a class="header" href="#read">Read</a></h4>
 <pre><code class="language-pepper">bool Read
 </code></pre>
@@ -8998,7 +9246,7 @@ sharing read, write and delete access with other openers.</p>
 <pre><code class="language-pepper">bool CreateNew
 </code></pre>
 <p>Whether the file must be newly created: opening fails if it exists (<code>O_EXCL</code> on POSIX, <code>CREATE_NEW</code> on Windows); needs write or append. Off by default.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -9123,7 +9371,7 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
         var bytes = m.Value.Size;
     }
 </code></pre>
-<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
 <h4 id="size-4"><a class="header" href="#size-4">Size</a></h4>
 <pre><code class="language-pepper">ulong Size
 </code></pre>
@@ -9169,7 +9417,7 @@ one.</p>
 <p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
 (<code>mode &amp; 07777</code>, for example 256 for owner read); on Windows the
 <code>FILE_ATTRIBUTE_*</code> bits.</p>
-<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
+<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
 <h4 id="metadata-1-1"><a class="header" href="#metadata-1-1">Metadata()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -9770,7 +10018,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
         i = i + 1;
     }
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">Path</a></h4>
 <pre><code class="language-pepper">Path Path
 </code></pre>
@@ -9794,7 +10042,7 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -9835,12 +10083,12 @@ afresh.</p>
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="path-1-1"><a class="header" href="#path-1-1">Path</a></h4>
 <pre><code class="language-pepper">Path Path
 </code></pre>
 <p>The directory’s path, as given to <code>open</code>.</p>
-<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
+<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
 <h4 id="directory-2"><a class="header" href="#directory-2">Directory()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -10125,7 +10373,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="id"><a class="header" href="#id">Id</a></h4>
 <pre><code class="language-pepper">const Id: ThreadId
 </code></pre>
@@ -10156,7 +10404,7 @@ detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.
 <pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
 </code></pre>
 <p>1 once the body has returned, else 0.</p>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
 </code></pre>
@@ -10306,12 +10554,12 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">Key</a></h4>
 <pre><code class="language-pepper">const Key: ulong
 </code></pre>
 <p>The operating-system thread-local key.</p>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>

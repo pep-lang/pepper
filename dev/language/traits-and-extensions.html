@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49e29622.js";
+            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -365,6 +365,10 @@ extend Square with Shape {
 }
 </code></pre>
 <p>Here <code>Square(3).sides()</code> returns 4.</p>
+<p>A default method can have type parameters of its own (see
+<a href="generics.html#generic-methods">Generic methods</a>). The runtime’s <code>Iterator&lt;T&gt;</code>
+uses this for its <code>map&lt;U&gt;</code> and <code>filter</code> <a href="iteration.html#adapters">adapters</a>,
+which every type that declares <code>Iterator&lt;T&gt;</code> gets.</p>
 <blockquote>
 <p><strong>Known problem:</strong> a default body that uses a string literal does not work
 yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
@@ -451,7 +455,8 @@ whether it was a <code>Shape</code> or a <code>Square</code>, the struct’s own
 </li>
 <li>
 <p><strong>Only instance methods are callable through the trait.</strong> Static methods,
-and methods whose signature uses <code>this</code> as a type, need the concrete type;
+generic methods, and methods whose signature uses <code>this</code> as a type, need the
+concrete type;
 calling one through a trait value is an error.</p>
 </li>
 <li>

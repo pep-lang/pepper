@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-49e29622.js";
+            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -503,7 +503,10 @@ main(): int {
 <p><strong>Parameter types.</strong> <code>(x: int) =&gt; x * 2</code> writes the parameter type. When the
 closure goes straight into a slot of function type (a typed variable, a
 parameter, an assignment, a <code>return</code>, a field), the types come from that
-slot, so <code>(a, b) =&gt; a + b</code> is enough. With no slot to take them from, a
+slot, so <code>(a, b) =&gt; a + b</code> is enough. A parameter of a generic function
+counts too: passing <code>(x) =&gt; x + 1</code> to <code>apply&lt;T&gt;(f: (T) =&gt; T, x: T)</code> with
+<code>x</code> an <code>int</code> types the closure’s <code>x</code> as <code>int</code> (see
+<a href="generics.html#generic-functions">Generics</a>). With no slot to take them from, a
 parameter without a type is an error:</p>
 <pre><code>main.pep:2:14: error: cannot infer the type of parameter 'x'; write it: (x: Type) =&gt; ...
 </code></pre>
@@ -595,13 +598,10 @@ and when the last reference goes, the object releases what it captured.</p>
 be referenced as values. <code>larger</code> alone is not a value even where the
 expected type would pick <code>larger&lt;int&gt;</code>. To use an <code>extern</code> function as a
 value, wrap it in a closure: <code>(x: int) =&gt; abs(x)</code>.</li>
+<li><strong>Generic methods</strong> cannot be referenced as values: <code>b.map&lt;long&gt;</code> is not
+a value. Wrap the call in a closure: <code>(f: (int) =&gt; long) =&gt; b.map(f)</code>.</li>
 <li><strong>A bare method name inside a method</strong> (<code>var f = norm;</code>) is not a value;
 write <code>this.norm</code>.</li>
-<li><strong>Parameter types from generic calls.</strong> A closure’s parameter types come
-from a slot whose type is known where the closure is written. Passing
-<code>(x) =&gt; x + 1</code> to a generic function whose parameter is <code>(T) =&gt; T</code> does not
-infer <code>T</code>; write the argument <code>apply&lt;int&gt;((x) =&gt; x + 1, 2)</code> or the
-parameter type <code>(x: int) =&gt; x + 1</code>.</li>
 <li><strong>Closures in trait default methods</strong> cannot use <code>this</code> or the members of
 the struct yet.</li>
 <li><strong>C callbacks.</strong> A closure cannot be passed to a C function that expects a
