@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-db707087.js";
+            window.path_to_searchindex_js = "searchindex-bba45b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a23cc414.js"></script>
+        <script src="toc-4f68acc7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,7 +223,8 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
-modules, <code>Result</code>-based error handling, iteration, and calling C. The
+modules, <code>Result</code>-based error handling, iteration, <code>with</code> blocks, weak
+references, and calling C. The
 standard library covers strings, arrays, hash maps and sets, atomics, and
 file-system access. That is enough to write real programs, but expect gaps.
 Some that you will meet quickly:</p>
@@ -233,8 +234,9 @@ values (see <a href="#function-types-and-references">function types</a>).</li>
 <li>Calling a method through a trait type does not work yet. You can declare
 traits and conform to them, but not dispatch through them.</li>
 <li>There is no threading API in the standard library yet.</li>
-<li>Reference counting does not reclaim cycles: two objects that refer to each
-other are never freed. Weak references are being designed.</li>
+<li>Reference counting does not reclaim cycles on its own: two objects that
+refer to each other are never freed. Break the cycle with a
+<a href="#weak-references">weak reference</a> on one side.</li>
 <li><code>print</code> writes each argument on its own line.</li>
 </ul>
 <p>Each chapter of this book says plainly what is and is not supported. When a
@@ -2381,12 +2383,87 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Pepper does not have weak references yet, so avoid cycles in long-lived data,
-or break them yourself before the last outside reference goes away: clear the
-container, or overwrite the field, that closes the loop. A common pattern is
-a tree where parents hold their children but children do not hold their
-parent; look a parent up by some other means, such as an index or a key into
-a <a href="#hashmap-and-hashset"><code>HashMap</code></a>.</p>
+<p>To avoid a cycle, make one direction of it a weak reference (next section),
+or break the cycle yourself before the last outside reference goes away:
+clear the container, or overwrite the field, that closes the loop.</p>
+<h2 id="weak-references"><a class="header" href="#weak-references">Weak references</a></h2>
+<p>A <a href="#weak"><code>Weak&lt;T&gt;</code></a> points at an object without keeping it
+alive. Use it for back pointers: a child’s parent, a document’s folder, an
+observer’s subject. The owner holds strong references down the tree, and
+everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
+<pre><code class="language-pepper">var destroyed = 0;
+
+struct Folder {
+    var name: String;
+    var files: Array&lt;Document&gt;;
+
+    construct(this.name = "") {
+        files = Array&lt;Document&gt;();
+    }
+
+    destruct {
+        destroyed += 1;
+    }
+}
+
+struct Document {
+    var title: String;
+    # A weak back pointer: the folder owns its documents, not the other way
+    # round, so there is no cycle.
+    var folder: Weak&lt;Folder&gt;;
+
+    construct(String title, Folder folder) {
+        this.title = title;
+        this.folder = Weak&lt;Folder&gt;(folder);
+    }
+
+    destruct {
+        destroyed += 1;
+    }
+
+    String path() {
+        with (var f = folder) {
+            return f.name + "/" + title;
+        } else {
+            return "(deleted)/" + title;
+        }
+        return "";
+    }
+}
+
+main(): int {
+    var kept = Document("draft", Folder("none"));
+    {
+        var home = Folder("home");
+        var notes = Document("notes", home);
+        home.files.append(notes);
+        assert(notes.path() == "home/notes", "the folder is alive");
+        kept = notes;
+    }
+    # The folder went away with `home`; the weak pointer did not keep it.
+    assert(kept.path() == "(deleted)/notes", "the folder is gone");
+    assert(kept.folder.expired(), "and the weak reference knows it");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong><code>Weak&lt;T&gt;(object)</code></strong> makes the weak reference. It does not change the
+object’s reference count.</li>
+<li><strong>A <code>with</code> block reaches the object</strong>: <code>with (var f = folder) { ... }</code>
+binds <code>f</code> to an ordinary strong reference for the length of the block. When
+the object has already been destroyed, the body is skipped and the <code>else</code>
+block runs. See <a href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a>.</li>
+<li><strong><code>expired()</code></strong> reports whether the object has been destroyed.</li>
+<li><strong>The object is destroyed on time.</strong> When its last strong reference goes,
+its destructor runs and its fields are released, even if weak references
+remain. Only the object’s small header stays allocated until the last weak
+reference is gone.</li>
+</ul>
+<p>In C++ terms, a struct value is a <code>std::shared_ptr&lt;T&gt;</code> and <code>Weak&lt;T&gt;</code> wraps
+the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>: <code>Weak&lt;T&gt;(object)</code> is
+<code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. A weak reference
+made while an object is still inside its constructor cannot be upgraded until
+the constructor returns, as with <code>weak_from_this()</code> in C++.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -2400,6 +2477,7 @@ a <a href="#hashmap-and-hashset"><code>HashMap</code></a>.</p>
 <tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
+<tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
 <tr><td>end of a block</td><td>Every local declared in the block releases its reference.</td></tr>
 </tbody>
 </table>
@@ -3353,7 +3431,9 @@ with (scope) { ... }
 </code></pre>
 <ul>
 <li><strong><code>name</code> is bound to <code>scope.enter()</code></strong>, not to <code>scope</code> itself. A <code>Session</code>
-can hand out itself; a weak reference hands out the object it points to.</li>
+can hand out itself; a <a href="#weak-references"><code>Weak&lt;T&gt;</code></a> hands out
+a strong reference to the object it points at, or null once that object is
+gone.</li>
 <li><strong>Without a binding</strong>, the block still holds the result of <code>enter()</code> until
 it ends. An <code>enter()</code> that returns nothing (declared without a return type)
 has nothing to bind, and binding it is an error.</li>
@@ -6960,6 +7040,86 @@ body is skipped and its <code>else</code> block runs instead.</p>
 <pre><code class="language-pepper">exit()
 </code></pre>
 <p>Leaves the scope. Implementations call it from their destructor.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/weak.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="weak"><a class="header" href="#weak">Weak</a></h1>
+<p>Weak references: <code>Weak&lt;T&gt;</code> points at an object without keeping it alive.</p>
+<p>Source: <code>runtime/weak.pep</code></p>
+<h2 id="weak-1"><a class="header" href="#weak-1">Weak</a></h2>
+<pre><code class="language-pepper">struct Weak&lt;T&gt;
+</code></pre>
+<p>A reference to a struct object that does not keep it alive, for back
+pointers (a child’s parent, an observer’s subject) that would otherwise
+form a reference cycle and leak.</p>
+<p>The object is reached only through a <code>with</code> block, which upgrades the weak
+reference to an ordinary strong one for the length of the block. Once the
+object has been destroyed the upgrade fails: the body is skipped and the
+<code>else</code> block runs instead.</p>
+<p>A <code>Weak&lt;T&gt;</code> never changes what it points at, so copies of it can be shared
+freely.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct type pointed at</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Scoped</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Child {
+        Weak&lt;Parent&gt; Owner;
+
+        construct(Parent owner) {
+            Owner = Weak&lt;Parent&gt;(owner);
+        }
+
+        String owner_name() {
+            with (var parent = Owner) {
+                return parent.Name;
+            } else {
+                return "(gone)";
+            }
+            return "";
+        }
+    }
+</code></pre>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h4 id="target"><a class="header" href="#target">Target</a></h4>
+<pre><code class="language-pepper">__weak&lt;T&gt; Target
+</code></pre>
+<p>The weak reference itself.</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
+<pre><code class="language-pepper">construct(T target)
+</code></pre>
+<p>Creates a weak reference to <code>target</code>’s object.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the object to point at; a null reference makes a weak reference that is always expired</li>
+</ul>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="expired"><a class="header" href="#expired">expired</a></h4>
+<pre><code class="language-pepper">bool expired()
+</code></pre>
+<p>Reports whether the object has been destroyed.</p>
+<p>A <code>false</code> result can be out of date by the time it is used; enter the
+reference with <code>with</code> to use the object.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once the object has been destroyed, or if the reference was made from null</li>
+</ul>
+<h4 id="enter-1"><a class="header" href="#enter-1">enter</a></h4>
+<pre><code class="language-pepper">T enter()
+</code></pre>
+<p>Upgrades the weak reference for a <code>with</code> block.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new strong reference to the object, or null once it has been destroyed</li>
+</ul>
+<h4 id="exit-1"><a class="header" href="#exit-1">exit</a></h4>
+<pre><code class="language-pepper">void exit()
+</code></pre>
+<p>Leaves the scope. The strong reference <code>enter()</code> returned is released
+by the <code>with</code> block itself, so there is nothing to do.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/result.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="result"><a class="header" href="#result">Result</a></h1>
 <p>Source: <code>runtime/result.pep</code></p>
@@ -6971,12 +7131,12 @@ body is skipped and its <code>else</code> block runs instead.</p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
     var n = r.Error.Message.length();   # 4
 </code></pre>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">Message</a></h4>
 <pre><code class="language-pepper">String Message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">construct(String message = "")
 </code></pre>
@@ -7080,7 +7240,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">bool is_ok()
 </code></pre>
@@ -7160,7 +7320,7 @@ Atomic around (or keep it in a global) to share the value between threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="data-2"><a class="header" href="#data-2">Data</a></h4>
 <pre><code class="language-pepper">__ptr&lt;T&gt; Data
 </code></pre>
@@ -7168,7 +7328,7 @@ Atomic around (or keep it in a global) to share the value between threads.</p>
 or one reference pointer for a struct <code>T</code>. Allocated by the
 constructor and never null afterwards. Internal storage; access it only
 through the methods, which keep every access atomic.</p>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
 </code></pre>
@@ -7182,7 +7342,7 @@ through the methods, which keep every access atomic.</p>
 <pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
     var p = Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">T load()
 </code></pre>
@@ -7492,7 +7652,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
         }
     }
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">Code</a></h4>
 <pre><code class="language-pepper">ErrorCode Code
 </code></pre>
@@ -7505,7 +7665,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(ErrorCode code = 0, String message = "")
 </code></pre>
@@ -7530,7 +7690,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">bool is_not_found()
 </code></pre>
@@ -7678,13 +7838,13 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
 <h4 id="value-1"><a class="header" href="#value-1">Value</a></h4>
 <pre><code class="language-pepper">String Value
 </code></pre>
 <p>The path’s text, exactly as given or built: UTF-8, not normalized,
 possibly empty.</p>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">construct(String value = "")
 </code></pre>
@@ -7723,7 +7883,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.Size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
@@ -8113,7 +8273,7 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.Value;
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="read"><a class="header" href="#read">Read</a></h4>
 <pre><code class="language-pepper">bool Read
 </code></pre>
@@ -8138,13 +8298,13 @@ sharing read, write and delete access with other openers.</p>
 <pre><code class="language-pepper">bool CreateNew
 </code></pre>
 <p>Whether the file must be newly created: opening fails if it exists (<code>O_EXCL</code> on POSIX, <code>CREATE_NEW</code> on Windows); needs write or append. Off by default.</p>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
@@ -8910,7 +9070,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
         i = i + 1;
     }
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">Path</a></h4>
 <pre><code class="language-pepper">Path Path
 </code></pre>
@@ -8934,13 +9094,13 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>Path</code> and <code>Name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>

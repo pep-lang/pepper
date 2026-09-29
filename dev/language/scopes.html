@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-db707087.js";
+            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a23cc414.js"></script>
+        <script src="../toc-4f68acc7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -271,7 +271,9 @@ with (scope) { ... }
 </code></pre>
 <ul>
 <li><strong><code>name</code> is bound to <code>scope.enter()</code></strong>, not to <code>scope</code> itself. A <code>Session</code>
-can hand out itself; a weak reference hands out the object it points to.</li>
+can hand out itself; a <a href="memory.html#weak-references"><code>Weak&lt;T&gt;</code></a> hands out
+a strong reference to the object it points at, or null once that object is
+gone.</li>
 <li><strong>Without a binding</strong>, the block still holds the result of <code>enter()</code> until
 it ends. An <code>enter()</code> that returns nothing (declared without a return type)
 has nothing to bind, and binding it is an error.</li>

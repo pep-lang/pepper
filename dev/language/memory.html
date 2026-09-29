@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-db707087.js";
+            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a23cc414.js"></script>
+        <script src="../toc-4f68acc7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -374,12 +374,87 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Pepper does not have weak references yet, so avoid cycles in long-lived data,
-or break them yourself before the last outside reference goes away: clear the
-container, or overwrite the field, that closes the loop. A common pattern is
-a tree where parents hold their children but children do not hold their
-parent; look a parent up by some other means, such as an index or a key into
-a <a href="../reference/hash.html"><code>HashMap</code></a>.</p>
+<p>To avoid a cycle, make one direction of it a weak reference (next section),
+or break the cycle yourself before the last outside reference goes away:
+clear the container, or overwrite the field, that closes the loop.</p>
+<h2 id="weak-references"><a class="header" href="#weak-references">Weak references</a></h2>
+<p>A <a href="../reference/weak.html"><code>Weak&lt;T&gt;</code></a> points at an object without keeping it
+alive. Use it for back pointers: a child’s parent, a document’s folder, an
+observer’s subject. The owner holds strong references down the tree, and
+everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
+<pre><code class="language-pepper">var destroyed = 0;
+
+struct Folder {
+    var name: String;
+    var files: Array&lt;Document&gt;;
+
+    construct(this.name = "") {
+        files = Array&lt;Document&gt;();
+    }
+
+    destruct {
+        destroyed += 1;
+    }
+}
+
+struct Document {
+    var title: String;
+    # A weak back pointer: the folder owns its documents, not the other way
+    # round, so there is no cycle.
+    var folder: Weak&lt;Folder&gt;;
+
+    construct(String title, Folder folder) {
+        this.title = title;
+        this.folder = Weak&lt;Folder&gt;(folder);
+    }
+
+    destruct {
+        destroyed += 1;
+    }
+
+    String path() {
+        with (var f = folder) {
+            return f.name + "/" + title;
+        } else {
+            return "(deleted)/" + title;
+        }
+        return "";
+    }
+}
+
+main(): int {
+    var kept = Document("draft", Folder("none"));
+    {
+        var home = Folder("home");
+        var notes = Document("notes", home);
+        home.files.append(notes);
+        assert(notes.path() == "home/notes", "the folder is alive");
+        kept = notes;
+    }
+    # The folder went away with `home`; the weak pointer did not keep it.
+    assert(kept.path() == "(deleted)/notes", "the folder is gone");
+    assert(kept.folder.expired(), "and the weak reference knows it");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong><code>Weak&lt;T&gt;(object)</code></strong> makes the weak reference. It does not change the
+object’s reference count.</li>
+<li><strong>A <code>with</code> block reaches the object</strong>: <code>with (var f = folder) { ... }</code>
+binds <code>f</code> to an ordinary strong reference for the length of the block. When
+the object has already been destroyed, the body is skipped and the <code>else</code>
+block runs. See <a href="scopes.html">Scoped blocks with <code>with</code></a>.</li>
+<li><strong><code>expired()</code></strong> reports whether the object has been destroyed.</li>
+<li><strong>The object is destroyed on time.</strong> When its last strong reference goes,
+its destructor runs and its fields are released, even if weak references
+remain. Only the object’s small header stays allocated until the last weak
+reference is gone.</li>
+</ul>
+<p>In C++ terms, a struct value is a <code>std::shared_ptr&lt;T&gt;</code> and <code>Weak&lt;T&gt;</code> wraps
+the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>: <code>Weak&lt;T&gt;(object)</code> is
+<code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. A weak reference
+made while an object is still inside its constructor cannot be upgraded until
+the constructor returns, as with <code>weak_from_this()</code> in C++.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -393,6 +468,7 @@ a <a href="../reference/hash.html"><code>HashMap</code></a>.</p>
 <tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
+<tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
 <tr><td>end of a block</td><td>Every local declared in the block releases its reference.</td></tr>
 </tbody>
 </table>
