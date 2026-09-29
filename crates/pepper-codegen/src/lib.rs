@@ -1839,6 +1839,15 @@ impl<'ctx> CodeGenerator<'ctx> {
         if !matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
             return Ok(None);
         }
+        // A pointer element (`rows[0]` of an `int**`) is itself the buffer:
+        // `slot_ptr` already holds the loaded pointer, and the next index
+        // strides by its pointee.
+        if let Some(pointee) = self
+            .value_sema_type(lhs)
+            .and_then(|ty| ty.strip_suffix('*').map(str::to_string))
+        {
+            return Ok(Some((slot_ptr, pointee)));
+        }
         let elem = self.index_element_type(lhs);
         // Copy the descriptor data out before returning; no `self` borrow
         // crosses codegen below.
