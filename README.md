@@ -243,6 +243,24 @@ Sample programs live in `tests/`: standalone files such as `hello.pep` and
 `tests/` is part of the parser's corpus test, so adding one extends the suite
 automatically.
 
+## VS Code extension from any branch
+
+The released extension comes from the `vsix-v*` GitHub release, which the VSIX
+workflow updates only on `main`. To run the extension and language server from
+whatever branch is checked out, before it merges:
+
+```powershell
+scripts/install-vscode-extension.ps1          # build pepper-lsp + vsix, install into VS Code
+scripts/install-vscode-extension.ps1 -Watch   # follow the branch: pull and reinstall on change
+```
+
+The extension restarts its language server by itself when the installed server
+changes; a change to the extension's own code needs **Developer: Reload
+Window**. When editing the server, setting `pepper.lspPath` to
+`target/release/pepper-lsp.exe` skips the install: each
+`cargo build --release -p pepper-lsp` restarts the server in place.
+**Pepper: Restart Language Server** restarts it on demand.
+
 ## Platform support, honestly
 
 - **Windows x64** is the platform the compiler is developed against and the one
