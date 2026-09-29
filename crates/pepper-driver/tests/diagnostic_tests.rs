@@ -162,3 +162,62 @@ fn deprecated_new_warns_with_a_fix_and_still_compiles() {
     let ctx = inkwell::context::Context::create();
     assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 7);
 }
+
+#[test]
+fn with_binding_assigned() {
+    let source = "struct S {\n    construct() {}\n    S enter() { return this; }\n    exit() {}\n}\nmain(): int {\n    with (var s = S()) {\n        s = S();\n    }\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("with_binding_assigned", source),
+        "main.pep:8:9: error: cannot assign to 's': it is bound by a 'with' block\n\
+         \x20   8 |         s = S();\n\
+         \x20     |         ^~\n\
+         main.pep:7:15: note: 's' is bound here\n\
+         \x20   7 |     with (var s = S()) {\n\
+         \x20     |               ^"
+    );
+}
+
+#[test]
+fn with_malformed_header() {
+    assert_eq!(
+        error_of("with_malformed_header", "main(): int {\n    with (var x) {\n    }\n    return 0;\n}\n"),
+        "main.pep:2:16: error: expected '='\n\
+         \x20   2 |     with (var x) {\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn with_void_binding() {
+    let source = "struct Lock {\n    construct() {}\n    enter() {}\n    exit() {}\n}\nmain(): int {\n    with (var l = Lock()) {\n    }\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("with_void_binding", source),
+        "main.pep:7:15: error: cannot bind 'l': 'enter()' returns 'void'\n\
+         \x20   7 |     with (var l = Lock()) {\n\
+         \x20     |               ^\n\
+         note: remove the binding: 'with (scope) { ... }'"
+    );
+}
+
+#[test]
+fn with_else_on_int() {
+    let source = "struct Counter {\n    construct() {}\n    int enter() { return 1; }\n    exit() {}\n}\nmain(): int {\n    with (var n = Counter()) {\n    } else {\n    }\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("with_else_on_int", source),
+        "main.pep:7:15: error: 'else' requires 'enter()' to return a struct reference, but it returns 'int'\n\
+         \x20   7 |     with (var n = Counter()) {\n\
+         \x20     |               ^"
+    );
+}
+
+#[test]
+fn with_no_enter() {
+    let source = "struct Plain {\n    construct() {}\n}\nmain(): int {\n    with (var p = Plain()) {\n    }\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("with_no_enter", source),
+        "main.pep:5:19: error: 'Plain' cannot be used in a 'with' block: it has no 'enter()' method\n\
+         \x20   5 |     with (var p = Plain()) {\n\
+         \x20     |                   ^~~~~~~\n\
+         note: a 'with' scope implements Scoped<T>: 'T enter()' and 'exit()'"
+    );
+}

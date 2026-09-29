@@ -2516,6 +2516,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(BasicValueEnum::PointerValue(self.function_object(function, &ty.to_string())?))
             }
             Expression::Invoke { callee, args } => self.codegen_invoke(callee, args),
+            // lower_with_blocks replaces every one before codegen.
+            Expression::WithEntered(_) => Err("internal error: unlowered 'with' condition".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;

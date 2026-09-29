@@ -249,6 +249,7 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
             block: block(&wh.block)?,
         })),
         ast::Statement::For(f) => for_loop(f),
+        ast::Statement::With(w) => with_block(w),
         ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
             expr: Some(expression(&ret.expr)?),
         })),
@@ -264,6 +265,8 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
 thread_local! {
     /// Numbers each lowered `for` loop's hidden iterator local.
     static FOR_LOOPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Numbers each lowered `with` block's hidden locals.
+    static WITH_BLOCKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Lower `for (var x in source) body` to
@@ -317,6 +320,82 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
             Statement::While(While {
                 condition: Expression::MethodCall { this: iterator_ref(), method: "next".to_string(), args: vec![], loc: at },
                 block: body,
+            }),
+        ],
+        attributes: vec![],
+    }))
+}
+
+/// Lower `with (var x = scope) body else other` to
+///
+/// ```text
+/// {
+///     var __with_scope_N = scope;
+///     var x = __with_scope_N.enter();      # __with_value_N when unnamed
+///     if (<WithEntered(x)>) { body } else { other }
+/// }
+/// ```
+///
+/// Refcounting needs nothing new: both are owned locals of the outer block,
+/// released in reverse order on every path out of it, so the bound value goes
+/// first and the scope object's destructor (which calls `exit()`) can run
+/// last. `lower_with_blocks` resolves the condition once `enter()`'s type is
+/// known.
+fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
+    let n = WITH_BLOCKS.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    });
+    let scope = format!("__with_scope_{}", n);
+    let at = loc(w.scope.span());
+    let hidden_scope = VariableDef {
+        name: scope.clone(),
+        ty: TypeName::auto(),
+        default: Some(expression(&w.scope)?),
+        hidden: true,
+        kind: Kind::Variable,
+        attributes: vec![],
+        loc: at,
+        type_loc: Loc::NONE,
+    };
+    let enter = Expression::MethodCall {
+        this: Box::new(Expression::SymbolRef { id: scope, ty: TypeName::auto(), loc: at }),
+        method: "enter".to_string(),
+        args: vec![],
+        loc: at,
+    };
+    let value = match &w.binding {
+        Some(binding) => {
+            let mut value = variable_def(binding, Kind::Variable)?;
+            value.default = Some(enter);
+            value
+        }
+        None => VariableDef {
+            name: format!("__with_value_{}", n),
+            ty: TypeName::auto(),
+            default: Some(enter),
+            hidden: true,
+            kind: Kind::Variable,
+            attributes: vec![],
+            loc: at,
+            type_loc: Loc::NONE,
+        },
+    };
+    let entered = Expression::WithEntered(Box::new(Expression::SymbolRef {
+        id: value.name.clone(),
+        ty: TypeName::auto(),
+        loc: value.loc,
+    }));
+    Ok(Statement::Block(Block {
+        name: String::new(),
+        items: vec![
+            Statement::Declaration(Declaration::Variable(hidden_scope)),
+            Statement::Declaration(Declaration::Variable(value)),
+            Statement::Branch(Branch {
+                condition: entered,
+                if_block: block(&w.block)?,
+                else_block: w.else_block.as_ref().map(block).transpose()?,
             }),
         ],
         attributes: vec![],

@@ -197,7 +197,7 @@ const RESERVED: &[&str] = &[
     "if", "else", "while", "for", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
-    "trait", "extend", "type", "export",
+    "trait", "extend", "type", "export", "with",
 ];
 
 /// Operators that may appear as method names (overloadable operators), longest first.
@@ -1204,6 +1204,68 @@ fn for_loop(input: &mut &str) -> Result<For> {
     Ok(For { binding, iterable, block, span: Span { start, end } })
 }
 
+/// `with (var x = scope) { ... } else { ... }`, `with (Type x = scope) ...`,
+/// or `with (scope) { ... }`. As with `for` the parentheses are optional.
+/// The binding receives `scope.enter()`; see `ast::With`.
+fn with_statement(input: &mut &str) -> Result<With> {
+    let start = pos(input);
+    if !keyword(input, "with") {
+        return Err(bt(input));
+    }
+    ws(input)?;
+    let parenthesized = input.starts_with('(');
+    if parenthesized {
+        *input = &input[1..];
+        ws(input)?;
+    }
+    // A declaration header must give the scope as its value; anything that
+    // does not parse as `var x = e` / `Type x = e` is the bare scope form.
+    let before = *input;
+    let is_var = keyword(&mut { *input }, "var") || keyword(&mut { *input }, "const");
+    let (binding, scope) = match variable_declaration(input, vec![]) {
+        Ok(mut binding) if binding.default_value.is_some() && !binding.is_const => {
+            let scope = binding.default_value.take().unwrap();
+            (Some(binding), scope)
+        }
+        Ok(binding) if is_var => {
+            // `with (const x = e)` or `with (var x)`: past `var`, commit.
+            if binding.is_const {
+                *input = before;
+                expected(*input, "'var'");
+            } else {
+                expected(*input, "'='");
+            }
+            return Err(cut(input));
+        }
+        Err(e) if is_var => return Err(e),
+        _ => {
+            *input = before;
+            (None, expression(input)?)
+        }
+    };
+    ws(input)?;
+    if parenthesized {
+        if !input.starts_with(')') {
+            return Err(cut_expecting(input, "')'"));
+        }
+        *input = &input[1..];
+        ws(input)?;
+    }
+    let body = block(input, vec![])?;
+    let mut end = body.span.end;
+    ws(input)?;
+    let mut else_block = None;
+    if keyword(&mut { *input }, "else") {
+        keyword(input, "else");
+        ws(input)?;
+        let b = block(input, vec![])?;
+        end = b.span.end;
+        else_block = Some(b);
+        ws(input)?;
+    }
+    Ok(With { binding, scope, block: body, else_block, span: Span { start, end } })
+}
+
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     let start = pos(input);
     if !input.starts_with("return") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -1260,6 +1322,9 @@ fn statement(input: &mut &str) -> Result<Statement> {
     if input.starts_with("for") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::For(for_loop(input)?));
     }
+    if keyword(&mut { *input }, "with") {
+        return Ok(Statement::With(with_statement(input)?));
+    }
     if input.starts_with("return") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::Return(return_statement(input)?));
     }
@@ -1284,7 +1349,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
         || (input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
             && ![
                 "if", "while", "return", "break", "continue", "struct", "extern", "import", "true", "false",
-                "sizeof", "and", "or", "new", "construct", "destruct", "static", "trait", "extend",
+                "sizeof", "and", "or", "new", "construct", "destruct", "static", "trait", "extend", "with",
             ]
             .iter()
             .any(|kw| is_kw(kw)));
@@ -2624,6 +2689,14 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
             ptr_check_expr(&fr.iterable)?;
             ptr_check_block(&fr.block)
         }
+        Statement::With(w) => {
+            if let Some(b) = &w.binding {
+                ptr_check_type(&b.type_name)?;
+            }
+            ptr_check_expr(&w.scope)?;
+            ptr_check_block(&w.block)?;
+            w.else_block.as_ref().map_or(Ok(()), ptr_check_block)
+        }
         Statement::Return(r) => ptr_check_expr(&r.expr),
         Statement::LoopBreak(_) => Ok(()),
     }
@@ -3394,6 +3467,49 @@ f() { var r = c.Result<int>.ok(1); }");
                 other => panic!("{}: {:?}", src, other),
             }
             assert!(input.trim().is_empty(), "{}: left {:?}", src, input);
+        }
+    }
+
+    #[test]
+    fn test_with_forms() {
+        for (src, name, ty, scope, has_else) in [
+            ("with (var p = this.parent) { p.touch(); }", Some("p"), "__auto", "this.parent", false),
+            ("with var p = parent { } else { orphan(); }", Some("p"), "__auto", "parent", true),
+            ("with (Node n = weak) { }", Some("n"), "Node", "weak", false),
+            ("with (var n: Node = weak) { } else { }", Some("n"), "Node", "weak", true),
+            ("with (lock) { count += 1; }", None, "", "lock", false),
+            ("with (this.mutex.lock()) { }", None, "", "this.mutex.lock()", false),
+            ("with (File.open(path)) { } else { }", None, "", "File.open(path)", true),
+        ] {
+            let _guard = track_source(src.len());
+            let mut input = src;
+            match statement(&mut input).unwrap_or_else(|e| panic!("{}: {:?}", src, e)) {
+                Statement::With(w) => {
+                    assert_eq!(w.binding.as_ref().map(|b| b.name.as_str()), name, "{}", src);
+                    if let Some(b) = &w.binding {
+                        assert_eq!(b.type_name.to_string(), ty, "{}", src);
+                        assert!(b.default_value.is_none(), "{}", src);
+                    }
+                    assert_eq!(w.scope.to_string().replace(' ', ""), scope.replace(' ', ""), "{}", src);
+                    assert_eq!(w.else_block.is_some(), has_else, "{}", src);
+                }
+                other => panic!("{}: {:?}", src, other),
+            }
+            assert!(input.trim().is_empty(), "{}: left {:?}", src, input);
+        }
+    }
+
+    #[test]
+    fn test_with_rejects_malformed_headers() {
+        for src in [
+            "with (var x) { }",          // a binding needs the scope: `var x = scope`
+            "with (const x = s) { }",    // the binding is not const
+            "with (var x = s { }",       // unclosed header
+            "with (s) ",                 // no body
+        ] {
+            let _guard = track_source(src.len());
+            let mut input = src;
+            assert!(statement(&mut input).is_err(), "{} should not parse", src);
         }
     }
 

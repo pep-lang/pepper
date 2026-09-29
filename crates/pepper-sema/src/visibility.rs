@@ -494,6 +494,21 @@ impl<'a> Checker<'a, '_> {
                 self.block(&f.block);
                 self.scopes.pop();
             }
+            Statement::With(w) => {
+                // The scope is evaluated outside the binding's scope; the
+                // binding is visible in the body only, not in `else`.
+                self.expression(&w.scope);
+                self.scopes.push((HashSet::new(), false));
+                if let Some(b) = &w.binding {
+                    self.type_name(&b.type_name);
+                    self.bind(&b.name);
+                }
+                self.block(&w.block);
+                self.scopes.pop();
+                if let Some(e) = &w.else_block {
+                    self.block(e);
+                }
+            }
             Statement::Return(r) => self.expression(&r.expr),
             Statement::LoopBreak(_) => {}
         }

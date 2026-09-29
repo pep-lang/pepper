@@ -198,6 +198,11 @@ with no extension, and `module_name()` is the output's stem.
     `__for_iterator_N` local (initialized with `Expression::ForIterator(e)`)
     and a `while (it.next()) { var x = it.current(); { body } }`. The model
     has no `for` statement.
+  - A `with (var x = scope) { body } else { other }` block becomes a block
+    holding a hidden `__with_scope_N` local (the scope), `var x =
+    __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
+    (Expression::WithEntered(x)) { body } else { other }`. The model has no
+    `with` statement; `lower_with_blocks` resolves the condition.
   - `t.m(args)` becomes `MethodCall`, and a named callee becomes
     `FunctionCall { function }`. A type literal callee (`Box<int>(…)`)
     becomes a constructor call named `"Box<int>"`. Any other callee becomes
@@ -215,7 +220,7 @@ with no extension, and `module_name()` is the output's stem.
   `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
-  `ForIterator`), and `Statement`. Each node that names something has a
+  `ForIterator`, `WithEntered`), and `Statement`. Each node that names something has a
   `Loc`; `Expression::loc()` returns it (`Loc::NONE` for literals and
   synthesized nodes).
 - **Types**: `type_name::TypeName { name, sub_types, flags }`, with
@@ -288,6 +293,7 @@ several passes run more than once on purpose.
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, before the destructor's `_pep_free`. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `walk_expression`, `walk_function`, `walk_global`, and
@@ -468,6 +474,7 @@ diagnostics"). The mechanics:
 | `string.pep` | `String` (fields `Data`, `Length`, `Size`, `Version`) and `StringIterator`. |
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
+| `scoped.pep` | `Scoped<T>`, the `with` protocol (`enter()`, and `exit()` called from the destructor). |
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
@@ -581,8 +588,6 @@ Known ignored tests (ignored does not mean passing):
 - `corpus_tests::corpus_files_compile_and_run`: `tests/Trait.Generic`
   fails. It uses a generic trait with a `static this from(T)` method
   implemented through `extend … with Convert<Bar>`.
-- `edge_case_tests::destructor_runs`: "destructors are not invoked on
-  scope exit under the JIT".
 
 Harness gotchas: runtime discovery and several harnesses `chdir` to the
 repository root (a process-wide change; every test sets the same

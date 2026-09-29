@@ -92,6 +92,21 @@ parentheses are optional. [Iteration](iteration.md) covers the protocol behind
 Pepper has no counting `for (init; condition; step)` loop and no range syntax.
 To count, use a `while` loop with a counter.
 
+## `with`
+
+`with` enters a scope object for the length of a block and binds what it
+hands out. The object cleans up when it is destroyed, on every way out of the
+block:
+
+```pepper
+with (var session = Session("grace")) {
+    greet(session.user);
+}
+```
+
+[Scoped blocks with `with`](scopes.md) covers the protocol and the optional
+`else` block.
+
 ## `break` and `continue`
 
 `break` leaves the innermost loop immediately. `continue` skips the rest of the

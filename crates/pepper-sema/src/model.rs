@@ -275,6 +275,11 @@ pub enum Expression {
     /// `current()` (Iterator<T>). Chosen by type, like C++ range-for; the
     /// builder emits it only as the default of the loop's hidden iterator.
     ForIterator(Box<Expression>),
+    /// The condition of a lowered `with` block, over its bound value (a
+    /// `SymbolRef`): "the scope was entered". `lower_with_blocks` replaces it
+    /// once types are known: a null test for a struct or pointer value, no
+    /// branch at all otherwise. Never reaches codegen.
+    WithEntered(Box<Expression>),
 }
 
 impl Expression {

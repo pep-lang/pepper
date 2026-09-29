@@ -241,6 +241,19 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                         collect_locals_upto(&f.block, offset, out);
                     }
                 }
+                ast::Statement::With(w) => {
+                    if w.block.span.start <= offset && offset < w.block.span.end {
+                        if let Some(b) = &w.binding {
+                            out.push(Symbol { name: b.name.clone(), name_span: b.name_span, ty: variable_type(b) });
+                        }
+                        collect_locals_upto(&w.block, offset, out);
+                    } else if let Some(e) = &w.else_block
+                        && e.span.start <= offset
+                        && offset < e.span.end
+                    {
+                        collect_locals_upto(e, offset, out);
+                    }
+                }
                 _ => {}
             }
         }
@@ -377,6 +390,19 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                     return Some(found);
                 }
                 if let Some(found) = find_expr_in_block(&f.block, offset) {
+                    return Some(found);
+                }
+            }
+            ast::Statement::With(w) => {
+                if let Some(found) = expr_at(&w.scope, offset) {
+                    return Some(found);
+                }
+                if let Some(found) = find_expr_in_block(&w.block, offset) {
+                    return Some(found);
+                }
+                if let Some(el) = &w.else_block
+                    && let Some(found) = find_expr_in_block(el, offset)
+                {
                     return Some(found);
                 }
             }

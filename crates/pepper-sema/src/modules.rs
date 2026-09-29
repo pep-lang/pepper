@@ -879,6 +879,19 @@ impl Rewriter<'_, '_> {
                 self.block(&mut f.block);
                 self.scopes.pop();
             }
+            Statement::With(w) => {
+                self.expression(&mut w.scope);
+                self.scopes.push(Scope::Values(HashSet::new()));
+                if let Some(b) = &mut w.binding {
+                    self.type_name(&mut b.type_name);
+                    self.bind(&b.name);
+                }
+                self.block(&mut w.block);
+                self.scopes.pop();
+                if let Some(e) = &mut w.else_block {
+                    self.block(e);
+                }
+            }
             Statement::Return(r) => self.expression(&mut r.expr),
             Statement::LoopBreak(_) => {}
         }

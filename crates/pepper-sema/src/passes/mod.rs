@@ -25,6 +25,7 @@ pub mod convert_print_calls;
 pub mod platform;
 pub mod function_types;
 pub mod check_function_types;
+pub mod lower_with_blocks;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -41,6 +42,7 @@ use specialize_structs::specialize_structs;
 use tag_generics::tag_generics;
 use convert_print_calls::convert_print_calls;
 use function_types::synthesize_function_types;
+use lower_with_blocks::lower_with_blocks;
 
 /// Run every pass in the ported order (25 entries, repeats included),
 /// stopping at the first pass that reports an error.
@@ -103,6 +105,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_resolvables(module, true));
     // Types inferred by the final resolve (e.g. `var f = square;`).
     step!(synthesize_function_types(module));
+    // `with` conditions need the final types of `enter()`.
+    step!(lower_with_blocks(module));
     Ok(())
 }
 
@@ -208,7 +212,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
                 walk_expression(arg, f);
             }
         }
-        Expression::ForIterator(source) => walk_expression(source, f),
+        Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
     }
 }
 

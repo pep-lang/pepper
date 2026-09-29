@@ -438,6 +438,19 @@ pub struct For {
     pub span: Span,
 }
 
+/// `with (var x = scope) { ... } else { ... }`: enter a `Scoped<T>` value.
+/// `x` is bound to `scope.enter()`; a null struct result skips the body and
+/// runs `else_block` instead. `binding` carries no default value: the scope
+/// expression is `scope`. Without a binding the result is held unnamed.
+#[derive(Debug, Clone)]
+pub struct With {
+    pub binding: Option<VariableDecl>,
+    pub scope: Expression,
+    pub block: Block,
+    pub else_block: Option<Block>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
     pub expr: Expression,
@@ -461,6 +474,7 @@ pub enum Statement {
     Branch(Branch),
     While(While),
     For(For),
+    With(With),
     Return(ReturnStatement),
     LoopBreak(LoopBreak),
 }
@@ -474,6 +488,7 @@ impl Statement {
             Statement::Branch(b) => b.span,
             Statement::While(w) => w.span,
             Statement::For(f) => f.span,
+            Statement::With(w) => w.span,
             Statement::Return(r) => r.span,
             Statement::LoopBreak(l) => l.span,
         }
@@ -879,6 +894,19 @@ impl Display for For {
     }
 }
 
+impl Display for With {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.binding {
+            Some(b) => write!(f, "with ({} = {}) {}", b, self.scope, self.block)?,
+            None => write!(f, "with ({}) {}", self.scope, self.block)?,
+        }
+        if let Some(e) = &self.else_block {
+            write!(f, " else {}", e)?;
+        }
+        Ok(())
+    }
+}
+
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "return {}", self.expr)
@@ -899,6 +927,7 @@ impl Display for Statement {
             Statement::Branch(b) => write!(f, "{}", b),
             Statement::While(w) => write!(f, "{}", w),
             Statement::For(fr) => write!(f, "{}", fr),
+            Statement::With(w) => write!(f, "{}", w),
             Statement::Return(r) => write!(f, "{};", r),
             Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
         }

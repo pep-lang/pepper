@@ -20,6 +20,7 @@ const PAGES: &[(&str, &str)] = &[
     ("array.pep", "Array"),
     ("hash.pep", "HashMap and HashSet"),
     ("iterator.pep", "Iterators"),
+    ("scoped.pep", "Scoped"),
     ("result.pep", "Result"),
     ("atomic.pep", "Atomic"),
     ("io/module.pep", "The io module"),

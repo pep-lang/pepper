@@ -196,7 +196,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::IntLiteral(_)
         | Expression::StringLiteral { .. }
         | Expression::PointerLiteral => {}
-        Expression::MemberRef { lhs, .. } | Expression::ForIterator(lhs) => subst_expr(lhs, aliases, values),
+        Expression::MemberRef { lhs, .. } | Expression::ForIterator(lhs) | Expression::WithEntered(lhs) => subst_expr(lhs, aliases, values),
         Expression::Binary { lhs, rhs, .. } => {
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);

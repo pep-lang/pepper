@@ -590,7 +590,6 @@ test(): int {
 }
 
 #[test]
-#[ignore = "known gap: destructors are not invoked on scope exit under the JIT (observed: destroyed stays 0)"]
 fn destructor_runs() {
     assert_eq!(
         compile_jit_with_runtime(
