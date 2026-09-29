@@ -70,6 +70,16 @@ platform=windows-x64
 tag="llvm-$version"
 asset="llvm-$version-$platform.tar.xz"
 
+# A self-hosted runner keeps the prefix from its last job, and re-downloading
+# and re-extracting it cost about a minute a job. The marker is written only
+# after an extraction succeeds, so a job killed mid-extract leaves no marker and
+# the next one installs afresh. setup-llvm.ps1 still validates the tree below.
+marker="$prefix/.pepper-ci-installed"
+if [ -f "$marker" ]; then
+  echo "LLVM $version already installed at $prefix; skipping download"
+  exec pwsh -File scripts/setup-llvm.ps1 -Llvm "$major"
+fi
+
 echo "Looking for prebuilt $asset in release $tag"
 staging=$(mktemp -d)
 if download_error=$(gh release download "$tag" --pattern "$asset" --dir "$staging" 2>&1); then
@@ -77,6 +87,7 @@ if download_error=$(gh release download "$tag" --pattern "$asset" --dir "$stagin
   mkdir -p "$prefix"
   archive=$(cd "$staging" && pwd)/$asset
   (cd "$prefix" && tar -xf "$archive")
+  touch "$marker"
   rm -rf "$staging"
 else
   rm -rf "$staging"

@@ -63,7 +63,10 @@ jobs:
       # version, because a hardcoded key keeps hitting exactly after a version
       # bump and actions/cache skips its save on an exact hit -- so the new
       # archive would never be cached and every later run would re-download.
+      # Self-hosted runners keep the installed LLVM and the download cache on
+      # disk, so restoring and saving them through actions/cache is pure cost.
       - name: Cache LLVM download
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
           path: ~/AppData/Local/pepper/cache
@@ -75,7 +78,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci-provision-llvm.sh
 
+      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
       - name: Cache cargo registry
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
           path: |
@@ -84,6 +89,17 @@ jobs:
             ~/.cargo/git/db
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
+
+      # Self-hosted runners keep their disk between jobs, but checkout's clean
+      # step deletes target/, so every job rebuilt every dependency from scratch.
+      # Build beside the checkout instead, where the clean cannot reach; cargo
+      # then rebuilds only what changed. One directory per job keeps jobs that
+      # build with different features from invalidating each other. Deleting
+      # it is always safe: the next job just builds from scratch.
+      - name: Use persistent target dir (self-hosted)
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       - name: Build
         run: cargo build --workspace --locked
@@ -155,7 +171,9 @@ jobs:
           PEPPER_LLVM_MAJOR: ${{ matrix.major }}
         run: bash scripts/ci-provision-llvm.sh
 
+      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
       - name: Cache cargo registry
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
           path: |
@@ -164,6 +182,18 @@ jobs:
             ~/.cargo/git/db
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
+
+      # Self-hosted runners keep their disk between jobs, but checkout's clean
+      # step deletes target/, so every job rebuilt every dependency from scratch.
+      # Build beside the checkout instead, where the clean cannot reach; cargo
+      # then rebuilds only what changed. One directory per LLVM major keeps the
+      # matrix legs, which build with different features, from invalidating
+      # each other. Deleting it is always safe: the next job just builds from
+      # scratch.
+      - name: Use persistent target dir (self-hosted)
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-llvm${{ matrix.major }}" >> "$GITHUB_ENV"
 
       # The LLVM version is a cargo feature, so it has to be named here too;
       # setup-llvm.sh prints this exact command when it provisions a non-default
