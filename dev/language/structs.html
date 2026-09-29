@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -326,6 +326,87 @@ most one destructor.</li>
 compiles, with a warning that offers the fix (see
 <a href="compiler-errors.html#deprecations">Deprecations</a>).</p>
 </blockquote>
+<h3 id="implicit-conversions"><a class="header" href="#implicit-conversions">Implicit conversions</a></h3>
+<p>A constructor marked <code>[Implicit]</code> also converts. Wherever a value flows into a
+place whose type is the struct, and the value has the constructor’s parameter
+type, the compiler calls the constructor for you:</p>
+<pre><code class="language-pepper">struct Celsius {
+    var degrees: double;
+
+    # `[Implicit]` lets a `double` become a `Celsius` wherever one is expected.
+    [Implicit]
+    construct(double degrees) {
+        this.degrees = degrees;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    # Without `[Implicit]`, callers write `Label("...")` themselves.
+    construct(String text) {
+        this.text = text;
+    }
+}
+
+describe(t: Celsius): String {
+    return (t.degrees &gt; 30.0) ? "hot" : "mild";
+}
+
+main(): int {
+    assert(describe(35.0) == "hot", "an argument converts");
+    var today: Celsius = 21.5;            # a typed variable converts
+    assert(describe(today) == "mild", "already a Celsius");
+
+    var label = Label("kitchen");         # no conversion: call the constructor
+    assert(label.text == "kitchen", "explicit constructor call");
+
+    var n = 12.0;                         # no slot type: stays a double
+    assert(n == 12.0, "untyped local");
+    return 0;
+}
+</code></pre>
+<p>The standard library uses this for <a href="../reference/io-path.html"><code>io.Path</code></a>,
+which converts from a <code>String</code>, so <code>dir.join("logs")</code> and
+<code>io.File.open("notes.txt")</code> work without writing <code>io.Path(...)</code>, and for
+<a href="../reference/result.html"><code>Error</code></a>, so <code>Result&lt;int&gt;.err("bad input")</code> works.</p>
+<ul>
+<li><strong>Where it applies</strong>: a variable’s initializer when the variable’s type is
+written, an assignment, a function, method or constructor argument
+(operators and <code>a[i] = value</code> included), a call through a function value,
+and a <code>return</code> from a function with a declared return type.</li>
+<li><strong>Where it does not</strong>: the receiver of a method call (<code>"docs".join("x")</code>
+does not turn <code>"docs"</code> into a <code>Path</code>), a <code>var</code> whose type is inferred
+(<code>var n = 12.0;</code> stays a <code>double</code>), and <code>__null</code>, which stays a null
+reference.</li>
+<li><strong>One conversion per value.</strong> The value must already have the
+constructor’s parameter type, or reach it by a widening that loses nothing:
+a smaller integer to a larger one, an integer literal that fits, <code>float</code> to
+<code>double</code>, or a struct to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>.
+Conversions never chain: if <code>Tag</code> converts from <code>Name</code> and <code>Name</code> from
+<code>String</code>, a <code>String</code> does not become a <code>Tag</code>.</li>
+<li><strong>Each conversion is a constructor call</strong>, so it allocates a new object.
+The converted value is a temporary like any constructor call’s result: it
+is released after the call it was passed to (see
+<a href="memory.html">Memory and reference counting</a>).</li>
+<li>Only a constructor that can be called with one argument may be
+<code>[Implicit]</code>: one parameter, or a first parameter followed by parameters
+that all have defaults. It may not convert from the struct itself or, in a
+generic struct, from a bare type parameter (<code>construct(T value)</code>):</li>
+</ul>
+<pre><code class="language-text">main.pep:2:5: error: 'Implicit' constructor of 'Span' must be callable with one argument
+    2 |     [Implicit]
+      |     ^~~~~~~~~~
+</code></pre>
+<p>Conversions are opt-in: a constructor without <code>[Implicit]</code> never runs on its
+own. When a value would fit such a constructor, the type error says so:</p>
+<pre><code class="language-text">main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
+    6 | main(): int { return show("x"); }
+      |                      ^~~~
+main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]
+    3 |     construct(String text) { this.text = text; }
+      |     ^~~~~~~~~
+</code></pre>
 <h2 id="destructors"><a class="header" href="#destructors">Destructors</a></h2>
 <p>A destructor runs when an object is destroyed, which happens when the last
 reference to it goes away. Declare it with <code>destruct</code> and a body, with no

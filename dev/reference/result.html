@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -199,9 +199,11 @@
 <p>The description of what went wrong; empty when none was given.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
-<pre><code class="language-pepper">construct(String message = "")
+<pre><code class="language-pepper">[Implicit] construct(String message = "")
 </code></pre>
 <p>Creates an Error carrying <code>message</code>.</p>
+<p>The constructor is <code>[Implicit]</code>: a <code>String</code> converts to an <code>Error</code>
+wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("bad input")</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>

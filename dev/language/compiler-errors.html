@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -331,7 +331,9 @@ code stopped making sense:</p>
 </code></pre>
 <p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
 a number is never a struct and one struct type is never another, except that
-a struct converts to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>.
+a struct converts to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>,
+and a value converts to a struct whose constructor from its type is
+<a href="structs.html#implicit-conversions"><code>[Implicit]</code></a>.
 The check applies wherever a value flows into a typed place: a variable’s
 initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'

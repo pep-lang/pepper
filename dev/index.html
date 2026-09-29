@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-53472bef.js";
+            window.path_to_searchindex_js = "searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -238,6 +238,10 @@ specialization (<code>larger&lt;int&gt;</code>) or a closure such as <code>(x: i
 can be stored, passed and called through a function type such as
 <code>(int) =&gt; int</code> (see
 <a href="language/function-types.html">function types and closures</a>).</li>
+<li>A constructor marked <code>[Implicit]</code> converts a value into its struct
+wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
+(see <a href="language/structs.html#implicit-conversions">implicit conversions</a>).
+There is no function or method overloading yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, but the compiler does not yet
 check what a closure captures, and there are no mutexes or channels (see

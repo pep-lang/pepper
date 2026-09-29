@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -302,7 +302,9 @@ new object to the parameter does not affect the caller’s variable.
 <a href="memory.html">Memory and reference counting</a> describes exactly how references are
 counted when you pass them.</p>
 <p>Arguments convert to the parameter’s type the same way assignment does, so you
-can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected.</p>
+can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected, and a <code>String</code> where
+a struct with an <a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a>
+from <code>String</code> (such as <code>io.Path</code>) is expected.</p>
 <h2 id="default-parameter-values"><a class="header" href="#default-parameter-values">Default parameter values</a></h2>
 <p>A parameter can have a default value, written <code>= value</code> after its type. A call
 that leaves the argument out gets the default. Put parameters with defaults at

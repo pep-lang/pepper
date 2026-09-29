@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-53472bef.js";
+            window.path_to_searchindex_js = "searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -236,6 +236,10 @@ specialization (<code>larger&lt;int&gt;</code>) or a closure such as <code>(x: i
 can be stored, passed and called through a function type such as
 <code>(int) =&gt; int</code> (see
 <a href="#function-types-and-closures">function types and closures</a>).</li>
+<li>A constructor marked <code>[Implicit]</code> converts a value into its struct
+wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
+(see <a href="#implicit-conversions">implicit conversions</a>).
+There is no function or method overloading yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, but the compiler does not yet
 check what a closure captures, and there are no mutexes or channels (see
@@ -753,9 +757,9 @@ count_file(path: Path): Result&lt;WordCounter&gt; {
 
 main(): int {
     # Write a small file to read back.
-    var dir = Directory.temp().join_str("pepper-word-count");
+    var dir = Directory.temp().join("pepper-word-count");
     Directory.create_all(dir);
-    var path = dir.join_str("poem.txt");
+    var path = dir.join("poem.txt");
     File.write_text(path, "the cat sat on the mat and the dog sat too");
 
     var result = count_file(path);
@@ -770,7 +774,7 @@ main(): int {
     assert(counter.count("sat") == 2, "'sat' appears twice");
     assert(counter.count("bird") == 0, "'bird' does not appear");
 
-    var missing = count_file(dir.join_str("missing.txt"));
+    var missing = count_file(dir.join("missing.txt"));
     assert(missing.is_err(), "a missing file is an error, not a crash");
     print(missing.Error.Message);
 
@@ -804,7 +808,8 @@ names in from the standard library’s <code>io</code> module, which, unlike <co
 <code>Array</code>, must be imported. See <a href="#modules-and-imports">Modules and imports</a>
 and <a href="#visibility">Visibility</a>.</li>
 <li><strong>Files.</strong> <code>Directory.temp()</code> is the system’s temporary directory, and
-<code>join_str</code> adds a name to a <a href="#path"><code>Path</code></a>.
+<code>join</code> adds a name to a <a href="#path"><code>Path</code></a>; the name can be
+a plain <code>String</code>, which converts to a <code>Path</code> implicitly.
 <a href="#file"><code>File</code></a> has helpers that read or write a whole
 file at once: <code>File.write_text</code> and <code>File.read_to_string</code>.</li>
 <li><strong>I/O errors are Results.</strong> <code>File.read_to_string</code> returns a <code>Result</code> whose
@@ -1589,7 +1594,9 @@ new object to the parameter does not affect the caller’s variable.
 <a href="#memory-and-reference-counting">Memory and reference counting</a> describes exactly how references are
 counted when you pass them.</p>
 <p>Arguments convert to the parameter’s type the same way assignment does, so you
-can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected.</p>
+can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected, and a <code>String</code> where
+a struct with an <a href="#implicit-conversions"><code>[Implicit]</code> constructor</a>
+from <code>String</code> (such as <code>io.Path</code>) is expected.</p>
 <h2 id="default-parameter-values"><a class="header" href="#default-parameter-values">Default parameter values</a></h2>
 <p>A parameter can have a default value, written <code>= value</code> after its type. A call
 that leaves the argument out gets the default. Put parameters with defaults at
@@ -2226,6 +2233,87 @@ most one destructor.</li>
 compiles, with a warning that offers the fix (see
 <a href="#deprecations">Deprecations</a>).</p>
 </blockquote>
+<h3 id="implicit-conversions"><a class="header" href="#implicit-conversions">Implicit conversions</a></h3>
+<p>A constructor marked <code>[Implicit]</code> also converts. Wherever a value flows into a
+place whose type is the struct, and the value has the constructor’s parameter
+type, the compiler calls the constructor for you:</p>
+<pre><code class="language-pepper">struct Celsius {
+    var degrees: double;
+
+    # `[Implicit]` lets a `double` become a `Celsius` wherever one is expected.
+    [Implicit]
+    construct(double degrees) {
+        this.degrees = degrees;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    # Without `[Implicit]`, callers write `Label("...")` themselves.
+    construct(String text) {
+        this.text = text;
+    }
+}
+
+describe(t: Celsius): String {
+    return (t.degrees &gt; 30.0) ? "hot" : "mild";
+}
+
+main(): int {
+    assert(describe(35.0) == "hot", "an argument converts");
+    var today: Celsius = 21.5;            # a typed variable converts
+    assert(describe(today) == "mild", "already a Celsius");
+
+    var label = Label("kitchen");         # no conversion: call the constructor
+    assert(label.text == "kitchen", "explicit constructor call");
+
+    var n = 12.0;                         # no slot type: stays a double
+    assert(n == 12.0, "untyped local");
+    return 0;
+}
+</code></pre>
+<p>The standard library uses this for <a href="#path"><code>io.Path</code></a>,
+which converts from a <code>String</code>, so <code>dir.join("logs")</code> and
+<code>io.File.open("notes.txt")</code> work without writing <code>io.Path(...)</code>, and for
+<a href="#result"><code>Error</code></a>, so <code>Result&lt;int&gt;.err("bad input")</code> works.</p>
+<ul>
+<li><strong>Where it applies</strong>: a variable’s initializer when the variable’s type is
+written, an assignment, a function, method or constructor argument
+(operators and <code>a[i] = value</code> included), a call through a function value,
+and a <code>return</code> from a function with a declared return type.</li>
+<li><strong>Where it does not</strong>: the receiver of a method call (<code>"docs".join("x")</code>
+does not turn <code>"docs"</code> into a <code>Path</code>), a <code>var</code> whose type is inferred
+(<code>var n = 12.0;</code> stays a <code>double</code>), and <code>__null</code>, which stays a null
+reference.</li>
+<li><strong>One conversion per value.</strong> The value must already have the
+constructor’s parameter type, or reach it by a widening that loses nothing:
+a smaller integer to a larger one, an integer literal that fits, <code>float</code> to
+<code>double</code>, or a struct to a <a href="#traits-as-types">trait it declares</a>.
+Conversions never chain: if <code>Tag</code> converts from <code>Name</code> and <code>Name</code> from
+<code>String</code>, a <code>String</code> does not become a <code>Tag</code>.</li>
+<li><strong>Each conversion is a constructor call</strong>, so it allocates a new object.
+The converted value is a temporary like any constructor call’s result: it
+is released after the call it was passed to (see
+<a href="#memory-and-reference-counting">Memory and reference counting</a>).</li>
+<li>Only a constructor that can be called with one argument may be
+<code>[Implicit]</code>: one parameter, or a first parameter followed by parameters
+that all have defaults. It may not convert from the struct itself or, in a
+generic struct, from a bare type parameter (<code>construct(T value)</code>):</li>
+</ul>
+<pre><code class="language-text">main.pep:2:5: error: 'Implicit' constructor of 'Span' must be callable with one argument
+    2 |     [Implicit]
+      |     ^~~~~~~~~~
+</code></pre>
+<p>Conversions are opt-in: a constructor without <code>[Implicit]</code> never runs on its
+own. When a value would fit such a constructor, the type error says so:</p>
+<pre><code class="language-text">main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
+    6 | main(): int { return show("x"); }
+      |                      ^~~~
+main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]
+    3 |     construct(String text) { this.text = text; }
+      |     ^~~~~~~~~
+</code></pre>
 <h2 id="destructors"><a class="header" href="#destructors">Destructors</a></h2>
 <p>A destructor runs when an object is destroyed, which happens when the last
 reference to it goes away. Declare it with <code>destruct</code> and a body, with no
@@ -4058,11 +4146,11 @@ read_setting(Path path): String {
 }
 
 main(): int {
-    var dir = Directory.temp().join_str("pepper-results-io-example");
+    var dir = Directory.temp().join("pepper-results-io-example");
     var created = Directory.create_all(dir);
     assert(created.is_ok(), "created the folder");
 
-    var path = dir.join_str("setting.txt");
+    var path = dir.join("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
 
     IoResult&lt;void&gt; written = File.write_text(path, "blue");
@@ -5689,7 +5777,9 @@ code stopped making sense:</p>
 </code></pre>
 <p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
 a number is never a struct and one struct type is never another, except that
-a struct converts to a <a href="#traits-as-types">trait it declares</a>.
+a struct converts to a <a href="#traits-as-types">trait it declares</a>,
+and a value converts to a struct whose constructor from its type is
+<a href="#implicit-conversions"><code>[Implicit]</code></a>.
 The check applies wherever a value flows into a typed place: a variable’s
 initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
@@ -7749,9 +7839,11 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <p>The description of what went wrong; empty when none was given.</p>
 <h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
-<pre><code class="language-pepper">construct(String message = "")
+<pre><code class="language-pepper">[Implicit] construct(String message = "")
 </code></pre>
 <p>Creates an Error carrying <code>message</code>.</p>
+<p>The constructor is <code>[Implicit]</code>: a <code>String</code> converts to an <code>Error</code>
+wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("bad input")</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
@@ -8130,7 +8222,7 @@ the program when it runs.</p>
 <pre><code class="language-pepper">    import io;
 
     main(): int {
-        var path = io.Directory.temp().join_str("greeting.txt");
+        var path = io.Directory.temp().join("greeting.txt");
         assert(io.File.write_text(path, "hello").is_ok(), "write");
         assert(io.File.read_to_string(path).value() == "hello", "read back");
         io.File.remove(path);
@@ -8437,7 +8529,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var p = io.Path("docs").join_str("guide.md");   # "docs/guide.md"
+    var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
     var name = p.file_name();                       # "guide.md"
     var ext = p.extension();                        # "md"
     var dir = p.parent();                           # io.Path("docs")
@@ -8453,10 +8545,13 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 possibly empty.</p>
 <h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
-<pre><code class="language-pepper">construct(String value = "")
+<pre><code class="language-pepper">[Implicit] construct(String value = "")
 </code></pre>
 <p>Creates a path holding <code>value</code> as is: no validation, normalization or
 separator conversion.</p>
+<p>The constructor is <code>[Implicit]</code>: a <code>String</code> (or a string literal)
+converts to a <code>Path</code> wherever a <code>Path</code> is expected, so every API that
+takes a <code>Path</code> also accepts text.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the path’s text; the default, <code>""</code>, is the empty path</li>
@@ -8466,6 +8561,7 @@ separator conversion.</p>
 
     var p = io.Path("/usr/lib");
     var empty = io.Path();   # is_empty() is true
+    var q: io.Path = "docs";   # converted implicitly
 </code></pre>
 <h3 id="static-methods-4"><a class="header" href="#static-methods-4">Static methods</a></h3>
 <h4 id="separator"><a class="header" href="#separator">separator</a></h4>
@@ -8550,23 +8646,20 @@ normalized: <code>a</code> joined with <code>../b</code> is <code>a/../b</code>.
 <ul>
 <li>a new Path; this path is not changed</li>
 </ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>join_str</code></li>
-</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
     var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
     var q = io.Path("a/").join(io.Path("b"));      # "a/b"
     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+    var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 </code></pre>
 <h4 id="join_str"><a class="header" href="#join_str">join_str</a></h4>
-<pre><code class="language-pepper">Path join_str(String other)
+<pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] Path join_str(String other)
 </code></pre>
 <p>Returns this path with the String <code>other</code> appended, exactly like
-<code>join(Path(other))</code> (a separate name because methods do not
-overload).</p>
+<code>join(Path(other))</code>. Deprecated: <code>join</code> accepts a <code>String</code> directly,
+since a <code>String</code> converts to a <code>Path</code> implicitly.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>other</code> — the path text to append</li>
@@ -8582,7 +8675,7 @@ overload).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var so = io.Path("usr").join_str("lib").join_str("x.so");   # "usr/lib/x.so"
+    var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 </code></pre>
 <h4 id="has_root_or_prefix"><a class="header" href="#has_root_or_prefix">has_root_or_prefix</a></h4>
 <pre><code class="language-pepper">bool has_root_or_prefix()
@@ -9735,11 +9828,11 @@ afresh.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var dir = io.Directory.temp().join_str("scratch").join_str("logs");
+    var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
         var d = io.Directory.open(dir).Value;
         var count = d.entries().Value.count();
-        io.Directory.remove_all(io.Directory.temp().join_str("scratch"));
+        io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 </code></pre>
 <h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
@@ -9813,7 +9906,7 @@ directories at the same time.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var r = io.Directory.create_all(io.Path("build").join_str("out").join_str("logs"));
+    var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
 </code></pre>
 <h4 id="remove-3"><a class="header" href="#remove-3">remove</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
@@ -9857,7 +9950,7 @@ Windows a read-only file inside the tree is such a failure
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var tree = io.Directory.temp().join_str("my-scratch");
+    var tree = io.Directory.temp().join("my-scratch");
     var r = io.Directory.remove_all(tree);
     if (r.is_err() &amp;&amp; !r.Error.is_not_found()) {
         print(r.Error.Message);
@@ -9912,7 +10005,7 @@ a root, or <code>.</code> if that call fails.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var scratch = io.Directory.temp().join_str("my-tool");
+    var scratch = io.Directory.temp().join("my-tool");
 </code></pre>
 <h3 id="methods-1-6"><a class="header" href="#methods-1-6">Methods</a></h3>
 <h4 id="entries"><a class="header" href="#entries">entries</a></h4>

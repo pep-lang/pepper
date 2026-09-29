@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -204,7 +204,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var p = io.Path("docs").join_str("guide.md");   # "docs/guide.md"
+    var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
     var name = p.file_name();                       # "guide.md"
     var ext = p.extension();                        # "md"
     var dir = p.parent();                           # io.Path("docs")
@@ -220,10 +220,13 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 possibly empty.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
-<pre><code class="language-pepper">construct(String value = "")
+<pre><code class="language-pepper">[Implicit] construct(String value = "")
 </code></pre>
 <p>Creates a path holding <code>value</code> as is: no validation, normalization or
 separator conversion.</p>
+<p>The constructor is <code>[Implicit]</code>: a <code>String</code> (or a string literal)
+converts to a <code>Path</code> wherever a <code>Path</code> is expected, so every API that
+takes a <code>Path</code> also accepts text.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the path’s text; the default, <code>""</code>, is the empty path</li>
@@ -233,6 +236,7 @@ separator conversion.</p>
 
     var p = io.Path("/usr/lib");
     var empty = io.Path();   # is_empty() is true
+    var q: io.Path = "docs";   # converted implicitly
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="separator"><a class="header" href="#separator">separator</a></h4>
@@ -317,23 +321,20 @@ normalized: <code>a</code> joined with <code>../b</code> is <code>a/../b</code>.
 <ul>
 <li>a new Path; this path is not changed</li>
 </ul>
-<p><strong>See also</strong></p>
-<ul>
-<li><code>join_str</code></li>
-</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
     var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
     var q = io.Path("a/").join(io.Path("b"));      # "a/b"
     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+    var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 </code></pre>
 <h4 id="join_str"><a class="header" href="#join_str">join_str</a></h4>
-<pre><code class="language-pepper">Path join_str(String other)
+<pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] Path join_str(String other)
 </code></pre>
 <p>Returns this path with the String <code>other</code> appended, exactly like
-<code>join(Path(other))</code> (a separate name because methods do not
-overload).</p>
+<code>join(Path(other))</code>. Deprecated: <code>join</code> accepts a <code>String</code> directly,
+since a <code>String</code> converts to a <code>Path</code> implicitly.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>other</code> — the path text to append</li>
@@ -349,7 +350,7 @@ overload).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
 
-    var so = io.Path("usr").join_str("lib").join_str("x.so");   # "usr/lib/x.so"
+    var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 </code></pre>
 <h4 id="has_root_or_prefix"><a class="header" href="#has_root_or_prefix">has_root_or_prefix</a></h4>
 <pre><code class="language-pepper">bool has_root_or_prefix()

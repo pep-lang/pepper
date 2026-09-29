@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-53472bef.js";
+            window.path_to_searchindex_js = "../searchindex-49e29622.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -199,7 +199,7 @@
 <pre><code class="language-pepper">    import io;
 
     main(): int {
-        var path = io.Directory.temp().join_str("greeting.txt");
+        var path = io.Directory.temp().join("greeting.txt");
         assert(io.File.write_text(path, "hello").is_ok(), "write");
         assert(io.File.read_to_string(path).value() == "hello", "read back");
         io.File.remove(path);
