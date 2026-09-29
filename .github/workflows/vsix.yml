@@ -44,11 +44,12 @@ jobs:
         # One native runner per target; the runner's preinstalled rustc
         # matches the host arch, so no cross-compilation is needed.
         # macos-latest is arm64; the free Intel macOS label is
-        # macos-15-intel (macos-14 is itself an arm64 image).
+        # macos-15-intel (macos-14 is itself an arm64 image). The x64
+        # Windows and Linux legs run on the self-hosted pepper-* runners.
         include:
-          - { target: win32-x64, runs-on: windows-latest, exe: ".exe" }
+          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe" }
           - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe" }
-          - { target: linux-x64, runs-on: ubuntu-latest, exe: "" }
+          - { target: linux-x64, runs-on: pepper-linux, exe: "" }
           - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "" }
           - { target: darwin-x64, runs-on: macos-15-intel, exe: "" }
           - { target: darwin-arm64, runs-on: macos-latest, exe: "" }
@@ -58,6 +59,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      # Hosted images ship node; the self-hosted runners may not.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Show toolchain
         run: |
@@ -98,7 +105,7 @@ jobs:
           if-no-files-found: error
 
   package:
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     permissions:
       contents: write
     needs: build

@@ -13,6 +13,11 @@
 # links and runs a program. macOS is kept off the push path because
 # private-repo macOS minutes bill at ten times the Linux rate, not because it
 # is expected to fail; reach it through `platform-test`.
+#
+# Windows and Linux jobs run on self-hosted runners labelled pepper-windows
+# and pepper-linux (a Windows service and a WSL systemd service on the
+# maintainer's machine). The Linux runner has LLVM 18-20 preinstalled and may
+# `sudo apt-get` to add others.
 name: CI
 
 on:
@@ -37,7 +42,7 @@ env:
 
 jobs:
   test:
-    runs-on: windows-latest
+    runs-on: pepper-windows
     # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
     # seconds. 45 leaves room for a slow download without hanging forever.
     timeout-minutes: 45
@@ -94,7 +99,7 @@ jobs:
   # 24.04 currently serves 18, 19 and 20 from its own repositories, and picks up
   # later ones for free as they are published.
   llvm-matrix:
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     timeout-minutes: 10
     outputs:
       majors: ${{ steps.resolve.outputs.majors }}
@@ -135,7 +140,7 @@ jobs:
       fail-fast: false
       matrix:
         major: ${{ fromJSON(needs.llvm-matrix.outputs.majors) }}
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     timeout-minutes: 20
 
     steps:
