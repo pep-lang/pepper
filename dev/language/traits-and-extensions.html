@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b3e16786.js";
+            window.path_to_searchindex_js = "../searchindex-ad824df6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -369,6 +369,11 @@ extend Square with Shape {
 <a href="generics.html#generic-methods">Generic methods</a>). The runtime’s <code>Iterator&lt;T&gt;</code>
 uses this for its <code>map&lt;U&gt;</code> and <code>filter</code> <a href="iteration.html#adapters">adapters</a>,
 which every type that declares <code>Iterator&lt;T&gt;</code> gets.</p>
+<p>A default body sees only what its trait declares: a bare call to one of the
+trait’s methods calls it on <code>this</code>, and any other bare name means what it
+means where the trait is declared (a top-level function or variable), even
+when a conforming type happens to have a method or field of that name. Call
+through <code>this</code> explicitly only for the trait’s own methods.</p>
 <blockquote>
 <p><strong>Known problem:</strong> a default body that uses a string literal does not work
 yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
