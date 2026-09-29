@@ -11,7 +11,9 @@ export trait Describe {
     describe(): String;
 }
 
-export var points_made = 0;
+# A module-scope variable is `const` and thread-safe: change it through
+# an Atomic.
+export const points_made = Atomic<int>(0);
 
 export origin(): Point {
     return make(0, 0);
@@ -26,7 +28,7 @@ make(x: int, y: int): Point {
     var p = Point();
     p.x = x;
     p.y = y;
-    points_made = points_made + 1;
+    points_made.fetch_add(1);
     return p;
 }
 

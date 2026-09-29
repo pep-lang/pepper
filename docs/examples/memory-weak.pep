@@ -1,4 +1,5 @@
-var destroyed = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic<int>(0);
 
 struct Folder {
     var name: String;
@@ -9,7 +10,7 @@ struct Folder {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -25,7 +26,7 @@ struct Document {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 
     String path() {

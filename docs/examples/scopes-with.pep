@@ -1,4 +1,5 @@
-var open_sessions = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const open_sessions = Atomic<int>(0);
 
 # A scope object: enter() hands out what the block works with, and the
 # destructor calls exit() when the last reference goes away.
@@ -6,7 +7,7 @@ struct Session {
     var user: String;
 
     construct(this.user = "") {
-        open_sessions += 1;
+        open_sessions.fetch_add(1);
     }
 
     destruct {
@@ -18,7 +19,7 @@ struct Session {
     }
 
     exit() {
-        open_sessions -= 1;
+        open_sessions.fetch_sub(1);
     }
 }
 
@@ -52,13 +53,13 @@ first_user(): String {
 
 main(): int {
     with (var session = Session("grace")) {
-        assert(open_sessions == 1, "open inside the block");
+        assert(open_sessions.load() == 1, "open inside the block");
         assert(session.user == "grace", "bound to what enter() returned");
     }
-    assert(open_sessions == 0, "closed at the end of the block");
+    assert(open_sessions.load() == 0, "closed at the end of the block");
 
     assert(first_user() == "ada", "the value was returned");
-    assert(open_sessions == 0, "closed on return as well");
+    assert(open_sessions.load() == 0, "closed on return as well");
 
     var hits = 0;
     with (var s = Lookup(Session("linus"))) {

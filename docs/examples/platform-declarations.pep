@@ -4,9 +4,9 @@
 [Target(OS(Windows))] type Handle = __ptr<void>;
 [Target(!OS(Windows))] type Handle = int;
 
-# Module-scope variables.
-[Target(OS(Windows))] var executable_suffix = ".exe";
-[Target(!OS(Windows))] var executable_suffix = "";
+# Module-scope variables (const and thread-safe, like every global).
+[Target(OS(Windows))] const max_path = 260;
+[Target(!OS(Windows))] const max_path = 4096;
 
 # Functions.
 [Target(OS(Windows))]
@@ -46,7 +46,7 @@ main(): int {
     }
     [Target(!OS(Windows))] {
         assert(sizeof<Handle>() == 4, "a descriptor is an int");
-        assert(executable_suffix.size() == 0, "the POSIX variable was kept");
+        assert(max_path == 4096, "the POSIX variable was kept");
     }
     return 0;
 }

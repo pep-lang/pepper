@@ -44,8 +44,8 @@ export make(x: int): Point {
 
 trait HiddenTrait { int hiddenGet(); }
 export trait Getter { int get(); }
-var hidden_count = 1;
-export var shown_count = 2;
+const hidden_count = 1;
+export const shown_count = 2;
 extend Point { int hiddenExt() { return x; } }
 export extend Point with Getter { int get() { return hiddenExt(); } }
 "#;

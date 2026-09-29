@@ -194,9 +194,20 @@ main.pep:1:7: note: 'LIMIT' declared const here
 
 A variable declared outside any function is a module-level (global) variable. It
 exists for the whole run of the program and every function in the file can read
-and assign it. Its initializer can be any expression, including a function call.
-Like other top-level declarations, a global is private to its file unless you
-mark it `export` (see [Visibility](visibility.md)).
+it. Its initializer can be any expression, including a function call, and runs
+before `main`. Like other top-level declarations, a global is private to its
+file unless you mark it `export` (see [Visibility](visibility.md)).
+
+Any function can run on any thread, so every thread can reach a global. It
+must therefore be declared `const` and have a thread-safe type, such as a
+number, an `Atomic<T>`, a `ThreadLocal<T>`, or a `[Shared]` struct (see
+[Module-scope variables](threads.md#module-scope-variables)). A global that
+changes is an `Atomic<T>`:
+
+```pepper
+const max_retries = 3;
+const requests = Atomic<long>(0);   # changed with requests.fetch_add(1)
+```
 
 ## Casting with `as`
 

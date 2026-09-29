@@ -83,6 +83,10 @@ type a short name, and can have type parameters of its own.
 - **Fields.** A field of function type is called like a method:
   `t.op(4)`. Inside the struct, `op(x)` and `this.op(x)` both call it.
 - **Arrays.** `pipeline[1](5)` indexes the array and calls the element.
+- **Module-level variables.** Every module-level variable is `const` (see
+  [Module-scope variables](threads.md#module-scope-variables)), so one whose
+  function changes is an `Atomic`: `handler.load()(1)` calls the current
+  function and `handler.store(square)` replaces it.
 - **Return values.** `pick(true)(5)` calls the function that `pick` returns.
 - **`void` results.** A function without a return value has a function type
   ending in `=> void`, such as `(int) => void`.

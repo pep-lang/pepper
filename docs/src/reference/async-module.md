@@ -21,7 +21,7 @@ values, and `[Shared]` structs such as `Atomic<T>`, `Thread` and
 ```pepper
     import async;
 
-    var hits = Atomic<long>(0);
+    const hits = Atomic<long>(0);
 
     work() {
         hits.fetch_add(1);

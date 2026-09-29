@@ -1,4 +1,5 @@
-var destroyed = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic<int>(0);
 
 struct Person {
     var name: String;
@@ -9,7 +10,7 @@ struct Person {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -22,7 +23,7 @@ main(): int {
         ann.friends.append(bob);
         bob.friends.append(ann);
     }
-    assert(destroyed == 0, "the cycle leaked both objects");
+    assert(destroyed.load() == 0, "the cycle leaked both objects");
 
     # Break the cycle before letting go, and both are destroyed.
     {
@@ -32,6 +33,6 @@ main(): int {
         dan.friends.append(cat);
         dan.friends.clear();    # Dan no longer holds Cat
     }
-    assert(destroyed == 2, "without the cycle, both were destroyed");
+    assert(destroyed.load() == 2, "without the cycle, both were destroyed");
     return 0;
 }

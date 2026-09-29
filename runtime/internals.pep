@@ -40,39 +40,38 @@ export _pep_assert(condition: bool, message: __ptr<char>): void {
 
 # ── Live-allocation counter (leak tests) and trace gate ─────────────────────
 # The live-allocation count, updated atomically because threads allocate
-# concurrently. It lives in a slot made on first use (by the main thread,
-# before any thread is started): a module-scope Atomic<long> would allocate
-# through _pep_malloc itself.
-var _pep_live_allocs_slot: __ptr<long> = __null;
-
-_pep_live_allocs_counter(): __ptr<long> {
-    if (_pep_live_allocs_slot == __null) {
-        _pep_live_allocs_slot = malloc(8);
-        memset(_pep_live_allocs_slot, 0, 8);
-    }
-    return _pep_live_allocs_slot;
+# concurrently. It lives in a raw malloc'd slot: an Atomic<long> would
+# allocate through _pep_malloc itself. The prelude's globals are initialized
+# before any other file's, and this is the first of them, so the slot exists
+# before anything allocates.
+_pep_new_live_allocs_slot(): __ptr<long> {
+    var slot = malloc(8);
+    memset(slot, 0, 8);
+    return slot;
 }
+const _pep_live_allocs_slot: __ptr<long> = _pep_new_live_allocs_slot();
+
 # `getenv` needs a NUL-terminated C string; a Pepper `String` buffer is not
 # guaranteed to be, so build the name in a helper (its c_str() is safe).
 _pep_trace_enabled(): bool {
     var name = "PEP_TRACE";
     return getenv(name.c_str()) != __null;
 }
-var _pep_trace_on = _pep_trace_enabled();
+const _pep_trace_on = _pep_trace_enabled();
 
 export _pep_malloc(size: ulong): __ptr<void> {
     var p = malloc(size);
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
     memset(p, 0, size);
-    __atomic_fetch_add<long>(_pep_live_allocs_counter(), 1);
+    __atomic_fetch_add<long>(_pep_live_allocs_slot, 1);
     return p;
 }
 
 export _pep_free(p: __ptr<void>) {
     if (p != __null) {
         free(p);
-        __atomic_fetch_sub<long>(_pep_live_allocs_counter(), 1);
+        __atomic_fetch_sub<long>(_pep_live_allocs_slot, 1);
     }
 }
 
@@ -83,7 +82,7 @@ export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void
     if (np != __null) {
         # realloc(null, n) is a fresh allocation; the counter must see it.
         if (p == __null && newSize > 0) {
-            __atomic_fetch_add<long>(_pep_live_allocs_counter(), 1);
+            __atomic_fetch_add<long>(_pep_live_allocs_slot, 1);
         }
         if (newSize > prevSize) {
             memset(np + prevSize, 0, newSize - prevSize);
@@ -92,7 +91,7 @@ export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void
     return np;
 }
 export _pep_live_allocs(): long {
-    return __atomic_load<long>(_pep_live_allocs_counter());
+    return __atomic_load<long>(_pep_live_allocs_slot);
 }
 
 ## Prints `message` and aborts the program. It never returns.

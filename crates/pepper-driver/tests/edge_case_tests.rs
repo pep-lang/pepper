@@ -287,14 +287,14 @@ fn void_function() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var g = 0;
+const g = Atomic<int>(0);
 bump(): void {
-    g = g + 5;
+    g.store(g.load() + 5);
 }
 test(): int {
     bump();
     bump();
-    return g - 10;
+    return g.load() - 10;
 }
 "#
         ),
@@ -307,10 +307,10 @@ fn global_variable() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var counter = 1;
+const counter = Atomic<int>(1);
 test(): int {
-    counter += 41;
-    return counter - 42;
+    counter.fetch_add(41);
+    return counter.load() - 42;
 }
 "#
         ),
@@ -446,15 +446,15 @@ fn logical_short_circuit() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var side = 0;
+const side = Atomic<int>(0);
 boom(): bool {
-    side = 1;
+    side.store(1);
     return true;
 }
 test(): int {
     var r = false && boom();
     var s = true || boom();
-    return (r as int) + (s as int) * 10 + side;
+    return (r as int) + (s as int) * 10 + side.load();
 }
 "#
         ),
@@ -468,9 +468,9 @@ fn logical_short_circuit2() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var side = 0;
+const side = Atomic<int>(0);
 boom(): bool {
-    side = 1;
+    side.store(1);
     return true;
 }
 test(): int {
@@ -478,7 +478,7 @@ test(): int {
     if (r) { return -1; }
     var s = true || boom();
     if (!s) { return -2; }
-    return side;
+    return side.load();
 }
 "#
         ),
@@ -592,19 +592,19 @@ fn destructor_runs() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var destroyed = 0;
+const destroyed = Atomic<int>(0);
 struct T {
     int v = 0;
     construct(this.v = 0) {}
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 test(): int {
     {
         var t = T();
     }
-    return destroyed - 1;
+    return destroyed.load() - 1;
 }
 "#
         ),
@@ -620,7 +620,7 @@ fn field_shadows_global() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var v = 100;
+const v = 100;
 struct Box {
     int v = 7;
     peek(): int { return v; }
@@ -1234,7 +1234,7 @@ fn nonconst_global_init() {
         compile_jit_with_runtime(
             r#"
 mk(): int { return 5; }
-var g = mk();
+const g = mk();
 test(): int { return g - 5; }
 "#
         ),
@@ -1244,13 +1244,19 @@ test(): int { return g - 5; }
 
 #[test]
 fn string_global_init() {
-    // String globals are `String(...)` ctor calls (non-constant) — the same
-    // __pep_global_init path; a null global faults on first use.
+    // Struct globals are constructor calls (non-constant), built by the same
+    // __pep_global_init path; a null global faults on first use. The
+    // constructor copies a String, so its init runs String code too.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-var s = "pepper";
-test(): int { return s.length() - 6; }
+[Shared]
+struct Name {
+    const Length: ulong;
+    construct(String text) { Length = text.length(); }
+}
+const s = Name("pepper");
+test(): int { return (s.Length as int) - 6; }
 "#
         ),
         0

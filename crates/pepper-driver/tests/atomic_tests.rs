@@ -297,7 +297,7 @@ fn fetch_add_contention() {
     const STEPS: i64 = 50_000;
     let mut module = build_module(
         r#"
-var counter = Atomic<long>(0);
+const counter = Atomic<long>(0);
 test(): int { return 0; }
 
 add_one(): long {
@@ -341,7 +341,7 @@ fn cas_contention() {
     const STEPS: i64 = 25_000;
     let mut module = build_module(
         r#"
-var counter = Atomic<long>(0);
+const counter = Atomic<long>(0);
 
 # CAS-retry increment: each call wins exactly one step of the counter.
 try_inc(): int {

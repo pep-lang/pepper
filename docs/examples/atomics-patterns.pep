@@ -7,7 +7,7 @@ struct Config {
 }
 
 # A module-scope Atomic that every function can share.
-var next_id = Atomic<long>(0);
+const next_id = Atomic<long>(0);
 
 new_id(): long {
     return next_id.fetch_add(1) + 1;

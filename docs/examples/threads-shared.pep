@@ -11,8 +11,8 @@ struct Settings {
 
 # Atomic<T> of a [Shared] struct: threads read the current settings, and one
 # of them can replace them.
-var current = Atomic<Settings>(Settings(8080, 3));
-var seen = Atomic<long>(0);
+const current = Atomic<Settings>(Settings(8080, 3));
+const seen = Atomic<long>(0);
 
 read_settings() {
     var settings = current.load();

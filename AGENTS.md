@@ -163,7 +163,9 @@ Threads do not change the model. A struct declared `[Shared]` (and every
 function type) steps its counts atomically, like `shared_ptr`'s control
 block; every other struct uses plain increments and must stay on one thread.
 `check_shared_types` requires a `[Shared]` struct's fields to be `const` and
-thread-safe.
+thread-safe. Every module-scope variable, exported or not, is implicitly
+`[Shared]`: any thread can reach it, so it must be `const` and thread-safe
+too (a global that changes is an `Atomic<T>` or a `ThreadLocal<T>`).
 
 `__weak<T>` is `std::weak_ptr<T>`, and the same rules apply to it on the weak
 count: copies acquire, scope exit releases. `__weak_from<T>(t)` is

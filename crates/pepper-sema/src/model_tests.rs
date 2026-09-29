@@ -217,7 +217,7 @@ fn cast_inferred_var_takes_cast_type() {
 
 #[test]
 fn globals_land_in_module_globals() {
-    let module = compile("var counter = 7;\ntest(): int {\n    return counter\n}");
+    let module = compile("const counter = 7;\ntest(): int {\n    return counter\n}");
     assert_eq!(module.globals.len(), 1);
     assert_eq!(module.globals[0].name, "counter");
     assert_eq!(module.globals[0].ty.to_string(), "i32");
@@ -275,13 +275,18 @@ h(): R<u8> { return 0 }
 fn type_alias_chain_expands() {
     let module = compile(
         r#"
+[Shared]
+struct Box<T> {
+    const Value: T;
+    construct(T value) { Value = value; }
+}
 type A = B;
-type B = Result<int, Error>;
-var g: A = 0;
+type B = Box<int>;
+const g: A = Box<int>(0);
 "#,
     );
     assert_eq!(module.globals.len(), 1);
-    assert_eq!(module.globals[0].ty.to_string(), "Result<int, Error>");
+    assert_eq!(module.globals[0].ty.to_string(), "Box<int>");
 }
 
 #[test]
@@ -327,10 +332,11 @@ fn type_alias_value_shadow_not_rewritten() {
     // alias.
     let module = compile(
         r#"
+[Shared]
 struct A { construct() {} m(): int { return 1; } }
 struct B { construct() {} m(): int { return 2; } }
 type S = B;
-var S: A = A();
+const S: A = A();
 main(): int { return S.m(); }
 "#,
     );

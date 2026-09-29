@@ -42,7 +42,9 @@ fn compile_error(source: &str) -> String {
 /// Two shapes whose destructors count into `destroyed` (1 per Square, 10 per
 /// Rect), so a test can tell which concrete destructor ran.
 const SHAPES: &str = r#"
-var destroyed = 0;
+import [ThreadLocal] from async;
+
+const destroyed = Atomic<int>(0);
 
 trait Shape {
     int area();
@@ -55,7 +57,7 @@ trait Shape {
 struct Square {
     int side;
     construct(int side) { this.side = side; }
-    destruct { destroyed = destroyed + 1; }
+    destruct { destroyed.fetch_add(1); }
 }
 
 extend Square with Shape {
@@ -66,7 +68,7 @@ struct Rect {
     int w;
     int h;
     construct(int w, int h) { this.w = w; this.h = h; }
-    destruct { destroyed = destroyed + 10; }
+    destruct { destroyed.fetch_add(10); }
 }
 
 extend Rect with Shape {
@@ -136,17 +138,17 @@ test(): int {
     {
         Shape s = Rect(1, 1);
     }
-    if (destroyed != 10) { return 1; }
+    if (destroyed.load() != 10) { return 1; }
     Shape b = make(1);
     b = make(4);
-    if (destroyed != 11) { return 2; }
+    if (destroyed.load() != 11) { return 2; }
     var h = Holder(Square(1));
     h.shape = b;
-    if (destroyed != 12) { return 3; }
+    if (destroyed.load() != 12) { return 3; }
     h = Holder(Square(2));
-    if (destroyed != 12) { return 4; }
+    if (destroyed.load() != 12) { return 4; }
     b = __null;
-    if (destroyed != 22) { return 5; }
+    if (destroyed.load() != 22) { return 5; }
     return 0;
 }
 "#,
@@ -196,7 +198,7 @@ test(): int {
     make(1);
     make(3);
     var total = make(2).area() + measure(make(4));
-    if (destroyed != 22) { return 1; }
+    if (destroyed.load() != 22) { return 1; }
     return total;
 }
 "#,
@@ -248,12 +250,12 @@ test(): int {
     if (shapes[2].area() != 10) { return 3; }
     Shape removed = shapes.remove_at(0);
     if (removed.area() != 1) { return 4; }
-    if (destroyed != 0) { return 5; }
+    if (destroyed.load() != 0) { return 5; }
     shapes[0] = Square(4);
-    if (destroyed != 1) { return 6; }
+    if (destroyed.load() != 1) { return 6; }
     if (shapes.find(removed) != -1) { return 7; }
     shapes.clear();
-    if (destroyed != 12) { return 8; }
+    if (destroyed.load() != 12) { return 8; }
     return 0;
 }
 "#,
@@ -266,7 +268,9 @@ test(): int {
 fn ternaries_globals_maps_and_function_types() {
     let (result, leaked) = run(&shapes(
         r#"
-var global_shape: Shape = Square(5);
+# A trait value is not thread-safe, so a module-scope one lives in a
+# ThreadLocal (set on this thread, cleared before the leak check).
+const global_shape = ThreadLocal<Shape>();
 
 int apply(f: (Shape) => int, s: Shape) {
     return f(s);
@@ -288,7 +292,9 @@ test(): int {
     Shape t = flag ? Square(2) : Rect(3, 3);
     Shape u = !flag ? Square(2) : Rect(3, 3);
     if (t.area() + u.area() != 13) { return 1; }
-    if (global_shape.area() != 25) { return 2; }
+    global_shape.set(Square(5));
+    if (global_shape.get().area() != 25) { return 2; }
+    global_shape.clear();
     var m = HashMap<String, Shape>();
     m["a"] = Square(3);
     m["b"] = Rect(1, 2);

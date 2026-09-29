@@ -18,12 +18,12 @@ fn error_of(source: &str) -> String {
 }
 
 const NODE: &str = r#"
-var destroyed = 0;
+const destroyed = Atomic<int>(0);
 
 struct Node {
     int Value = 0;
     construct(this.Value = 0) {}
-    destruct { destroyed = destroyed + 1; }
+    destruct { destroyed.fetch_add(1); }
 }
 "#;
 
@@ -47,7 +47,7 @@ test(): int {
         strong = __null;
         n = __null;
         # Destroyed, but the weak reference keeps the memory.
-        if (destroyed != 1) { return -4; }
+        if (destroyed.load() != 1) { return -4; }
         if (!__weak_expired<Node>(w)) { return -5; }
         var gone = __weak_upgrade<Node>(w);
         if (gone != __null) { return -6; }
@@ -79,7 +79,7 @@ test(): int {
         b = c;
         a = __null;
         n = __null;
-        if (destroyed != 1) { return -1; }
+        if (destroyed.load() != 1) { return -1; }
         if (_pep_live_allocs() - before != 1) { return -2; }
     }
     return (_pep_live_allocs() - before) as int;
@@ -92,12 +92,12 @@ test(): int {
 #[test]
 fn weak_field_breaks_a_cycle() {
     let src = r#"
-var freed = 0;
+const freed = Atomic<int>(0);
 
 struct Child {
     __weak<Parent> Parent;
     construct() {}
-    destruct { freed = freed + 1; }
+    destruct { freed.fetch_add(1); }
     int parent_value() {
         var p = __weak_upgrade<Parent>(Parent);
         if (p == __null) { return -1; }
@@ -109,7 +109,7 @@ struct Parent {
     int Value = 42;
     Child Child;
     construct() {}
-    destruct { freed = freed + 10; }
+    destruct { freed.fetch_add(10); }
 }
 
 test(): int {
@@ -121,7 +121,7 @@ test(): int {
         p.Child = c;
         if (c.parent_value() != 42) { return -1; }
     }
-    if (freed != 11) { return -2; }
+    if (freed.load() != 11) { return -2; }
     return (_pep_live_allocs() - before) as int;
 }
 "#;
@@ -131,12 +131,12 @@ test(): int {
 #[test]
 fn weak_to_self_released_in_destructor() {
     let src = r#"
-var ran = 0;
+const ran = Atomic<int>(0);
 
 struct Self {
     __weak<Self> Me;
     construct() {}
-    destruct { ran = ran + 1; }
+    destruct { ran.fetch_add(1); }
 }
 
 test(): int {
@@ -145,7 +145,7 @@ test(): int {
         var s = Self();
         s.Me = __weak_from<Self>(s);
     }
-    if (ran != 1) { return -1; }
+    if (ran.load() != 1) { return -1; }
     return (_pep_live_allocs() - before) as int;
 }
 "#;
@@ -160,7 +160,7 @@ test(): int {
     var before = _pep_live_allocs();
     {
         var w = __weak_from<Node>(Node(3));
-        if (destroyed != 1) { return -1; }
+        if (destroyed.load() != 1) { return -1; }
         if (!__weak_expired<Node>(w)) { return -2; }
     }
     return (_pep_live_allocs() - before) as int;
@@ -175,12 +175,12 @@ fn weak_made_during_construction_does_not_free() {
     // No strong owner exists until the constructor returns: dropping a weak
     // reference then must not free the object.
     let src = r#"
-var upgraded = 0;
+const upgraded = Atomic<int>(0);
 
 struct Early {
     construct() {
         var w = __weak_from<Early>(this);
-        if (__weak_upgrade<Early>(w) != __null) { upgraded = 1; }
+        if (__weak_upgrade<Early>(w) != __null) { upgraded.store(1); }
     }
 }
 
@@ -190,7 +190,7 @@ test(): int {
         var e = Early();
         if (__refcount<Early>(e) != 1) { return -1; }
     }
-    if (upgraded != 0) { return -2; }
+    if (upgraded.load() != 0) { return -2; }
     return (_pep_live_allocs() - before) as int;
 }
 "#;
@@ -244,19 +244,19 @@ test(): int {
 #[test]
 fn weak_struct_in_a_with_block() {
     let src = r#"
-var freed = 0;
+const freed = Atomic<int>(0);
 
 struct Parent {
     String Name;
     Child Kid;
     construct(String name) { Name = name; }
-    destruct { freed = freed + 1; }
+    destruct { freed.fetch_add(1); }
 }
 
 struct Child {
     Weak<Parent> Owner;
     construct(Parent owner) { Owner = Weak<Parent>(owner); }
-    destruct { freed = freed + 1; }
+    destruct { freed.fetch_add(1); }
     int owner_length() {
         with (var parent = Owner) {
             return parent.Name.length() as int;
@@ -278,11 +278,11 @@ test(): int {
         orphan = p.Kid;
     }
     # The cycle is broken: the parent is gone, the child lives on in orphan.
-    if (freed != 1) { return -3; }
+    if (freed.load() != 1) { return -3; }
     if (!orphan.Owner.expired()) { return -4; }
     if (orphan.owner_length() != -1) { return -5; }
     orphan = __null;
-    if (freed != 2) { return -6; }
+    if (freed.load() != 2) { return -6; }
     return (_pep_live_allocs() - before) as int;
 }
 "#;

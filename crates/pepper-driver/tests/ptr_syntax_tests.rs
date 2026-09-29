@@ -119,7 +119,7 @@ fn ptr_struct_field_and_global() {
 struct Holder {
     __ptr<char> data = __null;
 }
-var g: __ptr<void> = __null;
+const g: __ptr<void> = __null;
 test(): int {
     var h = Holder();
     h.data = _pep_malloc(4) as __ptr<char>;

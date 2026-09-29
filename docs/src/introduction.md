@@ -64,7 +64,7 @@ Some that you will meet quickly:
   [function types and closures](language/function-types.md)).
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, but the compiler does not yet
-  check module-scope variables, and there are no mutexes or channels (see
+  check what a closure captures, and there are no mutexes or channels (see
   [threads](language/threads.md#limitations)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a

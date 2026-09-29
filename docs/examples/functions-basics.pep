@@ -12,9 +12,10 @@ int perimeter(int width, int height) {
 
 # A function that returns nothing leaves out the return type
 # (or writes ': void', or 'void' in front).
-var log_count = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const log_count = Atomic<int>(0);
 log(message: String) {
-    log_count += 1;
+    log_count.fetch_add(1);
     print("log: " + message);
 }
 
@@ -32,7 +33,7 @@ main(): int {
 
     log("starting");
     log("done");
-    assert(log_count == 2, "logged twice");
+    assert(log_count.load() == 2, "logged twice");
     return 0;
 }
 

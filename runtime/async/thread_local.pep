@@ -30,7 +30,7 @@ import "sys_windows";
 ## @example
 ##     import async;
 ##
-##     var calls = async.ThreadLocal<int>();
+##     const calls = async.ThreadLocal<int>();
 ##
 ##     count_call() {
 ##         calls.set(calls.get() + 1);

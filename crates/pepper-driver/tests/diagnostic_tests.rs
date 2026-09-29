@@ -12,10 +12,18 @@ fn repo_root() -> PathBuf {
 /// Compile `source` as `main.pep` (with the runtime) through codegen and
 /// return the rendered error, with the temp directory stripped from paths.
 fn error_of(test: &str, source: &str) -> String {
+    error_of_files(test, source, &[])
+}
+
+/// [`error_of`], with `others` (name, source) written beside `main.pep`.
+fn error_of_files(test: &str, source: &str, others: &[(&str, &str)]) -> String {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_diagnostic_{}", test));
     std::fs::create_dir_all(&dir).unwrap();
+    for (name, other) in others {
+        std::fs::write(dir.join(name), other).unwrap();
+    }
     let main_path = dir.join("main.pep");
     std::fs::write(&main_path, source).unwrap();
     let options = pepper_driver::Options::parse_from(["pepper", main_path.to_str().unwrap()]);
@@ -427,6 +435,117 @@ fn shared_struct_field_not_thread_safe() {
          main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
          \x20   1 | struct Plain { int X; }\n\
          \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn module_scope_variable_not_const() {
+    // A private global is as reachable from every thread as an exported one.
+    assert_eq!(
+        error_of("global_not_const", "var hits = 0;\nmain(): int { return hits; }\n"),
+        "main.pep:1:5: error: module-scope variable 'hits' must be 'const'\n\
+         \x20   1 | var hits = 0;\n\
+         \x20     |     ^~~~\n\
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+    );
+}
+
+#[test]
+fn c_style_module_scope_variable_not_const() {
+    assert_eq!(
+        error_of("c_style_global_not_const", "long total = 0;\nmain(): int { return 0; }\n"),
+        "main.pep:1:6: error: module-scope variable 'total' must be 'const'\n\
+         \x20   1 | long total = 0;\n\
+         \x20     |      ^~~~~\n\
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+    );
+}
+
+#[test]
+fn exported_variable_not_const() {
+    assert_eq!(
+        error_of("exported_not_const", "export var hits = 0;\nmain(): int { return hits; }\n"),
+        "main.pep:1:12: error: module-scope variable 'hits' must be 'const'\n\
+         \x20   1 | export var hits = 0;\n\
+         \x20     |            ^~~~\n\
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+    );
+}
+
+#[test]
+fn module_scope_variable_not_thread_safe() {
+    assert_eq!(
+        error_of(
+            "global_not_thread_safe",
+            "struct Plain { var x: int; }\nconst origin: Plain = Plain();\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\n\
+         \x20   2 | const origin: Plain = Plain();\n\
+         \x20     |               ^~~~~\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain { var x: int; }\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn exported_variable_not_thread_safe() {
+    assert_eq!(
+        error_of(
+            "exported_not_thread_safe",
+            "struct Plain { var x: int; }\nexport const origin: Plain = Plain();\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:2:22: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\n\
+         \x20   2 | export const origin: Plain = Plain();\n\
+         \x20     |                      ^~~~~\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain { var x: int; }\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn module_scope_variable_with_inferred_type_not_thread_safe() {
+    // No written type: the error points at the name.
+    let error = error_of("global_inferred", "const greeting = \"hi\";\nmain(): int { return 0; }\n");
+    assert!(
+        error.starts_with(
+            "main.pep:1:7: error: module-scope variable 'greeting' has type 'String', which is not thread-safe\n\
+             \x20   1 | const greeting = \"hi\";\n\
+             \x20     |       ^~~~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+}
+
+#[test]
+fn module_scope_trait_value_not_thread_safe() {
+    // A trait value may hold any struct, so it is never thread-safe.
+    assert_eq!(
+        error_of(
+            "global_trait_value",
+            "trait Shape { int area(); }\n[Shared]\nstruct Square { construct() {} }\nextend Square with Shape { int area() { return 1; } }\n\n\nconst unit: Shape = Square();\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:7:13: error: module-scope variable 'unit' has type 'Shape', which is not thread-safe\n\
+         \x20   7 | const unit: Shape = Square();\n\
+         \x20     |             ^~~~~"
+    );
+}
+
+#[test]
+fn reexported_variable_not_const() {
+    // The error is at the declaration, whichever name other files use.
+    assert_eq!(
+        error_of_files(
+            "reexported_not_const",
+            "import \"lib\";\nmain(): int { return total; }\n",
+            &[("lib.pep", "var count = 0;\nexport count as total;\n")]
+        ),
+        "lib.pep:1:5: error: module-scope variable 'count' must be 'const'\n\
+         \x20   1 | var count = 0;\n\
+         \x20     |     ^~~~~\n\
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
     );
 }
 

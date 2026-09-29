@@ -193,9 +193,9 @@ fn logical_operators_short_circuit() {
     // The right side must not run when the left decides the result.
     assert_eq!(
         jit(r#"
-var calls = 0;
+const calls = Atomic<int>(0);
 bump(result: bool): bool {
-    calls += 1;
+    calls.fetch_add(1);
     return result;
 }
 test(): int {
@@ -206,7 +206,7 @@ test(): int {
     if (!(bump(false) or bump(true))) { return 103; }
     var both = bump(true) and bump(false);
     if (both) { return 104; }
-    return calls;
+    return calls.load();
 }
 "#),
         6
@@ -464,7 +464,7 @@ fn block_locals_go_out_of_scope() {
     // A block's `var` shadows an outer name only inside the block.
     assert_eq!(
         jit(r#"
-var g = 5;
+const g = 5;
 test(): int {
     { var g = 1; }
     var h = 7;

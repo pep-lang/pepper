@@ -1,16 +1,25 @@
-var counter = 7;
-var name = "pepper";
+# Module-scope variables are `const` and thread-safe: a number, an
+# Atomic<T>, or a [Shared] struct.
+[Shared]
+struct Label {
+    const Length: ulong;
+    construct(String text) { Length = text.length(); }
+}
+
+const limit = 7;
+const counter = Atomic<int>(7);
+const name = Label("pepper");
 
 main(): int {
     # Read a global.
-    if (counter != 7) { return -1; }
+    if (limit != 7 || counter.load() != 7) { return -1; }
 
-    # Write through a global, then read it back.
-    counter += 3;
-    if (counter != 10) { return -2; }
+    # Change state through a global, then read it back.
+    counter.fetch_add(3);
+    if (counter.load() != 10) { return -2; }
 
-    # String globals keep their value.
-    if (name.length() != 6) { return -3; }
+    # Struct globals built by a constructor keep their value.
+    if (name.Length != 6) { return -3; }
 
     return 0;
 }

@@ -35,7 +35,7 @@ so destroy one only after the threads that used it have exited.
 ```pepper
     import async;
 
-    var calls = async.ThreadLocal<int>();
+    const calls = async.ThreadLocal<int>();
 
     count_call() {
         calls.set(calls.get() + 1);

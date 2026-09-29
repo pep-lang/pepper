@@ -1,13 +1,15 @@
 # Declaring variables: inferred, explicitly typed, constant, and module-level.
 
-# Module-level variables (globals) live for the whole program.
-var request_count = 0;
-long total_bytes = 0;
-var greeting: String = "hello";
+# Module-level variables (globals) live for the whole program. Any thread
+# can reach them, so they are const and of a thread-safe type: a number, or
+# an Atomic for state that changes.
+const max_requests = 10;
+const request_count = Atomic<int>(0);
+const total_bytes = Atomic<long>(0);
 
 record(bytes: int) {
-    request_count += 1;
-    total_bytes += bytes;
+    request_count.fetch_add(1);
+    total_bytes.fetch_add(bytes);
 }
 
 main(): int {
@@ -34,9 +36,9 @@ main(): int {
 
     record(100);
     record(250);
-    assert(request_count == 2, "two requests recorded");
-    assert(total_bytes == 350, "350 bytes in total");
-    assert(greeting == "hello", "globals are visible in every function");
+    assert(request_count.load() == 2, "two requests recorded");
+    assert(total_bytes.load() == 350, "350 bytes in total");
+    assert(request_count.load() < max_requests, "globals are visible in every function");
 
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 && scale == 1.5, "floating point");

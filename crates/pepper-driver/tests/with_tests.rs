@@ -18,8 +18,8 @@ fn error_of(source: &str) -> String {
 
 /// A scope object that counts enters and exits, created fresh per block.
 const SESSION: &str = r#"
-var entered = 0;
-var exited = 0;
+const entered = Atomic<int>(0);
+const exited = Atomic<int>(0);
 
 struct Session {
     int Id = 0;
@@ -31,12 +31,12 @@ struct Session {
     }
 
     Session enter() {
-        entered = entered + 1;
+        entered.fetch_add(1);
         return this;
     }
 
     exit() {
-        exited = exited + 1;
+        exited.fetch_add(1);
     }
 }
 "#;
@@ -51,11 +51,11 @@ test(): int {
     var id = 0;
     with (var s = Session(7)) {
         id = s.Id;
-        if (exited != 0) { return -1; }
+        if (exited.load() != 0) { return -1; }
     }
     if (id != 7) { return -2; }
-    if (entered != 1) { return -3; }
-    if (exited != 1) { return -4; }
+    if (entered.load() != 1) { return -3; }
+    if (exited.load() != 1) { return -4; }
     return 0;
 }
 "#
@@ -90,10 +90,10 @@ loop_exits(): int {
 
 test(): int {
     if (early() != 1) { return -1; }
-    if (exited != 1) { return -2; }
+    if (exited.load() != 1) { return -2; }
     if (loop_exits() != 3) { return -3; }
-    if (exited != 4) { return -4; }
-    if (entered != 4) { return -5; }
+    if (exited.load() != 4) { return -4; }
+    if (entered.load() != 4) { return -5; }
     return 0;
 }
 "#
@@ -138,21 +138,21 @@ test(): int {
 #[test]
 fn with_void_enter_binds_nothing() {
     let src = r#"
-var depth = 0;
+const depth = Atomic<int>(0);
 
 struct Lock {
     construct() {}
     destruct { this.exit(); }
-    enter() { depth = depth + 1; }
-    exit() { depth = depth - 1; }
+    enter() { depth.fetch_add(1); }
+    exit() { depth.fetch_sub(1); }
 }
 
 test(): int {
     var seen = 0;
     with (Lock()) {
-        seen = depth;
+        seen = depth.load();
     }
-    return seen * 10 + depth - 10;
+    return seen * 10 + depth.load() - 10;
 }
 "#;
     assert_eq!(run(src), 0);
@@ -170,7 +170,7 @@ test(): int {
     var keep = Session(2);
     with (var s = keep) {
     }
-    if (exited != 0) { return -1; }
+    if (exited.load() != 0) { return -1; }
     return 0;
 }
 "#

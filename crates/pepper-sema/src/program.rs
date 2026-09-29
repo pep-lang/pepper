@@ -93,6 +93,31 @@ impl Program {
         self.warnings().iter().map(|w| w.render(self)).collect::<Vec<_>>().join("\n")
     }
 
+    /// The order in which the files' module-scope variables are
+    /// initialized: every file after the files it imports, and every file
+    /// after the prelude. Prelude files go in reverse load order, since the
+    /// runtime is loaded after the forced imports that build on it. Import
+    /// cycles are broken at the file first reached.
+    pub fn initialization_order(&self) -> Vec<usize> {
+        fn visit(file: usize, files: &[ProgramFile], visited: &mut [bool], order: &mut Vec<usize>) {
+            if visited[file] {
+                return;
+            }
+            visited[file] = true;
+            for &import in files[file].imports.iter().flatten() {
+                visit(import, files, visited, order);
+            }
+            order.push(file);
+        }
+        let mut visited = vec![false; self.files.len()];
+        let mut order = vec![];
+        let prelude = (0..self.files.len()).rev().filter(|&i| self.files[i].prelude);
+        for file in prelude.chain(0..self.files.len()) {
+            visit(file, &self.files, &mut visited, &mut order);
+        }
+        order
+    }
+
     /// The files as the visibility check sees them.
     pub fn source_files(&self) -> Vec<SourceFile<'_>> {
         self.files

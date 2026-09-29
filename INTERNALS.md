@@ -259,7 +259,13 @@ with no extension, and `module_name()` is the output's stem.
   gives a best-effort static type for operator resolution and print
   conversion.
 - `Module::merge` concatenates vectors. **There is one global namespace**:
-  modules exist only up to `modules::link`.
+  modules exist only up to `modules::link`. The driver's `compiler::merge`
+  then orders `module.globals` by `Program::initialization_order`: the
+  prelude first (in reverse load order, so the runtime precedes the forced
+  imports built on it), then every file after the files it imports. Globals
+  are initialized in that order, so an initializer may use an imported
+  file's globals, and the runtime's (`_pep_live_allocs_slot`, which every
+  allocation counts into) exist before any other initializer runs.
 
 ### 2.5 Platform filters (`passes/platform.rs`)
 
@@ -353,7 +359,7 @@ several passes run more than once on purpose.
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
-| final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). |
+| final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -390,7 +396,8 @@ unique. This lets tests compile concurrently on separate threads.
    sema has already cloned the concrete specializations.
 2. **`emit_globals`.** Module-scope variables become LLVM globals. A
    constant initializer is set directly. Other initializers go into
-   `__pep_global_init`, registered in `llvm.global_ctors`.
+   `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
+   `module.globals` (see `Program::initialization_order`).
 3. **Codegen.** `codegen_struct` (patched ctor plus methods, mangled as
    `Struct.method` with an implicit `this` parameter 0; static methods have
    no `this`) and `codegen_function`. Then `module.verify()`.
@@ -869,11 +876,6 @@ compiles the code but cannot run it. Run it for real with the
 
 ## 13. Known limitations and sharp edges
 
-- **Module-scope variables are not thread-checked.** `check_shared_types`
-  checks `[Shared]` structs only. Any thread can reach any global, so a
-  non-thread-safe global (a `String`, an `Array`, a plain struct) used from
-  two threads races on its reference count. Requiring globals to be
-  thread-safe is the missing half of the model.
 - **Closure captures are not thread-checked.** `check_shared_types`
   treats every function type as thread-safe, but a capturing closure's
   function value holds its captures, which may be `String`s or other

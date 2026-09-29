@@ -1,10 +1,11 @@
-var destroyed = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic<int>(0);
 
 struct Tracked {
     var name: String;
     construct(this.name = "") {}
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -22,15 +23,15 @@ main(): int {
     {
         var a = Tracked("a");
     }
-    assert(destroyed == 1, "a was destroyed at the end of its block");
+    assert(destroyed.load() == 1, "a was destroyed at the end of its block");
 
     # 2. While another reference exists, the object stays alive.
     var b = Tracked("b");
     var also_b = b;
     b = Tracked("b2");          # b lets go of the first object...
-    assert(destroyed == 1, "...but also_b still holds it");
+    assert(destroyed.load() == 1, "...but also_b still holds it");
     also_b = b;                 # the last reference moves away
-    assert(destroyed == 2, "the first object is destroyed now");
+    assert(destroyed.load() == 2, "the first object is destroyed now");
 
     # 3. Fields and containers hold references too.
     var holder = Holder();
@@ -38,21 +39,21 @@ main(): int {
         var c = Tracked("c");
         holder.item = c;
     }
-    assert(destroyed == 2, "holder.item keeps c alive after its scope");
+    assert(destroyed.load() == 2, "holder.item keeps c alive after its scope");
     holder = Holder();          # the old Holder dies and releases c
-    assert(destroyed == 3, "releasing the holder released its field");
+    assert(destroyed.load() == 3, "releasing the holder released its field");
 
     var list = Array<Tracked>();
     list.append(Tracked("d"));
-    assert(destroyed == 3, "the array holds d");
+    assert(destroyed.load() == 3, "the array holds d");
     list.clear();
-    assert(destroyed == 4, "clearing the array released d");
+    assert(destroyed.load() == 4, "clearing the array released d");
 
     # 4. Returned objects belong to the caller; unused results are
     #    destroyed right away.
     var e = make("e");
-    assert(destroyed == 4, "e is alive in main");
+    assert(destroyed.load() == 4, "e is alive in main");
     make("temporary");
-    assert(destroyed == 5, "a result nobody keeps is destroyed immediately");
+    assert(destroyed.load() == 5, "a result nobody keeps is destroyed immediately");
     return 0;
 }

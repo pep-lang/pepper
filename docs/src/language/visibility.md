@@ -16,7 +16,8 @@ You can export every kind of top-level declaration:
 - type aliases
 - traits
 - extensions
-- module-scope variables
+- module-scope variables, which are always `const` and thread-safe (see
+  [Module-scope variables](threads.md#module-scope-variables))
 
 Here is a library file with a mix of exported and private declarations, and a
 program that uses it:
@@ -30,7 +31,7 @@ program that uses it:
 ```
 
 `main.pep` can call `at`, `origin`, and `norm_of`, use `Point` and `Points` as
-types, and read `points_made`. It cannot use `make` or call `p.norm()`. Trying
+types, and read the counter in `points_made`, an exported `const` `Atomic<int>`. It cannot use `make` or call `p.norm()`. Trying
 to is an error that tells you how to fix it:
 
 ```pepper
@@ -46,8 +47,8 @@ main(): int {
 main.pep:4:13: error: 'make' is private to lib.pep; declare it with 'export' to use it from another file
     4 |     var q = make(1, 2);
       |             ^~~~
-lib.pep:25:1: note: declared here
-   25 | make(x: int, y: int): Point {
+lib.pep:27:1: note: declared here
+   27 | make(x: int, y: int): Point {
       | ^~~~
 ```
 
@@ -128,8 +129,8 @@ main(): int { return make(1); }
 main.pep:3:1: error: private 'make' is also declared in lib.pep; top-level names must be unique across files
     3 | make(x: int): int { return x; }
       | ^~~~
-lib.pep:25:1: note: also declared here
-   25 | make(x: int, y: int): Point {
+lib.pep:27:1: note: also declared here
+   27 | make(x: int, y: int): Point {
       | ^~~~
 ```
 

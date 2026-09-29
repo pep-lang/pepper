@@ -17,8 +17,9 @@ pick(squared: bool): (int) => int {
     return negate;
 }
 
-# A module-level function variable.
-var handler = increment;
+# A module-level function variable. Every module-level variable is const;
+# an Atomic lets it change.
+const handler = Atomic<(int) => int>(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine<T> = (T, T) => T;
@@ -32,8 +33,8 @@ fold(values: int[], combine: Combine<int>, start: int): int {
 }
 
 # A function that returns nothing has the return type void.
-var events = 0;
-record(n: int) { events += n; }
+const events = Atomic<int>(0);
+record(n: int) { events.fetch_add(n); }
 
 main(): int {
     var t = Transform();
@@ -56,9 +57,9 @@ main(): int {
     var chosen = pick(false);
     assert(chosen(5) == -5, "call a stored returned function");
 
-    assert(handler(1) == 2, "global function value");
-    handler = square;
-    assert(handler(3) == 9, "reassigned global");
+    assert(handler.load()(1) == 2, "global function value");
+    handler.store(square);
+    assert(handler.load()(3) == 9, "replaced global");
 
     var numbers = Array<int>();
     numbers.append(1);
@@ -69,6 +70,6 @@ main(): int {
     var callback: (int) => void = record;
     callback(2);
     callback(5);
-    assert(events == 7, "void function values");
+    assert(events.load() == 7, "void function values");
     return 0;
 }

@@ -65,8 +65,11 @@ fn assert_runs(name: &str, source: &str) -> String {
 const THREAD_PROGRAM: &str = r#"
 import async;
 
-var ran = Atomic<long>(0);
-var names_ok = Atomic<long>(0);
+const ran = Atomic<long>(0);
+const names_ok = Atomic<long>(0);
+# The runtime's globals are initialized before this file's, so an
+# initializer may already use the async module.
+const initializing_thread = async.Thread.current();
 
 work() {
     var me = async.Thread.current();
@@ -106,6 +109,7 @@ run_threads() {
 main(): int {
     var main_thread = async.Thread.current();
     assert(main_thread.name() == "main", "main thread name");
+    assert(initializing_thread.id() == main_thread.id(), "initializers run on the main thread");
     assert(async.Thread.current().id() == main_thread.id(), "current() is stable");
     assert(!main_thread.is_joinable(), "main thread cannot be joined");
 
@@ -137,10 +141,10 @@ struct Tracker {
     }
 }
 
-var released = Atomic<long>(0);
-var counter = async.ThreadLocal<int>();
-var tracker = async.ThreadLocal<Tracker>();
-var sum = Atomic<long>(0);
+const released = Atomic<long>(0);
+const counter = async.ThreadLocal<int>();
+const tracker = async.ThreadLocal<Tracker>();
+const sum = Atomic<long>(0);
 
 work() {
     assert(!counter.is_set(), "a new thread starts without a value");
@@ -207,8 +211,8 @@ struct Config {
     construct(this.Port = 0) {}
 }
 
-var config = Config(8080);
-var total = Atomic<long>(0);
+const config = Config(8080);
+const total = Atomic<long>(0);
 
 copy_references() {
     var i = 0;
@@ -231,6 +235,40 @@ main(): int {
     }
     assert(total.load() == 400000, "every copy saw the object");
     assert(__refcount<Config>(config) == 1, "the count is back to the global's own reference");
+    return 0;
+}
+"#;
+
+/// Exported module-scope variables are implicitly shared: `const` and
+/// thread-safe (a number, an `Atomic`, a `[Shared]` struct), so threads may
+/// use them directly.
+const EXPORTED_GLOBALS_PROGRAM: &str = r#"
+import async;
+
+[Shared]
+struct Limits {
+    const Step: long;
+    construct(this.Step = 1) {}
+}
+
+export const rounds = 50000;
+export const limits = Limits(2);
+export const hits = Atomic<long>(0);
+
+bump() {
+    var i = 0;
+    while (i < rounds) {
+        hits.fetch_add(limits.Step);
+        i = i + 1;
+    }
+}
+
+main(): int {
+    var a = async.Thread.spawn(bump);
+    var b = async.Thread.spawn(bump);
+    a.join();
+    b.join();
+    assert(hits.load() == 200000, "both threads updated the exported Atomic");
     return 0;
 }
 "#;
@@ -282,12 +320,18 @@ fn shared_counts_are_atomic() {
     assert_runs("shared_counts", SHARED_COUNTS_PROGRAM);
 }
 
+#[test]
+fn exported_globals_are_shared() {
+    assert_runs("exported_globals", EXPORTED_GLOBALS_PROGRAM);
+}
+
 fn all_programs() -> Vec<(&'static str, &'static str)> {
     vec![
         ("threads", THREAD_PROGRAM),
         ("thread_local", THREAD_LOCAL_PROGRAM),
         ("cpus", CPUS_PROGRAM),
         ("shared_counts", SHARED_COUNTS_PROGRAM),
+        ("exported_globals", EXPORTED_GLOBALS_PROGRAM),
         ("closure_body", CLOSURE_BODY_PROGRAM),
     ]
 }

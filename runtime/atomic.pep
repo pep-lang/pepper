@@ -20,7 +20,7 @@ import "internals";
 ##
 ## `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
 ## be used from several threads at once: pass the Atomic around (or keep it
-## in a global) to share the value between threads. A struct `T` must be
+## in a `const` global) to share the value between threads. A struct `T` must be
 ## thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
 ##
 ## @typeParam T the type of the stored value

@@ -6,8 +6,8 @@
 [Target(OS(Windows))] type Handle = long;
 [Target(!OS(Windows))] type Handle = int;
 
-[Target(OS(Windows))] var platform_code = 1;
-[Target(!OS(Windows))] var platform_code = 2;
+[Target(OS(Windows))] const platform_code = 1;
+[Target(!OS(Windows))] const platform_code = 2;
 
 main(): int {
     Handle h = 0;

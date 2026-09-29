@@ -16,7 +16,7 @@
 ## @example
 ##     import async;
 ##
-##     var hits = Atomic<long>(0);
+##     const hits = Atomic<long>(0);
 ##
 ##     work() {
 ##         hits.fetch_add(1);

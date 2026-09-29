@@ -389,10 +389,10 @@ test(): int { return (sizeof<Handle>() * 10 + sizeof<Other>()) as int; }
 #[test]
 fn target_selects_module_variable() {
     let src = r#"
-[Target(!OS(Windows))] var code = 2;
-[Target(OS(Windows))] var code = 1;
-[Target(OS(Windows))] var other = 3;
-[Target(!OS(Windows))] var other = 4;
+[Target(!OS(Windows))] const code = 2;
+[Target(OS(Windows))] const code = 1;
+[Target(OS(Windows))] const other = 3;
+[Target(!OS(Windows))] const other = 4;
 test(): int { return code * 10 + other; }
 "#;
     // Opposite declaration orders, as in `target_selects_type_alias`.
@@ -403,7 +403,7 @@ test(): int { return code * 10 + other; }
 fn target_on_alias_and_variable_is_validated_when_dropped() {
     for src in [
         "[Target(OS(Plan9))] type H = int;\ntest(): int { return 0; }",
-        "[Target(OS(Plan9))] var v = 1;\ntest(): int { return 0; }",
+        "[Target(OS(Plan9))] const v = 1;\ntest(): int { return 0; }",
     ] {
         let ast = pepper_parser::parser::parse_source("test.pep", src).expect("parse error");
         let mut module: SemaModule = build(&ast).expect("build");

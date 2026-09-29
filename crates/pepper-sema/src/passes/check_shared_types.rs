@@ -13,7 +13,11 @@
 //!   responsibility), a function type, a `[Shared]` struct, or a weak
 //!   reference to one.
 //!
-//! Every other struct is not thread-safe. The `const` rule is checked on the
+//! Every other struct is not thread-safe.
+//!
+//! Every module-scope variable, exported or not, is implicitly shared: any
+//! function can hand it to any thread, so it follows the same two rules as a
+//! field of a `[Shared]` struct. The `const` rule is checked on the
 //! declaration (generic bases included); the type rule on concrete structs,
 //! so a generic shared struct is checked per specialization
 //! (`Atomic<String>` is an error, `Atomic<int>` is not) and the error points
@@ -127,6 +131,43 @@ fn not_shared_note(diagnostic: Diagnostic, ty: &TypeName, module: &Module) -> Di
 
 pub fn check_shared_types(module: &mut Module) {
     let module: &Module = module;
+    if !check_shared_structs(module) {
+        return;
+    }
+    check_globals(module);
+}
+
+/// Module-scope variables must be `const` and thread-safe, like the fields
+/// of a `[Shared]` struct.
+fn check_globals(module: &Module) {
+    for global in &module.globals {
+        if !global.is_const {
+            crate::errors::report(
+                Diagnostic::error(format!("module-scope variable '{}' must be 'const'", global.name))
+                    .at(global.loc)
+                    .with_note(
+                        "every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'",
+                        None,
+                    ),
+            );
+            return;
+        }
+        let Some(offender) = unsafe_part(&global.ty, module) else { continue };
+        let loc = [global.type_loc, global.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+        let diagnostic = Diagnostic::error(format!(
+            "module-scope variable '{}' has type '{}', which is not thread-safe",
+            global.name,
+            global.ty.display()
+        ))
+        .at(loc);
+        crate::errors::report(not_shared_note(diagnostic, &offender, module));
+        return;
+    }
+}
+
+/// Every `[Shared]` struct's fields must be `const` and thread-safe. Returns
+/// whether they all are.
+fn check_shared_structs(module: &Module) -> bool {
     for st in module.structs.iter().filter(|st| st.is_shared()) {
         let fields = st.field_members.iter().filter(|f| f.kind == Kind::Field && !f.name.starts_with("__"));
         let is_generic_base = st.name == st.ty.name && st.ty.is_generic();
@@ -143,7 +184,7 @@ pub fn check_shared_types(module: &mut Module) {
                             None,
                         ),
                 );
-                return;
+                return false;
             }
             if is_generic_base {
                 continue;
@@ -168,7 +209,8 @@ pub fn check_shared_types(module: &mut Module) {
                 .at(field_loc)
             };
             crate::errors::report(not_shared_note(diagnostic, &offender, module));
-            return;
+            return false;
         }
     }
+    true
 }

@@ -42,6 +42,9 @@ worker.join();
 Capture only thread-safe values (numbers, `Atomic<T>`, `[Shared]` structs):
 the compiler does not check a closure's captures yet (see Limitations).
 
+Every module-scope variable is `const` and thread-safe, so any thread may
+use one (see [below](#module-scope-variables)).
+
 The [Thread reference](../reference/async-thread.md) documents every method.
 
 ## Processor counts
@@ -127,15 +130,51 @@ note: threads change a shared struct's state through a thread-safe member such a
 
 `Thread`, `ThreadLocal<T>` and `Atomic<T>` are `[Shared]` themselves.
 
+### Module-scope variables
+
+Every module-scope variable is implicitly shared, exported or not: any
+function can use it, and any function can run on any thread. So it follows
+the same two rules as a field of a `[Shared]` struct:
+
+- **It must be `const`.** To change the value, give it a thread-safe type such
+  as `Atomic<T>`, or a `ThreadLocal<T>` for a value per thread.
+- **It must have a thread-safe type** from the list above. A `String`, an
+  `Array`, a struct that is not `[Shared]`, or a trait value cannot be a
+  module-scope variable; keep it in a local, or in a `ThreadLocal<T>`.
+
+```pepper
+const max_workers = 8;                  # a number
+const jobs_done = Atomic<long>(0);      # changed with fetch_add
+const settings = Settings(8080, 3);     # a [Shared] struct
+const scratch = ThreadLocal<String>();  # a String per thread
+```
+
+A variable that breaks a rule is reported at its name or type:
+
+```text
+main.pep:1:5: error: module-scope variable 'hits' must be 'const'
+    1 | var hits = 0;
+      |     ^~~~
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'
+```
+
+```text
+main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
+    2 | const origin: Plain = Plain();
+      |               ^~~~~
+main.pep:1:8: note: 'Plain' is not declared [Shared]
+    1 | struct Plain { var x: int; }
+      |        ^~~~~
+```
+
+Module-scope variables are initialized before `main` runs, in the order they
+are declared, and each file's after those of the files it imports and of the
+runtime. So an initializer may use the variables of the files it imports.
+
 ## Limitations
 
 Thread safety is not complete yet:
 
-- **Module-scope variables are not checked.** Every thread can reach every
-  module-scope variable, and the compiler does not yet require them to be
-  thread-safe. Only use thread-safe variables, such as an `Atomic<T>` or a
-  `[Shared]` struct, from more than one thread. A `String` or `Array` used
-  from two threads at once can corrupt memory.
 - There are no mutexes, condition variables or channels yet. Coordinate
   threads with `Atomic<T>` and `join()`.
 - **Closure captures are not checked.** Every function type counts as

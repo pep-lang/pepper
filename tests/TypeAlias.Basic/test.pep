@@ -8,7 +8,7 @@ struct Box {
     construct(this.v = 0) {}
 }
 
-var global_alias_value: I = 3;
+const global_alias_value: I = 3;
 
 main(): int {
     # Non-generic alias in a local.

@@ -1,4 +1,5 @@
-var closed = 0;
+# A module-scope counter: const, and changed through an Atomic.
+const closed = Atomic<int>(0);
 
 struct Connection {
     var name: String;
@@ -8,16 +9,16 @@ struct Connection {
     # The destructor runs once, when the last reference to the object goes
     # away. Use it to release whatever the object holds.
     destruct {
-        closed += 1;
+        closed.fetch_add(1);
     }
 }
 
 main(): int {
     {
         var c = Connection("db");
-        assert(closed == 0, "still in use");
+        assert(closed.load() == 0, "still in use");
     }
     # `c` went out of scope at the closing brace.
-    assert(closed == 1, "the destructor ran at the end of the block");
+    assert(closed.load() == 1, "the destructor ran at the end of the block");
     return 0;
 }

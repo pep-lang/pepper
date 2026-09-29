@@ -30,6 +30,8 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 
 /// Check `program` and merge its files, in load order, into one module. The
 /// module's source map holds every file, so `FileId(i)` is `program.files[i]`.
+/// Its globals are in initialization order (see
+/// [`Program::initialization_order`]).
 pub fn merge(program: &Program) -> Result<SemaModule, String> {
     program.check()?;
     let mut module = SemaModule::default();
@@ -40,6 +42,13 @@ pub fn merge(program: &Program) -> Result<SemaModule, String> {
         let built = build_file(&file.module, FileId(i as u32)).map_err(|d| module.sources.render(&d))?;
         module.merge(built);
     }
+    // Globals are initialized in declaration order: put each file's after
+    // those of the files it depends on, so an initializer may use them.
+    let mut rank = vec![0; program.files.len()];
+    for (position, file) in program.initialization_order().into_iter().enumerate() {
+        rank[file] = position;
+    }
+    module.globals.sort_by_key(|global| rank.get(global.loc.file.0 as usize).copied().unwrap_or(0));
     Ok(module)
 }
 

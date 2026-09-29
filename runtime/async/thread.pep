@@ -36,15 +36,15 @@ export type ThreadId = ulong;
 export type ThreadBody = () => void;
 
 # The next id to hand out.
-var _async_next_id = Atomic<ulong>(1);
+const _async_next_id = Atomic<ulong>(1);
 
 # The current thread's `Thread`, set by the entry point of spawned threads and
 # on first use by `Thread.current()` everywhere else.
-var _async_current = ThreadLocal<Thread>();
+const _async_current = ThreadLocal<Thread>();
 
 # The operating system's identity of the thread that ran the program's
 # initializers (the main thread), to name it "main" in `Thread.current()`.
-var _async_main_os_thread = _async_sys_os_thread();
+const _async_main_os_thread = _async_sys_os_thread();
 
 ## An operating-system thread.
 ##
@@ -63,7 +63,7 @@ var _async_main_os_thread = _async_sys_os_thread();
 ## @example
 ##     import async;
 ##
-##     var total = Atomic<long>(0);
+##     const total = Atomic<long>(0);
 ##
 ##     add_ten() {
 ##         total.fetch_add(10);

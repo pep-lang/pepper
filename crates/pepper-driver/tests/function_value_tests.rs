@@ -165,12 +165,12 @@ test(): int {
 #[test]
 fn module_scope_function_value() {
     let src = format!("{}{}", FUNCTIONS, r#"
-var handler = square;
+const handler = Atomic<(int) => int>(square);
 
 test(): int {
-    var before = handler(3);
-    handler = negate;
-    return before + handler(3);
+    var before = handler.load()(3);
+    handler.store(negate);
+    return before + handler.load()(3);
 }
 "#);
     assert_eq!(run(&src), (6, 0));
@@ -220,14 +220,14 @@ test(): int {
 #[test]
 fn void_function_values() {
     let src = r#"
-var counter = 0;
-bump(by: int) { counter = counter + by; }
+const counter = Atomic<int>(0);
+bump(by: int) { counter.fetch_add(by); }
 
 test(): int {
     var f: (int) => void = bump;
     f(2);
     f(5);
-    return counter;
+    return counter.load();
 }
 "#;
     assert_eq!(run(src), (7, 0));
