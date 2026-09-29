@@ -317,75 +317,28 @@ impl<'a> Lifter<'a> {
         let frame = self.frames.pop().expect("frame");
         self.level -= 1;
 
-        let n = CLOSURES.with(|c| {
-            let n = c.get();
-            c.set(n + 1);
-            n
-        });
-        let base = format!("{}{}", CLOSURE_PREFIX, n);
-        let ty = if self.ctx.generics.is_empty() {
-            TypeName::new(&base)
-        } else {
-            TypeName::with_args(&base, self.ctx.generics.iter().map(|g| TypeName::new(&g.name)).collect())
-        };
+        let (base, ty) = closure_name(&self.ctx.generics);
         let loc = literal.loc;
 
-        // Fields and constructor arguments: the captured values, then `this`.
-        let mut fields = vec![
-            field(crate::passes::function_types::INVOKE_FIELD, TypeName::void_ptr(), Some(Expression::MethodAddress(CALL_METHOD.to_string())), loc),
-            field(crate::passes::function_types::DESTROY_FIELD, TypeName::void_ptr(), Some(Expression::MethodAddress("__dtor".to_string())), loc),
-        ];
+        // Captured values, then `this`.
+        let mut captures = vec![];
         let mut args = vec![];
         for &id in &frame.captures {
             let var = &self.vars[id];
-            fields.push(field(&var.name, var.ty.clone(), None, loc));
+            captures.push(field(&var.name, var.ty.clone(), None, loc));
             args.push(Expression::SymbolRef { id: var.name.clone(), ty: TypeName::auto(), loc });
         }
         if frame.uses_this {
             if let Some(this_ty) = &self.ctx.this_ty {
-                fields.push(field(THIS_FIELD, this_ty.clone(), None, loc));
+                captures.push(field(THIS_FIELD, this_ty.clone(), None, loc));
                 args.push(if self.level == 0 { Expression::ThisRef } else { Self::this_ref(loc) });
             }
         }
-        let ctor_params: Vec<VariableDef> = fields[2..]
-            .iter()
-            .map(|f| VariableDef { name: format!("this.{}", f.name), kind: Kind::Param, default: None, ..f.clone() })
-            .collect();
-
         let signature = TypeName::function_type(
             literal.ty.clone(),
             literal.parameters.iter().map(|p| p.ty.clone()).collect(),
         );
-        let mut constructor = empty_function(&ty.to_string(), ty.clone(), &base);
-        constructor.parameters = ctor_params;
-        constructor.loc = loc;
-        let call = FunctionDef {
-            name: CALL_METHOD.to_string(),
-            ty: literal.ty,
-            generic_params: vec![],
-            parameters: literal.parameters,
-            body: Some(literal.body),
-            parent: Some(base.clone()),
-            is_static: false,
-            is_indexer: false,
-            is_generic_func: false,
-            attributes: vec![],
-            loc,
-        };
-        self.lifted.push(StructDef {
-            name: base.clone(),
-            ty: ty.clone(),
-            generic_params: self.ctx.generics.clone(),
-            field_members: fields,
-            method_members: vec![call],
-            constructor,
-            destructor: empty_function("__dtor", TypeName::void(), &base),
-            acquire: empty_function("__acquire", TypeName::void(), &base),
-            release: empty_function("__release", TypeName::void(), &base),
-            traits: vec![],
-            attributes: vec![],
-            loc,
-        });
+        self.lifted.push(closure_struct(&base, &ty, &self.ctx.generics, captures, literal.parameters, literal.ty, literal.body, loc));
         *expr = Expression::MakeClosure {
             value: Box::new(Expression::FunctionCall { function: ty.to_string(), args, loc }),
             closure: ty.to_string(),
@@ -409,7 +362,78 @@ impl<'a> Lifter<'a> {
     }
 }
 
-fn field(name: &str, ty: TypeName, default: Option<Expression>, loc: Loc) -> VariableDef {
+/// A fresh closure struct name, and its type over `generics`.
+pub(crate) fn closure_name(generics: &[GenericParam]) -> (String, TypeName) {
+    let n = CLOSURES.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    });
+    let base = format!("{}{}", CLOSURE_PREFIX, n);
+    let ty = if generics.is_empty() {
+        TypeName::new(&base)
+    } else {
+        TypeName::with_args(&base, generics.iter().map(|g| TypeName::new(&g.name)).collect())
+    };
+    (base, ty)
+}
+
+/// The struct a closure becomes (see the module docs): the function-type
+/// head, one field per captured value (`captures`, initialized by the
+/// constructor in order), and `__call` running `body`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn closure_struct(
+    base: &str,
+    ty: &TypeName,
+    generics: &[GenericParam],
+    captures: Vec<VariableDef>,
+    parameters: Vec<VariableDef>,
+    ret: TypeName,
+    body: Block,
+    loc: Loc,
+) -> StructDef {
+    let mut fields = vec![
+        field(crate::passes::function_types::INVOKE_FIELD, TypeName::void_ptr(), Some(Expression::MethodAddress(CALL_METHOD.to_string())), loc),
+        field(crate::passes::function_types::DESTROY_FIELD, TypeName::void_ptr(), Some(Expression::MethodAddress("__dtor".to_string())), loc),
+    ];
+    fields.extend(captures);
+    let ctor_params: Vec<VariableDef> = fields[2..]
+        .iter()
+        .map(|f| VariableDef { name: format!("this.{}", f.name), kind: Kind::Param, default: None, ..f.clone() })
+        .collect();
+    let mut constructor = empty_function(&ty.to_string(), ty.clone(), base);
+    constructor.parameters = ctor_params;
+    constructor.loc = loc;
+    let call = FunctionDef {
+        name: CALL_METHOD.to_string(),
+        ty: ret,
+        generic_params: vec![],
+        parameters,
+        body: Some(body),
+        parent: Some(base.to_string()),
+        is_static: false,
+        is_indexer: false,
+        is_generic_func: false,
+        attributes: vec![],
+        loc,
+    };
+    StructDef {
+        name: base.to_string(),
+        ty: ty.clone(),
+        generic_params: generics.to_vec(),
+        field_members: fields,
+        method_members: vec![call],
+        constructor,
+        destructor: empty_function("__dtor", TypeName::void(), base),
+        acquire: empty_function("__acquire", TypeName::void(), base),
+        release: empty_function("__release", TypeName::void(), base),
+        traits: vec![],
+        attributes: vec![],
+        loc,
+    }
+}
+
+pub(crate) fn field(name: &str, ty: TypeName, default: Option<Expression>, loc: Loc) -> VariableDef {
     VariableDef {
         name: name.to_string(),
         ty,

@@ -456,3 +456,19 @@ fn function_pointer_undeclared() {
          \x20     |                                ^~~~"
     );
 }
+
+#[test]
+fn method_of_this_stored_in_a_field() {
+    assert_eq!(
+        error_of(
+            "method_cycle",
+            "struct Widget {\n    int size;\n    () => int measure;\n    area(): int { return size; }\n    setup() { measure = this.area; }\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:5:15: error: storing a method of 'this' in field 'measure' of 'this' creates a reference cycle that is never freed\n\
+         \x20   5 |     setup() { measure = this.area; }\n\
+         \x20     |               ^~~~~~~\n\
+         main.pep:5:30: note: the method value captures 'this' here; capture a 'Weak' reference to it in a closure instead\n\
+         \x20   5 |     setup() { measure = this.area; }\n\
+         \x20     |                              ^~~~"
+    );
+}

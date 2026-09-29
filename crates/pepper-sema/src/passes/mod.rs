@@ -28,6 +28,7 @@ pub mod check_bindings;
 pub mod lower_with_blocks;
 pub mod weak_types;
 pub mod closures;
+pub mod function_references;
 pub mod convert_to_traits;
 
 use apply_extensions::apply_extensions;
@@ -102,6 +103,10 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(synthesize_function_types(module));
 
     // final pass
+    // Methods, constructors and generic functions used as values, once every
+    // type is known; before `release_field_refs`, which releases a bound
+    // method's receiver.
+    step!(function_references::reference_functions(module));
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist

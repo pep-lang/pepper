@@ -56,12 +56,12 @@ maps and sets, atomics, threads, and file-system access. That is enough to write
 programs, but expect gaps.
 Some that you will meet quickly:
 
-- Functions are values: a named function or a closure such as
-  `(x: int) => x * 2` can be stored, passed and called through a function
-  type such as `(int) => int` (see
-  [function types and closures](language/function-types.md)). Methods,
-  constructors and generic functions cannot be named as values yet; wrap one
-  in a closure instead.
+- Functions are values: a named function, a method (`p.norm`,
+  `Point.norm`), a constructor (`Point`), a generic function's
+  specialization (`larger<int>`) or a closure such as `(x: int) => x * 2`
+  can be stored, passed and called through a function type such as
+  `(int) => int` (see
+  [function types and closures](language/function-types.md)).
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, but the compiler does not yet
   check module-scope variables, and there are no mutexes or channels (see

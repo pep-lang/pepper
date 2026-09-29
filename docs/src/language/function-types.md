@@ -3,8 +3,8 @@
 Functions in Pepper are values. You can store a function in a variable, a
 field or an array, pass it to another function, and return it. This lets you
 choose behavior at run time: a sort order, a callback, a step in a pipeline.
-A function value is either a named function or a closure, an anonymous
-function written where it is used.
+A function value is a named function, a method, a constructor, or a closure:
+an anonymous function written where it is used.
 
 ## Function types
 
@@ -35,6 +35,40 @@ function's type. Calling a function value calls the function:
 - A function-typed variable can be reassigned to any function of the same type.
 - A parameter of function type, such as `f: (int) => int`, lets the caller pass
   in the behavior. Generic functions can take function parameters too.
+
+## Methods, constructors and generic functions
+
+Methods, constructors and specializations of generic functions are values
+too:
+
+```pepper
+{{#include ../../examples/function-types-references.pep}}
+```
+
+| Written | Type | Calls |
+|---|---|---|
+| `p.norm` | `() => int` | `p.norm()`, on the object `p` referred to when the value was made |
+| `Point.norm` | `(Point) => int` | `norm` on the object passed as the first argument |
+| `Point.origin` (a `static` method) | `() => Point` | `Point.origin()` |
+| `Point` | `(int, int) => Point` | the constructor |
+| `Box<int>` | `(int) => Box<int>` | the constructor of `Box<int>` |
+| `larger<int>` | `(int, int) => int` | the specialization `larger<int>` |
+
+- **Bound methods.** `p.norm` keeps a reference to the object, like a closure
+  `() => p.norm()` that captured `p`, so the object lives as long as the
+  value does. The expression before the `.` is evaluated once, when the value
+  is made. Inside a method, write `this.norm`; a bare `norm` is not a value.
+  Storing `this.norm` in a field of `this` would be a reference cycle, and is
+  an error, as for [closures](#this-in-methods).
+- **Traits and extensions.** A method declared in an
+  [extension](traits-and-extensions.md) works the same way, and so does a
+  method of a trait-typed value (`shape.area`), which calls through the trait.
+- **Generic functions** need their type arguments: `larger<int>`, not
+  `larger`.
+- **A type with a constructor that takes no arguments.** `Box<int>` on its
+  own names the constructor only when the constructor needs at least one
+  argument; otherwise it is a call, `Box<int>()`. The same goes for a generic
+  function whose parameters all have defaults.
 
 ## Storing and returning functions
 
@@ -169,7 +203,9 @@ hides the function inside its scope. Inside a function with a parameter named
 A function value is a reference, like a struct value, and follows the same
 reference-counting rules (see [Memory and reference counting](memory.md)).
 Referring to a named function allocates nothing: every reference to `square`
-shares one static function object.
+shares one static function object. A method, constructor or generic function
+value allocates one small object, like a closure; a bound method's object
+holds a reference to its receiver.
 
 Creating a closure allocates one object holding the captured values, like
 constructing a struct. Copying the closure adds a reference to that object,
@@ -177,12 +213,12 @@ and when the last reference goes, the object releases what it captured.
 
 ## What is not supported yet
 
-- **Generic functions, methods, constructors and `extern` functions** cannot be
-  referenced as values. Naming a generic function without a call reports
-  `use of undeclared identifier`, and naming a method without a call
-  (`var f = s.get;`) reports `no member named 'get' in 'S'`. To use one of these
-  as a value, write a named free function that calls it, or a closure:
-  `(x: int) => s.get(x)`.
+- **Generic functions without type arguments and `extern` functions** cannot
+  be referenced as values. `larger` alone is not a value even where the
+  expected type would pick `larger<int>`. To use an `extern` function as a
+  value, wrap it in a closure: `(x: int) => abs(x)`.
+- **A bare method name inside a method** (`var f = norm;`) is not a value;
+  write `this.norm`.
 - **Parameter types from generic calls.** A closure's parameter types come
   from a slot whose type is known where the closure is written. Passing
   `(x) => x + 1` to a generic function whose parameter is `(T) => T` does not

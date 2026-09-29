@@ -294,7 +294,9 @@ by `closures::sync_closures`, which `resolve_implicit_types` runs in its
 fixpoint loop: parameter and return types from the function type of the slot
 the closure flows into, capture field types from the constructor arguments,
 and each `MakeClosure`'s type from its `__call`. `closures::check_closures`
-reports what is still `auto` before `check_function_types`.
+reports what is still `auto` before `check_function_types`. Methods, constructors and
+generic function specializations used as values become closure structs too,
+late, in `function_references` (see the pass table).
 
 Then `struct_body::apply` runs `resolve_type_aliases`, so no alias
 survives into later stages. Then, for each struct:
@@ -345,6 +347,7 @@ several passes run more than once on purpose.
 | 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. |
 | loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions` | Repeats until the counts of structs and functions stop growing (specializing exposes new uses). Bounded because a self-nesting generic never converges. |
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
+| final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
