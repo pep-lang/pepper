@@ -1,6 +1,8 @@
 pub mod builder;
 pub mod model;
+pub mod modules;
 pub mod passes;
+pub mod program;
 pub(crate) mod static_type;
 pub mod struct_body;
 pub mod symbols;
@@ -14,3 +16,4 @@ pub use passes::transform_pass;
 pub use passes::platform::{apply_platform_filters, with_simulated_host};
 pub use type_name::TypeName;
 pub use visibility::{check_visibility, SourceFile, VisibilityError, VisibilityErrorKind};
+pub use modules::{FileScope, ModuleError, ProgramFile};

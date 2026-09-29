@@ -15,7 +15,7 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Write `lib.pep` and `main.pep` (which `use`s lib) to a fresh directory
+/// Write `lib.pep` and `main.pep` (which imports lib) to a fresh directory
 /// and run sema over them, with the runtime.
 fn compile(test: &str, lib: &str, main: &str) -> Result<(), String> {
     // chdir so runtime discovery resolves like the CLI.
@@ -24,7 +24,7 @@ fn compile(test: &str, lib: &str, main: &str) -> Result<(), String> {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("lib.pep"), lib).unwrap();
     let main_path = dir.join("main.pep");
-    std::fs::write(&main_path, format!("use \"lib\";\n{}", main)).unwrap();
+    std::fs::write(&main_path, format!("import \"lib\";\n{}", main)).unwrap();
     let options = pepper_driver::Options::parse_from(["pepper", main_path.to_str().unwrap()]);
     pepper_driver::compiler::compile(&options, "main").map(|_| ())
 }

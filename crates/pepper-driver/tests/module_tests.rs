@@ -1,0 +1,1148 @@
+//! Modules and imports through the driver's compile path: a folder holding a
+//! `module.pep` is a module; `import m [as q]`, `import [x as y] from m`,
+//! `import "file" [as q]`, and `export x as y` bind and rewrite names before
+//! the files are merged. Each test writes a file tree, compiles it with the
+//! runtime, and JIT-runs its `test` entry.
+//!
+//! `import m` finds modules on the search paths only, so the harness passes
+//! `-I deps` and writes every module folder a test lists at its top level
+//! (`geo/module.pep`, `geo/impl.pep`) under `deps/`. Other files stay where
+//! the test puts them, next to `main.pep`.
+
+use clap::Parser;
+use pepper_codegen::CodeGenerator;
+use std::path::PathBuf;
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
+}
+
+/// Write `files` (path, text) under a fresh directory named for `test`, then
+/// compile `main.pep` there.
+fn compile(test: &str, files: &[(&str, &str)]) -> Result<pepper_sema::model::Module, String> {
+    compile_with(test, files, &[])
+}
+
+/// Write `files` under a fresh directory for `test`: top-level module folders
+/// go under `deps/`. Returns the directory.
+fn write_tree(test: &str, files: &[(&str, &str)]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("pepper_modules_{}", test));
+    let _ = std::fs::remove_dir_all(&dir);
+    let is_module = |top: &str| files.iter().any(|(p, _)| *p == format!("{}/module.pep", top));
+    // A top-level folder listed as `./name/...` is local, not a dependency.
+    for (path, text) in files {
+        let path = match path.split_once('/') {
+            // `./name/...` stays next to main.pep: a local module folder.
+            _ if path.starts_with("./") => dir.join(&path[2..]),
+            Some((top, _)) if is_module(top) => dir.join("deps").join(path),
+            _ => dir.join(path),
+        };
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    std::fs::create_dir_all(dir.join("deps")).unwrap();
+    dir
+}
+
+/// `compile`, with extra command-line arguments.
+fn compile_with(test: &str, files: &[(&str, &str)], args: &[&str]) -> Result<pepper_sema::model::Module, String> {
+    // chdir so runtime discovery resolves like the CLI.
+    std::env::set_current_dir(repo_root()).unwrap();
+    let dir = write_tree(test, files);
+    let main_path = dir.join("main.pep");
+    let deps = dir.join("deps");
+    let mut argv = vec!["pepper", main_path.to_str().unwrap(), "-I", deps.to_str().unwrap()];
+    argv.extend_from_slice(args);
+    let options = pepper_driver::Options::parse_from(argv);
+    pepper_driver::compiler::compile(&options, "main")
+}
+
+fn run(test: &str, files: &[(&str, &str)]) -> i32 {
+    run_with(test, files, &[])
+}
+
+fn run_with(test: &str, files: &[(&str, &str)], args: &[&str]) -> i32 {
+    let mut module = compile_with(test, files, args).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.jit_execute(&mut module, "test").expect("jit")
+}
+
+fn error(test: &str, files: &[(&str, &str)]) -> String {
+    match compile(test, files) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    }
+}
+
+/// A module: `module.pep` exports some of its own declarations and
+/// re-exports from a file of the same module.
+const GEOMETRY: &[(&str, &str)] = &[
+    (
+        "geometry/module.pep",
+        r#"
+import "shapes";
+
+export struct Point { var x: int; var y: int; }
+export make(x: int, y: int): Point {
+    var p = Point();
+    p.x = x;
+    p.y = y;
+    return p;
+}
+secret(): int { return 1000; }
+export secret as revealed;
+export area as rect_area;
+export Box;
+"#,
+    ),
+    (
+        "geometry/shapes.pep",
+        r#"
+export area(w: int, h: int): int { return w * h + helper(); }
+export struct Box<T> { var value: T; }
+helper(): int { return 0; }
+"#,
+    ),
+];
+
+fn with_geometry<'a>(main: &'a str) -> Vec<(&'a str, &'a str)> {
+    let mut files: Vec<(&str, &str)> = GEOMETRY.to_vec();
+    files.push(("main.pep", main));
+    files
+}
+
+#[test]
+fn bare_module_import_is_qualified_by_module_name() {
+    let main = r#"
+import geometry;
+test(): int {
+    var p: geometry.Point = geometry.make(3, 4);
+    return p.x * 10 + p.y;
+}
+"#;
+    assert_eq!(run("bare", &with_geometry(main)), 34);
+}
+
+#[test]
+fn module_import_as_alias() {
+    let main = r#"
+import geometry as g;
+test(): int {
+    var p = g.make(1, 2);
+    var b = g.Box<int>();
+    b.value = g.rect_area(2, 5);
+    return p.y + b.value + g.revealed();
+}
+"#;
+    assert_eq!(run("alias", &with_geometry(main)), 1012);
+}
+
+#[test]
+fn symbol_list_import_binds_local_names() {
+    let main = r#"
+import [make, Point as Pt, rect_area as area, revealed] from geometry;
+test(): int {
+    var p: Pt = make(2, 3);
+    return area(p.x, p.y) + revealed();
+}
+"#;
+    assert_eq!(run("list", &with_geometry(main)), 1006);
+}
+
+#[test]
+fn file_import_brings_exports_unqualified_and_as_qualifies() {
+    let files = [
+        ("util.pep", "export twice(x: int): int { return x * 2; }\nexport var base = 5;"),
+        ("more.pep", "export thrice(x: int): int { return x * 3; }"),
+        ("main.pep", "import \"util\";\nimport \"more\" as m;\ntest(): int { return twice(base) + m.thrice(1); }"),
+    ];
+    assert_eq!(run("file", &files), 13);
+}
+
+#[test]
+fn locals_and_parameters_shadow_imports() {
+    let main = r#"
+import geometry as g;
+import [rect_area as area] from geometry;
+calc(area: int): int { return area; }
+test(): int {
+    var g = 7;
+    return calc(g) + area(1, 1);
+}
+"#;
+    assert_eq!(run("shadow", &with_geometry(main)), 8);
+}
+
+#[test]
+fn files_of_a_module_may_import_each_other() {
+    let files = [
+        ("pair/module.pep", "import \"a\";\nexport ping as start;"),
+        ("pair/a.pep", "import \"b\";\nexport ping(n: int): int { return n == 0 ? 0 : pong(n - 1) + 1; }"),
+        ("pair/b.pep", "import \"a\";\nexport pong(n: int): int { return n == 0 ? 0 : ping(n - 1) + 1; }"),
+        ("main.pep", "import pair;\ntest(): int { return pair.start(6); }"),
+    ];
+    assert_eq!(run("cycle", &files), 6);
+}
+
+#[test]
+fn file_exports_are_not_module_exports() {
+    // `shapes.pep` exports `area`, but only `module.pep`'s exports and
+    // re-exports are the module's (it re-exports `area` as `rect_area`).
+    let err = error("not_module_export", &with_geometry("import geometry;\ntest(): int { return geometry.area(1, 2); }"));
+    assert!(err.contains("'area' is not exported by 'geometry'"), "{}", err);
+}
+
+#[test]
+fn private_symbol_is_not_importable() {
+    let err = error("private_import", &with_geometry("import [secret] from geometry;\ntest(): int { return secret(); }"));
+    assert!(err.contains("'secret' is not exported by module 'geometry'"), "{}", err);
+}
+
+#[test]
+fn another_files_export_needs_an_import() {
+    // `main.pep` imports geometry, whose module file imports shapes; that does
+    // not make shapes' exports visible to main.
+    let err = error("not_imported", &with_geometry("import geometry;\ntest(): int { return area(1, 2); }"));
+    assert!(err.contains("'area' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn unknown_module_and_file_are_reported_at_the_import() {
+    let err = error("unknown", &[("main.pep", "import nowhere;\nimport \"missing\";\ntest(): int { return 0; }")]);
+    assert!(err.contains("main.pep:1:8: cannot find module 'nowhere'"), "{}", err);
+    assert!(err.contains("main.pep:2:8: cannot find \"missing.pep\" or the module folder \"missing\" next to this file"), "{}", err);
+}
+
+#[test]
+fn qualifier_must_name_an_imported_module() {
+    let err = error("bad_qualifier", &with_geometry("test(): int { var p: geometry.Point = 0; return 0; }"));
+    assert!(err.contains("'geometry' is not an imported module"), "{}", err);
+}
+
+#[test]
+fn import_may_not_redeclare_a_local_name() {
+    let err = error(
+        "redeclare",
+        &with_geometry("import [make] from geometry;\nmake(): int { return 0; }\ntest(): int { return 0; }"),
+    );
+    assert!(err.contains("'make' is imported but also declared in this file"), "{}", err);
+}
+
+#[test]
+fn re_export_of_unknown_symbol_is_rejected() {
+    let err = error("bad_reexport", &[("main.pep", "export nothing as something;\ntest(): int { return 0; }")]);
+    assert!(err.contains("cannot export 'nothing'"), "{}", err);
+}
+
+#[test]
+fn runtime_prelude_needs_no_import() {
+    let main = "test(): int { var s: String = \"abc\"; return s.length() as int; }";
+    assert_eq!(run("prelude", &[("main.pep", main)]), 3);
+}
+
+#[test]
+fn modules_may_not_export_the_same_name() {
+    // One namespace: `a.f` and `b.f` would both resolve to one declaration.
+    let files = [
+        ("a/module.pep", "export f(): int { return 1; }"),
+        ("b/module.pep", "export f(): int { return 2; }"),
+        ("main.pep", "import a;\nimport b;\ntest(): int { return a.f() * 10 + b.f(); }"),
+    ];
+    let err = error("duplicate_export", &files);
+    assert!(err.contains("exported 'f' is also declared in"), "{}", err);
+}
+
+#[test]
+fn export_may_not_repeat_a_runtime_name() {
+    let err = error("runtime_duplicate", &[("main.pep", "export struct String { }\ntest(): int { return 0; }")]);
+    assert!(err.contains("exported 'String' is also declared in"), "{}", err);
+}
+
+#[test]
+fn a_local_may_not_capture_a_rewritten_name() {
+    // `g.rect_area` is `area` in shapes.pep; the parameter `area` would
+    // capture it.
+    let err = error(
+        "capture",
+        &with_geometry("import geometry as g;
+calc(area: int): int { return area + g.rect_area(1, 1); }
+test(): int { return calc(1); }"),
+    );
+    assert!(err.contains("'g.rect_area' refers to 'area', which a local, parameter, or member named 'area' hides here"), "{}", err);
+}
+
+#[test]
+fn forced_module_import_keeps_its_re_exports() {
+    let files = [
+        ("counter/module.pep", "import \"impl\";
+export step as increment_size;"),
+        ("counter/impl.pep", "export step(): int { return 2; }"),
+        ("main.pep", "test(): int { return increment_size(); }"),
+    ];
+    assert_eq!(run_with("forced_reexport", &files, &["--import", "counter"]), 2);
+}
+
+#[test]
+fn named_import_wins_over_a_whole_file_import() {
+    let files = [
+        ("a.pep", "export one(): int { return 1; }"),
+        ("b.pep", "export two(): int { return 2; }"),
+        ("main.pep", "import [two as one] from \"b\";
+import \"a\";
+test(): int { return one(); }"),
+    ];
+    assert_eq!(run("explicit_first", &files), 2);
+    let files = [
+        ("a.pep", "export one(): int { return 1; }"),
+        ("b.pep", "export two(): int { return 2; }"),
+        ("main.pep", "import \"a\";
+import [two as one] from \"b\";
+test(): int { return one(); }"),
+    ];
+    assert_eq!(run("explicit_last", &files), 2);
+}
+
+#[test]
+fn extension_methods_shadow_imports_in_the_struct_body() {
+    // Counter's own `total` calls `bump`, a method main.pep's extension adds
+    // through a qualified target; the file's `bump` import must not capture it.
+    let files = [
+        (
+            "c/module.pep",
+            "import [bump_impl as bump] from \"helpers\";
+             export struct Counter { var n: int; total(): int { return bump(); } }
+             export use_bump(): int { return bump(); }",
+        ),
+        ("c/helpers.pep", "export bump_impl(): int { return 100; }"),
+        ("main.pep", "import c as m;
+export extend m.Counter { bump(): int { return 1; } }
+test(): int { var k = m.Counter(); return k.total() + m.use_bump(); }"),
+    ];
+    assert_eq!(run("ext_members", &files), 101);
+}
+
+#[test]
+fn file_imports_stay_inside_their_module() {
+    let files = [
+        ("escape.pep", "export f(): int { return 1; }"),
+        ("./inner/module.pep", "import \"../escape\";\nexport g(): int { return f(); }"),
+        ("main.pep", "import \"inner\";\ntest(): int { return g(); }"),
+    ];
+    let err = error("escape", &files);
+    assert!(err.contains("\"../escape.pep\" is outside this file's module"), "{}", err);
+
+    let files = [
+        ("./geo/module.pep", "import \"shapes\";\nexport area as rect_area;"),
+        ("./geo/shapes.pep", "export area(w: int, h: int): int { return w * h; }"),
+        ("main.pep", "import \"geo/shapes\";\ntest(): int { return area(1, 2); }"),
+    ];
+    let err = error("nested_module", &files);
+    assert!(err.contains("\"geo/shapes.pep\" belongs to another module"), "{}", err);
+
+    // A subfolder that is not a module is still this module.
+    let files = [
+        ("lib/deep.pep", "export f(): int { return 4; }"),
+        ("main.pep", "import \"lib/deep\";\ntest(): int { return f(); }"),
+    ];
+    assert_eq!(run("subfolder", &files), 4);
+}
+
+#[test]
+fn a_local_module_folder_is_imported_by_path() {
+    // `import "geo"` names the module folder next to the file; `import geo`
+    // would search only `-I` and the runtime.
+    let files = [
+        ("./geo/module.pep", "import \"shapes\";\nexport area as rect_area;"),
+        ("./geo/shapes.pep", "export area(w: int, h: int): int { return w * h; }"),
+        ("main.pep", "import \"geo\" as g;\ntest(): int { return g.rect_area(2, 3); }"),
+    ];
+    assert_eq!(run("local_module", &files), 6);
+    let files = [
+        ("./geo/module.pep", "export f(): int { return 1; }"),
+        ("main.pep", "import geo;\ntest(): int { return geo.f(); }"),
+    ];
+    let err = error("local_module_by_name", &files);
+    assert!(err.contains("cannot find module 'geo'"), "{}", err);
+}
+
+#[test]
+fn a_qualified_use_does_not_unlock_the_bare_name() {
+    // `g.revealed` is geometry's private `secret`, and `g.make` is `make`;
+    // neither makes the bare spelling visible.
+    let err = error(
+        "bare_after_qualified",
+        &with_geometry("import geometry as g;\ntest(): int { g.revealed(); return secret(); }"),
+    );
+    assert!(err.contains("'secret' is private to"), "{}", err);
+    let err = error(
+        "bare_after_list",
+        &with_geometry("import [rect_area] from geometry;\ntest(): int { rect_area(1, 1); return area(1, 2); }"),
+    );
+    assert!(err.contains("'area' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn private_extensions_elsewhere_do_not_shadow_imports() {
+    // Another file's private extension adds `g` to Counter; Counter's own file
+    // cannot see it, so `g.area2` there is still the module qualifier.
+    let files = [
+        ("geo/module.pep", "export area2(): int { return 7; }"),
+        (
+            "c/module.pep",
+            "import geo as g;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return g.area2(); } }",
+        ),
+        ("c/other.pep", "import \"module\";\nextend Counter { g(): int { return 0; } }"),
+        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
+    ];
+    assert_eq!(run("private_ext", &files), 7);
+}
+
+/// Load `main.pep` as the language server does (lenient), without the
+/// runtime.
+fn load_lenient(test: &str, files: &[(&str, &str)]) -> pepper_sema::program::Program {
+    let dir = write_tree(test, files);
+    let main = dir.join("main.pep");
+    let search_paths = pepper_driver::imports::search_paths(&[dir.join("deps")], &[]);
+    pepper_sema::program::load_file(&main, &[], &search_paths, pepper_sema::program::Mode::Lenient).expect("load")
+}
+
+#[test]
+fn a_module_that_fails_to_parse_is_reported_at_the_import() {
+    let program = load_lenient(
+        "broken_module",
+        &[("geo/module.pep", "export struct P { var x: int; "), ("main.pep", "import geo;\nf(p: geo.P): int { return 0; }")],
+    );
+    let messages: Vec<&str> = program.errors.iter().filter(|e| e.file == 0).map(|e| e.message.as_str()).collect();
+    assert!(messages.iter().any(|m| m.starts_with("cannot load module 'geo':")), "{:?}", messages);
+}
+
+#[test]
+fn an_unsaved_root_imports_its_siblings() {
+    // The root is an editor buffer with no file on disk yet.
+    let dir = std::env::temp_dir().join("pepper_modules_unsaved");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("helper.pep"), "export seven(): int { return 7; }").unwrap();
+    let root = pepper_sema::program::Root {
+        name: "untitled".to_string(),
+        source: "import \"helper\";\nf(): int { return seven(); }".to_string(),
+        path: dir.join("untitled.pep"),
+    };
+    let search_paths = pepper_driver::imports::search_paths(&[], &[]);
+    let program = pepper_sema::program::load(root, &[], &search_paths, pepper_sema::program::Mode::Lenient).expect("load");
+    assert!(program.check().is_ok(), "{:?}", program.check());
+}
+
+#[test]
+fn member_comparisons_in_arguments_need_no_import() {
+    let main = r#"
+struct P { var b: int; }
+two(x: bool, y: bool): int { return (x ? 1 : 0) + (y ? 1 : 0); }
+test(): int {
+    var a = P();
+    a.b = 1;
+    var c = 2;
+    var d = 3;
+    var e = 1;
+    return two(a.b < c, d > (e));
+}
+"#;
+    assert_eq!(run("comparisons", &[("main.pep", main)]), 2);
+}
+
+#[test]
+fn qualified_c_style_return_type() {
+    let main = r#"
+import geometry as g;
+g.Point origin() { return g.make(5, 6); }
+test(): int { return origin().y; }
+"#;
+    assert_eq!(run("c_style_return", &with_geometry(main)), 6);
+}
+
+#[test]
+fn re_exports_that_flip_through_an_ambiguity_are_reported() {
+    let files = [
+        ("a.pep", "import \"bb\";\nimport \"cc\";\nexport foo as bar;"),
+        ("bb.pep", "import \"a\";\nimport \"dd\";\nexport bar as foo;"),
+        ("cc.pep", "export foo(): int { return 1; }"),
+        ("dd.pep", "export bar(): int { return 2; }"),
+        ("main.pep", "import \"a\";\ntest(): int { return 0; }"),
+    ];
+    let err = error("flip", &files);
+    assert!(err.contains("depends on itself through an import that is ambiguous"), "{}", err);
+    assert!(!err.contains("did not settle"), "{}", err);
+}
+
+#[test]
+fn file_import_may_spell_the_extension() {
+    let files = [("lib.pep", "export f(): int { return 9; }"), ("main.pep", "import \"lib.pep\";\ntest(): int { return f(); }")];
+    assert_eq!(run("with_extension", &files), 9);
+}
+
+#[test]
+fn an_editor_warns_on_modules_it_cannot_find() {
+    // An editor knows no `-I` directories: `util`, next to `geo`, is found
+    // only by the compile that passes `-I`, so the editor warns rather than
+    // errs. A local module folder is always found.
+    let dir = std::env::temp_dir().join("pepper_modules_editor");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("geo/local")).unwrap();
+    std::fs::create_dir_all(dir.join("util")).unwrap();
+    std::fs::write(dir.join("util/module.pep"), "export one(): int { return 1; }").unwrap();
+    std::fs::write(dir.join("geo/local/module.pep"), "export three(): int { return 3; }").unwrap();
+    let module = dir.join("geo/module.pep");
+    std::fs::write(&module, "import util;\nimport \"local\";\nexport two(): int { return three() - 1; }").unwrap();
+    let search_paths = pepper_driver::imports::search_paths(&[], &[]);
+    let program =
+        pepper_sema::program::load_file(&module, &[], &search_paths, pepper_sema::program::Mode::Lenient).expect("load");
+    let errors: Vec<(&str, bool)> = program.errors.iter().map(|e| (e.message.as_str(), e.unresolved)).collect();
+    assert_eq!(errors.len(), 1, "{:?}", errors);
+    assert!(errors[0].0.starts_with("cannot find module 'util'") && errors[0].1, "{:?}", errors);
+}
+
+#[test]
+fn a_re_export_chain_may_bounce_between_files_of_a_module() {
+    let files = [
+        (
+            "m/module.pep",
+            "import \"a\";\nf(): int { return 3; }\nexport f as m1;\nexport a1 as m2;\nexport a2 as m3;",
+        ),
+        ("m/a.pep", "import \"module\";\nexport m1 as a1;\nexport m2 as a2;"),
+        ("main.pep", "import m;\ntest(): int { return m.m3(); }"),
+    ];
+    assert_eq!(run("bounce", &files), 3);
+}
+
+#[test]
+fn an_unresolved_import_is_reported_once() {
+    let err = error("unresolved_once", &[("main.pep", "import nosuch;\nf(p: nosuch.Point): int { return 0; }\ntest(): int { return 0; }")]);
+    assert!(err.contains("cannot find module 'nosuch'"), "{}", err);
+    assert!(!err.contains("not an imported module"), "{}", err);
+}
+
+#[test]
+fn a_file_import_spelled_with_its_extension_is_named_once_in_errors() {
+    let err = error("missing_with_extension", &[("main.pep", "import \"util.pep\";\ntest(): int { return 0; }")]);
+    assert!(err.contains("cannot find \"util.pep\" or the module folder \"util\" next to this file"), "{}", err);
+}
+
+#[test]
+fn forced_module_bare_re_exports_are_visible() {
+    let files = [
+        ("counter/module.pep", "import \"impl\";\nexport step;\nhelper(): int { return 5; }\nexport helper;"),
+        ("counter/impl.pep", "export step(): int { return 2; }"),
+        ("main.pep", "test(): int { return step() + helper(); }"),
+    ];
+    assert_eq!(run_with("forced_bare_reexport", &files, &["--import", "counter"]), 7);
+}
+
+#[test]
+fn a_concrete_override_may_sit_next_to_an_imported_generic() {
+    let files = [
+        ("geo/module.pep", "export pick<T>(x: T): int { return 1; }"),
+        ("main.pep", "import [pick] from geo;\npick<int>(x: int): int { return 40; }\ntest(): int { return pick<int>(3) + pick<bool>(true); }"),
+    ];
+    assert_eq!(run("override_imported", &files), 41);
+}
+
+#[test]
+fn a_field_does_not_hide_a_module_in_a_type() {
+    let main = r#"
+import geometry as g;
+struct S {
+    var g: int;
+    at(): g.Point { return g.make(g, 2); }
+}
+test(): int { var s = S(); s.g = 4; return s.at().x; }
+"#;
+    // Only the return type needs the module there; whatever the expression
+    // makes of the field, the type must not be reported.
+    if let Err(err) = compile("field_type", &with_geometry(main)) {
+        assert!(!err.contains("'g' is not an imported module"), "{}", err);
+    }
+    let main = r#"
+import geometry as g;
+struct S {
+    var g: int;
+    at(p: g.Point): int { return p.x + g; }
+}
+test(): int { var s = S(); s.g = 4; var p = g.make(3, 0); return s.at(p); }
+"#;
+    assert_eq!(run("field_type_ok", &with_geometry(main)), 7);
+}
+
+#[test]
+fn a_member_product_statement_is_an_expression() {
+    let main = r#"
+struct P { var b: int; }
+test(): int {
+    var a = P();
+    a.b = 3;
+    var c = 2;
+    a.b * c;
+    return c;
+}
+"#;
+    assert_eq!(run("product_statement", &[("main.pep", main)]), 2);
+}
+
+#[test]
+fn code_this_platform_drops_may_name_exports_it_lacks() {
+    // Never true: both the declaration and its call are dropped everywhere.
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    let files = [
+        ("plat/module.pep", format!("{} export only_there(): int {{ return 1; }}\nexport always(): int {{ return 2; }}", never)),
+        (
+            "main.pep",
+            format!("import plat;\n{} use_it(): int {{ return plat.only_there(); }}\ntest(): int {{ return plat.always(); }}", never),
+        ),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    assert_eq!(run("platform_dropped", &files), 2);
+}
+
+#[test]
+fn an_override_of_an_aliased_generic_takes_the_generic_name() {
+    let files = [
+        ("geo/module.pep", "export pick<T>(x: T): int { return 1; }"),
+        ("main.pep", "import [pick as choose] from geo;\nchoose<int>(x: int): int { return 40; }\ntest(): int { return choose<int>(3); }"),
+    ];
+    assert_eq!(run("override_alias", &files), 40);
+}
+
+#[test]
+fn an_imported_type_specializes_an_extension() {
+    let files = [
+        ("geo/module.pep", "export struct Point { var x: int; }"),
+        (
+            "main.pep",
+            "import [Point as Pt] from geo;\nstruct Box<T> { var v: int; }\n\
+             extend Box<Pt> { make(): Pt { var p = Pt(); p.x = 8; return p; } }\n\
+             test(): int { var b = Box<Pt>(); return b.make().x; }",
+        ),
+    ];
+    // `Pt` is the import, not a generic parameter: the extension is of
+    // `Box<Point>`, and `Pt` inside it is `Point`. (Checked through linking
+    // and sema; running it hits a codegen gap with struct returns from
+    // specialized extensions that is unrelated to modules.)
+    compile("extend_import", &files).expect("links and checks");
+}
+
+#[test]
+fn a_re_export_through_an_unresolved_import_is_reported_once() {
+    let err = error("reexport_unresolved", &[("main.pep", "import nosuch;\nexport nosuch.Point as P;\ntest(): int { return 0; }")]);
+    assert!(err.contains("cannot find module 'nosuch'"), "{}", err);
+    assert!(!err.contains("not an imported module"), "{}", err);
+}
+
+#[test]
+fn imports_come_before_declarations() {
+    let files = [
+        ("util.pep", "export f(): int { return 1; }"),
+        ("main.pep", "test(): int { return f(); }\nimport \"util\";"),
+    ];
+    let err = error("imports_first", &files);
+    assert!(err.contains("main.pep:2:1: imports must come before all declarations"), "{}", err);
+}
+
+#[test]
+fn a_member_of_a_qualified_generic_type() {
+    let files = [
+        ("r/module.pep", "export struct Box<T> { var v: T; static make(): int { return 6; } }"),
+        ("main.pep", "import r as q;\ntest(): int { return q.Box<int>.make(); }"),
+    ];
+    // Parses and links; a static on a generic struct is otherwise ordinary.
+    compile("qualified_generic_member", &files).expect("links and checks");
+}
+
+#[test]
+fn extend_with_an_unimported_type_is_rejected() {
+    let files = [
+        ("geo/module.pep", "export struct Point { var x: int; }"),
+        ("lib.pep", "import geo;\nexport f(): int { return 0; }"),
+        ("main.pep", "import \"lib\";\nstruct Box<T> { var v: int; }\nextend Box<Point> { g(): int { return 1; } }\ntest(): int { return f(); }"),
+    ];
+    let err = error("extend_unimported", &files);
+    assert!(err.contains("'Point' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn an_override_does_not_unlock_the_generic_name() {
+    let files = [
+        ("geo/module.pep", "export pick<T>(x: T): int { return 1; }"),
+        (
+            "main.pep",
+            "import [pick as choose] from geo;\nchoose<int>(x: int): int { return 40; }\ntest(): int { return pick<bool>(true); }",
+        ),
+    ];
+    let err = error("override_leak", &files);
+    assert!(err.contains("'pick' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn a_name_may_not_be_both_a_module_and_a_symbol() {
+    let files = [
+        ("m/module.pep", "export f(): int { return 1; }"),
+        ("n/module.pep", "export m(): int { return 2; }"),
+        ("main.pep", "import m;\nimport [m] from n;\ntest(): int { return m.f() + m(); }"),
+    ];
+    let err = error("module_and_symbol", &files);
+    assert!(err.contains("'m' is imported both as a module and as a symbol"), "{}", err);
+}
+
+#[test]
+fn code_this_platform_drops_may_use_unqualified_imports() {
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    let main = format!(
+        "import [always] from plat;\n\
+         {never} use_it(): int {{ return always(); }}\n\
+         struct S {{ var n: int; {never} m(): int {{ return always(); }} }}\n\
+         test(): int {{ {never} {{ always(); }} return always(); }}"
+    );
+    let files = [("plat/module.pep", "export always(): int { return 2; }"), ("main.pep", main.as_str())];
+    assert_eq!(run("platform_unqualified", &files), 2);
+}
+
+#[test]
+fn a_dropped_own_declaration_does_not_hide_a_missing_import() {
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    let main = format!("import \"lib\";\n{never} helper(): int {{ return 5; }}\ntest(): int {{ return helper() + user(); }}");
+    let files = [
+        ("other.pep", "export helper(): int { return 1; }"),
+        ("lib.pep", "import \"other\";\nexport user(): int { return helper(); }"),
+        ("main.pep", main.as_str()),
+    ];
+    let err = error("dropped_own", &files);
+    assert!(err.contains("'helper' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn an_unresolved_forced_import_is_an_error() {
+    let err = match compile_with("forced_missing", &[("main.pep", "test(): int { return 0; }")], &["--import", "no_such_module"]) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    };
+    assert!(err.contains("--import no_such_module: cannot find module 'no_such_module'"), "{}", err);
+}
+
+#[test]
+fn a_hidden_extension_method_cannot_capture_a_rewritten_name() {
+    let files = [
+        ("geo/module.pep", "export area2(): int { return 7; }"),
+        (
+            "c/module.pep",
+            "import geo as g;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return g.area2(); } }",
+        ),
+        ("c/other.pep", "import \"module\";\nextend Counter { area2(): int { return 100; } }"),
+        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
+    ];
+    let err = error("hidden_capture", &files);
+    assert!(err.contains("'g.area2' refers to the imported 'area2', but an extension in another file"), "{}", err);
+}
+
+#[test]
+fn platform_specific_imports_and_re_exports() {
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    let module = format!("import \"impl\";\n{never} export only_there as there;\nexport always(): int {{ return 2; }}");
+    let main = format!(
+        "import plat;\n{never} import [there] from plat;\n{never} import nowhere;\n\
+         {never} use_it(): int {{ return there(); }}\ntest(): int {{ return plat.always(); }}"
+    );
+    let files = [
+        ("plat/impl.pep", format!("{never} export only_there(): int {{ return 1; }}")),
+        ("plat/module.pep", module),
+        ("main.pep", main),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    assert_eq!(run("platform_imports", &files), 2);
+}
+
+#[test]
+fn a_missing_whole_file_import_is_reported_once() {
+    let err = error("missing_whole_file", &[("main.pep", "import \"missing\";\nexport foo;\ntest(): int { return 0; }")]);
+    assert!(err.contains("cannot find \"missing.pep\""), "{}", err);
+    assert!(!err.contains("cannot export"), "{}", err);
+}
+
+#[test]
+fn a_missing_file_import_is_not_downgraded_for_the_editor() {
+    let program = load_lenient(
+        "editor_missing_file",
+        &[("main.pep", "import \"helperz\";\nimport nowhere;\nf(): int { return 0; }")],
+    );
+    let flags: Vec<(bool, &str)> = program.errors.iter().map(|e| (e.unresolved, e.message.as_str())).collect();
+    assert!(flags.iter().any(|(u, m)| !u && m.contains("helperz")), "{:?}", flags);
+    assert!(flags.iter().any(|(u, m)| *u && m.contains("nowhere")), "{:?}", flags);
+}
+
+#[test]
+fn a_module_imports_a_module_nested_in_its_folder() {
+    let files = [
+        ("a/module.pep", "import \"sub\" as sub;\nexport f(): int { return sub.g(); }"),
+        ("a/sub/module.pep", "export g(): int { return 4; }"),
+        ("main.pep", "import a;\ntest(): int { return a.f(); }"),
+    ];
+    assert_eq!(run("nested_module", &files), 4);
+}
+
+#[test]
+fn platform_dropped_members_neither_shadow_nor_capture() {
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    // A dropped extension method `ar` does not shadow the alias `ar`.
+    let module = format!(
+        "import [area2 as ar] from geo;\nexport struct Counter {{ var n: int; f(): int {{ return ar(); }} }}\n\
+         {never} extend Counter {{ ar(): int {{ return 100; }} }}"
+    );
+    let files = [
+        ("geo/module.pep", "export area2(): int { return 7; }".to_string()),
+        ("c/module.pep", module),
+        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }".to_string()),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    assert_eq!(run("dropped_member_alias", &files), 7);
+
+    // A dropped extension method `area2` does not capture `g.area2`.
+    let other = format!("import \"module\";\n{never} extend Counter {{ area2(): int {{ return 100; }} }}");
+    let files = [
+        ("geo/module.pep", "export area2(): int { return 7; }".to_string()),
+        (
+            "c/module.pep",
+            "import geo as g;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return g.area2(); } }".to_string(),
+        ),
+        ("c/other.pep", other),
+        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }".to_string()),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    assert_eq!(run("dropped_member_capture", &files), 7);
+}
+
+#[test]
+fn malformed_target_on_imports_and_re_exports_is_an_error() {
+    let files = [
+        ("geo/module.pep", "export g(): int { return 7; }"),
+        ("main.pep", "[Target(OS(Windoze))] import geo;\ntest(): int { return geo.g(); }"),
+    ];
+    let err = error("bad_target_import", &files);
+    assert!(err.contains("Windoze"), "{}", err);
+    let files = [("main.pep", "helper(): int { return 1; }\n[Target(Bogus(1))] export helper as h;\ntest(): int { return 0; }")];
+    let err = error("bad_target_reexport", &files);
+    assert!(err.contains("Bogus"), "{}", err);
+}
+
+#[test]
+fn an_unaliased_import_may_not_be_captured_by_a_hidden_extension_method() {
+    let files = [
+        ("geo/module.pep", "export area2(): int { return 7; }"),
+        (
+            "c/module.pep",
+            "import [area2] from geo;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return area2(); } }",
+        ),
+        ("c/other.pep", "import \"module\";\nextend Counter { area2(): int { return 100; } }"),
+        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
+    ];
+    let err = error("unaliased_capture", &files);
+    assert!(err.contains("'area2' refers to the imported 'area2', but an extension in another file"), "{}", err);
+}
+
+#[test]
+fn generic_calls_and_prelude_names_are_not_captured_by_hidden_methods() {
+    // `hash<int>(x)` and `twice<int>(x)` are never bound to a method, even
+    // though a private extension in another file adds `hash` and `twice`.
+    let files = [
+        ("util.pep", "export twice<T>(x: T): int { return 2; }"),
+        (
+            "point.pep",
+            "import \"util\";\nexport struct Point { var x: int; key(): int { return (hash<int>(x) == hash<int>(x) ? 1 : 0) + twice<int>(x); } }",
+        ),
+        ("ext.pep", "import \"point\";\nextend Point { hash(): ulong { return 1; } twice(): int { return 100; } }"),
+        ("main.pep", "import \"point\";\nimport \"ext\";\ntest(): int { var p = Point(); return p.key(); }"),
+    ];
+    assert_eq!(run("generic_not_captured", &files), 3);
+}
+
+#[test]
+fn a_split_c_style_declaration_is_still_exported() {
+    let files = [
+        ("lib.pep", "export struct P { var x: int; }\nexport P\nmake() { var p = P(); p.x = 7; return p; }"),
+        ("main.pep", "import \"lib\";\ntest(): int { return make().x; }"),
+    ];
+    assert_eq!(run("split_c_style", &files), 7);
+}
+
+#[test]
+fn a_file_outside_any_module_imports_only_its_folder() {
+    let files = [
+        ("common.pep", "export seven(): int { return 7; }"),
+        ("app/lib.pep", "import \"../common\";\nexport f(): int { return seven(); }"),
+        ("main.pep", "import \"app/lib\";\ntest(): int { return f(); }"),
+    ];
+    let err = error("outside_folder", &files);
+    assert!(err.contains("\"../common.pep\" is outside this file's folder"), "{}", err);
+}
+
+#[test]
+fn values_do_not_hide_imports_in_types_or_generic_calls() {
+    let files = [
+        (
+            "g/module.pep",
+            "export pick<T>(x: T): T { return x; }\nexport struct Vec { var n: int; }",
+        ),
+        (
+            "main.pep",
+            "import [pick as choose, Vec as V] from g;\nimport g;\n\
+             struct S { var v: int; choose(): int { return 1; } pick(): int { return 2; }\n\
+                 f(): int { return choose<int>(3) + g.pick<int>(4); } }\n\
+             h(V: int, w: V): int { var choose = 2; return choose<int>(5) + choose + V + w.n; }\n\
+             test(): int { var s = S(); var w = V(); w.n = 10; return s.f() + h(100, w); }",
+        ),
+    ];
+    // 3 + 4 + (5 + 2 + 100 + 10)
+    assert_eq!(run("types_not_hidden", &files), 124);
+}
+
+#[test]
+fn an_override_exported_under_an_alias_exports_the_generic() {
+    let files = [
+        ("g/module.pep", "export pick<T>(x: T): T { return x; }"),
+        ("b.pep", "import [pick as choose] from g;\nexport choose<int>(x: int): int { return x + 100; }"),
+        ("main.pep", "import \"b\";\nimport [pick] from g;\ntest(): int { return pick<int>(3); }"),
+    ];
+    assert_eq!(run("override_export_alias", &files), 103);
+}
+
+#[test]
+fn a_chain_of_exported_overrides_settles() {
+    let files = [
+        ("c.pep", "export pick<T>(x: T): int { return 1; }"),
+        ("b.pep", "import [pick as p1] from \"c\";\nexport p1<int>(x: int): int { return 2; }"),
+        ("a.pep", "import [pick as p2] from \"b\";\nexport p2<String>(x: String): int { return 3; }"),
+        ("d.pep", "import [pick as p3] from \"a\";\nexport p3<ulong>(x: ulong): int { return 4; }"),
+        ("main.pep", "import [pick] from \"d\";\nimport \"b\";\nimport \"a\";\ntest(): int { return pick<int>(0); }"),
+    ];
+    assert_eq!(run("override_chain", &files), 2);
+}
+
+#[test]
+fn a_module_folder_may_be_imported_with_the_extension_spelled() {
+    let files = [
+        ("./geo/module.pep", "export f(): int { return 5; }"),
+        ("main.pep", "import \"geo.pep\" as g;\ntest(): int { return g.f(); }"),
+    ];
+    assert_eq!(run("folder_with_extension", &files), 5);
+}
+
+#[test]
+fn errors_name_a_module_folder_as_a_folder() {
+    let files = [
+        ("./vec/module.pep", "export struct Vec3 { var x: int; }"),
+        ("main.pep", "import [Vec2] from \"vec\";\ntest(): int { return 0; }"),
+    ];
+    let err = error("folder_named", &files);
+    assert!(err.contains("'Vec2' is not exported by the module folder \"vec\""), "{}", err);
+}
+
+#[test]
+fn constructors_and_destructors_are_linked_and_checked_whatever_their_attributes() {
+    // Platform selection keeps a constructor or destructor whatever its
+    // `[Target]`, so its imports are rewritten and its references checked.
+    let never = "[Target(OS(Windows) && OS(Linux))]";
+    let main = format!("import geo;\nstruct S {{ var v: int; {never} new() {{ v = geo.seven(); }} }}\ntest(): int {{ var s = S(); return s.v; }}");
+    let files = [("geo/module.pep", "export seven(): int { return 7; }"), ("main.pep", main.as_str())];
+    compile("ctor_target_linked", &files).expect("links");
+
+    let main = format!("import \"lib\";\nstruct S {{ var v: int; {never} new() {{ v = secret(); }} }}\ntest(): int {{ return 0; }}");
+    let files = [("lib.pep", "secret(): int { return 9; }\nexport f(): int { return 0; }"), ("main.pep", main.as_str())];
+    let err = error("ctor_target_checked", &files);
+    assert!(err.contains("'secret' is private to"), "{}", err);
+}
+
+#[test]
+fn an_override_of_a_prelude_alias_is_exported_under_the_generic() {
+    let files = [
+        ("alt/module.pep", "export pick<T>(x: T): int { return 1; }\nexport pick as choose;"),
+        ("lib.pep", "export choose<int>(x: int): int { return 7; }"),
+        ("main.pep", "import \"lib\";\ntest(): int { return pick<int>(3); }"),
+    ];
+    assert_eq!(run_with("prelude_alias_override", &files, &["--import", "alt"]), 7);
+}
+
+#[test]
+fn a_file_named_module_is_described_as_a_file() {
+    let files = [
+        ("./geo/module.pep", "import \"impl\";\nexport f(): int { return 1; }"),
+        ("./geo/impl.pep", "import [nope] from \"module.pep\";\nexport g(): int { return 0; }"),
+        ("./mymodule/module.pep", "export h(): int { return 2; }"),
+        ("main.pep", "import \"geo\";\nimport [nope2] from \"mymodule\";\ntest(): int { return 0; }"),
+    ];
+    let err = error("module_named_file", &files);
+    assert!(err.contains("'nope' is not exported by \"module.pep\""), "{}", err);
+    assert!(err.contains("'nope2' is not exported by the module folder \"mymodule\""), "{}", err);
+}
+
+#[test]
+fn an_override_of_the_files_own_generic_keeps_its_name() {
+    // A prelude alias named `pick` does not rename lib's own `pick<int>`.
+    let files = [
+        ("alt/module.pep", "export foo<T>(x: T): int { return 1; }\nexport foo as pick;"),
+        ("lib.pep", "export pick<T>(x: T): int { return 2; }\nexport pick<int>(x: int): int { return 3; }"),
+        ("main.pep", "import [pick] from \"lib\";\ntest(): int { return pick<int>(3); }"),
+    ];
+    assert_eq!(run_with("own_generic_override", &files, &["--import", "alt"]), 3);
+}
+
+#[test]
+fn a_forced_import_replaces_a_runtime_export() {
+    let files = [
+        ("quiet/module.pep", "export assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
+    ];
+    assert_eq!(run_with("forced_replaces_runtime", &files, &["--import", "quiet"]), 7);
+}
+
+#[test]
+fn a_forced_file_import_may_spell_the_extension() {
+    let files = [("main.pep", "test(): int { return val(); }")];
+    std::env::set_current_dir(repo_root()).unwrap();
+    let dir = write_tree("forced_with_extension", &files);
+    std::fs::write(dir.join("deps").join("util.pep"), "export val(): int { return 4; }").unwrap();
+    let main_path = dir.join("main.pep");
+    let deps = dir.join("deps");
+    let options = pepper_driver::Options::parse_from([
+        "pepper",
+        main_path.to_str().unwrap(),
+        "-I",
+        deps.to_str().unwrap(),
+        "--import",
+        "util.pep",
+    ]);
+    pepper_driver::compiler::compile(&options, "main").expect("`--import util.pep` resolves util.pep");
+}
+
+#[test]
+fn a_value_does_not_hide_an_unimported_type() {
+    let files = [
+        ("lib.pep", "export struct Point { var x: int; }\nexport make(): Point { return Point(); }"),
+        ("main.pep", "import [make] from \"lib\";\nf(Point: int): int { var p: Point = make(); return p.x + Point; }\ntest(): int { return f(1); }"),
+    ];
+    let err = error("value_hides_type", &files);
+    assert!(err.contains("'Point' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn a_forced_modules_other_files_share_its_exemptions() {
+    let files = [
+        ("quiet/module.pep", "import \"impl\";\nexport assert;"),
+        ("quiet/impl.pep", "export assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
+    ];
+    assert_eq!(run_with("forced_module_files", &files, &["--import", "quiet"]), 7);
+}
+
+#[test]
+fn a_forced_modules_other_files_stay_private() {
+    // Only module.pep's exports are visible everywhere; impl.pep's own
+    // exports are not, though they may still replace runtime exports.
+    let files = [
+        ("counter/module.pep", "import \"impl\";\nexport step as increment_size;"),
+        ("counter/impl.pep", "export step(): int { return 2; }\nexport secret(): int { return 9; }"),
+        ("main.pep", "test(): int { return increment_size() + secret(); }"),
+    ];
+    let err = match compile_with("forced_parts_private", &files, &["--import", "counter"]) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    };
+    assert!(err.contains("'secret' is exported by") && err.contains("which this file does not import"), "{}", err);
+}
+
+#[test]
+fn an_unresolved_forced_import_names_what_was_searched() {
+    let err = match compile_with("forced_missing_ext", &[("main.pep", "test(): int { return 0; }")], &["--import", "nosuch.pep"]) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    };
+    assert!(err.contains("cannot find module 'nosuch' (no nosuch/module.pep) or file nosuch.pep in"), "{}", err);
+}
+
+#[test]
+fn a_forced_alias_may_not_replace_a_runtime_export() {
+    // The runtime's own files would keep calling their `assert`, so only a
+    // declaration under the name itself may replace it.
+    let files = [
+        ("quiet/module.pep", "quiet_assert(condition: bool, msg: __ptr<char>): void { }\nexport quiet_assert as assert;"),
+        ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
+    ];
+    let err = match compile_with("forced_alias_replaces", &files, &["--import", "quiet"]) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    };
+    assert!(err.contains("a forced import cannot replace 'assert' with an alias"), "{}", err);
+}
+
+#[test]
+fn a_keyword_prefixed_module_qualifies_local_and_field_types() {
+    let files = [
+        ("ordered/module.pep", "export struct Socket { var fd: int; }"),
+        ("externals/module.pep", "export struct Pipe { var fd: int; }"),
+        (
+            "main.pep",
+            "import ordered;\nimport externals;\nstruct H { externals.Pipe p; }\n\
+             test(): int { ordered.Socket s = ordered.Socket(); s.fd = 4; var h = H(); h.p = externals.Pipe(); h.p.fd = 3; return s.fd + h.p.fd; }",
+        ),
+    ];
+    assert_eq!(run("keyword_prefixed_modules", &files), 7);
+}
+
+#[test]
+fn a_module_nested_in_a_forced_module_is_not_exempt() {
+    let files = [
+        ("alt/module.pep", "import \"sub\" as s;\nexport f(): int { return s.g(); }"),
+        ("alt/sub/module.pep", "export g(): int { return 1; }\nexport assert(condition: bool, msg: __ptr<char>): void { }"),
+        ("main.pep", "test(): int { return f(); }"),
+    ];
+    let err = match compile_with("forced_nested_module", &files, &["--import", "alt"]) {
+        Ok(_) => panic!("expected a compile error"),
+        Err(e) => e,
+    };
+    assert!(err.contains("exported 'assert' is also declared in"), "{}", err);
+}
+
+#[test]
+fn a_file_may_call_its_own_concrete_generic() {
+    assert_eq!(run("own_concrete_generic", &[("main.pep", "foo<int>(x: int): int { return x + 1; }\ntest(): int { return foo<int>(4); }")]), 5);
+}
+
+#[test]
+fn concrete_overloads_in_two_files_are_each_their_own() {
+    let files = [
+        ("lib.pep", "conv<long>(x: long): long { return x + 100; }\nexport usel(): long { return conv<long>(1); }"),
+        ("main.pep", "import \"lib\";\nconv<int>(x: int): int { return x + 1; }\ntest(): int { return conv<int>(3) + (usel() as int); }"),
+    ];
+    assert_eq!(run("two_file_overloads", &files), 105);
+}
+
+#[test]
+fn an_own_concrete_generic_beside_a_plain_function_elsewhere() {
+    // lib's plain `conv` is no generic base, so main's `conv<int>` stays its
+    // own; the runtime's private `hex` does not block a user's `hex<int>`.
+    let files = [
+        ("lib.pep", "conv(x: ulong): int { return 100; }\nexport seven(): int { return conv(1 as ulong) - 93; }"),
+        ("main.pep", "import \"lib\";\nconv<int>(x: int): int { return x + 1; }\ntest(): int { return conv<int>(6) + seven(); }"),
+    ];
+    assert_eq!(run("own_concrete_beside_plain", &files), 14);
+    // The runtime's private, non-generic `hex` is no generic base either.
+    compile("own_hex", &[("main.pep", "hex<int>(x: int): int { return x + 1; }\ntest(): int { return hex<int>(6); }")])
+        .expect("passes linking and visibility");
+}
+
+#[test]
+fn a_blocked_own_override_names_the_other_file() {
+    let files = [
+        ("lib.pep", "conv<T>(x: T): T { return x; }\nexport seven(): int { return conv<int>(7); }"),
+        ("main.pep", "import \"lib\";\nconv<int>(x: int): int { return x + 1; }\ntest(): int { return conv<int>(6) + seven(); }"),
+    ];
+    let err = error("blocked_override_names_other", &files);
+    assert!(err.contains("'conv' is private to") && err.contains("lib.pep"), "{}", err);
+    assert!(!err.contains("is private to C:") || !err.contains("main.pep; declare"), "{}", err);
+}

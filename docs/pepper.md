@@ -177,7 +177,7 @@ An alias must not reference itself, directly or through a chain of aliases; the 
 
 Every top-level declaration — functions (including `extern` declarations), structs, type aliases, traits,
 extensions, and module-scope variables — is private to the file that declares it. Prefix the declaration with
-`export` to make it usable from other files:
+`export` to make it usable from other files that import it (see [Modules and imports](#modules-and-imports)):
 
 ```
 # lib.pep
@@ -199,7 +199,7 @@ extend Point {
 }
 
 # main.pep
-use "lib";
+import "lib";
 main(): int {
     var p = origin();   # ok
     p.print();          # ok: exported extension
@@ -220,7 +220,7 @@ available through it in that file. Visibility is checked before types are known,
 name: a call `x.m()` from another file is accepted if any struct body or extension visible to the calling file
 (its own, or exported) declares an `m`. Extending a struct does not make a private struct visible. The runtime's
 public surface (`String`, `Array`, `HashMap`, `HashSet`, `Atomic`, `Result`, `Error`, `hash`, `assert`, `panic`,
-…) is exported this way.
+…) is exported this way, and is visible to every file without an import.
 
 All files of a program still share one namespace, so a private name must not also be declared in another file;
 the compiler reports `private 'helper' is also declared in b.pep`. `extern` declarations are exempt, since every
@@ -233,6 +233,94 @@ position, not name, so a private `pick<U>` also collides with `pick<T>`.
 
 `export` controls visibility between Pepper files only; C linkage is the separate `[Export]` attribute described
 in [Exporting functions](#exporting-functions).
+
+## Modules and imports
+
+A module is a folder that contains a `module.pep` file. The module is named after the folder, and its exports
+are exactly what its `module.pep` exports.
+
+```
+deps/
+    geometry/
+        module.pep  # the module's exports
+        shapes.pep  # a file of the module, imported by module.pep
+main.pep
+```
+
+An import names its source in one of two ways:
+
+- `import geometry`, an identifier, is a dependency: a module found on the search paths, which are the `-I`
+  directories, then the runtime directory. The program above compiles with `pepper main.pep -I deps`.
+- `import "shapes"`, a string, is local, relative to the importing file: the file `shapes.pep`, which must belong
+  to the importing file's module (for a file outside any module, lie in its folder or below, outside any module
+  nested there), or else the module folder `shapes/`, such as a module nested in this one or one next to the
+  program. `import "../other/x"` naming a file of another module is an error; import that module's folder
+  instead.
+
+Imports come in these forms, and every import comes before all of a file's declarations and re-exports:
+
+- `import geometry` makes the module's exports available qualified by its name: `geometry.Point`,
+  `geometry.area(2, 3)`.
+- `import geometry as g` or `import "geometry" as g` does the same under the name `g`: `g.Point`, `g.area(2, 3)`.
+- `import [area, Point as Pt] from geometry` (or `from "util"`) makes the named exports available unqualified,
+  `area` under its own name and `Point` as `Pt`.
+- `import "shapes"` makes the exports of `shapes.pep` (or of the module folder `shapes/`) available unqualified.
+
+Qualified names work wherever a name does: in expressions (`g.area(1, 2)`, `g.origin_count`), in types
+(`var p: g.Point`, `g.Box<int>[]`, `g.Point origin()`), and in generic constructions (`g.Box<int>()`). A generic
+construction is recognized only for a qualifier imported earlier in the file; elsewhere `a.b < c, d > (e)` is two
+comparisons. A qualifier or an imported name
+is shadowed by a local, parameter, generic parameter, or struct member of the same name, but a file may not
+import a name it also declares at top level. A name listed in `import [...]` wins over the same name from a
+whole-file import; two whole-file imports that provide a name differently make it ambiguous where it is used.
+Because an imported name is compiled as the name of the declaration it denotes, a local with that
+declaration's name may not be in scope where it is used: if `geometry.rect_area` is `shapes.pep`'s `area`,
+then `g.rect_area(1, 2)` inside a function with a parameter named `area` is an error asking you to rename one. The exports of a file or module a file did not import are not
+visible to it, even when another file of the program imports them:
+
+```
+# main.pep
+import geometry;
+main(): int { return area(1, 2); }  # error: 'area' is exported by geometry/shapes.pep, which this file does not import
+```
+
+`export symbol as name;` exports `symbol` to importers as `name`; `export symbol;` exports it under its own name
+(the `;` is required: without it, `export P` followed by a declaration is an exported C-style declaration).
+The symbol may be declared in the file, even privately, or imported from another file or module, qualified or not.
+This is how a `module.pep` publishes what its other files define:
+
+```
+# geometry/shapes.pep
+export area(w: int, h: int): int { return w * h; }
+export struct Box<T> { var value: T; }
+
+# geometry/module.pep
+import "shapes";
+export struct Point { var x: int; var y: int; }
+helper(): int { return 0; }
+export area as rect_area;   # geometry.rect_area is shapes.area
+export Box;                 # geometry.Box is shapes.Box
+export helper as reset;     # a private declaration, exported under another name
+```
+
+`shapes.pep`'s own exports are not the module's: an importer of `geometry` can use `geometry.rect_area` and
+`geometry.Box`, but `geometry.area` is an error.
+
+An import or re-export may carry attributes like any declaration: `[Target(OS(Linux))] import linux;` and
+`[Target(OS(Linux))] export linux_open as open;` are ignored on other platforms. A module imports a module nested
+in its own folder by path: `geometry/module.pep` may `import "shapes3d" as s3` for `geometry/shapes3d/module.pep`.
+
+The runtime is not a module: its files are loaded into every program, and their exports are visible everywhere
+without an import. `--import NAME` adds a module (or a `NAME.pep` file) found on the search paths to that prelude; a name that
+resolves to neither is an error.
+
+Imports bind names; they do not create separate namespaces. All files of a program still share one namespace for
+their declarations, so an exported name must not be declared by any other file either, even in another module
+reached through its own qualifier: `exported 'f' is also declared in b/module.pep`. Prelude files, meaning the
+runtime and any `--import` modules (with their other files), are exempt by design and may repeat each other's
+exports, so a forced import can supply its own definition of a runtime export such as `panic`: it is loaded ahead
+of the runtime and its definition wins. It must declare the name itself (`export panic(...)`); re-exporting
+another function under a runtime export's name is an error, since the runtime's own files would keep calling theirs.
 
 ## Traits
 

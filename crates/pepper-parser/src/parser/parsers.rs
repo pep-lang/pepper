@@ -31,6 +31,23 @@ thread_local! {
     /// rewinds `input`, so the remaining-slice offset alone underreports where
     /// parsing stopped; this records the deepest point any rule reached.
     static MAX_POS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Module qualifiers the file's imports have bound so far (`m` of
+    /// `import m`, `q` of `import x as q`). `q.Box<int>()` is a generic
+    /// construction only for these; otherwise `a.b < c, d > (e)` stays two
+    /// comparisons.
+    static QUALIFIERS: std::cell::RefCell<std::collections::HashSet<String>> = std::cell::RefCell::new(Default::default());
+    /// Set while an expression is probed as a generic type literal.
+    static EXPRESSION_PROBE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Parse a type where an expression could also start (a generic literal
+/// probe, a `Type name` declaration): qualified names are limited to imported
+/// qualifiers (see `qualified_tail`).
+fn probe_type_name(input: &mut &str) -> Result<TypeName> {
+    let outer = EXPRESSION_PROBE.with(|p| p.replace(true));
+    let result = type_name(input);
+    EXPRESSION_PROBE.with(|p| p.set(outer));
+    result
 }
 
 /// Byte offset of `input`'s start within the tracked source, also recording it
@@ -55,6 +72,7 @@ impl SourceGuard {
     fn set(len: usize) -> Self {
         let prev = SRC_LEN.with(|l| l.replace(Some(len)));
         MAX_POS.with(|m| m.set(0));
+        QUALIFIERS.with(|q| q.borrow_mut().clear());
         SourceGuard(prev)
     }
 }
@@ -81,7 +99,7 @@ pub(crate) fn max_pos() -> usize {
 // ── Keywords ──────────────────────────────────────────────────────────────────
 
 const RESERVED: &[&str] = &[
-    "import", "use", "struct", "var", "const",
+    "import", "struct", "var", "const",
     "if", "else", "while", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
@@ -207,11 +225,36 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     Ok(ty)
 }
 
+/// Extend `name` with `.segment`s written directly after it: a qualified
+/// name, `module.Type`, resolved by module linking. While probing whether an
+/// expression is a generic type literal, only a qualifier an import bound
+/// counts, so `i < a.size, i > 0` stays two comparisons.
+fn qualified_tail(input: &mut &str, name: &mut String) {
+    if EXPRESSION_PROBE.with(|p| p.get()) && !QUALIFIERS.with(|q| q.borrow().contains(name.as_str())) {
+        return;
+    }
+    while input.starts_with('.') && input[1..].starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+        let before = *input;
+        *input = &input[1..];
+        match identifier(input) {
+            Ok(segment) => {
+                name.push('.');
+                name.push_str(&segment);
+            }
+            Err(_) => {
+                *input = before;
+                break;
+            }
+        }
+    }
+}
+
 /// Type name without a trailing Array suffix, so indexer methods
 /// (`T [](params)`) are not mistaken for `T[]` Array types.
 fn type_name_base(input: &mut &str) -> Result<TypeName> {
     let start = pos(input);
-    let name = identifier(input)?;
+    let mut name = identifier(input)?;
+    qualified_tail(input, &mut name);
     ws(input)?;
 
     // generic types: < T, T, ... >
@@ -356,10 +399,27 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     // symbol reference, or a generic type literal such as `Array<int>` in `Array<int>()`
     let before = *input;
     let name = identifier(input)?;
+    // A qualified generic construction, call, or member access,
+    // `m.Box<int>()`, `m.Box<int>[]()`, `m.Result<int>.ok(1)`, where `m` is an
+    // imported module: parsed whole as a type literal so the `<` is not read
+    // as a comparison. Anything else, like `f(a.b < c, d > (e))`, stays two
+    // comparisons.
+    if input.starts_with('.') && QUALIFIERS.with(|q| q.borrow().contains(&name)) {
+        let mut probe: &str = before;
+        if let Ok(ty) = probe_type_name(&mut probe)
+            && ty.name.contains('.')
+            && !ty.generic_types.is_empty()
+            && ws(&mut probe).is_ok()
+            && (probe.starts_with('(') || probe.starts_with('.'))
+        {
+            *input = probe;
+            return Ok(Expression::TypeLiteral(ty));
+        }
+    }
     ws(input)?;
     if input.starts_with('<') {
         let mut probe: &str = before;
-        if let Ok(ty) = type_name(&mut probe) {
+        if let Ok(ty) = probe_type_name(&mut probe) {
             // The whole `Name<...>` parsed as a type; advance the real input past it.
             // (If it failed, this was a `<` comparison and `name` is a plain symbol.)
             *input = probe;
@@ -845,8 +905,10 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
     }
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
-    // Only valid when NOT followed by '(' (which would indicate a function call)
-    let mut ty = type_name(input)?;
+    // Only valid when NOT followed by '(' (which would indicate a function call).
+    // A qualified type must name an imported module, so `a.b * c;` stays an
+    // expression rather than declaring `c`.
+    let mut ty = probe_type_name(input)?;
     ws(input)?;
 
     // If the next token is '(' this is a function call, not a declaration
@@ -1013,19 +1075,19 @@ fn statement(input: &mut &str) -> Result<Statement> {
         ws(input)?;
         return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Continue, span: Span { start, end: pos(input) } }));
     }
-    // Variable declaration: `var`/`const` prefix OR `TypeName name = value` form
-    let is_var_decl = (input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
-        || (input.starts_with("const") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
+    // Variable declaration: `var`/`const` prefix OR `TypeName name = value` form.
+    // Keywords are matched as whole words, so a type or module qualifier that
+    // merely starts with one (`ordered.Socket s`, `newton x`) still declares.
+    let is_kw = |kw: &str| keyword(&mut { *input }, kw);
+    let is_var_decl = is_kw("var")
+        || is_kw("const")
         || (input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-            && !input.starts_with("if") && !input.starts_with("while") && !input.starts_with("return")
-            && !input.starts_with("break") && !input.starts_with("continue")
-            && !input.starts_with("struct") && !input.starts_with("extern")
-            && !input.starts_with("import") && !input.starts_with("use")
-            && !input.starts_with("true") && !input.starts_with("false")
-            && !input.starts_with("sizeof") && !input.starts_with("and") && !input.starts_with("or")
-            && !input.starts_with("new") && !input.starts_with("construct") && !input.starts_with("destruct")
-            && !input.starts_with("static") && !input.starts_with("trait") && !input.starts_with("extend")
-            && !input.starts_with('('));
+            && ![
+                "if", "while", "return", "break", "continue", "struct", "extern", "import", "true", "false",
+                "sizeof", "and", "or", "new", "construct", "destruct", "static", "trait", "extend",
+            ]
+            .iter()
+            .any(|kw| is_kw(kw)));
     if is_var_decl {
         let before = *input;
         if let Ok(v) = variable_declaration(input, vec![]) {
@@ -1170,12 +1232,18 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
     let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     let before = *input;
 
-    // Parse first identifier
+    // Parse first identifier: a name, or a return type (`g.Point origin()`).
     let name_span_start = pos(input);
-    let first = identifier(input)?;
+    let mut first = identifier(input)?;
+    qualified_tail(input, &mut first);
     let name_span_end = pos(input);
     ws(input)?;
     // Determine which syntax based on what follows
+    if first.contains('.') && (input.starts_with('(') || input.starts_with('<')) {
+        // A qualified name is a type, never a function's own name.
+        *input = before;
+        return Err(bt(input));
+    }
     if input.starts_with('(') || input.starts_with('<') {
         // Syntax 1: `first` is the function name
         let generic_params = if input.starts_with('<') {
@@ -1582,13 +1650,14 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
 
     let before = *input;
     let name_span_start = pos(input);
-    let first = match identifier(input) {
+    let mut first = match identifier(input) {
         Ok(n) => n,
         Err(e) => {
             *input = before;
             return Err(e);
         }
     };
+    qualified_tail(input, &mut first);
     let name_span_end = pos(input);
     ws(input)?;
 
@@ -1606,7 +1675,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         Err(cut(input))
     }
 
-    if input.starts_with('(') {
+    if input.starts_with('(') && !first.contains('.') {
         let parameters = function_parameters(input)?;
         ws(input)?;
         // optional return-type annotation: `name(params): Type` (lexy `[: type]`)
@@ -1863,7 +1932,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             continue;
         }
 
-        if input.starts_with("extern") {
+        if keyword(&mut { *input }, "extern") {
             let m = extern_function_declaration(input, m_attrs)?;
             ws(input)?;
             methods.push(m);
@@ -2027,41 +2096,117 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
 fn import(input: &mut &str) -> Result<Import> {
     let start = pos(input);
     ws(input)?;
-
-    if input.starts_with("import") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        *input = &input[6..];
-    } else if input.starts_with("use") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        *input = &input[3..];
-    } else {
+    if !keyword(input, "import") {
         return Err(bt(input));
     }
     ws(input)?;
-    let mut name_span_start = pos(input);
-    #[allow(unused_assignments)] // reassigned in both branches below
-    let mut name_span_end = name_span_start;
-    let (name, is_local) = if input.starts_with('"') {
-        name_span_start = pos(input);
-        let lit = string_constant(input)?;
-        name_span_end = pos(input);
-        if let Literal::String(s) = lit { (s, true) }
-        else { return Err(cut(input)); }
-    } else {
-        name_span_start = pos(input);
-        let id = identifier(input)?;
-        name_span_end = pos(input);
-        (id, false)
-    };
-    ws(input)?;
 
-    let alias = if input.starts_with("as") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-        *input = &input[2..];
+    // `import [a, b as c] from source`
+    let symbols = if input.starts_with('[') {
+        *input = &input[1..];
+        let mut symbols = vec![];
+        loop {
+            ws(input)?;
+            if input.starts_with(']') && symbols.is_empty() {
+                break;
+            }
+            let sym_start = pos(input);
+            let name = identifier(input).map_err(|_| cut(input))?;
+            let name_span = Span { start: sym_start, end: pos(input) };
+            ws(input)?;
+            let alias = if keyword(input, "as") {
+                ws(input)?;
+                Some(identifier(input).map_err(|_| cut(input))?)
+            } else {
+                None
+            };
+            symbols.push(ImportedSymbol { name, name_span, alias, span: Span { start: sym_start, end: pos(input) } });
+            ws(input)?;
+            if input.starts_with(',') {
+                *input = &input[1..];
+                continue;
+            }
+            break;
+        }
+        if !input.starts_with(']') {
+            return Err(cut(input));
+        }
+        *input = &input[1..];
         ws(input)?;
-        Some(identifier(input)?)
+        if !keyword(input, "from") {
+            return Err(cut(input));
+        }
+        ws(input)?;
+        Some(symbols)
     } else {
         None
     };
 
-    Ok(Import { name, name_span: Span { start: name_span_start, end: name_span_end }, alias, is_local, span: Span { start, end: pos(input) } })
+    let name_span_start = pos(input);
+    let (name, is_local) = if input.starts_with('"') {
+        match string_constant(input)? {
+            Literal::String(s) => (s, true),
+            _ => return Err(cut(input)),
+        }
+    } else {
+        (identifier(input).map_err(|_| cut(input))?, false)
+    };
+    let name_span = Span { start: name_span_start, end: pos(input) };
+    let mut end = pos(input);
+
+    let before_alias = *input;
+    ws(input)?;
+    let alias = if keyword(input, "as") {
+        // An alias names a qualifier, which a symbol list does not bind.
+        if symbols.is_some() {
+            return Err(cut(input));
+        }
+        ws(input)?;
+        let alias = identifier(input).map_err(|_| cut(input))?;
+        end = pos(input);
+        Some(alias)
+    } else {
+        *input = before_alias;
+        None
+    };
+
+    Ok(Import { name, name_span, alias, is_local, symbols, attributes: vec![], span: Span { start, end } })
+}
+
+/// `export symbol as name` / `export symbol` / `export m.symbol as name`:
+/// a re-export, as opposed to an `export` declaration. Backtracks unless the
+/// symbol is followed by `as` or ends the statement.
+fn export_alias(input: &mut &str) -> Result<ExportAlias> {
+    ws(input)?;
+    let start = pos(input);
+    if !keyword(input, "export") {
+        return Err(bt(input));
+    }
+    ws(input)?;
+    let symbol_start = pos(input);
+    let mut symbol = identifier(input)?;
+    qualified_tail(input, &mut symbol);
+    let symbol_span = Span { start: symbol_start, end: pos(input) };
+    let mut end = pos(input);
+    let before = *input;
+    ws(input)?;
+    let alias = if keyword(input, "as") {
+        ws(input)?;
+        let alias = identifier(input).map_err(|_| cut(input))?;
+        end = pos(input);
+        Some(alias)
+    } else {
+        *input = before;
+        None
+    };
+    // A bare `export Box` needs its `;`: without it, `export P` followed by
+    // `make() {...}` on the next line is a C-style declaration returning `P`.
+    let mut probe = *input;
+    ws(&mut probe)?;
+    if alias.is_none() && !probe.starts_with(';') {
+        return Err(bt(input));
+    }
+    Ok(ExportAlias { symbol, symbol_span, alias, attributes: vec![], span: Span { start, end } })
 }
 
 // ── Module ────────────────────────────────────────────────────────────────────
@@ -2071,24 +2216,52 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
     ws(input)?;
 
     let mut imports = vec![];
+    let mut exports = vec![];
     let mut declarations = vec![];
     loop {
         ws(input)?;
         if input.is_empty() { break; }
 
-        // imports may appear between declarations
-        if input.starts_with("import") || input.starts_with("use") {
-            let before = *input;
-            match import(input) {
-                Ok(imp) => {
+        // Imports and re-exports, each optionally after attributes
+        // (`[Target(OS(Linux))] import linux;`). Imports must precede every
+        // declaration and re-export; `check_import_order` rejects a late one
+        // after parsing.
+        let before = *input;
+        let attrs_start = pos(input);
+        let attrs = if input.starts_with('[') { attributes(input)? } else { vec![] };
+        ws(input)?;
+        let with_attributes = |span: &mut Span, attributes: &mut Vec<Attribute>, attrs: Vec<Attribute>| {
+            if !attrs.is_empty() {
+                span.start = attrs_start;
+            }
+            *attributes = attrs;
+        };
+        if keyword(&mut { *input }, "import") {
+            let mut imp = import(input)?;
+            with_attributes(&mut imp.span, &mut imp.attributes, attrs);
+            if let Some(q) = imp.qualifier() {
+                QUALIFIERS.with(|qs| qs.borrow_mut().insert(q.to_string()));
+            }
+            ws(input)?;
+            if input.starts_with(';') { *input = &input[1..]; }
+            imports.push(imp);
+            continue;
+        }
+        if keyword(&mut { *input }, "export") {
+            match export_alias(input) {
+                Ok(mut exp) => {
+                    with_attributes(&mut exp.span, &mut exp.attributes, attrs);
                     ws(input)?;
                     if input.starts_with(';') { *input = &input[1..]; }
-                    imports.push(imp);
+                    exports.push(exp);
                     continue;
                 }
-                Err(_) => { *input = before; }
+                Err(ErrMode::Cut(e)) => return Err(ErrMode::Cut(e)),
+                Err(_) => {}
             }
         }
+        // A declaration parses its own attributes.
+        *input = before;
 
         let decl = declaration(input)?;
         ws(input)?;
@@ -2102,7 +2275,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
         return Err(cut(input));
     }
 
-    Ok(Module { imports, declarations })
+    Ok(Module { imports, exports, declarations })
 }
 
 // ── C pointer syntax check ───────────────────────────────────────────────────
@@ -2115,24 +2288,39 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
 // probes (e.g. `a<b*c` tried as a generic type literal, or `a * b` tried as
 // the declaration `a* b`) parse `*`-suffixed types that never reach the tree.
 
-/// A rejected C-style pointer type: byte offset of the type and the message.
-pub(crate) struct PointerSyntaxError {
+/// Imports must come before every declaration and re-export: qualified
+/// generic constructions (`m.Box<int>()`) are recognized from the imports
+/// parsed so far.
+pub(crate) fn check_import_order(m: &Module) -> std::result::Result<(), PostParseError> {
+    let first_item = m.declarations.iter().map(|d| d.span().start).chain(m.exports.iter().map(|e| e.span.start)).min();
+    match m.imports.iter().find(|imp| first_item.is_some_and(|f| imp.span.start > f)) {
+        Some(imp) => Err(PostParseError {
+            offset: imp.span.start,
+            message: "imports must come before all declarations".to_string(),
+        }),
+        None => Ok(()),
+    }
+}
+
+/// An error found after parsing (a C-style pointer type outside `extern`, a
+/// late import): byte offset of the offending node and the message.
+pub(crate) struct PostParseError {
     pub offset: usize,
     pub message: String,
 }
 
 /// Reject `T*` in every type position outside `extern` function declarations.
-pub(crate) fn check_pointer_syntax(m: &Module) -> std::result::Result<(), PointerSyntaxError> {
+pub(crate) fn check_pointer_syntax(m: &Module) -> std::result::Result<(), PostParseError> {
     m.declarations.iter().try_for_each(ptr_check_decl)
 }
 
-fn ptr_check_type(t: &TypeName) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_type(t: &TypeName) -> std::result::Result<(), PostParseError> {
     let stars = t.name.len() - t.name.trim_end_matches('*').len();
     if stars > 0 {
         let base = TypeName { name: t.name[..t.name.len() - stars].to_string(), ..t.clone() };
         let written = format!("{}{}", base, "*".repeat(stars));
         let suggested = format!("{}{}{}", "__ptr<".repeat(stars), base, ">".repeat(stars));
-        return Err(PointerSyntaxError {
+        return Err(PostParseError {
             offset: t.span.start,
             message: format!(
                 "C pointer syntax `{}` is only allowed in extern declarations; use `{}`",
@@ -2143,21 +2331,21 @@ fn ptr_check_type(t: &TypeName) -> std::result::Result<(), PointerSyntaxError> {
     t.generic_types.iter().try_for_each(ptr_check_type)
 }
 
-fn ptr_check_attrs(attrs: &[Attribute]) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_attrs(attrs: &[Attribute]) -> std::result::Result<(), PostParseError> {
     attrs.iter().try_for_each(|a| ptr_check_expr(&a.body))
 }
 
-fn ptr_check_generic_params(ps: &[GenericParam]) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_generic_params(ps: &[GenericParam]) -> std::result::Result<(), PostParseError> {
     ps.iter().filter_map(|p| p.default.as_ref()).try_for_each(ptr_check_type)
 }
 
-fn ptr_check_var(v: &VariableDecl) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_var(v: &VariableDecl) -> std::result::Result<(), PostParseError> {
     ptr_check_attrs(&v.attributes)?;
     ptr_check_type(&v.type_name)?;
     v.default_value.as_ref().map_or(Ok(()), ptr_check_expr)
 }
 
-fn ptr_check_fn(f: &FunctionDecl) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_fn(f: &FunctionDecl) -> std::result::Result<(), PostParseError> {
     ptr_check_attrs(&f.attributes)?;
     if f.external {
         // Extern prototypes mirror C and may use `T*` freely.
@@ -2169,7 +2357,7 @@ fn ptr_check_fn(f: &FunctionDecl) -> std::result::Result<(), PointerSyntaxError>
     f.body.as_ref().map_or(Ok(()), ptr_check_block)
 }
 
-fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PostParseError> {
     match d {
         Declaration::Variable(v) => ptr_check_var(v),
         Declaration::Function(f) => ptr_check_fn(f),
@@ -2200,12 +2388,12 @@ fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PointerSyntaxError
     }
 }
 
-fn ptr_check_block(b: &Block) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_block(b: &Block) -> std::result::Result<(), PostParseError> {
     ptr_check_attrs(&b.attributes)?;
     b.statements.iter().try_for_each(ptr_check_stmt)
 }
 
-fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
     match s {
         Statement::Expression(e) => ptr_check_expr(e),
         Statement::Block(b) => ptr_check_block(b),
@@ -2224,7 +2412,7 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PointerSyntaxError> 
     }
 }
 
-fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PointerSyntaxError> {
+fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
     match e {
         Expression::Literal { .. } | Expression::SymbolRef { .. } => Ok(()),
         Expression::TypeLiteral(t) | Expression::SizeOf(t) => ptr_check_type(t),
@@ -2666,6 +2854,107 @@ mod tests {
         let m = parse("import mylib as m;\nfoo() {}");
         assert_eq!(m.imports.len(), 1);
         assert_eq!(m.imports[0].alias.as_deref(), Some("m"));
+        assert_eq!(m.imports[0].qualifier(), Some("m"));
+    }
+
+    #[test]
+    fn test_import_forms() {
+        let m = parse(
+            "import geometry\nimport \"shapes\";\nimport \"util\" as u;\n\
+             import [sqrt, pow as power] from math;\nimport [a] from \"file\";\nfoo() {}",
+        );
+        assert_eq!(m.imports.len(), 5);
+        assert_eq!(m.imports[0].qualifier(), Some("geometry"));
+        assert!(m.imports[1].is_local && m.imports[1].qualifier().is_none());
+        assert_eq!(m.imports[2].qualifier(), Some("u"));
+        let symbols = m.imports[3].symbols.as_ref().expect("symbol list");
+        assert_eq!(m.imports[3].name, "math");
+        assert_eq!(symbols.iter().map(|s| s.local_name()).collect::<Vec<_>>(), vec!["sqrt", "power"]);
+        assert_eq!(symbols[1].name, "pow");
+        assert!(m.imports[3].qualifier().is_none());
+        assert!(m.imports[4].is_local);
+        assert_eq!(m.to_string().lines().nth(3), Some("import [sqrt, pow as power] from math;"));
+        assert_eq!(m.declarations.len(), 1);
+    }
+
+    #[test]
+    fn test_import_and_export_attributes() {
+        let m = parse("[Target(OS(Linux))] import linux;\n[Target(OS(Linux))] export open as o;\n[Target(OS(Linux))] f() {}");
+        assert_eq!(m.imports[0].attributes.len(), 1);
+        assert_eq!(m.imports[0].span.start, 0);
+        assert_eq!(m.exports[0].attributes.len(), 1);
+        assert_eq!(m.exports[0].exported_name(), "o");
+        assert_eq!(m.declarations.len(), 1);
+        assert!(m.to_string().starts_with("[Target(OS(Linux))] import linux;"), "{}", m);
+    }
+
+    #[test]
+    fn test_export_alias() {
+        let m = parse("export helper as help;\nexport m.sqrt as root\nexport Box;\nexport f(): int { return 0; }\nexport var x = 1;");
+        assert_eq!(m.exports.len(), 3);
+        assert_eq!((m.exports[0].symbol.as_str(), m.exports[0].exported_name()), ("helper", "help"));
+        assert_eq!((m.exports[1].symbol.as_str(), m.exports[1].exported_name()), ("m.sqrt", "root"));
+        assert_eq!((m.exports[2].symbol.as_str(), m.exports[2].exported_name()), ("Box", "Box"));
+        assert_eq!(m.declarations.len(), 2);
+        assert!(matches!(&m.declarations[0], Declaration::Function(f) if f.is_exported));
+        // A bare re-export needs its `;`; without one, a return type on its
+        // own line starts an exported C-style declaration.
+        let m = parse("export Box; # the box\nexport P\nmake() { return P(); }");
+        assert_eq!(m.exports.iter().map(|e| e.symbol.as_str()).collect::<Vec<_>>(), vec!["Box"]);
+        assert!(matches!(&m.declarations[0], Declaration::Function(f) if f.name == "make" && f.is_exported && f.return_type.name == "P"));
+    }
+
+    #[test]
+    fn test_qualified_names() {
+        let m = parse("import geo;\nf(p: geo.Point, b: geo.Box<geo.Point>[]): int { var q = geo.Box<int>(); return geo.area(1, 2); }");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("function") };
+        assert_eq!(f.parameters[0].type_name.name, "geo.Point");
+        assert_eq!(f.parameters[1].type_name.to_string(), "geo.Box[]<geo.Point>");
+        let Statement::Declaration(Declaration::Variable(v)) = &f.body.as_ref().unwrap().statements[0] else { panic!("var") };
+        let Some(Expression::FunctionCall { function, .. }) = &v.default_value else { panic!("call") };
+        assert!(matches!(function.as_ref(), Expression::TypeLiteral(t) if t.name == "geo.Box"));
+        // A comparison after a member access is still a comparison.
+        assert!(matches!(parse_expr("a.b < c"), Expression::Binary { .. }));
+        let Expression::FunctionCall { arguments, .. } = parse_expr("f(a.b < c, d > e)") else { panic!("call") };
+        assert_eq!(arguments.len(), 2);
+        assert!(arguments.iter().all(|a| matches!(a, Expression::Binary { .. })));
+        for src in ["g.Box<int> ()", "g.Box<int>[]()"] {
+            let m = parse(&format!("import g;\nf() {{ var x = {}; }}", src));
+            let Declaration::Function(f) = &m.declarations[0] else { panic!("function") };
+            let Statement::Declaration(Declaration::Variable(v)) = &f.body.as_ref().unwrap().statements[0] else { panic!("var") };
+            let Some(Expression::FunctionCall { function, .. }) = &v.default_value else { panic!("call: {}", src) };
+            assert!(matches!(function.as_ref(), Expression::TypeLiteral(t) if t.name.starts_with("g.Box")), "{}", src);
+        }
+        // A member of a qualified generic type.
+        let m = parse("import c;
+f() { var r = c.Result<int>.ok(1); }");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("function") };
+        let Statement::Declaration(Declaration::Variable(v)) = &f.body.as_ref().unwrap().statements[0] else { panic!("var") };
+        let Some(Expression::FunctionCall { function, .. }) = &v.default_value else { panic!("call") };
+        let Expression::MemberAccess { lhs, name, .. } = function.as_ref() else { panic!("member") };
+        assert!(name == "ok" && matches!(lhs.as_ref(), Expression::TypeLiteral(t) if t.name == "c.Result"));
+        // Without an import of `a`, a generic-looking member comparison is
+        // two comparisons, on either side of the `<`.
+        for src in ["f(a.b < c, d > (e))", "g(i < a.size, i > 0)"] {
+            let Expression::FunctionCall { arguments, .. } = parse_expr(src) else { panic!("call: {}", src) };
+            assert_eq!(arguments.len(), 2, "{}", src);
+        }
+        assert!(matches!(parse_expr("x < p.mask >> 1"), Expression::Binary { op, .. } if op == "<"));
+        // A qualified C-style return type.
+        let m = parse("import g;\ng.Point origin() { return g.Point(); }\ntrait T { g.Point at(); }");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("function") };
+        assert_eq!((f.name.as_str(), f.return_type.name.as_str()), ("origin", "g.Point"));
+        let Declaration::Trait(t) = &m.declarations[1] else { panic!("trait") };
+        assert_eq!((t.methods[0].name.as_str(), t.methods[0].return_type.name.as_str()), ("at", "g.Point"));
+    }
+
+    #[test]
+    fn test_import_errors() {
+        for src in ["use \"lib\";", "import;", "import [a b] from m;", "import [a] m;", "import [a] from m as n;"] {
+            let _guard = track_source(src.len());
+            let mut input = src;
+            assert!(parse_module(&mut input).is_err(), "should reject: {}", src);
+        }
     }
 
     #[test]

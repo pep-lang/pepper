@@ -31,7 +31,8 @@ pub fn parse_source(name: &str, source: &str) -> Result<Module, String> {
         format!("{}:{}:{}: parse error", name, p.line + 1, p.col + 1)
     })?;
     // `T*` is only legal in extern declarations; see `check_pointer_syntax`.
-    parsers::check_pointer_syntax(&module).map_err(|e| {
+    // Imports come first; see `check_import_order`.
+    parsers::check_pointer_syntax(&module).and_then(|_| parsers::check_import_order(&module)).map_err(|e| {
         let p = Span::offset_to_position(source, e.offset.min(source.len()));
         format!("{}:{}:{}: {}", name, p.line + 1, p.col + 1, e.message)
     })?;
@@ -107,6 +108,16 @@ mod tests {
         // `*` in expressions is multiplication, never a pointer type.
         let src = "f(a: int, b: int): int {\n    var c = a * b;\n    c = a*b;\n    return a < b * c ? 1 : 0;\n}\n";
         super::parse_source("t.pep", src).expect("multiplication must parse");
+    }
+
+    #[test]
+    fn imports_come_before_declarations() {
+        let e = match super::parse_source("t.pep", "import a;\nf() {}\nimport b;\n") {
+            Ok(_) => panic!("expected a late import to be rejected"),
+            Err(e) => e,
+        };
+        assert_eq!(e, "t.pep:3:1: imports must come before all declarations");
+        super::parse_source("t.pep", "import a;\nimport \"b\";\nexport x as y;\nf() {}\n").expect("imports first");
     }
 
     #[test]

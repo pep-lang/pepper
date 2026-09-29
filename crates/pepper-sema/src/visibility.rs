@@ -32,9 +32,9 @@
 //! own, or exported) does.
 
 use crate::passes::platform::keep;
-use crate::type_name::is_concrete_override;
+use crate::type_name::{is_concrete_override, is_override};
 use pepper_parser::ast::{
-    Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement,
+    Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement,
     StructDecl, TypeName,
 };
 use std::collections::{HashMap, HashSet};
@@ -46,6 +46,15 @@ pub struct SourceFile<'a> {
     /// The file's text, for turning spans into line/column positions.
     pub source: &'a str,
     pub module: &'a Module,
+    /// A prelude file (the runtime, a forced import): its exports are visible
+    /// everywhere without an import.
+    pub prelude: bool,
+    /// Its exports may repeat other exempt files' exports: prelude files, and
+    /// the other files of a forced module.
+    pub duplicate_exempt: bool,
+    /// The references module linking rewrote from an import (span start ->
+    /// declaration name), from its [`crate::modules::FileScope`].
+    pub imported: &'a HashMap<usize, String>,
 }
 
 /// What a [`VisibilityError`] is about.
@@ -57,6 +66,11 @@ pub enum VisibilityErrorKind {
     PrivateExtension,
     /// A private declaration whose name another file also declares.
     Duplicate,
+    /// A reference to another file's export that this file did not import.
+    NotImported,
+    /// An exported declaration of a non-prelude file whose name another file
+    /// also declares: imports would resolve both to one of them.
+    DuplicateExport,
 }
 
 /// A visibility violation.
@@ -85,6 +99,14 @@ impl VisibilityError {
             }
             VisibilityErrorKind::PrivateExtension => format!(
                 "'{}' is declared in a private extension in {}; declare the extension with 'export' to use it from another file",
+                self.name, other
+            ),
+            VisibilityErrorKind::NotImported => format!(
+                "'{}' is exported by {}, which this file does not import; add an import for it",
+                self.name, other
+            ),
+            VisibilityErrorKind::DuplicateExport => format!(
+                "exported '{}' is also declared in {}; top-level names must be unique across files, even in different modules",
                 self.name, other
             ),
             VisibilityErrorKind::Duplicate => format!(
@@ -116,15 +138,22 @@ struct Decl<'a> {
     generics: Vec<&'a str>,
 }
 
+/// A generic function a concrete override (`pick<int>`) would specialize:
+/// it has generic parameters, and they are not all concrete.
+fn is_generic_base(d: &Decl) -> bool {
+    !d.generics.is_empty() && !is_override(d.generics.iter().copied())
+}
+
 /// Check every file's references against the other files' exports.
 pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     let mut decls: HashMap<&str, Vec<Decl>> = HashMap::new();
+    let mut types: HashSet<&str> = HashSet::new();
     let mut members = Members::default();
     for (i, file) in files.iter().enumerate() {
         let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![] };
         for d in &file.module.declarations {
             // A malformed attribute is reported by platform filtering itself.
-            if !keep(attributes(d)).unwrap_or(true) {
+            if !keep(d.attributes()).unwrap_or(true) {
                 continue;
             }
             match d {
@@ -134,14 +163,21 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     ..decl(f.is_exported, f.name_span)
                 }),
                 Declaration::Struct(s) => {
+                    types.insert(&s.name);
                     decls.entry(&s.name).or_default().push(decl(s.is_exported, s.name_span));
                     members.of_struct.entry(&s.name).or_default().extend(struct_member_names(s));
                     for m in struct_member_names(s) {
                         members.in_struct_bodies.entry(m).or_default().push((i, s.is_exported));
                     }
                 }
-                Declaration::TypeAlias(t) => decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span)),
-                Declaration::Trait(t) => decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span)),
+                Declaration::TypeAlias(t) => {
+                    types.insert(&t.name);
+                    decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
+                }
+                Declaration::Trait(t) => {
+                    types.insert(&t.name);
+                    decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
+                }
                 Declaration::Variable(v) => decls.entry(&v.name).or_default().push(decl(v.is_exported, v.name_span)),
                 Declaration::Extend(e) => {
                     for m in &e.methods {
@@ -163,16 +199,22 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         }
     };
 
+    let prelude: Vec<bool> = files.iter().map(|f| f.prelude).collect();
+    let exempt: Vec<bool> = files.iter().map(|f| f.duplicate_exempt).collect();
     let mut errors = vec![];
     for (name, entries) in &decls {
-        for d in entries.iter().filter(|d| !d.exported && !d.external) {
+        // Exports of prelude files (the runtime and `--import` modules) may
+        // repeat each other, by design: the runtime is one unit, and a forced
+        // import may supply its own definition of a runtime export. Every
+        // other file's names must be unique.
+        for d in entries.iter().filter(|d| !d.external && (!d.exported || !exempt[d.file])) {
             if let Some(other) = entries.iter().find(|o| o.file != d.file && shape(o) == shape(d)) {
                 errors.push(VisibilityError {
                     file: d.file,
                     span: d.span,
                     name: name.to_string(),
                     declared_in: other.file,
-                    kind: VisibilityErrorKind::Duplicate,
+                    kind: if d.exported { VisibilityErrorKind::DuplicateExport } else { VisibilityErrorKind::Duplicate },
                 });
             }
         }
@@ -183,28 +225,35 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     for (i, file) in files.iter().enumerate() {
         // An extension declares no name of its own; its target's name belongs
         // to the file that declares the struct.
+        // Nor does a concrete override (`pick<int>`): after linking it may
+        // carry an imported generic's name, which it must not make visible.
         let own: HashSet<&str> = file
             .module
             .declarations
             .iter()
-            .filter(|d| !matches!(d, Declaration::Extend(_)))
+            .filter(|d| match d {
+                Declaration::Extend(_) => false,
+                Declaration::Function(f) => !is_override(f.generic_params.iter().map(|g| g.name.as_str())),
+                _ => true,
+            })
+            // Nor does one platform selection drops: it is never compiled.
+            .filter(|d| keep(d.attributes()).unwrap_or(true))
             .map(|d| d.name())
             .collect();
-        let mut checker = Checker { file: i, own, decls: &decls, members: &members, scopes: vec![], errors: &mut errors };
+        let mut checker = Checker {
+            file: i,
+            own,
+            imported: file.imported,
+            types: &types,
+            prelude: &prelude,
+            decls: &decls,
+            members: &members,
+            scopes: vec![],
+            errors: &mut errors,
+        };
         checker.module(file.module);
     }
     errors
-}
-
-fn attributes(d: &Declaration) -> &[Attribute] {
-    match d {
-        Declaration::Variable(v) => &v.attributes,
-        Declaration::Function(f) => &f.attributes,
-        Declaration::Struct(s) => &s.attributes,
-        Declaration::Trait(t) => &t.attributes,
-        Declaration::Extend(e) => &e.attributes,
-        Declaration::TypeAlias(t) => &t.attributes,
-    }
 }
 
 /// Member names across the program, for bare member refs in method bodies
@@ -228,16 +277,26 @@ fn struct_member_names(s: &StructDecl) -> impl Iterator<Item = &str> {
 struct Checker<'a, 'e> {
     file: usize,
     own: HashSet<&'a str>,
+    /// References linking rewrote from an import: span start -> name.
+    imported: &'a HashMap<usize, String>,
+    /// Every type name declared at top level (structs, aliases, traits).
+    types: &'a HashSet<&'a str>,
+    /// Per file: its exports are visible without an import.
+    prelude: &'a [bool],
     decls: &'a HashMap<&'a str, Vec<Decl<'a>>>,
     members: &'a Members<'a>,
     /// Locally bound names, innermost last.
-    scopes: Vec<HashSet<String>>,
+    /// Locally bound names, innermost last; `true` for generic parameters,
+    /// the only names that hide a type.
+    scopes: Vec<(HashSet<String>, bool)>,
     errors: &'e mut Vec<VisibilityError>,
 }
 
 impl<'a> Checker<'a, '_> {
     fn module(&mut self, module: &'a Module) {
-        for decl in &module.declarations {
+        // What platform selection drops is never compiled, and linking did
+        // not look at it either.
+        for decl in module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             self.declaration(decl);
         }
     }
@@ -261,11 +320,13 @@ impl<'a> Checker<'a, '_> {
                         self.expression(e);
                     }
                 }
+                // Platform selection never drops a constructor or destructor,
+                // whatever its attributes, so both are always checked.
                 if let Some(c) = &s.constructor {
-                    self.function(c);
+                    self.function_body(c);
                 }
                 if let Some(d) = &s.destructor {
-                    self.block(d);
+                    self.block_body(d);
                 }
                 for m in &s.methods {
                     self.function(m);
@@ -282,8 +343,18 @@ impl<'a> Checker<'a, '_> {
             }
             Declaration::Extend(e) => {
                 // `extend Foo<T>` introduces T as a generic parameter; bind it
-                // before checking the target and traits that mention it.
-                self.scopes.push(e.target.generic_types.iter().map(|t| t.name.clone()).collect());
+                // before checking the target and traits that mention it. A
+                // name the program declares as a type specializes instead
+                // (`extend Array<Point>`), and is checked like any reference.
+                self.scopes.push((
+                    e.target
+                        .generic_types
+                        .iter()
+                        .filter(|t| t.generic_types.is_empty() && !self.types.contains(t.name.as_str()))
+                        .map(|t| t.name.clone())
+                        .collect(),
+                    true,
+                ));
                 self.type_name(&e.target);
                 for t in &e.traits {
                     self.type_name(t);
@@ -303,10 +374,17 @@ impl<'a> Checker<'a, '_> {
         }
     }
 
+    /// A function, unless platform selection drops it.
     fn function(&mut self, f: &'a FunctionDecl) {
+        if keep(&f.attributes).unwrap_or(true) {
+            self.function_body(f);
+        }
+    }
+
+    fn function_body(&mut self, f: &'a FunctionDecl) {
         self.push_generics(&f.generic_params);
         self.type_name(&f.return_type);
-        self.scopes.push(HashSet::new());
+        self.scopes.push((HashSet::new(), false));
         for p in &f.parameters {
             self.type_name(&p.type_name);
             if let Some(e) = &p.default_value {
@@ -321,8 +399,15 @@ impl<'a> Checker<'a, '_> {
         self.scopes.pop();
     }
 
+    /// A block, unless platform selection drops it.
     fn block(&mut self, block: &'a Block) {
-        self.scopes.push(HashSet::new());
+        if keep(&block.attributes).unwrap_or(true) {
+            self.block_body(block);
+        }
+    }
+
+    fn block_body(&mut self, block: &'a Block) {
+        self.scopes.push((HashSet::new(), false));
         for stmt in &block.statements {
             self.statement(stmt);
         }
@@ -384,28 +469,56 @@ impl<'a> Checker<'a, '_> {
 
     fn type_name(&mut self, ty: &TypeName) {
         let base = ty.name.trim_end_matches(|c| c == '*' || c == '[' || c == ']');
-        self.reference(base, ty.span);
+        // Only a generic parameter hides a type: a local or member named
+        // `Point` is a value, as linking also treats it.
+        if self.scopes.iter().any(|(s, generic)| *generic && s.contains(base)) {
+            for g in &ty.generic_types {
+                self.type_name(g);
+            }
+            return;
+        }
+        self.check_reference(base, ty.span);
         for g in &ty.generic_types {
             self.type_name(g);
         }
     }
 
     fn reference(&mut self, name: &str, span: Span) {
-        if self.own.contains(name) || self.scopes.iter().any(|s| s.contains(name)) {
+        if self.scopes.iter().any(|(s, _)| s.contains(name)) {
+            return;
+        }
+        self.check_reference(name, span);
+    }
+
+    /// Check a reference not bound locally.
+    fn check_reference(&mut self, name: &str, span: Span) {
+        if self.own.contains(name) {
             return;
         }
         // Not a top-level name: possibly a bare extension method in a method body.
         let Some(entries) = self.decls.get(name) else { return self.member(name, span) };
-        if entries.iter().any(|d| d.exported || d.file == self.file) {
+        if self.imported.get(&span.start).is_some_and(|n| n == name)
+            // This file's own declaration counts, unless it is only a concrete
+            // override (`pick<int>`) of a generic another file declares: that
+            // would unlock the other file's name.
+            || entries.iter().any(|d| {
+                (d.file == self.file
+                    && (!is_override(d.generics.iter().copied())
+                        || !entries
+                            .iter()
+                            .any(|e| e.file != self.file && is_generic_base(e))))
+                    || (d.exported && self.prelude[d.file])
+            })
+        {
             return;
         }
-        self.errors.push(VisibilityError {
-            file: self.file,
-            span,
-            name: name.to_string(),
-            declared_in: entries[0].file,
-            kind: VisibilityErrorKind::Private,
-        });
+        // Name the other file: the one whose declaration is out of reach.
+        let elsewhere = entries.iter().find(|d| d.file != self.file).unwrap_or(&entries[0]);
+        let (declared_in, kind) = match entries.iter().find(|d| d.exported && d.file != self.file) {
+            Some(d) => (d.file, VisibilityErrorKind::NotImported),
+            None => (elsewhere.file, VisibilityErrorKind::Private),
+        };
+        self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, kind });
     }
 
     /// A member name (`x.name`, or bare `name` in a method body) that some
@@ -427,7 +540,7 @@ impl<'a> Checker<'a, '_> {
     }
 
     fn bind(&mut self, name: &str) {
-        if let Some(scope) = self.scopes.last_mut() {
+        if let Some((scope, _)) = self.scopes.last_mut() {
             scope.insert(name.to_string());
         }
     }
@@ -435,7 +548,7 @@ impl<'a> Checker<'a, '_> {
     /// Bind `params`, then check their defaults, which may mention them
     /// (`R<T, E=T>`).
     fn push_generics(&mut self, params: &[GenericParam]) {
-        self.scopes.push(params.iter().map(|p| p.name.clone()).collect());
+        self.scopes.push((params.iter().map(|p| p.name.clone()).collect(), true));
         for p in params {
             if let Some(d) = &p.default {
                 self.type_name(d);
@@ -453,7 +566,7 @@ impl<'a> Checker<'a, '_> {
                 ext.iter().filter(|&&(_, file, exported)| exported || file == self.file).map(|&(m, _, _)| m.to_string()),
             );
         }
-        self.scopes.push(names);
+        self.scopes.push((names, false));
     }
 }
 
@@ -464,10 +577,12 @@ mod tests {
 
     fn check(files: &[(&str, &str)]) -> Vec<String> {
         let modules: Vec<Module> = files.iter().map(|(n, s)| parse_source(n, s).expect("parse")).collect();
+        let none = HashMap::new();
         let sources: Vec<SourceFile> = files
             .iter()
             .zip(&modules)
-            .map(|((name, source), module)| SourceFile { name, source, module })
+            // Unlinked, as before modules: every file's exports are visible.
+            .map(|((name, source), module)| SourceFile { name, source, module, prelude: true, duplicate_exempt: true, imported: &none })
             .collect();
         check_visibility(&sources).iter().map(|e| e.render(&sources)).collect()
     }
@@ -647,10 +762,22 @@ mod tests {
     #[test]
     fn generic_parameters_shadow_private_names_in_extend_and_defaults() {
         let errors = check(&[
-            ("lib.pep", "struct T { }\nexport struct Box<U> { var v: U; }"),
-            ("main.pep", "extend Box<T> { get(): T { return v; } }\nstruct R<T, E=T> { var e: E; }"),
+            ("lib.pep", "count(): int { return 0; }\nexport struct Box<U> { var v: U; }\nstruct T { }"),
+            ("main.pep", "extend Box<V> { get(): V { return v; } }\nstruct R<T, E=T> { var e: E; }"),
         ]);
         assert!(errors.is_empty(), "{:?}", errors);
+    }
+
+    #[test]
+    fn a_declared_type_in_extend_specializes_and_is_checked() {
+        // `T` names lib's private struct, so `extend Box<T>` specializes
+        // `Box<T>` (as sema reads it) rather than introducing a parameter.
+        let errors = check(&[
+            ("lib.pep", "struct T { }\nexport struct Box<U> { var v: U; }"),
+            ("main.pep", "extend Box<T> { get(): int { return 0; } }"),
+        ]);
+        assert_eq!(errors.len(), 1, "{:?}", errors);
+        assert!(errors[0].contains("'T' is private to lib.pep"), "{:?}", errors);
     }
 
     #[test]

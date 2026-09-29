@@ -60,6 +60,14 @@ pub fn is_concrete_override<'a>(mut params: impl Iterator<Item = &'a str>) -> bo
     params.all(|p| INTEGRAL_TYPES.contains(p) || p == "String")
 }
 
+/// Whether a function with these generic parameters, as spelled, is a
+/// concrete override (`hash<int>`): it has some, and all are concrete. Module
+/// linking and the visibility check both decide overrides by this.
+pub fn is_override<'a>(params: impl IntoIterator<Item = &'a str>) -> bool {
+    let mut params = params.into_iter().peekable();
+    params.peek().is_some() && is_concrete_override(params)
+}
+
 impl TypeName {
     pub fn new(name: &str) -> Self {
         Self {

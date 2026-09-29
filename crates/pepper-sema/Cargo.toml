@@ -8,3 +8,4 @@ path = "src/lib.rs"
 
 [dependencies]
 pepper-parser = { path = "../pepper-parser" }
+pepper-files = { path = "../pepper-files" }

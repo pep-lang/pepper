@@ -335,6 +335,30 @@ pub enum Declaration {
 }
 
 impl Declaration {
+    /// The attributes written before the declaration.
+    pub fn attributes(&self) -> &[Attribute] {
+        match self {
+            Declaration::Variable(v) => &v.attributes,
+            Declaration::Function(f) => &f.attributes,
+            Declaration::Struct(s) => &s.attributes,
+            Declaration::Trait(t) => &t.attributes,
+            Declaration::Extend(e) => &e.attributes,
+            Declaration::TypeAlias(t) => &t.attributes,
+        }
+    }
+
+    /// Marked `export`: usable from files that import this one.
+    pub fn is_exported(&self) -> bool {
+        match self {
+            Declaration::Variable(v) => v.is_exported,
+            Declaration::Function(f) => f.is_exported,
+            Declaration::Struct(s) => s.is_exported,
+            Declaration::Trait(t) => t.is_exported,
+            Declaration::Extend(e) => e.is_exported,
+            Declaration::TypeAlias(t) => t.is_exported,
+        }
+    }
+
     pub fn name(&self) -> &str {
         match self {
             Declaration::Variable(d) => &d.name,
@@ -438,19 +462,118 @@ impl Statement {
 
 // ── Module ────────────────────────────────────────────────────────────────────
 
+/// One `symbol` or `symbol as name` entry of `import [...] from source`.
+#[derive(Debug, Clone)]
+pub struct ImportedSymbol {
+    pub name: String,
+    pub name_span: Span,
+    /// The local name; `None` binds the symbol under its own name.
+    pub alias: Option<String>,
+    pub span: Span,
+}
+
+impl ImportedSymbol {
+    /// The name this symbol is bound to in the importing file.
+    pub fn local_name(&self) -> &str {
+        self.alias.as_deref().unwrap_or(&self.name)
+    }
+}
+
+/// An import. The source is a module (`import math`, a folder with a
+/// `module.pep` on the search path) or a file of the same module
+/// (`import "helpers"`, `helpers.pep` next to the importing file).
+///
+/// - `import math` / `import math as m`: the module's exports, qualified
+///   (`math.sqrt`, `m.sqrt`).
+/// - `import "helpers"`: the file's exports, unqualified. With `as h`, qualified.
+/// - `import [sqrt, pow as power] from math`: the named exports, unqualified.
 #[derive(Debug, Clone)]
 pub struct Import {
+    /// The module name, or the file path as written without `.pep`.
     pub name: String,
     /// Span of the imported name (identifier or string literal).
     pub name_span: Span,
     pub alias: Option<String>,
+    /// Local (`"name"`): a file of this module, or a module folder, relative
+    /// to the importing file; rather than a dependency (`name`) found on the
+    /// search paths.
     pub is_local: bool,
+    /// `import [...] from source`: the symbols named in the list.
+    pub symbols: Option<Vec<ImportedSymbol>>,
+    /// Attributes before `import`: `[Target(OS(Linux))] import linux;`.
+    pub attributes: Vec<Attribute>,
+    /// The whole import, from its first attribute when it has any.
     pub span: Span,
+}
+
+impl Import {
+    /// The name without a trailing `.pep`: `import "util.pep"` and
+    /// `import "util"` name the same thing. Resolution and diagnostics both
+    /// use it.
+    pub fn stem(&self) -> &str {
+        self.name.strip_suffix(".pep").unwrap_or(&self.name)
+    }
+
+    /// How diagnostics name the import's source: `"util.pep"` (whether
+    /// written `"util"` or `"util.pep"`), `module 'm'`.
+    pub fn describe(&self) -> String {
+        if self.is_local {
+            format!("\"{}.pep\"", self.stem())
+        } else {
+            format!("module '{}'", self.name)
+        }
+    }
+
+    /// Like [`Import::describe`], naming a local import that resolved to a
+    /// module folder (`folder`) as the folder: `the module folder "vec"`.
+    pub fn describe_as(&self, folder: bool) -> String {
+        if self.is_local && folder {
+            format!("the module folder \"{}\"", self.stem())
+        } else {
+            self.describe()
+        }
+    }
+
+    /// The qualifier this import binds (`m` in `m.sqrt`), if any: the alias,
+    /// or a bare module import's own name.
+    pub fn qualifier(&self) -> Option<&str> {
+        if self.symbols.is_some() {
+            return None;
+        }
+        match &self.alias {
+            Some(a) => Some(a),
+            None if !self.is_local => Some(&self.name),
+            None => None,
+        }
+    }
+}
+
+/// `export symbol as name;` — re-exports `symbol` (declared in this file, or
+/// imported: `sym`, `m.sym`) to importers under `name`, or under its own
+/// (last) name without `as`.
+#[derive(Debug, Clone)]
+pub struct ExportAlias {
+    /// The exported symbol as written, possibly qualified (`m.sym`).
+    pub symbol: String,
+    pub symbol_span: Span,
+    pub alias: Option<String>,
+    /// Attributes before `export`: `[Target(OS(Linux))] export open as o;`.
+    pub attributes: Vec<Attribute>,
+    /// The whole re-export, from its first attribute when it has any.
+    pub span: Span,
+}
+
+impl ExportAlias {
+    /// The name importers see.
+    pub fn exported_name(&self) -> &str {
+        self.alias.as_deref().unwrap_or_else(|| self.symbol.rsplit('.').next().unwrap_or(&self.symbol))
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Module {
     pub imports: Vec<Import>,
+    pub exports: Vec<ExportAlias>,
     pub declarations: Vec<Declaration>,
 }
 
@@ -752,13 +875,43 @@ impl Display for Statement {
     }
 }
 
+impl Display for ImportedSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(alias) = &self.alias {
+            write!(f, " as {}", alias)?;
+        }
+        Ok(())
+    }
+}
+
 impl Display for Import {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.is_local {
-            write!(f, "import \"{}\"", self.name)?;
-        } else {
-            write!(f, "import {}", self.name)?;
+        for a in &self.attributes {
+            write!(f, "{} ", a)?;
         }
+        write!(f, "import ")?;
+        if let Some(symbols) = &self.symbols {
+            write!(f, "[{}] from ", join(symbols, ", "))?;
+        }
+        if self.is_local {
+            write!(f, "\"{}\"", self.name)?;
+        } else {
+            write!(f, "{}", self.name)?;
+        }
+        if let Some(alias) = &self.alias {
+            write!(f, " as {}", alias)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for ExportAlias {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for a in &self.attributes {
+            write!(f, "{} ", a)?;
+        }
+        write!(f, "export {}", self.symbol)?;
         if let Some(alias) = &self.alias {
             write!(f, " as {}", alias)?;
         }
@@ -770,6 +923,9 @@ impl Display for Module {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for imp in &self.imports {
             writeln!(f, "{};", imp)?;
+        }
+        for exp in &self.exports {
+            writeln!(f, "{};", exp)?;
         }
         for decl in &self.declarations {
             match decl {
