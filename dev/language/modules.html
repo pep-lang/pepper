@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ad824df6.js";
+            window.path_to_searchindex_js = "../searchindex-6270c235.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -439,10 +439,10 @@ declaration’s own name may not be in scope where you use it. If
 function with a parameter named <code>area</code> is an error that asks you to rename
 one of them.</li>
 </ul>
-<p>Imports bind names; they do not create separate namespaces. All files of a
-program share one namespace for their declarations, so two modules may not
-export the same name, even though users reach them through different
-qualifiers. See <a href="visibility.html#one-namespace-for-the-whole-program">One namespace for the whole program</a>.</p>
+<p>Each file has its own namespace for its private declarations, so files and
+modules may reuse private names freely. Exported names share one namespace,
+so two modules may not export the same name, even though users reach them
+through different qualifiers. See <a href="visibility.html#each-file-has-its-own-namespace">Each file has its own namespace</a>.</p>
 <h2 id="platform-specific-imports"><a class="header" href="#platform-specific-imports">Platform-specific imports</a></h2>
 <p>An import or a re-export may carry attributes like any declaration. With a
 <code>[Target(...)]</code> attribute it applies only on matching platforms and is ignored

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad824df6.js";
+            window.path_to_searchindex_js = "searchindex-6270c235.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -3229,9 +3229,10 @@ library uses this to give <a href="#hashmap-and-hashset"><code>hash&lt;String&gt
 content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity.</p>
 <p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
 one of your own structs, such as <code>describe&lt;Point&gt;</code>. An override for a struct
-must be in the same file as the generic function: in another file it is
-reported as a duplicate declaration (see
-<a href="#one-namespace-for-the-whole-program">Visibility</a>).</p>
+must be in the same file as the generic function: in another file,
+<code>describe&lt;Point&gt;</code> is a second, private generic function whose type parameter
+is named <code>Point</code> (see
+<a href="#each-file-has-its-own-namespace">Visibility</a>).</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="#extending-generic-structs">extension</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -4546,42 +4547,70 @@ attribute described in <a href="#calling-c">Calling C</a>.</p>
 way, and is visible in every file without an import. The runtime’s own helpers
 are private, so calling one, such as the integer formatter <code>dec</code>, reports
 <code>'dec' is private to</code> followed by the path of the runtime’s <code>internals.pep</code>.</p>
-<h2 id="one-namespace-for-the-whole-program"><a class="header" href="#one-namespace-for-the-whole-program">One namespace for the whole program</a></h2>
-<p>Visibility controls who may <em>use</em> a name, but all the files of a program still
-share one namespace for their declarations. Two files may not both declare the
-same top-level name, even if both declarations are private:</p>
+<h2 id="each-file-has-its-own-namespace"><a class="header" href="#each-file-has-its-own-namespace">Each file has its own namespace</a></h2>
+<p>A private declaration belongs to its file alone, so two files may each
+declare a private name without clashing. Here <code>main.pep</code> and <code>lib.pep</code> each
+have their own <code>Counter</code> and <code>make</code>, and each file’s code reaches its own:</p>
+<pre><code class="language-pepper"># lib.pep's private helpers: no other file can see them, and no other
+# file's names can clash with them.
+struct Counter { var n: int; }
+
+make(): Counter {
+    var c = Counter();
+    c.n = 10;
+    return c;
+}
+
+export lib_total(): int {
+    return make().n;
+}
+</code></pre>
 <pre><code class="language-pepper">import "lib";
 
-make(x: int): int { return x; }   # lib.pep also has a private make()
-main(): int { return make(1); }
+# main.pep has its own private Counter and make(), unrelated to lib.pep's.
+struct Counter { var n: int; var step: int; }
+
+make(): Counter {
+    var c = Counter();
+    c.n = 1;
+    c.step = 2;
+    return c;
+}
+
+main(): int {
+    var c = make();                    # main.pep's make()
+    assert(c.n + c.step == 3, "main's own Counter");
+    assert(lib_total() == 10, "lib's make() is its own");
+    return 0;
+}
 </code></pre>
-<pre><code class="language-text">main.pep:3:1: error: private 'make' is also declared in lib.pep; top-level names must be unique across files
-    3 | make(x: int): int { return x; }
-      | ^~~~
-lib.pep:27:1: note: also declared here
-   27 | make(x: int, y: int): Point {
-      | ^~~~
-</code></pre>
-<p>An exported name must be unique too, even across modules that are reached
-through different qualifiers: <code>exported 'f' is also declared in b/module.pep</code>.
-Give private helpers names that are unlikely to collide, for example with a
-prefix for the file or module they belong to. The runtime’s io module, for
-instance, prefixes its private helpers with <code>_io_</code>.</p>
-<p>A few kinds of declaration are exempt from this rule:</p>
+<p>This holds across modules too: two modules may each have a <code>util.pep</code> with a
+private <code>helper</code>. Files are told apart by their path inside their module
+(<code>io/file.pep</code>), not by their file name alone.</p>
+<p>Exported names are different: they share one namespace across the whole
+program, because importers reach them by name. Two files may not export the
+same name, even from modules reached through different qualifiers:
+<code>exported 'f' is also declared in b/module.pep</code>. A private name may repeat an
+exported one from another file; in the file that declares it, the file’s own
+declaration is the one that name refers to.</p>
+<p>A few kinds of declaration are not private in this sense:</p>
 <ul>
-<li><strong><code>extern</code> declarations</strong>, since every declaration of an extern names the
-same C function.</li>
-<li><strong>Concrete overrides</strong> of an exported generic function, such as <code>hash&lt;int&gt;</code>
-alongside <code>hash&lt;T&gt;</code>. Overriding one the runtime already provides, such as
-<code>hash&lt;String&gt;</code>, is still a duplicate. The exemption covers only overrides
-for primitive types and <code>String</code>: an override for a struct, such as
-<code>hash&lt;Point&gt;</code>, collides with <code>hash&lt;T&gt;</code> when the two are in different files,
-so declare it in the same file as the generic function. Type parameters
-are compared by position, not by name, so a private <code>pick&lt;U&gt;</code> also
-collides with <code>pick&lt;T&gt;</code>.</li>
+<li><strong><code>extern</code> declarations</strong> name a C function, which is the same function in
+every file. Several files may declare the same extern.</li>
+<li><strong>Concrete overrides</strong> of a generic function, such as <code>hash&lt;int&gt;</code> alongside
+<code>hash&lt;T&gt;</code>, take the generic function’s name: they replace its version for
+those types wherever it is called. So each override may be declared in only
+one file (<code>override 'hash&lt;int&gt;' is also declared in b.pep</code>), and overriding
+one the runtime already provides, such as <code>hash&lt;String&gt;</code>, is also an error.
+An override must be for a generic function you can see: overriding another
+file’s private generic function reports that it is private. The exemption
+covers only overrides for primitive types and <code>String</code>: <code>hash&lt;Point&gt;</code> is a
+second generic function whose type parameter is named <code>Point</code>, private to
+its file like any other declaration.</li>
 <li><strong>Declarations that a <code>[Target(...)]</code> attribute drops</strong> for the platform
-being compiled (see <a href="#platform-selection">Platform selection</a>). This is
-why <code>lib.pep</code> above can declare <code>platform_name</code> twice.</li>
+being compiled (see <a href="#platform-selection">Platform selection</a>) are never
+compiled. This is why the first <code>lib.pep</code> above can declare <code>platform_name</code>
+twice.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="modules-and-imports"><a class="header" href="#modules-and-imports">Modules and imports</a></h1>
@@ -4842,10 +4871,10 @@ declaration’s own name may not be in scope where you use it. If
 function with a parameter named <code>area</code> is an error that asks you to rename
 one of them.</li>
 </ul>
-<p>Imports bind names; they do not create separate namespaces. All files of a
-program share one namespace for their declarations, so two modules may not
-export the same name, even though users reach them through different
-qualifiers. See <a href="#one-namespace-for-the-whole-program">One namespace for the whole program</a>.</p>
+<p>Each file has its own namespace for its private declarations, so files and
+modules may reuse private names freely. Exported names share one namespace,
+so two modules may not export the same name, even though users reach them
+through different qualifiers. See <a href="#each-file-has-its-own-namespace">Each file has its own namespace</a>.</p>
 <h2 id="platform-specific-imports"><a class="header" href="#platform-specific-imports">Platform-specific imports</a></h2>
 <p>An import or a re-export may carry attributes like any declaration. With a
 <code>[Target(...)]</code> attribute it applies only on matching platforms and is ignored
