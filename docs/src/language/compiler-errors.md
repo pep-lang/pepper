@@ -183,6 +183,9 @@ a number is never a struct and one struct type is never another, except that
 a struct converts to a [trait it declares](traits-and-extensions.md#traits-as-types),
 and a value converts to a struct whose constructor from its type is
 [`[Implicit]`](structs.md#implicit-conversions).
+A raw pointer is never a struct either: a `__ptr<char>` is not a `String`
+(copy it with `String(p)`), and a `String` is not a `__ptr<char>` (pass its
+`c_str()`).
 The check applies wherever a value flows into a typed place: a variable's
 initializer, an assignment, an argument and a `return`:
 
@@ -196,6 +199,12 @@ main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value o
 main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);
       |            ^
+```
+
+```text
+main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
+    3 |     assert(false, p);
+      |                   ^
 ```
 
 ```text

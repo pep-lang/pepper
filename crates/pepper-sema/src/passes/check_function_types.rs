@@ -42,6 +42,19 @@ pub(crate) fn canonical(ty: &TypeName) -> TypeName {
     TypeName::with_args(name, ty.sub_types.iter().map(canonical).collect())
 }
 
+/// A type as Pepper code spells it: `T*` (the model's pointer spelling,
+/// legal only in extern declarations) is `__ptr<T>`.
+fn pepper_spelling(ty: &TypeName) -> String {
+    match ty.name.strip_suffix('*') {
+        Some(pointee) if ty.sub_types.is_empty() => format!("__ptr<{}>", pepper_spelling(&TypeName::new(pointee))),
+        _ => ty.display(),
+    }
+}
+
+fn is_void_ptr(ty: &TypeName) -> bool {
+    canonical(ty).to_string() == "void*"
+}
+
 fn same_type(a: &TypeName, b: &TypeName) -> bool {
     canonical(a) == canonical(b)
 }
@@ -59,6 +72,9 @@ struct Slot<'s> {
 enum Kind {
     Numeric,
     Struct,
+    /// A raw pointer (`__ptr<T>`, `T*`). Pointers convert among themselves
+    /// (C interop needs `void*`), but a pointer is never a struct reference.
+    Pointer,
 }
 
 struct Checker<'a> {
@@ -86,11 +102,14 @@ impl<'a> Checker<'a> {
     }
 
     /// What a type certainly is, or `None` when unknown here (unresolved,
-    /// a generic parameter, a pointer, a function).
+    /// a generic parameter, a function).
     fn kind_of(&self, ty: &TypeName) -> Option<Kind> {
         let name = ty.to_string();
-        if name == crate::type_name::AUTO || name.is_empty() || ty.is_function_type() || name.ends_with('*') {
+        if name == crate::type_name::AUTO || name.is_empty() || ty.is_function_type() {
             return None;
+        }
+        if name.ends_with('*') || (ty.name == "__ptr" && ty.sub_types.len() == 1) {
+            return Some(Kind::Pointer);
         }
         if self.unbound.iter().any(|p| *p == ty.name) {
             return None;
@@ -106,8 +125,9 @@ impl<'a> Checker<'a> {
     }
 
     /// A non-function `value` flowing into a non-function slot: numbers
-    /// convert among themselves, but a number is never a struct, and one
-    /// struct is never another.
+    /// convert among themselves, but a number is never a struct, one struct
+    /// is never another, and a pointer is never a struct (a `char*` passed
+    /// as a `String` would be read as a `String` object).
     fn value_flows_into(
         &mut self,
         value: &Expression,
@@ -128,7 +148,22 @@ impl<'a> Checker<'a> {
         let Some(expected_kind) = self.kind_of(expected) else {
             return;
         };
-        let Some(actual) = static_type::of(value, &self.table, current) else {
+        // A raw literal is the `char*` global a `String` is built from, and
+        // a literal passed where a pointer is expected is passed as that
+        // global (`strlen("hi")`).
+        let literal = match value {
+            Expression::StringLiteral { is_raw: true, .. } => true,
+            Expression::FunctionCall { function, args, loc } => {
+                function == "String" && loc.is_none() && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, .. }))
+            }
+            _ => false,
+        };
+        let actual = if literal && (matches!(value, Expression::StringLiteral { .. }) || matches!(self.kind_of(expected), Some(Kind::Pointer))) {
+            Some(TypeName::new("char*"))
+        } else {
+            static_type::of(value, &self.table, current)
+        };
+        let Some(actual) = actual else {
             return;
         };
         let Some(actual_kind) = self.kind_of(&actual) else {
@@ -140,12 +175,24 @@ impl<'a> Checker<'a> {
             // defaults (`Result<int>` is `Result<int, Error>`) and
             // aliases may spell one specialization two ways.
             (Kind::Struct, Kind::Struct) => canonical(expected).name != canonical(&actual).name,
+            (Kind::Pointer, Kind::Pointer) => false,
+            // Integers and pointers mix in C interop (`__null`, handles).
+            (Kind::Pointer, Kind::Numeric) | (Kind::Numeric, Kind::Pointer) => false,
+            // A struct reference is an opaque `void*` to C and the runtime,
+            // but no pointer, `void*` included, is a struct reference.
+            (Kind::Pointer, Kind::Struct) => !is_void_ptr(expected),
+            (Kind::Struct, Kind::Pointer) => true,
             _ => true,
         };
         if mismatch {
-            let message = (slot.mismatch)(&expected.display(), &actual.display());
+            let mut message = (slot.mismatch)(&pepper_spelling(expected), &pepper_spelling(&actual));
+            let c_string = matches!(actual_kind, Kind::Pointer) && expected.to_string() == "String";
+            if c_string {
+                message += "; use 'String(...)' to copy a C string";
+            }
             let mut diagnostic = Diagnostic::error(message);
-            if let Some(note) = self.constructor_hint(expected, &actual) {
+            // The C-string hint already names the constructor.
+            if let Some(note) = self.constructor_hint(expected, &actual).filter(|_| !c_string) {
                 diagnostic = diagnostic.with_note(note.0, Some(note.1));
             }
             self.report_with(diagnostic, value, slot);

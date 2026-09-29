@@ -626,6 +626,28 @@ fn void_call_used_as_a_value() {
 }
 
 #[test]
+fn pointer_is_not_a_string() {
+    assert_eq!(
+        error_of("pointer_as_string_argument", "main(): int {\n    var p = \"x\".c_str();\n    assert(false, p);\n    return 0;\n}\n"),
+        "main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string\n\
+         \x20   3 |     assert(false, p);\n\
+         \x20     |                   ^"
+    );
+    assert_eq!(
+        error_of("pointer_as_string_variable", "main(): int {\n    var p = \"x\".c_str();\n    var s: String = p;\n    return 0;\n}\n"),
+        "main.pep:3:21: error: cannot initialize variable 's' of type 'String' with a value of type '__ptr<char>'; use 'String(...)' to copy a C string\n\
+         \x20   3 |     var s: String = p;\n\
+         \x20     |                     ^"
+    );
+    assert_eq!(
+        error_of("string_as_pointer_argument", "f(p: __ptr<char>): int { return 0; }\nmain(): int {\n    var s = String();\n    return f(s);\n}\n"),
+        "main.pep:4:14: error: cannot pass a value of type 'String' as argument 1 of 'f', which has type '__ptr<char>'\n\
+         \x20   4 |     return f(s);\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
 fn method_of_this_stored_in_a_field() {
     assert_eq!(
         error_of(
@@ -639,6 +661,13 @@ fn method_of_this_stored_in_a_field() {
          \x20   5 |     setup() { measure = this.area; }\n\
          \x20     |                              ^~~~"
     );
+}
+
+#[test]
+fn void_pointer_is_not_a_struct() {
+    // A struct may pass as `void*`, but no pointer is a struct reference.
+    let variable = error_of("void_ptr_as_struct", "struct S { int x = 0; }\nmain(): int {\n    var p: __ptr<void> = __null;\n    S s = p;\n    return 0;\n}\n");
+    assert!(variable.starts_with("main.pep:4:11: error: cannot initialize variable 's' of type 'S' with a value of type '__ptr<void>'\n"), "{variable}");
 }
 
 #[test]

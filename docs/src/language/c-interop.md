@@ -72,7 +72,9 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
   `String(p, size)` copies `size` bytes. If you already know the number of
   code points, pass it as a third argument:
   `String(p, size, String.length_of(p, size))`. The constructor copies the
-  bytes, so you still own (and may free) the C buffer.
+  bytes, so you still own (and may free) the C buffer. A C string is never
+  passed or stored where a `String` is expected without this copy: that is
+  an error.
 
 ```pepper
 {{#include ../../examples/c-strings.pep}}
@@ -84,6 +86,15 @@ Passing a `String` value directly to an extern's `char*` parameter is an error:
 main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
     4 |     return strlen(name) as int;
       |                   ^~~~
+```
+
+The reverse is an error too: a `char*` (or any raw pointer, `void*`
+included) is never a `String`, so passing one where a `String` is expected,
+assigning it to a `String` variable, or returning it as one is rejected. Copy
+it into a String with `String(p)` first:
+
+```text
+main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
 ```
 
 ## Variadic functions
