@@ -267,8 +267,6 @@ conversions"), so code ported from C gives the same results:
 | Increment | `++` `--`, prefix or postfix |
 | Conditional | `condition ? a : b` |
 
-Some operators have limits today:
-
 `&&` and `||` short-circuit: the right operand is evaluated only when the left
 one does not decide the result, so `items.count() > 0 && items[0] == 1` never
 reads `items[0]` from an empty array.

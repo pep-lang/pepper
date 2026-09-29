@@ -68,6 +68,9 @@ call it, even though `Point` itself is exported:
 main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
+lib.pep:42:5: note: declared here
+   42 |     norm(): int {
+      |     ^~~~
 ```
 
 Likewise, a trait that a private extension implements is only available

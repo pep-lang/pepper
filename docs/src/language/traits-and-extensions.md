@@ -36,11 +36,10 @@ above does this.
 `Box<int>`, and calling one on a `Box<String>` is an error
 (`no member named 'doubled' in 'Box<String>'`).
 
-Two limitations of extensions today:
+A library type's specialization can be extended the same way. The example's
+`extend Array<int>` adds `total()`, which loops over `this` with `for`.
 
-- A `for` loop over `this` inside an extension of `Array<int>` does not
-  compile. Loop with an index instead.
-- An extension cannot add fields; declare every field in the struct itself.
+An extension cannot add fields; declare every field in the struct itself.
 
 ## Traits
 

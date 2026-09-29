@@ -58,7 +58,7 @@ pepper main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]
   ▼
 compiler::compile → compile_sources                               (driver/src/compiler.rs)
   program::load_program                                           (sema/src/program.rs)
-    runtime::discover()           cwd-relative runtime/ search → prelude files
+    runtime::discover()           PEPPER_RUNTIME, else runtime/ near cwd or exe
     imports::search_paths         -I dirs, then runtime dirs
     resolve_forced                --import NAME → prelude, ahead of the runtime
     program::load                 parse_source every reachable file; resolve imports
@@ -72,7 +72,6 @@ compiler::compile → compile_sources                               (driver/src/
     struct_body::apply            resolve_type_aliases; __refcount, ctor, dtor,
                                   __acquire/__release bodies
     passes::transform_pass        ~30 ordered steps (section 3)
-    check_function_types          function-value signature check
   ▼
 CodeGenerator::generate                                           (codegen/src/lib.rs)
   instantiate structs → sizes → methods → ctors → externs → functions
@@ -98,14 +97,22 @@ with no extension, and `module_name()` is the output's stem.
 
 ### 2.2 Program loading (`crates/pepper-sema/src/program.rs`, `crates/pepper-files`)
 
-- **Runtime discovery** (`pepper_files::runtime::discover`) checks
-  `<cwd>/runtime`, then `<cwd>/.pep/runtime`, then `../runtime` up to five
-  levels up. The **first** directory containing `.pep` files wins. Only that
-  directory's top-level `.pep` files join the prelude (`runtime/io/` does
-  not). Any `.a` files there are linked. Every directory scanned before the
-  winner is also returned, and those become import search paths. This lookup
-  is relative to the **current directory**, not to the compiler binary.
-  Tests `set_current_dir` to the repository root for this reason.
+- **Runtime discovery** (`pepper_files::runtime::discover`). When the
+  `PEPPER_RUNTIME` environment variable is set and non-empty, it names the
+  runtime directory and nothing else is searched. Otherwise the candidates
+  are `<cwd>/runtime`, `<cwd>/.pep/runtime`, and `../runtime` up to five
+  levels above the current directory, then `runtime` beside the running
+  executable and up to five levels above it (so `target/debug/pepper` finds
+  the checkout's `runtime/` from anywhere). The **first** directory
+  containing `.pep` files wins. Only that directory's top-level `.pep` files
+  join the prelude (`runtime/io/` does not). Any `.a` files there are
+  linked. Every directory scanned before the winner is also returned, and
+  those become import search paths. `discover_from(cwd, exe_dir)` is the
+  testable core. In `Mode::Strict`, `load_program` fails with `cannot find
+  the Pepper runtime` when no runtime is found (unless `--no-runtime`);
+  `Mode::Lenient` carries on without a prelude.
+  Tests still `set_current_dir` to the repository root so the cwd candidate
+  wins.
 - **`load_program(root, &Setup)`** is the single loader. The CLI, test
   harnesses, and the LSP all call it. `Setup` holds `import_dirs` (`-I`),
   `forced_imports` (`--import`), `runtime`, and `mode`. `Mode::Strict`
@@ -156,7 +163,8 @@ with no extension, and `module_name()` is the output's stem.
   parse, two checks run on the finished AST: `check_pointer_syntax`
   (`T*` is legal only in `extern` declarations; elsewhere the message
   suggests `__ptr<T>`) and `check_import_order` (imports come before every
-  declaration).
+  declaration). The grammar itself rejects a second constructor or
+  destructor in one struct (`redefinition of the constructor of 'S'`).
 - **Grammar** (`parser/parsers.rs`): hand-written winnow combinators over
   `&mut &str`. The precedence ladder is documented at the top of the file
   (`assignment → ternary → … → postfix → atom`, with `cast` for `as`).
@@ -175,16 +183,20 @@ with no extension, and `module_name()` is the output's stem.
   (the furthest offset any rule reached), `EXPECTATION` (what was expected
   at that furthest failure), `QUALIFIERS` (import qualifiers bound so far,
   so `q.Box<int>()` counts as a generic construction only when `q` is an
-  import), and `EXPRESSION_PROBE`.
+  import), `EXPRESSION_PROBE`, `WARNINGS` (deprecations), and `ERROR` (a
+  hard error that is not an unmet expectation).
   `track_source(len)` returns a `SourceGuard` that resets all of it for one
   parse. **Any code that calls a grammar rule directly (the unit tests do)
   must hold that guard.** Parsing is not reentrant on one thread.
 - **Spans and errors.** `pos(input)` converts the remaining slice into a
   byte offset in the source. A rule that gives up calls `expected(input,
   "')'")` or `cut_expecting`, or `expected_with_note` to add a note such as
-  "to match this '{'". `parse_error` reports the expectation recorded at the
-  furthest offset (`expected ')'`), or `unexpected 'x'` when none was
-  recorded. `token_at` sizes the caret.
+  "to match this '{'". A failure that is not an unmet expectation (an
+  out-of-range integer literal) calls `error_at(span, message)`, which
+  records it in `ERROR` and cuts. `parse_error` reports that error first if
+  there is one, otherwise the expectation recorded at the furthest offset
+  (`expected ')'`), or `unexpected 'x'` when none was recorded. `token_at`
+  sizes the caret.
 - **AST** (`ast.rs`): `Module { imports, exports, declarations }`.
   `Declaration` is `Variable | Function | Struct | Trait | Extend |
   TypeAlias`. The file also defines `Statement`, `Expression`, `TypeName {
@@ -217,6 +229,9 @@ with no extension, and `module_name()` is the output's stem.
     `Invoke`.
   - Member names that start with `__` are rejected, except `__acquire` and
     `__release`, which source code may call.
+  - An operator the builder has no mapping for is reported (`unsupported
+    binary operator '…'`), and a comparison overload (`==`, `<`, …) whose
+    declared return type is not `bool` is rejected.
   - Structs get `constructor`, `destructor` (`__dtor`), and empty `acquire`
     and `release` shells. Top-level `var`s go to `module.globals`. Externs
     go to `module.externs`.
@@ -280,30 +295,32 @@ survives into later stages. Then, for each struct:
 ## 3. Sema transform passes (`crates/pepper-sema/src/passes/`)
 
 `transform_pass(&mut Module) -> Result<(), Diagnostic>` runs the steps below
-in order. Each call is wrapped in `step!`, which stops at the first pass
+in order (`passes/mod.rs`). Each call is wrapped in `step!`, which stops at the first pass
 that reported an error. The order came from the C++ implementation, and
 several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
-| 1 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
-| 2 | `resolve_literals` | Folds unary minus into numeric literals. |
-| 3 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
-| 4 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
-| 5 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
-| 6 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup. |
-| 7 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
-| 8 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. |
-| 9–10 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
-| 11 | `synthesize_function_types` | For function types that specialization exposed. |
-| 12 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes. |
-| 13–14 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
-| 15 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). |
-| 16–17 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. |
+| 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
+| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
+| 3 | `resolve_literals` | Folds unary minus into numeric literals. |
+| 4 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
+| 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
+| 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
+| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup, and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). |
+| 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
+| 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. |
+| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
+| 12 | `synthesize_function_types` | For function types that specialization exposed. |
+| 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes. |
+| 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
+| 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). |
+| 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. |
 | loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions` | Repeats until the counts of structs and functions stop growing (specializing exposes new uses). Bounded because a self-nesting generic never converges. |
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
-| final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, before the destructor's `_pep_free`. |
+| final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). Errors are located `Diagnostic`s. |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -311,17 +328,18 @@ Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `replace_expression`. **When you add a model `Expression` variant, add it to
 `walk_expression`.**
 
-After `transform_pass`, the driver calls
-`passes::check_function_types::check_function_types`, which rejects a
-function value flowing into a slot of a different signature. The LSP skips
-this pass.
+`struct_body::apply`'s `resolve_type_aliases` reports a recursive alias
+at the alias's name (`type alias 'A' refers to itself`, with a note at each
+alias the cycle passes through). Because `check_function_types` is a
+transform step, the driver and the LSP both run it.
 
 Error reporting inside passes goes through `crate::errors::report(diag)`, a
 thread-local that keeps only the **first** diagnostic of a run. Other
-per-run state is thread-local too and is reset at the start of each run:
-`apply_extensions::reset_applied`, the builder's `FOR_LOOPS` counter, and
-`platform::SIMULATED_HOST`. This lets tests compile concurrently on
-separate threads.
+per-run state is thread-local too: `apply_extensions::reset_applied` runs at
+the start of each `transform_pass`, and `platform::SIMULATED_HOST` is set
+only inside `with_simulated_host`. The builder's `FOR_LOOPS` and
+`WITH_BLOCKS` counters are never reset; they only keep hidden local names
+unique. This lets tests compile concurrently on separate threads.
 
 ---
 
@@ -502,8 +520,8 @@ diagnostics"). The mechanics:
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).
 - **Lowered by name.** `print` → `_pep_print`/`_pep_print_int`/
-  `_pep_print_float`. Every constructor calls `_pep_malloc`, and every
-  destructor calls `_pep_free`. `__acquire` and `__release` call `trace_ptr`
+  `_pep_print_float`. Every constructor calls `_pep_malloc`, and `__release`
+  calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `trace_ptr`
   and `trace_int`. `assert` (a runtime function) receives a raw `char*`.
   Codegen calls these by name after visibility has run, so `_pep_print*`
   need not be exported.
@@ -549,8 +567,10 @@ diagnostics"). The mechanics:
   `DocComment::to_markdown`).
 - Completion lists keywords, globals, locals, and struct members.
   Document symbols come from the AST.
-- Runtime discovery is cwd-relative here too, so it depends on the
-  directory the server was started in.
+- Runtime discovery is the same as the compiler's (section 2.2): from the
+  directory the server was started in, then from the `pepper-lsp`
+  executable's directory, unless `PEPPER_RUNTIME` is set. In `Lenient`
+  mode a missing runtime is not an error.
 - Tests: `tools/lsp/src/tests.rs` builds a module tree in a temp directory
   and asserts hover and definition results. `tools/lsp/smoke-test.mjs`
   exercises raw JSON-RPC.
@@ -571,17 +591,17 @@ release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 ## 9. Tests
 
 `cargo test --workspace` runs everything. Without `--workspace`, only the
-root package's test runs. The suite has roughly 750 `#[test]` functions;
-the counts in `.agents/skills/test/SKILL.md` are out of date.
+root package's test runs. The suite has roughly 810 `#[test]` functions.
 
 | Kind | Where | Notes |
 | --- | --- | --- |
 | Parser unit | `crates/pepper-parser/src/parser/parsers.rs` (`mod tests`), `parser.rs`, `diagnostic.rs`, `doc.rs` | Helpers `parse`, `parse_expr`, and `parse_type` take the `track_source` guard. `parser.rs` tests pin exact rendered parse errors. |
 | Sema model | `crates/pepper-sema/src/model_tests.rs`, `visibility.rs` tests | `compile()` = parse → `build` → filters → `struct_body::apply` → `transform_pass`, then assertions on the model. |
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
-| Driver integration | `crates/pepper-driver/tests/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, shared_ptr semantics, C arithmetic semantics, edge cases, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
+| Driver integration | `crates/pepper-driver/tests/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
 | Diagnostics | `crates/pepper-driver/tests/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests` (**ignored**). |
+| Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
 | Runtime docs | `crates/pepper-driver/tests/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
@@ -599,9 +619,11 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 Known ignored tests (ignored does not mean passing):
 
-- `corpus_tests::corpus_files_compile_and_run`: `tests/Trait.Generic`
-  fails. It uses a generic trait with a `static this from(T)` method
-  implemented through `extend … with Convert<Bar>`.
+- `corpus_tests::corpus_files_compile_and_run`: `tests/Array.Api` aborts
+  on its `remove_at transfers the reference` assert, which expects
+  `__refcount<Widget>(w) == 1` while both `w` and `gone` hold the element.
+  `Trait.Generic` now passes. The `#[ignore]` reason string still names
+  trait dispatch.
 
 Harness gotchas: runtime discovery and several harnesses `chdir` to the
 repository root (a process-wide change; every test sets the same
@@ -730,8 +752,8 @@ compiles the code but cannot run it. Run it for real with the
   only when there is no source. Codegen's `*_unlocated` wrappers exist to
   attach these locations.
 - **Errors never panic on user input.** Panics that remain are internal
-  invariants, such as `expect("unknown binary operator")` in the builder,
-  which only fires if the parser and builder operator tables disagree. The
+  invariants, such as the `expect` in `lower_with_blocks` that relies on
+  the builder giving each hidden `with` value its `enter()` call. The
   LSP wraps sema and visibility in `catch_unwind` as a backstop, not as a
   license to panic.
 - **Thread-local state, not globals.** This covers the parser's position
@@ -773,30 +795,23 @@ compiles the code but cannot run it. Run it for real with the
 - **Traits have no dynamic dispatch.** Codegen has no trait awareness at
   all. Traits are recorded on structs by `apply_extensions`, and calls
   resolve statically by type. `for` chooses `iterate()` or
-  `next()`/`current()` by type (`ForIterator`), not through the trait. See
-  the ignored `Trait.Generic` fixture.
-- **Runtime discovery is cwd-relative.** Running `pepper` from outside the
-  repository (more than five levels away from a `runtime/`) silently
-  compiles without a prelude. The LSP depends on where the editor started
-  it.
+  `next()`/`current()` by type (`ForIterator`), not through the trait.
+  `extend S with T` checks conformance and copies default methods, but a
+  trait is never a type you can call through.
+- **Runtime discovery is by location.** The runtime must sit within five
+  levels above the current directory or the executable, or be named by
+  `PEPPER_RUNTIME`. The compiler reports an error when none is found; the
+  LSP silently runs without a prelude.
 - **Host-only targets.** `[Target]` evaluates against the host, and the
   triple is always the host's. 32-bit x86 is unreachable by construction
   (see `crates/pepper-codegen/Cargo.toml`).
-- **`check_function_types` returns unlocated `String` errors.** It predates
-  the diagnostic standard; move it onto `Diagnostic` when you touch it.
-  Some passes also leave unresolved nodes for codegen to report as
+- Some passes leave unresolved nodes for codegen to report as
   `unknown …`.
 - **Only the first sema error is reported** per compile
   (`errors::report`).
 - **Specialization fixpoint is capped at 16 rounds.** A type that nests
   itself through generics stops there instead of looping forever.
-- **`^=` quirk.** `builder::binary_op` maps `"^="` to
-  `BinaryOp::BitOrAssign`, a behavior inherited from the C++ implementation
-  and commented as such. There is no xor-assign operator.
 - **Unused CLI flags**: `-g`, `-v`, `-T`, `--Tall`; `--MSVC` returns an
   error. Only the first source file is compiled.
-- **The destructor-on-scope-exit test is ignored under the JIT**
-  (`edge_case_tests::destructor_runs`).
-- **Stale guidance**: `.agents/skills/test/SKILL.md` test counts and its
-  claim that "most" corpus fixtures fail are out of date. Only
-  `Trait.Generic` fails.
+- **Stale guidance**: `.agents/skills/test/SKILL.md` still says "most"
+  corpus fixtures fail. Only `Array.Api` fails (section 9).

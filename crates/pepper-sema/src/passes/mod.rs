@@ -46,7 +46,7 @@ use convert_print_calls::convert_print_calls;
 use function_types::synthesize_function_types;
 use lower_with_blocks::lower_with_blocks;
 
-/// Run every pass in the ported order (25 entries, repeats included),
+/// Run every pass in order (repeats included),
 /// stopping at the first pass that reports an error.
 pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // A pass that reports an error leaves the model partly unresolved, so

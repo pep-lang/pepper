@@ -151,8 +151,8 @@ can be any type. These binary operators can be defined:
 | Kind | Operators |
 |---|---|
 | Arithmetic | `+` `-` `*` `/` `%` `**` |
-| Bitwise | `&` `|` `^` `>>` |
-| Comparison and logical | `==` `!=` `>` `>=` `&&` `||` |
+| Bitwise | `&` `\|` `^` `>>` |
+| Comparison and logical | `==` `!=` `>` `>=` `&&` `\|\|` |
 | Compound assignment | `+=` `-=` `*=` `/=` `%=` `>>=` `&=` `\|=` `^=` |
 
 Keep these rules in mind:

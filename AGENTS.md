@@ -13,6 +13,37 @@ documentation is the book in `docs/` (see `docs/src/contributing/docs.md`).
 - Before doing any work, start a new branch from the current default.
 - When the todo list completes, open a pull request for that branch (use
   `gh pr create --body-file` per the string rule above).
+- Update the documentation in the same PR as the change it describes (see
+  below).
+
+## Keep the documentation current
+
+Documentation changes land in the same PR as the code they describe. Before
+opening a PR, check each of these against the diff:
+
+- **Language behavior** (syntax, semantics, a new or changed error, a lifted
+  limitation): update the chapter in `docs/src/language/` that covers it,
+  including any limitation it states ("not supported yet"), and add or
+  change an example in `docs/examples/`. A new feature with no chapter gets
+  one, listed in `docs/src/SUMMARY.md`. A deprecation also gets a row in the
+  table in `docs/src/language/compiler-errors.md`. Grep the whole book for
+  the limitation a change lifts ("not supported", "not yet", "cannot"), since
+  it is often repeated in other chapters and in the "Current status" list of
+  `docs/src/introduction.md`.
+- **Runtime or library API**: write or update its `##` doc comment (see
+  [the standard](#library-code-is-documented-with--doc-comments)), then run
+  `cargo run -p pepper-docgen -- reference` and commit the regenerated
+  `docs/src/reference/`.
+- **Compiler structure** (a crate, stage, pass, file, or pattern that
+  INTERNALS.md names moves, is added, or changes): update INTERNALS.md.
+- **CLI, setup, or tooling**: update README.md and, when it affects writing
+  the docs, `docs/src/contributing/docs.md`.
+
+CI enforces what it can: `runtime_docs_tests` fails on an undocumented
+public runtime declaration, `docs_examples_tests` compiles and runs every
+example, and `pepper-docgen check` fails when the reference is stale. It
+cannot tell whether prose still matches the compiler, so that part is on
+the author.
 
 ## Response style
 

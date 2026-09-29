@@ -118,7 +118,17 @@ directory you run it from.
 
 The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
-Misspell `greeting` as `greting`, and you get:
+Store the message in a variable first, then misspell its name:
+
+```pepper
+main(): int {
+    var greeting = "Hello, world!";
+    print(greting);
+    return 0;
+}
+```
+
+The compiler reports:
 
 ```text
 main.pep:3:11: error: use of undeclared identifier 'greting'

@@ -101,9 +101,10 @@ shares one static function object.
 
 ## What is not supported yet
 
-- **Closures and lambdas.** Pepper has no anonymous functions yet, and a
-  function value cannot capture local variables. Only named free functions can
-  be used as values. Closures are planned.
+- **Closure literals.** Pepper has no anonymous functions yet, such as
+  `(x) => x * 2`, and a function value cannot capture local variables. Only
+  named free functions can be used as values. Closure literals are the next
+  phase of this feature.
 - **Generic functions, methods, constructors and `extern` functions** cannot be
   referenced as values. Naming a generic function without a call reports
   `use of undeclared identifier`, and naming a method without a call

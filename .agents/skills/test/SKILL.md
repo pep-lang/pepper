@@ -51,7 +51,7 @@ behavior**).
 ## Corpus behavior
 
 - `tests/parser_corpus.rs` treats the corpus as the executable spec for the parser: every file must parse with at least one declaration. Adding a `.pep` file extends it automatically.
-- `crates/pepper-driver/tests/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. It is `#[ignore]`d because most fixtures still fail on unimplemented features (generics in extensions, trait dispatch, string internals). Ignored ≠ passing — don't count it toward success, and check its progress with `-- --ignored`.
+- `crates/pepper-driver/tests/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. It is `#[ignore]`d because one fixture still fails (see the `#[ignore]` reason there). Ignored ≠ passing — don't count it toward success, and check its progress with `-- --ignored`.
 
 ## Diagnosing failures
 

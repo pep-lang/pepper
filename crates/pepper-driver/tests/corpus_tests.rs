@@ -77,13 +77,12 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .map_err(|e| format!("spawn failed: {}", e))
 }
 
-/// KNOWN GAPS (tracked for the next phase): 1 of 17 corpus fixtures fails —
-/// trait dispatch (`Trait.Generic`). `Struct.RefStorage` passes since the
-/// release_field_refs fix. The String.* and Array.* fixtures pass end to
-/// end. These need their own sema/codegen features per the C++ anchors.
-/// Ignored until implemented; NOT a pass.
+/// KNOWN GAPS: 1 of 17 corpus fixtures fails. `Array.Api` aborts on its
+/// "remove_at transfers the reference" assert, which expects a refcount of 1
+/// while two locals hold the element. `Trait.Generic` passes since the trait
+/// conformance work (#82). Ignored until fixed; NOT a pass.
 #[test]
-#[ignore = "1/17 corpus fixture fails: trait dispatch — tracked feature work"]
+#[ignore = "1/17 corpus fixture fails: Array.Api remove_at refcount assert"]
 fn corpus_files_compile_and_run() {
     let mut tested = 0usize;
     let mut failures: Vec<String> = vec![];

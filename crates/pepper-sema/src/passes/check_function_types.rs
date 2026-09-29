@@ -330,7 +330,8 @@ impl<'a> Checker<'a> {
 }
 
 /// Reject values whose type does not match the typed slot they flow into.
-/// Runs as the last transform pass (so the language server reports it too).
+/// Runs near the end of `transform_pass`, before `lower_with_blocks`, so the
+/// language server reports it too.
 pub fn check_function_types(module: &mut Module) {
     let module = &*module;
     let mut checker = Checker { module, table: StructTable::build(module), errors: vec![], unbound: vec![] };

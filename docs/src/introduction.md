@@ -49,14 +49,18 @@ Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
 
 Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
+traits with default methods, function types and function references,
 modules, `Result`-based error handling, iteration, `with` blocks, weak
-references, and calling C. The
-standard library covers strings, arrays, hash maps and sets, atomics, and
-file-system access. That is enough to write real programs, but expect gaps.
+references, and calling C. The standard library covers strings, arrays, hash
+maps and sets, atomics, and file-system access. That is enough to write real
+programs, but expect gaps.
 Some that you will meet quickly:
 
-- There are no closures or lambdas yet. You can pass named functions as
-  values (see [function types](language/function-types.md)).
+- Functions are values: a named function can be stored, passed and called
+  through a function type such as `(int) => int` (see
+  [function types](language/function-types.md)). Closure literals, such as
+  `(x) => x * 2`, and capturing local variables are the next phase and are not
+  implemented yet.
 - Calling a method through a trait type does not work yet. You can declare
   traits and conform to them, but not dispatch through them.
 - There is no threading API in the standard library yet.

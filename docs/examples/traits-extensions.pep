@@ -28,6 +28,18 @@ extend String {
     }
 }
 
+# One specialization of a generic library type can be extended, and its
+# methods can loop over `this`.
+extend Array<int> {
+    total(): int {
+        var sum = 0;
+        for (var x in this) {
+            sum += x;
+        }
+        return sum;
+    }
+}
+
 struct Box<T> {
     var value: T;
 }
@@ -45,6 +57,11 @@ main(): int {
     assert(Temperature.freezing() == Temperature(0.0), "static method and operator from an extension");
 
     assert("hello".exclaim() == "hello!", "String extension");
+
+    var numbers = Array<int>();
+    numbers.append(2);
+    numbers.append(3);
+    assert(numbers.total() == 5, "Array<int> extension loops over this");
 
     var b = Box<int>();
     b.value = 5;

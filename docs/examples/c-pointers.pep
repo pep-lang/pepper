@@ -54,13 +54,14 @@ main(): int {
     free(b.data);
     b.data = __null;
 
-    # A pointer to pointers: indexing yields the inner pointer.
+    # A pointer to pointers: indexing yields the inner pointer, and indexing
+    # again reads or writes through it.
     var rows = malloc(2 * sizeof<__ptr<int>>()) as __ptr<__ptr<int>>;
     var row = malloc(sizeof<int>()) as __ptr<int>;
-    row[0] = 7;
     rows[1] = row;
-    var inner: __ptr<int> = rows[1];
-    assert(inner[0] == 7, "rows[1] is the row pointer");
+    rows[1][0] = 7;
+    assert(rows[1][0] == 7, "rows[1][0] reads through the row pointer");
+    assert(row[0] == 7, "rows[1] is the row pointer");
     free(row);
     free(rows);
     return 0;

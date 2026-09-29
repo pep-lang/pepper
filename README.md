@@ -193,9 +193,9 @@ cargo test --workspace
 
 `--workspace` is not optional. The repository root is itself a package, so a
 bare `cargo test` runs only its single integration test and **silently skips
-every crate** under `crates/`. Expect about 106 passing tests and 1 ignored (a
-corpus test whose fixtures need language features that are not implemented
-yet).
+every crate** under `crates/`. Every test should pass. One is ignored: the
+corpus test in `crates/pepper-driver/tests/corpus_tests.rs`, because one of
+its fixtures still fails (the `#[ignore]` reason names it).
 
 Those commands build against the default LLVM 20. For any other version, name
 it — the same count should pass:
@@ -206,7 +206,7 @@ cargo test --workspace --no-default-features --features llvm18-1
 
 CI runs that matrix on Linux for every LLVM apt offers — 18, 19 and 20 on
 `ubuntu-24.04`. On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
-all five pass.
+all five pass; CI's `test-macos` job runs the suite there against LLVM 20.
 
 ## Run the compiler
 
@@ -237,6 +237,14 @@ cargo run -- tests/hello.pep
 
 Both print `Hello world!`. Intermediate artifacts land in `.pep/build/` next to
 where you ran the compiler, which is gitignored.
+
+The compiler needs the standard library in `runtime/`. It uses the directory
+named by `PEPPER_RUNTIME` when that is set, and otherwise searches near the
+current directory and then near the compiler executable, so a compiler built
+from this repository finds its runtime wherever you run it. When it finds none
+it says so and stops. The book's
+[Getting started](docs/src/tutorial/getting-started.md) chapter gives the exact
+search order.
 
 Sample programs live in `tests/`: standalone files such as `hello.pep` and
 `array.pep`, plus one `test.pep` per feature directory. Every `.pep` file under

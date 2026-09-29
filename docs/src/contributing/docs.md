@@ -13,6 +13,12 @@ cargo run -p pepper-docgen -- build           # render into target/docs-site/dev
 cargo run -p pepper-docgen -- build --version 0.2.0 --site <dir>
 ```
 
+## Keeping the book current
+
+Documentation changes land in the same PR as the code they describe. The
+checklist of what to update for each kind of change is in `AGENTS.md`, under
+"Keep the documentation current".
+
 ## Examples are tested
 
 Every runnable example lives in `docs/examples/`: a single `name.pep`, or a

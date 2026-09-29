@@ -42,8 +42,8 @@ below for an example).
 Some things to know about `extern` declarations:
 
 - The prototype uses C syntax only. The `name(parameter: type): type` form that
-  Pepper functions use is a parse error on an extern, and so is `__ptr<T>` as a
-  parameter type: write `char*`, not `__ptr<char>`.
+  Pepper functions use is a parse error on an extern, and `__ptr<T>` as a
+  parameter type is an error too: write `char*`, not `__ptr<char>`.
 - An extern is private to its file, like every declaration. Write
   `export extern ...` to let files that import this one call it (see
   [Visibility](visibility.md)).
@@ -158,13 +158,8 @@ behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.
 
-Two current limitations:
-
-- Indexing twice in one expression through a pointer to pointers
-  (`rows[1][0]`) is not supported yet; read the inner pointer into a variable
-  first, as the example does.
-- Pepper function values are Pepper objects, not C function pointers, so you
-  cannot pass a Pepper function as a C callback (for example to `qsort`).
+Pepper function values are Pepper objects, not C function pointers, so you
+cannot pass a Pepper function as a C callback (for example to `qsort`).
 
 ## Binding to a different symbol name
 

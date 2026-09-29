@@ -51,6 +51,9 @@ main(): int { return area(1, 2); }
 main.pep:2:22: error: 'area' is exported by deps/geometry/shapes.pep, which this file does not import; add an import for it
     2 | main(): int { return area(1, 2); }
       |                      ^~~~
+deps/geometry/shapes.pep:3:8: note: declared here
+    3 | export area(w: int, h: int): int {
+      |        ^~~~
 ```
 
 ## Imports come first
@@ -195,7 +198,10 @@ everywhere without an import.
 `--import NAME` adds a module, or a file `NAME.pep`, found on the search paths
 to that prelude, so every file sees its exports without importing it. A name
 that resolves to neither is an error:
-`--import no_such_module: cannot find module 'no_such_module'`.
+
+```text
+error: --import no_such_module: cannot find module 'no_such_module' (no no_such_module/module.pep) or file no_such_module.pep in /home/you/pepper/runtime
+```
 
 A prelude module may redefine an export of the runtime, such as `panic`: it is
 loaded ahead of the runtime and its definition wins. It must declare the name

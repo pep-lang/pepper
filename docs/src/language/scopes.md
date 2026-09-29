@@ -48,9 +48,10 @@ export trait Scoped<T> {
 }
 ```
 
-Traits are not checked yet, so the block goes by the methods a type has:
-a type without `enter()` is a compile error in a `with` header. Declaring the
-trait (`extend Session with Scoped<Session> {}`) documents the intent.
+A `with` block goes by the methods a type has, not by the trait: a type
+without `enter()` is a compile error in a `with` header. Declaring the trait
+(`extend Session with Scoped<Session> {}`) documents the intent, and the
+compiler then checks that the type has both `enter()` and `exit()`.
 
 ## When `exit()` runs
 
