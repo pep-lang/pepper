@@ -18,9 +18,11 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
     generator.jit_execute(&mut module, "test").expect("jit")
 }
 
+// Atomic<T> needs a thread-safe struct T: `[Shared]`, with const fields.
 const POINT: &str = r#"
+[Shared]
 struct Point {
-    int x;
+    const x: int;
     construct(this.x = 0) {}
 }
 "#;
@@ -69,8 +71,7 @@ fn load_store_struct() {
                 r#"{point}
 test(): int {{
     var a = Atomic<Point>();
-    var p = Point();
-    p.x = 7;
+    var p = Point(7);
     a.store(p);
     var q = a.load();
     if (q.x != 7) {{ return -1; }}
@@ -113,12 +114,10 @@ fn store_replaces_struct_ref() {
                 r#"{point}
 test(): int {{
     var a = Atomic<Point>();
-    var p1 = Point();
-    p1.x = 1;
+    var p1 = Point(1);
     a.store(p1);
     if (__refcount<Point>(p1) != 2) {{ return -1; }}
-    var p2 = Point();
-    p2.x = 2;
+    var p2 = Point(2);
     a.store(p2);
     # Slot dropped p1's ref and took p2's.
     if (__refcount<Point>(p1) != 1) {{ return -2; }}
@@ -162,19 +161,16 @@ fn cmpxchg_struct_refcount() {
                 r#"{point}
 test(): int {{
     var a = Atomic<Point>();
-    var p1 = Point();
-    p1.x = 1;
+    var p1 = Point(1);
     a.store(p1);
     if (__refcount<Point>(p1) != 2) {{ return -1; }}
-    var p2 = Point();
-    p2.x = 2;
+    var p2 = Point(2);
     # Success: slot takes p2, drops p1.
     if (!a.compare_exchange(p1, p2)) {{ return -2; }}
     if (__refcount<Point>(p1) != 1) {{ return -3; }}
     if (__refcount<Point>(p2) != 2) {{ return -4; }}
     # Failure: expected no longer matches (slot holds p2).
-    var p3 = Point();
-    p3.x = 3;
+    var p3 = Point(3);
     if (a.compare_exchange(p1, p3)) {{ return -5; }}
     if (__refcount<Point>(p3) != 1) {{ return -6; }}
     if (a.load().x != 2) {{ return -7; }}
@@ -214,11 +210,9 @@ fn exchange_struct_refcount() {
                 r#"{point}
 test(): int {{
     var a = Atomic<Point>();
-    var p1 = Point();
-    p1.x = 1;
+    var p1 = Point(1);
     a.store(p1);
-    var p2 = Point();
-    p2.x = 2;
+    var p2 = Point(2);
     var old = a.exchange(p2);
     if (old.x != 1) {{ return -1; }}
     # The returned old ref is owned by the caller: it must not be released.

@@ -1,0 +1,174 @@
+//! Thread safety of `[Shared]` structs.
+//!
+//! Reference counts are plain by default; a struct declared `[Shared]` gets
+//! atomic counts (`struct_body`), so its objects may be referenced from
+//! several threads at once. That is only safe if nothing reachable through
+//! the object can race, so every field of a shared struct must be:
+//!
+//! - `const`: set once, by the constructor, and never assigned again
+//!   (threads change shared state through a thread-safe member such as an
+//!   `Atomic<T>`, not by assigning fields); and
+//! - of a thread-safe type: a primitive, a raw pointer to a thread-safe type
+//!   (`__ptr<void>` included: what raw memory holds is the code's own
+//!   responsibility), a function type, a `[Shared]` struct, or a weak
+//!   reference to one.
+//!
+//! Every other struct is not thread-safe. The `const` rule is checked on the
+//! declaration (generic bases included); the type rule on concrete structs,
+//! so a generic shared struct is checked per specialization
+//! (`Atomic<String>` is an error, `Atomic<int>` is not) and the error points
+//! at the code that named the specialization.
+
+use crate::model::*;
+use crate::passes::gather_generics::parse_type_string;
+use crate::type_name::{INTEGRAL_TYPES, TypeName};
+
+/// The first type inside `ty` that is not thread-safe, if any.
+fn unsafe_part(ty: &TypeName, module: &Module) -> Option<TypeName> {
+    let name = ty.to_string();
+    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_function_type() {
+        return None;
+    }
+    if let Some(pointee) = name.strip_suffix('*') {
+        return unsafe_part(&parse_type_string(pointee), module);
+    }
+    if let Some(target) = ty.weak_target() {
+        return unsafe_part(target, module);
+    }
+    match module.structs.iter().find(|st| st.name == name) {
+        Some(st) if st.is_shared() => None,
+        _ => Some(ty.clone()),
+    }
+}
+
+/// Where the program names type `spec` (a variable, field or parameter
+/// type, or a constructor call), for errors about a specialization.
+fn use_site(module: &Module, spec: &str) -> Option<Loc> {
+    fn var_loc(var: &VariableDef, spec: &str) -> Option<Loc> {
+        let mentions = |ty: &TypeName| -> bool {
+            fn walk(ty: &TypeName, spec: &str) -> bool {
+                ty.to_string() == spec || ty.sub_types.iter().any(|t| walk(t, spec))
+            }
+            walk(ty, spec)
+        };
+        // An inferred type (`var a = Atomic<String>();`) has no type
+        // location: the constructor call in the initializer names it.
+        if !mentions(&var.ty) || var.type_loc.is_none() {
+            return None;
+        }
+        Some(var.type_loc)
+    }
+    fn in_block(block: &Block, spec: &str) -> Option<Loc> {
+        for stmt in &block.items {
+            let found = match stmt {
+                Statement::Declaration(Declaration::Variable(var)) => {
+                    var_loc(var, spec).or_else(|| var.default.as_ref().and_then(|e| in_expression(e, spec)))
+                }
+                Statement::Block(inner) => in_block(inner, spec),
+                Statement::Branch(branch) => in_expression(&branch.condition, spec)
+                    .or_else(|| in_block(&branch.if_block, spec))
+                    .or_else(|| branch.else_block.as_ref().and_then(|b| in_block(b, spec))),
+                Statement::While(wh) => in_expression(&wh.condition, spec).or_else(|| in_block(&wh.block, spec)),
+                Statement::Expression(e) => in_expression(e, spec),
+                Statement::Return(ret) => ret.expr.as_ref().and_then(|e| in_expression(e, spec)),
+                _ => None,
+            };
+            if found.is_some() {
+                return found;
+            }
+        }
+        None
+    }
+    fn in_expression(expr: &Expression, spec: &str) -> Option<Loc> {
+        let mut expr = expr.clone();
+        let mut found = None;
+        crate::passes::walk_expression(&mut expr, &mut |e: &mut Expression| {
+            if found.is_none()
+                && let Expression::FunctionCall { function, loc, .. } = e
+                && function == spec
+                && !loc.is_none()
+            {
+                found = Some(*loc);
+            }
+        });
+        found
+    }
+    fn in_function(function: &FunctionDef, spec: &str) -> Option<Loc> {
+        function
+            .parameters
+            .iter()
+            .find_map(|p| var_loc(p, spec))
+            .or_else(|| function.body.as_ref().and_then(|b| in_block(b, spec)))
+    }
+    module
+        .globals
+        .iter()
+        .find_map(|g| var_loc(g, spec).or_else(|| g.default.as_ref().and_then(|e| in_expression(e, spec))))
+        .or_else(|| module.functions.iter().find_map(|f| in_function(f, spec)))
+        .or_else(|| {
+            module.structs.iter().find_map(|st| {
+                st.field_members
+                    .iter()
+                    .find_map(|f| var_loc(f, spec))
+                    .or_else(|| st.method_members.iter().chain([&st.constructor, &st.destructor]).find_map(|m| in_function(m, spec)))
+            })
+        })
+}
+
+/// A note at `ty`'s declaration saying why it is not thread-safe.
+fn not_shared_note(diagnostic: Diagnostic, ty: &TypeName, module: &Module) -> Diagnostic {
+    match module.structs.iter().find(|st| st.name == ty.to_string()) {
+        Some(st) if !st.loc.is_none() => {
+            diagnostic.with_note(format!("'{}' is not declared [Shared]", ty.display()), Some(st.loc))
+        }
+        _ => diagnostic,
+    }
+}
+
+pub fn check_shared_types(module: &mut Module) {
+    let module: &Module = module;
+    for st in module.structs.iter().filter(|st| st.is_shared()) {
+        let fields = st.field_members.iter().filter(|f| f.kind == Kind::Field && !f.name.starts_with("__"));
+        let is_generic_base = st.name == st.ty.name && st.ty.is_generic();
+        let is_specialization = st.name.contains('<');
+        for field in fields {
+            // Declared once per source struct: check it there, not again in
+            // every specialization.
+            if !is_specialization && !field.is_const {
+                crate::errors::report(
+                    Diagnostic::error(format!("field '{}' of shared struct '{}' must be 'const'", field.name, st.name))
+                        .at(field.loc)
+                        .with_note(
+                            "threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'",
+                            None,
+                        ),
+                );
+                return;
+            }
+            if is_generic_base {
+                continue;
+            }
+            let Some(offender) = unsafe_part(&field.ty, module) else { continue };
+            let field_loc = [field.type_loc, field.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+            let diagnostic = if is_specialization {
+                Diagnostic::error(format!(
+                    "shared struct '{}' requires thread-safe type arguments; '{}' is not thread-safe",
+                    st.name,
+                    offender.display()
+                ))
+                .at(use_site(module, &st.name).unwrap_or(field_loc))
+                .with_note(format!("required by field '{}' declared here", field.name), Some(field_loc))
+            } else {
+                Diagnostic::error(format!(
+                    "field '{}' of shared struct '{}' has type '{}', which is not thread-safe",
+                    field.name,
+                    st.name,
+                    field.ty.display()
+                ))
+                .at(field_loc)
+            };
+            crate::errors::report(not_shared_note(diagnostic, &offender, module));
+            return;
+        }
+    }
+}

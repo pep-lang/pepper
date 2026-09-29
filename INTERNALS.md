@@ -304,7 +304,11 @@ survives into later stages. Then, for each struct:
   held by all strong references together, as in a C++ control block). It
   fills the `__acquire` body (null check, `++__refcount`, `trace_*` calls)
   and the `__release` body (null check, `--`, and at 0 a call to `__dtor`,
-  then `--__weakcount` and `_pep_free(this)` if that reached 0).
+  then `--__weakcount` and `_pep_free(this)` if that reached 0). Each step
+  is an `Expression::CountStep` node, which evaluates to the new count and
+  is atomic when `StructDef::atomic_counts()` holds: the struct is
+  `[Shared]` or a function type. Everything else uses a plain
+  load/add/store.
 - `finish` builds the constructor. A hidden `size` local is patched with the
   real ABI size in codegen by `patched_ctor`. The constructor calls `this =
   _pep_malloc(size)`, initializes each field (explicit default or zero),
@@ -335,7 +339,7 @@ several passes run more than once on purpose.
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
 | 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
 | 12 | `synthesize_function_types` | For function types that specialization exposed. |
-| 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes. |
+| 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`, including the `T` of intrinsic nodes that specialization substituted. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes, and `__function_pointer(f)` into `Expression::FunctionPointer` (a free function, or a static method of the enclosing struct, whose owner type specialization substitutes). |
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
 | 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). |
 | 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. |
@@ -346,6 +350,7 @@ several passes run more than once on purpose.
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). Errors are located `Diagnostic`s. |
+| final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -412,7 +417,10 @@ How the language lowers:
   `__is_pod`, and `__default<T>`. `call_function` declares unknown
   runtime helpers such as `_pep_malloc` on demand.
 - **Intrinsic nodes** in `codegen_expr_unlocated`: `SizeOf`, `Default` (zero
-  or null), `IsPod`, `RefCount`, `Address` (FNV-folds POD values),
+  or null), `IsPod`, `RefCount` (an atomic load), `CountStep` (an
+  `atomicrmw` on the head count at byte offset 0 or 4, monotonic up and
+  acq_rel down, or a plain load/add/store), `FunctionPointer` (the LLVM
+  function's address; a static method is `Owner.name`), `Address` (FNV-folds POD values),
   `AtomicLoad` (acquire), `AtomicStore` (release, via `xchg`),
   `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), and `AtomicFetch`
   (`atomicrmw` acq_rel).
@@ -430,7 +438,8 @@ How the language lowers:
   blocks. `frame.exited` suppresses dead code after
   `return`/`break`/`continue`. Every unterminated block is patched to branch
   to the function's return block. Return values go through a `retval`
-  alloca in the entry block.
+  alloca in the entry block. Locals get their slots there too
+  (`entry_alloca`), so a `var` inside a loop does not grow the stack.
 - **Errors**: codegen functions return `Result<_, String>`. A node that can
   fail and has a `Loc` gets the wrapper pattern:
 
@@ -525,14 +534,15 @@ are null-safe.
 | Trait values | Same rules, same call sites: `Trait.__acquire`/`Trait.__release` are thunks into the vtable (§4.2), so the concrete type's `__release`, and at zero its `__dtor`, run. `ToTrait` does no refcount work of its own: converting an lvalue read acquires as the read would, and an owned rvalue moves. |
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
 | Closures | `MakeClosure` is an owned rvalue like the constructor call it wraps (`make_shared`): each captured value is a constructor argument, acquired into its field. The value's type is the function type, so every other row applies through `__function<…>.__acquire`/`__release`. At zero, the function type's `__dtor` calls `__destroy`, the closure's `__dtor`, whose `release_field_refs` releases the captures. |
-| `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0). `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
+| `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0), atomic when `T` is `[Shared]`. `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `__weak_upgrade` is a compare-and-swap loop that increments the strong count only while it is non-zero (`weak_ptr::lock`). `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
+| Threads | Counts are plain by default. A `[Shared]` struct (`StructDef::is_shared`) and every function type step them atomically (`CountStep`), like `std::shared_ptr`'s control block; `passes/check_shared_types.rs` keeps non-thread-safe values out of shared structs. |
 
 Debugging aids: set `PEP_TRACE` to make the runtime's `trace_ptr`,
 `trace_int`, and `trace_region` print. `_pep_live_allocs()` counts live
-allocations; leak-census tests
-(`crates/pepper-driver/tests/shared_ptr_semantics_tests.rs`) read it through
-the JIT. The counter is process-wide, so those tests have to account for
-concurrency.
+allocations (an atomic counter, since threads allocate concurrently);
+leak-census tests (`crates/pepper-driver/tests/shared_ptr_semantics_tests.rs`)
+read it through the JIT. The counter is process-wide, so those tests have to
+account for concurrency.
 
 ---
 
@@ -574,15 +584,16 @@ diagnostics"). The mechanics:
 | `scoped.pep` | `Scoped<T>`, the `with` protocol (`enter()`, and `exit()` called from the destructor). |
 | `weak.pep` | `Weak<T>` over `__weak<T>`; implements `Scoped<T>` (`enter()` upgrades). |
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
-| `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. |
+| `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. `[Shared]`, so its `T` must be thread-safe. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
+| `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`), `cpus.pep` (`logical_cpus`, `physical_cpus`), and the platform layer in `sys_posix.pep` (pthreads, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `GetLogicalProcessorInformationEx`). |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
 
 - **Loading.** Every top-level `runtime/*.pep` is a prelude file. Its
   `export`s are visible in every program without an import. `runtime/io` is
   found as a module because the runtime directory is on the search path.
-- **Naming convention for internals.** Names prefixed `_pep_` (core) and
-  `_io_` (io module) are internals. They are `export`ed so other runtime
+- **Naming convention for internals.** Names prefixed `_pep_` (core),
+  `_io_` (io module) and `_async_` (async module) are internals. They are `export`ed so other runtime
   files can use them. They are exempt from the documentation standard, and
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).
@@ -595,8 +606,11 @@ diagnostics"). The mechanics:
 - **Intrinsics available to runtime code**: `__ptr<T>` (a raw pointer, the
   only pointer spelling allowed outside `extern`), `__null`, `sizeof(T)`,
   `__default<T>()`, `__is_pod<T>()`, `__refcount<T>(x)`, `__address<T>(x)`,
-  `__atomic_load/store/cmpxchg/fetch_{add,sub,and,or,xor}<T>(…)`, and
-  `__weak<T>` with `__weak_from/upgrade/expired<T>(…)`.
+  `__atomic_load/store/cmpxchg/fetch_{add,sub,and,or,xor}<T>(…)`,
+  `__weak<T>` with `__weak_from/upgrade/expired<T>(…)`, and
+  `__function_pointer(f)` (a C-callable `__ptr<void>` to a free function or
+  a static method of the enclosing struct; also documented for users in the
+  book's C chapter).
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
   `crates/pepper-driver/tests/runtime_docs_tests.rs` enforces it. The
@@ -845,6 +859,21 @@ compiles the code but cannot run it. Run it for real with the
 ---
 
 ## 13. Known limitations and sharp edges
+
+- **Module-scope variables are not thread-checked.** `check_shared_types`
+  checks `[Shared]` structs only. Any thread can reach any global, so a
+  non-thread-safe global (a `String`, an `Array`, a plain struct) used from
+  two threads races on its reference count. Requiring globals to be
+  thread-safe is the missing half of the model.
+- **Closure captures are not thread-checked.** `check_shared_types`
+  treats every function type as thread-safe, but a capturing closure's
+  function value holds its captures, which may be `String`s or other
+  non-`[Shared]` structs. Spawning such a closure shares their plain counts
+  across threads. Splitting function types into thread-safe and not is the
+  fix.
+- **`var v = p[i]` through a `__ptr<T>` infers `int`** inside some
+  functions, silently truncating a wider `T` (seen with `__ptr<ulong>`).
+  Declare the type (`ulong v = p[i];`) until inference is fixed.
 
 - **Single global namespace.** Module linking rewrites names, and then
   every file merges into one `Module`. Two private declarations with the

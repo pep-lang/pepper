@@ -18,8 +18,10 @@ import "internals";
 ## `store` a release, and `compare_exchange` and the `fetch_*` operations are
 ## acquire-release.
 ##
-## `Atomic` is itself a struct, so copies of it share one slot: pass the
-## Atomic around (or keep it in a global) to share the value between threads.
+## `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
+## be used from several threads at once: pass the Atomic around (or keep it
+## in a global) to share the value between threads. A struct `T` must be
+## thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
 ##
 ## @typeParam T the type of the stored value
 ## @example
@@ -29,12 +31,13 @@ import "internals";
 ##         if (counter.load() != 5) { return 1; }
 ##         return 0;
 ##     }
+[Shared]
 export struct Atomic<T> {
     ## The heap slot the value lives in: `sizeof<T>()` bytes for a POD `T`,
     ## or one reference pointer for a struct `T`. Allocated by the
     ## constructor and never null afterwards. Internal storage; access it only
     ## through the methods, which keep every access atomic.
-    __ptr<T> Data;
+    const Data: __ptr<T>;
 
     ## Creates an Atomic holding `value`.
     ##

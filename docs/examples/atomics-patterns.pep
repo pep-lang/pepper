@@ -1,6 +1,9 @@
+# An Atomic can only hold a thread-safe struct: one declared [Shared], whose
+# fields are const and thread-safe.
+[Shared]
 struct Config {
-    String Name;
-    construct(this.Name = "") {}
+    const Version: int;
+    construct(this.Version = 0) {}
 }
 
 # A module-scope Atomic that every function can share.
@@ -32,18 +35,18 @@ main(): int {
     assert(n.load() == 7, "both names see the store");
 
     # An Atomic can hold a struct reference.
-    var first = Config("first");
+    var first = Config(1);
     var current = Atomic<Config>(first);
-    assert(current.load().Name == "first", "load returns the reference");
+    assert(current.load().Version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
-    var lookalike = Config("first");
-    var second = Config("second");
+    var lookalike = Config(1);
+    var second = Config(2);
     assert(!current.compare_exchange(lookalike, second), "a different object");
     assert(current.compare_exchange(first, second), "the same object");
-    assert(current.load().Name == "second", "swapped");
+    assert(current.load().Version == 2, "swapped");
 
     var old = current.exchange(first);
-    assert(old.Name == "second", "exchange hands back the old reference");
+    assert(old.Version == 2, "exchange hands back the old reference");
     return 0;
 }

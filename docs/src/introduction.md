@@ -12,8 +12,8 @@ three things first:
   no ownership annotations to learn. Structs hold data, methods and
   extensions add behavior, and traits describe what a type can do.
 - **Concurrent safety.** Shared data should be safe to use from more than one
-  thread. Today that means `Atomic<T>`, which the compiler lowers to native
-  atomic instructions; more is planned.
+  thread. Only thread-safe values can be shared: numbers, `Atomic<T>`, and
+  structs declared `[Shared]`, whose fields the compiler checks.
 
 Here is a complete Pepper program:
 
@@ -52,7 +52,7 @@ structs with constructors, destructors and methods, generics, type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules, `Result`-based error handling, iteration,
 `with` blocks, weak references, and calling C. The standard library covers strings, arrays, hash
-maps and sets, atomics, and file-system access. That is enough to write real
+maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:
 
@@ -63,7 +63,9 @@ Some that you will meet quickly:
   constructors and generic functions cannot be named as values yet; wrap one
   in a closure instead.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
-- There is no threading API in the standard library yet.
+- Threads can share only thread-safe values, but the compiler does not yet
+  check module-scope variables, and there are no mutexes or channels (see
+  [threads](language/threads.md#limitations)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.

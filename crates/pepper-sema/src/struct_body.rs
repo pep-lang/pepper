@@ -53,26 +53,46 @@ fn if_block(condition: Expression, items: Vec<Statement>) -> Statement {
         else_block: None,
     })
 }
-/// `this.<field> = this.<field> <op> 1;`
-fn add_to_field(field: &str, op: BinaryOp) -> Statement {
-    Statement::Expression(Expression::Binary {
-        op: BinaryOp::Assign,
-        lhs: Box::new(member_ref(field)),
-        rhs: Box::new(Expression::Binary {
-            op,
-            lhs: Box::new(member_ref(field)),
-            rhs: Box::new(Expression::IntLiteral(1)),
+/// `if (this === __null) { return; }`
+pub(crate) fn null_guard() -> Statement {
+    if_block(
+        Expression::Binary {
+            op: BinaryOp::Identical,
+            lhs: Box::new(Expression::ThisRef),
+            rhs: Box::new(Expression::PointerLiteral),
             loc: Loc::NONE,
-        }),
-        loc: Loc::NONE,
-    })
+        },
+        vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
+    )
 }
 
-/// `this.<field> == 0`
-fn field_is_zero(field: &str) -> Expression {
+/// One step of a head count of `this`; its value is the new count.
+pub(crate) fn count_step(field: CountField, increment: bool, atomic: bool) -> Expression {
+    Expression::CountStep { field, increment, atomic }
+}
+
+/// Name of the local that holds the count a `count_local` step produced.
+const COUNT_LOCAL: &str = "__count";
+
+/// `u32 __count = <count step>;`
+fn count_local(field: CountField, increment: bool, atomic: bool) -> Statement {
+    Statement::Declaration(Declaration::Variable(var_def(
+        COUNT_LOCAL,
+        TypeName::new("u32"),
+        Some(count_step(field, increment, atomic)),
+        false,
+    )))
+}
+
+fn count_ref() -> Expression {
+    Expression::SymbolRef { id: COUNT_LOCAL.to_string(), ty: TypeName::new("u32"), loc: Loc::NONE }
+}
+
+/// `<value> == 0`
+pub(crate) fn is_zero(value: Expression) -> Expression {
     Expression::Binary {
         op: BinaryOp::Equal,
-        lhs: Box::new(member_ref(field)),
+        lhs: Box::new(value),
         rhs: Box::new(Expression::IntLiteral(0)),
         loc: Loc::NONE,
     }
@@ -121,33 +141,21 @@ pub fn apply_synthesized(st: &mut StructDef) {
     }
 
     let struct_name = st.name.clone();
+    // A `[Shared]` struct (or a function type) steps its counts atomically,
+    // so references to it can be copied and dropped on several threads at
+    // once; every other struct uses plain increments.
+    let atomic = st.atomic_counts();
 
-    // __acquire body: null-check, ++this.__refcount + trace calls. Codegen
+    // __acquire body: null-check, ++__refcount, trace calls. Codegen
     // acquires on a struct-reference store whenever the new occupant differs
     // from the old one (including nulls from zero-initialized slots), so the
-    // guard mirrors __release's.
+    // guard mirrors __release's. The traces print the count the step
+    // produced rather than re-reading a field another thread may be
+    // changing.
     if let Some(body) = &mut st.acquire.body {
         body.items = vec![
-            if_block(
-                Expression::Binary {
-                    op: BinaryOp::Identical,
-                    lhs: Box::new(Expression::ThisRef),
-                    rhs: Box::new(Expression::PointerLiteral),
-                    loc: Loc::NONE,
-                },
-                vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
-            ),
-            Statement::Expression(Expression::Binary {
-                op: BinaryOp::Assign,
-                lhs: Box::new(member_ref("__refcount")),
-                rhs: Box::new(Expression::Binary {
-                    op: BinaryOp::Add,
-                    lhs: Box::new(member_ref("__refcount")),
-                    rhs: Box::new(Expression::IntLiteral(1)),
-                    loc: Loc::NONE,
-                }),
-                loc: Loc::NONE,
-            }),
+            null_guard(),
+            count_local(CountField::Strong, true, atomic),
             call(
                 "trace_ptr",
                 vec![
@@ -158,38 +166,20 @@ pub fn apply_synthesized(st: &mut StructDef) {
             call(
                 "trace_int",
                 vec![
-                    member_ref("__refcount"),
+                    count_ref(),
                     str_lit(format!("  refcount: {}", struct_name)),
                 ],
             ),
         ];
     }
 
-    // __release body: null-check, decrement, trace calls, dtor at zero.
+    // __release body: null-check, atomic decrement, trace calls, dtor at zero.
     if let Some(body) = &mut st.release.body {
         body.items = vec![
             // NOTE: release gets called blindly on the lhs of any assignment.
             // The lhs can be a null-initialized ref.
-            if_block(
-                Expression::Binary {
-                    op: BinaryOp::Identical,
-                    lhs: Box::new(Expression::ThisRef),
-                    rhs: Box::new(Expression::PointerLiteral),
-                    loc: Loc::NONE,
-                },
-                vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
-            ),
-            Statement::Expression(Expression::Binary {
-                op: BinaryOp::Assign,
-                lhs: Box::new(member_ref("__refcount")),
-                rhs: Box::new(Expression::Binary {
-                    op: BinaryOp::Sub,
-                    lhs: Box::new(member_ref("__refcount")),
-                    rhs: Box::new(Expression::IntLiteral(1)),
-                    loc: Loc::NONE,
-                }),
-                loc: Loc::NONE,
-            }),
+            null_guard(),
+            count_local(CountField::Strong, false, atomic),
             call(
                 "trace_ptr",
                 vec![
@@ -200,17 +190,12 @@ pub fn apply_synthesized(st: &mut StructDef) {
             call(
                 "trace_int",
                 vec![
-                    member_ref("__refcount"),
+                    count_ref(),
                     str_lit(format!("  refcount: {}", struct_name)),
                 ],
             ),
             if_block(
-                Expression::Binary {
-                    op: BinaryOp::Equal,
-                    lhs: Box::new(member_ref("__refcount")),
-                    rhs: Box::new(Expression::IntLiteral(0)),
-                    loc: Loc::NONE,
-                },
+                is_zero(count_ref()),
                 vec![
                     call(
                         "trace_ptr",
@@ -226,10 +211,13 @@ pub fn apply_synthesized(st: &mut StructDef) {
                         args: vec![],
                         loc: Loc::NONE,
                     }),
-                    add_to_field("__weakcount", BinaryOp::Sub),
-                    // Destroyed: the memory goes once no weak reference
+                    // Destroyed: give up the strong references' weak
+                    // reference. The memory goes once no weak reference
                     // remains; otherwise the last weak release frees it.
-                    if_block(field_is_zero("__weakcount"), vec![call("_pep_free", vec![Expression::ThisRef])]),
+                    if_block(
+                        is_zero(count_step(CountField::Weak, false, atomic)),
+                        vec![call("_pep_free", vec![Expression::ThisRef])],
+                    ),
                 ],
             ),
         ];

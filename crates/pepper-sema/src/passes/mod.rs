@@ -10,6 +10,7 @@ pub mod resolve_type_aliases;
 pub mod tag_generics;
 pub mod convert_string_literals;
 pub mod gather_generics;
+pub mod check_shared_types;
 pub mod resolve_implicit_types;
 pub mod resolve_resolvables;
 pub mod apply_extensions;
@@ -112,6 +113,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Struct values flowing into trait-typed slots, once every type is final.
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
+    step!(check_shared_types::check_shared_types(module));
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
     Ok(())
@@ -186,6 +188,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(rhs, f);
         }
         Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
+        Expression::CountStep { .. } | Expression::FunctionPointer { .. } => {}
         Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => walk_expression(arg, f),
         Expression::AtomicLoad(_, arg) => walk_expression(arg, f),
         Expression::AtomicStore(_, ptr, val) => {
@@ -249,6 +252,8 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::Default(_)
         | Expression::FunctionRef { .. }
         | Expression::MethodAddress(_)
+        | Expression::CountStep { .. }
+        | Expression::FunctionPointer { .. }
         | Expression::ClosureLiteral(_) => vec![],
         Expression::MemberRef { lhs, .. } => vec![lhs.as_mut()],
         Expression::Binary { lhs, rhs, .. }

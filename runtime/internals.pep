@@ -41,7 +41,19 @@ export assert(condition: bool, msg: __ptr<char>): void {
 }
 
 # ── Live-allocation counter (leak tests) and trace gate ─────────────────────
-var _pep_live_allocs_count = 0;
+# The live-allocation count, updated atomically because threads allocate
+# concurrently. It lives in a slot made on first use (by the main thread,
+# before any thread is started): a module-scope Atomic<long> would allocate
+# through _pep_malloc itself.
+var _pep_live_allocs_slot: __ptr<long> = __null;
+
+_pep_live_allocs_counter(): __ptr<long> {
+    if (_pep_live_allocs_slot == __null) {
+        _pep_live_allocs_slot = malloc(8);
+        memset(_pep_live_allocs_slot, 0, 8);
+    }
+    return _pep_live_allocs_slot;
+}
 # `getenv` needs a NUL-terminated C string; a Pepper `String` buffer is not
 # guaranteed to be, so build the name in a helper (its c_str() is safe).
 _pep_trace_enabled(): bool {
@@ -55,14 +67,14 @@ export _pep_malloc(size: ulong): __ptr<void> {
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
     memset(p, 0, size);
-    _pep_live_allocs_count = _pep_live_allocs_count + 1;
+    __atomic_fetch_add<long>(_pep_live_allocs_counter(), 1);
     return p;
 }
 
 export _pep_free(p: __ptr<void>) {
     if (p != __null) {
         free(p);
-        _pep_live_allocs_count = _pep_live_allocs_count - 1;
+        __atomic_fetch_sub<long>(_pep_live_allocs_counter(), 1);
     }
 }
 
@@ -73,7 +85,7 @@ export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void
     if (np != __null) {
         # realloc(null, n) is a fresh allocation; the counter must see it.
         if (p == __null && newSize > 0) {
-            _pep_live_allocs_count = _pep_live_allocs_count + 1;
+            __atomic_fetch_add<long>(_pep_live_allocs_counter(), 1);
         }
         if (newSize > prevSize) {
             memset(np + prevSize, 0, newSize - prevSize);
@@ -82,7 +94,7 @@ export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void
     return np;
 }
 export _pep_live_allocs(): long {
-    return _pep_live_allocs_count;
+    return __atomic_load<long>(_pep_live_allocs_counter());
 }
 
 ## Prints `msg` and aborts the program. It never returns.

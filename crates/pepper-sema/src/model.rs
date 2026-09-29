@@ -251,6 +251,27 @@ pub enum Expression {
     /// `__weak_upgrade<T>(w)` (a new strong `T`, or null once destroyed) and
     /// `__weak_expired<T>(w)` (bool).
     Weak(WeakOp, TypeName, Box<Expression>),
+    /// One step of a head count of the `this` object inside a synthesized
+    /// `__acquire`/`__release` body: `field` (`__refcount` or `__weakcount`)
+    /// goes up by one (`increment`) or down by one. Evaluates to the count
+    /// after the step (`u32`). See `struct_body` for when it is atomic.
+    CountStep {
+        field: CountField,
+        increment: bool,
+        /// An atomic read-modify-write (a `[Shared]` struct, a function
+        /// type, or a weak view of a shared struct), else a plain one.
+        atomic: bool,
+    },
+    /// `__function_pointer(f)`: the raw, C-callable address of function `f`
+    /// (a `void*`), for passing a Pepper function to C as a callback. `owner`
+    /// is the struct whose static method `f` is, or `None` for a free
+    /// function.
+    FunctionPointer {
+        owner: Option<TypeName>,
+        function: String,
+        /// Location of the intrinsic's name.
+        loc: Loc,
+    },
     /// Free function call by name (possibly specialized `name<args>`)
     FunctionCall {
         function: String,
@@ -342,6 +363,7 @@ impl Expression {
             | Expression::Index { loc, .. }
             | Expression::ArrayIndex { loc, .. }
             | Expression::FunctionCall { loc, .. }
+            | Expression::FunctionPointer { loc, .. }
             | Expression::MethodCall { loc, .. }
             | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. } => *loc,
@@ -363,6 +385,25 @@ pub struct ClosureLiteral {
     pub expression_body: bool,
     /// Location of the whole literal.
     pub loc: Loc,
+}
+
+/// Which head count of an object an `Expression::CountStep` changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CountField {
+    /// `__refcount`, the strong count (byte offset 0).
+    Strong,
+    /// `__weakcount`, the weak count (byte offset 4).
+    Weak,
+}
+
+impl CountField {
+    /// The byte offset of the count in every object head.
+    pub fn offset(self) -> u64 {
+        match self {
+            CountField::Strong => 0,
+            CountField::Weak => 4,
+        }
+    }
 }
 
 /// Which weak reference intrinsic an `Expression::Weak` is.
@@ -512,6 +553,29 @@ pub struct StructDef {
     pub attributes: Vec<ast::Attribute>,
     /// Location of the declared name.
     pub loc: Loc,
+}
+
+/// The attribute that makes a struct shareable between threads.
+pub const SHARED_ATTRIBUTE: &str = "Shared";
+
+/// Whether `attributes` include a bare `[name]`.
+pub fn has_attribute(attributes: &[ast::Attribute], name: &str) -> bool {
+    attributes.iter().any(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == name))
+}
+
+impl StructDef {
+    /// Declared `[Shared]`: its objects may be referenced from several
+    /// threads, so its reference counts are atomic.
+    pub fn is_shared(&self) -> bool {
+        has_attribute(&self.attributes, SHARED_ATTRIBUTE)
+    }
+
+    /// Whether acquire/release step the counts atomically: `[Shared]`
+    /// structs, and function types (the values that carry work to another
+    /// thread).
+    pub fn atomic_counts(&self) -> bool {
+        self.is_shared() || self.ty.is_function_type()
+    }
 }
 
 #[derive(Debug, Clone)]

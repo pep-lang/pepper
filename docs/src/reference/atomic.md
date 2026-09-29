@@ -7,7 +7,7 @@ Source: `runtime/atomic.pep`
 ## Atomic
 
 ```pepper
-struct Atomic<T>
+[Shared] struct Atomic<T>
 ```
 
 A value of type `T` that threads can read and update without data races,
@@ -21,8 +21,10 @@ caller its own reference. Memory ordering: `load` is an acquire,
 `store` a release, and `compare_exchange` and the `fetch_*` operations are
 acquire-release.
 
-`Atomic` is itself a struct, so copies of it share one slot: pass the
-Atomic around (or keep it in a global) to share the value between threads.
+`Atomic` is a `[Shared]` struct, so copies of it share one slot and may
+be used from several threads at once: pass the Atomic around (or keep it
+in a global) to share the value between threads. A struct `T` must be
+thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
 
 **Type parameters**
 - `T` — the type of the stored value
@@ -42,7 +44,7 @@ Atomic around (or keep it in a global) to share the value between threads.
 #### Data
 
 ```pepper
-__ptr<T> Data
+const Data: __ptr<T>
 ```
 
 The heap slot the value lives in: `sizeof<T>()` bytes for a POD `T`,

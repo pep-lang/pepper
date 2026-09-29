@@ -4,6 +4,7 @@
 use crate::model::Diagnostic;
 use crate::model::{Block, Declaration, Expression, FunctionDef, Module, Statement};
 use crate::type_name::TypeName;
+use std::collections::HashSet;
 
 fn convert_type_string(ty: &mut TypeName) {
     // Inner-first, so `__ptr<__ptr<int>>` → `int**` and `Array<__ptr<char>>`
@@ -30,6 +31,21 @@ fn convert_expression(expr: &mut Expression) {
         // Type positions inside expressions: `x as __ptr<T>`, `sizeof<__ptr<T>>`.
         if let Expression::Cast { ty, .. } | Expression::SizeOf(ty) = e {
             convert_type_string(ty);
+        }
+        // Intrinsic nodes converted in an earlier run carry their `T`, which
+        // specialization may since have substituted with a `__ptr<U>`
+        // (`Atomic<__ptr<void>>`).
+        match e {
+            Expression::IsPod(ty)
+            | Expression::Default(ty)
+            | Expression::RefCount(ty, _)
+            | Expression::Address(ty, _)
+            | Expression::Weak(_, ty, _)
+            | Expression::AtomicLoad(ty, _)
+            | Expression::AtomicStore(ty, _, _)
+            | Expression::AtomicCmpXchg(ty, _, _, _)
+            | Expression::AtomicFetch(_, ty, _, _) => convert_type_string(ty),
+            _ => {}
         }
         if let Expression::FunctionCall { function, args, .. } = e {
             let base = function.split('<').next().unwrap_or(function);
@@ -162,7 +178,76 @@ fn convert_function(function: &mut FunctionDef) {
     }
 }
 
+/// The function a `__function_pointer(f)` argument names: a free function,
+/// or a static method of `owner` (the struct being converted, if any).
+fn function_pointer_target(
+    arg: &Expression,
+    owner: Option<(&TypeName, &HashSet<String>)>,
+    free_functions: &HashSet<String>,
+) -> Result<(Option<TypeName>, String), Diagnostic> {
+    let name = match arg {
+        Expression::SymbolRef { id, .. } => id,
+        Expression::FunctionRef { function, .. } => function,
+        Expression::MemberRef { lhs, name, .. } if matches!(lhs.as_ref(), Expression::ThisRef) => name,
+        other => {
+            return Err(Diagnostic::error("'__function_pointer' expects the name of a function").at(other.loc()));
+        }
+    };
+    if let Some((owner, statics)) = owner
+        && statics.contains(name)
+    {
+        return Ok((Some(owner.clone()), name.clone()));
+    }
+    if free_functions.contains(name) {
+        return Ok((None, name.clone()));
+    }
+    Err(Diagnostic::error(format!("use of undeclared identifier '{}'", name)).at(arg.loc()))
+}
+
+/// `__function_pointer(f)` calls in `function` → `FunctionPointer` nodes.
+fn convert_function_pointers(
+    function: &mut FunctionDef,
+    owner: Option<(&TypeName, &HashSet<String>)>,
+    free_functions: &HashSet<String>,
+) {
+    let Some(body) = &mut function.body else { return };
+    crate::passes::walk_block(body, &mut |expr: &mut Expression| {
+        crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+            let Expression::FunctionCall { function, args, loc } = e else { return };
+            if function != "__function_pointer" {
+                return;
+            }
+            if args.len() != 1 {
+                let which = if args.len() > 1 { "many" } else { "few" };
+                crate::errors::report(
+                    Diagnostic::error(format!("too {} arguments to '__function_pointer': expected 1, have {}", which, args.len()))
+                        .at(*loc),
+                );
+                return;
+            }
+            match function_pointer_target(&args[0], owner, free_functions) {
+                Ok((owner, name)) => {
+                    *e = Expression::FunctionPointer { owner, function: name, loc: *loc };
+                }
+                Err(diagnostic) => crate::errors::report(diagnostic),
+            }
+        });
+    });
+}
+
 pub fn convert_intrinsics(module: &mut Module) {
+    let free_functions: HashSet<String> = module.functions.iter().map(|f| f.name.clone()).collect();
+    for function in &mut module.functions {
+        convert_function_pointers(function, None, &free_functions);
+    }
+    for st in &mut module.structs {
+        let statics: HashSet<String> =
+            st.method_members.iter().filter(|m| m.is_static).map(|m| m.name.clone()).collect();
+        let owner = st.ty.clone();
+        for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+            convert_function_pointers(method, Some((&owner, &statics)), &free_functions);
+        }
+    }
     for function in &mut module.functions {
         convert_function(function);
     }

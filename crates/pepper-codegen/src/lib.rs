@@ -1497,6 +1497,26 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
+    /// Allocate a local's stack slot in the current function's entry block,
+    /// so a `var` declared inside a loop reuses one slot instead of growing
+    /// the stack on every iteration (and LLVM can promote it to a register).
+    fn entry_alloca(&self, ty: BasicTypeEnum<'ctx>, name: &str) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+        let entry = self
+            .builder
+            .get_insert_block()
+            .and_then(|block| block.get_parent())
+            .and_then(|function| function.get_first_basic_block());
+        let Some(entry) = entry else {
+            return self.builder.build_alloca(ty, name).map_err(|e| e.to_string());
+        };
+        let builder = self.context.create_builder();
+        match entry.get_first_instruction() {
+            Some(first) => builder.position_before(&first),
+            None => builder.position_at_end(entry),
+        }
+        builder.build_alloca(ty, name).map_err(|e| e.to_string())
+    }
+
     fn codegen_var_def(&mut self, var: &VariableDef) -> Result<(), String> {
         let result = self.codegen_var_def_unlocated(var);
         self.locate(&result, var.loc);
@@ -1532,10 +1552,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 error
             })?
         };
-        let alloca = self
-            .builder
-            .build_alloca(ty, &var.name)
-            .map_err(|e| e.to_string())?;
+        let alloca = self.entry_alloca(ty, &var.name)?;
         if let Some(default) = &var.default {
             let value = self.codegen_expr(default)?;
             // Copying an existing struct reference into a fresh slot acquires
@@ -2035,6 +2052,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             // Atomic intrinsics: the load yields T, the store is void, the
             // cmpxchg reports success as bool.
             Expression::Weak(op, ty, _) => Some(op.result(ty).to_string()),
+            Expression::CountStep { .. } => Some("u32".to_string()),
+            Expression::FunctionPointer { .. } => Some("void*".to_string()),
             Expression::AtomicLoad(ty, _) => Some(ty.to_string()),
             Expression::AtomicStore(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
@@ -2720,6 +2739,53 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
             Expression::Weak(op, ty, arg) => self.codegen_weak(*op, ty, arg),
+            Expression::CountStep { field, increment, atomic } => {
+                // One step of a head count of `this`. Every object (and
+                // every weak view) starts with the two u32 counts, so the
+                // count sits at a fixed byte offset whatever the struct.
+                let this = match self.codegen_expr(&Expression::ThisRef)? {
+                    BasicValueEnum::PointerValue(p) => p,
+                    other => return Err(format!("head count on a non-reference {:?}", other)),
+                };
+                let count = self.head_count_ptr(this, *field)?;
+                let i32_type = self.context.i32_type();
+                let one = i32_type.const_int(1, false);
+                let old = if *atomic {
+                    // Taking a reference needs no ordering (the caller
+                    // already holds one); dropping one is acquire-release,
+                    // so the last release sees every other thread's writes
+                    // before it destroys the object (as in C++'s shared_ptr).
+                    let (op, ordering) = if *increment {
+                        (inkwell::AtomicRMWBinOp::Add, inkwell::AtomicOrdering::Monotonic)
+                    } else {
+                        (inkwell::AtomicRMWBinOp::Sub, inkwell::AtomicOrdering::AcquireRelease)
+                    };
+                    self.builder.build_atomicrmw(op, count, one, ordering).map_err(|e| e.to_string())?
+                } else {
+                    self.builder.build_load(i32_type, count, "count").map_err(|e| e.to_string())?.into_int_value()
+                };
+                let new = if *increment {
+                    self.builder.build_int_add(old, one, "count_after")
+                } else {
+                    self.builder.build_int_sub(old, one, "count_after")
+                }
+                .map_err(|e| e.to_string())?;
+                if !*atomic {
+                    self.builder.build_store(count, new).map_err(|e| e.to_string())?;
+                }
+                Ok(new.into())
+            }
+            Expression::FunctionPointer { owner, function, .. } => {
+                let name = match owner {
+                    Some(owner) => format!("{}.{}", owner, function),
+                    None => function.clone(),
+                };
+                let target = self
+                    .module
+                    .get_function(&name)
+                    .ok_or_else(|| format!("use of undeclared identifier '{}'", function))?;
+                Ok(target.as_global_value().as_pointer_value().into())
+            }
             Expression::RefCount(ty, arg) => {
                 // __refcount<T>(t): 0 for POD T; the u32 head field of a
                 // struct object (index 0, inserted by sema's apply_synthesized).
@@ -2751,13 +2817,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let merge_block = self.context.append_basic_block(fn_value, "refcount_merge");
                 self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(then_block);
-                let idx0 = self.context.i32_type().const_int(0, false);
-                let field = unsafe {
-                    self.builder
-                        .build_gep(struct_ty, ptr, &[idx0.into()], "refcount")
-                        .map_err(|e| e.to_string())?
-                };
-                let loaded = self.builder.build_load(self.context.i32_type(), field, "refcount_val").map_err(|e| e.to_string())?;
+                // Atomic: another thread may be changing the count.
+                let _ = struct_ty;
+                let loaded: BasicValueEnum<'ctx> = self.load_strong_count(ptr)?.into();
                 if let Some(ty) = arg_temp {
                     self.release_temp(&ty, val)?;
                 }
@@ -3120,8 +3182,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                         arg_names.push(self.numeric_source_name(arg, &v));
                         arg_vals.push(v);
                     }
+                    // A default argument is evaluated at the call, so an owned
+                    // default (`String name = ""`) is a temporary like any other.
                     for extra in self.missing_args(&mangled, args.len())? {
                         let v = self.codegen_expr(&extra)?;
+                        if let Some(ty) = self.owned_temp_type(&extra) {
+                            owned_arg_temps.push((v, ty));
+                        }
                         arg_names.push(self.numeric_source_name(&extra, &v));
                         arg_vals.push(v);
                     }
@@ -3191,8 +3258,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                     arg_names.push(self.numeric_source_name(arg, &v));
                     arg_vals.push(v);
                 }
+                // A default argument is evaluated at the call, so an owned
+                // default (`String name = ""`) is a temporary like any other.
                 for extra in self.missing_args(&mangled, args.len())? {
                     let v = self.codegen_expr(&extra)?;
+                    if let Some(ty) = self.owned_temp_type(&extra) {
+                        owned_arg_temps.push((v, ty));
+                    }
                     arg_names.push(self.numeric_source_name(&extra, &v));
                     arg_vals.push(v);
                 }
@@ -3447,8 +3519,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);
         }
+        // A default argument is evaluated at the call, so an owned
+        // default (`String name = ""`) is a temporary like any other.
         for extra in self.missing_args(&target, args.len())? {
             let v = self.codegen_expr(&extra)?;
+            if let Some(ty) = self.owned_temp_type(&extra) {
+                owned_arg_temps.push((v, ty));
+            }
             arg_names.push(self.numeric_source_name(&extra, &v));
             arg_vals.push(v);
         }
@@ -3489,6 +3566,22 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// read like a method receiver; an owned-rvalue argument is a temporary
     /// released once the result exists (so `__weak_from<T>(T())` leaves a
     /// weak reference to an already destroyed object, as in C++).
+    /// Atomic (monotonic) read of the strong count of the object at `object`.
+    fn load_strong_count(&self, object: PointerValue<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let count = self.head_count_ptr(object, sema::CountField::Strong)?;
+        let load = self.builder.build_load(self.context.i32_type(), count, "strong_count").map_err(|e| e.to_string())?;
+        let instruction = inkwell::values::BasicValue::as_instruction_value(&load).ok_or_else(|| "strong count load".to_string())?;
+        instruction.set_alignment(4).map_err(|e| e.to_string())?;
+        instruction.set_atomic_ordering(inkwell::AtomicOrdering::Monotonic).map_err(|e| e.to_string())?;
+        Ok(load.into_int_value())
+    }
+
+    /// Address of head count `field` in the object at `object`.
+    fn head_count_ptr(&self, object: PointerValue<'ctx>, field: sema::CountField) -> Result<PointerValue<'ctx>, String> {
+        let offset = self.context.i64_type().const_int(field.offset(), false);
+        unsafe { self.builder.build_gep(self.context.i8_type(), object, &[offset], "head_count") }.map_err(|e| e.to_string())
+    }
+
     fn codegen_weak(&mut self, op: sema::WeakOp, ty: &TypeName, arg: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
         let struct_ty = match self.types.get(&ty.to_string()) {
             Some(BasicTypeEnum::StructType(sct)) if self.structs.contains_key(&ty.to_string()) => sct,
@@ -3507,9 +3600,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.acquire_ref(&op.result(ty).to_string(), val)?;
                 val
             }
-            sema::WeakOp::Upgrade | sema::WeakOp::Expired => {
-                // Live iff non-null with a strong reference left. The head
+            sema::WeakOp::Expired => {
+                // Expired iff null or no strong reference is left. The head
                 // load must not run on null: branch, then phi.
+                let _ = struct_ty;
                 let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
                 let entry = self.builder.get_insert_block().expect("no insert block");
                 let then_block = self.context.append_basic_block(fn_value, "weak_nonnull");
@@ -3517,36 +3611,54 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let is_null = self.builder.build_is_null(ptr, "weak_null").map_err(|e| e.to_string())?;
                 self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(then_block);
-                let head = self
+                let strong = self.load_strong_count(ptr)?;
+                let dead = self
                     .builder
-                    .build_struct_gep(struct_ty, ptr, 0, "weak_refcount")
+                    .build_int_compare(inkwell::IntPredicate::EQ, strong, self.context.i32_type().const_zero(), "weak_dead")
                     .map_err(|e| e.to_string())?;
-                let strong = self
-                    .builder
-                    .build_load(self.context.i32_type(), head, "weak_strong")
-                    .map_err(|e| e.to_string())?
-                    .into_int_value();
-                let live = self
-                    .builder
-                    .build_int_compare(inkwell::IntPredicate::NE, strong, self.context.i32_type().const_zero(), "weak_live")
-                    .map_err(|e| e.to_string())?;
-                let live_end = self.builder.get_insert_block().expect("no insert block");
+                let dead_end = self.builder.get_insert_block().expect("no insert block");
                 self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
                 self.builder.position_at_end(merge_block);
-                let phi = self.builder.build_phi(self.context.bool_type(), "weak_is_live").map_err(|e| e.to_string())?;
-                phi.add_incoming(&[(&live, live_end), (&self.context.bool_type().const_zero(), entry)]);
-                let is_live = phi.as_basic_value().into_int_value();
-                if op == sema::WeakOp::Expired {
-                    self.builder.build_not(is_live, "weak_expired").map_err(|e| e.to_string())?.into()
-                } else {
-                    // A new strong reference to a live object, else null.
-                    let upgraded = self
-                        .builder
-                        .build_select(is_live, ptr, self.context.ptr_type(inkwell::AddressSpace::default()).const_null(), "upgraded")
-                        .map_err(|e| e.to_string())?;
-                    self.acquire_ref(&ty.to_string(), upgraded)?;
-                    upgraded
-                }
+                let phi = self.builder.build_phi(self.context.bool_type(), "weak_expired").map_err(|e| e.to_string())?;
+                phi.add_incoming(&[(&dead, dead_end), (&self.context.bool_type().const_all_ones(), entry)]);
+                phi.as_basic_value()
+            }
+            sema::WeakOp::Upgrade => {
+                // `weak_ptr::lock`: take a strong reference only while one
+                // is left, as one compare-and-swap loop, so a thread
+                // releasing the last reference at the same moment can never
+                // be resurrected. Null (or a destroyed object) gives null.
+                let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                let entry = self.builder.get_insert_block().expect("no insert block");
+                let loop_block = self.context.append_basic_block(fn_value, "upgrade_loop");
+                let try_block = self.context.append_basic_block(fn_value, "upgrade_try");
+                let merge_block = self.context.append_basic_block(fn_value, "upgrade_merge");
+                let is_null = self.builder.build_is_null(ptr, "weak_null").map_err(|e| e.to_string())?;
+                self.builder.build_conditional_branch(is_null, merge_block, loop_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(loop_block);
+                let strong = self.load_strong_count(ptr)?;
+                let dead = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, strong, self.context.i32_type().const_zero(), "weak_dead")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_conditional_branch(dead, merge_block, try_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(try_block);
+                let count = self.head_count_ptr(ptr, sema::CountField::Strong)?;
+                let bumped = self
+                    .builder
+                    .build_int_add(strong, self.context.i32_type().const_int(1, false), "strong_up")
+                    .map_err(|e| e.to_string())?;
+                let cas = self
+                    .builder
+                    .build_cmpxchg(count, strong, bumped, inkwell::AtomicOrdering::Acquire, inkwell::AtomicOrdering::Monotonic)
+                    .map_err(|e| e.to_string())?;
+                let won = self.builder.build_extract_value(cas, 1, "upgrade_ok").map_err(|e| e.to_string())?.into_int_value();
+                self.builder.build_conditional_branch(won, merge_block, loop_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(merge_block);
+                let null = self.context.ptr_type(inkwell::AddressSpace::default()).const_null();
+                let phi = self.builder.build_phi(self.context.ptr_type(inkwell::AddressSpace::default()), "upgraded").map_err(|e| e.to_string())?;
+                phi.add_incoming(&[(&null, entry), (&null, loop_block), (&ptr, try_block)]);
+                phi.as_basic_value()
             }
         };
         if let Some(temp) = arg_temp {

@@ -346,7 +346,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // Intrinsics carry no declared function; type them directly so a
         // `var x = __address<T>(v)` is not mis-inferred as i32.
         Expression::Address(..) => TypeName::new("u64"),
-        Expression::RefCount(..) => TypeName::new("u32"),
+        Expression::RefCount(..) | Expression::CountStep { .. } => TypeName::new("u32"),
+        Expression::FunctionPointer { .. } => TypeName::new("void*"),
         Expression::Weak(op, ty, _) => op.result(ty),
         Expression::AtomicLoad(ty, _) => ty.clone(),
         Expression::AtomicStore(..) => TypeName::new("void"),

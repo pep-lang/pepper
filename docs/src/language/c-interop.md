@@ -158,8 +158,27 @@ behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.
 
-Pepper function values are Pepper objects, not C function pointers, so you
-cannot pass a Pepper function as a C callback (for example to `qsort`).
+## Passing a Pepper function to C
+
+A Pepper [function value](function-types.md) is a Pepper object, not a C
+function pointer. To hand a function to C as a callback, such as the
+comparison function of `qsort`, take its address with
+`__function_pointer(name)`. The result is a `__ptr<void>`:
+
+```pepper
+{{#include ../../examples/c-callbacks.pep}}
+```
+
+- The argument must name a free function, or a static method of the struct
+  whose method uses it. Inside a generic struct the static method is the one
+  for the current type arguments, which is how `ThreadLocal<T>` gives the
+  operating system a destructor for its `T`.
+- C calls the function with the C calling convention, so give it
+  C-compatible parameter and return types: numbers and `__ptr<T>`. C knows
+  nothing of reference counts, so a struct parameter or return value would
+  not be counted correctly.
+- A name that is not a function is reported as
+  `use of undeclared identifier`.
 
 ## Binding to a different symbol name
 

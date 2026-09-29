@@ -159,6 +159,12 @@ The whole model, as a construct mapping:
 Everything else — scope exit, parameter exit, store-release-old — follows
 from "every owned value releases exactly once when it goes out of scope".
 
+Threads do not change the model. A struct declared `[Shared]` (and every
+function type) steps its counts atomically, like `shared_ptr`'s control
+block; every other struct uses plain increments and must stay on one thread.
+`check_shared_types` requires a `[Shared]` struct's fields to be `const` and
+thread-safe.
+
 `__weak<T>` is `std::weak_ptr<T>`, and the same rules apply to it on the weak
 count: copies acquire, scope exit releases. `__weak_from<T>(t)` is
 `weak_ptr(t)` and `__weak_upgrade<T>(w)` is `w.lock()`; both return a new

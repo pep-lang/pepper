@@ -402,3 +402,57 @@ fn closure_capturing_this_stored_in_a_field() {
          \x20     |                         ^~~~~~~~~~"
     );
 }
+
+#[test]
+fn shared_struct_field_not_const() {
+    assert_eq!(
+        error_of("shared_not_const", "[Shared]\nstruct Counter {\n    int Count;\n}\nmain(): int { return 0; }\n"),
+        "main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'\n\
+         \x20   3 |     int Count;\n\
+         \x20     |         ^~~~~\n\
+         note: threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'"
+    );
+}
+
+#[test]
+fn shared_struct_field_not_thread_safe() {
+    assert_eq!(
+        error_of(
+            "shared_not_thread_safe",
+            "struct Plain { int X; }\n[Shared]\nstruct Config {\n    const Inner: Plain;\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:4:18: error: field 'Inner' of shared struct 'Config' has type 'Plain', which is not thread-safe\n\
+         \x20   4 |     const Inner: Plain;\n\
+         \x20     |                  ^~~~~\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain { int X; }\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn shared_generic_argument_not_thread_safe() {
+    // The error points at the code that names the specialization; the notes
+    // (in the runtime) name the field and the type.
+    let error = error_of("shared_generic_argument", "main(): int {\n    var a = Atomic<String>();\n    return 0;\n}\n");
+    assert!(
+        error.starts_with(
+            "main.pep:2:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+             \x20   2 |     var a = Atomic<String>();\n\
+             \x20     |             ^~~~~~~~~~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: required by field 'Data' declared here"), "{error}");
+    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+}
+
+#[test]
+fn function_pointer_undeclared() {
+    assert_eq!(
+        error_of("function_pointer_undeclared", "main(): int {\n    var p = __function_pointer(nope);\n    return 0;\n}\n"),
+        "main.pep:2:32: error: use of undeclared identifier 'nope'\n\
+         \x20   2 |     var p = __function_pointer(nope);\n\
+         \x20     |                                ^~~~"
+    );
+}

@@ -23,7 +23,8 @@
 - [Error handling with Result](language/results.md)
 - [Visibility](language/visibility.md)
 - [Modules and imports](language/modules.md)
-- [Atomics and concurrency](language/atomics.md)
+- [Atomics](language/atomics.md)
+- [Threads and shared data](language/threads.md)
 - [Calling C](language/c-interop.md)
 - [Platform selection](language/platform-selection.md)
 - [Linking](language/linking.md)
@@ -48,6 +49,10 @@
     - [Path](reference/io-path.md)
     - [File](reference/io-file.md)
     - [Directory](reference/io-directory.md)
+  - [The async module](reference/async-module.md)
+    - [Thread](reference/async-thread.md)
+    - [ThreadLocal](reference/async-thread_local.md)
+    - [Processor counts](reference/async-cpus.md)
 <!-- reference:end -->
 
 # Contributing

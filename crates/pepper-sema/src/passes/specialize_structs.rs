@@ -158,6 +158,7 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             | Expression::AtomicStore(ty, _, _)
             | Expression::AtomicCmpXchg(ty, _, _, _) => substitute(ty, type_map),
             Expression::AtomicFetch(_, ty, _, _) => substitute(ty, type_map),
+            Expression::FunctionPointer { owner: Some(ty), .. } => substitute(ty, type_map),
             Expression::MakeClosure { closure, ty, .. } => {
                 substitute(ty, type_map);
                 let mut parsed = crate::passes::gather_generics::parse_type_string(closure);

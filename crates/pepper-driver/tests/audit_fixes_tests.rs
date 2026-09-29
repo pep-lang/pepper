@@ -381,8 +381,9 @@ test(): int {
 fn atomic_releases_its_struct_reference() {
     let (result, leaked) = jit_census(
         r#"
+[Shared]
 struct Point {
-    int x;
+    const x: int;
     construct(this.x = 0) {}
 }
 keep(): int {

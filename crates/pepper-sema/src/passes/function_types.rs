@@ -87,8 +87,8 @@ pub fn synthesize_function_types(module: &mut Module) {
         if let Some(target) = ty.weak_target() {
             // Only a concrete struct target: `__weak<T>` inside a generic
             // base waits for its specializations.
-            if module.structs.iter().any(|st| st.name == target.to_string()) {
-                module.structs.push(crate::passes::weak_types::weak_struct(&ty));
+            if let Some(shared) = module.structs.iter().find(|st| st.name == target.to_string()).map(|st| st.is_shared()) {
+                module.structs.push(crate::passes::weak_types::weak_struct(&ty, shared));
             }
             continue;
         }

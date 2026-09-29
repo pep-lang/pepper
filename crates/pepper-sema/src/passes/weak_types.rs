@@ -24,34 +24,8 @@
 
 use crate::model::*;
 use crate::passes::function_types::empty_function;
+use crate::struct_body::{count_step, is_zero, null_guard};
 use crate::type_name::TypeName;
-
-fn head(field: &str) -> Expression {
-    Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: field.to_string(), loc: Loc::NONE }
-}
-
-fn step(field: &str, op: BinaryOp) -> Statement {
-    Statement::Expression(Expression::Binary {
-        op: BinaryOp::Assign,
-        lhs: Box::new(head(field)),
-        rhs: Box::new(Expression::Binary {
-            op,
-            lhs: Box::new(head(field)),
-            rhs: Box::new(Expression::IntLiteral(1)),
-            loc: Loc::NONE,
-        }),
-        loc: Loc::NONE,
-    })
-}
-
-fn is_zero(field: &str) -> Expression {
-    Expression::Binary {
-        op: BinaryOp::Equal,
-        lhs: Box::new(head(field)),
-        rhs: Box::new(Expression::IntLiteral(0)),
-        loc: Loc::NONE,
-    }
-}
 
 fn when(condition: Expression, items: Vec<Statement>) -> Statement {
     Statement::Branch(Branch {
@@ -61,21 +35,9 @@ fn when(condition: Expression, items: Vec<Statement>) -> Statement {
     })
 }
 
-/// `if (this === __null) { return; }`
-fn null_guard() -> Statement {
-    when(
-        Expression::Binary {
-            op: BinaryOp::Identical,
-            lhs: Box::new(Expression::ThisRef),
-            rhs: Box::new(Expression::PointerLiteral),
-            loc: Loc::NONE,
-        },
-        vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
-    )
-}
-
-/// The synthesized struct for `ty` (`__weak<T>`).
-pub fn weak_struct(ty: &TypeName) -> StructDef {
+/// The synthesized struct for `ty` (`__weak<T>`); `atomic` when `T` is a
+/// `[Shared]` struct, whose weak references may be dropped on any thread.
+pub fn weak_struct(ty: &TypeName, atomic: bool) -> StructDef {
     let name = ty.to_string();
     let mut st = StructDef {
         name: name.clone(),
@@ -93,17 +55,16 @@ pub fn weak_struct(ty: &TypeName) -> StructDef {
     };
     crate::struct_body::apply_synthesized(&mut st);
     if let Some(body) = &mut st.acquire.body {
-        body.items = vec![null_guard(), step("__weakcount", BinaryOp::Add)];
+        body.items = vec![null_guard(), Statement::Expression(count_step(CountField::Weak, true, atomic))];
     }
     if let Some(body) = &mut st.release.body {
         body.items = vec![
             null_guard(),
-            step("__weakcount", BinaryOp::Sub),
             // The strong references hold one weak reference between them
             // until the object is destroyed, so 0 means destroyed and
             // unreferenced.
             when(
-                is_zero("__weakcount"),
+                is_zero(count_step(CountField::Weak, false, atomic)),
                 vec![Statement::Expression(Expression::FunctionCall {
                     function: "_pep_free".to_string(),
                     args: vec![Expression::ThisRef],

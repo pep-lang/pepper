@@ -117,7 +117,7 @@ main.pep:2:13: error: unknown escape sequence '\q'
 - `Result<TValue, TError>`, `Error` and `None` describe operations that can
   fail. See [Error handling with Result](results.md).
 - `Atomic<T>` is a value that threads can update safely. See
-  [Atomics and concurrency](atomics.md).
+  [Atomics](atomics.md) and [Threads and shared data](threads.md).
 
 ### Raw pointers and `__null`
 

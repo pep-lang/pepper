@@ -121,6 +121,14 @@ the built-in `__weak<T>`, a `std::weak_ptr<T>`: `Weak<T>(object)` is
 made while an object is still inside its constructor cannot be upgraded until
 the constructor returns, as with `weak_from_this()` in C++.
 
+## References and threads
+
+Reference counts are plain, fast increments, so a struct's objects must stay
+on one thread. A struct declared `[Shared]` has atomic counts instead, and
+its references can be copied and dropped on any thread. The compiler requires
+such a struct's fields to be `const` and thread-safe. See
+[What threads can share](threads.md#what-threads-can-share).
+
 ## Summary
 
 | Code | What happens to references |

@@ -170,5 +170,6 @@ depth, including features this tour skipped:
 [generics](../language/generics.md),
 [function types and closures](../language/function-types.md),
 [traits and extensions](../language/traits-and-extensions.md),
-[atomics](../language/atomics.md), and
+[atomics](../language/atomics.md),
+[threads](../language/threads.md), and
 [calling C](../language/c-interop.md).
