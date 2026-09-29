@@ -638,10 +638,9 @@ fn an_imported_type_specializes_an_extension() {
         ),
     ];
     // `Pt` is the import, not a generic parameter: the extension is of
-    // `Box<Point>`, and `Pt` inside it is `Point`. (Checked through linking
-    // and sema; running it hits a codegen gap with struct returns from
-    // specialized extensions that is unrelated to modules.)
-    compile("extend_import", &files).expect("links and checks");
+    // `Box<Point>`, and `Pt` inside it is `Point`, so `make` returns a
+    // struct reference.
+    assert_eq!(run("extend_import", &files), 8);
 }
 
 #[test]
