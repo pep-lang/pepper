@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
+            window.path_to_searchindex_js = "../searchindex-7f4f3964.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -334,6 +334,9 @@ a number is never a struct and one struct type is never another, except that
 a struct converts to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>,
 and a value converts to a struct whose constructor from its type is
 <a href="structs.html#implicit-conversions"><code>[Implicit]</code></a>.
+A raw pointer is never a struct either: a <code>__ptr&lt;char&gt;</code> is not a <code>String</code>
+(copy it with <code>String(p)</code>), and a <code>String</code> is not a <code>__ptr&lt;char&gt;</code> (pass its
+<code>c_str()</code>).
 The check applies wherever a value flows into a typed place: a variable’s
 initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
@@ -343,6 +346,10 @@ initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);
       |            ^
+</code></pre>
+<pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
+    3 |     assert(false, p);
+      |                   ^
 </code></pre>
 <pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
