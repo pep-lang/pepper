@@ -13,11 +13,11 @@ read_setting(Path path): String {
 }
 
 main(): int {
-    var dir = Directory.temp().join_str("pepper-results-io-example");
+    var dir = Directory.temp().join("pepper-results-io-example");
     var created = Directory.create_all(dir);
     assert(created.is_ok(), "created the folder");
 
-    var path = dir.join_str("setting.txt");
+    var path = dir.join("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
 
     IoResult<void> written = File.write_text(path, "blue");

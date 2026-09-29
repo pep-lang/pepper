@@ -154,7 +154,7 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 ## @example
 ##     import io;
 ##
-##     var p = io.Path("docs").join_str("guide.md");   # "docs/guide.md"
+##     var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
 ##     var name = p.file_name();                       # "guide.md"
 ##     var ext = p.extension();                        # "md"
 ##     var dir = p.parent();                           # io.Path("docs")
@@ -169,12 +169,18 @@ export struct Path {
     ## Creates a path holding `value` as is: no validation, normalization or
     ## separator conversion.
     ##
+    ## The constructor is `[Implicit]`: a `String` (or a string literal)
+    ## converts to a `Path` wherever a `Path` is expected, so every API that
+    ## takes a `Path` also accepts text.
+    ##
     ## @param value the path's text; the default, `""`, is the empty path
     ## @example
     ##     import io;
     ##
     ##     var p = io.Path("/usr/lib");
     ##     var empty = io.Path();   # is_empty() is true
+    ##     var q: io.Path = "docs";   # converted implicitly
+    [Implicit]
     construct(String value = "") {
         this.Value = value;
     }
@@ -246,7 +252,7 @@ export struct Path {
     ##     var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
     ##     var q = io.Path("a/").join(io.Path("b"));      # "a/b"
     ##     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
-    ## @see join_str
+    ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
     Path join(Path other) {
         if (other.Value.Size == 0) {
             return Path(Value.clone());
@@ -264,16 +270,17 @@ export struct Path {
     }
 
     ## Returns this path with the String `other` appended, exactly like
-    ## `join(Path(other))` (a separate name because methods do not
-    ## overload).
+    ## `join(Path(other))`. Deprecated: `join` accepts a `String` directly,
+    ## since a `String` converts to a `Path` implicitly.
     ##
     ## @param other the path text to append
     ## @returns a new Path; this path is not changed
     ## @example
     ##     import io;
     ##
-    ##     var so = io.Path("usr").join_str("lib").join_str("x.so");   # "usr/lib/x.so"
+    ##     var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
     ## @see join
+    [Deprecated("use 'join', which accepts a String", "join")]
     Path join_str(String other) {
         return join(Path(other));
     }

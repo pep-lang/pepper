@@ -20,7 +20,7 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
     import io;
 
     main(): int {
-        var path = io.Directory.temp().join_str("greeting.txt");
+        var path = io.Directory.temp().join("greeting.txt");
         assert(io.File.write_text(path, "hello").is_ok(), "write");
         assert(io.File.read_to_string(path).value() == "hello", "read back");
         io.File.remove(path);

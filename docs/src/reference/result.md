@@ -33,10 +33,13 @@ The description of what went wrong; empty when none was given.
 #### Error()
 
 ```pepper
-construct(String message = "")
+[Implicit] construct(String message = "")
 ```
 
 Creates an Error carrying `message`.
+
+The constructor is `[Implicit]`: a `String` converts to an `Error`
+wherever an `Error` is expected, as in `Result<int>.err("bad input")`.
 
 **Parameters**
 - `message` — the description of the failure; defaults to the empty string

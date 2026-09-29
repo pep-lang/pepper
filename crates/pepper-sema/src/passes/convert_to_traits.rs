@@ -1,6 +1,16 @@
+//! Conversions at the places a value flows into a typed slot (variable
+//! initializer, assignment, argument, return).
+//!
+//! Implicit constructors: a value flowing into a slot of struct type `B`
+//! whose constructor is `[Implicit]` from type `A` becomes the call `B(value)`
+//! when the value is an `A`, or reaches `A` by promotion (integer widening, a
+//! literal that fits, `f32` to `f64`, a struct to a trait it declares). One
+//! conversion per value: the constructor's own argument never converts again
+//! through another constructor. The call is an ordinary constructor call, an
+//! owned rvalue, so the refcount rules need nothing new.
+//!
 //! Struct-to-trait conversions. Wherever a value of struct type `S` flows
-//! into a slot of trait type `Tr` (variable initializer, assignment,
-//! argument, return), wrap it in `ToTrait { S → Tr }`: the same object, seen
+//! into a slot of trait type `Tr`, wrap it in `ToTrait { S → Tr }`: the same object, seen
 //! through the vtable of `S`'s conformance to `Tr`. This is C++'s
 //! `shared_ptr<Derived>` → `shared_ptr<Base>`: the slot acquires (or an owned
 //! rvalue moves in) exactly as it would for an `S`, so the refcount rules
@@ -24,7 +34,17 @@ struct StructFacts {
     loc: Loc,
 }
 
+/// A struct whose constructor is `[Implicit]`.
+#[derive(Clone)]
+struct Implicit {
+    /// The constructor's parameter type.
+    from: TypeName,
+    /// The constructor call's name (`Path`, `Box<int>`).
+    callee: String,
+}
+
 struct Converter {
+    implicit: HashMap<String, Implicit>,
     table: StructTable,
     trait_defs: Vec<TraitDef>,
     trait_types: HashMap<String, TraitType>,
@@ -74,8 +94,9 @@ impl Converter {
         current: Option<&TypeName>,
         fallback: Loc,
     ) {
-        if !traits::is_trait_type(&self.trait_defs, expected)
-            || matches!(value, Expression::ToTrait { .. })
+        let to_trait = traits::is_trait_type(&self.trait_defs, expected);
+        if matches!(value, Expression::ToTrait { .. })
+            || !(to_trait || self.implicit.contains_key(&expected.to_string()))
         {
             return;
         }
@@ -95,6 +116,10 @@ impl Converter {
         } else {
             value.loc()
         };
+        if !to_trait {
+            self.convert_implicit(value, expected, current, loc);
+            return;
+        }
         let from =
             if matches!(value, Expression::PointerLiteral) {
                 TypeName::void_ptr()
@@ -155,6 +180,68 @@ impl Converter {
             to: expected.clone(),
             loc,
         };
+    }
+
+    /// `value` flows into a slot of struct type `expected`, which has an
+    /// `[Implicit]` constructor: call it when the value is not already an
+    /// `expected` and fits the constructor's parameter.
+    fn convert_implicit(
+        &mut self,
+        value: &mut Expression,
+        expected: &TypeName,
+        current: Option<&TypeName>,
+        loc: Loc,
+    ) {
+        // `__null` is a null reference of any struct type.
+        if matches!(value, Expression::PointerLiteral) {
+            return;
+        }
+        let Some(implicit) = self.implicit.get(&expected.to_string()).cloned() else {
+            return;
+        };
+        let Some(actual) = static_type::of(value, &self.table, current) else {
+            return;
+        };
+        let canonical = crate::passes::check_function_types::canonical;
+        // Already the struct. Type arguments are not compared, as in
+        // `check_function_types`: one specialization may be spelled two ways.
+        if canonical(&actual).name == canonical(expected).name {
+            return;
+        }
+        if !self.fits(value, &actual, &implicit.from) {
+            return;
+        }
+        let inner = std::mem::replace(value, Expression::PointerLiteral);
+        *value = Expression::FunctionCall {
+            function: implicit.callee,
+            args: vec![inner],
+            loc,
+        };
+        // A struct reaching a trait parameter still needs its `ToTrait`.
+        if let Expression::FunctionCall { args, .. } = value {
+            self.convert(&mut args[0], &implicit.from, current, loc);
+        }
+    }
+
+    /// Whether `value`, of type `actual`, reaches `to` exactly or by
+    /// promotion: the conversions an implicit constructor's argument may take.
+    fn fits(&self, value: &Expression, actual: &TypeName, to: &TypeName) -> bool {
+        let canonical = crate::passes::check_function_types::canonical;
+        let (from_c, to_c) = (canonical(actual), canonical(to));
+        if from_c == to_c {
+            return true;
+        }
+        if traits::is_trait_type(&self.trait_defs, to) {
+            return self
+                .structs
+                .get(&actual.to_string())
+                .is_some_and(|facts| facts.traits.iter().any(|t| canonical(t) == to_c));
+        }
+        let (from_name, to_name) = (from_c.to_string(), to_c.to_string());
+        if let Expression::IntLiteral(v) = value {
+            return integer_range(&to_name).is_some_and(|(min, max)| (*v as i128) >= min && (*v as i128) <= max);
+        }
+        promotes(&from_name, &to_name)
     }
 
     /// A trait method implemented with a struct return type where the trait
@@ -437,12 +524,58 @@ impl Converter {
     }
 }
 
+/// The range of an integer type, by canonical name.
+fn integer_range(ty: &str) -> Option<(i128, i128)> {
+    let bits = |b: u32, signed: bool| {
+        if signed {
+            (-(1i128 << (b - 1)), (1i128 << (b - 1)) - 1)
+        } else {
+            (0, (1i128 << b) - 1)
+        }
+    };
+    Some(match ty {
+        "i8" => bits(8, true),
+        "i16" => bits(16, true),
+        "i32" => bits(32, true),
+        "i64" => bits(64, true),
+        "u8" => bits(8, false),
+        "u16" => bits(16, false),
+        "u32" => bits(32, false),
+        "u64" => bits(64, false),
+        _ => return None,
+    })
+}
+
+/// Whether every value of numeric type `from` is a value of `to` (canonical
+/// names): integer widening, and `f32` to `f64`.
+fn promotes(from: &str, to: &str) -> bool {
+    if from == "f32" && to == "f64" {
+        return true;
+    }
+    match (integer_range(from), integer_range(to)) {
+        (Some((from_min, from_max)), Some((to_min, to_max))) => from_min >= to_min && from_max <= to_max,
+        _ => false,
+    }
+}
+
 pub fn convert_to_traits(module: &mut Module) {
-    if module.traits.is_empty() {
+    let concrete = |st: &StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
+    let mut implicit = HashMap::new();
+    for st in module.structs.iter().filter(|st| concrete(st)) {
+        if let Some(from) = st.implicit_from() {
+            let entry = Implicit {
+                from: from.clone(),
+                callee: st.ty.to_string(),
+            };
+            implicit.insert(st.name.clone(), entry.clone());
+            implicit.insert(st.ty.to_string(), entry);
+        }
+    }
+    if module.traits.is_empty() && implicit.is_empty() {
         return;
     }
-    let concrete = |st: &StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
     let mut converter = Converter {
+        implicit,
         table: StructTable::build(module),
         trait_defs: module.traits.clone(),
         trait_types: HashMap::new(),

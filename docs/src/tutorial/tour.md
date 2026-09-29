@@ -151,7 +151,8 @@ What is new here:
   `Array`, must be imported. See [Modules and imports](../language/modules.md)
   and [Visibility](../language/visibility.md).
 - **Files.** `Directory.temp()` is the system's temporary directory, and
-  `join_str` adds a name to a [`Path`](../reference/io-path.md).
+  `join` adds a name to a [`Path`](../reference/io-path.md); the name can be
+  a plain `String`, which converts to a `Path` implicitly.
   [`File`](../reference/io-file.md) has helpers that read or write a whole
   file at once: `File.write_text` and `File.read_to_string`.
 - **I/O errors are Results.** `File.read_to_string` returns a `Result` whose

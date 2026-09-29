@@ -101,7 +101,9 @@ new object to the parameter does not affect the caller's variable.
 counted when you pass them.
 
 Arguments convert to the parameter's type the same way assignment does, so you
-can pass an `int` where a `long` or `double` is expected.
+can pass an `int` where a `long` or `double` is expected, and a `String` where
+a struct with an [`[Implicit]` constructor](structs.md#implicit-conversions)
+from `String` (such as `io.Path`) is expected.
 
 ## Default parameter values
 

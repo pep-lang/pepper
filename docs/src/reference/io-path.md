@@ -31,7 +31,7 @@ dots are ASCII, so splitting at them never cuts a character in two.
 ```pepper
     import io;
 
-    var p = io.Path("docs").join_str("guide.md");   # "docs/guide.md"
+    var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
     var name = p.file_name();                       # "guide.md"
     var ext = p.extension();                        # "md"
     var dir = p.parent();                           # io.Path("docs")
@@ -56,11 +56,15 @@ possibly empty.
 #### Path()
 
 ```pepper
-construct(String value = "")
+[Implicit] construct(String value = "")
 ```
 
 Creates a path holding `value` as is: no validation, normalization or
 separator conversion.
+
+The constructor is `[Implicit]`: a `String` (or a string literal)
+converts to a `Path` wherever a `Path` is expected, so every API that
+takes a `Path` also accepts text.
 
 **Parameters**
 - `value` — the path's text; the default, `""`, is the empty path
@@ -71,6 +75,7 @@ separator conversion.
 
     var p = io.Path("/usr/lib");
     var empty = io.Path();   # is_empty() is true
+    var q: io.Path = "docs";   # converted implicitly
 ```
 
 ### Static methods
@@ -179,9 +184,6 @@ normalized: `a` joined with `../b` is `a/../b`.
 **Returns**
 - a new Path; this path is not changed
 
-**See also**
-- `join_str`
-
 **Example**
 ```pepper
     import io;
@@ -189,17 +191,18 @@ normalized: `a` joined with `../b` is `a/../b`.
     var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
     var q = io.Path("a/").join(io.Path("b"));      # "a/b"
     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+    var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 ```
 
 #### join_str
 
 ```pepper
-Path join_str(String other)
+[Deprecated("use 'join', which accepts a String", "join")] Path join_str(String other)
 ```
 
 Returns this path with the String `other` appended, exactly like
-`join(Path(other))` (a separate name because methods do not
-overload).
+`join(Path(other))`. Deprecated: `join` accepts a `String` directly,
+since a `String` converts to a `Path` implicitly.
 
 **Parameters**
 - `other` — the path text to append
@@ -214,7 +217,7 @@ overload).
 ```pepper
     import io;
 
-    var so = io.Path("usr").join_str("lib").join_str("x.so");   # "usr/lib/x.so"
+    var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 ```
 
 #### has_root_or_prefix

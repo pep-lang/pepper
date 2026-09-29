@@ -15,7 +15,11 @@ export struct Error {
 
     ## Creates an Error carrying `message`.
     ##
+    ## The constructor is `[Implicit]`: a `String` converts to an `Error`
+    ## wherever an `Error` is expected, as in `Result<int>.err("bad input")`.
+    ##
     ## @param message the description of the failure; defaults to the empty string
+    [Implicit]
     construct(String message = "") {
         this.Message = message;
     }

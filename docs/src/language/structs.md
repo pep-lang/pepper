@@ -92,6 +92,62 @@ main.pep:7:13: error: too many arguments to 'Point': expected 0, have 2
 > compiles, with a warning that offers the fix (see
 > [Deprecations](compiler-errors.md#deprecations)).
 
+### Implicit conversions
+
+A constructor marked `[Implicit]` also converts. Wherever a value flows into a
+place whose type is the struct, and the value has the constructor's parameter
+type, the compiler calls the constructor for you:
+
+```pepper
+{{#include ../../examples/structs-implicit.pep}}
+```
+
+The standard library uses this for [`io.Path`](../reference/io-path.md),
+which converts from a `String`, so `dir.join("logs")` and
+`io.File.open("notes.txt")` work without writing `io.Path(...)`, and for
+[`Error`](../reference/result.md), so `Result<int>.err("bad input")` works.
+
+- **Where it applies**: a variable's initializer when the variable's type is
+  written, an assignment, a function, method or constructor argument
+  (operators and `a[i] = value` included), a call through a function value,
+  and a `return` from a function with a declared return type.
+- **Where it does not**: the receiver of a method call (`"docs".join("x")`
+  does not turn `"docs"` into a `Path`), a `var` whose type is inferred
+  (`var n = 12.0;` stays a `double`), and `__null`, which stays a null
+  reference.
+- **One conversion per value.** The value must already have the
+  constructor's parameter type, or reach it by a widening that loses nothing:
+  a smaller integer to a larger one, an integer literal that fits, `float` to
+  `double`, or a struct to a [trait it declares](traits-and-extensions.md#traits-as-types).
+  Conversions never chain: if `Tag` converts from `Name` and `Name` from
+  `String`, a `String` does not become a `Tag`.
+- **Each conversion is a constructor call**, so it allocates a new object.
+  The converted value is a temporary like any constructor call's result: it
+  is released after the call it was passed to (see
+  [Memory and reference counting](memory.md)).
+- Only a constructor that can be called with one argument may be
+  `[Implicit]`: one parameter, or a first parameter followed by parameters
+  that all have defaults. It may not convert from the struct itself or, in a
+  generic struct, from a bare type parameter (`construct(T value)`):
+
+```text
+main.pep:2:5: error: 'Implicit' constructor of 'Span' must be callable with one argument
+    2 |     [Implicit]
+      |     ^~~~~~~~~~
+```
+
+Conversions are opt-in: a constructor without `[Implicit]` never runs on its
+own. When a value would fit such a constructor, the type error says so:
+
+```text
+main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
+    6 | main(): int { return show("x"); }
+      |                      ^~~~
+main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]
+    3 |     construct(String text) { this.text = text; }
+      |     ^~~~~~~~~
+```
+
 ## Destructors
 
 A destructor runs when an object is destroyed, which happens when the last

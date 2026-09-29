@@ -640,3 +640,38 @@ fn method_of_this_stored_in_a_field() {
          \x20     |                              ^~~~"
     );
 }
+
+#[test]
+fn implicit_on_a_constructor_that_takes_two_arguments() {
+    assert_eq!(
+        error_of(
+            "implicit_two_arguments",
+            "struct Span {\n    [Implicit]\n    construct(int start, int end) { }\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:2:5: error: 'Implicit' constructor of 'Span' must be callable with one argument\n\
+         \x20   2 |     [Implicit]\n\
+         \x20     |     ^~~~~~~~~~"
+    );
+    assert_eq!(
+        error_of("implicit_on_function", "[Implicit]\nf(): int { return 1; }\nmain(): int { return 0; }\n"),
+        "main.pep:1:1: error: 'Implicit' applies only to constructors\n\
+         \x20   1 | [Implicit]\n\
+         \x20     | ^~~~~~~~~~"
+    );
+}
+
+#[test]
+fn plain_constructor_suggested_for_a_mismatch() {
+    assert_eq!(
+        error_of(
+            "plain_constructor_hint",
+            "struct Label {\n    String text;\n    construct(String text) { this.text = text; }\n}\nshow(l: Label): int { return 0; }\nmain(): int { return show(\"x\"); }\n"
+        ),
+        "main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'\n\
+         \x20   6 | main(): int { return show(\"x\"); }\n\
+         \x20     |                      ^~~~\n\
+         main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]\n\
+         \x20   3 |     construct(String text) { this.text = text; }\n\
+         \x20     |     ^~~~~~~~~"
+    );
+}

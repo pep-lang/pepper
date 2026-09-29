@@ -14,9 +14,9 @@ count_file(path: Path): Result<WordCounter> {
 
 main(): int {
     # Write a small file to read back.
-    var dir = Directory.temp().join_str("pepper-word-count");
+    var dir = Directory.temp().join("pepper-word-count");
     Directory.create_all(dir);
-    var path = dir.join_str("poem.txt");
+    var path = dir.join("poem.txt");
     File.write_text(path, "the cat sat on the mat and the dog sat too");
 
     var result = count_file(path);
@@ -31,7 +31,7 @@ main(): int {
     assert(counter.count("sat") == 2, "'sat' appears twice");
     assert(counter.count("bird") == 0, "'bird' does not appear");
 
-    var missing = count_file(dir.join_str("missing.txt"));
+    var missing = count_file(dir.join("missing.txt"));
     assert(missing.is_err(), "a missing file is an error, not a crash");
     print(missing.Error.Message);
 

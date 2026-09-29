@@ -231,6 +231,10 @@ with no extension, and `module_name()` is the output's stem.
     `FunctionCall { function }`. A type literal callee (`Box<int>(…)`)
     becomes a constructor call named `"Box<int>"`. Any other callee becomes
     `Invoke`.
+  - `[Implicit]` is accepted only on a constructor callable with one
+    argument whose parameter is neither the struct nor a bare type
+    parameter (`check_implicit_constructor`); anywhere else,
+    `reject_implicit` reports it at the attribute.
   - Member names that start with `__` are rejected, except `__acquire` and
     `__release`, which source code may call.
   - An operator the builder has no mapping for is reported (`unsupported
@@ -357,7 +361,7 @@ several passes run more than once on purpose.
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
-| final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
+| final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`StructDef::implicit_from`) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
@@ -794,6 +798,9 @@ applies:
 - `[LinkName("sym")]` → `ExternDef::link_name`, used by
   `instantiate_extern`
 - `[Target(...)]` → `passes/platform.rs`
+- `[Shared]` → `StructDef::is_shared`
+- `[Implicit]` → `StructDef::implicit_from`, checked in `builder.rs` and
+  applied by `convert_to_traits`
 
 Validate the arguments and report a located error. Add driver tests (see
 `link_tests.rs`, `platform_tests.rs`).

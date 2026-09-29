@@ -62,6 +62,10 @@ Some that you will meet quickly:
   can be stored, passed and called through a function type such as
   `(int) => int` (see
   [function types and closures](language/function-types.md)).
+- A constructor marked `[Implicit]` converts a value into its struct
+  wherever the struct is expected, so `io.Path` parameters accept a `String`
+  (see [implicit conversions](language/structs.md#implicit-conversions)).
+  There is no function or method overloading yet.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, but the compiler does not yet
   check what a closure captures, and there are no mutexes or channels (see

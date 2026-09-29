@@ -180,7 +180,9 @@ main.pep:2:13: error: expected expression
 
 **A value of the wrong type.** Numbers convert among themselves, as in C, but
 a number is never a struct and one struct type is never another, except that
-a struct converts to a [trait it declares](traits-and-extensions.md#traits-as-types).
+a struct converts to a [trait it declares](traits-and-extensions.md#traits-as-types),
+and a value converts to a struct whose constructor from its type is
+[`[Implicit]`](structs.md#implicit-conversions).
 The check applies wherever a value flows into a typed place: a variable's
 initializer, an assignment, an argument and a `return`:
 

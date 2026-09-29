@@ -571,6 +571,11 @@ pub struct StructDef {
 /// The attribute that makes a struct shareable between threads.
 pub const SHARED_ATTRIBUTE: &str = "Shared";
 
+/// The attribute that lets a one-argument constructor convert implicitly:
+/// a value of its parameter's type flowing into a slot of the struct's type
+/// becomes a call to it (`passes::convert_to_traits`).
+pub const IMPLICIT_ATTRIBUTE: &str = "Implicit";
+
 /// Whether `attributes` include a bare `[name]`.
 pub fn has_attribute(attributes: &[ast::Attribute], name: &str) -> bool {
     attributes.iter().any(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == name))
@@ -581,6 +586,15 @@ impl StructDef {
     /// threads, so its reference counts are atomic.
     pub fn is_shared(&self) -> bool {
         has_attribute(&self.attributes, SHARED_ATTRIBUTE)
+    }
+
+    /// The type an `[Implicit]` constructor converts from: its first
+    /// parameter's (the builder checked the rest have defaults).
+    pub fn implicit_from(&self) -> Option<&TypeName> {
+        if !has_attribute(&self.constructor.attributes, IMPLICIT_ATTRIBUTE) {
+            return None;
+        }
+        self.constructor.parameters.first().map(|p| &p.ty)
     }
 
     /// Whether acquire/release step the counts atomically: `[Shared]`

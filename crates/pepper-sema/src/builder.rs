@@ -224,6 +224,7 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
     }
 }
 fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
+    reject_implicit(&decl.attributes)?;
     Ok(VariableDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.type_name),
@@ -418,6 +419,76 @@ fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
 }
 
 fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
+    reject_implicit(&decl.attributes)?;
+    member_def(decl, parent)
+}
+
+/// `[Implicit]` is a constructor attribute: anywhere else it is an error, at
+/// the attribute.
+fn reject_implicit(attributes: &[ast::Attribute]) -> Result<(), Diagnostic> {
+    match implicit_attribute(attributes) {
+        Some(attr) => Err(Diagnostic::error(format!("'{}' applies only to constructors", IMPLICIT_ATTRIBUTE))
+            .at(loc(attr.span))),
+        None => Ok(()),
+    }
+}
+
+fn implicit_attribute(attributes: &[ast::Attribute]) -> Option<&ast::Attribute> {
+    attributes
+        .iter()
+        .find(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == IMPLICIT_ATTRIBUTE))
+}
+
+/// An `[Implicit]` constructor converts a value of its parameter's type into
+/// the struct, so it must take exactly one argument, and that argument must
+/// not already be the struct or one of its type parameters (which would make
+/// every value convert).
+fn check_implicit_constructor(decl: &ast::StructDecl, ctor: &ast::FunctionDecl) -> Result<(), Diagnostic> {
+    let Some(attr) = implicit_attribute(&ctor.attributes) else {
+        return Ok(());
+    };
+    let at = loc(attr.span);
+    let one_argument = ctor
+        .parameters
+        .split_first()
+        .is_some_and(|(_, rest)| rest.iter().all(|p| p.default_value.is_some()));
+    if !one_argument {
+        return Err(Diagnostic::error(format!(
+            "'{}' constructor of '{}' must be callable with one argument",
+            IMPLICIT_ATTRIBUTE, decl.name
+        ))
+        .at(at));
+    }
+    let first = &ctor.parameters[0];
+    // `this.field = default` takes the field's type.
+    let from = match first.name.strip_prefix("this.") {
+        Some(field) => match decl.fields.iter().find(|f| f.name == field) {
+            Some(f) => type_name_from(&f.type_name),
+            None => return Ok(()),
+        },
+        None => type_name_from(&first.type_name),
+    };
+    if from.sub_types.is_empty() && decl.generic_params.iter().any(|g| g.name == from.name) {
+        return Err(Diagnostic::error(format!(
+            "'{}' constructor of '{}' cannot convert from its type parameter '{}'",
+            IMPLICIT_ATTRIBUTE, decl.name, from.name
+        ))
+        .at(at));
+    }
+    if from.name == decl.name {
+        return Err(Diagnostic::error(format!(
+            "'{}' constructor of '{}' cannot convert from '{}'",
+            IMPLICIT_ATTRIBUTE,
+            decl.name,
+            from.display()
+        ))
+        .at(at));
+    }
+    Ok(())
+}
+
+/// A function or struct member, with no check on its attributes.
+fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
     let parameters: Vec<VariableDef> = decl
         .parameters
         .iter()
@@ -467,6 +538,7 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
     }
 }
 fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
+    reject_implicit(&t.attributes)?;
     Ok(TraitDef {
         name: t.name.clone(),
         generic_params: t.generic_params.iter().map(generic_param_from).collect(),
@@ -477,6 +549,7 @@ fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
 }
 
 fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
+    reject_implicit(&e.attributes)?;
     Ok(ExtensionDef {
         target: type_name_from(&e.target),
         resolved: None,
@@ -490,6 +563,10 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
 fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
+    reject_implicit(&decl.attributes)?;
+    if let Some(body) = &decl.destructor {
+        reject_implicit(&body.attributes)?;
+    }
     let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
     let base_name = decl.name.clone();
     let ty = if generic_params.is_empty() {
@@ -510,7 +587,8 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
 
     let constructor = match &decl.constructor {
         Some(ctor) => {
-            let mut f = function_def(ctor, Some(base_name.clone()))?;
+            check_implicit_constructor(decl, ctor)?;
+            let mut f = member_def(ctor, Some(base_name.clone()))?;
             f.name = ty.to_string();
             f.ty = ty.clone();
             f
@@ -630,6 +708,7 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
             }
             ast::Declaration::Function(f) => {
                 if f.external {
+                    reject_implicit(&f.attributes)?;
                     out.externs.push(ExternDef {
                         name: f.name.clone(),
                         ty: type_name_from(&f.return_type),
@@ -649,12 +728,15 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
             ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
             ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
             ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),
-            ast::Declaration::TypeAlias(t) => out.type_aliases.push(TypeAliasDef {
+            ast::Declaration::TypeAlias(t) => out.type_aliases.push({
+                reject_implicit(&t.attributes)?;
+                TypeAliasDef {
                 name: t.name.clone(),
                 generic_params: t.generic_params.iter().map(generic_param_from).collect(),
                 target: type_name_from(&t.target),
                 attributes: t.attributes.clone(),
                 loc: loc(t.name_span),
+                }
             }),
         }
     }

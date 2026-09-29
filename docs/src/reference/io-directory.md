@@ -126,11 +126,11 @@ afresh.
 ```pepper
     import io;
 
-    var dir = io.Directory.temp().join_str("scratch").join_str("logs");
+    var dir = io.Directory.temp().join("scratch").join("logs");
     if (io.Directory.create_all(dir).is_ok()) {
         var d = io.Directory.open(dir).Value;
         var count = d.entries().Value.count();
-        io.Directory.remove_all(io.Directory.temp().join_str("scratch"));
+        io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 ```
 
@@ -224,7 +224,7 @@ directories at the same time.
 ```pepper
     import io;
 
-    var r = io.Directory.create_all(io.Path("build").join_str("out").join_str("logs"));
+    var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
 ```
 
 #### remove
@@ -273,7 +273,7 @@ Windows a read-only file inside the tree is such a failure
 ```pepper
     import io;
 
-    var tree = io.Directory.temp().join_str("my-scratch");
+    var tree = io.Directory.temp().join("my-scratch");
     var r = io.Directory.remove_all(tree);
     if (r.is_err() && !r.Error.is_not_found()) {
         print(r.Error.Message);
@@ -337,7 +337,7 @@ a root, or `.` if that call fails.
 ```pepper
     import io;
 
-    var scratch = io.Directory.temp().join_str("my-tool");
+    var scratch = io.Directory.temp().join("my-tool");
 ```
 
 ### Methods

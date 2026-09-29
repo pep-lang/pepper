@@ -74,8 +74,12 @@ struct Checker<'a> {
 
 impl<'a> Checker<'a> {
     fn report(&mut self, message: String, value: &Expression, slot: &Slot) {
+        self.report_with(Diagnostic::error(message), value, slot);
+    }
+
+    fn report_with(&mut self, diagnostic: Diagnostic, value: &Expression, slot: &Slot) {
         let at = if value.loc().is_none() { slot.fallback } else { value.loc() };
-        let diagnostic = Diagnostic::error(message).at(at);
+        let diagnostic = diagnostic.at(at);
         if !self.errors.iter().any(|d| d.message == diagnostic.message && d.loc == diagnostic.loc) {
             self.errors.push(diagnostic);
         }
@@ -140,7 +144,11 @@ impl<'a> Checker<'a> {
         };
         if mismatch {
             let message = (slot.mismatch)(&expected.display(), &actual.display());
-            self.report(message, value, slot);
+            let mut diagnostic = Diagnostic::error(message);
+            if let Some(note) = self.constructor_hint(expected, &actual) {
+                diagnostic = diagnostic.with_note(note.0, Some(note.1));
+            }
+            self.report_with(diagnostic, value, slot);
         }
     }
 
@@ -155,6 +163,25 @@ impl<'a> Checker<'a> {
             self.report(message, value, slot);
         }
         void
+    }
+
+    /// When `expected`'s constructor takes one `actual` but is not
+    /// `[Implicit]`, a note at the constructor saying how to convert.
+    fn constructor_hint(&self, expected: &TypeName, actual: &TypeName) -> Option<(String, Loc)> {
+        let st = self.module.structs.iter().find(|s| s.name == expected.to_string() || s.ty.to_string() == expected.to_string())?;
+        let (first, rest) = st.constructor.parameters.split_first()?;
+        if st.implicit_from().is_some() || rest.iter().any(|p| p.default.is_none()) || !same_type(&first.ty, actual) {
+            return None;
+        }
+        Some((
+            format!(
+                "'{}' has a constructor from '{}': call '{}(...)', or mark the constructor [Implicit]",
+                expected.display(),
+                actual.display(),
+                expected.display()
+            ),
+            st.constructor.loc,
+        ))
     }
 
     /// `value` flows into a slot of type `expected`.
