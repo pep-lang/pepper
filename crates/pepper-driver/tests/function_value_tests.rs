@@ -165,7 +165,7 @@ test(): int {
 #[test]
 fn module_scope_function_value() {
     let src = format!("{}{}", FUNCTIONS, r#"
-const handler = Atomic<(int) => int>(square);
+const handler = Atomic<shared (int) => int>(square);
 
 test(): int {
     var before = handler.load()(3);
@@ -335,4 +335,67 @@ test(): int {
 }
 "#));
     assert!(err.contains("argument 1 of 'apply' expects a function of type '(int) => int'"), "{}", err);
+}
+
+/// A `shared` value used as a plain one is wrapped in a plain adapter that
+/// holds one reference to it: the adapter and the value are both freed when
+/// the last plain and `shared` references go.
+#[test]
+fn shared_value_converts_to_plain() {
+    let src = format!("{}{}", FUNCTIONS, r#"
+apply(f: (int) => int, x: int): int { return f(x); }
+twice(): shared (int) => int { return (x: int) => x * 2; }
+
+test(): int {
+    var s: shared (int) => int = twice();
+    var sum = apply(s, 1);
+    {
+        var p: (int) => int = s;
+        if (__refcount<shared (int) => int>(s) != 2) { return -1; }
+        sum = sum + p(2);
+        p = s;
+        sum = sum + p(3);
+    }
+    if (__refcount<shared (int) => int>(s) != 1) { return -2; }
+    # A named function converts either way without an adapter.
+    var named: shared (int) => int = square;
+    var plain: (int) => int = square;
+    return sum + named(1) + plain(1) + apply(twice(), 10);
+}
+"#);
+    assert_eq!(run(&src), (34, 0));
+}
+
+/// Plain function types count with plain increments; `shared` ones step
+/// their counts atomically.
+#[test]
+fn only_shared_function_counts_are_atomic() {
+    use inkwell::values::AnyValue;
+    let src = r#"
+main(): int {
+    var n = 1;
+    var plain: () => int = () => n;
+    var shared_one: shared () => int = () => n;
+    return plain() + shared_one();
+}
+"#;
+    let mut module = sema(src).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.generate(&mut module).expect("codegen");
+    let body = |prefix: &str, method: &str| -> String {
+        let name = generator
+            .module
+            .get_functions()
+            .map(|f| f.get_name().to_string_lossy().into_owned())
+            .find(|n| n.starts_with(prefix) && n.ends_with(method))
+            .unwrap_or_else(|| panic!("no {prefix}...{method}"));
+        generator.module.get_function(&name).unwrap().print_to_string().to_string()
+    };
+    for method in [".__acquire", ".__release"] {
+        let plain = body("__function<", method);
+        let shared = body("__shared_function<", method);
+        assert!(!plain.contains("atomicrmw"), "plain {method} steps atomically:\n{plain}");
+        assert!(shared.contains("atomicrmw"), "shared {method} does not step atomically:\n{shared}");
+    }
 }

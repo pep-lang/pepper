@@ -32,6 +32,7 @@ pub mod function_references;
 pub mod generic_methods;
 pub mod type_arguments;
 pub mod convert_to_traits;
+pub mod shared_functions;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -126,6 +127,10 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Types inferred by the final resolve (e.g. `var f = square;`).
     step!(synthesize_function_types(module));
     step!(closures::check_closures(module));
+    // Plain and `shared` function values flowing into each other's slots,
+    // once every type is final.
+    step!(shared_functions::shared_functions(module));
+    step!(synthesize_function_types(module));
     // Struct values flowing into trait-typed slots, once every type is final.
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));

@@ -12,7 +12,8 @@ that claim to be.
 ```
 
 - `Thread.spawn(body, name)` starts a new thread that runs `body`, a function
-  of type `ThreadBody` (an alias for `() => void`), and returns its `Thread`. The name is optional.
+  of type `ThreadBody` (an alias for `shared () => void`), and returns its
+  `Thread`. The name is optional.
 - `join()` waits for the body to return. After `join()`, the joining thread
   sees everything the other thread did. A thread can be joined once.
 - `Thread.current()` returns the calling thread's `Thread`. For a spawned
@@ -39,8 +40,19 @@ var worker = async.Thread.spawn(() => { total.fetch_add(step); });
 worker.join();
 ```
 
-Capture only thread-safe values (numbers, `Atomic<T>`, `[Shared]` structs):
-the compiler does not check a closure's captures yet (see Limitations).
+The body is a [`shared` function value](function-types.md#sharing-function-values-between-threads),
+so the closure may capture only thread-safe values (numbers, `Atomic<T>`,
+`[Shared]` structs, `shared` function values). The compiler checks each
+capture and reports one that is not thread-safe where the closure uses it:
+
+```text
+main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
+    5 |     var t = async.Thread.spawn(() => { print(name); });
+      |                                              ^~~~
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+    4 |     var name = "worker";
+      |         ^~~~
+```
 
 Every module-scope variable is `const` and thread-safe, so any thread may
 use one (see [below](#module-scope-variables)).
@@ -100,11 +112,19 @@ The compiler checks every `[Shared]` struct:
   types:
   - numbers and `bool`;
   - raw pointers (`__ptr<T>`) to thread-safe types;
-  - function types, such as `() => void`;
+  - `shared` function types, such as `shared () => void` (see
+    [Function types](function-types.md#sharing-function-values-between-threads));
   - `[Shared]` structs, and weak references to them.
 
   `String`, `Array` and other structs that are not `[Shared]` are not
-  thread-safe.
+  thread-safe, and neither is a plain function type such as `() => void`:
+
+  ```text
+  main.pep:3:14: error: field 'F' of shared struct 'H' has type '() => void', which is not thread-safe
+      3 |     const F: () => void;
+        |              ^~~~~~~~~~
+  note: declare the function type 'shared () => void' to share it between threads
+  ```
 
 A generic `[Shared]` struct is checked for each set of type arguments.
 `Atomic<T>` is `[Shared]`, so `Atomic<int>` and `Atomic<Settings>` are fine,
@@ -139,14 +159,16 @@ the same two rules as a field of a `[Shared]` struct:
 - **It must be `const`.** To change the value, give it a thread-safe type such
   as `Atomic<T>`, or a `ThreadLocal<T>` for a value per thread.
 - **It must have a thread-safe type** from the list above. A `String`, an
-  `Array`, a struct that is not `[Shared]`, or a trait value cannot be a
-  module-scope variable; keep it in a local, or in a `ThreadLocal<T>`.
+  `Array`, a struct that is not `[Shared]`, a trait value, or a plain function
+  value cannot be a module-scope variable; keep it in a local, or in a
+  `ThreadLocal<T>`.
 
 ```pepper
 const max_workers = 8;                  # a number
 const jobs_done = Atomic<long>(0);      # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal<String>();  # a String per thread
+const double: shared (int) => int = (x: int) => x * 2;  # a shared function
 ```
 
 A variable that breaks a rule is reported at its name or type:
@@ -173,11 +195,5 @@ runtime. So an initializer may use the variables of the files it imports.
 
 ## Limitations
 
-Thread safety is not complete yet:
-
 - There are no mutexes, condition variables or channels yet. Coordinate
   threads with `Atomic<T>` and `join()`.
-- **Closure captures are not checked.** Every function type counts as
-  thread-safe, but a closure that captures a `String` or `Array` and runs on
-  another thread shares that value's plain reference count with the thread
-  that created it. Capture only thread-safe values in a thread body.

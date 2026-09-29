@@ -95,10 +95,15 @@ impl TypeName {
 /// `__function<R, P1, P2>` (return type first, then the parameters).
 pub const FUNCTION_TYPE: &str = "__function";
 
+/// Internal name of a thread-safe function type: `shared (P1, P2) => R` is
+/// `__shared_function<R, P1, P2>`.
+pub const SHARED_FUNCTION_TYPE: &str = "__shared_function";
+
 impl Display for TypeName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.name == FUNCTION_TYPE && !self.generic_types.is_empty() {
-            return write!(f, "({}) => {}", join(&self.generic_types[1..], ", "), self.generic_types[0]);
+        if (self.name == FUNCTION_TYPE || self.name == SHARED_FUNCTION_TYPE) && !self.generic_types.is_empty() {
+            let shared = if self.name == SHARED_FUNCTION_TYPE { "shared " } else { "" };
+            return write!(f, "{}({}) => {}", shared, join(&self.generic_types[1..], ", "), self.generic_types[0]);
         }
         if self.generic_types.is_empty() {
             write!(f, "{}", self.name)

@@ -22,6 +22,10 @@ function. A function type can be used anywhere a type can: for variables,
 parameters, return types, struct fields, generic arguments such as
 `Array<(int) => int>`, and [type aliases](type-aliases.md).
 
+Written with `shared` in front, as in `shared () => void`, a function type is
+thread-safe: its values can be passed to other threads. See
+[Sharing function values between threads](#sharing-function-values-between-threads).
+
 ## Referring to a named function
 
 The name of a free function, written without a call, is a value of that
@@ -83,10 +87,12 @@ type a short name, and can have type parameters of its own.
 - **Fields.** A field of function type is called like a method:
   `t.op(4)`. Inside the struct, `op(x)` and `this.op(x)` both call it.
 - **Arrays.** `pipeline[1](5)` indexes the array and calls the element.
-- **Module-level variables.** Every module-level variable is `const` (see
-  [Module-scope variables](threads.md#module-scope-variables)), so one whose
-  function changes is an `Atomic`: `handler.load()(1)` calls the current
-  function and `handler.store(square)` replaces it.
+- **Module-level variables.** Every module-level variable is `const` and
+  thread-safe (see [Module-scope variables](threads.md#module-scope-variables)),
+  so one whose function changes is an `Atomic` of a
+  [`shared` function type](#sharing-function-values-between-threads):
+  `handler.load()(1)` calls the current function and `handler.store(square)`
+  replaces it.
 - **Return values.** `pick(true)(5)` calls the function that `pick` returns.
 - **`void` results.** A function without a return value has a function type
   ending in `=> void`, such as `(int) => void`.
@@ -189,6 +195,66 @@ a function of type (String) => int takes 1 argument(s), but 2 were given
 
 These two errors do not show a source location yet.
 
+## Sharing function values between threads
+
+A plain function type such as `() => void` can hold any function value,
+including a closure that captures a `String` or an `Array`. Such values stay
+on the thread that made them: their reference counts are plain increments,
+like those of a struct that is not `[Shared]` (see
+[What threads can share](threads.md#what-threads-can-share)).
+
+A function type written with `shared` in front, such as `shared () => void`
+or `shared (long) => void`, is thread-safe. Its reference counts are atomic,
+and its values hold only thread-safe state, so any thread may copy, call and
+drop them. It goes wherever a thread-safe type is required: the body of a
+thread (`ThreadBody` is `shared () => void`), a field of a `[Shared]` struct,
+a module-scope variable, or `Atomic<shared (int) => int>`.
+
+```pepper
+{{#include ../../examples/function-types-shared.pep}}
+```
+
+- **What converts to `shared`.** A named function, which holds no state; a
+  method, constructor or generic function value with nothing captured, such
+  as `Point.norm` or `Box<int>`; and a closure literal (or a bound method
+  such as `p.norm`) whose captured values are all thread-safe: numbers,
+  `Atomic<T>` and other `[Shared]` structs, weak references to them, and
+  `shared` function values. The value must be written where the `shared`
+  type is expected, so that it is made thread-safe from the start.
+- **What does not.** A closure that captures a value that is not thread-safe
+  is reported at the capture, with a note at the captured variable:
+
+  ```text
+  main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
+      5 |     var t = async.Thread.spawn(() => { print(name); });
+        |                                              ^~~~
+  main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+      4 |     var name = "worker";
+        |         ^~~~
+  ```
+
+  A closure in a method that uses `this` or a member captures `this`, so it
+  is thread-safe only in a `[Shared]` struct. A value that already has a
+  plain type (a variable, a parameter, a call result) never becomes
+  `shared`, even when it holds nothing:
+
+  ```text
+  main.pep:3:32: error: cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'
+      3 |     var f: shared () => void = g;
+        |                                ^
+  ```
+
+- **From `shared` to plain.** A `shared` value converts to the plain type of
+  the same signature anywhere: `shared (long) => long` can be passed to a
+  parameter of type `(long) => long`. The conversion allocates a small plain
+  function value that holds the shared one and calls it, so the plain copy
+  counts with plain increments while the shared value keeps its atomic ones.
+- **Inference.** A variable initialized with a closure, such as
+  `var f = () => 1;`, has a plain type. Write the type to make it `shared`:
+  `var f: shared () => int = () => 1;`.
+- `shared` is special only directly before a function type; elsewhere it is
+  an ordinary name.
+
 ## Null function values
 
 A function-typed variable or field that has never been assigned is null.
@@ -217,6 +283,10 @@ holds a reference to its receiver.
 Creating a closure allocates one object holding the captured values, like
 constructing a struct. Copying the closure adds a reference to that object,
 and when the last reference goes, the object releases what it captured.
+
+A plain function value's counts are plain increments; a `shared` one's are
+atomic, like a `[Shared]` struct's (see
+[Sharing function values between threads](#sharing-function-values-between-threads)).
 
 ## What is not supported yet
 

@@ -32,8 +32,13 @@ export type ThreadId = ulong;
 ## The type of a thread's body: a function that takes no arguments and
 ## returns nothing. `Thread.spawn` runs one on a new thread.
 ##
+## It is a `shared` function type, because the body runs on another thread:
+## a named function, or a closure that captures only thread-safe values
+## (numbers, `Atomic<T>`, `[Shared]` structs, other `shared` function
+## values). A closure capturing a `String`, say, is a compile error.
+##
 ## @see Thread.spawn
-export type ThreadBody = () => void;
+export type ThreadBody = shared () => void;
 
 # The next id to hand out.
 const _async_next_id = Atomic<ulong>(1);

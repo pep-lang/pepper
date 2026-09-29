@@ -17,9 +17,10 @@ pick(squared: bool): (int) => int {
     return negate;
 }
 
-# A module-level function variable. Every module-level variable is const;
-# an Atomic lets it change.
-const handler = Atomic<(int) => int>(increment);
+# A module-level function variable. Every module-level variable is const
+# and thread-safe: an Atomic lets it change, and a function type every thread
+# can reach is declared shared.
+const handler = Atomic<shared (int) => int>(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine<T> = (T, T) => T;

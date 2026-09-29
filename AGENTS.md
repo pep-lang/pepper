@@ -160,8 +160,9 @@ Everything else — scope exit, parameter exit, store-release-old — follows
 from "every owned value releases exactly once when it goes out of scope".
 
 Threads do not change the model. A struct declared `[Shared]` (and every
-function type) steps its counts atomically, like `shared_ptr`'s control
-block; every other struct uses plain increments and must stay on one thread.
+`shared` function type, `shared (T) => R`) steps its counts atomically, like
+`shared_ptr`'s control block; every other struct, and every plain function
+type, uses plain increments and must stay on one thread.
 `check_shared_types` requires a `[Shared]` struct's fields to be `const` and
 thread-safe. Every module-scope variable, exported or not, is implicitly
 `[Shared]`: any thread can reach it, so it must be `const` and thread-safe

@@ -602,10 +602,11 @@ impl StructDef {
     }
 
     /// Whether acquire/release step the counts atomically: `[Shared]`
-    /// structs, and function types (the values that carry work to another
-    /// thread).
+    /// structs, and thread-safe function types (`shared (P...) => R`, the
+    /// values that carry work to another thread). A plain function type
+    /// counts like any other struct.
     pub fn atomic_counts(&self) -> bool {
-        self.is_shared() || self.ty.is_function_type()
+        self.is_shared() || self.ty.is_shared_function_type()
     }
 }
 

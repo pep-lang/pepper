@@ -9,9 +9,10 @@
 ## - [ThreadLocal](async-thread_local.md): a variable with a separate value on every thread
 ## - [Processor counts](async-cpus.md): `logical_cpus()` and `physical_cpus()`
 ##
-## Only thread-safe values can be shared between threads: numbers, function
-## values, and `[Shared]` structs such as `Atomic<T>`, `Thread` and
-## `ThreadLocal<T>`. See the language guide's Threads chapter.
+## Only thread-safe values can be shared between threads: numbers, `shared`
+## function values (such as a thread's body), and `[Shared]` structs such as
+## `Atomic<T>`, `Thread` and `ThreadLocal<T>`. See the language guide's
+## Threads chapter.
 ##
 ## @example
 ##     import async;

@@ -3678,11 +3678,20 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// The static function object for free function `name`, of function
     /// type `ty`: `{ refcount, invoke, destroy }` with an invoke thunk that
-    /// forwards to `name`. Its refcount starts at 2^30, so the balanced
-    /// acquire/release pairs of the slots holding it never reach zero: the
-    /// object is immortal and never freed.
+    /// forwards to `name`. Its refcount starts at `STATIC_REFCOUNT` (2^30),
+    /// so the balanced acquire/release pairs of the slots holding it never
+    /// reach zero: the object is immortal and never freed. A plain function
+    /// type does not step a count that high (`function_types`), so threads
+    /// sharing the object only read it; a `shared` one steps it atomically.
+    /// Each function type gets its own object (`name` used as a `shared`
+    /// and as a plain value has two).
     fn function_object(&mut self, name: &str, ty: &str) -> Result<PointerValue<'ctx>, String> {
-        let global_name = format!("__function_object.{}", name);
+        let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(ty);
+        let global_name = if fn_ty.is_shared_function_type() {
+            format!("__function_object.shared.{}", name)
+        } else {
+            format!("__function_object.{}", name)
+        };
         if let Some(global) = self.module.get_global(&global_name) {
             return Ok(global.as_pointer_value());
         }
@@ -3692,13 +3701,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|d| d.llvm_type)
             .ok_or_else(|| format!("function type {} has no struct", ty))?;
         let target = *self.functions.get(name).ok_or_else(|| format!("unknown function {}", name))?;
-        let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(ty);
         let thunk_type = self.invoke_fn_type(&fn_ty)?;
-        let thunk = self.module.add_function(
-            &format!("__function_thunk.{}", name),
-            thunk_type,
-            Some(inkwell::module::Linkage::Private),
-        );
+        let thunk_name = format!("__function_thunk.{}", name);
+        if let Some(thunk) = self.module.get_function(&thunk_name) {
+            return Ok(self.static_function_object(&global_name, struct_type, thunk));
+        }
+        let thunk = self.module.add_function(&thunk_name, thunk_type, Some(inkwell::module::Linkage::Private));
         let saved = self.builder.get_insert_block();
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
@@ -3717,19 +3725,32 @@ impl<'ctx> CodeGenerator<'ctx> {
         if let Some(block) = saved {
             self.builder.position_at_end(block);
         }
+        Ok(self.static_function_object(&global_name, struct_type, thunk))
+    }
 
+    /// The immortal global `{ STATIC_REFCOUNT, 1, thunk, null }` named
+    /// `global_name` (see `function_object`).
+    fn static_function_object(
+        &mut self,
+        global_name: &str,
+        struct_type: inkwell::types::StructType<'ctx>,
+        thunk: inkwell::values::FunctionValue<'ctx>,
+    ) -> PointerValue<'ctx> {
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let thunk_ptr = thunk.as_global_value().as_pointer_value();
         let init = struct_type.const_named_struct(&[
-            self.context.i32_type().const_int(1 << 30, false).into(),
+            self.context
+                .i32_type()
+                .const_int(pepper_sema::passes::function_types::STATIC_REFCOUNT as u64, false)
+                .into(),
             self.context.i32_type().const_int(1, false).into(),
             thunk_ptr.into(),
             ptr_type.const_null().into(),
         ]);
-        let global = self.module.add_global(struct_type, None, &global_name);
-        global.set_linkage(inkwell::module::Linkage::Private);
-        global.set_initializer(&init);
-        Ok(global.as_pointer_value())
+        let object = self.module.add_global(struct_type, None, global_name);
+        object.set_linkage(inkwell::module::Linkage::Private);
+        object.set_initializer(&init);
+        object.as_pointer_value()
     }
 
     /// `MethodAddress(method)`: the entry point of `method` of the struct

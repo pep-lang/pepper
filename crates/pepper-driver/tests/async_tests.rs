@@ -315,6 +315,72 @@ fn closure_thread_bodies() {
     assert_runs("closure_body", CLOSURE_BODY_PROGRAM);
 }
 
+/// `shared` function types: thread bodies built from thread-safe captures
+/// (an `Atomic`, a `[Shared]` struct, another `shared` function value, a
+/// number), a named function, a `[Shared]` struct holding a `shared`
+/// function field, and `shared` values used where plain ones are expected.
+/// Plain closures capturing a `String` keep working on one thread.
+const SHARED_FUNCTIONS_PROGRAM: &str = r#"
+import async;
+
+[Shared]
+struct Job {
+    const Weight: long;
+    const Run: shared (long) => void;
+    construct(this.Weight = 1, this.Run = (n: long) => {}) {}
+}
+
+const total = Atomic<long>(0);
+const named_runs = Atomic<long>(0);
+
+count_named() {
+    named_runs.fetch_add(1);
+}
+
+apply_plain(f: (long) => long, x: long): long {
+    return f(x);
+}
+
+make_adder(step: long): shared (long) => long {
+    return (x: long) => x + step;
+}
+
+main(): int {
+    var add: shared (long) => void = (n: long) => { total.fetch_add(n); };
+    var job = Job(5, add);
+    var workers = Array<async.Thread>();
+    var i = 0;
+    while (i < 4) {
+        workers.append(async.Thread.spawn(() => { job.Run(job.Weight); }));
+        workers.append(async.Thread.spawn(() => { add(1); }));
+        workers.append(async.Thread.spawn(count_named));
+        i = i + 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    assert(total.load() == 24, "every thread ran its shared closure");
+    assert(named_runs.load() == 4, "named functions are thread bodies");
+
+    # A shared value converts to the plain type of the same signature.
+    var add_two = make_adder(2);
+    assert(apply_plain(add_two, 40) == 42, "shared value passed as plain");
+    var plain: (long) => long = add_two;
+    assert(plain(1) == 3, "shared value stored as plain");
+
+    # Plain closures still capture anything, on one thread.
+    var greeting = "hello";
+    var greet: () => String = () => greeting + " world";
+    assert(greet() == "hello world", "plain closure captures a String");
+    return 0;
+}
+"#;
+
+#[test]
+fn shared_function_types() {
+    assert_runs("shared_functions", SHARED_FUNCTIONS_PROGRAM);
+}
+
 #[test]
 fn shared_counts_are_atomic() {
     assert_runs("shared_counts", SHARED_COUNTS_PROGRAM);
@@ -333,6 +399,7 @@ fn all_programs() -> Vec<(&'static str, &'static str)> {
         ("shared_counts", SHARED_COUNTS_PROGRAM),
         ("exported_globals", EXPORTED_GLOBALS_PROGRAM),
         ("closure_body", CLOSURE_BODY_PROGRAM),
+        ("shared_functions", SHARED_FUNCTIONS_PROGRAM),
     ]
 }
 

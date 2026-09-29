@@ -213,6 +213,12 @@ impl<'a> Checker<'a> {
             }
             let message = format!("{} expects a function of type '{}', but was given a value of type '{}'", (slot.what)(), expected.display(), actual.display());
             self.report(message, value, slot);
+        } else if !same_type(&actual, expected) && same_type(&actual.with_sharing(false), &expected.with_sharing(false)) {
+            // Same signature, but a plain value where a `shared` one is
+            // expected (`shared_functions` converted every value that can
+            // be), or the reverse inside code no conversion reaches.
+            let message = (slot.mismatch)(&expected.display(), &actual.display());
+            self.report(message, value, slot);
         } else if !same_type(&actual, expected) {
             let message = format!("{} expects a function of type '{}', but was given a function of type '{}'", (slot.what)(), expected.display(), actual.display());
             self.report(message, value, slot);

@@ -26,7 +26,7 @@ use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 const KEYWORDS: &[&str] = &[
     "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
     "and", "or", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
-    "extend", "export",
+    "extend", "export", "shared",
 ];
 
 // ── Position conversion ───────────────────────────────────────────────────────

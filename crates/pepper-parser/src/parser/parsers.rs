@@ -312,6 +312,9 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     if input.starts_with('(') {
         return function_type_name(input);
     }
+    if let Some(ty) = shared_function_type_name(input)? {
+        return Ok(ty);
+    }
     let mut ty = type_name_base(input)?;
     // End of the last token of the type, excluding trailing whitespace.
     let mut end = ty.span.end;
@@ -394,9 +397,43 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
     *input = &input[2..];
     ws(input)?;
     let ret = type_name(input)?;
+    // End at the return type's last token, not the whitespace after it.
+    let end = ret.span.end;
     let mut generic_types = vec![ret];
     generic_types.extend(params);
-    Ok(TypeName { name: FUNCTION_TYPE.to_string(), generic_types, span: Span { start, end: pos(input) } })
+    Ok(TypeName { name: FUNCTION_TYPE.to_string(), generic_types, span: Span { start, end } })
+}
+
+/// Thread-safe function type `shared (P1, P2) => R`, lowered to
+/// `__shared_function<R, P1, P2>`. `shared` is a contextual keyword: it is
+/// one only directly before a function type, so it stays usable as a name.
+/// Returns `None` (consuming nothing) when the input is not one.
+fn shared_function_type_name(input: &mut &str) -> Result<Option<TypeName>> {
+    const KEYWORD: &str = "shared";
+    let Some(rest) = input.strip_prefix(KEYWORD) else { return Ok(None) };
+    if rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Ok(None);
+    }
+    let before = *input;
+    let start = pos(input);
+    *input = rest;
+    ws(input)?;
+    if !input.starts_with('(') {
+        *input = before;
+        return Ok(None);
+    }
+    match function_type_name(input) {
+        Ok(mut ty) => {
+            ty.name = SHARED_FUNCTION_TYPE.to_string();
+            ty.span.start = start;
+            Ok(Some(ty))
+        }
+        Err(ErrMode::Backtrack(_)) => {
+            *input = before;
+            Ok(None)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Extend `name` with `.segment`s written directly after it: a qualified
@@ -3048,6 +3085,28 @@ mod tests {
         let Declaration::Function(f) = &m.declarations[0] else { panic!("expected a function") };
         assert_eq!(f.parameters[0].type_name.to_string(), "(int) => int");
         assert_eq!(f.return_type.to_string(), "(int) => int");
+    }
+
+    #[test]
+    fn shared_function_types() {
+        let ty = parse_type("shared (int) => bool");
+        assert_eq!(ty.name, SHARED_FUNCTION_TYPE);
+        let args: Vec<String> = ty.generic_types.iter().map(|t| t.to_string()).collect();
+        assert_eq!(args, ["bool", "int"]);
+        assert_eq!(ty.to_string(), "shared (int) => bool");
+        assert_eq!(ty.span.start, 0);
+        assert_eq!(parse_type("shared() => void").to_string(), "shared () => void");
+        assert_eq!(parse_type("Array<shared () => void>").to_string(), "Array<shared () => void>");
+        assert_eq!(parse_type("shared (int) => shared () => int").to_string(), "shared (int) => shared () => int");
+        // Anywhere else `shared` is an ordinary name.
+        assert_eq!(parse_type("shared").to_string(), "shared");
+        assert_eq!(parse_type("shared_thing").to_string(), "shared_thing");
+        let m = parse("run(f: shared () => void): shared (int) => int { var g: shared () => void = f; var shared = 1; shared(shared); return h; }\n\
+                       struct S { const op: shared (String) => void; }\n\
+                       type Op = shared (int) => int;\n");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("expected a function") };
+        assert_eq!(f.parameters[0].type_name.to_string(), "shared () => void");
+        assert_eq!(f.return_type.to_string(), "shared (int) => int");
     }
 
     #[test]

@@ -191,7 +191,7 @@ fn function_type_mismatch() {
         ),
         "main.pep:3:12: error: variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'\n\
          \x20   3 |     var f: (String) => int = square;\n\
-         \x20     |            ^~~~~~~~~~~~~~~~"
+         \x20     |            ^~~~~~~~~~~~~~~"
     );
 }
 
@@ -651,6 +651,107 @@ fn type_arguments_not_inferred() {
          main.pep:1:1: note: declared here\n\
          \x20   1 | make<T>(): T { return __default<T>(); }\n\
          \x20     | ^~~~"
+    );
+}
+
+#[test]
+fn shared_closure_captures_not_thread_safe() {
+    // At the capture's first use in the closure, with a note at the
+    // captured variable.
+    assert_eq!(
+        error_of(
+            "shared_closure_capture",
+            "import async;\n\nmain(): int {\n    var name = \"worker\";\n    var t = async.Thread.spawn(() => { print(name); });\n    t.join();\n    return 0;\n}\n"
+        ),
+        "main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe\n\
+         \x20   5 |     var t = async.Thread.spawn(() => { print(name); });\n\
+         \x20     |                                              ^~~~\n\
+         main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct\n\
+         \x20   4 |     var name = \"worker\";\n\
+         \x20     |         ^~~~"
+    );
+    assert_eq!(
+        error_of(
+            "shared_closure_returned",
+            "make(): shared () => int {\n    var s = \"x\";\n    return () => s.length() as int;\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:3:18: error: closure returned as 'shared () => int' captures 's' of type 'String', which is not thread-safe\n\
+         \x20   3 |     return () => s.length() as int;\n\
+         \x20     |                  ^\n\
+         main.pep:2:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct\n\
+         \x20   2 |     var s = \"x\";\n\
+         \x20     |         ^"
+    );
+}
+
+#[test]
+fn shared_closure_captures_this() {
+    assert_eq!(
+        error_of(
+            "shared_closure_this",
+            "struct S {\n    var n: int;\n    construct(this.n = 0) {}\n    run() {\n        var f: shared () => int = () => n;\n    }\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:5:41: error: closure stored as 'shared () => int' captures 'this' of type 'S', which is not thread-safe\n\
+         \x20   5 |         var f: shared () => int = () => n;\n\
+         \x20     |                                         ^\n\
+         note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct"
+    );
+}
+
+#[test]
+fn shared_method_value_captures_receiver() {
+    assert_eq!(
+        error_of(
+            "shared_method_value",
+            "struct P {\n    var x: int;\n    construct(this.x = 0) {}\n    get(): int { return x; }\n}\ntake(f: shared () => int): int { return f(); }\nmain(): int {\n    var p = P(3);\n    return take(p.get);\n}\n"
+        ),
+        "main.pep:9:19: error: method value passed as 'shared () => int' captures its receiver of type 'P', which is not thread-safe\n\
+         \x20   9 |     return take(p.get);\n\
+         \x20     |                   ^~~\n\
+         note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct"
+    );
+}
+
+#[test]
+fn plain_function_value_is_not_shared() {
+    assert_eq!(
+        error_of(
+            "plain_to_shared_variable",
+            "main(): int {\n    var g = () => {};\n    var f: shared () => void = g;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:32: error: cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'\n\
+         \x20   3 |     var f: shared () => void = g;\n\
+         \x20     |                                ^"
+    );
+    assert_eq!(
+        error_of(
+            "plain_to_shared_argument",
+            "take(f: shared () => int): int { return f(); }\nmain(): int {\n    var h: () => int = () => 1;\n    return take(h);\n}\n"
+        ),
+        "main.pep:4:17: error: cannot pass a value of type '() => int' as argument 1 of 'take', which has type 'shared () => int'\n\
+         \x20   4 |     return take(h);\n\
+         \x20     |                 ^"
+    );
+}
+
+#[test]
+fn plain_function_type_in_shared_places() {
+    assert_eq!(
+        error_of(
+            "plain_function_shared_field",
+            "[Shared]\nstruct H {\n    const F: () => void;\n    construct(this.F = () => {}) {}\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:3:14: error: field 'F' of shared struct 'H' has type '() => void', which is not thread-safe\n\
+         \x20   3 |     const F: () => void;\n\
+         \x20     |              ^~~~~~~~~~\n\
+         note: declare the function type 'shared () => void' to share it between threads"
+    );
+    assert_eq!(
+        error_of("plain_function_global", "const f: () => int = () => 1;\nmain(): int { return 0; }\n"),
+        "main.pep:1:10: error: module-scope variable 'f' has type '() => int', which is not thread-safe\n\
+         \x20   1 | const f: () => int = () => 1;\n\
+         \x20     |          ^~~~~~~~~\n\
+         note: declare the function type 'shared () => int' to share it between threads"
     );
 }
 

@@ -29,6 +29,9 @@ pub const BOOL: &str = "bool";
 pub const VOID_PTR: &str = "void*";
 /// Internal name of function types: `(P1, P2) => R` is `__function<R, P1, P2>`.
 pub const FUNCTION: &str = "__function";
+/// Internal name of thread-safe function types: `shared (P1, P2) => R` is
+/// `__shared_function<R, P1, P2>`.
+pub const SHARED_FUNCTION: &str = "__shared_function";
 /// `__weak<T>`: a weak reference to a struct `T` (`std::weak_ptr<T>`).
 pub const WEAK: &str = "__weak";
 
@@ -135,9 +138,25 @@ impl TypeName {
         self.flags == TypeFlags::Function
     }
 
-    /// A function type `(P...) => R`, spelled `__function<R, P...>`.
+    /// A function type, plain (`(P...) => R`, spelled `__function<R, P...>`)
+    /// or thread-safe (`shared (P...) => R`, `__shared_function<R, P...>`).
     pub fn is_function_type(&self) -> bool {
-        self.name == FUNCTION && !self.sub_types.is_empty()
+        (self.name == FUNCTION || self.name == SHARED_FUNCTION) && !self.sub_types.is_empty()
+    }
+
+    /// A thread-safe function type `shared (P...) => R`.
+    pub fn is_shared_function_type(&self) -> bool {
+        self.name == SHARED_FUNCTION && !self.sub_types.is_empty()
+    }
+
+    /// This function type with the same signature, thread-safe or plain;
+    /// any other type unchanged.
+    pub fn with_sharing(&self, shared: bool) -> TypeName {
+        let mut ty = self.clone();
+        if ty.is_function_type() {
+            ty.name = (if shared { SHARED_FUNCTION } else { FUNCTION }).to_string();
+        }
+        ty
     }
 
     /// A weak reference type `__weak<T>`.
@@ -172,7 +191,8 @@ impl TypeName {
     pub fn display(&self) -> String {
         if self.is_function_type() {
             let params: Vec<String> = self.function_params().iter().map(|p| p.display()).collect();
-            return format!("({}) => {}", params.join(", "), self.sub_types[0].display());
+            let shared = if self.is_shared_function_type() { "shared " } else { "" };
+            return format!("{}({}) => {}", shared, params.join(", "), self.sub_types[0].display());
         }
         if self.is_generic() {
             let subs: Vec<String> = self.sub_types.iter().map(|t| t.display()).collect();

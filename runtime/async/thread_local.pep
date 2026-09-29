@@ -88,9 +88,10 @@ export struct ThreadLocal<T> {
     void set(T value) {
         __ptr<T> slot = _async_sys_key_get(Key);
         if (slot == __null) {
-            # A struct T occupies its reference pointer in the slot; a POD T
-            # occupies sizeof(T) bytes of the value itself.
-            slot = _pep_malloc(__is_pod<T>() ? sizeof<T>() : 8);
+            # sizeof<T>() is the size of a stored T: one pointer for a
+            # struct, two for a trait value (object and vtable), the value
+            # itself for a number.
+            slot = _pep_malloc(sizeof<T>());
             _async_sys_key_set(Key, slot);
         }
         slot[0] = value;

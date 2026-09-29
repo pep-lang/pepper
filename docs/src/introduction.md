@@ -69,8 +69,8 @@ Some that you will meet quickly:
   (see [implicit conversions](language/structs.md#implicit-conversions)).
   There is no function or method overloading yet.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
-- Threads can share only thread-safe values, but the compiler does not yet
-  check what a closure captures, and there are no mutexes or channels (see
+- Threads can share only thread-safe values, which the compiler checks,
+  closure captures included; there are no mutexes or channels yet (see
   [threads](language/threads.md#limitations)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a

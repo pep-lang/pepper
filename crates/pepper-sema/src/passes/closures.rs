@@ -81,13 +81,18 @@ struct Var {
     ty: TypeName,
     /// How many closure literals enclose the declaration (0: the function).
     level: usize,
+    /// Where it is declared.
+    loc: Loc,
 }
 
 /// A closure literal being lifted.
 struct Frame {
     level: usize,
-    captures: Vec<usize>,
+    /// Captured locals, each with where this closure first uses it.
+    captures: Vec<(usize, Loc)>,
     uses_this: bool,
+    /// Where this closure first uses `this` or a member, when known.
+    this_use: Loc,
 }
 
 struct Lifter<'a> {
@@ -117,8 +122,8 @@ impl<'a> Lifter<'a> {
         }
     }
 
-    fn declare(&mut self, name: &str, ty: &TypeName) {
-        self.vars.push(Var { name: name.to_string(), ty: ty.clone(), level: self.level });
+    fn declare(&mut self, name: &str, ty: &TypeName, loc: Loc) {
+        self.vars.push(Var { name: name.to_string(), ty: ty.clone(), level: self.level, loc });
         let id = self.vars.len() - 1;
         self.scopes.last_mut().expect("scope").push(id);
     }
@@ -135,8 +140,8 @@ impl<'a> Lifter<'a> {
         for frame in &mut self.frames {
             if frame.level > level {
                 any = true;
-                if !frame.captures.contains(&id) {
-                    frame.captures.push(id);
+                if !frame.captures.iter().any(|&(c, _)| c == id) {
+                    frame.captures.push((id, loc));
                 }
             }
         }
@@ -155,6 +160,9 @@ impl<'a> Lifter<'a> {
         }
         for frame in &mut self.frames {
             frame.uses_this = true;
+            if frame.this_use.is_none() {
+                frame.this_use = loc;
+            }
         }
     }
 
@@ -178,7 +186,7 @@ impl<'a> Lifter<'a> {
                 if let Some(default) = &mut var.default {
                     self.walk_expression(default);
                 }
-                self.declare(&var.name, &var.ty);
+                self.declare(&var.name, &var.ty, var.loc);
             }
             Statement::Declaration(_) => {}
             Statement::Branch(branch) => {
@@ -307,10 +315,10 @@ impl<'a> Lifter<'a> {
         };
         let mut literal = *literal;
         self.level += 1;
-        self.frames.push(Frame { level: self.level, captures: vec![], uses_this: false });
+        self.frames.push(Frame { level: self.level, captures: vec![], uses_this: false, this_use: Loc::NONE });
         self.scopes.push(vec![]);
         for param in &literal.parameters {
-            self.declare(&param.name, &param.ty);
+            self.declare(&param.name, &param.ty, param.loc);
         }
         self.walk_block(&mut literal.body);
         self.scopes.pop();
@@ -320,17 +328,21 @@ impl<'a> Lifter<'a> {
         let (base, ty) = closure_name(&self.ctx.generics);
         let loc = literal.loc;
 
-        // Captured values, then `this`.
+        // Captured values, then `this`. Each capture field is located at the
+        // closure's first use of the value, and its `type_loc` is where the
+        // captured local is declared (for `check_shared_types`).
         let mut captures = vec![];
         let mut args = vec![];
-        for &id in &frame.captures {
+        for &(id, used) in &frame.captures {
             let var = &self.vars[id];
-            captures.push(field(&var.name, var.ty.clone(), None, loc));
+            let used = if used.is_none() { loc } else { used };
+            captures.push(VariableDef { type_loc: var.loc, ..field(&var.name, var.ty.clone(), None, used) });
             args.push(Expression::SymbolRef { id: var.name.clone(), ty: TypeName::auto(), loc });
         }
         if frame.uses_this {
             if let Some(this_ty) = &self.ctx.this_ty {
-                captures.push(field(THIS_FIELD, this_ty.clone(), None, loc));
+                let used = if frame.this_use.is_none() { loc } else { frame.this_use };
+                captures.push(field(THIS_FIELD, this_ty.clone(), None, used));
                 args.push(if self.level == 0 { Expression::ThisRef } else { Self::this_ref(loc) });
             }
         }
@@ -460,7 +472,7 @@ fn lift_function(function: &mut FunctionDef, ctx: &Context, lifted: &mut Vec<Str
     }
     for param in &function.parameters {
         if !param.name.starts_with("this.") {
-            lifter.declare(&param.name, &param.ty);
+            lifter.declare(&param.name, &param.ty, param.loc);
         }
     }
     if let Some(body) = &mut function.body {

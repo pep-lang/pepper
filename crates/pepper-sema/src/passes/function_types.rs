@@ -15,6 +15,16 @@
 //! (`(int) => int`) and another (`(i32) => i32`) are interchangeable in
 //! codegen. Refcounting, field releases and scope exits then treat function
 //! values exactly like any other struct reference (shared_ptr semantics).
+//!
+//! A thread-safe function type (`shared (P...) => R`, spelled
+//! `__shared_function<R, P...>`) is a separate struct with the same layout
+//! whose counts step atomically, like a `[Shared]` struct's. A plain
+//! function type's counts are plain, so its values stay on one thread
+//! (`check_shared_types`). The one object a plain function value can share
+//! with other threads is a named function's static object (codegen's
+//! `function_object`), so a plain function type's `__acquire`/`__release`
+//! leave a count at or above [`STATIC_REFCOUNT`] alone: that object is only
+//! ever read.
 
 use crate::model::*;
 use crate::type_name::TypeName;
@@ -24,6 +34,10 @@ use std::collections::HashSet;
 pub const INVOKE_FIELD: &str = "__invoke";
 /// Field reserved for a closure's capture-release routine.
 pub const DESTROY_FIELD: &str = "__destroy";
+/// The strong count of a named function's static function object. No
+/// heap object gets near it, so the object is never freed, and a plain
+/// function type does not step a count this high (see the module docs).
+pub const STATIC_REFCOUNT: i64 = 1 << 30;
 
 /// The function type of a free function: `(params) => return`.
 pub fn signature(function: &FunctionDef) -> TypeName {
@@ -94,6 +108,9 @@ pub fn synthesize_function_types(module: &mut Module) {
         }
         let mut st = function_struct(&ty);
         crate::struct_body::apply_synthesized(&mut st);
+        if !ty.is_shared_function_type() {
+            skip_static_objects(&mut st);
+        }
         crate::struct_body::finish(&mut st).expect("function type struct");
         module.structs.push(st);
     }
@@ -237,6 +254,35 @@ fn destructor(parent: &str) -> FunctionDef {
         attributes: vec![],
     });
     dtor
+}
+
+/// `if (this.__refcount >= STATIC_REFCOUNT) { return; }` after the null
+/// check of a plain function type's `__acquire` and `__release`: a named
+/// function's static object may be reached from several threads, and plain
+/// steps on it would race (see the module docs).
+fn skip_static_objects(st: &mut StructDef) {
+    for method in [&mut st.acquire, &mut st.release] {
+        let Some(body) = &mut method.body else { continue };
+        let guard = Statement::Branch(Branch {
+            condition: Expression::Binary {
+                op: BinaryOp::GreaterEqual,
+                lhs: Box::new(Expression::MemberRef {
+                    lhs: Box::new(Expression::ThisRef),
+                    name: "__refcount".to_string(),
+                    loc: Loc::NONE,
+                }),
+                rhs: Box::new(Expression::IntLiteral(STATIC_REFCOUNT)),
+                loc: Loc::NONE,
+            },
+            if_block: Block {
+                name: "if".to_string(),
+                items: vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
+                attributes: vec![],
+            },
+            else_block: None,
+        });
+        body.items.insert(1.min(body.items.len()), guard);
+    }
 }
 
 /// The struct for one function type, before `apply_synthesized`/`finish`.

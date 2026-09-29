@@ -439,7 +439,7 @@ test(): int {
 #[test]
 fn module_scope_closure() {
     let src = r#"
-const triple = (x: int) => x * 3;
+const triple: shared (int) => int = (x: int) => x * 3;
 
 test(): int { return triple(14); }
 "#;

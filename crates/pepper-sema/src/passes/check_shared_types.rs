@@ -10,10 +10,13 @@
 //!   `Atomic<T>`, not by assigning fields); and
 //! - of a thread-safe type: a primitive, a raw pointer to a thread-safe type
 //!   (`__ptr<void>` included: what raw memory holds is the code's own
-//!   responsibility), a function type, a `[Shared]` struct, or a weak
-//!   reference to one.
+//!   responsibility), a `shared` function type, a `[Shared]` struct, or a
+//!   weak reference to one.
 //!
-//! Every other struct is not thread-safe.
+//! Every other struct is not thread-safe, and neither is a plain function
+//! type (`(P...) => R`): its counts are plain and a closure of that type may
+//! hold anything. `shared_functions` checks what a closure converted to a
+//! `shared` function type captures, with [`unsafe_part`] too.
 //!
 //! Every module-scope variable, exported or not, is implicitly shared: any
 //! function can hand it to any thread, so it follows the same two rules as a
@@ -29,20 +32,50 @@ use crate::type_name::{INTEGRAL_TYPES, TypeName};
 
 /// The first type inside `ty` that is not thread-safe, if any.
 fn unsafe_part(ty: &TypeName, module: &Module) -> Option<TypeName> {
+    unsafe_part_in(ty, &ThreadSafeStructs::of(module))
+}
+
+/// The names of the structs whose references are thread-safe: `[Shared]`
+/// structs and `shared` function types.
+pub(crate) struct ThreadSafeStructs(std::collections::HashSet<String>);
+
+impl ThreadSafeStructs {
+    pub(crate) fn of(module: &Module) -> Self {
+        ThreadSafeStructs(
+            module
+                .structs
+                .iter()
+                .filter(|st| st.is_shared() || st.ty.is_shared_function_type())
+                .map(|st| st.name.clone())
+                .collect(),
+        )
+    }
+}
+
+/// [`unsafe_part`], given the thread-safe structs.
+pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<TypeName> {
     let name = ty.to_string();
-    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_function_type() {
+    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_shared_function_type() {
         return None;
     }
+    if ty.is_function_type() {
+        return Some(ty.clone());
+    }
     if let Some(pointee) = name.strip_suffix('*') {
-        return unsafe_part(&parse_type_string(pointee), module);
+        return unsafe_part_in(&parse_type_string(pointee), safe);
     }
     if let Some(target) = ty.weak_target() {
-        return unsafe_part(target, module);
+        return unsafe_part_in(target, safe);
     }
-    match module.structs.iter().find(|st| st.name == name) {
-        Some(st) if st.is_shared() => None,
-        _ => Some(ty.clone()),
+    if safe.0.contains(&name) {
+        return None;
     }
+    // Some passes carry a type as a flat name (`__function<void>`).
+    let parsed = parse_type_string(&name);
+    if parsed.is_function_type() {
+        return unsafe_part_in(&parsed, safe);
+    }
+    Some(ty.clone())
 }
 
 /// Where the program names type `spec` (a variable, field or parameter
@@ -120,7 +153,13 @@ fn use_site(module: &Module, spec: &str) -> Option<Loc> {
 }
 
 /// A note at `ty`'s declaration saying why it is not thread-safe.
-fn not_shared_note(diagnostic: Diagnostic, ty: &TypeName, module: &Module) -> Diagnostic {
+pub(crate) fn not_shared_note(diagnostic: Diagnostic, ty: &TypeName, module: &Module) -> Diagnostic {
+    if ty.is_function_type() {
+        return diagnostic.with_note(
+            format!("declare the function type '{}' to share it between threads", ty.with_sharing(true).display()),
+            None,
+        );
+    }
     match module.structs.iter().find(|st| st.name == ty.to_string()) {
         Some(st) if !st.loc.is_none() => {
             diagnostic.with_note(format!("'{}' is not declared [Shared]", ty.display()), Some(st.loc))
@@ -194,7 +233,7 @@ fn check_shared_structs(module: &Module) -> bool {
             let diagnostic = if is_specialization {
                 Diagnostic::error(format!(
                     "shared struct '{}' requires thread-safe type arguments; '{}' is not thread-safe",
-                    st.name,
+                    st.ty.display(),
                     offender.display()
                 ))
                 .at(use_site(module, &st.name).unwrap_or(field_loc))

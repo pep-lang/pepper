@@ -27,11 +27,16 @@ number, so it can be compared, hashed and used as a `HashMap` key.
 ## ThreadBody
 
 ```pepper
-type ThreadBody = () => void
+type ThreadBody = shared () => void
 ```
 
 The type of a thread's body: a function that takes no arguments and
 returns nothing. `Thread.spawn` runs one on a new thread.
+
+It is a `shared` function type, because the body runs on another thread:
+a named function, or a closure that captures only thread-safe values
+(numbers, `Atomic<T>`, `[Shared]` structs, other `shared` function
+values). A closure capturing a `String`, say, is a compile error.
 
 **See also**
 - `Thread.spawn`

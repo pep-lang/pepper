@@ -216,6 +216,19 @@ main.pep:6:8: note: declare it with 'extend Circle with Shape'
       |        ^~~~~~
 ```
 
+**A value that is not thread-safe given to another thread** (see
+[Threads](threads.md#what-threads-can-share)): here a thread body, a
+`shared` function value, that captures a `String`:
+
+```text
+main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
+    5 |     var t = async.Thread.spawn(() => { print(name); });
+      |                                              ^~~~
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+    4 |     var name = "worker";
+      |         ^~~~
+```
+
 **The same name declared twice in one scope:**
 
 ```text

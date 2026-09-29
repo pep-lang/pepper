@@ -213,7 +213,9 @@ with no extension, and `module_name()` is the output's stem.
   also carry `name_span`. Externs are `FunctionDecl { external: true, … }`.
   Every node implements `Display`; `--emit-ast` prints through it.
   Function types `(P…) => R` are parsed directly into
-  `__function<R, P…>`.
+  `__function<R, P…>`, and thread-safe ones `shared (P…) => R` into
+  `__shared_function<R, P…>` (`shared_function_type_name`; `shared` is a
+  contextual keyword, not in `RESERVED`).
 
 ### 2.4 Building the sema model (`crates/pepper-sema/src/builder.rs`, `model.rs`)
 
@@ -307,7 +309,10 @@ of `__call` and `__dtor`), so its head matches the function type struct,
 then one field per captured local, then `__this` when the body uses `this`
 or a bare member of the enclosing struct (rewritten to `__this.member`). The
 body becomes the `__call` method; bare captured names become fields through
-`convert_member_refs`. The lift reports an assignment to a captured local
+`convert_member_refs`. Each capture field is located at the closure's first
+use of the value, with the captured local's declaration as its `type_loc`
+(`shared_functions` reports a capture that is not thread-safe there). The
+lift reports an assignment to a captured local
 anywhere in the enclosing function, and a method storing a closure that
 captures `this` in a field of `this`. Types the literal left out are filled
 by `closures::sync_closures`, which `resolve_implicit_types` runs in its
@@ -329,8 +334,8 @@ survives into later stages. Then, for each struct:
   then `--__weakcount` and `_pep_free(this)` if that reached 0). Each step
   is an `Expression::CountStep` node, which evaluates to the new count and
   is atomic when `StructDef::atomic_counts()` holds: the struct is
-  `[Shared]` or a function type. Everything else uses a plain
-  load/add/store.
+  `[Shared]` or a `shared` function type. Everything else, plain function
+  types included, uses a plain load/add/store.
 - `finish` builds the constructor. A hidden `size` local is patched with the
   real ABI size in codegen by `patched_ctor`. The constructor calls `this =
   _pep_malloc(size)`, initializes each field (explicit default or zero),
@@ -351,7 +356,7 @@ several passes run more than once on purpose.
 | # | Step | What it does |
 | --- | --- | --- |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
-| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
+| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
 | 4 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
@@ -373,9 +378,10 @@ several passes run more than once on purpose.
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_type_arguments` (`type_arguments.rs`) | Reports a generic call whose type arguments the arguments did not determine (`cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)`, with a note at the declaration). |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
+| final | `shared_functions`, `synthesize_function_types` | Where a function value flows into a `shared` function-typed slot, retypes a `FunctionRef` or `MakeClosure` to the `shared` type, reporting a capture that `check_shared_types::unsafe_part_in` finds not thread-safe (at its first use in the closure, with a note at the captured local). Where a `shared` value flows into a plain slot of the same signature, wraps it in a new plain adapter closure (`__inner`, `__call` forwarding to it; its destructor releases `__inner`), so plain counts never touch a shared object. Any other plain value in a `shared` slot is left for `check_function_types`. |
 | final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`StructDef::implicit_from`) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
-| final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
-| final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
+| final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
+| final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -455,8 +461,10 @@ How the language lowers:
   `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), and `AtomicFetch`
   (`atomicrmw` acq_rel).
 - **Function values**: `FunctionRef` produces a static function object
-  (`__function_object.<name>`) whose `__invoke` points at a thunk
-  (`__function_thunk.<name>`). `codegen_invoke` loads `__invoke` and calls
+  (`__function_object.<name>`, or `__function_object.shared.<name>` for a
+  `shared` function type) whose `__invoke` points at a thunk
+  (`__function_thunk.<name>`, one per function). Its strong count starts at
+  `STATIC_REFCOUNT`, so it is never freed. `codegen_invoke` loads `__invoke` and calls
   it with the signature of the static type. `MakeClosure` is its closure
   struct's constructor call, used as the function value: the constructor
   stores `MethodAddress("__call")` (the method itself, whose `this` is the
@@ -565,7 +573,7 @@ are null-safe.
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
 | Closures | `MakeClosure` is an owned rvalue like the constructor call it wraps (`make_shared`): each captured value is a constructor argument, acquired into its field. The value's type is the function type, so every other row applies through `__function<…>.__acquire`/`__release`. At zero, the function type's `__dtor` calls `__destroy`, the closure's `__dtor`, whose `release_field_refs` releases the captures. |
 | `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0), atomic when `T` is `[Shared]`. `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `__weak_upgrade` is a compare-and-swap loop that increments the strong count only while it is non-zero (`weak_ptr::lock`). `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
-| Threads | Counts are plain by default. A `[Shared]` struct (`StructDef::is_shared`) and every function type step them atomically (`CountStep`), like `std::shared_ptr`'s control block; `passes/check_shared_types.rs` keeps non-thread-safe values out of shared structs. |
+| Threads | Counts are plain by default. A `[Shared]` struct (`StructDef::is_shared`) and every `shared` function type (`shared (T) => R`) step them atomically (`CountStep`), like `std::shared_ptr`'s control block; plain function types count plainly. `passes/check_shared_types.rs` keeps non-thread-safe values (plain function values included) out of shared structs and globals, and `passes/shared_functions.rs` lets a closure become `shared` only when its captures are thread-safe, and wraps a `shared` value used as a plain one in a plain adapter that holds it (a struct holding a `shared_ptr` field). |
 
 Debugging aids: set `PEP_TRACE` to make `_pep_trace_ptr` and
 `_pep_trace_int` (internal runtime helpers, not part of the language's API)
@@ -894,13 +902,6 @@ compiles the code but cannot run it. Run it for real with the
 ---
 
 ## 13. Known limitations and sharp edges
-
-- **Closure captures are not thread-checked.** `check_shared_types`
-  treats every function type as thread-safe, but a capturing closure's
-  function value holds its captures, which may be `String`s or other
-  non-`[Shared]` structs. Spawning such a closure shares their plain counts
-  across threads. Splitting function types into thread-safe and not is the
-  fix.
 
 - **Single global namespace.** Module linking rewrites names, and then
   every file merges into one `Module`. Two private declarations with the

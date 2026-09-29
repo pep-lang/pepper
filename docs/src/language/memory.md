@@ -130,6 +130,11 @@ its references can be copied and dropped on any thread. The compiler requires
 such a struct's fields to be `const` and thread-safe. See
 [What threads can share](threads.md#what-threads-can-share).
 
+Function values follow the same split: a plain function type such as
+`() => void` has plain counts and stays on one thread, and a
+[`shared` function type](function-types.md#sharing-function-values-between-threads)
+such as `shared () => void` has atomic counts.
+
 ## Summary
 
 | Code | What happens to references |
