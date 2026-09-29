@@ -202,6 +202,18 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         Expression::MemberRef { lhs, .. }
         | Expression::ForIterator(lhs)
         | Expression::WithEntered(lhs) => subst_expr(lhs, aliases, values),
+        Expression::MakeClosure { value, ty, .. } => {
+            subst(ty, aliases);
+            subst_expr(value, aliases, values);
+        }
+        Expression::CallPointer { pointer, args } => {
+            subst_expr(pointer, aliases, values);
+            for arg in args {
+                subst_expr(arg, aliases, values);
+            }
+        }
+        // Lifted before aliases resolve.
+        Expression::ClosureLiteral(_) | Expression::MethodAddress(_) => {}
         Expression::Binary { lhs, rhs, .. } => {
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);

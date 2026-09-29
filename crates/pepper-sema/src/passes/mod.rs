@@ -26,6 +26,7 @@ pub mod check_function_types;
 pub mod check_bindings;
 pub mod lower_with_blocks;
 pub mod weak_types;
+pub mod closures;
 pub mod convert_to_traits;
 
 use apply_extensions::apply_extensions;
@@ -107,6 +108,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_resolvables(module, true));
     // Types inferred by the final resolve (e.g. `var f = square;`).
     step!(synthesize_function_types(module));
+    step!(closures::check_closures(module));
     // Struct values flowing into trait-typed slots, once every type is final.
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
@@ -217,10 +219,71 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
                 walk_expression(arg, f);
             }
         }
-        Expression::ForIterator(source) | Expression::WithEntered(source) => {
-            walk_expression(source, f)
-        }
+        Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
+        Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
+        Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
+        Expression::MethodAddress(_) => {}
+        Expression::CallPointer { pointer, args } => {
+            walk_expression(pointer, f);
+            for arg in args {
+                walk_expression(arg, f);
+            }
+        }
+    }
+}
+
+/// The direct sub-expressions of `expr`, for walks that need to decide per
+/// node whether to descend (a closure literal's body is a block, not listed).
+pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
+    match expr {
+        Expression::SymbolRef { .. }
+        | Expression::ThisRef
+        | Expression::BoolLiteral(_)
+        | Expression::IntLiteral(_)
+        | Expression::FloatLiteral(_)
+        | Expression::StringLiteral { .. }
+        | Expression::PointerLiteral
+        | Expression::SizeOf(_)
+        | Expression::IsPod(_)
+        | Expression::Default(_)
+        | Expression::FunctionRef { .. }
+        | Expression::MethodAddress(_)
+        | Expression::ClosureLiteral(_) => vec![],
+        Expression::MemberRef { lhs, .. } => vec![lhs.as_mut()],
+        Expression::Binary { lhs, rhs, .. }
+        | Expression::Index { lhs, rhs, .. }
+        | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs.as_mut(), rhs.as_mut()],
+        Expression::Unary { operand, .. } => vec![operand.as_mut()],
+        Expression::Cast { expr, .. } => vec![expr.as_mut()],
+        Expression::Ternary { condition, true_expr, false_expr } => {
+            vec![condition.as_mut(), true_expr.as_mut(), false_expr.as_mut()]
+        }
+        Expression::RefCount(_, arg)
+        | Expression::Address(_, arg)
+        | Expression::Weak(_, _, arg)
+        | Expression::AtomicLoad(_, arg)
+        | Expression::ForIterator(arg)
+        | Expression::WithEntered(arg) => vec![arg.as_mut()],
+        Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => vec![ptr.as_mut(), val.as_mut()],
+        Expression::AtomicCmpXchg(_, ptr, expected, desired) => vec![ptr.as_mut(), expected.as_mut(), desired.as_mut()],
+        Expression::FunctionCall { args, .. } => args.iter_mut().collect(),
+        Expression::MethodCall { this, args, .. } => {
+            let mut children = vec![this.as_mut()];
+            children.extend(args.iter_mut());
+            children
+        }
+        Expression::Invoke { callee, args } => {
+            let mut children = vec![callee.as_mut()];
+            children.extend(args.iter_mut());
+            children
+        }
+        Expression::CallPointer { pointer, args } => {
+            let mut children = vec![pointer.as_mut()];
+            children.extend(args.iter_mut());
+            children
+        }
+        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => vec![value.as_mut()],
     }
 }
 

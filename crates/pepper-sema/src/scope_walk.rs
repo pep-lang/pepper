@@ -304,6 +304,17 @@ macro_rules! scope_walker {
                             self.visit_expression(a);
                         }
                     }
+                    Expression::Closure(c) => {
+                        // A closure's parameters hide outer names in its body.
+                        self.scopes_mut().push(Scope::Values(HashSet::new()));
+                        for p in &$($m)? c.parameters {
+                            self.visit_type_name(&$($m)? p.type_name);
+                            self.scopes_mut().bind(&p.name);
+                        }
+                        self.visit_type_name(&$($m)? c.return_type);
+                        self.walk_block(&$($m)? c.body);
+                        self.scopes_mut().pop();
+                    }
                 }
             }
 

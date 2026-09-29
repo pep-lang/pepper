@@ -360,3 +360,45 @@ fn weak_reference_to_trait_type() {
          \x20     |            ^~~~~~~~~~~"
     );
 }
+
+#[test]
+fn assigning_a_captured_local() {
+    assert_eq!(
+        error_of(
+            "closure_assign",
+            "main(): int {\n    var count = 0;\n    var f = () => count;\n    count = 5;\n    return f();\n}\n"
+        ),
+        "main.pep:4:5: error: cannot assign to 'count' because a closure captures it\n\
+         \x20   4 |     count = 5;\n\
+         \x20     |     ^~~~~\n\
+         main.pep:3:19: note: captured here; a closure keeps a copy, so the variable must not change\n\
+         \x20   3 |     var f = () => count;\n\
+         \x20     |                   ^~~~~"
+    );
+}
+
+#[test]
+fn closure_parameter_type_not_inferred() {
+    assert_eq!(
+        error_of("closure_infer", "main(): int {\n    var f = (x) => x;\n    return 0;\n}\n"),
+        "main.pep:2:14: error: cannot infer the type of parameter 'x'; write it: (x: Type) => ...\n\
+         \x20   2 |     var f = (x) => x;\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
+fn closure_capturing_this_stored_in_a_field() {
+    assert_eq!(
+        error_of(
+            "closure_cycle",
+            "struct Widget {\n    int size;\n    () => int measure;\n    setup() { measure = () => size; }\n}\nmain(): int { return 0; }\n"
+        ),
+        "main.pep:4:15: error: storing a closure that captures 'this' in field 'measure' of 'this' creates a reference cycle that is never freed\n\
+         \x20   4 |     setup() { measure = () => size; }\n\
+         \x20     |               ^~~~~~~\n\
+         main.pep:4:25: note: the closure captures 'this' here; capture a 'Weak' reference to it instead\n\
+         \x20   4 |     setup() { measure = () => size; }\n\
+         \x20     |                         ^~~~~~~~~~"
+    );
+}

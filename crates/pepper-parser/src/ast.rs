@@ -78,10 +78,13 @@ pub struct TypeName {
     pub span: Span,
 }
 
+/// Internal name of a type sema infers (`var x = 1;`).
+pub const AUTO_TYPE: &str = "__auto";
+
 impl TypeName {
     pub fn auto() -> Self {
         Self {
-            name: "__auto".to_string(),
+            name: AUTO_TYPE.to_string(),
             generic_types: vec![],
             span: Span::none(),
         }
@@ -169,6 +172,23 @@ pub enum Expression {
         arguments: Vec<Expression>,
         span: Span,
     },
+    /// A closure literal: `(x: int, y) => x + y` or `(x): int => { ... }`.
+    Closure(Box<ClosureLiteral>),
+}
+
+/// A closure literal. Parameters and the return type written without a type
+/// are `auto`; sema infers them from where the closure is used.
+#[derive(Debug, Clone)]
+pub struct ClosureLiteral {
+    pub parameters: Vec<VariableDecl>,
+    /// The type after the parameter list (`(x): int => ...`), else `auto`.
+    pub return_type: TypeName,
+    /// The body. An expression body (`=> x * 2`) is a block holding
+    /// `return x * 2;`.
+    pub body: Block,
+    /// The body was written as an expression rather than a block.
+    pub expression_body: bool,
+    pub span: Span,
 }
 
 impl Expression {
@@ -184,6 +204,7 @@ impl Expression {
             | Expression::Cast { span, .. }
             | Expression::FunctionCall { span, .. } => *span,
             Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
+            Expression::Closure(c) => c.span,
         }
     }
 }
@@ -667,6 +688,24 @@ impl Display for Expression {
             Expression::MemberAccess { lhs, name, .. } => write!(f, "{}.{}", lhs, name),
             Expression::FunctionCall { function, arguments, .. } => {
                 write!(f, "{}({})", function, join(arguments, ", "))
+            }
+            Expression::Closure(c) => {
+                let params: Vec<String> = c
+                    .parameters
+                    .iter()
+                    .map(|p| if p.type_name.name == AUTO_TYPE { p.name.clone() } else { format!("{}: {}", p.name, p.type_name) })
+                    .collect();
+                write!(f, "({})", params.join(", "))?;
+                if c.return_type.name != AUTO_TYPE {
+                    write!(f, ": {}", c.return_type)?;
+                }
+                match c.body.statements.as_slice() {
+                    [Statement::Return(ReturnStatement { expr: Some(e), .. })] if c.expression_body => write!(f, " => {}", e),
+                    _ => {
+                        write!(f, " => ")?;
+                        write_block_body(f, &c.body)
+                    }
+                }
             }
         }
     }

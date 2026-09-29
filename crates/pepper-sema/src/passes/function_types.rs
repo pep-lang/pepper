@@ -108,7 +108,7 @@ fn collect(ty: &TypeName, found: &mut Vec<TypeName>, seen: &mut HashSet<String>)
     if let Some(pointee) = ty.name.strip_suffix('*') {
         collect(&TypeName::new(pointee), found, seen);
     }
-    if (ty.is_function_type() || ty.is_weak()) && seen.insert(ty.to_string()) {
+    if (ty.is_function_type() || ty.is_weak()) && !ty.contains_auto() && seen.insert(ty.to_string()) {
         found.push(ty.clone());
     }
 }
@@ -168,6 +168,7 @@ fn expression_types(expr: &Expression, add: &mut impl FnMut(&TypeName)) {
         | Expression::Cast { ty, .. }
         | Expression::ArrayIndex { ty, .. } => add(ty),
         Expression::Weak(op, ty, _) => add(&op.result(ty)),
+        Expression::MakeClosure { ty, .. } => add(ty),
         Expression::FunctionCall { function, .. } if function.contains('<') => {
             add(&crate::passes::gather_generics::parse_type_string(function));
         }
@@ -205,6 +206,39 @@ fn pointer_field(name: &str) -> VariableDef {
     }
 }
 
+/// The destructor of a function type: a closure's `__destroy` releases its
+/// captured values (`if (this.__destroy !== null) __destroy(this);`). A
+/// named function's static object has none.
+fn destructor(parent: &str) -> FunctionDef {
+    let mut dtor = empty_function("__dtor", TypeName::void(), parent);
+    let destroy = || {
+        Box::new(Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: DESTROY_FIELD.to_string(), loc: Loc::NONE })
+    };
+    dtor.body = Some(Block {
+        name: String::new(),
+        items: vec![Statement::Branch(Branch {
+            condition: Expression::Unary {
+                op: UnaryOp::LogicalNot,
+                operand: Box::new(Expression::Binary {
+                    op: BinaryOp::Identical,
+                    lhs: destroy(),
+                    rhs: Box::new(Expression::PointerLiteral),
+                    loc: Loc::NONE,
+                }),
+                loc: Loc::NONE,
+            },
+            if_block: Block {
+                name: "if".to_string(),
+                items: vec![Statement::Expression(Expression::CallPointer { pointer: destroy(), args: vec![Expression::ThisRef] })],
+                attributes: vec![],
+            },
+            else_block: None,
+        })],
+        attributes: vec![],
+    });
+    dtor
+}
+
 /// The struct for one function type, before `apply_synthesized`/`finish`.
 fn function_struct(ty: &TypeName) -> StructDef {
     let name = ty.to_string();
@@ -215,7 +249,7 @@ fn function_struct(ty: &TypeName) -> StructDef {
         field_members: vec![pointer_field(INVOKE_FIELD), pointer_field(DESTROY_FIELD)],
         method_members: vec![],
         constructor: empty_function(&name, ty.clone(), &name),
-        destructor: empty_function("__dtor", TypeName::void(), &name),
+        destructor: destructor(&name),
         acquire: empty_function("__acquire", TypeName::void(), &name),
         release: empty_function("__release", TypeName::void(), &name),
         traits: vec![],

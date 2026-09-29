@@ -223,6 +223,10 @@ with no extension, and `module_name()` is the output's stem.
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
     (Expression::WithEntered(x)) { body } else { other }`. The model has no
     `with` statement; `lower_with_blocks` resolves the condition.
+  - A closure literal becomes `Expression::ClosureLiteral` (parameters,
+    return type and body, types `auto` where not written); an expression
+    body is lowered to `{ return expr; }`. `lift_closures` removes it
+    (§2.6).
   - `t.m(args)` becomes `MethodCall`, and a named callee becomes
     `FunctionCall { function }`. A type literal callee (`Box<int>(…)`)
     becomes a constructor call named `"Box<int>"`. Any other callee becomes
@@ -243,7 +247,8 @@ with no extension, and `module_name()` is the output's stem.
   `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
-  `ForIterator`, `WithEntered`, `ToTrait`), and `Statement`. Each node that names something has a
+  `ForIterator`, `WithEntered`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
+  `MethodAddress`, `CallPointer`), and `Statement`. Each node that names something has a
   `Loc`; `Expression::loc()` returns it (`Loc::NONE` for literals and
   synthesized nodes).
 - **Types**: `type_name::TypeName { name, sub_types, flags }`, with
@@ -273,7 +278,25 @@ cross-compilation.
 
 ### 2.6 Struct bodies (`struct_body.rs`)
 
-`struct_body::apply` runs `resolve_type_aliases` first, so no alias
+`struct_body::apply` first runs `passes::closures::lift_closures`, which
+turns every closure literal into a synthesized struct `__closure_N` (generic
+over the enclosing code's type parameters) and a `MakeClosure` creation
+expression, so the new structs get their bodies below like any other. The
+struct's fields are `__invoke` and `__destroy` (defaults `MethodAddress`
+of `__call` and `__dtor`), so its head matches the function type struct,
+then one field per captured local, then `__this` when the body uses `this`
+or a bare member of the enclosing struct (rewritten to `__this.member`). The
+body becomes the `__call` method; bare captured names become fields through
+`convert_member_refs`. The lift reports an assignment to a captured local
+anywhere in the enclosing function, and a method storing a closure that
+captures `this` in a field of `this`. Types the literal left out are filled
+by `closures::sync_closures`, which `resolve_implicit_types` runs in its
+fixpoint loop: parameter and return types from the function type of the slot
+the closure flows into, capture field types from the constructor arguments,
+and each `MakeClosure`'s type from its `__call`. `closures::check_closures`
+reports what is still `auto` before `check_function_types`.
+
+Then `struct_body::apply` runs `resolve_type_aliases`, so no alias
 survives into later stages. Then, for each struct:
 
 - `apply_synthesized` inserts the two head fields: `u32 __refcount`
@@ -302,12 +325,12 @@ several passes run more than once on purpose.
 | # | Step | What it does |
 | --- | --- | --- |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
-| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
+| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
 | 4 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
 | 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
-| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup, and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). |
+| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup, and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
 | 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
@@ -320,6 +343,7 @@ several passes run more than once on purpose.
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). Errors are located `Diagnostic`s. |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
@@ -395,7 +419,10 @@ How the language lowers:
 - **Function values**: `FunctionRef` produces a static function object
   (`__function_object.<name>`) whose `__invoke` points at a thunk
   (`__function_thunk.<name>`). `codegen_invoke` loads `__invoke` and calls
-  it with the signature of the static type.
+  it with the signature of the static type. `MakeClosure` is its closure
+  struct's constructor call, used as the function value: the constructor
+  stores `MethodAddress("__call")` (the method itself, whose `this` is the
+  object) in `__invoke` and `MethodAddress("__dtor")` in `__destroy`.
 - **Default arguments**: `param_defaults` stores each callable's default
   expressions. `missing_args` pads trailing arguments at the call site and
   reports `too many/too few arguments to 'f'`.
@@ -497,6 +524,7 @@ are null-safe.
 | Discarded temporary | `Statement::Expression` releases `owned_temp_type(expr)`. Arguments that are owned rvalues are released after the call (`owned_arg_temps` in `codegen_call`). The receiver of `f().x` or `f()[i]` goes on `deferred_temps` and is released at the end of the full expression by `flush_deferred_temps`. Ternary arms use `codegen_expr_in_arm`. |
 | Trait values | Same rules, same call sites: `Trait.__acquire`/`Trait.__release` are thunks into the vtable (§4.2), so the concrete type's `__release`, and at zero its `__dtor`, run. `ToTrait` does no refcount work of its own: converting an lvalue read acquires as the read would, and an owned rvalue moves. |
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
+| Closures | `MakeClosure` is an owned rvalue like the constructor call it wraps (`make_shared`): each captured value is a constructor argument, acquired into its field. The value's type is the function type, so every other row applies through `__function<…>.__acquire`/`__release`. At zero, the function type's `__dtor` calls `__destroy`, the closure's `__dtor`, whose `release_field_refs` releases the captures. |
 | `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0). `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
 
 Debugging aids: set `PEP_TRACE` to make the runtime's `trace_ptr`,

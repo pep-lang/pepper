@@ -114,6 +114,12 @@ fn replace_expr_types(expr: &mut Expression, type_map: &[(String, TypeName)]) {
                 crate::type_name::replace_map(ty, type_map)
             }
             Expression::AtomicFetch(_, ty, _, _) => crate::type_name::replace_map(ty, type_map),
+            Expression::MakeClosure { closure, ty, .. } => {
+                crate::type_name::replace_map(ty, type_map);
+                let mut parsed = crate::passes::gather_generics::parse_type_string(closure);
+                crate::type_name::replace_map(&mut parsed, type_map);
+                *closure = parsed.to_string();
+            }
             _ => {}
         }
         // Generic calls inside bodies (`__address<T>(v)` → `__address<int>(v)`).

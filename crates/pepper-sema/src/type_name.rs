@@ -185,6 +185,11 @@ impl TypeName {
         !self.sub_types.is_empty()
     }
 
+    /// The type, or any type nested in it, is still `auto` (not inferred).
+    pub fn contains_auto(&self) -> bool {
+        self.name == AUTO || self.sub_types.iter().any(|t| t.contains_auto())
+    }
+
     pub fn is_pointer(&self) -> bool {
         self.is_scalar() && self.name.ends_with('*')
     }

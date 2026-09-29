@@ -18,6 +18,8 @@ struct Scopes {
     functions: Vec<(String, TypeName)>,
     /// Free functions usable as values: name → function type.
     function_types: Vec<(String, TypeName)>,
+    /// Generic free functions: name → generic parameter names.
+    generic_functions: Vec<(String, Vec<String>)>,
     /// While walking a function with no declared return type: the types of
     /// its `return <value>` statements.
     returns: Option<Vec<TypeName>>,
@@ -33,6 +35,7 @@ impl Scopes {
             methods: vec![],
             functions: vec![],
             function_types: vec![],
+            generic_functions: vec![],
             returns: None,
         }
     }
@@ -180,6 +183,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             TypeName::auto()
         }
         Expression::FunctionRef { ty, .. } => ty.clone(),
+        Expression::MakeClosure { ty, .. } if !ty.contains_auto() => ty.clone(),
         Expression::Invoke { callee, .. } => type_of_expr(callee, scopes, current_struct)
             .function_return()
             .cloned()
@@ -312,6 +316,20 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 "__atomic_cmpxchg" => return TypeName::new("bool"),
                 _ => {}
             }
+            // A generic call spelled with its arguments (`twice<int>(f)`)
+            // before it is specialized: the base's return type with the
+            // arguments substituted.
+            if let Some((_, params)) = scopes.generic_functions.iter().find(|(n, _)| n == name) {
+                if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
+                    let args = crate::passes::gather_generics::parse_type_string(function).sub_types;
+                    if !args.is_empty() {
+                        let map: Vec<(String, TypeName)> = params.iter().cloned().zip(args).collect();
+                        let mut ty = ty.clone();
+                        crate::type_name::replace_map(&mut ty, &map);
+                        return ty;
+                    }
+                }
+            }
             // Plain free-function call: its declared return type.
             if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
                 return ty.clone();
@@ -346,11 +364,15 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
 pub fn resolve_implicit_types(module: &mut Module) {
     // Inferring a return type can type the callers' locals, so repeat while
     // return types change (bounded: each run only replaces `auto`).
+    // Closure types (see `closures::sync_closures`) and inferred types feed
+    // each other, so they share the loop.
     for _ in 0..8 {
-        if !resolve_once(module) {
+        let synced = crate::passes::closures::sync_closures(module);
+        if !resolve_once(module) && !synced {
             break;
         }
     }
+    crate::passes::closures::sync_closures(module);
 }
 
 /// Whether `function`'s return type is inferred from its returns: it
@@ -418,6 +440,13 @@ fn resolve_once(module: &mut Module) -> bool {
         function_returns.push((e.name.clone(), e.ty.clone()));
     }
 
+    let generic_functions: Vec<(String, Vec<String>)> = module
+        .functions
+        .iter()
+        .filter(|f| f.is_generic_func)
+        .map(|f| (f.name.clone(), f.generic_params.iter().map(|p| p.name.clone()).collect()))
+        .collect();
+
     // Free functions usable as values (`var f = square;`).
     let function_values = crate::passes::function_types::referenceable_functions(module);
 
@@ -441,6 +470,7 @@ fn resolve_once(module: &mut Module) -> bool {
         scopes.methods = struct_methods.clone();
         scopes.functions = function_returns.clone();
         scopes.function_types = function_values.clone();
+        scopes.generic_functions = generic_functions.clone();
         scopes.symbols[0].extend(global_symbols.iter().cloned());
 
         // Resolve field types with defaults.
@@ -522,6 +552,7 @@ fn resolve_once(module: &mut Module) -> bool {
             scopes.methods = struct_methods.clone();
             scopes.functions = function_returns.clone();
             scopes.function_types = function_values.clone();
+            scopes.generic_functions = generic_functions.clone();
             scopes.symbols[0].extend(global_symbols.iter().cloned());
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
@@ -539,6 +570,7 @@ fn resolve_once(module: &mut Module) -> bool {
     scopes.methods = struct_methods.clone();
     scopes.functions = function_returns.clone();
     scopes.function_types = function_values.clone();
+    scopes.generic_functions = generic_functions.clone();
     scopes.symbols[0].extend(global_symbols.iter().cloned());
     for var in &mut module.globals {
         if var.ty.to_string() == crate::type_name::AUTO {

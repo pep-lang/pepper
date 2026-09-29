@@ -158,6 +158,12 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             | Expression::AtomicStore(ty, _, _)
             | Expression::AtomicCmpXchg(ty, _, _, _) => substitute(ty, type_map),
             Expression::AtomicFetch(_, ty, _, _) => substitute(ty, type_map),
+            Expression::MakeClosure { closure, ty, .. } => {
+                substitute(ty, type_map);
+                let mut parsed = crate::passes::gather_generics::parse_type_string(closure);
+                substitute(&mut parsed, type_map);
+                *closure = parsed.to_string();
+            }
             _ => {}
         }
         // Constructor calls inside method bodies (`Array<T>(n)` →
@@ -167,11 +173,11 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             substitute(&mut parsed, type_map);
             *function = parsed.to_string();
         }
-        // `this` symbol refs in specialized bodies carry the base type.
+        // A constructor's `__init_<field>` parameter is typed like its field
+        // (`T`, `(T) => T`) when `finish` synthesizes it.
         if let Expression::SymbolRef { id, ty, .. } = e {
-            if id == "this" && !type_map.is_empty() {
-                // type_map is per-struct; leave resolution to implicit types.
-                let _ = ty;
+            if id.starts_with("__init_") {
+                substitute(ty, type_map);
             }
         }
     });

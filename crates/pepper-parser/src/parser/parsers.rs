@@ -688,8 +688,105 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     Ok(Expression::SymbolRef { id: name, span: Span { start, end } })
 }
 
+/// A closure literal: `(params) [: R] => body`, where each parameter is
+/// `name` or `name: Type` and the body is a block or an expression. Anything
+/// that is not a closure up to its `=>` backtracks, so `(a + b)` and
+/// `c ? (x) : y` stay ordinary expressions.
+fn closure_literal(input: &mut &str) -> Result<Expression> {
+    let before: &str = input;
+    let start = pos(input);
+    fn fail<'a>(input: &mut &'a str, before: &'a str) -> Result<Expression> {
+        *input = before;
+        Err(bt(input))
+    }
+    *input = &input[1..];
+    let mut parameters = vec![];
+    loop {
+        ws(input)?;
+        if input.starts_with(')') {
+            *input = &input[1..];
+            break;
+        }
+        let name_start = pos(input);
+        let Ok(name) = identifier(input) else { return fail(input, before) };
+        let name_span = Span { start: name_start, end: pos(input) };
+        ws(input)?;
+        let mut type_name = TypeName::auto();
+        if input.starts_with(':') {
+            *input = &input[1..];
+            ws(input)?;
+            match type_name_parse(input) {
+                Ok(ty) => type_name = ty,
+                Err(_) => return fail(input, before),
+            }
+            ws(input)?;
+        }
+        parameters.push(VariableDecl {
+            attributes: vec![],
+            name,
+            name_span,
+            type_name,
+            default_value: None,
+            is_const: false,
+            span: Span { start: name_start, end: pos(input) },
+            is_exported: false,
+        });
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with(')') {
+            *input = &input[1..];
+            break;
+        }
+        return fail(input, before);
+    }
+    ws(input)?;
+    let mut return_type = TypeName::auto();
+    if input.starts_with(':') {
+        *input = &input[1..];
+        ws(input)?;
+        match type_name_parse(input) {
+            Ok(ty) => return_type = ty,
+            Err(_) => return fail(input, before),
+        }
+        ws(input)?;
+    }
+    if !input.starts_with("=>") {
+        return fail(input, before);
+    }
+    *input = &input[2..];
+    ws(input)?;
+    let (body, expression_body) = if input.starts_with('{') {
+        (block(input, vec![])?, false)
+    } else {
+        let expr = expression(input)?;
+        let span = expr.span();
+        let ret = Statement::Return(ReturnStatement { expr: Some(expr), span });
+        (Block { statements: vec![ret], span, attributes: vec![] }, true)
+    };
+    Ok(Expression::Closure(Box::new(ClosureLiteral {
+        parameters,
+        return_type,
+        body,
+        expression_body,
+        span: Span { start, end: pos(input) },
+    })))
+}
+
+/// A type inside a closure's signature. Cut errors become backtracks, since
+/// the text may turn out not to be a closure.
+fn type_name_parse(input: &mut &str) -> Result<TypeName> {
+    type_name(input).map_err(|_| bt(input))
+}
+
 fn atom(input: &mut &str) -> Result<Expression> {
     if input.starts_with('(') {
+        match closure_literal(input) {
+            Ok(closure) => return Ok(closure),
+            Err(ErrMode::Backtrack(_)) => {}
+            Err(e) => return Err(e),
+        }
         *input = &input[1..];
         ws(input)?;
         let expr = expression(input)?;
@@ -2856,6 +2953,13 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
             ptr_check_expr(function)?;
             arguments.iter().try_for_each(ptr_check_expr)
         }
+        Expression::Closure(c) => {
+            for p in &c.parameters {
+                ptr_check_type(&p.type_name)?;
+            }
+            ptr_check_type(&c.return_type)?;
+            ptr_check_block(&c.body)
+        }
     }
 }
 
@@ -2916,6 +3020,53 @@ mod tests {
     #[test]
     fn parenthesized_expressions_are_not_function_types() {
         let m = parse("f(): int { var a = (1 + 2) * 3; (a) + 1; return (a); }\n");
+        assert_eq!(m.declarations.len(), 1);
+    }
+
+    // ── Closure literals ──
+
+    fn closure(s: &str) -> ClosureLiteral {
+        match parse_expr(s) {
+            Expression::Closure(c) => *c,
+            other => panic!("expected a closure, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn closure_with_an_expression_body() {
+        let c = closure("(x: int, y) => x + y");
+        let params: Vec<String> = c.parameters.iter().map(|p| format!("{}:{}", p.name, p.type_name)).collect();
+        assert_eq!(params, ["x:int", "y:__auto"]);
+        assert!(c.expression_body);
+        assert_eq!(c.return_type.name, AUTO_TYPE);
+        assert_eq!(parse_expr("(x: int, y) => x + y").to_string(), "(x: int, y) => (x + y)");
+    }
+
+    #[test]
+    fn closure_with_a_block_body_and_return_type() {
+        let c = closure("(x): (int) => int => { return (y) => x + y; }");
+        assert!(!c.expression_body);
+        assert_eq!(c.return_type.to_string(), "(int) => int");
+        assert_eq!(c.body.statements.len(), 1);
+        let empty = closure("() => {}");
+        assert!(empty.parameters.is_empty());
+    }
+
+    #[test]
+    fn closure_body_extends_to_the_end_of_the_expression() {
+        let c = closure("(a) => (b) => a + b");
+        let [Statement::Return(ReturnStatement { expr: Some(Expression::Closure(inner)), .. })] = c.body.statements.as_slice() else {
+            panic!("expected a closure returning a closure")
+        };
+        assert_eq!(inner.parameters[0].name, "b");
+    }
+
+    #[test]
+    fn parenthesized_expressions_are_not_closures() {
+        assert!(matches!(parse_expr("(a + b) * 2"), Expression::Binary { .. }));
+        assert!(matches!(parse_expr("c ? (x) : y"), Expression::Ternary { .. }));
+        assert!(matches!(parse_expr("(f)(1)"), Expression::FunctionCall { .. }));
+        let m = parse("f(): int { apply((x) => x * 2, 3); return ((x: int) => x)(1); }\n");
         assert_eq!(m.declarations.len(), 1);
     }
 

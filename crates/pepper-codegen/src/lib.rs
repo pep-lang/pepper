@@ -2023,7 +2023,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             // `x as T` has the cast target's type.
             Expression::Cast { ty, .. } => Some(ty.to_string()),
-            Expression::FunctionRef { ty, .. } => Some(ty.to_string()),
+            Expression::FunctionRef { ty, .. } | Expression::MakeClosure { ty, .. } => Some(ty.to_string()),
             Expression::Invoke { callee, .. } => {
                 let callee_ty = pepper_sema::passes::gather_generics::parse_type_string(&self.value_sema_type(callee)?);
                 callee_ty.function_return().map(|t| t.to_string())
@@ -2117,7 +2117,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         match expr {
             Expression::MethodCall { .. }
             | Expression::FunctionCall { .. }
-            | Expression::Invoke { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
+            | Expression::Invoke { .. }
+            | Expression::MakeClosure { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
             // A ternary of two owned rvalues is one owned rvalue: the arm's
             // creation ref flows into the phi, so the consumer releases it
             // once. Mixed lvalue/rvalue arms are not (C++ yields a copy of
@@ -3036,6 +3037,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.function_object(function, &ty.to_string())?,
             )),
             Expression::Invoke { callee, args } => self.codegen_invoke(callee, args),
+            // The closure struct's constructor call; its result is used as
+            // the function value (the two share their head layout).
+            Expression::MakeClosure { value, .. } => self.codegen_expr(value),
+            Expression::MethodAddress(method) => self.method_address(method),
+            Expression::CallPointer { pointer, args } => self.codegen_call_pointer(pointer, args),
+            Expression::ClosureLiteral(_) => Err("internal error: closure literal was not lifted".to_string()),
             Expression::ToTrait {
                 value, from, to, ..
             } => self.codegen_to_trait(value, from, to),
@@ -3602,6 +3609,38 @@ impl<'ctx> CodeGenerator<'ctx> {
         global.set_linkage(inkwell::module::Linkage::Private);
         global.set_initializer(&init);
         Ok(global.as_pointer_value())
+    }
+
+    /// `MethodAddress(method)`: the entry point of `method` of the struct
+    /// whose constructor is being emitted (a closure struct's `__invoke`
+    /// and `__destroy` defaults).
+    fn method_address(&mut self, method: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        let current = self
+            .frame
+            .function
+            .map(|f| f.get_name().to_string_lossy().into_owned())
+            .ok_or_else(|| "method address outside a function".to_string())?;
+        let name = format!("{}.{}", current, method);
+        let function = *self.functions.get(&name).ok_or_else(|| format!("unknown method {}", name))?;
+        Ok(function.as_global_value().as_pointer_value().into())
+    }
+
+    /// `CallPointer`: call the `void` function at `pointer` with `args`
+    /// (the function type destructor calling a closure's `__destroy`).
+    fn codegen_call_pointer(&mut self, pointer: &Expression, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
+        let target = self.codegen_expr(pointer)?.into_pointer_value();
+        let mut values: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![];
+        let mut types: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = vec![];
+        for arg in args {
+            let v = self.codegen_expr(arg)?;
+            types.push(v.get_type().into());
+            values.push(v.into());
+        }
+        let fn_type = self.context.void_type().fn_type(&types, false);
+        self.builder
+            .build_indirect_call(fn_type, target, &values, "")
+            .map_err(|e| e.to_string())?;
+        Ok(self.context.i32_type().const_zero().into())
     }
 
     /// Call through a function value: load its invoke entry point and call

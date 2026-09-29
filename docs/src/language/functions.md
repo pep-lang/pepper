@@ -141,5 +141,6 @@ message)`, which stops the program with `message` when `condition` is false, and
 ## Functions as values
 
 A function's name used without a call is a value that you can store in a
-variable, pass to another function, or return. See
-[Function types and references](function-types.md).
+variable, pass to another function, or return, and a closure such as
+`(x: int) => x * 2` is a function written where it is used. See
+[Function types and closures](function-types.md).

@@ -87,6 +87,11 @@ To avoid a cycle, make one direction of it a weak reference (next section),
 or break the cycle yourself before the last outside reference goes away:
 clear the container, or overwrite the field, that closes the loop.
 
+A [closure](function-types.md#closures) holds a reference to every struct it
+captures, including `this`, so a closure stored inside an object it captures
+closes a cycle too. The compiler reports the direct case, a method storing a
+closure that captures `this` in a field of `this`.
+
 ## Weak references
 
 A [`Weak<T>`](../reference/weak.md) points at an object without keeping it

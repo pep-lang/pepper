@@ -213,6 +213,13 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 loc: loc(target.span()),
             })
         }
+        ast::Expression::Closure(c) => Ok(Expression::ClosureLiteral(Box::new(ClosureLiteral {
+            parameters: c.parameters.iter().map(|p| variable_def(p, Kind::Param)).collect::<Result<Vec<_>, _>>()?,
+            ty: type_name_from(&c.return_type),
+            body: block(&c.body)?,
+            expression_body: c.expression_body,
+            loc: loc(c.span),
+        }))),
     }
 }
 fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {

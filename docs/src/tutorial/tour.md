@@ -168,7 +168,7 @@ You have now seen most of what you need to write everyday Pepper code. The
 [language guide](../language/types-and-variables.md) covers each topic in
 depth, including features this tour skipped:
 [generics](../language/generics.md),
-[function types](../language/function-types.md),
+[function types and closures](../language/function-types.md),
 [traits and extensions](../language/traits-and-extensions.md),
 [atomics](../language/atomics.md), and
 [calling C](../language/c-interop.md).

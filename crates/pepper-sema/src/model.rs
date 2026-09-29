@@ -279,6 +279,30 @@ pub enum Expression {
         callee: Box<Expression>,
         args: Vec<Expression>,
     },
+    /// A closure literal as written, before `lift_closures` (the first
+    /// step of `struct_body::apply`) turns it into a `MakeClosure`. Never
+    /// reaches the transform passes.
+    ClosureLiteral(Box<ClosureLiteral>),
+    /// Create a closure: `value` constructs the closure's synthesized struct
+    /// (`__closure_N`, holding the captured values), which is used as a
+    /// value of function type `ty`. `closure` names that struct (with its
+    /// generic arguments, `__closure_N<T>`).
+    MakeClosure {
+        value: Box<Expression>,
+        closure: String,
+        ty: TypeName,
+        loc: Loc,
+    },
+    /// The entry point of method `method` of the struct whose constructor
+    /// this appears in, as a `void*`. Only in synthesized closure structs:
+    /// their `__invoke` and `__destroy` field defaults.
+    MethodAddress(String),
+    /// Call the `void` function at `pointer` with `args`. Only in
+    /// synthesized function type structs: the destructor calls `__destroy`.
+    CallPointer {
+        pointer: Box<Expression>,
+        args: Vec<Expression>,
+    },
     /// The iterator a `for` loop drives, built from its source expression:
     /// `source.iterate()` when the source's type declares `iterate()`
     /// (Iterable<T>), else the source itself when it declares `next()` and
@@ -319,10 +343,26 @@ impl Expression {
             | Expression::ArrayIndex { loc, .. }
             | Expression::FunctionCall { loc, .. }
             | Expression::MethodCall { loc, .. }
+            | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. } => *loc,
+            Expression::ClosureLiteral(c) => c.loc,
             _ => Loc::NONE,
         }
     }
+}
+
+/// A closure literal: `(x: int) => x * 2`. Parameters and the return type
+/// written without a type are `auto`.
+#[derive(Debug, Clone)]
+pub struct ClosureLiteral {
+    pub parameters: Vec<VariableDef>,
+    /// The return type (`auto` when not written).
+    pub ty: TypeName,
+    pub body: Block,
+    /// The body was an expression, lowered to `{ return expr; }`.
+    pub expression_body: bool,
+    /// Location of the whole literal.
+    pub loc: Loc,
 }
 
 /// Which weak reference intrinsic an `Expression::Weak` is.

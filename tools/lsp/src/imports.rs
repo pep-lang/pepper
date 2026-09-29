@@ -228,6 +228,12 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
         ast::Expression::MemberAccess { lhs, .. } => in_expression_types(lhs, offset),
         ast::Expression::FunctionCall { function, arguments, .. } => in_expression_types(function, offset)
             .or_else(|| arguments.iter().find_map(|a| in_expression_types(a, offset))),
+        ast::Expression::Closure(c) => c
+            .parameters
+            .iter()
+            .find_map(|p| in_variable(p, offset))
+            .or_else(|| in_type_name(&c.return_type, offset))
+            .or_else(|| in_block(&c.body, offset)),
         ast::Expression::Literal { .. } | ast::Expression::SymbolRef { .. } => None,
     }
 }

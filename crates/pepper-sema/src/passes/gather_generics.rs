@@ -18,7 +18,7 @@ pub fn gather_generics(module: &mut Module) {
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
-                if function.starts_with("__") {
+                if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {
@@ -70,7 +70,7 @@ pub fn gather_generics(module: &mut Module) {
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
-                if function.starts_with("__") {
+                if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {
@@ -97,7 +97,7 @@ pub fn gather_generics(module: &mut Module) {
     for var in &mut module.globals {
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
-                if function.starts_with("__") {
+                if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {
@@ -115,7 +115,7 @@ pub fn gather_generics(module: &mut Module) {
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
-                if function.starts_with("__") {
+                if function.starts_with("__") && !crate::passes::closures::is_closure_struct(function) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {

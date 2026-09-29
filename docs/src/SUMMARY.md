@@ -12,7 +12,7 @@
 - [Types and variables](language/types-and-variables.md)
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)
-- [Function types and references](language/function-types.md)
+- [Function types and closures](language/function-types.md)
 - [Structs](language/structs.md)
 - [Memory and reference counting](language/memory.md)
 - [Generics](language/generics.md)

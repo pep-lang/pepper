@@ -1,8 +1,10 @@
-# Function types and references
+# Function types and closures
 
 Functions in Pepper are values. You can store a function in a variable, a
 field or an array, pass it to another function, and return it. This lets you
 choose behavior at run time: a sort order, a callback, a step in a pipeline.
+A function value is either a named function or a closure, an anonymous
+function written where it is used.
 
 ## Function types
 
@@ -50,6 +52,76 @@ type a short name, and can have type parameters of its own.
 - **Return values.** `pick(true)(5)` calls the function that `pick` returns.
 - **`void` results.** A function without a return value has a function type
   ending in `=> void`, such as `(int) => void`.
+
+## Closures
+
+A closure literal is a parameter list, `=>`, and a body. The body is an
+expression or a block:
+
+```pepper
+{{#include ../../examples/function-types-closures.pep}}
+```
+
+- **Parameter types.** `(x: int) => x * 2` writes the parameter type. When the
+  closure goes straight into a slot of function type (a typed variable, a
+  parameter, an assignment, a `return`, a field), the types come from that
+  slot, so `(a, b) => a + b` is enough. With no slot to take them from, a
+  parameter without a type is an error:
+
+  ```
+  main.pep:2:14: error: cannot infer the type of parameter 'x'; write it: (x: Type) => ...
+  ```
+
+- **Return type.** It is inferred from the body, or from the slot. To write
+  it, put it after the parameters: `(x: int): long => x`.
+- **Body.** An expression body is the value the closure returns. A block body
+  uses `return` like a function. A closure whose type returns `void` can have
+  an expression body such as `() => counter.add(1)`; the value is discarded.
+- **Calling.** A closure is called like any function value, and can be called
+  where it is written: `((x: int) => x + 1)(2)`.
+
+### Captured values
+
+A closure can use the local variables and parameters around it. It keeps a
+copy of each one it uses, made when the closure is created, so it can outlive
+the function that created it (`make_adder` above).
+
+A captured variable must never be assigned, before or after the closure is
+created, inside the closure or outside it. Then the copy and the variable can
+never differ:
+
+```pepper
+var count = 0;
+var f = () => count;
+count = 5;   # error
+```
+
+```
+main.pep:4:5: error: cannot assign to 'count' because a closure captures it
+main.pep:3:19: note: captured here; a closure keeps a copy, so the variable must not change
+```
+
+The rule applies to `++`, `--` and compound assignments too. Only the
+variable is fixed: a captured struct is a reference to the same object, so the
+closure can call its methods and change its fields (`counter` above). To share
+a changing number, capture a struct that holds it, such as a `Counter` or an
+[`Atomic<int>`](atomics.md).
+
+### `this` in methods
+
+A closure written in a method can use `this`, the struct's fields and its
+methods. It captures `this` (one reference to the object), never a copy of
+the fields, so it sees the fields' current values.
+
+Storing such a closure in a field of the same object would make the object
+and the closure keep each other alive forever (a reference cycle), so that
+direct case is an error:
+
+```
+main.pep:4:15: error: storing a closure that captures 'this' in field 'measure' of 'this' creates a reference cycle that is never freed
+```
+
+Capture a [weak reference](memory.md#weak-references) to the object instead.
 
 ## Type checking
 
@@ -99,14 +171,24 @@ reference-counting rules (see [Memory and reference counting](memory.md)).
 Referring to a named function allocates nothing: every reference to `square`
 shares one static function object.
 
+Creating a closure allocates one object holding the captured values, like
+constructing a struct. Copying the closure adds a reference to that object,
+and when the last reference goes, the object releases what it captured.
+
 ## What is not supported yet
 
-- **Closure literals.** Pepper has no anonymous functions yet, such as
-  `(x) => x * 2`, and a function value cannot capture local variables. Only
-  named free functions can be used as values. Closure literals are the next
-  phase of this feature.
 - **Generic functions, methods, constructors and `extern` functions** cannot be
   referenced as values. Naming a generic function without a call reports
   `use of undeclared identifier`, and naming a method without a call
   (`var f = s.get;`) reports `no member named 'get' in 'S'`. To use one of these
-  as a value, write a named free function that calls it.
+  as a value, write a named free function that calls it, or a closure:
+  `(x: int) => s.get(x)`.
+- **Parameter types from generic calls.** A closure's parameter types come
+  from a slot whose type is known where the closure is written. Passing
+  `(x) => x + 1` to a generic function whose parameter is `(T) => T` does not
+  infer `T`; write the argument `apply<int>((x) => x + 1, 2)` or the
+  parameter type `(x: int) => x + 1`.
+- **Closures in trait default methods** cannot use `this` or the members of
+  the struct yet.
+- **C callbacks.** A closure cannot be passed to a C function that expects a
+  function pointer.

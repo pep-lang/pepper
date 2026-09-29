@@ -81,7 +81,7 @@ fn field_is_zero(field: &str) -> Expression {
 /// Zero value for a field type: null reference for struct/pointer types,
 /// 0.0 for floats, 0 for everything else (port of `zero_value` in
 /// `StructGen.cpp:35`).
-fn zero_for(ty: &TypeName) -> Expression {
+pub(crate) fn zero_for(ty: &TypeName) -> Expression {
     if ty.is_pointer() || ty.is_struct() {
         Expression::PointerLiteral
     } else if matches!(ty.name.as_str(), "f32" | "float" | "f64" | "double") {
@@ -386,6 +386,11 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
+    // Closure literals become structs first, so they get bodies below.
+    crate::passes::closures::lift_closures(module);
+    if let Some(error) = crate::errors::take() {
+        return Err(error);
+    }
     crate::passes::resolve_type_aliases::resolve_type_aliases(module);
     if let Some(error) = crate::errors::take() {
         return Err(error);
