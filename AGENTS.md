@@ -123,3 +123,54 @@ The whole model, as a construct mapping:
 
 Everything else — scope exit, parameter exit, store-release-old — follows
 from "every owned value releases exactly once when it goes out of scope".
+
+## Compiler errors are clang-style diagnostics, located at the exact token
+
+Every error the compiler, the language server, or a test harness shows is a
+`pepper_parser::diagnostic::Diagnostic`, rendered like clang:
+
+```
+main.pep:3:16: error: use of undeclared identifier 'nope'
+    3 |     return a + nope;
+      |                ^~~~
+main.pep:1:1: note: declared here
+    1 | ...
+```
+
+- **Always attach a location.** An error without `file:line:col` and a caret
+  is a bug. Locate it at the token the user must change: the name, the
+  operator, the attribute. Do not use the enclosing statement or function.
+  Use a note (`with_note(message, Some(loc))`) when a second place explains
+  the first, such as "declared here", "to match this '{'", or "type alias X
+  declared here".
+- **Word messages like clang.** Start in lowercase, with no trailing period.
+  Put identifiers and types in single quotes (`'x'`, `'Box<int>'`). Say what
+  is wrong and, when it is cheap, what to do instead.
+  - `use of undeclared identifier 'x'`
+  - `no member named 'm' in 'S'`
+  - `too many arguments to 'f': expected 2, have 3`
+  - `expected ';'`
+- **Report errors; never panic** on anything a user can write. Each layer has
+  its own way to do this:
+  - **Parser:** record what was expected at the failure with `expected()` or
+    `cut_expecting()`. The furthest failure wins. `parse_source_diag` turns it
+    into the diagnostic.
+  - **Sema builder:** return `Diagnostic` with `.at(loc(span))`. `loc` stamps
+    the file being built.
+  - **Sema passes:** call `errors::report(diagnostic)` and carry on.
+    `transform_pass` stops after the pass that reported and returns the first
+    error.
+  - **Codegen:** return `Err(String)` from inside a located node.
+    `locate`/`error_loc` attach the innermost node's location, so a new model
+    node that can fail must carry a `loc` and go through the `*_unlocated`
+    wrapper pattern.
+- **Every model node that names something carries a `Loc`.** That covers
+  references, calls, operators and declarations. Nodes that sema synthesizes
+  copy the `Loc` of the source they stand for (a `for` loop's hidden iterator
+  uses the iterable's). Use `Loc::NONE` only when no source exists.
+- **Render only at the boundary.** Driver entry points and test harnesses
+  return `String`s rendered with `module.sources` (or `Program`). Nothing
+  below that formats `file:line:col` by hand.
+- **Test the rendered output** for a new error in
+  `crates/pepper-driver/tests/diagnostic_tests.rs`: the header line, the
+  source line, and the caret.

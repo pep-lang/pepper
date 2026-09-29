@@ -652,3 +652,21 @@ signatures: `sys_posix.pep` (`[Target(!OS(Windows))]`, with Linux/macOS differen
 `Arch(...)`) and `sys_windows.pep` (`[Target(OS(Windows))]`, the UTF-16 `*W` APIs in kernel32). All files of a
 program share one namespace, so the module's C functions (`open`, `read`, `write`, `close`, `stat`, `rename`,
 ...) take those names program-wide, and its private helpers are prefixed `_io_`.
+
+## Compiler errors
+
+Errors are reported like clang's. Each one gives `file:line:column`, the
+message, the source line, and a caret under the exact token. Notes point at
+related places, such as a declaration or the brace a block opened with.
+Output is colored on a terminal unless `NO_COLOR` is set. The language server
+reports the same errors at the same ranges, with the notes as related
+information.
+
+```
+main.pep:3:12: error: 'helper' is private to lib.pep; declare it with 'export' to use it from another file
+    3 |     return helper();
+      |            ^~~~~~
+lib.pep:1:1: note: declared here
+    1 | helper(): int { return 1; }
+      | ^~~~~~
+```
