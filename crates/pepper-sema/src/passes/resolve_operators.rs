@@ -238,6 +238,7 @@ fn compound_index_assign(
         default: Some(get_call),
         hidden: false,
         kind: Kind::Variable,
+        attributes: vec![],
     };
     let set = Expression::MethodCall {
         this: Box::new((**container).clone()),

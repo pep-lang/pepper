@@ -342,3 +342,47 @@ fn continue_skips_iteration() {
         13
     );
 }
+
+// ── [Target] on type aliases and module-scope variables ────────────────────
+
+#[test]
+fn target_selects_type_alias() {
+    // Only the matching alias may survive: with both, the later one would
+    // win on every platform. The pairs are declared in opposite orders so
+    // one of them puts the non-matching alias last on every host.
+    let src = r#"
+[Target(!OS(Windows))] type Handle = int;
+[Target(OS(Windows))] type Handle = long;
+[Target(OS(Windows))] type Other = int;
+[Target(!OS(Windows))] type Other = long;
+test(): int { return (sizeof<Handle>() * 10 + sizeof<Other>()) as int; }
+"#;
+    let expected = if cfg!(windows) { 84 } else { 48 };
+    assert_eq!(compile_jit(src), expected);
+}
+
+#[test]
+fn target_selects_module_variable() {
+    let src = r#"
+[Target(!OS(Windows))] var code = 2;
+[Target(OS(Windows))] var code = 1;
+[Target(OS(Windows))] var other = 3;
+[Target(!OS(Windows))] var other = 4;
+test(): int { return code * 10 + other; }
+"#;
+    // Opposite declaration orders, as in `target_selects_type_alias`.
+    assert_eq!(compile_jit(src), if cfg!(windows) { 13 } else { 24 });
+}
+
+#[test]
+fn target_on_alias_and_variable_is_validated_when_dropped() {
+    for src in [
+        "[Target(OS(Plan9))] type H = int;\ntest(): int { return 0; }",
+        "[Target(OS(Plan9))] var v = 1;\ntest(): int { return 0; }",
+    ] {
+        let ast = pepper_parser::parser::parse_source("test.pep", src).expect("parse error");
+        let mut module: SemaModule = build(&ast).expect("build");
+        let err = pepper_sema::apply_platform_filters(&mut module).expect_err(src);
+        assert!(err.contains("Plan9"), "{src}: unexpected error: {err}");
+    }
+}

@@ -260,6 +260,12 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), String> {
     for x in &module.externs {
         validate(&x.attributes)?;
     }
+    for g in &module.globals {
+        validate(&g.attributes)?;
+    }
+    for a in &module.type_aliases {
+        validate(&a.attributes)?;
+    }
 
     // Top-level functions: keep iff all attributes match. Bodies are walked
     // whether or not the function survives, so a malformed predicate inside is
@@ -304,6 +310,11 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), String> {
     module.traits.retain(|t| keep(&t.attributes).unwrap_or(false));
     module.extensions.retain(|e| keep(&e.attributes).unwrap_or(false));
     module.externs.retain(|x| keep(&x.attributes).unwrap_or(false));
+    // Aliases resolve after this pass with "last definition wins", so a
+    // per-platform pair (`[Target(OS(Windows))] type H = ...;` and its
+    // `!OS(Windows)` twin) must lose its dropped half here.
+    module.globals.retain(|g| keep(&g.attributes).unwrap_or(false));
+    module.type_aliases.retain(|a| keep(&a.attributes).unwrap_or(false));
 
     // Members of surviving declarations: drop the ones that don't match.
     for s in &mut module.structs {

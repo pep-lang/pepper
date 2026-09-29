@@ -303,6 +303,9 @@ pub struct VariableDef {
     /// Hidden internal var (e.g. the ctor's `size`).
     pub hidden: bool,
     pub kind: Kind,
+    /// Source attributes; only module-scope variables use them
+    /// (`[Target(...)]` platform selection).
+    pub attributes: Vec<ast::Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -418,6 +421,8 @@ pub struct TypeAliasDef {
     pub name: String,
     pub generic_params: Vec<GenericParam>,
     pub target: TypeName,
+    /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
+    pub attributes: Vec<ast::Attribute>,
 }
 
 #[derive(Debug, Clone)]

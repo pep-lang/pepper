@@ -1971,8 +1971,22 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
     }
     let before = *input;
     if !leading.is_empty() {
-        // Attributes commit the statement to a function definition.
-        return Ok(Declaration::Function(function_declaration(input, leading)?));
+        // Attributed declarations are functions or module-scope variables
+        // (`[Target(OS(Windows))] var x = 1;`). Try the function first and
+        // report its error if neither parses, so a malformed attributed
+        // function keeps its diagnostic.
+        let function_err = match function_declaration(input, leading.clone()) {
+            Ok(f) => return Ok(Declaration::Function(f)),
+            Err(e) => e,
+        };
+        *input = before;
+        if let Ok(v) = variable_declaration(input, leading) {
+            if decl_boundary(input) {
+                return Ok(Declaration::Variable(v));
+            }
+        }
+        *input = before;
+        return Err(function_err);
     }
     if let Ok(f) = function_declaration(input, vec![]) {
         return Ok(Declaration::Function(f));
@@ -3121,6 +3135,21 @@ mod tests {
     }
 
     #[test]
+    fn test_attributed_module_variable() {
+        // Module-scope variables take attributes (for `[Target(...)]`).
+        let m = parse("[Target(OS(Windows))] var x = 1;\n[Target(!OS(Windows))] int y = 2;");
+        for (decl, name) in m.declarations.iter().zip(["x", "y"]) {
+            match decl {
+                Declaration::Variable(v) => {
+                    assert_eq!(v.name, name);
+                    assert_eq!(v.attributes.len(), 1);
+                }
+                other => panic!("{:?}", other),
+            }
+        }
+    }
+
+    #[test]
     fn test_attribute_errors() {
         // Malformed attributes and attributes in unsupported positions must be rejected.
         let bad_sources = [
@@ -3128,7 +3157,6 @@ mod tests {
             "[A f() {}",
             "[] f() {}",
             "[1] f() {}",
-            "[A] var x = 1;",
             "[A] { }",
             "[A(1+] f() {}",
         ];

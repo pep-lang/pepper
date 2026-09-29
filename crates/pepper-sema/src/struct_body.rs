@@ -33,6 +33,7 @@ fn var_def(name: &str, ty: TypeName, default: Option<Expression>, hidden: bool) 
         default,
         hidden,
         kind: Kind::Variable,
+        attributes: vec![],
     }
 }
 

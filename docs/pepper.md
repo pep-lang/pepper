@@ -275,10 +275,13 @@ in the function signature are automatically lowered to C types, with object refe
 
 The `[Target(...)]` attribute selects code for the compile target, which is always the host
 platform. It takes exactly one argument: a boolean expression built from `OS(...)` and `Arch(...)`
-calls. It can be attached to top-level functions, externs, structs, traits, extensions, struct/trait/
-extension methods, and to blocks inside function bodies:
+calls. It can be attached to top-level functions, externs, structs, traits, extensions, type aliases,
+module-scope variables, struct/trait/extension methods, and to blocks inside function bodies:
 
 ```
+[Target(OS(Windows))] type FileHandle = __ptr<void>;
+[Target(!OS(Windows))] type FileHandle = int;
+
 [Target(OS(Windows))]
 int window_width() { return 80; }
 

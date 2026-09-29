@@ -186,6 +186,7 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Str
         default: decl.default_value.as_ref().map(expression).transpose()?,
         hidden: false,
         kind,
+        attributes: decl.attributes.clone(),
     })
 }
 
@@ -422,6 +423,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                 name: t.name.clone(),
                 generic_params: t.generic_params.iter().map(generic_param_from).collect(),
                 target: type_name_from(&t.target),
+                attributes: t.attributes.clone(),
             }),
         }
     }
