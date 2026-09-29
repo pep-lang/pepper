@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -206,20 +206,6 @@
 <ul>
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
 </ul>
-<h2 id="none"><a class="header" href="#none">None</a></h2>
-<pre><code class="language-pepper">struct None
-</code></pre>
-<p>The value of a result that carries no value on success, like Rust’s <code>()</code>
-in <code>Result&lt;(), E&gt;</code>: <code>Result&lt;None&gt;.ok(None())</code>.</p>
-<p>Has no fields; every <code>None</code> is interchangeable with any other.</p>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    check(bool good): Result&lt;None&gt; {
-        if (good) {
-            return Result&lt;None&gt;.ok(None());
-        }
-        return Result&lt;None&gt;.err(Error("bad"));
-    }
-</code></pre>
 <h2 id="result-1"><a class="header" href="#result-1">Result</a></h2>
 <pre><code class="language-pepper">struct Result&lt;TValue, TError=Error&gt;
 </code></pre>
@@ -231,15 +217,19 @@ the <code>Error</code> fields always exist; only the one matching <code>IsOk</co
 meaningful, and the other keeps its default (zero for a POD type, null for
 a struct type, so do not read through it). <code>TError</code> defaults to <code>Error</code>,
 so <code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
+<p><code>Result&lt;void&gt;</code> is the result of an operation that returns nothing on
+success, like Rust’s <code>Result&lt;(), E&gt;</code>. A <code>void</code> type argument erases what
+it types: that instance has no <code>Value</code> field, <code>ok()</code> takes no argument,
+and <code>value()</code> returns nothing, so it only checks that the result is Ok.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>TValue</code> — the type of the value an Ok result carries; use <code>None</code> when there is no value</li>
+<li><code>TValue</code> — the type of the value an Ok result carries; <code>void</code> when there is none</li>
 <li><code>TError</code> — the type of the error an Err result carries; defaults to <code>Error</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    main(): int {
         var a = Result&lt;int&gt;.ok(42);
-        if (a.unwrap() != 42) { return 1; }
+        if (a.value() != 42) { return 1; }
         var b = Result&lt;int&gt;.err(Error("boom"));
         if (!b.is_err()) { return 2; }
         return b.ok_or(0);   # 0
@@ -274,6 +264,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </code></pre>
 <p>Returns an Ok result holding <code>v</code>.</p>
 <p>For a struct <code>TValue</code> the result acquires a reference to <code>v</code>.</p>
+<p>For <code>Result&lt;void&gt;</code>, <code>ok()</code> takes no argument.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>v</code> — the success value</li>
@@ -284,6 +275,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.ok(42);
+    var done = Result&lt;void&gt;.ok();
 </code></pre>
 <h4 id="err"><a class="header" href="#err">err</a></h4>
 <pre><code class="language-pepper">static Result&lt;TValue, TError&gt; err(TError e)
@@ -318,22 +310,24 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <ul>
 <li>true when <code>Error</code> holds the outcome</li>
 </ul>
-<h4 id="unwrap"><a class="header" href="#unwrap">unwrap</a></h4>
-<pre><code class="language-pepper">TValue unwrap()
+<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<pre><code class="language-pepper">TValue value()
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
 <p>For a struct <code>TValue</code> the caller gets its own reference; the result
 keeps its reference too.</p>
+<p>For <code>Result&lt;void&gt;</code> it returns nothing: calling it only checks that the
+result is Ok.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the <code>Value</code> of an Ok result</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>this.IsOk</code> does not hold, that is, the result is Err (“Result::unwrap on an Err value”)</li>
+<li>if <code>this.IsOk</code> does not hold, that is, the result is Err (“Result.value on an Err value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).unwrap();   # 42
+<pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
 </code></pre>
 <h4 id="ok_or"><a class="header" href="#ok_or">ok_or</a></h4>
 <pre><code class="language-pepper">TValue ok_or(TValue fallback)

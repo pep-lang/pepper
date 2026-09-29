@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -244,8 +244,9 @@ structs for you; some library types offer a method for it, such as
 </ul>
 <p>A struct-typed variable or field that has not been given a value, such as
 <code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
-calling a method through a null reference crashes the program. Use <code>===</code> to
-check whether two references name the same object.</p>
+calling a method through a null reference crashes the program. Use <code>===</code> or
+<code>!==</code> to check whether two references name the same object, or whether one is
+null (<code>next === __null</code>).</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an

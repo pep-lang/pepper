@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -413,7 +413,7 @@ parse_number(text: String): Result&lt;int&gt; {
 main(): int {
     var good = parse_number("2026");
     assert(good.is_ok(), "digits parse");
-    assert(good.unwrap() == 2026, "unwrap returns the value");
+    assert(good.value() == 2026, "value() returns the value");
 
     var bad = parse_number("12x");
     assert(bad.is_err(), "x is not a digit");
@@ -429,7 +429,7 @@ main(): int {
 <code>Result&lt;int&gt;.ok(value)</code> or <code>Result&lt;int&gt;.err(Error("message"))</code>.</li>
 <li><code>is_ok()</code> and <code>is_err()</code> tell you which one you have. <code>Value</code> and <code>Error</code>
 are its fields; <code>Error.Message</code> is the error’s text.</li>
-<li><code>unwrap()</code> returns the value, and stops the program if there is none. Use it
+<li><code>value()</code> returns the value, and stops the program if there is none. Use it
 only when an error would be a bug. <code>ok_or(fallback)</code> returns the value, or
 <code>fallback</code> if there is none.</li>
 </ul>
@@ -504,7 +504,7 @@ main(): int {
 
     var result = count_file(path);
     assert(result.is_ok(), "the file we just wrote can be read");
-    var counter = result.unwrap();
+    var counter = result.value();
     for (var word in counter.order) {
         print(word);
         print(counter.count(word));

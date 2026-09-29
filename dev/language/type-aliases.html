@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -273,7 +273,7 @@ main(): int {
     assert(ages.contains("Ada"), "Lookup&lt;int&gt; is HashMap&lt;String, int&gt;");
 
     # Outcome&lt;int&gt; fills E with its default: Result&lt;int, Error&gt;.
-    assert(parse_digit("7").unwrap() == 7, "ok");
+    assert(parse_digit("7").value() == 7, "ok");
     assert(parse_digit("x").is_err(), "err");
     return 0;
 }

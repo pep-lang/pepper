@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -306,7 +306,7 @@ can still be renamed or removed afterwards.</p>
     }
 </code></pre>
 <h4 id="create"><a class="header" href="#create">create</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; create(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; create(Path path)
 </code></pre>
 <p>Creates one directory (<code>mkdir</code> on POSIX, with mode 0777 less the
 umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.</p>
@@ -316,14 +316,14 @@ umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the directory cannot be created: <code>is_already_exists()</code> when anything (a file too) is already at <code>path</code>, <code>is_not_found()</code> when the parent is missing or the path is empty, <code>is_permission_denied()</code> when the parent is not writable</li>
+<li>an Ok result on success; an error when the directory cannot be created: <code>is_already_exists()</code> when anything (a file too) is already at <code>path</code>, <code>is_not_found()</code> when the parent is missing or the path is empty, <code>is_permission_denied()</code> when the parent is not writable</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>create_all</code></li>
 </ul>
 <h4 id="create_all"><a class="header" href="#create_all">create_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; create_all(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; create_all(Path path)
 </code></pre>
 <p>Creates a directory and any missing parents, like <code>mkdir -p</code>.
 Succeeds without doing anything when <code>path</code> is empty or already a
@@ -337,7 +337,7 @@ directories at the same time.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when a directory cannot be created: <code>is_already_exists()</code> when a file (not a directory) is at <code>path</code> or at one of its parents, <code>is_permission_denied()</code>, and so on. Parents created before the failure are left in place</li>
+<li>an Ok result on success; an error when a directory cannot be created: <code>is_already_exists()</code> when a file (not a directory) is at <code>path</code> or at one of its parents, <code>is_permission_denied()</code>, and so on. Parents created before the failure are left in place</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
@@ -345,7 +345,7 @@ directories at the same time.</p>
     var r = io.Directory.create_all(io.Path("build").join_str("out").join_str("logs"));
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
 </code></pre>
 <p>Removes an empty directory (<code>rmdir</code> on POSIX, <code>RemoveDirectoryW</code> on
 Windows).</p>
@@ -355,14 +355,14 @@ Windows).</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when it cannot be removed: <code>is_directory_not_empty()</code> when it still has entries, <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when <code>path</code> is a file, <code>is_permission_denied()</code></li>
+<li>an Ok result on success; an error when it cannot be removed: <code>is_directory_not_empty()</code> when it still has entries, <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when <code>path</code> is a file, <code>is_permission_denied()</code></li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>remove_all</code></li>
 </ul>
 <h4 id="remove_all"><a class="header" href="#remove_all">remove_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove_all(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove_all(Path path)
 </code></pre>
 <p>Removes <code>path</code> and, if it is a directory, everything inside it,
 recursively. Symlinks are removed, never followed, so nothing outside
@@ -377,7 +377,7 @@ Windows a read-only file inside the tree is such a failure
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when something cannot be removed: <code>is_not_found()</code> when <code>path</code> does not exist (unlike <code>rm -rf</code>, a missing path is an error) or is empty, <code>is_permission_denied()</code>, and so on</li>
+<li>an Ok result on success; an error when something cannot be removed: <code>is_not_found()</code> when <code>path</code> does not exist (unlike <code>rm -rf</code>, a missing path is an error) or is empty, <code>is_permission_denied()</code>, and so on</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
@@ -406,7 +406,7 @@ are resolved (<code>getcwd</code> on POSIX, <code>GetCurrentDirectoryW</code> on
 <li><code>set_current</code></li>
 </ul>
 <h4 id="set_current"><a class="header" href="#set_current">set_current</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; set_current(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; set_current(Path path)
 </code></pre>
 <p>Changes the process’s current directory (<code>chdir</code> on POSIX,
 <code>SetCurrentDirectoryW</code> on Windows). This affects the whole process,
@@ -418,7 +418,7 @@ resolve against the new directory.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when it is a file, <code>is_permission_denied()</code></li>
+<li>an Ok result on success; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when it is a file, <code>is_permission_denied()</code></li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>

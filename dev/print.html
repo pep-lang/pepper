@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -382,8 +382,8 @@ Store the message in a variable first, then misspell its name:</p>
 color off. The chapter on <a href="#compiler-errors">compiler errors</a>
 covers them in more detail.</p>
 <p>A failed <code>assert</code> or a <code>panic</code> at run time prints its message and stops the
-program abnormally. For example, <code>unwrap()</code> on a failed <code>Result</code> prints
-<code>Result::unwrap on an Err value</code>.</p>
+program abnormally. For example, <code>value()</code> on a failed <code>Result</code> prints
+<code>Result.value on an Err value</code>.</p>
 <h2 id="useful-compiler-options"><a class="header" href="#useful-compiler-options">Useful compiler options</a></h2>
 <div class="table-wrapper">
 <table>
@@ -669,7 +669,7 @@ parse_number(text: String): Result&lt;int&gt; {
 main(): int {
     var good = parse_number("2026");
     assert(good.is_ok(), "digits parse");
-    assert(good.unwrap() == 2026, "unwrap returns the value");
+    assert(good.value() == 2026, "value() returns the value");
 
     var bad = parse_number("12x");
     assert(bad.is_err(), "x is not a digit");
@@ -685,7 +685,7 @@ main(): int {
 <code>Result&lt;int&gt;.ok(value)</code> or <code>Result&lt;int&gt;.err(Error("message"))</code>.</li>
 <li><code>is_ok()</code> and <code>is_err()</code> tell you which one you have. <code>Value</code> and <code>Error</code>
 are its fields; <code>Error.Message</code> is the error’s text.</li>
-<li><code>unwrap()</code> returns the value, and stops the program if there is none. Use it
+<li><code>value()</code> returns the value, and stops the program if there is none. Use it
 only when an error would be a bug. <code>ok_or(fallback)</code> returns the value, or
 <code>fallback</code> if there is none.</li>
 </ul>
@@ -760,7 +760,7 @@ main(): int {
 
     var result = count_file(path);
     assert(result.is_ok(), "the file we just wrote can be read");
-    var counter = result.unwrap();
+    var counter = result.value();
     for (var word in counter.order) {
         print(word);
         print(counter.count(word));
@@ -987,7 +987,7 @@ nothing.</li>
 and <code>int[][]</code> for <code>Array&lt;Array&lt;int&gt;&gt;</code>. See <a href="#array"><code>Array</code></a>.</li>
 <li><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> are hash tables. See
 <a href="#hashmap-and-hashset">HashMap and HashSet</a>.</li>
-<li><code>Result&lt;TValue, TError&gt;</code>, <code>Error</code> and <code>None</code> describe operations that can
+<li><code>Result&lt;TValue, TError&gt;</code> and <code>Error</code> describe operations that can
 fail. See <a href="#error-handling-with-result">Error handling with Result</a>.</li>
 <li><code>Atomic&lt;T&gt;</code> is a value that threads can update safely. See
 <a href="#atomics">Atomics</a> and <a href="#threads-and-shared-data">Threads and shared data</a>.</li>
@@ -1199,6 +1199,8 @@ main(): int {
     var small = 3 &lt; 5;
     assert(small, "3 &lt; 5");
     assert(5 &gt;= 5 &amp;&amp; 4 &lt;= 5 &amp;&amp; 6 &gt; 5 &amp;&amp; 5 == 5 &amp;&amp; 5 != 6, "comparisons");
+    # On numbers, `===` and `!==` are the same as `==` and `!=`.
+    assert(5 === 5 &amp;&amp; 5 !== 6, "identity on numbers");
 
     # Logical operators; 'and' and 'or' are spellings of &amp;&amp; and ||.
     var t = true;
@@ -1244,7 +1246,7 @@ main(): int {
 <tbody>
 <tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code>, unary <code>-</code> and <code>+</code></td></tr>
 <tr><td>Comparison</td><td><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td></tr>
-<tr><td>Identity</td><td><code>===</code> (two references to the same object)</td></tr>
+<tr><td>Identity</td><td><code>===</code> <code>!==</code> (two references to the same object; plain equality for numbers and <code>bool</code>)</td></tr>
 <tr><td>Logical</td><td><code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>~</code> <code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr>
 <tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
@@ -1264,7 +1266,6 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 <ul>
 <li><strong><code>**</code> works only on integers.</strong> A floating-point operand is a compile error
 (<code>unsupported op Pow</code>).</li>
-<li><strong><code>===</code></strong> compares struct references. It is not supported for numbers.</li>
 </ul>
 <p>Operators bind in this order, tightest first:</p>
 <ol>
@@ -1277,7 +1278,7 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 <li><code>+</code>, <code>-</code></li>
 <li><code>&lt;&lt;</code>, <code>&gt;&gt;</code></li>
 <li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
-<li><code>==</code>, <code>!=</code>, <code>===</code></li>
+<li><code>==</code>, <code>!=</code>, <code>===</code>, <code>!==</code></li>
 <li><code>&amp;</code></li>
 <li><code>|</code>, <code>^</code></li>
 <li><code>&amp;&amp;</code>, <code>and</code></li>
@@ -1552,6 +1553,9 @@ void log_c(String message) { print(message); }
     print(n);
 }
 </code></pre>
+<p>A call to such a function has no value, so it cannot be stored, passed,
+returned, or used as an operand or condition: <code>var x = log("hi");</code> reports
+<code>cannot use a value of type 'void' as variable 'x'</code>.</p>
 <p>In a function that returns a value, <code>return;</code> is an error:</p>
 <pre><code class="language-text">main.pep:2:5: error: non-void function 'f' should return a value
     2 |     return;
@@ -1629,7 +1633,10 @@ main(): int {
 <p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
 <code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
-<code>panic(message)</code>. See <a href="#built-in-functions">Built-in functions</a>.</p>
+<code>panic(message)</code>, which always stops it. Both take the message as a <code>String</code>, so
+it can be built at run time (<code>assert(n &gt; 0, name + " must be positive")</code>); a
+string literal message costs nothing when the assertion holds. See
+<a href="#built-in-functions">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as
@@ -2116,7 +2123,8 @@ program, so give struct-typed fields a value before you use them.</li>
 <li>A struct with no constructor can be created with its name and empty
 parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the call site.</li>
 <li><code>p.x</code> reads a field and <code>p.x = 3</code> writes it.</li>
-<li><code>a === b</code> is true when <code>a</code> and <code>b</code> refer to the same object. See
+<li><code>a === b</code> is true when <code>a</code> and <code>b</code> refer to the same object, and <code>a !== b</code>
+when they do not. See
 <a href="#comparing-structs">Comparing structs</a> for <code>==</code>.</li>
 </ul>
 <p>A struct can have a field whose type is a struct declared later in the file.
@@ -2356,6 +2364,10 @@ main(): int {
     var price = Money(250);
     assert(price == Money(250), "== compares cents");
     assert(price != Money(100), "!= compares cents");
+    # `===` and `!==` always compare identity: equal cents, different objects.
+    assert(price !== Money(250), "!== compares identity");
+    var same = price;
+    assert(same === price, "=== is true for the same object");
 
     var total = price + Money(50);
     assert(total.cents == 300, "+ makes a new value");
@@ -2410,8 +2422,9 @@ yet, because the parser reads the <code>&lt;</code> as the start of generic argu
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
 for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
-count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> always
-compares identity, whatever methods the struct declares.</p>
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
+<code>!==</code> always compare identity, whatever methods the struct declares, so
+<code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it with the element type,
 <code>[]</code>, and parameters, but no name:</p>
@@ -2488,8 +2501,9 @@ structs for you; some library types offer a method for it, such as
 </ul>
 <p>A struct-typed variable or field that has not been given a value, such as
 <code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
-calling a method through a null reference crashes the program. Use <code>===</code> to
-check whether two references name the same object.</p>
+calling a method through a null reference crashes the program. Use <code>===</code> or
+<code>!==</code> to check whether two references name the same object, or whether one is
+null (<code>next === __null</code>).</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an
@@ -2893,7 +2907,7 @@ main(): int {
     # The standard library's Result uses a default the same way:
     # Result&lt;int&gt; means Result&lt;int, Error&gt;.
     var ok = Result&lt;int&gt;.ok(42);
-    assert(ok.unwrap() == 42, "Result with the default error type");
+    assert(ok.value() == 42, "Result with the default error type");
     return 0;
 }
 </code></pre>
@@ -3033,7 +3047,7 @@ main(): int {
     assert(ages.contains("Ada"), "Lookup&lt;int&gt; is HashMap&lt;String, int&gt;");
 
     # Outcome&lt;int&gt; fills E with its default: Result&lt;int, Error&gt;.
-    assert(parse_digit("7").unwrap() == 7, "ok");
+    assert(parse_digit("7").value() == 7, "ok");
     assert(parse_digit("x").is_err(), "err");
     return 0;
 }
@@ -3828,7 +3842,7 @@ caller checks which one it got before using the value. Pepper has no
 exceptions, so <code>Result</code> is how a function reports a failure the caller is
 expected to handle. For a failure that should stop the program, such as a
 broken invariant, use <code>assert</code> or <code>panic</code> instead.</p>
-<p><code>Result</code>, <code>Error</code>, and <code>None</code> are part of the runtime, so you can use them
+<p><code>Result</code> and <code>Error</code> are part of the runtime, so you can use them
 without an import. The <a href="#result">Result reference</a> lists every
 member.</p>
 <h2 id="creating-and-checking-results"><a class="header" href="#creating-and-checking-results">Creating and checking results</a></h2>
@@ -3847,7 +3861,7 @@ main(): int {
     var good = parse_digit("2");
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
-    assert(good.unwrap() == 2, "unwrap returns the value");
+    assert(good.value() == 2, "value() returns the value");
     assert(good.Value == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
@@ -3860,16 +3874,16 @@ main(): int {
 
     # Result&lt;int&gt; is short for Result&lt;int, Error&gt;.
     Result&lt;int, Error&gt; spelled_out = good;
-    assert(spelled_out.unwrap() == 2, "the same type");
+    assert(spelled_out.value() == 2, "the same type");
 
     # A default-constructed Result is an Err with a default error.
     var empty = Result&lt;int&gt;();
     assert(empty.is_err(), "Result() is an Err");
 
-    # An operation with no value to return uses None.
-    var done = Result&lt;None&gt;.ok(None());
-    var failed = Result&lt;None&gt;.err(Error("disk full"));
-    assert(done.is_ok() &amp;&amp; failed.is_err(), "Result&lt;None&gt; works like any other");
+    # An operation with no value to return uses void.
+    var done = Result&lt;void&gt;.ok();
+    var failed = Result&lt;void&gt;.err(Error("disk full"));
+    assert(done.is_ok() &amp;&amp; failed.is_err(), "Result&lt;void&gt; works like any other");
     return 0;
 }
 </code></pre>
@@ -3883,7 +3897,7 @@ main(): int {
 <tr><td><code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
 <tr><td><code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
 <tr><td><code>is_ok()</code>, <code>is_err()</code></td><td>Report which kind the result is.</td></tr>
-<tr><td><code>unwrap()</code></td><td>Returns the value; panics with <code>Result::unwrap on an Err value</code> if the result is an Err.</td></tr>
+<tr><td><code>value()</code></td><td>Returns the value; panics with <code>Result.value on an Err value</code> if the result is an Err.</td></tr>
 <tr><td><code>ok_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the result is an Err. Never panics.</td></tr>
 <tr><td><code>Value</code>, <code>Error</code>, <code>IsOk</code></td><td>The fields behind the methods.</td></tr>
 </tbody>
@@ -3893,7 +3907,7 @@ main(): int {
 values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). <code>Error</code> is a struct
 with one field, <code>String Message</code>: <code>Error("boom").Message</code> is <code>"boom"</code>.</p>
-<p>Use <code>unwrap()</code> when an Err would be a bug in your program, since it stops the
+<p>Use <code>value()</code> when an Err would be a bug in your program, since it stops the
 program. When an Err is an expected outcome, test with <code>is_ok()</code> or <code>is_err()</code>,
 or supply a fallback with <code>ok_or</code>.</p>
 <h3 id="both-fields-always-exist"><a class="header" href="#both-fields-always-exist">Both fields always exist</a></h3>
@@ -3904,10 +3918,14 @@ checking <code>is_ok()</code>, and <code>Error</code> only after checking <code>
 field through a null struct reference crashes the program.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
-uses <code>None</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. <code>None</code> is an empty
-struct:</p>
-<pre><code class="language-pepper">var done = Result&lt;None&gt;.ok(None());
-var failed = Result&lt;None&gt;.err(Error("disk full"));
+uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
+argument erases what it types, so <code>Result&lt;void&gt;</code> has no <code>Value</code> field, <code>ok()</code>
+takes no argument, and <code>value()</code> returns nothing: calling it only checks that
+the result is Ok. Using that call as a value, as in <code>var x = done.value();</code>, is
+a compile error, as it is for any function that returns <code>void</code>.</p>
+<pre><code class="language-pepper">var done = Result&lt;void&gt;.ok();
+var failed = Result&lt;void&gt;.err(Error("disk full"));
+done.value();   # panics if `done` is an Err
 </code></pre>
 <h2 id="custom-error-types-and-propagation"><a class="header" href="#custom-error-types-and-propagation">Custom error types and propagation</a></h2>
 <p>Any type can be the error type. A struct lets you carry details the caller can
@@ -3965,21 +3983,21 @@ add_numbers(String a, String b): Result&lt;int, ParseError&gt; {
 }
 
 # Convert an error into another type on the way out.
-check_total(String a, String b, int limit): Result&lt;None&gt; {
+check_total(String a, String b, int limit): Result&lt;void&gt; {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.Error;
-        return Result&lt;None&gt;.err(Error("bad number '" + e.Input + "'"));
+        return Result&lt;void&gt;.err(Error("bad number '" + e.Input + "'"));
     }
     if (sum.Value &gt; limit) {
-        return Result&lt;None&gt;.err(Error("total is over the limit"));
+        return Result&lt;void&gt;.err(Error("total is over the limit"));
     }
-    return Result&lt;None&gt;.ok(None());
+    return Result&lt;void&gt;.ok();
 }
 
 main(): int {
     var sum = add_numbers("40", "2");
-    assert(sum.unwrap() == 42, "40 + 2");
+    assert(sum.value() == 42, "40 + 2");
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
@@ -4001,7 +4019,7 @@ as shown above.</p>
 <p>The <a href="#the-io-module">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
 alias for <code>Result&lt;T, IoError&gt;</code>, and operations with nothing to return use
-<code>IoResult&lt;None&gt;</code>. <code>IoError</code> holds the platform’s error <code>Code</code> and a <code>Message</code>,
+<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>Code</code> and a <code>Message</code>,
 and has predicates such as <code>is_not_found()</code> and <code>is_permission_denied()</code> for
 deciding what to do about the failure:</p>
 <pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError] from io;
@@ -4026,7 +4044,7 @@ main(): int {
     var path = dir.join_str("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
 
-    IoResult&lt;None&gt; written = File.write_text(path, "blue");
+    IoResult&lt;void&gt; written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");
     assert(read_setting(path) == "blue", "the file's contents");
 
@@ -5845,53 +5863,38 @@ of the page to read the reference for another release.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/internals.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
 <p>Source: <code>runtime/internals.pep</code></p>
-<h2 id="memcpy"><a class="header" href="#memcpy">memcpy</a></h2>
-<pre><code class="language-pepper">extern void memcpy(void* dest, void* src, ulong n)
-</code></pre>
-<p>Copies <code>n</code> bytes from <code>src</code> to <code>dest</code> (the C library’s <code>memcpy</code>).</p>
-<p>The regions must not overlap, and both must be valid for <code>n</code> bytes.
-Nothing is bounds-checked, and no reference counts change: copying a
-struct reference with it neither acquires nor releases. Runs in O(n).
-This declaration discards C’s return value.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>dest</code> — the start of the destination region, a <code>__ptr&lt;void&gt;</code></li>
-<li><code>src</code> — the start of the source region, a <code>__ptr&lt;void&gt;</code></li>
-<li><code>n</code> — the number of bytes to copy; 0 copies nothing</li>
-</ul>
 <h2 id="assert"><a class="header" href="#assert">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, msg: __ptr&lt;char&gt;): void
+<pre><code class="language-pepper">assert(condition: bool, message: String): void
 </code></pre>
-<p>Panics with <code>msg</code> when <code>condition</code> is false; otherwise does nothing.</p>
-<p>The check always runs; there is no release mode that removes it.
-The message is a raw <code>__ptr&lt;char&gt;</code> (C <code>char*</code>), not a <code>String</code>. A string
-literal is passed as its global pointer with no temporary allocation,
-which keeps hot paths like array index bounds checks allocation-free. A
-non-literal <code>String</code> message is lowered to <code>msg.c_str()</code> at the call site.</p>
+<p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
+<p>The check always runs; there is no release mode that removes it. A
+string literal message costs nothing when the assertion holds: the
+compiler passes the literal’s constant bytes to the runtime without
+building a <code>String</code>. Any other message is evaluated before the call.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
-<li><code>msg</code> — the NUL-terminated message to print on failure; <code>__null</code> prints a generic message</li>
+<li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>condition</code> is false: prints <code>msg</code> and aborts (see <code>panic</code>)</li>
+<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="panic"><a class="header" href="#panic">panic</a></h2>
-<pre><code class="language-pepper">panic(msg: __ptr&lt;char&gt;)
+<pre><code class="language-pepper">panic(message: String)
 </code></pre>
-<p>Prints <code>msg</code> and aborts the program. It never returns.</p>
-<p>Writes <code>msg</code> and a newline to standard output with <code>puts</code>, or
-“Assertion failed with no additional information” when <code>msg</code> is
-<code>__null</code>. Then it flushes every C output stream, so the message is not
-lost when stdout is a pipe, and calls C <code>abort()</code>. No destructors or
-releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
+<p>Prints <code>message</code> and aborts the program. It never returns.</p>
+<p>Writes <code>message</code> and a newline to standard output, or “Assertion failed
+with no additional information” when <code>message</code> is null. Then it flushes
+every C output stream, so the message is not lost when stdout is a pipe,
+and calls C <code>abort()</code>. No destructors or releases run, and the process
+ends abnormally (SIGABRT on POSIX).</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>msg</code> — the NUL-terminated message to print, or <code>__null</code></li>
+<li><code>message</code> — the text to print</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -5899,55 +5902,6 @@ releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    panic("unreachable");
-</code></pre>
-<h2 id="trace_region"><a class="header" href="#trace_region">trace_region</a></h2>
-<pre><code class="language-pepper">trace_region(ptr: __ptr&lt;void&gt;, size: ulong, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name</code>, the address <code>ptr</code>, and the first 8 bytes at <code>ptr</code> when
-tracing is on. Does nothing otherwise.</p>
-<p>Tracing is on when the <code>PEP_TRACE</code> environment variable is set to any
-value, even an empty one. It is read once at program start. The line has
-the form <code>name: AAAAAAAAAAAAAAAAWWWWWWWWWWWWWWWW</code>: 16 uppercase hex
-digits of the address, then, with no separator, the first 8 bytes read as
-a little-endian 64-bit word. The word is omitted when <code>ptr</code> is <code>__null</code>
-or <code>size</code> is less than 8. Only those 8 bytes are read, whatever <code>size</code> is.
-The line goes to standard output.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>ptr</code> — the start of the region to trace</li>
-<li><code>size</code> — the region’s size in bytes; the word is printed only when it is at least 8</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<h2 id="trace_ptr"><a class="header" href="#trace_ptr">trace_ptr</a></h2>
-<pre><code class="language-pepper">trace_ptr(ptr: __ptr&lt;void&gt;, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name: </code> followed by the address <code>ptr</code> as 16 uppercase hex digits
-when tracing is on (the <code>PEP_TRACE</code> environment variable is set, checked
-once at program start). Does nothing otherwise.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>ptr</code> — the address to print; it is not dereferenced</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<h2 id="trace_int"><a class="header" href="#trace_int">trace_int</a></h2>
-<pre><code class="language-pepper">trace_int(value: long, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name: </code> followed by <code>value</code> in signed decimal when tracing is on
-(the <code>PEP_TRACE</code> environment variable is set, checked once at program
-start). Does nothing otherwise.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — the number to print</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    trace_int(count, "count");   # prints "count: 3" under PEP_TRACE=1
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/string.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="string"><a class="header" href="#string">String</a></h1>
@@ -7749,20 +7703,6 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <ul>
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
 </ul>
-<h2 id="none"><a class="header" href="#none">None</a></h2>
-<pre><code class="language-pepper">struct None
-</code></pre>
-<p>The value of a result that carries no value on success, like Rust’s <code>()</code>
-in <code>Result&lt;(), E&gt;</code>: <code>Result&lt;None&gt;.ok(None())</code>.</p>
-<p>Has no fields; every <code>None</code> is interchangeable with any other.</p>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    check(bool good): Result&lt;None&gt; {
-        if (good) {
-            return Result&lt;None&gt;.ok(None());
-        }
-        return Result&lt;None&gt;.err(Error("bad"));
-    }
-</code></pre>
 <h2 id="result-1"><a class="header" href="#result-1">Result</a></h2>
 <pre><code class="language-pepper">struct Result&lt;TValue, TError=Error&gt;
 </code></pre>
@@ -7774,15 +7714,19 @@ the <code>Error</code> fields always exist; only the one matching <code>IsOk</co
 meaningful, and the other keeps its default (zero for a POD type, null for
 a struct type, so do not read through it). <code>TError</code> defaults to <code>Error</code>,
 so <code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
+<p><code>Result&lt;void&gt;</code> is the result of an operation that returns nothing on
+success, like Rust’s <code>Result&lt;(), E&gt;</code>. A <code>void</code> type argument erases what
+it types: that instance has no <code>Value</code> field, <code>ok()</code> takes no argument,
+and <code>value()</code> returns nothing, so it only checks that the result is Ok.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>TValue</code> — the type of the value an Ok result carries; use <code>None</code> when there is no value</li>
+<li><code>TValue</code> — the type of the value an Ok result carries; <code>void</code> when there is none</li>
 <li><code>TError</code> — the type of the error an Err result carries; defaults to <code>Error</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    main(): int {
         var a = Result&lt;int&gt;.ok(42);
-        if (a.unwrap() != 42) { return 1; }
+        if (a.value() != 42) { return 1; }
         var b = Result&lt;int&gt;.err(Error("boom"));
         if (!b.is_err()) { return 2; }
         return b.ok_or(0);   # 0
@@ -7817,6 +7761,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </code></pre>
 <p>Returns an Ok result holding <code>v</code>.</p>
 <p>For a struct <code>TValue</code> the result acquires a reference to <code>v</code>.</p>
+<p>For <code>Result&lt;void&gt;</code>, <code>ok()</code> takes no argument.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>v</code> — the success value</li>
@@ -7827,6 +7772,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.ok(42);
+    var done = Result&lt;void&gt;.ok();
 </code></pre>
 <h4 id="err"><a class="header" href="#err">err</a></h4>
 <pre><code class="language-pepper">static Result&lt;TValue, TError&gt; err(TError e)
@@ -7861,22 +7807,24 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <ul>
 <li>true when <code>Error</code> holds the outcome</li>
 </ul>
-<h4 id="unwrap"><a class="header" href="#unwrap">unwrap</a></h4>
-<pre><code class="language-pepper">TValue unwrap()
+<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<pre><code class="language-pepper">TValue value()
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
 <p>For a struct <code>TValue</code> the caller gets its own reference; the result
 keeps its reference too.</p>
+<p>For <code>Result&lt;void&gt;</code> it returns nothing: calling it only checks that the
+result is Ok.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the <code>Value</code> of an Ok result</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>this.IsOk</code> does not hold, that is, the result is Err (“Result::unwrap on an Err value”)</li>
+<li>if <code>this.IsOk</code> does not hold, that is, the result is Err (“Result.value on an Err value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).unwrap();   # 42
+<pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
 </code></pre>
 <h4 id="ok_or"><a class="header" href="#ok_or">ok_or</a></h4>
 <pre><code class="language-pepper">TValue ok_or(TValue fallback)
@@ -8131,7 +8079,7 @@ the program when it runs.</p>
     main(): int {
         var path = io.Directory.temp().join_str("greeting.txt");
         assert(io.File.write_text(path, "hello").is_ok(), "write");
-        assert(io.File.read_to_string(path).unwrap() == "hello", "read back");
+        assert(io.File.read_to_string(path).value() == "hello", "read back");
         io.File.remove(path);
         return 0;
     }
@@ -8394,7 +8342,7 @@ themselves, so callers rarely see this.</p>
 </code></pre>
 <p>The result of an io operation: <code>Value</code> on success, an <code>IoError</code> on
 failure. Check <code>is_ok()</code> / <code>is_err()</code> before reading <code>Value</code> or <code>Error</code>;
-operations that produce nothing return <code>IoResult&lt;None&gt;</code>.</p>
+operations that produce nothing return <code>IoResult&lt;void&gt;</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the value an operation produces on success</li>
@@ -8445,7 +8393,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
     }
 </code></pre>
 <h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
-<h4 id="value-1"><a class="header" href="#value-1">Value</a></h4>
+<h4 id="value-2"><a class="header" href="#value-2">Value</a></h4>
 <pre><code class="language-pepper">String Value
 </code></pre>
 <p>The path’s text, exactly as given or built: UTF-8, not normalized,
@@ -9009,7 +8957,7 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <li><code>File.open_with</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).unwrap();
+<pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     log.write_string("started");
 </code></pre>
 <h2 id="metadata-1"><a class="header" href="#metadata-1">Metadata</a></h2>
@@ -9105,10 +9053,10 @@ on Windows).</p>
 predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) to tell
 kinds apart portably.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("out.txt")).value();
     f.write_string("hello");
     f.close();
-    var text = File.read_to_string(Path("out.txt")).unwrap();   # "hello"
+    var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
 <h3 id="fields-2-1"><a class="header" href="#fields-2-1">Fields</a></h3>
 <h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
@@ -9171,7 +9119,7 @@ truncating it to 0 bytes if it exists.</p>
 <li>the open <code>File</code>, empty and positioned at 0; an error with <code>is_not_found()</code> when the path is empty or its parent directory does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error (on POSIX, <code>is_is_a_directory()</code> when the path is a directory)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("report.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("report.txt")).value();
     f.write_string("done");
 </code></pre>
 <h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
@@ -9294,7 +9242,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
     var text = r.Value;
 </code></pre>
 <h4 id="write_bytes"><a class="header" href="#write_bytes">write_bytes</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; write_bytes(Path path, u8[] data)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; write_bytes(Path path, u8[] data)
 </code></pre>
 <p>Writes <code>data</code> as the whole contents of the file at <code>path</code>, creating
 it or replacing what it held (Rust’s <code>fs::write</code>), then closes it.</p>
@@ -9307,7 +9255,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+<li>an Ok result once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var data = Array&lt;u8&gt;();
@@ -9315,7 +9263,7 @@ leaves it truncated or partly written.</p>
     File.write_bytes(Path("one.bin"), data);
 </code></pre>
 <h4 id="write_text"><a class="header" href="#write_text">write_text</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; write_text(Path path, String s)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; write_text(Path path, String s)
 </code></pre>
 <p>Writes <code>s</code> as UTF-8 as the whole contents of the file at <code>path</code>,
 creating it or replacing what it held, then closes it. No newline is
@@ -9329,7 +9277,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the text is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+<li>an Ok result once the text is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
 </ul>
 <p><strong>Note</strong></p>
 <ul>
@@ -9359,10 +9307,10 @@ part way leaves <code>to</code> partly written.</p>
 <li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();
+<pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).value();
 </code></pre>
 <h4 id="rename"><a class="header" href="#rename">rename</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; rename(Path from, Path to)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; rename(Path from, Path to)
 </code></pre>
 <p>Renames or moves <code>from</code> to <code>to</code>, replacing an existing file at <code>to</code>
 (<code>rename</code> on POSIX, <code>MoveFileExW</code> with <code>MOVEFILE_REPLACE_EXISTING</code> on
@@ -9376,13 +9324,13 @@ fails rather than copying.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
 <h4 id="remove-2"><a class="header" href="#remove-2">remove</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
 </code></pre>
 <p>Deletes the file at <code>path</code>. A symlink is removed itself, not its
 target. Directories are not removed: use <code>Directory.remove</code> or
@@ -9393,7 +9341,7 @@ target. Directories are not removed: use <code>Directory.remove</code> or
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.remove(Path("old.txt"));
@@ -9413,12 +9361,12 @@ opened.</p>
 <li>true while the File is open</li>
 </ul>
 <h4 id="check_open"><a class="header" href="#check_open">check_open</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; check_open()
+<pre><code class="language-pepper">IoResult&lt;void&gt; check_open()
 </code></pre>
 <p>Checks that the File is open, for use before an operation.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
+<li>an Ok result when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
 </ul>
 <h4 id="read-2"><a class="header" href="#read-2">read</a></h4>
 <pre><code class="language-pepper">IoResult&lt;ulong&gt; read(u8[] buf, ulong max)
@@ -9489,7 +9437,7 @@ write (<code>EINTR</code>) is retried.</p>
 <li>the number of bytes written, which may be less than <code>data.count()</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
 </ul>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; write_all(u8[] data)
+<pre><code class="language-pepper">IoResult&lt;void&gt; write_all(u8[] data)
 </code></pre>
 <p>Writes all of <code>data</code>, repeating the write until every byte is
 written. Advances the position by <code>data.count()</code>.</p>
@@ -9500,10 +9448,10 @@ written. Advances the position by <code>data.count()</code>.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
+<li>an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
 </ul>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; write_string(String s)
+<pre><code class="language-pepper">IoResult&lt;void&gt; write_string(String s)
 </code></pre>
 <p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does. No newline
 or terminator is added.</p>
@@ -9513,10 +9461,10 @@ or terminator is added.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once every byte is written; an error as for <code>write_all</code></li>
+<li>an Ok result once every byte is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
     var r = f.write_string("hello, world");
     if (r.is_err()) {
         return 1;
@@ -9592,7 +9540,7 @@ and has platform-defined results on Windows.</p>
 <li>the new position, in bytes from the start of the file; an error when the File is closed, <code>whence</code> is not 0, 1 or 2, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
 </ul>
 <h4 id="set_len"><a class="header" href="#set_len">set_len</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; set_len(ulong size)
+<pre><code class="language-pepper">IoResult&lt;void&gt; set_len(ulong size)
 </code></pre>
 <p>Truncates or extends the file to exactly <code>size</code> bytes; bytes added
 are zeros. The position is kept, even when it is now past the end.</p>
@@ -9603,10 +9551,10 @@ are zeros. The position is kept, even when it is now past the end.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
+<li>an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
 </ul>
 <h4 id="sync"><a class="header" href="#sync">sync</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; sync()
+<pre><code class="language-pepper">IoResult&lt;void&gt; sync()
 </code></pre>
 <p>Flushes the file’s contents and metadata to the storage device,
 waiting until they are written (<code>fsync</code> on POSIX,
@@ -9615,7 +9563,7 @@ process; this forces them out of the operating system’s cache.</p>
 <p>On Windows the File must have been opened with write access.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
+<li>an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
 </ul>
 <h4 id="metadata-2"><a class="header" href="#metadata-2">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
@@ -9631,7 +9579,7 @@ permission bits and timestamps.</p>
 <pre><code class="language-pepper">    var size = f.metadata().Value.Size;
 </code></pre>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; close()
+<pre><code class="language-pepper">IoResult&lt;void&gt; close()
 </code></pre>
 <p>Closes the File now, to observe the error the system reports (for
 example a deferred write failure). Without it the destructor closes
@@ -9642,10 +9590,10 @@ is never closed twice. A standard stream is only marked closed: the
 stream stays open, and <code>File.stdout()</code> and the like still work.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success or when already closed; the platform error when closing an owned handle fails</li>
+<li>an Ok result on success or when already closed; the platform error when closing an owned handle fails</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.bin")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("out.bin")).value();
     f.write_string("data");
     if (f.close().is_err()) {
         return 1;
@@ -9776,7 +9724,7 @@ can still be renamed or removed afterwards.</p>
     }
 </code></pre>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; create(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; create(Path path)
 </code></pre>
 <p>Creates one directory (<code>mkdir</code> on POSIX, with mode 0777 less the
 umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.</p>
@@ -9786,14 +9734,14 @@ umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the directory cannot be created: <code>is_already_exists()</code> when anything (a file too) is already at <code>path</code>, <code>is_not_found()</code> when the parent is missing or the path is empty, <code>is_permission_denied()</code> when the parent is not writable</li>
+<li>an Ok result on success; an error when the directory cannot be created: <code>is_already_exists()</code> when anything (a file too) is already at <code>path</code>, <code>is_not_found()</code> when the parent is missing or the path is empty, <code>is_permission_denied()</code> when the parent is not writable</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>create_all</code></li>
 </ul>
 <h4 id="create_all"><a class="header" href="#create_all">create_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; create_all(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; create_all(Path path)
 </code></pre>
 <p>Creates a directory and any missing parents, like <code>mkdir -p</code>.
 Succeeds without doing anything when <code>path</code> is empty or already a
@@ -9807,7 +9755,7 @@ directories at the same time.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when a directory cannot be created: <code>is_already_exists()</code> when a file (not a directory) is at <code>path</code> or at one of its parents, <code>is_permission_denied()</code>, and so on. Parents created before the failure are left in place</li>
+<li>an Ok result on success; an error when a directory cannot be created: <code>is_already_exists()</code> when a file (not a directory) is at <code>path</code> or at one of its parents, <code>is_permission_denied()</code>, and so on. Parents created before the failure are left in place</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import io;
@@ -9815,7 +9763,7 @@ directories at the same time.</p>
     var r = io.Directory.create_all(io.Path("build").join_str("out").join_str("logs"));
 </code></pre>
 <h4 id="remove-3"><a class="header" href="#remove-3">remove</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
 </code></pre>
 <p>Removes an empty directory (<code>rmdir</code> on POSIX, <code>RemoveDirectoryW</code> on
 Windows).</p>
@@ -9825,14 +9773,14 @@ Windows).</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when it cannot be removed: <code>is_directory_not_empty()</code> when it still has entries, <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when <code>path</code> is a file, <code>is_permission_denied()</code></li>
+<li>an Ok result on success; an error when it cannot be removed: <code>is_directory_not_empty()</code> when it still has entries, <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when <code>path</code> is a file, <code>is_permission_denied()</code></li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>remove_all</code></li>
 </ul>
 <h4 id="remove_all"><a class="header" href="#remove_all">remove_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove_all(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove_all(Path path)
 </code></pre>
 <p>Removes <code>path</code> and, if it is a directory, everything inside it,
 recursively. Symlinks are removed, never followed, so nothing outside
@@ -9847,7 +9795,7 @@ Windows a read-only file inside the tree is such a failure
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when something cannot be removed: <code>is_not_found()</code> when <code>path</code> does not exist (unlike <code>rm -rf</code>, a missing path is an error) or is empty, <code>is_permission_denied()</code>, and so on</li>
+<li>an Ok result on success; an error when something cannot be removed: <code>is_not_found()</code> when <code>path</code> does not exist (unlike <code>rm -rf</code>, a missing path is an error) or is empty, <code>is_permission_denied()</code>, and so on</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
@@ -9876,7 +9824,7 @@ are resolved (<code>getcwd</code> on POSIX, <code>GetCurrentDirectoryW</code> on
 <li><code>set_current</code></li>
 </ul>
 <h4 id="set_current"><a class="header" href="#set_current">set_current</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; set_current(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; set_current(Path path)
 </code></pre>
 <p>Changes the process’s current directory (<code>chdir</code> on POSIX,
 <code>SetCurrentDirectoryW</code> on Windows). This affects the whole process,
@@ -9888,7 +9836,7 @@ resolve against the new directory.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when it is a file, <code>is_permission_denied()</code></li>
+<li>an Ok result on success; an error when the directory cannot be entered: <code>is_not_found()</code> when it is missing or the path is empty, <code>is_not_a_directory()</code> when it is a file, <code>is_permission_denied()</code></li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>

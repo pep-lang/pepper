@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -276,6 +276,9 @@ void log_c(String message) { print(message); }
     print(n);
 }
 </code></pre>
+<p>A call to such a function has no value, so it cannot be stored, passed,
+returned, or used as an operand or condition: <code>var x = log("hi");</code> reports
+<code>cannot use a value of type 'void' as variable 'x'</code>.</p>
 <p>In a function that returns a value, <code>return;</code> is an error:</p>
 <pre><code class="language-text">main.pep:2:5: error: non-void function 'f' should return a value
     2 |     return;
@@ -353,7 +356,10 @@ main(): int {
 <p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
 <code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
-<code>panic(message)</code>. See <a href="../reference/internals.html">Built-in functions</a>.</p>
+<code>panic(message)</code>, which always stops it. Both take the message as a <code>String</code>, so
+it can be built at run time (<code>assert(n &gt; 0, name + " must be positive")</code>); a
+string literal message costs nothing when the assertion holds. See
+<a href="../reference/internals.html">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as

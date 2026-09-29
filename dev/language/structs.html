@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -239,7 +239,8 @@ program, so give struct-typed fields a value before you use them.</li>
 <li>A struct with no constructor can be created with its name and empty
 parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the call site.</li>
 <li><code>p.x</code> reads a field and <code>p.x = 3</code> writes it.</li>
-<li><code>a === b</code> is true when <code>a</code> and <code>b</code> refer to the same object. See
+<li><code>a === b</code> is true when <code>a</code> and <code>b</code> refer to the same object, and <code>a !== b</code>
+when they do not. See
 <a href="#comparing-structs">Comparing structs</a> for <code>==</code>.</li>
 </ul>
 <p>A struct can have a field whose type is a struct declared later in the file.
@@ -479,6 +480,10 @@ main(): int {
     var price = Money(250);
     assert(price == Money(250), "== compares cents");
     assert(price != Money(100), "!= compares cents");
+    # `===` and `!==` always compare identity: equal cents, different objects.
+    assert(price !== Money(250), "!== compares identity");
+    var same = price;
+    assert(same === price, "=== is true for the same object");
 
     var total = price + Money(50);
     assert(total.cents == 300, "+ makes a new value");
@@ -533,8 +538,9 @@ yet, because the parser reads the <code>&lt;</code> as the start of generic argu
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
 for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
-count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> always
-compares identity, whatever methods the struct declares.</p>
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
+<code>!==</code> always compare identity, whatever methods the struct declares, so
+<code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it with the element type,
 <code>[]</code>, and parameters, but no name:</p>

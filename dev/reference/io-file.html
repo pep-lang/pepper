@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -353,7 +353,7 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <li><code>File.open_with</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).unwrap();
+<pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
     log.write_string("started");
 </code></pre>
 <h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
@@ -449,10 +449,10 @@ on Windows).</p>
 predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) to tell
 kinds apart portably.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("out.txt")).value();
     f.write_string("hello");
     f.close();
-    var text = File.read_to_string(Path("out.txt")).unwrap();   # "hello"
+    var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
 <h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
 <h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
@@ -515,7 +515,7 @@ truncating it to 0 bytes if it exists.</p>
 <li>the open <code>File</code>, empty and positioned at 0; an error with <code>is_not_found()</code> when the path is empty or its parent directory does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error (on POSIX, <code>is_is_a_directory()</code> when the path is a directory)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("report.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("report.txt")).value();
     f.write_string("done");
 </code></pre>
 <h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
@@ -638,7 +638,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
     var text = r.Value;
 </code></pre>
 <h4 id="write_bytes"><a class="header" href="#write_bytes">write_bytes</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; write_bytes(Path path, u8[] data)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; write_bytes(Path path, u8[] data)
 </code></pre>
 <p>Writes <code>data</code> as the whole contents of the file at <code>path</code>, creating
 it or replacing what it held (Rust’s <code>fs::write</code>), then closes it.</p>
@@ -651,7 +651,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+<li>an Ok result once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var data = Array&lt;u8&gt;();
@@ -659,7 +659,7 @@ leaves it truncated or partly written.</p>
     File.write_bytes(Path("one.bin"), data);
 </code></pre>
 <h4 id="write_text"><a class="header" href="#write_text">write_text</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; write_text(Path path, String s)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; write_text(Path path, String s)
 </code></pre>
 <p>Writes <code>s</code> as UTF-8 as the whole contents of the file at <code>path</code>,
 creating it or replacing what it held, then closes it. No newline is
@@ -673,7 +673,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the text is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+<li>an Ok result once the text is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
 </ul>
 <p><strong>Note</strong></p>
 <ul>
@@ -703,10 +703,10 @@ part way leaves <code>to</code> partly written.</p>
 <li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();
+<pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).value();
 </code></pre>
 <h4 id="rename"><a class="header" href="#rename">rename</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; rename(Path from, Path to)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; rename(Path from, Path to)
 </code></pre>
 <p>Renames or moves <code>from</code> to <code>to</code>, replacing an existing file at <code>to</code>
 (<code>rename</code> on POSIX, <code>MoveFileExW</code> with <code>MOVEFILE_REPLACE_EXISTING</code> on
@@ -720,13 +720,13 @@ fails rather than copying.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;None&gt; remove(Path path)
+<pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
 </code></pre>
 <p>Deletes the file at <code>path</code>. A symlink is removed itself, not its
 target. Directories are not removed: use <code>Directory.remove</code> or
@@ -737,7 +737,7 @@ target. Directories are not removed: use <code>Directory.remove</code> or
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.remove(Path("old.txt"));
@@ -757,12 +757,12 @@ opened.</p>
 <li>true while the File is open</li>
 </ul>
 <h4 id="check_open"><a class="header" href="#check_open">check_open</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; check_open()
+<pre><code class="language-pepper">IoResult&lt;void&gt; check_open()
 </code></pre>
 <p>Checks that the File is open, for use before an operation.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
+<li>an Ok result when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
 </ul>
 <h4 id="read-2"><a class="header" href="#read-2">read</a></h4>
 <pre><code class="language-pepper">IoResult&lt;ulong&gt; read(u8[] buf, ulong max)
@@ -833,7 +833,7 @@ write (<code>EINTR</code>) is retried.</p>
 <li>the number of bytes written, which may be less than <code>data.count()</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
 </ul>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; write_all(u8[] data)
+<pre><code class="language-pepper">IoResult&lt;void&gt; write_all(u8[] data)
 </code></pre>
 <p>Writes all of <code>data</code>, repeating the write until every byte is
 written. Advances the position by <code>data.count()</code>.</p>
@@ -844,10 +844,10 @@ written. Advances the position by <code>data.count()</code>.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
+<li>an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
 </ul>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; write_string(String s)
+<pre><code class="language-pepper">IoResult&lt;void&gt; write_string(String s)
 </code></pre>
 <p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does. No newline
 or terminator is added.</p>
@@ -857,10 +857,10 @@ or terminator is added.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once every byte is written; an error as for <code>write_all</code></li>
+<li>an Ok result once every byte is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
     var r = f.write_string("hello, world");
     if (r.is_err()) {
         return 1;
@@ -936,7 +936,7 @@ and has platform-defined results on Windows.</p>
 <li>the new position, in bytes from the start of the file; an error when the File is closed, <code>whence</code> is not 0, 1 or 2, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
 </ul>
 <h4 id="set_len"><a class="header" href="#set_len">set_len</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; set_len(ulong size)
+<pre><code class="language-pepper">IoResult&lt;void&gt; set_len(ulong size)
 </code></pre>
 <p>Truncates or extends the file to exactly <code>size</code> bytes; bytes added
 are zeros. The position is kept, even when it is now past the end.</p>
@@ -947,10 +947,10 @@ are zeros. The position is kept, even when it is now past the end.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
+<li>an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
 </ul>
 <h4 id="sync"><a class="header" href="#sync">sync</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; sync()
+<pre><code class="language-pepper">IoResult&lt;void&gt; sync()
 </code></pre>
 <p>Flushes the file’s contents and metadata to the storage device,
 waiting until they are written (<code>fsync</code> on POSIX,
@@ -959,7 +959,7 @@ process; this forces them out of the operating system’s cache.</p>
 <p>On Windows the File must have been opened with write access.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
+<li>an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
 </ul>
 <h4 id="metadata-2"><a class="header" href="#metadata-2">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
@@ -975,7 +975,7 @@ permission bits and timestamps.</p>
 <pre><code class="language-pepper">    var size = f.metadata().Value.Size;
 </code></pre>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
-<pre><code class="language-pepper">IoResult&lt;None&gt; close()
+<pre><code class="language-pepper">IoResult&lt;void&gt; close()
 </code></pre>
 <p>Closes the File now, to observe the error the system reports (for
 example a deferred write failure). Without it the destructor closes
@@ -986,10 +986,10 @@ is never closed twice. A standard stream is only marked closed: the
 stream stays open, and <code>File.stdout()</code> and the like still work.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li><code>None</code> on success or when already closed; the platform error when closing an owned handle fails</li>
+<li>an Ok result on success or when already closed; the platform error when closing an owned handle fails</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.bin")).unwrap();
+<pre><code class="language-pepper">    var f = File.create(Path("out.bin")).value();
     f.write_string("data");
     if (f.close().is_err()) {
         return 1;

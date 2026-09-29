@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -184,53 +184,38 @@
                         <!-- Generated from runtime/internals.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
 <p>Source: <code>runtime/internals.pep</code></p>
-<h2 id="memcpy"><a class="header" href="#memcpy">memcpy</a></h2>
-<pre><code class="language-pepper">extern void memcpy(void* dest, void* src, ulong n)
-</code></pre>
-<p>Copies <code>n</code> bytes from <code>src</code> to <code>dest</code> (the C library’s <code>memcpy</code>).</p>
-<p>The regions must not overlap, and both must be valid for <code>n</code> bytes.
-Nothing is bounds-checked, and no reference counts change: copying a
-struct reference with it neither acquires nor releases. Runs in O(n).
-This declaration discards C’s return value.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>dest</code> — the start of the destination region, a <code>__ptr&lt;void&gt;</code></li>
-<li><code>src</code> — the start of the source region, a <code>__ptr&lt;void&gt;</code></li>
-<li><code>n</code> — the number of bytes to copy; 0 copies nothing</li>
-</ul>
 <h2 id="assert"><a class="header" href="#assert">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, msg: __ptr&lt;char&gt;): void
+<pre><code class="language-pepper">assert(condition: bool, message: String): void
 </code></pre>
-<p>Panics with <code>msg</code> when <code>condition</code> is false; otherwise does nothing.</p>
-<p>The check always runs; there is no release mode that removes it.
-The message is a raw <code>__ptr&lt;char&gt;</code> (C <code>char*</code>), not a <code>String</code>. A string
-literal is passed as its global pointer with no temporary allocation,
-which keeps hot paths like array index bounds checks allocation-free. A
-non-literal <code>String</code> message is lowered to <code>msg.c_str()</code> at the call site.</p>
+<p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
+<p>The check always runs; there is no release mode that removes it. A
+string literal message costs nothing when the assertion holds: the
+compiler passes the literal’s constant bytes to the runtime without
+building a <code>String</code>. Any other message is evaluated before the call.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
-<li><code>msg</code> — the NUL-terminated message to print on failure; <code>__null</code> prints a generic message</li>
+<li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>condition</code> is false: prints <code>msg</code> and aborts (see <code>panic</code>)</li>
+<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="panic"><a class="header" href="#panic">panic</a></h2>
-<pre><code class="language-pepper">panic(msg: __ptr&lt;char&gt;)
+<pre><code class="language-pepper">panic(message: String)
 </code></pre>
-<p>Prints <code>msg</code> and aborts the program. It never returns.</p>
-<p>Writes <code>msg</code> and a newline to standard output with <code>puts</code>, or
-“Assertion failed with no additional information” when <code>msg</code> is
-<code>__null</code>. Then it flushes every C output stream, so the message is not
-lost when stdout is a pipe, and calls C <code>abort()</code>. No destructors or
-releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
+<p>Prints <code>message</code> and aborts the program. It never returns.</p>
+<p>Writes <code>message</code> and a newline to standard output, or “Assertion failed
+with no additional information” when <code>message</code> is null. Then it flushes
+every C output stream, so the message is not lost when stdout is a pipe,
+and calls C <code>abort()</code>. No destructors or releases run, and the process
+ends abnormally (SIGABRT on POSIX).</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>msg</code> — the NUL-terminated message to print, or <code>__null</code></li>
+<li><code>message</code> — the text to print</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -238,55 +223,6 @@ releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    panic("unreachable");
-</code></pre>
-<h2 id="trace_region"><a class="header" href="#trace_region">trace_region</a></h2>
-<pre><code class="language-pepper">trace_region(ptr: __ptr&lt;void&gt;, size: ulong, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name</code>, the address <code>ptr</code>, and the first 8 bytes at <code>ptr</code> when
-tracing is on. Does nothing otherwise.</p>
-<p>Tracing is on when the <code>PEP_TRACE</code> environment variable is set to any
-value, even an empty one. It is read once at program start. The line has
-the form <code>name: AAAAAAAAAAAAAAAAWWWWWWWWWWWWWWWW</code>: 16 uppercase hex
-digits of the address, then, with no separator, the first 8 bytes read as
-a little-endian 64-bit word. The word is omitted when <code>ptr</code> is <code>__null</code>
-or <code>size</code> is less than 8. Only those 8 bytes are read, whatever <code>size</code> is.
-The line goes to standard output.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>ptr</code> — the start of the region to trace</li>
-<li><code>size</code> — the region’s size in bytes; the word is printed only when it is at least 8</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<h2 id="trace_ptr"><a class="header" href="#trace_ptr">trace_ptr</a></h2>
-<pre><code class="language-pepper">trace_ptr(ptr: __ptr&lt;void&gt;, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name: </code> followed by the address <code>ptr</code> as 16 uppercase hex digits
-when tracing is on (the <code>PEP_TRACE</code> environment variable is set, checked
-once at program start). Does nothing otherwise.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>ptr</code> — the address to print; it is not dereferenced</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<h2 id="trace_int"><a class="header" href="#trace_int">trace_int</a></h2>
-<pre><code class="language-pepper">trace_int(value: long, name: __ptr&lt;char&gt;)
-</code></pre>
-<p>Prints <code>name: </code> followed by <code>value</code> in signed decimal when tracing is on
-(the <code>PEP_TRACE</code> environment variable is set, checked once at program
-start). Does nothing otherwise.</p>
-<p>A traced call frees what it allocates. Only the first 400 bytes of
-<code>name</code> are printed.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — the number to print</li>
-<li><code>name</code> — a NUL-terminated label for the line, or <code>__null</code> for none</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    trace_int(count, "count");   # prints "count: 3" under PEP_TRACE=1
 </code></pre>
 
                     </main>

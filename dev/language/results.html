@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -188,7 +188,7 @@ caller checks which one it got before using the value. Pepper has no
 exceptions, so <code>Result</code> is how a function reports a failure the caller is
 expected to handle. For a failure that should stop the program, such as a
 broken invariant, use <code>assert</code> or <code>panic</code> instead.</p>
-<p><code>Result</code>, <code>Error</code>, and <code>None</code> are part of the runtime, so you can use them
+<p><code>Result</code> and <code>Error</code> are part of the runtime, so you can use them
 without an import. The <a href="../reference/result.html">Result reference</a> lists every
 member.</p>
 <h2 id="creating-and-checking-results"><a class="header" href="#creating-and-checking-results">Creating and checking results</a></h2>
@@ -207,7 +207,7 @@ main(): int {
     var good = parse_digit("2");
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
-    assert(good.unwrap() == 2, "unwrap returns the value");
+    assert(good.value() == 2, "value() returns the value");
     assert(good.Value == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
@@ -220,16 +220,16 @@ main(): int {
 
     # Result&lt;int&gt; is short for Result&lt;int, Error&gt;.
     Result&lt;int, Error&gt; spelled_out = good;
-    assert(spelled_out.unwrap() == 2, "the same type");
+    assert(spelled_out.value() == 2, "the same type");
 
     # A default-constructed Result is an Err with a default error.
     var empty = Result&lt;int&gt;();
     assert(empty.is_err(), "Result() is an Err");
 
-    # An operation with no value to return uses None.
-    var done = Result&lt;None&gt;.ok(None());
-    var failed = Result&lt;None&gt;.err(Error("disk full"));
-    assert(done.is_ok() &amp;&amp; failed.is_err(), "Result&lt;None&gt; works like any other");
+    # An operation with no value to return uses void.
+    var done = Result&lt;void&gt;.ok();
+    var failed = Result&lt;void&gt;.err(Error("disk full"));
+    assert(done.is_ok() &amp;&amp; failed.is_err(), "Result&lt;void&gt; works like any other");
     return 0;
 }
 </code></pre>
@@ -243,7 +243,7 @@ main(): int {
 <tr><td><code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
 <tr><td><code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
 <tr><td><code>is_ok()</code>, <code>is_err()</code></td><td>Report which kind the result is.</td></tr>
-<tr><td><code>unwrap()</code></td><td>Returns the value; panics with <code>Result::unwrap on an Err value</code> if the result is an Err.</td></tr>
+<tr><td><code>value()</code></td><td>Returns the value; panics with <code>Result.value on an Err value</code> if the result is an Err.</td></tr>
 <tr><td><code>ok_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the result is an Err. Never panics.</td></tr>
 <tr><td><code>Value</code>, <code>Error</code>, <code>IsOk</code></td><td>The fields behind the methods.</td></tr>
 </tbody>
@@ -253,7 +253,7 @@ main(): int {
 values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). <code>Error</code> is a struct
 with one field, <code>String Message</code>: <code>Error("boom").Message</code> is <code>"boom"</code>.</p>
-<p>Use <code>unwrap()</code> when an Err would be a bug in your program, since it stops the
+<p>Use <code>value()</code> when an Err would be a bug in your program, since it stops the
 program. When an Err is an expected outcome, test with <code>is_ok()</code> or <code>is_err()</code>,
 or supply a fallback with <code>ok_or</code>.</p>
 <h3 id="both-fields-always-exist"><a class="header" href="#both-fields-always-exist">Both fields always exist</a></h3>
@@ -264,10 +264,14 @@ checking <code>is_ok()</code>, and <code>Error</code> only after checking <code>
 field through a null struct reference crashes the program.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
-uses <code>None</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. <code>None</code> is an empty
-struct:</p>
-<pre><code class="language-pepper">var done = Result&lt;None&gt;.ok(None());
-var failed = Result&lt;None&gt;.err(Error("disk full"));
+uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
+argument erases what it types, so <code>Result&lt;void&gt;</code> has no <code>Value</code> field, <code>ok()</code>
+takes no argument, and <code>value()</code> returns nothing: calling it only checks that
+the result is Ok. Using that call as a value, as in <code>var x = done.value();</code>, is
+a compile error, as it is for any function that returns <code>void</code>.</p>
+<pre><code class="language-pepper">var done = Result&lt;void&gt;.ok();
+var failed = Result&lt;void&gt;.err(Error("disk full"));
+done.value();   # panics if `done` is an Err
 </code></pre>
 <h2 id="custom-error-types-and-propagation"><a class="header" href="#custom-error-types-and-propagation">Custom error types and propagation</a></h2>
 <p>Any type can be the error type. A struct lets you carry details the caller can
@@ -325,21 +329,21 @@ add_numbers(String a, String b): Result&lt;int, ParseError&gt; {
 }
 
 # Convert an error into another type on the way out.
-check_total(String a, String b, int limit): Result&lt;None&gt; {
+check_total(String a, String b, int limit): Result&lt;void&gt; {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.Error;
-        return Result&lt;None&gt;.err(Error("bad number '" + e.Input + "'"));
+        return Result&lt;void&gt;.err(Error("bad number '" + e.Input + "'"));
     }
     if (sum.Value &gt; limit) {
-        return Result&lt;None&gt;.err(Error("total is over the limit"));
+        return Result&lt;void&gt;.err(Error("total is over the limit"));
     }
-    return Result&lt;None&gt;.ok(None());
+    return Result&lt;void&gt;.ok();
 }
 
 main(): int {
     var sum = add_numbers("40", "2");
-    assert(sum.unwrap() == 42, "40 + 2");
+    assert(sum.value() == 42, "40 + 2");
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
@@ -361,7 +365,7 @@ as shown above.</p>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
 alias for <code>Result&lt;T, IoError&gt;</code>, and operations with nothing to return use
-<code>IoResult&lt;None&gt;</code>. <code>IoError</code> holds the platform’s error <code>Code</code> and a <code>Message</code>,
+<code>IoResult&lt;void&gt;</code>. <code>IoError</code> holds the platform’s error <code>Code</code> and a <code>Message</code>,
 and has predicates such as <code>is_not_found()</code> and <code>is_permission_denied()</code> for
 deciding what to do about the failure:</p>
 <pre><code class="language-pepper">import [File, Directory, Path, IoResult, IoError] from io;
@@ -386,7 +390,7 @@ main(): int {
     var path = dir.join_str("setting.txt");
     assert(read_setting(path) == "default", "a missing file gives the default");
 
-    IoResult&lt;None&gt; written = File.write_text(path, "blue");
+    IoResult&lt;void&gt; written = File.write_text(path, "blue");
     assert(written.is_ok(), "wrote the file");
     assert(read_setting(path) == "blue", "the file's contents");
 

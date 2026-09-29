@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dcb09c66.js";
+            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -342,7 +342,7 @@ nothing.</li>
 and <code>int[][]</code> for <code>Array&lt;Array&lt;int&gt;&gt;</code>. See <a href="../reference/array.html"><code>Array</code></a>.</li>
 <li><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> are hash tables. See
 <a href="../reference/hash.html">HashMap and HashSet</a>.</li>
-<li><code>Result&lt;TValue, TError&gt;</code>, <code>Error</code> and <code>None</code> describe operations that can
+<li><code>Result&lt;TValue, TError&gt;</code> and <code>Error</code> describe operations that can
 fail. See <a href="results.html">Error handling with Result</a>.</li>
 <li><code>Atomic&lt;T&gt;</code> is a value that threads can update safely. See
 <a href="atomics.html">Atomics</a> and <a href="threads.html">Threads and shared data</a>.</li>
@@ -554,6 +554,8 @@ main(): int {
     var small = 3 &lt; 5;
     assert(small, "3 &lt; 5");
     assert(5 &gt;= 5 &amp;&amp; 4 &lt;= 5 &amp;&amp; 6 &gt; 5 &amp;&amp; 5 == 5 &amp;&amp; 5 != 6, "comparisons");
+    # On numbers, `===` and `!==` are the same as `==` and `!=`.
+    assert(5 === 5 &amp;&amp; 5 !== 6, "identity on numbers");
 
     # Logical operators; 'and' and 'or' are spellings of &amp;&amp; and ||.
     var t = true;
@@ -599,7 +601,7 @@ main(): int {
 <tbody>
 <tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code>, unary <code>-</code> and <code>+</code></td></tr>
 <tr><td>Comparison</td><td><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td></tr>
-<tr><td>Identity</td><td><code>===</code> (two references to the same object)</td></tr>
+<tr><td>Identity</td><td><code>===</code> <code>!==</code> (two references to the same object; plain equality for numbers and <code>bool</code>)</td></tr>
 <tr><td>Logical</td><td><code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>~</code> <code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr>
 <tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
@@ -619,7 +621,6 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 <ul>
 <li><strong><code>**</code> works only on integers.</strong> A floating-point operand is a compile error
 (<code>unsupported op Pow</code>).</li>
-<li><strong><code>===</code></strong> compares struct references. It is not supported for numbers.</li>
 </ul>
 <p>Operators bind in this order, tightest first:</p>
 <ol>
@@ -632,7 +633,7 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 <li><code>+</code>, <code>-</code></li>
 <li><code>&lt;&lt;</code>, <code>&gt;&gt;</code></li>
 <li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
-<li><code>==</code>, <code>!=</code>, <code>===</code></li>
+<li><code>==</code>, <code>!=</code>, <code>===</code>, <code>!==</code></li>
 <li><code>&amp;</code></li>
 <li><code>|</code>, <code>^</code></li>
 <li><code>&amp;&amp;</code>, <code>and</code></li>
