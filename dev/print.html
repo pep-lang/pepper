@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9ac4a8e3.js";
+            window.path_to_searchindex_js = "searchindex-04c53d6f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -4943,7 +4943,7 @@ A <code>void*</code> returned by an extern is a <code>__ptr&lt;void&gt;</code> i
 <tr><th>Operation</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>p[i]</code></td><td>reads or writes the element <code>i</code> places from <code>p</code></td></tr>
+<tr><td><code>p[i]</code></td><td>reads or writes the element <code>i</code> places from <code>p</code>; its type is <code>T</code>, so <code>var v = p[i]</code> declares a <code>T</code></td></tr>
 <tr><td><code>p + n</code></td><td>the address <code>n</code> elements after <code>p</code> (<code>n</code> bytes for <code>__ptr&lt;void&gt;</code>)</td></tr>
 <tr><td><code>p == __null</code>, <code>p != __null</code></td><td>compares with the null pointer</td></tr>
 <tr><td><code>p == q</code>, <code>p != q</code></td><td>compares two addresses (a pointer also compares with an integer address)</td></tr>
@@ -4992,6 +4992,13 @@ sum(values: __ptr&lt;int&gt;, count: int): int {
     return total;
 }
 
+# `var` takes the element type from the pointer: `big` is a ulong, so a value
+# above 2^32 reads back whole.
+first(values: __ptr&lt;ulong&gt;): ulong {
+    var big = values[0];
+    return big;
+}
+
 main(): int {
     # Indexing reads and writes elements of T.
     var numbers = malloc(4 * sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
@@ -5000,6 +5007,11 @@ main(): int {
     numbers[2] = 30;
     numbers[3] = 40;
     assert(sum(numbers, 4) == 100, "indexing reads what was written");
+
+    var wide = malloc(sizeof&lt;ulong&gt;()) as __ptr&lt;ulong&gt;;
+    wide[0] = 5000000000;
+    assert(first(wide) == 5000000000, "var v = p[i] has the pointee's type");
+    free(wide);
 
     # p + n moves by n elements, not n bytes.
     var third = numbers + 2;
