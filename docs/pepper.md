@@ -550,3 +550,64 @@ An operation with nothing to return on success uses `None`, an empty struct, as 
 var done = Result<None>.ok(None());
 var failed = Result<None>.err(Error("disk full"));
 ```
+
+## The io module
+
+`runtime/io/` is a module, not part of the prelude: `import io` (then `io.File`, `io.Path`, ...) or
+`import [File, Path, Directory] from io`. It is modeled on Rust's `std::fs` and `std::path`.
+
+```
+import [File, OpenOptions, Directory, Path] from io;
+
+main(): int {
+    var dir = Directory.temp().join_str("demo");
+    Directory.create_all(dir);
+    var notes = dir.join_str("notes.txt");
+    File.write_text(notes, "hello");
+    var more = OpenOptions().append(true).open(notes).unwrap();
+    more.write_string(", world");
+    more.close();
+    var text = File.read_to_string(notes);
+    if (text.is_err()) {
+        print(text.Error.Message);
+        return 1;
+    }
+    Directory.remove_all(dir);
+    return 0;
+}
+```
+
+- **Results.** Fallible operations return `IoResult<T>` (`Result<T, IoError>`); those with nothing to return use
+  `IoResult<None>`. `IoError` holds the raw platform `Code` (errno / `GetLastError()`) and a `Message`, and
+  classifies it with predicates: `is_not_found()`, `is_permission_denied()`, `is_already_exists()`,
+  `is_not_a_directory()`, `is_is_a_directory()`, `is_directory_not_empty()`, `is_invalid_input()`,
+  `is_interrupted()`.
+- **`Path`** wraps a `String Value`. Pure operations: `join(Path)` and `join_str(String)` (an absolute right-hand
+  side replaces the left), `parent()`, `file_name()`, `file_stem()`, `extension()`, `with_extension(ext)`,
+  `components()`, `normalize()` (lexical: drops `.`, resolves `..`, collapses separators; `"a/.."` is `"."`),
+  `is_absolute()`, `is_relative()`, `is_empty()`, `Path.separator()`, `==`. "No value" is an empty `Path` or
+  `String`: `Path("/").parent()` and `Path("a/..").file_name()` are empty. File-system queries: `exists()`,
+  `is_file()`, `is_dir()`, `metadata()` (follows symlinks), `symlink_metadata()`, `canonicalize()`.
+- **`File`** owns a handle and closes it when the last reference goes; `close()` closes early and reports the
+  error (it is idempotent). `File.open(p)` reads, `File.create(p)` writes (creating or truncating), and
+  `File.open_with(p, options)` or `OpenOptions().read(..).write(..).append(..).truncate(..).create(..)
+  .create_new(..).open(p)` choose. Instance I/O: `read(buf, max)` appends up to `max` bytes to a `u8[]`
+  (0 at end of file), `read_all()`, `read_string()` (rejects invalid UTF-8), `write(bytes)` (may be partial),
+  `write_all(bytes)`, `write_string(s)`, `seek_start/seek_end/seek_current(offset)`, `set_len(n)`, `sync()`,
+  `metadata()`. Whole-file helpers are static: `read_bytes`, `read_to_string`, `write_bytes`, `write_text`,
+  `copy`, `rename`, `remove`. `File.stdin()`, `stdout()`, `stderr()` are never closed by `File`.
+- **`Directory`**: `open(p)` (checks it is a directory), `entries()` (every `DirEntry` except `.` and `..`,
+  eagerly, with `Name`, the joined `Path`, `IsFile`/`IsDir`/`IsSymlink`), static `create`, `create_all`,
+  `remove` (must be empty), `remove_all` (removes symlinks, never follows them), `current`, `set_current`,
+  `temp`.
+- **`Metadata`**: `Size`, `IsFile`, `IsDir`, `IsSymlink`, `ReadOnly`, `Modified`/`Accessed`/`Created` (ns since
+  the Unix epoch; `Created` is 0 where the file system has no birth time) and `Permissions` (POSIX mode bits,
+  or `FILE_ATTRIBUTE_*` bits on Windows).
+- **Platform types**: `FileHandle` (a descriptor `int`, or a `HANDLE` `__ptr<void>` on Windows), `ErrorCode`,
+  `Mode`, and `Offset` (`long` everywhere).
+
+The public types are written against a private platform layer, `_io_sys_*` functions declared twice with identical
+signatures: `sys_posix.pep` (`[Target(!OS(Windows))]`, with Linux/macOS differences selected by `OS(...)` and
+`Arch(...)`) and `sys_windows.pep` (`[Target(OS(Windows))]`, the UTF-16 `*W` APIs in kernel32). All files of a
+program share one namespace, so the module's C functions (`open`, `read`, `write`, `close`, `stat`, `rename`,
+...) take those names program-wide, and its private helpers are prefixed `_io_`.
