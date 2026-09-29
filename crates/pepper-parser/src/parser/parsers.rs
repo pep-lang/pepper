@@ -19,6 +19,12 @@ fn bt(_input: &mut &str) -> ErrMode<&'static str> {
 fn cut(_input: &mut &str) -> ErrMode<&'static str> {
     ErrMode::Cut("parse error")
 }
+/// A hard failure that records `what` as expected at `input` (see
+/// [`expected`]).
+fn cut_expecting(input: &mut &str, what: &'static str) -> ErrMode<&'static str> {
+    expected(input, what);
+    cut(input)
+}
 
 // ── Source-location tracking ─────────────────────────────────────────────────
 
@@ -72,6 +78,7 @@ impl SourceGuard {
     fn set(len: usize) -> Self {
         let prev = SRC_LEN.with(|l| l.replace(Some(len)));
         MAX_POS.with(|m| m.set(0));
+        EXPECTATION.with(|e| *e.borrow_mut() = None);
         QUALIFIERS.with(|q| q.borrow_mut().clear());
         SourceGuard(prev)
     }
@@ -93,6 +100,68 @@ pub(crate) fn track_source(len: usize) -> SourceGuard {
 /// the remaining input.
 pub(crate) fn max_pos() -> usize {
     MAX_POS.with(|m| m.get())
+}
+
+// ── Parse-error expectations ─────────────────────────────────────────────────
+//
+// What the grammar wanted at the furthest point a rule failed, so a parse
+// error can say `expected ')'` instead of just `parse error`. Rules record an
+// expectation where they give up; only the furthest offset's survive.
+
+/// The expectations recorded at the furthest failure of the current parse.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Expectation {
+    /// Byte offset of the failure, after skipping whitespace and comments.
+    pub offset: usize,
+    /// What would have been accepted there, e.g. `')'` or `expression`.
+    pub expected: Vec<&'static str>,
+    /// A related location, e.g. the `{` an expected `}` would close.
+    pub note: Option<(usize, &'static str)>,
+}
+
+thread_local! {
+    static EXPECTATION: std::cell::RefCell<Option<Expectation>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Record that `what` was expected at the start of `input`.
+fn expected(input: &str, what: &'static str) {
+    expected_with_note(input, what, None);
+}
+
+/// As [`expected`], with a note at a related byte offset.
+fn expected_with_note(input: &str, what: &'static str, note: Option<(usize, &'static str)>) {
+    let mut rest = input;
+    let _ = ws(&mut rest);
+    let offset = pos(rest);
+    EXPECTATION.with(|e| {
+        let mut e = e.borrow_mut();
+        match e.as_mut() {
+            Some(cur) if cur.offset > offset => {}
+            Some(cur) if cur.offset == offset => {
+                if !cur.expected.contains(&what) {
+                    cur.expected.push(what);
+                }
+                if cur.note.is_none() {
+                    cur.note = note;
+                }
+            }
+            _ => *e = Some(Expectation { offset, expected: vec![what], note }),
+        }
+    });
+}
+
+/// The expectations recorded by the current parse.
+pub(crate) fn expectation() -> Option<Expectation> {
+    EXPECTATION.with(|e| e.borrow().clone())
+}
+
+/// Byte offset of the first non-trivia (whitespace, comment) at or after
+/// `offset` in `source`.
+pub(crate) fn skip_trivia(source: &str, offset: usize) -> usize {
+    let mut rest = &source[offset.min(source.len())..];
+    let before = rest.len();
+    let _ = ws(&mut rest);
+    offset.min(source.len()) + (before - rest.len())
 }
 
 
@@ -190,6 +259,8 @@ fn identifier(input: &mut &str) -> Result<String> {
 
 fn type_name(input: &mut &str) -> Result<TypeName> {
     let mut ty = type_name_base(input)?;
+    // End of the last token of the type, excluding trailing whitespace.
+    let mut end = ty.span.end;
 
     // Array suffix: one or more `[]`  (e.g. int[], int[][], ptr<char>[]) 
     loop {
@@ -199,6 +270,7 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
             ws(input)?;
             if input.starts_with(']') {
                 *input = &input[1..];
+                end = pos(input);
                 ty.name.push_str("[]");
                 continue;
             }
@@ -215,13 +287,14 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         ws(input)?;
         if input.starts_with('*') {
             *input = &input[1..];
+            end = pos(input);
             ty.name.push('*');
         } else {
             break;
         }
     }
 
-    ty.span.end = pos(input);
+    ty.span.end = end;
     Ok(ty)
 }
 
@@ -255,6 +328,7 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
     let start = pos(input);
     let mut name = identifier(input)?;
     qualified_tail(input, &mut name);
+    let mut end = pos(input);
     ws(input)?;
 
     // generic types: < T, T, ... >
@@ -271,19 +345,21 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
             }
             if input.starts_with('>') {
                 *input = &input[1..];
+                end = pos(input);
                 break;
             }
-            return Err(cut(input));
+            return Err(cut_expecting(input, "'>'"));
         }
     }
 
-    Ok(TypeName { name, generic_types, span: Span { start, end: pos(input) } })
+    Ok(TypeName { name, generic_types, span: Span { start, end } })
 }
 
 fn string_constant(input: &mut &str) -> Result<Literal> {
     if !input.starts_with('"') {
         return Err(bt(input));
     }
+    let open = pos(input);
     *input = &input[1..]; // consume opening quote
     let mut content = String::new();
     while let Some(c) = input.chars().next() {
@@ -292,7 +368,10 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
         *input = &input[c.len_utf8()..];
     }
     // consume closing quote
-    if !input.starts_with('"') { return Err(cut(input)); }
+    if !input.starts_with('"') {
+        expected_with_note(input, "'\"'", Some((open, "to match this '\"'")));
+        return Err(cut(input));
+    }
     *input = &input[1..];
     Ok(Literal::String(content))
 }
@@ -378,12 +457,12 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     if input.starts_with("sizeof") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[6..];
         ws(input)?;
-        if !input.starts_with('<') { return Err(cut(input)); }
+        if !input.starts_with('<') { return Err(cut_expecting(input, "'<'")); }
         *input = &input[1..];
         ws(input)?;
-        let ty = type_name(input)?;
+        let ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
         ws(input)?;
-        if !input.starts_with('>') { return Err(cut(input)); }
+        if !input.starts_with('>') { return Err(cut_expecting(input, "'>'")); }
         *input = &input[1..];
         // `sizeof<T>()` is the same expression; absorb the call parens so we
         // don't wrap a `SizeOf` in an empty `FunctionCall`.
@@ -391,14 +470,14 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
         if input.starts_with('(') {
             *input = &input[1..];
             ws(input)?;
-            if !input.starts_with(')') { return Err(cut(input)); }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
             *input = &input[1..];
         }
         return Ok(Expression::SizeOf(ty)); // span carried by ty
     }
     // symbol reference, or a generic type literal such as `Array<int>` in `Array<int>()`
     let before = *input;
-    let name = identifier(input)?;
+    let name = identifier(input).inspect_err(|_| expected(input, "expression"))?;
     // A qualified generic construction, call, or member access,
     // `m.Box<int>()`, `m.Box<int>[]()`, `m.Result<int>.ok(1)`, where `m` is an
     // imported module: parsed whole as a type literal so the `<` is not read
@@ -435,7 +514,7 @@ fn atom(input: &mut &str) -> Result<Expression> {
         ws(input)?;
         let expr = expression(input)?;
         ws(input)?;
-        if !input.starts_with(')') { return Err(cut(input)); }
+        if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
         *input = &input[1..];
         return Ok(expr);
     }
@@ -454,7 +533,7 @@ fn postfix(input: &mut &str) -> Result<Expression> {
         if input.starts_with('.') {
             *input = &input[1..];
             ws(input)?;
-            let name = identifier(input)?;
+            let name = identifier(input).inspect_err(|_| expected(input, "member name"))?;
             let name_len = name.len();
             let start = expr.span().start;
             expr = Expression::MemberAccess { lhs: Box::new(expr), name, name_span: Span { start: pos(input) - name_len, end: pos(input) }, span: Span { start, end: pos(input) } };
@@ -465,7 +544,7 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             ws(input)?;
             let rhs = expression(input)?;
             ws(input)?;
-            if !input.starts_with(']') { return Err(cut(input)); }
+            if !input.starts_with(']') { return Err(cut_expecting(input, "']'")); }
             *input = &input[1..];
             let start = expr.span().start;
             expr = Expression::Index { lhs: Box::new(expr), rhs: Box::new(rhs), span: Span { start, end: pos(input) } };
@@ -488,7 +567,7 @@ fn postfix(input: &mut &str) -> Result<Expression> {
                 }
             }
             ws(input)?;
-            if !input.starts_with(')') { return Err(cut(input)); }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
             *input = &input[1..];
             let start = expr.span().start;
             expr = Expression::FunctionCall { function: Box::new(expr), arguments: args, span: Span { start, end: pos(input) } };
@@ -555,7 +634,7 @@ fn cast(input: &mut &str) -> Result<Expression> {
         let start = expr.span().start;
         *input = &input[2..];
         ws(input)?;
-        let ty = type_name(input)?;
+        let ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
         return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) } });
     }
     Ok(expr)
@@ -724,7 +803,7 @@ fn ternary(input: &mut &str) -> Result<Expression> {
     ws(input)?;
     let true_expr = expression(input)?;
     ws(input)?;
-    if !input.starts_with(':') { return Err(cut(input)); }
+    if !input.starts_with(':') { return Err(cut_expecting(input, "':'")); }
     *input = &input[1..];
     ws(input)?;
     let false_expr = expression(input)?;
@@ -786,7 +865,7 @@ fn attribute(input: &mut &str) -> Result<Attribute> {
         }
     }
     ws(input)?;
-    if !input.starts_with(']') { return Err(cut(input)); }
+    if !input.starts_with(']') { return Err(cut_expecting(input, "']'")); }
     *input = &input[1..];
     Ok(Attribute { body, span: Span { start, end: pos(input) } })
 }
@@ -864,7 +943,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         if input.starts_with(':') {
             *input = &input[1..];
             ws(input)?;
-            ty = type_name(input)?;
+            ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
             ws(input)?;
         }
         let mut dv = None;
@@ -889,7 +968,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         if input.starts_with(':') {
             *input = &input[1..];
             ws(input)?;
-            ty = type_name(input)?;
+            ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
             ws(input)?;
         }
         let mut dv = None;
@@ -925,7 +1004,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
     if input.starts_with(':') {
         *input = &input[1..];
         ws(input)?;
-        ty = type_name(input)?;
+        ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
         ws(input)?;
     }
 
@@ -943,7 +1022,8 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
 fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
     // Widen the node span to cover any preceding attributes.
     let start = attributes.first().map(|a| a.span.start).unwrap_or(pos(input));
-    if !input.starts_with('{') { return Err(cut(input)); }
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
     *input = &input[1..];
 
     let mut statements = vec![];
@@ -962,9 +1042,11 @@ fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
         }
     }
     ws(input)?;
-    if input.starts_with('}') {
-        *input = &input[1..];
+    if !input.starts_with('}') {
+        expected_with_note(input, "'}'", Some((open, "to match this '{'")));
+        return Err(cut(input));
     }
+    *input = &input[1..];
     Ok(Block { statements, span: Span { start, end: pos(input) }, attributes })
 }
 
@@ -1139,6 +1221,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
             if decl_boundary(input) {
                 return Ok(Statement::Declaration(Declaration::Variable(v)));
             }
+            expected(input, "';'");
         }
         *input = before;
     }
@@ -1151,7 +1234,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
 // ── Declarations ──────────────────────────────────────────────────────────────
 
 fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
-    if !input.starts_with('(') { return Err(cut(input)); }
+    if !input.starts_with('(') { return Err(cut_expecting(input, "'('")); }
     *input = &input[1..];
     let mut params = vec![];
     loop {
@@ -1176,7 +1259,7 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
             *input = &input[1..];
             break;
         }
-        return Err(cut(input));
+        return Err(cut_expecting(input, "')'"));
     }
     Ok(params)
 }
@@ -1233,7 +1316,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
 }
 
 fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
-    if !input.starts_with('<') { return Err(cut(input)); }
+    if !input.starts_with('<') { return Err(cut_expecting(input, "'<'")); }
     *input = &input[1..];
     let mut params = vec![];
     loop {
@@ -1261,7 +1344,7 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
             *input = &input[1..];
             break;
         }
-        return Err(cut(input));
+        return Err(cut_expecting(input, "'>'"));
     }
     Ok(params)
 }
@@ -1409,7 +1492,7 @@ fn extern_type_name(input: &mut &str) -> Result<TypeName> {
 /// optionally ending in C's `...`. Returns the parameters and whether the
 /// list ended in `...` (a variadic function such as `printf` or `open`).
 fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
-    if !input.starts_with('(') { return Err(cut(input)); }
+    if !input.starts_with('(') { return Err(cut_expecting(input, "'('")); }
     *input = &input[1..];
     let mut params = vec![];
     let mut variadic = false;
@@ -1421,7 +1504,7 @@ fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
             if params.is_empty() { return Err(cut(input)); }
             *input = &input[3..];
             ws(input)?;
-            if !input.starts_with(')') { return Err(cut(input)); }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
             variadic = true;
             break;
         }
@@ -1437,7 +1520,7 @@ fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
             *input = &input[1..];
             continue;
         }
-        if !input.starts_with(')') { return Err(cut(input)); }
+        if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
         break;
     }
     *input = &input[1..];
@@ -1491,14 +1574,14 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
     if input.starts_with("this") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = pos(input);
         *input = &input[4..];
-        if !input.starts_with('.') { return Err(cut(input)); }
+        if !input.starts_with('.') { return Err(cut_expecting(input, "'.'")); }
         *input = &input[1..];
         ws(input)?;
         let field_span_start = pos(input);
         let field = identifier(input)?;
         let field_span_end = pos(input);
         ws(input)?;
-        if !input.starts_with('=') { return Err(cut(input)); }
+        if !input.starts_with('=') { return Err(cut_expecting(input, "'='")); }
         *input = &input[1..];
         ws(input)?;
         let value = expression(input)?;
@@ -1715,7 +1798,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
             ws(input)?;
             return Ok(None);
         }
-        Err(cut(input))
+        Err(cut_expecting(input, "'{' or ';'"))
     }
 
     if input.starts_with('(') && !first.contains('.') {
@@ -1806,7 +1889,8 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
         vec![]
     };
     ws(input)?;
-    if !input.starts_with('{') { return Err(cut(input)); }
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
     *input = &input[1..];
 
     let mut methods = vec![];
@@ -1825,7 +1909,7 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
         }
     }
     ws(input)?;
-    if !input.starts_with('}') { return Err(cut(input)); }
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
     Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
@@ -1859,7 +1943,8 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
         }
     }
     ws(input)?;
-    if !input.starts_with('{') { return Err(cut(input)); }
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
     *input = &input[1..];
 
     let mut methods = vec![];
@@ -1878,7 +1963,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
         }
     }
     ws(input)?;
-    if !input.starts_with('}') { return Err(cut(input)); }
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
     Ok(ExtendDecl { attributes: attrs, target, traits, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
@@ -1905,7 +1990,8 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     };
     ws(input)?;
 
-    if !input.starts_with('{') { return Err(cut(input)); }
+    if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
+    let open = pos(input);
     *input = &input[1..];
 
     let mut fields = vec![];
@@ -1929,7 +2015,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             *input = if input.starts_with("construct") { &input[9..] } else { &input[3..] };
             ws(input)?;
             let new_span_end = pos(input);
-            if !input.starts_with('(') { return Err(cut(input)); }
+            if !input.starts_with('(') { return Err(cut_expecting(input, "'('")); }
             *input = &input[1..];
             let mut parameters = vec![];
             loop {
@@ -1941,7 +2027,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
                     *input = &input[1..];
                     continue;
                 }
-                if !input.starts_with(')') { return Err(cut(input)); }
+                if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
                 break;
             }
             *input = &input[1..];
@@ -2010,7 +2096,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     }
 
     ws(input)?;
-    if !input.starts_with('}') { return Err(cut(input)); }
+    if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
     Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false })
@@ -2037,7 +2123,7 @@ fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<Typ
     };
     ws(input)?;
 
-    if !input.starts_with('=') { return Err(cut(input)); }
+    if !input.starts_with('=') { return Err(cut_expecting(input, "'='")); }
     *input = &input[1..];
     ws(input)?;
     let target = type_name(input)?;
@@ -2306,7 +2392,8 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
         // A declaration parses its own attributes.
         *input = before;
 
-        let decl = declaration(input)?;
+        let at = *input;
+        let decl = declaration(input).inspect_err(|_| expected(at, "declaration"))?;
         ws(input)?;
         if input.starts_with(';') { *input = &input[1..]; }
         declarations.push(decl);
@@ -2315,7 +2402,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
     // The entire input must have been consumed; a partial parse is an error.
     ws(input)?;
     if !input.is_empty() {
-        return Err(cut(input));
+        return Err(cut_expecting(input, "declaration"));
     }
 
     Ok(Module { imports, exports, declarations })

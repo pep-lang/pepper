@@ -75,7 +75,7 @@ impl Scopes {
 /// Best-effort type of an expression (port of `typeOfExpr`).
 fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&TypeName>) -> TypeName {
     match expr {
-        Expression::MemberRef { lhs, name } => {
+        Expression::MemberRef { lhs, name, .. } => {
             let lhs_type = type_of_expr(lhs, scopes, current_struct);
             if lhs_type.is_empty() || lhs_type.to_string() == crate::type_name::AUTO {
                 return TypeName::auto();
@@ -494,18 +494,20 @@ fn resolve_expression(
     _var: Option<&mut VariableDef>,
 ) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
-        if let Expression::SymbolRef { id, ty } = e {
+        if let Expression::SymbolRef { id, ty, loc } = e {
             if ty.to_string() == crate::type_name::AUTO && id != "this" {
                 let resolved = if let Some(st) = current_struct {
                     type_of_expr(&Expression::SymbolRef {
                         id: id.clone(),
                         ty: TypeName::auto(),
+                        loc: *loc,
                     }, scopes, Some(st))
                 } else {
                     type_of_expr(
                         &Expression::SymbolRef {
                             id: id.clone(),
                             ty: TypeName::auto(),
+                            loc: *loc,
                         },
                         scopes,
                         None,

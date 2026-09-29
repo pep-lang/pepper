@@ -31,7 +31,7 @@ fn compile_jit_census(source: &str) -> (i32, i64) {
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     let ee = generator.jit_engine(&mut module).expect("jit");

@@ -664,7 +664,7 @@ fn with_codegen_as<R>(
 /// module that references that platform's C functions.
 fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), String> {
     with_codegen_as(os, arch, name, source, |generator, module| {
-        generator.generate(module)?;
+        generator.generate(module).map_err(|d| module.sources.render(&d))?;
         generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
         let ir = generator.module.to_string();
         // Spot-check that the simulated platform's layer is the one that

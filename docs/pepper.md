@@ -116,7 +116,7 @@ export trait Iterable<T> {
 
 The loop picks the form by the methods the source's type has, like C++ range-for: `iterate()` first, else `next()` and
 `current()`. A type with neither is a compile error:
-`type Foo is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())`. Traits are not
+`type 'Foo' is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())`. Traits are not
 checked yet, so declaring one (`extend Foo with Iterator<int> {}`) documents intent rather than being required.
 
 - The loop variable is a copy, like any `var`: rebinding it does not write back to the collection. For struct elements

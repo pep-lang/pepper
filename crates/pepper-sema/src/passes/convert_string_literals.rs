@@ -22,6 +22,7 @@ fn convert(expr: &mut Expression) {
                 Expression::IntLiteral(value.len() as i64),
                 Expression::IntLiteral(value.chars().count() as i64),
             ],
+            loc: crate::model::Loc::NONE,
         };
     }
 }

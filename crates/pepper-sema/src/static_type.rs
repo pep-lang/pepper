@@ -93,7 +93,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),
         Expression::IntLiteral(_) => Some(TypeName::new("i32")),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
-        Expression::MemberRef { lhs, name } => {
+        Expression::MemberRef { lhs, name, .. } => {
             // Specialized clones keep unsubstituted annotations on bare
             // symbols (`keys` typed `K*` in `HashMap<String, int>`), and a
             // table lookup of the enclosing type may fall back to the

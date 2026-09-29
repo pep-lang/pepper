@@ -3,7 +3,8 @@
 //! one `Module`; run the transform passes.
 
 use crate::options::Options;
-use pepper_sema::builder::build;
+use pepper_parser::diagnostic::FileId;
+use pepper_sema::builder::build_file;
 use pepper_sema::model::Module as SemaModule;
 use pepper_sema::passes::transform_pass;
 use pepper_sema::program::{self, Program, Root, Setup};
@@ -25,12 +26,17 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
     merge(&program::load_program(Root::from_file(entry_source)?, &setup)?)
 }
 
-/// Check `program` and merge its files, in load order, into one module.
+/// Check `program` and merge its files, in load order, into one module. The
+/// module's source map holds every file, so `FileId(i)` is `program.files[i]`.
 pub fn merge(program: &Program) -> Result<SemaModule, String> {
     program.check()?;
     let mut module = SemaModule::default();
     for file in &program.files {
-        module.merge(build(&file.module)?);
+        module.sources.add(&file.name, &file.source);
+    }
+    for (i, file) in program.files.iter().enumerate() {
+        let built = build_file(&file.module, FileId(i as u32)).map_err(|d| module.sources.render(&d))?;
+        module.merge(built);
     }
     Ok(module)
 }
@@ -62,9 +68,9 @@ pub fn compile(
 
     let mut module = compile_sources(options, entry_source)?;
 
-    pepper_sema::apply_platform_filters(&mut module)?;
-    struct_body::apply(&mut module)?;
-    transform_pass(&mut module);
+    pepper_sema::apply_platform_filters(&mut module).map_err(|d| module.sources.render(&d))?;
+    struct_body::apply(&mut module).map_err(|d| module.sources.render(&d))?;
+    transform_pass(&mut module).map_err(|d| module.sources.render(&d))?;
 
     Ok(module)
 }

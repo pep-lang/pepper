@@ -12,7 +12,7 @@ fn compile(source: &str) -> crate::model::Module {
     let mut module = build(&ast).expect("build");
     crate::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     module
 }
 
@@ -33,7 +33,7 @@ test(): int {
     .expect("parse error");
     let err = build(&ast).expect_err("reserved member access must be rejected");
     assert!(
-        err.contains("reserved"),
+        err.message.contains("reserved"),
         "expected a reserved-member diagnostic, got: {}",
         err
     );

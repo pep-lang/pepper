@@ -1,6 +1,7 @@
 //! Port of `source/Sema/ConvertIntrinsics.h`: `__ptr<T>` → `T*` type rewrite;
 //! `__is_pod`/`__default` calls become intrinsic expressions.
 
+use crate::model::Diagnostic;
 use crate::model::{Block, Declaration, Expression, FunctionDef, Module, Statement};
 use crate::type_name::TypeName;
 
@@ -12,7 +13,12 @@ fn convert_type_string(ty: &mut TypeName) {
     }
     if ty.name == "__ptr" {
         if ty.sub_types.len() != 1 {
-            panic!("__ptr<T> takes only a single generic type argument");
+            crate::errors::report(Diagnostic::error(format!(
+                "__ptr<T> takes exactly one type argument, {} given in '{}'",
+                ty.sub_types.len(),
+                ty
+            )));
+            return;
         }
         let pointee = ty.sub_types[0].to_string();
         *ty = TypeName::new(&format!("{}*", pointee));
@@ -25,7 +31,7 @@ fn convert_expression(expr: &mut Expression) {
         if let Expression::Cast { ty, .. } | Expression::SizeOf(ty) = e {
             convert_type_string(ty);
         }
-        if let Expression::FunctionCall { function, args } = e {
+        if let Expression::FunctionCall { function, args, .. } = e {
             let base = function.split('<').next().unwrap_or(function);
             if base == "__is_pod" || base == "__default" {
                 // Store the inner type (not the full call name) so later

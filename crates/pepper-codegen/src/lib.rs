@@ -17,6 +17,7 @@ use inkwell::values::AnyValue as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
+use pepper_sema::model::{Diagnostic, Loc};
 use pepper_sema::type_name::TypeName;
 use std::collections::HashMap;
 
@@ -76,6 +77,10 @@ pub struct CodeGenerator<'ctx> {
     deferred_temps: Vec<(BasicValueEnum<'ctx>, String)>,
     /// Declared names of the externs (C functions) in the module.
     extern_names: std::collections::HashSet<String>,
+    /// The innermost located node an error passed through on its way out,
+    /// keyed by the error's text: errors are plain strings inside codegen,
+    /// and `generate` attaches this location when it returns one.
+    error_loc: Option<(String, Loc)>,
 }
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
@@ -101,12 +106,36 @@ impl<'ctx> CodeGenerator<'ctx> {
             scopes: Vec::new(),
             deferred_temps: Vec::new(),
             extern_names: std::collections::HashSet::new(),
+            error_loc: None,
         }
+    }
+
+    /// Remember `loc` as where a failing `result`'s error arose, unless a node
+    /// nested inside this one already claimed it. An error some caller
+    /// swallowed leaves a stale entry, which the next different error text
+    /// replaces.
+    fn locate<T>(&mut self, result: &Result<T, String>, loc: Loc) {
+        let Err(error) = result else { return };
+        if loc.is_none() || self.error_loc.as_ref().is_some_and(|(e, _)| e == error) {
+            return;
+        }
+        self.error_loc = Some((error.clone(), loc));
     }
 
     /// Instantiate + codegen in the exact C++ phase order
     /// (LLVMCodeGenerator.cpp:264-308).
-    pub fn generate(&mut self, module: &mut SemaModule) -> Result<(), String> {
+    pub fn generate(&mut self, module: &mut SemaModule) -> Result<(), Diagnostic> {
+        self.error_loc = None;
+        self.generate_module(module).map_err(|error| {
+            let loc = match self.error_loc.take() {
+                Some((e, loc)) if e == error => loc,
+                _ => Loc::NONE,
+            };
+            Diagnostic::error(error).at(loc)
+        })
+    }
+
+    fn generate_module(&mut self, module: &mut SemaModule) -> Result<(), String> {
         // Instantiation pass: structs → methods → externs → functions.
         // Concrete (non-abstract) structs are pre-registered as opaque
         // pointers first: a struct's field may name a specialization that is
@@ -342,7 +371,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         module: &mut SemaModule,
         map_global: impl Fn(&str) -> Option<usize>,
     ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
-        self.generate(module)?;
+        self.generate(module).map_err(|d| module.sources.render(&d))?;
         let ee = self
             .module
             .create_jit_execution_engine(OptimizationLevel::None)
@@ -392,6 +421,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Struct instantiation (port of StructGen.cpp:57-106) ─────────────────
 
     fn instantiate_struct(&mut self, st: &StructDef) -> Result<(), String> {
+        let result = self.instantiate_struct_unlocated(st);
+        self.locate(&result, st.loc);
+        result
+    }
+
+    fn instantiate_struct_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
         // Generic struct bases are abstract: skip `Name<...>` instances and
         // generic bases (ty 'Array<T>'); specializations were cloned with
         // concrete names by sema.
@@ -404,7 +439,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let ty = self
                 .types
                 .get(&field.ty.to_string())
-                .ok_or_else(|| format!("Field {} has unknown type {}", field.name, field.ty))?;
+                .ok_or_else(|| format!("unknown type name '{}' for field '{}'", field.ty, field.name))?;
             field_types.push(ty);
         }
 
@@ -438,6 +473,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Method instantiation (port of StructGen.cpp:108-148) ────────────────
 
     fn instantiate_methods(&mut self, st: &StructDef) -> Result<(), String> {
+        let result = self.instantiate_methods_unlocated(st);
+        self.locate(&result, st.loc);
+        result
+    }
+
+    fn instantiate_methods_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
         if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
         }
@@ -517,6 +558,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Extern + function instantiation (port of FunctionGen.cpp:63-95) ─────
 
     fn instantiate_extern(&mut self, ext: &ExternDef) -> Result<(), String> {
+        let result = self.instantiate_extern_unlocated(ext);
+        self.locate(&result, ext.loc);
+        result
+    }
+
+    fn instantiate_extern_unlocated(&mut self, ext: &ExternDef) -> Result<(), String> {
         self.extern_names.insert(ext.name.clone());
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
         for param in &ext.parameters {
@@ -571,6 +618,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn instantiate_function(&mut self, function: &FunctionDef) -> Result<(), String> {
+        let result = self.instantiate_function_unlocated(function);
+        self.locate(&result, function.loc);
+        result
+    }
+
+    fn instantiate_function_unlocated(&mut self, function: &FunctionDef) -> Result<(), String> {
         // Generic function bases are abstract: skip them; specializations
         // were cloned with concrete names by sema. Mirrors `instantiate_struct`.
         if function.is_generic_func {
@@ -653,6 +706,12 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     // ── Struct codegen (ctor + methods) ─────────────────────────────────────
     fn codegen_struct(&mut self, st: &StructDef) -> Result<(), String> {
+        let result = self.codegen_struct_unlocated(st);
+        self.locate(&result, st.loc);
+        result
+    }
+
+    fn codegen_struct_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
         if st.ty.is_generic() && st.name == st.ty.name {
             return Ok(());
         }
@@ -673,6 +732,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Function codegen (port of FunctionGen.cpp:22-61 + Function.cpp:61-76)
 
     fn codegen_function(&mut self, function: &FunctionDef) -> Result<(), String> {
+        let result = self.codegen_function_unlocated(function);
+        self.locate(&result, function.loc);
+        result
+    }
+
+    fn codegen_function_unlocated(&mut self, function: &FunctionDef) -> Result<(), String> {
         let fn_value = match self.functions.get(&function.name) {
             Some(f) => *f,
             None => return Ok(()), // extern-only or generic
@@ -1000,6 +1065,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_var_def(&mut self, var: &VariableDef) -> Result<(), String> {
+        let result = self.codegen_var_def_unlocated(var);
+        self.locate(&result, var.loc);
+        result
+    }
+
+    fn codegen_var_def_unlocated(&mut self, var: &VariableDef) -> Result<(), String> {
         // A `for` loop's hidden iterator: substitute the concrete source
         // (`source.iterate()` or `source` itself), so the refcount rules below
         // see an ordinary method call or read. Sema types it best-effort;
@@ -1023,7 +1094,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         } else {
             self.types
                 .get(&var.ty.to_string())
-                .ok_or_else(|| format!("unknown type {}", var.ty))?
+                .ok_or_else(|| {
+                    let error = format!("unknown type name '{}'", var.ty);
+                    // Point at the written type rather than the name.
+                    self.error_loc = var.type_loc.known().map(|loc| (error.clone(), loc));
+                    error
+                })?
         };
         let alloca = self
             .builder
@@ -1161,12 +1237,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         let methods = self.structs.get(&ty).map(|d| &d.methods);
         let declares = |m: &str| methods.is_some_and(|ms| ms.contains_key(m));
         if declares("iterate") {
-            Ok(Expression::MethodCall { this: Box::new(source.clone()), method: "iterate".to_string(), args: vec![] })
+            Ok(Expression::MethodCall { this: Box::new(source.clone()), method: "iterate".to_string(), args: vec![], loc: source.loc() })
         } else if declares("next") && declares("current") {
             Ok(source.clone())
         } else {
             Err(format!(
-                "type {} is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())",
+                "type '{}' is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())",
                 ty
             ))
         }
@@ -1408,7 +1484,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 })
             }
-            Expression::MemberRef { lhs, name } => {
+            Expression::MemberRef { lhs, name, .. } => {
                 let struct_name = self.struct_name_of(lhs)?;
                 self.structs
                     .get(&struct_name)?
@@ -1425,7 +1501,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .get(method)
                     .cloned()
             }
-            Expression::Unary { op, operand } => match *op {
+            Expression::Unary { op, operand, .. } => match *op {
                 // `!x` produces an i1; the arithmetic unaries keep the
                 // operand's type (codegen_unary).
                 UnaryOp::LogicalNot => Some("bool".to_string()),
@@ -1438,7 +1514,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .map(|t| llvm_ops::result_type(&t, &t)),
                 _ => self.value_sema_type(operand),
             },
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary { op, lhs, rhs, .. } => {
                 // The produced value is the *promoted* type from
                 // `codegen_binary` (`binary_result_type`): numeric operands
                 // are promoted to canonical i32/i64/f32/f64 (a `u8 - int`
@@ -1856,7 +1932,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         source: &Expression,
     ) -> Result<(), String> {
         let field_ty_name = match lhs {
-            Expression::MemberRef { lhs, name } => {
+            Expression::MemberRef { lhs, name, .. } => {
                 // `codegen_lvalue` already resolved this MemberRef; a miss
                 // here means the store target is not a struct field.
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
@@ -1928,6 +2004,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let result = self.codegen_expr_unlocated(expr);
+        self.locate(&result, expr.loc());
+        result
+    }
+
+    fn codegen_expr_unlocated(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
             Expression::BoolLiteral(v) => Ok(BasicValueEnum::IntValue(
                 self.context.bool_type().const_int(*v as u64, false),
@@ -1972,7 +2054,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .frame
                     .find_local(id)
                     .or_else(|| self.global_addrs.get(id))
-                    .ok_or_else(|| format!("unknown symbol {}", id))?;
+                    .ok_or_else(|| format!("use of undeclared identifier '{}'", id))?;
                 addr.load(&self.builder)
                     .ok_or_else(|| format!("load failed {}", id))
             }
@@ -1984,7 +2066,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 addr.load(&self.builder)
                     .ok_or_else(|| "load this failed".to_string())
             }
-            Expression::MemberRef { lhs, name } => {
+            Expression::MemberRef { lhs, name, .. } => {
                 // Load lhs (this pointer), then StructGEP (Struct.cpp:60-70).
                 // The struct name comes from the lhs's static type, not the
                 // LLVM value (opaque pointers lose the type).
@@ -2006,7 +2088,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .fields
                     .iter()
                     .position(|(n, _)| n == name)
-                    .ok_or_else(|| format!("no field {}.{}", struct_name, name))?;
+                    .ok_or_else(|| format!("no member named '{}' in '{}'", name, struct_name))?;
                 let field_ty = self
                     .types
                     .get(&desc.fields[idx].1)
@@ -2034,15 +2116,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Ok(value)
             }
-            Expression::Binary { op, lhs, rhs } => self.codegen_binary(op, lhs, rhs),
-            Expression::Unary { op, operand } => self.codegen_unary(*op, operand),
-            Expression::Cast { expr, ty } => self.codegen_cast(expr, ty),
+            Expression::Binary { op, lhs, rhs, .. } => self.codegen_binary(op, lhs, rhs),
+            Expression::Unary { op, operand, .. } => self.codegen_unary(*op, operand),
+            Expression::Cast { expr, ty, .. } => self.codegen_cast(expr, ty),
             Expression::Ternary {
                 condition,
                 true_expr,
                 false_expr,
             } => self.codegen_ternary(condition, true_expr, false_expr),
-            Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
+            Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD Array indexing.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i]`) is a temporary: its
@@ -2413,14 +2495,14 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::FunctionCall {
                 function: name,
-                args,
+                args, ..
             } => self.codegen_call(name, args),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
                 self.codegen_expr(&iterator)
             }
-            Expression::MethodCall { this, method, args } => {
+            Expression::MethodCall { this, method, args, .. } => {
                 // Receiver is a buffer slot (`Data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they
                 // address the pointee's own data (`s[0]` on `String s`), so
@@ -2674,7 +2756,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             // released. A raw literal lowers to a global pointer — not an
             // owned value — so it carries no temp.
             let (msg_value, already_ptr, msg_temp) = match &args[1] {
-                Expression::FunctionCall { function, args: inner }
+                Expression::FunctionCall { function, args: inner, .. }
                     if function == "String"
                         && matches!(
                             inner.first(),
@@ -2767,7 +2849,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             // `String(raw, size, len)` ctor call, whose String object C
             // would read as garbage.
             if is_extern {
-                if let Expression::FunctionCall { function, args: inner } = arg {
+                if let Expression::FunctionCall { function, args: inner, .. } = arg {
                     if let (true, Some(raw @ Expression::StringLiteral { is_raw: true, .. })) =
                         (function == "String", inner.first())
                     {
@@ -2850,18 +2932,28 @@ impl<'ctx> CodeGenerator<'ctx> {
             // support-library externs (_pep_malloc, …) on demand.
             return Ok(vec![]);
         };
-        if provided >= defaults.len() {
-            return Ok(vec![]);
+        // Parameters from the last one without a default on are optional.
+        let required = defaults.iter().rposition(Option::is_none).map_or(0, |i| i + 1);
+        let expected = |bound: &str, n: usize| {
+            if required == defaults.len() { n.to_string() } else { format!("{} {}", bound, n) }
+        };
+        if provided > defaults.len() {
+            return Err(format!(
+                "too many arguments to '{}': expected {}, have {}",
+                target,
+                expected("at most", defaults.len()),
+                provided
+            ));
         }
-        defaults[provided..]
-            .iter()
-            .enumerate()
-            .map(|(offset, default)| {
-                default.clone().ok_or_else(|| {
-                    format!("{}: missing argument {}", target, provided + offset)
-                })
-            })
-            .collect()
+        if provided < required {
+            return Err(format!(
+                "too few arguments to '{}': expected {}, have {}",
+                target,
+                expected("at least", required),
+                provided
+            ));
+        }
+        Ok(defaults[provided..].iter().map(|d| d.clone().expect("trailing parameters have defaults")).collect())
     }
 
     fn call_function(
@@ -2883,7 +2975,12 @@ impl<'ctx> CodeGenerator<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         let fn_value = match self.functions.get(name) {
             Some(f) => *f,
-            None => return Err(format!("unknown function {}", name)),
+            None => {
+                return Err(match name.split_once('.') {
+                    Some((owner, member)) => format!("no member named '{}' in '{}'", member, owner),
+                    None => format!("call to undeclared function '{}'", name),
+                })
+            }
         };
         // Coerce args to the declared param types (e.g. i32 refcount → i64
         // for trace_int).
@@ -3143,6 +3240,12 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Resolve an lvalue expression to an Address (assignment target).
     fn codegen_lvalue(&mut self, expr: &Expression) -> Result<Address<'ctx>, String> {
+        let result = self.codegen_lvalue_unlocated(expr);
+        self.locate(&result, expr.loc());
+        result
+    }
+
+    fn codegen_lvalue_unlocated(&mut self, expr: &Expression) -> Result<Address<'ctx>, String> {
         match expr {
             Expression::SymbolRef { id, .. } => self
                 .frame
@@ -3155,7 +3258,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .find_local("this")
                 .cloned()
                 .ok_or_else(|| "no this".to_string()),
-            Expression::MemberRef { lhs, name } => {
+            Expression::MemberRef { lhs, name, .. } => {
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 // An owned-rvalue receiver (`f().x = v`) is a temporary: its
                 // creation ref is released at the end of the full expression,
@@ -3174,7 +3277,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .fields
                     .iter()
                     .position(|(n, _)| n == name)
-                    .ok_or_else(|| format!("no field {}.{}", struct_name, name))?;
+                    .ok_or_else(|| format!("no member named '{}' in '{}'", name, struct_name))?;
                 let ty_name = desc.fields[idx].1.clone();
                 let field_ty = self
                     .types
@@ -3190,7 +3293,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 Ok(Address::with_llvm_ty(name, &ty_name, field_ty, gep))
             }
-            Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
+            Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => {
                 // POD Array element store: `arr[i] = v` → GEP + store.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i] = v`) is a temporary: its

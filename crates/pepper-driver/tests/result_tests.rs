@@ -30,7 +30,7 @@ fn build_module(source: &str) -> SemaModule {
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     module
 }
 

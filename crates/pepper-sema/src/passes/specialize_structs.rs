@@ -34,6 +34,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         release: base.release.clone(),
         traits: base.traits.clone(),
         attributes: base.attributes.clone(),
+        loc: base.loc,
     };
 
     // Fields: clone then substitute types.
@@ -161,7 +162,7 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             *function = parsed.to_string();
         }
         // `this` symbol refs in specialized bodies carry the base type.
-        if let Expression::SymbolRef { id, ty } = e {
+        if let Expression::SymbolRef { id, ty, .. } = e {
             if id == "this" && !type_map.is_empty() {
                 // type_map is per-struct; leave resolution to implicit types.
                 let _ = ty;

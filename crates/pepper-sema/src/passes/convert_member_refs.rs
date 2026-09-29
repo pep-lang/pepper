@@ -56,7 +56,7 @@ fn convert_statement(stmt: &mut Statement, struct_name: &str, fields: &[Variable
 fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[VariableDef], methods: &[String], locals: &[String], globals: &std::collections::HashSet<String>) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         match e {
-            Expression::SymbolRef { id, ty } => {
+            Expression::SymbolRef { id, ty, loc } => {
                 if *id == "this" {
                     return;
                 }
@@ -71,6 +71,7 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     *e = Expression::MemberRef {
                         lhs: Box::new(Expression::ThisRef),
                         name: id.clone(),
+                        loc: *loc,
                     };
                     return;
                 }
@@ -81,10 +82,13 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     return;
                 }
                 if ty.is_empty() || ty.to_string() == crate::type_name::AUTO {
-                    panic!("Unable to resolve symbol {} in struct {}", id, struct_name);
+                    crate::errors::report(
+                        Diagnostic::error(format!("use of undeclared identifier '{}' in a method of '{}'", id, struct_name))
+                            .at(*loc),
+                    );
                 }
             }
-            Expression::FunctionCall { function, args } => {
+            Expression::FunctionCall { function, args, loc } => {
                 // Convert function calls that are actually method calls.
                 if methods.contains(function) {
                     let method = function.clone();
@@ -93,9 +97,11 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                         this: Box::new(Expression::SymbolRef {
                             id: "this".to_string(),
                             ty: TypeName::auto(),
+                            loc: Loc::NONE,
                         }),
                         method,
                         args: call_args,
+                        loc: *loc,
                     };
                 }
             }

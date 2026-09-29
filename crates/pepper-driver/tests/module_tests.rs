@@ -210,8 +210,8 @@ fn another_files_export_needs_an_import() {
 #[test]
 fn unknown_module_and_file_are_reported_at_the_import() {
     let err = error("unknown", &[("main.pep", "import nowhere;\nimport \"missing\";\ntest(): int { return 0; }")]);
-    assert!(err.contains("main.pep:1:8: cannot find module 'nowhere'"), "{}", err);
-    assert!(err.contains("main.pep:2:8: cannot find \"missing.pep\" or the module folder \"missing\" next to this file"), "{}", err);
+    assert!(err.contains("main.pep:1:8: error: cannot find module 'nowhere'"), "{}", err);
+    assert!(err.contains("main.pep:2:8: error: cannot find \"missing.pep\" or the module folder \"missing\" next to this file"), "{}", err);
 }
 
 #[test]
@@ -644,7 +644,7 @@ fn imports_come_before_declarations() {
         ("main.pep", "test(): int { return f(); }\nimport \"util\";"),
     ];
     let err = error("imports_first", &files);
-    assert!(err.contains("main.pep:2:1: imports must come before all declarations"), "{}", err);
+    assert!(err.contains("main.pep:2:1: error: imports must come before all declarations"), "{}", err);
 }
 
 #[test]

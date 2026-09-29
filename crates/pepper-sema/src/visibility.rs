@@ -37,6 +37,7 @@ use pepper_parser::ast::{
     Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement,
     StructDecl, TypeName,
 };
+use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
 use std::collections::{HashMap, HashSet};
 
 /// One parsed source file.
@@ -116,12 +117,46 @@ impl VisibilityError {
         }
     }
 
-    /// `<file>:<line>:<col>: <message>`
-    pub fn render(&self, files: &[SourceFile]) -> String {
-        let file = &files[self.file];
-        let p = self.span.start_position(file.source);
-        format!("{}:{}:{}: {}", file.name, p.line + 1, p.col + 1, self.message(files))
+    /// The error, with a note at the declaration in the other file. File
+    /// ids are indices into `files`.
+    pub fn to_diagnostic(&self, files: &[SourceFile]) -> Diagnostic {
+        let note = match self.kind {
+            VisibilityErrorKind::Duplicate => "also declared here",
+            _ => "declared here",
+        };
+        let declared_at = declaration_span(files[self.declared_in].module, &self.name, self.kind)
+            .map(|span| Loc::new(FileId(self.declared_in as u32), span));
+        Diagnostic::error(self.message(files))
+            .at(Loc::new(FileId(self.file as u32), self.span))
+            .with_note(note, declared_at)
     }
+
+    /// The rendered diagnostic (see [`pepper_parser::diagnostic`]).
+    pub fn render(&self, files: &[SourceFile]) -> String {
+        self.to_diagnostic(files).render(&Files(files))
+    }
+}
+
+/// `files` as the name and text lookup diagnostics render against.
+struct Files<'a, 'b>(&'a [SourceFile<'b>]);
+
+impl Sources for Files<'_, '_> {
+    fn get(&self, file: FileId) -> Option<(&str, &str)> {
+        self.0.get(file.0 as usize).map(|f| (f.name, f.source))
+    }
+}
+
+/// Span of the name `name` declares in `module`: a top-level declaration,
+/// or for a private-extension error, the extension method.
+fn declaration_span(module: &Module, name: &str, kind: VisibilityErrorKind) -> Option<Span> {
+    module.declarations.iter().find_map(|d| match d {
+        Declaration::Extend(e) if kind == VisibilityErrorKind::PrivateExtension => {
+            e.methods.iter().find(|m| m.name == name).map(|m| m.name_span)
+        }
+        Declaration::Extend(_) => None,
+        d if d.name() == name => Some(d.name_span()),
+        _ => None,
+    })
 }
 
 /// One named top-level declaration.
@@ -593,7 +628,38 @@ mod tests {
             // Unlinked, as before modules: every file's exports are visible.
             .map(|((name, source), module)| SourceFile { name, source, module, prelude: true, duplicate_exempt: true, imported: &none })
             .collect();
-        check_visibility(&sources).iter().map(|e| e.render(&sources)).collect()
+        check_visibility(&sources).iter().map(|e| header(e, &sources)).collect()
+    }
+
+    /// `<file>:<line>:<col>: <message>`: where the error is and what it
+    /// says, without the rendered snippet and note.
+    fn header(e: &VisibilityError, files: &[SourceFile]) -> String {
+        let file = &files[e.file];
+        let p = e.span.start_position(file.source);
+        format!("{}:{}:{}: {}", file.name, p.line + 1, p.col + 1, e.message(files))
+    }
+
+    #[test]
+    fn rendered_error_notes_the_declaration() {
+        let lib_src = "helper(): int { return 1; }\n";
+        let lib = pepper_parser::parser::parse_source("lib.pep", lib_src).unwrap();
+        let main_src = "main(): int {\n    return helper();\n}\n";
+        let main = pepper_parser::parser::parse_source("main.pep", main_src).unwrap();
+        let none = HashMap::new();
+        let files = [
+            SourceFile { name: "lib.pep", source: lib_src, module: &lib, prelude: true, duplicate_exempt: true, imported: &none },
+            SourceFile { name: "main.pep", source: main_src, module: &main, prelude: true, duplicate_exempt: true, imported: &none },
+        ];
+        let rendered: Vec<String> = check_visibility(&files).iter().map(|e| e.render(&files)).collect();
+        assert_eq!(
+            rendered,
+            ["main.pep:2:12: error: 'helper' is private to lib.pep; declare it with 'export' to use it from another file\n\
+              \x20   2 |     return helper();\n\
+              \x20     |            ^~~~~~\n\
+              lib.pep:1:1: note: declared here\n\
+              \x20   1 | helper(): int { return 1; }\n\
+              \x20     | ^~~~~~"]
+        );
     }
 
     #[test]

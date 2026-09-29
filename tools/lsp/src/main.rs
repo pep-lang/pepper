@@ -6,11 +6,12 @@
 //! go-to-definition, and document symbols are computed from the parsed AST
 //! plus the sema model.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use pepper_parser::ast::{self, Span};
+use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
 use pepper_sema::model::{Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
@@ -394,15 +395,15 @@ type Program = pepper_sema::program::Program;
 
 /// Merge `program` into one sema model and run the sema passes. Build errors
 /// in the document (`program[0]`) are reported; other files that fail to
-/// build are skipped.
-fn sema_model_of(program: &Program) -> Result<SemaModule, String> {
+/// build are skipped. Locations carry the file's index in `program`.
+fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
     let mut module = SemaModule::default();
-    for file in &program.files[1..] {
-        if let Ok(m) = pepper_sema::build(&file.module) {
+    for (i, file) in program.files.iter().enumerate().skip(1) {
+        if let Ok(m) = pepper_sema::builder::build_file(&file.module, FileId(i as u32)) {
             module.merge(m);
         }
     }
-    module.merge(pepper_sema::build(&program.files[0].module)?);
+    module.merge(pepper_sema::builder::build_file(&program.files[0].module, FileId(0))?);
 
     // Run the sema passes under a panic guard: an LSP must never crash on
     // a user file, so a panicking pass degrades to "no semantic info".
@@ -410,13 +411,53 @@ fn sema_model_of(program: &Program) -> Result<SemaModule, String> {
         let mut m = module;
         pepper_sema::apply_platform_filters(&mut m)?;
         pepper_sema::struct_body::apply(&mut m)?;
-        pepper_sema::transform_pass(&mut m);
+        pepper_sema::transform_pass(&mut m)?;
         Ok(m)
     }));
     match result {
         Ok(Ok(m)) => Ok(m),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err("semantic analysis panicked".to_string()),
+        Err(_) => Err(diag::Diagnostic::error("semantic analysis panicked")),
+    }
+}
+
+/// Each file of `program` as (name, text), indexed like its diagnostics'
+/// file ids.
+fn program_names(program: &Program) -> Vec<(&str, &str)> {
+    program.files.iter().map(|f| (f.name.as_str(), f.source.as_str())).collect()
+}
+
+/// `d` as an LSP diagnostic on the document (`program[0]`, file id 0), with
+/// its notes as related information. A location in another file, or none,
+/// lands at the top of the document with that file's name in the message.
+fn lsp_diagnostic(d: &diag::Diagnostic, uri: &Url, program: &[(&str, &str)]) -> Diagnostic {
+    let (range, message) = match d.loc {
+        Some(loc) if loc.file.0 == 0 => (span_to_range(program[0].1, loc.span), d.message.clone()),
+        Some(loc) => {
+            let name = program.get(loc.file.0 as usize).map_or("another file", |f| f.0);
+            (Range::default(), format!("{}: {}", name, d.message))
+        }
+        None => (Range::default(), d.message.clone()),
+    };
+    let related: Vec<DiagnosticRelatedInformation> = d
+        .notes
+        .iter()
+        .filter_map(|note| {
+            let loc = note.loc?;
+            let (name, text) = program.get(loc.file.0 as usize)?;
+            let uri = if loc.file.0 == 0 { uri.clone() } else { Url::from_file_path(name).ok()? };
+            Some(DiagnosticRelatedInformation {
+                location: Location::new(uri, span_to_range(text, loc.span)),
+                message: note.message.clone(),
+            })
+        })
+        .collect();
+    Diagnostic {
+        range,
+        severity: Some(DiagnosticSeverity::ERROR),
+        message,
+        related_information: (!related.is_empty()).then_some(related),
+        ..Default::default()
     }
 }
 
@@ -449,21 +490,15 @@ impl PepperLsp {
 
     /// Build the merged sema model for `uri`: runtime prelude + resolved
     /// imports + the open document.
-    fn sema_model(&self, uri: &Url) -> Result<SemaModule, String> {
-        sema_model_of(&self.program(uri)?)
+    fn sema_model(&self, uri: &Url) -> Option<SemaModule> {
+        sema_model_of(&self.program(uri).ok()?).ok()
     }
 
     /// Import errors in the program's document (`program.files[0]`),
     /// references to symbols another file did not `export` or this file did
     /// not import, and private names it shares with other files.
-    fn visibility_diagnostics(program: &Program) -> Vec<Diagnostic> {
-        let text = &program.files[0].source;
-        let diagnostic = |span: Span, message: String, severity| Diagnostic {
-            range: span_to_range(text, span),
-            severity: Some(severity),
-            message,
-            ..Default::default()
-        };
+    fn visibility_diagnostics(program: &Program, uri: &Url) -> Vec<Diagnostic> {
+        let names = program_names(program);
         // The editor does not know the compile's `-I` directories, so an
         // import it cannot find may still resolve for the compiler.
         let mut diags: Vec<Diagnostic> = program
@@ -471,21 +506,24 @@ impl PepperLsp {
             .iter()
             .filter(|e| e.file == 0)
             .map(|e| {
-                let severity = if e.unresolved { DiagnosticSeverity::WARNING } else { DiagnosticSeverity::ERROR };
-                diagnostic(e.span, e.message.clone(), severity)
+                let mut d = lsp_diagnostic(&e.to_diagnostic(), uri, &names);
+                if e.unresolved {
+                    d.severity = Some(DiagnosticSeverity::WARNING);
+                }
+                d
             })
             .collect();
         let files = program.source_files();
         // Same panic guard as the sema passes.
         let Ok(errors) = std::panic::catch_unwind(|| pepper_sema::check_visibility(&files)) else { return diags };
         // A reference that failed to link already has its diagnostic.
-        let linked_errors: std::collections::HashSet<usize> =
+        let linked_errors: HashSet<usize> =
             program.errors.iter().filter(|e| e.file == 0).map(|e| e.span.start).collect();
         diags.extend(
             errors
                 .iter()
                 .filter(|e| e.file == 0 && !linked_errors.contains(&e.span.start))
-                .map(|e| diagnostic(e.span, e.message(&files), DiagnosticSeverity::ERROR)),
+                .map(|e| lsp_diagnostic(&e.to_diagnostic(&files), uri, &names)),
         );
         diags
     }
@@ -493,55 +531,18 @@ impl PepperLsp {
     /// Publish diagnostics for `uri`: parse errors (precise) + sema errors.
     async fn publish_diagnostics(&self, uri: &Url) {
         let mut diags = vec![];
-        if let Some(text) = self.doc(uri) {
-            if let Err(msg) = parse_source(uri.as_str(), &text) {
-                // `msg` is `<name>:<line>:<col>: <message>` (1-based), for a
-                // parse error or one found after parsing (a late import, `T*`
-                // outside an extern). The name is the URI, which itself holds
-                // colons, so strip it rather than splitting on them.
-                let located = msg.strip_prefix(uri.as_str()).and_then(|rest| rest.strip_prefix(':')).and_then(|rest| {
-                    let (l, rest) = rest.split_once(':')?;
-                    let (c, message) = rest.split_once(':')?;
-                    Some((l.parse::<u32>().ok()?, c.parse::<u32>().ok()?, message.trim().to_string()))
-                });
-                if let Some((l, c, message)) = located {
-                    diags.push(Diagnostic {
-                        range: Range::new(
-                            Position::new(l.saturating_sub(1), c.saturating_sub(1)),
-                            Position::new(l.saturating_sub(1), c.saturating_sub(1)),
-                        ),
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        message,
-                        ..Default::default()
-                    });
-                } else {
-                    diags.push(Diagnostic {
-                        range: Range::new(Position::new(0, 0), Position::new(0, 0)),
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        message: msg,
-                        ..Default::default()
-                    });
-                }
+        let Some(text) = self.doc(uri) else { return };
+        // A parse error, or one found after parsing (a late import, `T*`
+        // outside an extern).
+        if let Err(d) = pepper_parser::parser::parse_source_diag(&text) {
+            diags.push(lsp_diagnostic(&d, uri, &[(uri.as_str(), &text)]));
+        } else if let Ok(program) = self.program(uri) {
+            // Read and parse the program once for both the sema and
+            // visibility checks.
+            if let Err(d) = sema_model_of(&program) {
+                diags.push(lsp_diagnostic(&d, uri, &program_names(&program)));
             }
-        }
-        // Read and parse the program once for both the sema and visibility
-        // checks.
-        let program = self.program(uri);
-        // The program fails to load only when the document itself does not
-        // parse, which already produced a diagnostic above; only surface
-        // genuine semantic errors.
-        if let Ok(p) = &program
-            && let Err(e) = sema_model_of(p)
-        {
-            diags.push(Diagnostic {
-                range: Range::new(Position::new(0, 0), Position::new(0, 0)),
-                severity: Some(DiagnosticSeverity::ERROR),
-                message: format!("semantic error: {}", e),
-                ..Default::default()
-            });
-        }
-        if let Ok(program) = &program {
-            diags.extend(Self::visibility_diagnostics(program));
+            diags.extend(Self::visibility_diagnostics(&program, uri));
         }
         self.client.publish_diagnostics(uri.clone(), diags, None).await;
     }
@@ -558,7 +559,7 @@ impl PepperLsp {
         let locals: Vec<Symbol> = locals_at(body, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
-        let sema = self.sema_model(uri).ok();
+        let sema = self.sema_model(uri);
 
         let md = |content: String| HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: content });
 

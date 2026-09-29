@@ -15,7 +15,7 @@ fn compile_jit(source: &str) -> i32 {
     let mut module: SemaModule = build(&ast).expect("build");
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     generator.jit_execute(&mut module, "test").expect("jit")
@@ -37,7 +37,7 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     generator.jit_execute(&mut module, "test").expect("jit")

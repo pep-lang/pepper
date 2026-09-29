@@ -47,9 +47,11 @@ pub fn release_field_refs(module: &mut Module) {
                     this: Box::new(Expression::MemberRef {
                         lhs: Box::new(Expression::ThisRef),
                         name: name.clone(),
+                        loc: crate::model::Loc::NONE,
                     }),
                     method: "__release".to_string(),
                     args: vec![],
+                    loc: crate::model::Loc::NONE,
                 })
             })
             .collect();

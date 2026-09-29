@@ -34,7 +34,7 @@ fn compile_jit_mapped(source: &str, map_global: impl Fn(&str) -> Option<usize>) 
     module.merge(build(&ast).expect("build"));
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     let ee = generator.jit_engine_mapped(&mut module, map_global).expect("jit engine");
@@ -354,7 +354,7 @@ fn dropped_predicate() -> &'static str {
 fn platform_err(source: &str) -> String {
     let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
     let mut module: SemaModule = build(&ast).expect("build");
-    pepper_sema::apply_platform_filters(&mut module).expect_err("platform filter must fail")
+    pepper_sema::apply_platform_filters(&mut module).expect_err("platform filter must fail").message
 }
 
 #[test]

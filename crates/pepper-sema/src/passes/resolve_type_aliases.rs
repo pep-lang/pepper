@@ -202,7 +202,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(rhs, aliases, values);
         }
         Expression::Unary { operand, .. } => subst_expr(operand, aliases, values),
-        Expression::Cast { expr: inner, ty } => {
+        Expression::Cast { expr: inner, ty, .. } => {
             subst_expr(inner, aliases, values);
             subst(ty, aliases);
         }
@@ -211,7 +211,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(true_expr, aliases, values);
             subst_expr(false_expr, aliases, values);
         }
-        Expression::Index { lhs, rhs } => {
+        Expression::Index { lhs, rhs, .. } => {
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
@@ -245,7 +245,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
-        Expression::FunctionCall { function, args } => {
+        Expression::FunctionCall { function, args, .. } => {
             // Type positions are encoded into the call string (static calls
             // like `Result<int>.ok(..)` and explicit generic args `g<I>(..)`).
             // Generic arguments are always type positions; the base name is a
@@ -269,13 +269,14 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             // codegen resolves (`Result<int, Error>`). Skipped when a value
             // symbol owns the name — `S.m()` on a variable `S` is not an
             // alias use.
-            if let Expression::SymbolRef { id, .. } = this.as_ref() {
+            if let Expression::SymbolRef { id, loc, .. } = this.as_ref() {
                 if aliases.contains_key(id) && !values.contains(id) {
                     let mut expanded = TypeName::new(id);
                     subst(&mut expanded, aliases);
                     *this = Box::new(Expression::FunctionCall {
                         function: expanded.to_string(),
                         args: vec![],
+                        loc: *loc,
                     });
                 }
             }
@@ -285,6 +286,12 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             }
         }
     }
+}
+
+/// An error in a use of `def`. Type names carry no location, so it points
+/// at the alias's declaration.
+fn alias_error(def: &TypeAliasDef, message: String) -> Diagnostic {
+    Diagnostic::error(message).with_note(format!("type alias {} declared here", def.name), Some(def.loc))
 }
 
 /// Expand one type name (and its nested arguments) to a non-alias type.
@@ -297,7 +304,8 @@ fn subst(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>) {
 /// on this descent path: re-entering one means the alias graph is recursive.
 fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, inflight: &mut HashSet<String>, depth: usize) {
     if depth > MAX_EXPANSION_DEPTH {
-        panic!("type alias expansion too deep for {}", ty);
+        crate::errors::report(Diagnostic::error(format!("type alias expansion too deep for {}", ty)));
+        return;
     }
     // Nested arguments first; each is expanded independently.
     for arg in &mut ty.sub_types {
@@ -307,12 +315,16 @@ fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, infl
         return;
     };
     if ty.sub_types.len() > def.generic_params.len() {
-        panic!(
-            "type alias {} takes {} type argument(s), {} given",
-            def.name,
-            def.generic_params.len(),
-            ty.sub_types.len()
-        );
+        crate::errors::report(alias_error(
+            def,
+            format!(
+                "type alias {} takes {} type argument(s), {} given",
+                def.name,
+                def.generic_params.len(),
+                ty.sub_types.len()
+            ),
+        ));
+        return;
     }
     let mut map: Vec<(String, TypeName)> = vec![];
     for (i, param) in def.generic_params.iter().enumerate() {
@@ -321,17 +333,19 @@ fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, infl
         } else if let Some(default) = &param.default {
             default.clone()
         } else {
-            panic!(
-                "type alias {} requires a type argument for parameter {}",
-                def.name, param.name
-            );
+            crate::errors::report(alias_error(
+                def,
+                format!("type alias {} requires a type argument for parameter {}", def.name, param.name),
+            ));
+            return;
         };
         map.push((param.name.clone(), arg));
     }
 
     let current = ty.to_string();
     if !inflight.insert(current.clone()) {
-        panic!("type alias {} is recursive: {}", def.name, current);
+        crate::errors::report(alias_error(def, format!("type alias {} is recursive: {}", def.name, current)));
+        return;
     }
     let mut next = def.target.clone();
     replace_map(&mut next, &map);

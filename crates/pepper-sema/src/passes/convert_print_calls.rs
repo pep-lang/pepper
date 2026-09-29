@@ -8,12 +8,12 @@ use crate::static_type::{self, StructTable};
 use crate::type_name::TypeName;
 
 fn convert(expr: &mut Expression, table: &StructTable, current: Option<&TypeName>) {
-    if let Expression::FunctionCall { function, args } = expr {
+    if let Expression::FunctionCall { function, args, .. } = expr {
         if function == "print" {
             for arg in args.iter_mut() {
                 // A raw literal needs no ctor call at all: it becomes the
                 // global string pointer directly, so nothing is allocated.
-                if let Expression::FunctionCall { function, args: ctor_args } = arg {
+                if let Expression::FunctionCall { function, args: ctor_args, .. } = arg {
                     if function == "String" && ctor_args.len() >= 1 {
                         if let Expression::StringLiteral { .. } = &ctor_args[0] {
                             let literal = std::mem::replace(&mut ctor_args[0], Expression::IntLiteral(0));
@@ -24,7 +24,8 @@ fn convert(expr: &mut Expression, table: &StructTable, current: Option<&TypeName
                 }
                 if static_type::of(arg, table, current).is_some_and(|ty| StructTable::base_name(&ty) == "String") {
                     let lhs = std::mem::replace(arg, Expression::IntLiteral(0));
-                    *arg = Expression::MemberRef { lhs: Box::new(lhs), name: "Data".to_string() };
+                    let loc = lhs.loc();
+                    *arg = Expression::MemberRef { lhs: Box::new(lhs), name: "Data".to_string(), loc };
                 }
             }
         }

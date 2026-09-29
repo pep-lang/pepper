@@ -1,4 +1,5 @@
 pub mod builder;
+pub(crate) mod errors;
 pub mod model;
 pub mod modules;
 pub mod passes;

@@ -7,7 +7,7 @@ pub fn resolve_literals(module: &mut Module) {
     let mut f = |expr: &mut Expression| {
         if let Expression::Unary {
             op: crate::model::UnaryOp::Neg,
-            operand,
+            operand, ..
         } = expr
         {
             // Fold -literal into a negated literal.

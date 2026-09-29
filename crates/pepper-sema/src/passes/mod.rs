@@ -39,25 +39,37 @@ use specialize_structs::specialize_structs;
 use tag_generics::tag_generics;
 use convert_print_calls::convert_print_calls;
 
-/// Run every pass in the ported order (25 entries, repeats included).
-pub fn transform_pass(module: &mut Module) {
+/// Run every pass in the ported order (25 entries, repeats included),
+/// stopping at the first pass that reports an error.
+pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
+    // A pass that reports an error leaves the model partly unresolved, so
+    // later passes would only trip over it.
+    macro_rules! step {
+        ($pass:expr) => {{
+            $pass;
+            if let Some(error) = crate::errors::take() {
+                return Err(error);
+            }
+        }};
+    }
+    crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
-    resolve_literals(module);
-    tag_generics(module);
-    convert_string_literals(module);
-    gather_generics(module);
-    resolve_implicit_types(module);
-    resolve_resolvables(module, false); // resolve as much as possible
-    apply_extensions(module, false); // apply generic/concrete extensions
-    specialize_structs(module);
-    specialize_functions(module);
-    convert_intrinsics(module);
-    resolve_resolvables(module, false); // resolve what remains
-    apply_extensions(module, true); // apply specialized extensions
-    convert_member_refs(module);
-    resolve_implicit_types(module);
-    resolve_operators(module);
+    step!(resolve_literals(module));
+    step!(tag_generics(module));
+    step!(convert_string_literals(module));
+    step!(gather_generics(module));
+    step!(resolve_implicit_types(module));
+    step!(resolve_resolvables(module, false)); // resolve as much as possible
+    step!(apply_extensions(module, false)); // apply generic/concrete extensions
+    step!(specialize_structs(module));
+    step!(specialize_functions(module));
+    step!(convert_intrinsics(module));
+    step!(resolve_resolvables(module, false)); // resolve what remains
+    step!(apply_extensions(module, true)); // apply specialized extensions
+    step!(convert_member_refs(module));
+    step!(resolve_implicit_types(module));
+    step!(resolve_operators(module));
 
     // Second pass, resolve dependent types/calls. Specializing can expose
     // further generic uses (`Map<String, int>` → field `Array<String>` →
@@ -66,23 +78,24 @@ pub fn transform_pass(module: &mut Module) {
     // itself (`Foo<T>` holding a `Foo<Array<T>>`) never reaches a fixpoint.
     for _ in 0..16 {
         let before = (module.structs.len(), module.functions.len());
-        gather_generics(module);
-        specialize_structs(module);
-        specialize_functions(module);
+        step!(gather_generics(module));
+        step!(specialize_structs(module));
+        step!(specialize_functions(module));
         if (module.structs.len(), module.functions.len()) == before {
             break;
         }
     }
-    convert_intrinsics(module);
-    resolve_resolvables(module, false);
-    convert_member_refs(module);
+    step!(convert_intrinsics(module));
+    step!(resolve_resolvables(module, false));
+    step!(convert_member_refs(module));
 
     // final pass
-    release_field_refs(module);
-    resolve_implicit_types(module);
-    resolve_operators(module); // once implicit types are resolved, operator overloading may exist
-    convert_print_calls(module);
-    resolve_resolvables(module, true);
+    step!(release_field_refs(module));
+    step!(resolve_implicit_types(module));
+    step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
+    step!(convert_print_calls(module));
+    step!(resolve_resolvables(module, true));
+    Ok(())
 }
 
 // ── Shared walk helpers ──────────────────────────────────────────────────────
@@ -149,7 +162,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(true_expr, f);
             walk_expression(false_expr, f);
         }
-        Expression::Index { lhs, rhs } | Expression::ArrayIndex { lhs, rhs, .. } => {
+        Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => {
             walk_expression(lhs, f);
             walk_expression(rhs, f);
         }

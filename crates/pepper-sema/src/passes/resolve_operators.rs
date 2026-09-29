@@ -78,14 +78,14 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
     expand_compound_index_assigns(body, table, current);
     // Single traversal: walk_block visits every expression node once.
     crate::passes::walk_block(body, &mut |expr: &mut Expression| match expr {
-        Expression::Binary { op, lhs, rhs } if op.is_assignment() => {
+        Expression::Binary { op, lhs, rhs, loc } if op.is_assignment() => {
             // `x[y] = z` → `x.__index_set(y, z)`, when the container is a
             // struct declaring the setter. Plain assign only — compound
             // assigns through an index expand in the pre-pass (statement
             // level) or use codegen's load-op-store path; a bare set here
             // would drop the read-modify-write.
             if *op == BinaryOp::Assign {
-                if let Expression::Index { lhs: container, rhs: index } = &**lhs {
+                if let Expression::Index { lhs: container, rhs: index, .. } = &**lhs {
                     if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set")) && !is_raw_buffer_field(container, table, current) {
                         let container = (**container).clone();
                         let index = (**index).clone();
@@ -94,6 +94,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                             this: Box::new(container),
                             method: "__index_set".to_string(),
                             args: vec![index, rhs_value],
+                            loc: *loc,
                         };
                         return;
                     }
@@ -109,10 +110,11 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                     this: Box::new(lhs),
                     method: op_name,
                     args: vec![rhs],
+                    loc: *loc,
                 };
             }
         }
-        Expression::Index { lhs, rhs } => {
+        Expression::Index { lhs, rhs, loc } => {
             let info = lhs_struct(lhs, table, current);
             if info.is_some_and(|i| i.methods.contains("__index_get")) && !is_raw_buffer_field(lhs, table, current) {
                 // Replace the index op with a call to the index method.
@@ -122,6 +124,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                     this: Box::new(lhs),
                     method: "__index_get".to_string(),
                     args: vec![rhs],
+                    loc: *loc,
                 };
             } else if info.is_none() && static_type::of(lhs, table, current).is_some() {
                 // POD receiver with a known type: Array indexing (element
@@ -136,7 +139,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                 };
             }
         }
-        Expression::Binary { op, lhs, rhs } => {
+        Expression::Binary { op, lhs, rhs, loc } => {
             // Resolve overloads on lhs: x + y → x.operator+(y). Only when
             // the lhs's struct declares the method — plain field compares
             // (`Size == 0`) and POD elements must stay binary ops.
@@ -156,6 +159,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                         this: Box::new(lhs),
                         method: op_name,
                         args: vec![rhs],
+                        loc: *loc,
                     };
                 }
             }
@@ -208,13 +212,14 @@ fn compound_index_assign(
     table: &StructTable,
     current: Option<&TypeName>,
 ) -> Option<(VariableDef, Expression)> {
-    let Expression::Binary { op, lhs, rhs } = expr else {
+    let Expression::Binary { op, lhs, rhs, loc } = expr else {
         return None;
     };
+    let loc = *loc;
     let Some(base_op) = op.base_assign_op() else {
         return None;
     };
-    let Expression::Index { lhs: container, rhs: index } = &**lhs else {
+    let Expression::Index { lhs: container, rhs: index, .. } = &**lhs else {
         return None;
     };
     if !lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
@@ -226,6 +231,7 @@ fn compound_index_assign(
         this: Box::new((**container).clone()),
         method: "__index_get".to_string(),
         args: vec![(**index).clone()],
+        loc,
     };
     // No source locations in the model; a process-wide counter keeps the
     // name unique across functions.
@@ -239,6 +245,8 @@ fn compound_index_assign(
         hidden: false,
         kind: Kind::Variable,
         attributes: vec![],
+        loc,
+        type_loc: Loc::NONE,
     };
     let set = Expression::MethodCall {
         this: Box::new((**container).clone()),
@@ -247,10 +255,12 @@ fn compound_index_assign(
             (**index).clone(),
             Expression::Binary {
                 op: base_op,
-                lhs: Box::new(Expression::SymbolRef { id: tmp_name, ty: TypeName::auto() }),
+                lhs: Box::new(Expression::SymbolRef { id: tmp_name, ty: TypeName::auto(), loc }),
                 rhs: Box::new((**rhs).clone()),
+                loc,
             },
         ],
+        loc,
     };
     Some((tmp, set))
 }

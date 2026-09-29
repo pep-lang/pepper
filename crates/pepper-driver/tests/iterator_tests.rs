@@ -35,10 +35,10 @@ fn try_compile_jit_census(source: &str) -> Result<(i32, i64), String> {
     }
     let ast = pepper_parser::parser::parse_source("test.pep", source).map_err(|e| e.to_string())?;
     pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
-    module.merge(build(&ast)?);
+    module.merge(build(&ast).map_err(|d| d.render_in("test.pep", source))?);
     pepper_sema::apply_platform_filters(&mut module).expect("platform");
     struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module);
+    transform_pass(&mut module).expect("sema");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     let ee = generator.jit_engine(&mut module)?;
@@ -418,7 +418,7 @@ fn not_iterable_is_a_compile_error() {
         let err = try_compile_jit_census(source).expect_err("expected a compile error");
         assert!(
             err.contains(&format!(
-                "type {ty} is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())"
+                "type '{ty}' is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())"
             )),
             "unexpected error: {err}"
         );

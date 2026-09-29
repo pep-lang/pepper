@@ -10,6 +10,7 @@
 
 use crate::model::*;
 use pepper_parser::ast::{self, Expression};
+use pepper_parser::diagnostic::FileId;
 use pepper_parser::parser::parsers::{
     contains_platform_predicate, is_os_or_arch_name, is_platform_predicate_name,
 };
@@ -224,25 +225,25 @@ pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
 
 /// Validate every attribute, reporting a malformed one, without short-circuiting
 /// on a false predicate — so a bad attribute later in the list is still reported.
-fn validate(attributes: &[ast::Attribute]) -> Result<(), String> {
+fn validate(attributes: &[ast::Attribute], file: FileId) -> Result<(), Diagnostic> {
     for attr in attributes {
-        let _ = evaluate(&attr.body, attr)?;
+        evaluate(&attr.body, attr).map_err(|e| Diagnostic::error(e).at(Loc::new(file, attr.span)))?;
     }
     Ok(())
 }
 
 /// Drop attributed blocks that do not match the host, recursing into nested
 /// blocks, branches, and loops.
-fn filter_block(block: &mut Block) -> Result<(), String> {
+fn filter_block(block: &mut Block, file: FileId) -> Result<(), Diagnostic> {
     let mut i = 0;
     while i < block.items.len() {
         match &mut block.items[i] {
             Statement::Block(inner) => {
-                validate(&inner.attributes)?;
-                let matched = keep(&inner.attributes)?;
+                validate(&inner.attributes, file)?;
+                let matched = keep(&inner.attributes).map_err(Diagnostic::error)?;
                 // Walk the contents either way: a malformed predicate nested
                 // inside a dropped block must still be reported on every host.
-                filter_block(inner)?;
+                filter_block(inner, file)?;
                 if !matched {
                     // `remove` shifts the next item into `i`; don't skip it.
                     block.items.remove(i);
@@ -250,12 +251,12 @@ fn filter_block(block: &mut Block) -> Result<(), String> {
                 }
             }
             Statement::Branch(br) => {
-                filter_block(&mut br.if_block)?;
+                filter_block(&mut br.if_block, file)?;
                 if let Some(else_block) = &mut br.else_block {
-                    filter_block(else_block)?;
+                    filter_block(else_block, file)?;
                 }
             }
-            Statement::While(w) => filter_block(&mut w.block)?,
+            Statement::While(w) => filter_block(&mut w.block, file)?,
             _ => {}
         }
         i += 1;
@@ -264,46 +265,49 @@ fn filter_block(block: &mut Block) -> Result<(), String> {
 }
 
 /// Walk a function body, validating and filtering attributed blocks inside.
-fn walk_function_body(function: &mut FunctionDef) -> Result<(), String> {
+fn walk_function_body(function: &mut FunctionDef, file: FileId) -> Result<(), Diagnostic> {
     if let Some(body) = &mut function.body {
-        filter_block(body)?;
+        filter_block(body, file)?;
     }
     Ok(())
 }
 
 /// Validate a function's own attributes, then walk its body. Used for
 /// functions that survive filtering (methods, constructors, …).
-fn filter_function(function: &mut FunctionDef) -> Result<(), String> {
-    validate(&function.attributes)?;
-    walk_function_body(function)
+fn filter_function(function: &mut FunctionDef, file: FileId) -> Result<(), Diagnostic> {
+    // Synthesized members carry no location; their errors point into the
+    // owner's file.
+    let file = function.loc.known().map_or(file, |l| l.file);
+    validate(&function.attributes, file)?;
+    walk_function_body(function, file)
 }
 
 /// Apply platform selection to the whole module. Runs before
 /// `struct_body::apply` so filtered code is never synthesized over.
-pub fn apply_platform_filters(module: &mut Module) -> Result<(), String> {
+pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
     // Validate every top-level predicate first so a bad attribute in dropped
     // code is still reported. `validate` evaluates each attribute (no
     // short-circuit on a false one) so a malformed later attribute is caught.
     for f in &module.functions {
-        validate(&f.attributes)?;
+        validate(&f.attributes, f.loc.file)?;
     }
     for s in &module.structs {
-        validate(&s.attributes)?;
+        validate(&s.attributes, s.loc.file)?;
     }
     for t in &module.traits {
-        validate(&t.attributes)?;
+        validate(&t.attributes, t.loc.file)?;
     }
     for e in &module.extensions {
-        validate(&e.attributes)?;
+        validate(&e.attributes, e.loc.file)?;
     }
     for x in &module.externs {
-        validate(&x.attributes)?;
+        validate(&x.attributes, x.loc.file)?;
     }
     for g in &module.globals {
-        validate(&g.attributes)?;
+        validate(&g.attributes, g.loc.file)?;
     }
     for a in &module.type_aliases {
-        validate(&a.attributes)?;
+        validate(&a.attributes, a.loc.file)?;
     }
 
     // Top-level functions: keep iff all attributes match. Bodies are walked
@@ -312,7 +316,8 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), String> {
     let mut kept = Vec::with_capacity(module.functions.len());
     for f in std::mem::take(&mut module.functions) {
         let mut f = f;
-        walk_function_body(&mut f)?;
+        let file = f.loc.file;
+        walk_function_body(&mut f, file)?;
         if keep(&f.attributes).unwrap_or(false) {
             kept.push(f);
         }
@@ -326,22 +331,25 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), String> {
     // body; for constructors/destructors/acquire/release (non-Option fields,
     // never dropped) this also validates their attributes.
     for s in &mut module.structs {
+        let file = s.loc.file;
         for m in &mut s.method_members {
-            filter_function(m)?;
+            filter_function(m, file)?;
         }
-        filter_function(&mut s.constructor)?;
-        filter_function(&mut s.destructor)?;
-        filter_function(&mut s.acquire)?;
-        filter_function(&mut s.release)?;
+        filter_function(&mut s.constructor, file)?;
+        filter_function(&mut s.destructor, file)?;
+        filter_function(&mut s.acquire, file)?;
+        filter_function(&mut s.release, file)?;
     }
     for t in &mut module.traits {
+        let file = t.loc.file;
         for m in &mut t.methods {
-            filter_function(m)?;
+            filter_function(m, file)?;
         }
     }
     for e in &mut module.extensions {
+        let file = e.loc.file;
         for m in &mut e.methods {
-            filter_function(m)?;
+            filter_function(m, file)?;
         }
     }
 

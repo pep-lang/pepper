@@ -47,13 +47,13 @@ fn corpus_fixtures() -> Vec<(String, PathBuf)> {
 fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let mut merged = pepper_driver::compiler::merge(&load(entry)?)?;
 
-    pepper_sema::apply_platform_filters(&mut merged)?;
-    struct_body::apply(&mut merged)?;
-    transform_pass(&mut merged);
+    pepper_sema::apply_platform_filters(&mut merged).map_err(|d| d.to_string())?;
+    struct_body::apply(&mut merged).map_err(|d| d.to_string())?;
+    transform_pass(&mut merged).map_err(|d| d.to_string())?;
 
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.generate(&mut merged)?;
+    generator.generate(&mut merged).map_err(|d| d.to_string())?;
 
     // Emit + link.
     let build_dir = std::env::temp_dir().join("pepper_corpus_test");

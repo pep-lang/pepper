@@ -25,6 +25,7 @@ use crate::passes::platform::keep;
 use pepper_parser::ast::{
     Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement, TypeName,
 };
+use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 use std::collections::{HashMap, HashSet};
 
 /// One parsed file of a program, with its imports resolved to other files.
@@ -71,10 +72,10 @@ pub struct ModuleError {
 }
 
 impl ModuleError {
-    /// `<file>:<line>:<col>: <message>`
-    pub fn render(&self, names: &[&str], sources: &[&str]) -> String {
-        let p = self.span.start_position(sources[self.file]);
-        format!("{}:{}:{}: {}", names[self.file], p.line + 1, p.col + 1, self.message)
+    /// The error as a diagnostic, located in `files[self.file]` of the
+    /// program it came from.
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        Diagnostic::error(self.message.clone()).at(Loc::new(FileId(self.file as u32), self.span))
     }
 }
 

@@ -60,7 +60,9 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
             if let Some((name, _)) = found {
                 ext.resolved = Some(name.clone());
             } else if report_missing {
-                panic!("Cannot extend non-existent struct {}", ext.target);
+                crate::errors::report(
+                    Diagnostic::error(format!("cannot extend unknown struct '{}'", ext.target)).at(ext.loc),
+                );
             }
         }
     }
@@ -130,7 +132,7 @@ fn resolve_statement(stmt: &mut Statement, view: &ResolvedModuleView, report_mis
 
 fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_missing: bool) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
-        if let Expression::FunctionCall { function, .. } = e {
+        if let Expression::FunctionCall { function, loc, .. } = e {
             let known_function = view.functions.iter().any(|(name, _)| name == function);
             let known_extern = view.externs.iter().any(|name| name == function);
             let known_struct = view
@@ -152,7 +154,9 @@ fn resolve_expression(expr: &mut Expression, view: &ResolvedModuleView, report_m
                     || function == "String"
                     || function.contains('<');
                 if !builtin && report_missing {
-                    panic!("Unable to resolve function {}", function);
+                    crate::errors::report(
+                        Diagnostic::error(format!("call to undeclared function '{}'", function)).at(*loc),
+                    );
                 }
             }
         }

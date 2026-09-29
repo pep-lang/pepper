@@ -9,6 +9,7 @@ fn member_ref(name: &str) -> Expression {
     Expression::MemberRef {
         lhs: Box::new(Expression::ThisRef),
         name: name.to_string(),
+        loc: Loc::NONE,
     }
 }
 
@@ -16,6 +17,7 @@ fn call(function: &str, args: Vec<Expression>) -> Statement {
     Statement::Expression(Expression::FunctionCall {
         function: function.to_string(),
         args,
+        loc: Loc::NONE,
     })
 }
 
@@ -34,6 +36,8 @@ fn var_def(name: &str, ty: TypeName, default: Option<Expression>, hidden: bool) 
         hidden,
         kind: Kind::Variable,
         attributes: vec![],
+        loc: Loc::NONE,
+        type_loc: Loc::NONE,
     }
 }
 
@@ -90,6 +94,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     op: BinaryOp::Identical,
                     lhs: Box::new(Expression::ThisRef),
                     rhs: Box::new(Expression::PointerLiteral),
+                    loc: Loc::NONE,
                 },
                 vec![Statement::Return(ReturnStatement { expr: None })],
             ),
@@ -100,7 +105,9 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     op: BinaryOp::Add,
                     lhs: Box::new(member_ref("__refcount")),
                     rhs: Box::new(Expression::IntLiteral(1)),
+                    loc: Loc::NONE,
                 }),
+                loc: Loc::NONE,
             }),
             call(
                 "trace_ptr",
@@ -129,6 +136,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     op: BinaryOp::Identical,
                     lhs: Box::new(Expression::ThisRef),
                     rhs: Box::new(Expression::PointerLiteral),
+                    loc: Loc::NONE,
                 },
                 vec![Statement::Return(ReturnStatement { expr: None })],
             ),
@@ -139,7 +147,9 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     op: BinaryOp::Sub,
                     lhs: Box::new(member_ref("__refcount")),
                     rhs: Box::new(Expression::IntLiteral(1)),
+                    loc: Loc::NONE,
                 }),
+                loc: Loc::NONE,
             }),
             call(
                 "trace_ptr",
@@ -160,6 +170,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     op: BinaryOp::Equal,
                     lhs: Box::new(member_ref("__refcount")),
                     rhs: Box::new(Expression::IntLiteral(0)),
+                    loc: Loc::NONE,
                 },
                 vec![
                     call(
@@ -170,6 +181,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                         this: Box::new(Expression::ThisRef),
                         method: "__dtor".to_string(),
                         args: vec![],
+                        loc: Loc::NONE,
                     }),
                 ],
             ),
@@ -236,7 +248,9 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
                 args: vec![Expression::SymbolRef {
                     id: "size".to_string(),
                     ty: TypeName::auto(),
+                    loc: Loc::NONE,
                 }],
+                loc: Loc::NONE,
             }),
             false,
         ))),
@@ -261,6 +275,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             op: BinaryOp::Assign,
             lhs: Box::new(member_ref(&field.name)),
             rhs: Box::new(value),
+            loc: Loc::NONE,
         }));
     }
     // Assign the `this.<field>` parameters to their fields, in declaration
@@ -273,7 +288,9 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             rhs: Box::new(Expression::SymbolRef {
                 id: format!("__init_{}", field),
                 ty: ty.clone(),
+                loc: Loc::NONE,
             }),
+            loc: Loc::NONE,
         }));
     }
 
@@ -293,6 +310,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         expr: Some(Expression::SymbolRef {
             id: "this".to_string(),
             ty: st.ty.clone(),
+            loc: Loc::NONE,
         }),
     }));
 
@@ -323,11 +341,16 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// Apply both the constructor bodies and the synthesized members to every
 /// struct in the module. Type aliases expand first so synthesis sees only
 /// real types (a field of alias type must lower like a field of its target).
-pub fn apply(module: &mut Module) -> Result<(), String> {
+pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
+    crate::errors::take(); // each run starts fresh
     crate::passes::resolve_type_aliases::resolve_type_aliases(module);
+    if let Some(error) = crate::errors::take() {
+        return Err(error);
+    }
     for st in &mut module.structs {
         apply_synthesized(st);
-        finish(st)?;
+        let loc = st.loc;
+        finish(st).map_err(|e| Diagnostic::error(e).at(loc))?;
     }
     Ok(())
 }

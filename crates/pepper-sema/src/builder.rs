@@ -4,6 +4,18 @@
 use crate::model::*;
 use crate::type_name::TypeName;
 use pepper_parser::ast;
+use pepper_parser::diagnostic::{Diagnostic, FileId};
+
+thread_local! {
+    /// The file being built, whose id every location built carries. Set by
+    /// [`build_file`] for the duration of one build.
+    static FILE: std::cell::Cell<FileId> = const { std::cell::Cell::new(FileId(0)) };
+}
+
+/// `span` in the file being built.
+fn loc(span: ast::Span) -> Loc {
+    Loc::new(FILE.with(|f| f.get()), span)
+}
 
 fn type_name_from(t: &ast::TypeName) -> TypeName {
     let args: Vec<TypeName> = t.generic_types.iter().map(type_name_from).collect();
@@ -83,7 +95,7 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
     })
 }
 
-fn expression(expr: &ast::Expression) -> Result<Expression, String> {
+fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
     match expr {
         ast::Expression::Literal { value: lit, .. } => match lit {
             ast::Literal::String(value) => Ok(Expression::StringLiteral {
@@ -102,26 +114,31 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
                 Ok(Expression::SymbolRef {
                     id: id.clone(),
                     ty: TypeName::auto(),
+                    loc: loc(expr.span()),
                 })
             }
         }
         ast::Expression::TypeLiteral(ty) => Ok(Expression::FunctionCall {
             function: type_name_from(ty).to_string(),
             args: vec![],
+            loc: loc(ty.span),
         }),
         ast::Expression::SizeOf(ty) => Ok(Expression::SizeOf(type_name_from(ty))),
-        ast::Expression::Unary { op, prefix, operand, .. } => Ok(Expression::Unary {
+        ast::Expression::Unary { op, prefix, operand, span } => Ok(Expression::Unary {
             op: unary_op(op, *prefix).expect("unknown unary operator"),
             operand: Box::new(expression(operand)?),
+            loc: loc(*span),
         }),
-        ast::Expression::Cast { expr, ty, .. } => Ok(Expression::Cast {
+        ast::Expression::Cast { expr, ty, span } => Ok(Expression::Cast {
             expr: Box::new(expression(expr)?),
             ty: type_name_from(ty),
+            loc: loc(*span),
         }),
-        ast::Expression::Binary { lhs, op, rhs, .. } => Ok(Expression::Binary {
+        ast::Expression::Binary { lhs, op, rhs, span } => Ok(Expression::Binary {
             op: binary_op(op).expect("unknown binary operator"),
             lhs: Box::new(expression(lhs)?),
             rhs: Box::new(expression(rhs)?),
+            loc: loc(*span),
         }),
         ast::Expression::Ternary {
             condition,
@@ -133,37 +150,49 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             true_expr: Box::new(expression(true_expr)?),
             false_expr: Box::new(expression(false_expr)?),
         }),
-        ast::Expression::Index { lhs, rhs, .. } => Ok(Expression::Index {
+        ast::Expression::Index { lhs, rhs, span } => Ok(Expression::Index {
             lhs: Box::new(expression(lhs)?),
             rhs: Box::new(expression(rhs)?),
+            loc: loc(*span),
         }),
-        ast::Expression::MemberAccess { lhs, name, .. } => {
+        ast::Expression::MemberAccess { lhs, name, name_span, .. } => {
             if name.starts_with("__") && name != "__release" && name != "__acquire" {
-                return Err(format!("'{}' is a reserved (synthesized) member and cannot be accessed from source code", name));
+                return Err(Diagnostic::error(format!(
+                    "'{}' is a reserved (synthesized) member and cannot be accessed from source code",
+                    name
+                ))
+                .at(loc(*name_span)));
             }
             Ok(Expression::MemberRef {
                 lhs: Box::new(expression(lhs)?),
                 name: name.clone(),
+                loc: loc(*name_span),
             })
         }
         ast::Expression::FunctionCall { function, arguments, .. } => {
             // Method call `t.getX()`: the target is a member access.
-            if let ast::Expression::MemberAccess { lhs, name, .. } = function.as_ref() {
+            if let ast::Expression::MemberAccess { lhs, name, name_span, .. } = function.as_ref() {
                 // `__release`/`__acquire` are deliberately callable from
                 // source: explicit refcount control is the language's escape
                 // hatch for object lifetimes.
                 if name.starts_with("__") && name != "__release" && name != "__acquire" {
-                    return Err(format!("'{}' is a reserved (synthesized) method and cannot be called from source code", name));
+                    return Err(Diagnostic::error(format!(
+                        "'{}' is a reserved (synthesized) method and cannot be called from source code",
+                        name
+                    ))
+                    .at(loc(*name_span)));
                 }
                 return Ok(Expression::MethodCall {
                     this: Box::new(expression(lhs)?),
                     method: name.clone(),
                     args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                    loc: loc(*name_span),
                 });
             }
             // Constructor-style call `Name<args>(ctor_args)` keeps the generic
             // target name; the args become the call arguments.
-            let function = match function.as_ref() {
+            let target = function.as_ref();
+            let function = match target {
                 ast::Expression::TypeLiteral(ty) => type_name_from(ty).to_string(),
                 ast::Expression::SymbolRef { id: name, .. } => name.clone(),
                 ast::Expression::Literal { value: lit, .. } => lit.to_string(),
@@ -175,11 +204,12 @@ fn expression(expr: &ast::Expression) -> Result<Expression, String> {
             Ok(Expression::FunctionCall {
                 function,
                 args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                loc: loc(target.span()),
             })
         }
     }
 }
-fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, String> {
+fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
     Ok(VariableDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.type_name),
@@ -187,10 +217,12 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Str
         hidden: false,
         kind,
         attributes: decl.attributes.clone(),
+        loc: loc(decl.name_span),
+        type_loc: if decl.type_name.span.is_empty() { Loc::NONE } else { loc(decl.type_name.span) },
     })
 }
 
-fn block(block: &ast::Block) -> Result<Block, String> {
+fn block(block: &ast::Block) -> Result<Block, Diagnostic> {
     Ok(Block {
         name: String::new(),
         items: block.statements.iter().map(statement).collect::<Result<Vec<_>, _>>()?,
@@ -198,7 +230,7 @@ fn block(block: &ast::Block) -> Result<Block, String> {
     })
 }
 
-fn statement(stmt: &ast::Statement) -> Result<Statement, String> {
+fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
     match stmt {
         ast::Statement::Expression(expr) => Ok(Statement::Expression(expression(expr)?)),
         ast::Statement::Block(inner) => Ok(Statement::Block(block(inner)?)),
@@ -246,14 +278,17 @@ thread_local! {
 /// block (released at loop exit, `break` and `return` included) and `x` is a
 /// while-body local (released at the end of every iteration and at
 /// `continue`). The body keeps its own block so it may shadow `x`.
-fn for_loop(f: &ast::For) -> Result<Statement, String> {
+fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
     let n = FOR_LOOPS.with(|c| {
         let n = c.get();
         c.set(n + 1);
         n
     });
     let iterator = format!("__for_iterator_{}", n);
-    let iterator_ref = || Box::new(Expression::SymbolRef { id: iterator.clone(), ty: TypeName::auto() });
+    // The hidden code is located at the iterable, so an error in it (say,
+    // a type without `next`) points at what the loop iterates.
+    let at = loc(f.iterable.span());
+    let iterator_ref = || Box::new(Expression::SymbolRef { id: iterator.clone(), ty: TypeName::auto(), loc: at });
     let hidden_iterator = VariableDef {
         name: iterator.clone(),
         ty: TypeName::auto(),
@@ -261,9 +296,11 @@ fn for_loop(f: &ast::For) -> Result<Statement, String> {
         hidden: true,
         kind: Kind::Variable,
         attributes: vec![],
+        loc: at,
+        type_loc: Loc::NONE,
     };
     let mut element = variable_def(&f.binding, Kind::Variable)?;
-    element.default = Some(Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![] });
+    element.default = Some(Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![], loc: at });
     let body = Block {
         name: String::new(),
         items: vec![Statement::Declaration(Declaration::Variable(element)), Statement::Block(block(&f.block)?)],
@@ -274,7 +311,7 @@ fn for_loop(f: &ast::For) -> Result<Statement, String> {
         items: vec![
             Statement::Declaration(Declaration::Variable(hidden_iterator)),
             Statement::While(While {
-                condition: Expression::MethodCall { this: iterator_ref(), method: "next".to_string(), args: vec![] },
+                condition: Expression::MethodCall { this: iterator_ref(), method: "next".to_string(), args: vec![], loc: at },
                 block: body,
             }),
         ],
@@ -282,7 +319,7 @@ fn for_loop(f: &ast::For) -> Result<Statement, String> {
     }))
 }
 
-fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, String> {
+fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
     let parameters: Vec<VariableDef> = decl
         .parameters
         .iter()
@@ -300,34 +337,47 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Func
         is_indexer: decl.is_indexer,
         is_generic_func: !decl.generic_params.is_empty(),
         attributes: decl.attributes.clone(),
+        loc: loc(decl.name_span),
     })
 }
 
-fn declaration(decl: &ast::Declaration) -> Result<Declaration, String> {
+fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
     match decl {
         ast::Declaration::Variable(v) => {
             Ok(Declaration::Variable(variable_def(v, Kind::Variable)?))
         }
         ast::Declaration::Function(f) => Ok(Declaration::Function(function_def(f, None)?)),
         ast::Declaration::Struct(s) => Ok(Declaration::Struct(struct_def(s)?)),
-        ast::Declaration::Trait(t) => Ok(Declaration::Trait(TraitDef {
-            name: t.name.clone(),
-            methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
-            attributes: t.attributes.clone(),
-        })),
-        ast::Declaration::Extend(e) => Ok(Declaration::Extension(ExtensionDef {
-            target: type_name_from(&e.target),
-            resolved: None,
-            traits: e.traits.iter().map(type_name_from).collect(),
-            methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
-            attributes: e.attributes.clone(),
-        })),
-        ast::Declaration::TypeAlias(_) => Err("type aliases are top-level declarations".into()),
+        ast::Declaration::Trait(t) => Ok(Declaration::Trait(trait_def(t)?)),
+        ast::Declaration::Extend(e) => Ok(Declaration::Extension(extension_def(e)?)),
+        ast::Declaration::TypeAlias(t) => {
+            Err(Diagnostic::error("type aliases are top-level declarations").at(loc(t.name_span)))
+        }
     }
 }
+fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
+    Ok(TraitDef {
+        name: t.name.clone(),
+        methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        attributes: t.attributes.clone(),
+        loc: loc(t.name_span),
+    })
+}
+
+fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
+    Ok(ExtensionDef {
+        target: type_name_from(&e.target),
+        resolved: None,
+        traits: e.traits.iter().map(type_name_from).collect(),
+        methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
+        attributes: e.attributes.clone(),
+        loc: loc(e.target.span),
+    })
+}
+
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
-fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
+fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
     let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
     let base_name = decl.name.clone();
     let ty = if generic_params.is_empty() {
@@ -368,6 +418,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             is_indexer: false,
             is_generic_func: false,
             attributes: vec![],
+            loc: loc(decl.name_span),
         },
     };
     let destructor = match &decl.destructor {
@@ -382,6 +433,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             is_indexer: false,
             is_generic_func: false,
             attributes: body.attributes.clone(),
+            loc: loc(decl.name_span),
         },
         None => FunctionDef {
             name: "__dtor".to_string(),
@@ -398,6 +450,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
             is_indexer: false,
             is_generic_func: false,
             attributes: vec![],
+            loc: loc(decl.name_span),
         },
     };
 
@@ -413,6 +466,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, String> {
         release: empty_method(&base_name, "__release"),
         traits: vec![],
         attributes: decl.attributes.clone(),
+        loc: loc(decl.name_span),
     })
 }
 
@@ -432,12 +486,26 @@ fn empty_method(parent: &str, name: &str) -> FunctionDef {
         is_indexer: false,
         is_generic_func: false,
         attributes: vec![],
+        loc: Loc::NONE,
     }
 }
 
 /// Parse-level module → model module (no synthesized members yet; call
-/// [`struct_body::apply_synthesized`] afterwards).
-pub fn build(module: &ast::Module) -> Result<Module, String> {
+/// [`struct_body::apply_synthesized`] afterwards). Locations carry the
+/// default [`FileId`]; see [`build_file`].
+pub fn build(module: &ast::Module) -> Result<Module, Diagnostic> {
+    build_file(module, FileId::default())
+}
+
+/// [`build`], with every location pointing into `file`.
+pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnostic> {
+    let previous = FILE.with(|f| f.replace(file));
+    let built = build_module(module);
+    FILE.with(|f| f.set(previous));
+    built
+}
+
+fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
     let mut out = Module::default();
     out.imports = module.imports.clone();
     for decl in &module.declarations {
@@ -460,29 +528,21 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                             .collect::<Result<Vec<_>, _>>()?,
                         is_variadic: f.is_variadic,
                         attributes: f.attributes.clone(),
+                        loc: loc(f.name_span),
                     });
                 } else {
                     out.functions.push(function_def(f, None)?);
                 }
             }
             ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
-            ast::Declaration::Trait(t) => out.traits.push(TraitDef {
-                name: t.name.clone(),
-                methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
-                attributes: t.attributes.clone(),
-            }),
-            ast::Declaration::Extend(e) => out.extensions.push(ExtensionDef {
-                target: type_name_from(&e.target),
-                resolved: None,
-                traits: e.traits.iter().map(type_name_from).collect(),
-                methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
-                attributes: e.attributes.clone(),
-            }),
+            ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
+            ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),
             ast::Declaration::TypeAlias(t) => out.type_aliases.push(TypeAliasDef {
                 name: t.name.clone(),
                 generic_params: t.generic_params.iter().map(generic_param_from).collect(),
                 target: type_name_from(&t.target),
                 attributes: t.attributes.clone(),
+                loc: loc(t.name_span),
             }),
         }
     }

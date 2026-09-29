@@ -4,6 +4,7 @@
 
 use crate::type_name::TypeName;
 use pepper_parser::ast;
+pub use pepper_parser::diagnostic::{Diagnostic, Loc};
 
 // ── Binary operators (port of Model/BinaryOps.h) ─────────────────────────────
 
@@ -163,6 +164,7 @@ pub enum Expression {
     SymbolRef {
         id: String,
         ty: TypeName,
+        loc: Loc,
     },
     /// `this`
     ThisRef,
@@ -170,6 +172,8 @@ pub enum Expression {
     MemberRef {
         lhs: Box<Expression>,
         name: String,
+        /// Location of the member name.
+        loc: Loc,
     },
     BoolLiteral(bool),
     IntLiteral(i64),
@@ -185,15 +189,19 @@ pub enum Expression {
         op: BinaryOp,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
+        /// Location of the operator and right operand.
+        loc: Loc,
     },
     Unary {
         op: UnaryOp,
         operand: Box<Expression>,
+        loc: Loc,
     },
     /// `expr as Type` — static cast (spec docs/pepper.md).
     Cast {
         expr: Box<Expression>,
         ty: TypeName,
+        loc: Loc,
     },
     Ternary {
         condition: Box<Expression>,
@@ -204,6 +212,7 @@ pub enum Expression {
     Index {
         lhs: Box<Expression>,
         rhs: Box<Expression>,
+        loc: Loc,
     },
     /// POD array indexing after operator resolution
     ArrayIndex {
@@ -236,12 +245,16 @@ pub enum Expression {
     FunctionCall {
         function: String,
         args: Vec<Expression>,
+        /// Location of the called name.
+        loc: Loc,
     },
     /// Method call on `this` expression
     MethodCall {
         this: Box<Expression>,
         method: String,
         args: Vec<Expression>,
+        /// Location of the method name.
+        loc: Loc,
     },
     /// The iterator a `for` loop drives, built from its source expression:
     /// `source.iterate()` when the source's type declares `iterate()`
@@ -249,6 +262,24 @@ pub enum Expression {
     /// `current()` (Iterator<T>). Chosen by type, like C++ range-for; the
     /// builder emits it only as the default of the loop's hidden iterator.
     ForIterator(Box<Expression>),
+}
+
+impl Expression {
+    /// Where the expression came from in source; [`Loc::NONE`] for literals
+    /// and nodes the compiler synthesized.
+    pub fn loc(&self) -> Loc {
+        match self {
+            Expression::SymbolRef { loc, .. }
+            | Expression::MemberRef { loc, .. }
+            | Expression::Binary { loc, .. }
+            | Expression::Unary { loc, .. }
+            | Expression::Cast { loc, .. }
+            | Expression::Index { loc, .. }
+            | Expression::FunctionCall { loc, .. }
+            | Expression::MethodCall { loc, .. } => *loc,
+            _ => Loc::NONE,
+        }
+    }
 }
 
 // ── Statements ───────────────────────────────────────────────────────────────
@@ -312,6 +343,10 @@ pub struct VariableDef {
     /// Source attributes; only module-scope variables use them
     /// (`[Target(...)]` platform selection).
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
+    /// Location of the written type; [`Loc::NONE`] when it is inferred.
+    pub type_loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -338,6 +373,8 @@ pub struct FunctionDef {
     pub is_generic_func: bool,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -358,6 +395,8 @@ pub struct StructDef {
     pub traits: Vec<TypeName>,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -366,6 +405,8 @@ pub struct TraitDef {
     pub methods: Vec<FunctionDef>,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -378,6 +419,8 @@ pub struct ExtensionDef {
     pub methods: Vec<FunctionDef>,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the extended type.
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -390,6 +433,8 @@ pub struct ExternDef {
     pub is_variadic: bool,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
 }
 
 impl ExternDef {
@@ -432,6 +477,8 @@ pub struct TypeAliasDef {
     pub target: TypeName,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
+    /// Location of the declared name.
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone)]
@@ -468,6 +515,9 @@ pub struct Module {
     /// Type aliases (`type Name = Target;`), expanded away by
     /// `resolve_type_aliases` before any other pass.
     pub type_aliases: Vec<TypeAliasDef>,
+    /// The files locations point into, for rendering diagnostics. Filled by
+    /// whoever loads the files (see `build_file`); `merge` leaves it alone.
+    pub sources: pepper_parser::diagnostic::SourceMap,
 }
 
 impl Module {

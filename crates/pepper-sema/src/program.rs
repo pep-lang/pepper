@@ -8,6 +8,7 @@ use crate::passes::platform::keep;
 use pepper_files::imports::{
     LocalImport, ModuleRoots, Placement, path_key, resolve_forced, resolve_local, resolve_module, search_paths,
 };
+use pepper_parser::diagnostic::{FileId, Sources};
 use pepper_parser::parser::parse_source;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -46,11 +47,9 @@ pub struct Program {
 }
 
 impl Program {
-    /// Render `errors` as `<file>:<line>:<col>: <message>` lines.
+    /// Render `errors` clang-style (see [`pepper_parser::diagnostic`]).
     pub fn render(&self, errors: &[ModuleError]) -> String {
-        let names: Vec<&str> = self.files.iter().map(|f| f.name.as_str()).collect();
-        let sources: Vec<&str> = self.files.iter().map(|f| f.source.as_str()).collect();
-        errors.iter().map(|e| e.render(&names, &sources)).collect::<Vec<_>>().join("\n")
+        errors.iter().map(|e| e.to_diagnostic().render(self)).collect::<Vec<_>>().join("\n")
     }
 
     /// Linking errors, then visibility errors, every one rendered; empty
@@ -81,6 +80,12 @@ impl Program {
                 imported: &scope.imported,
             })
             .collect()
+    }
+}
+
+impl Sources for Program {
+    fn get(&self, file: FileId) -> Option<(&str, &str)> {
+        self.files.get(file.0 as usize).map(|f| (f.name.as_str(), f.source.as_str()))
     }
 }
 

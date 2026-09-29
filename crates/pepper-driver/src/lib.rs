@@ -11,6 +11,7 @@ pub use pepper_files::runtime;
 
 pub use options::Options;
 pub use pepper_parser::parser;
+pub use pepper_parser::diagnostic as parser_diagnostic;
 
 use pepper_codegen::CodeGenerator;
 use std::path::PathBuf;
@@ -32,7 +33,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     let link_libraries = link_libraries(&sema_module);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, &module_name);
-    generator.generate(&mut sema_module)?;
+    generator.generate(&mut sema_module).map_err(|d| sema_module.sources.render(&d))?;
 
     let build_dir = options.effective_build_dir();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
