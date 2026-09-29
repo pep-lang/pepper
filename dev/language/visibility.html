@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -196,7 +196,8 @@ You can export every kind of top-level declaration:</p>
 <li>type aliases</li>
 <li>traits</li>
 <li>extensions</li>
-<li>module-scope variables</li>
+<li>module-scope variables, which are always <code>const</code> and thread-safe (see
+<a href="threads.html#module-scope-variables">Module-scope variables</a>)</li>
 </ul>
 <p>Here is a library file with a mix of exported and private declarations, and a
 program that uses it:</p>
@@ -213,7 +214,9 @@ export trait Describe {
     describe(): String;
 }
 
-export var points_made = 0;
+# A module-scope variable is `const` and thread-safe: change it through
+# an Atomic.
+export const points_made = Atomic&lt;int&gt;(0);
 
 export origin(): Point {
     return make(0, 0);
@@ -228,7 +231,7 @@ make(x: int, y: int): Point {
     var p = Point();
     p.x = x;
     p.y = y;
-    points_made = points_made + 1;
+    points_made.fetch_add(1);
     return p;
 }
 
@@ -266,13 +269,13 @@ main(): int {
     assert(p.x == 3, "fields are as visible as their struct");
     assert(p.describe() == "point", "method from an exported extension");
     assert(norm_of(p) == 25, "an exported function may use private helpers");
-    assert(points_made == 2, "exported module variable");
+    assert(points_made.load() == 2, "exported module variable");
     assert(platform_name().length() &gt; 0, "exported, with an attribute");
     return 0;
 }
 </code></pre>
 <p><code>main.pep</code> can call <code>at</code>, <code>origin</code>, and <code>norm_of</code>, use <code>Point</code> and <code>Points</code> as
-types, and read <code>points_made</code>. It cannot use <code>make</code> or call <code>p.norm()</code>. Trying
+types, and read the counter in <code>points_made</code>, an exported <code>const</code> <code>Atomic&lt;int&gt;</code>. It cannot use <code>make</code> or call <code>p.norm()</code>. Trying
 to is an error that tells you how to fix it:</p>
 <pre><code class="language-pepper">import "lib";
 
@@ -284,8 +287,8 @@ main(): int {
 <pre><code class="language-text">main.pep:4:13: error: 'make' is private to lib.pep; declare it with 'export' to use it from another file
     4 |     var q = make(1, 2);
       |             ^~~~
-lib.pep:25:1: note: declared here
-   25 | make(x: int, y: int): Point {
+lib.pep:27:1: note: declared here
+   27 | make(x: int, y: int): Point {
       | ^~~~
 </code></pre>
 <p>The same applies to private structs, type aliases, traits, and variables:
@@ -342,8 +345,8 @@ main(): int { return make(1); }
 <pre><code class="language-text">main.pep:3:1: error: private 'make' is also declared in lib.pep; top-level names must be unique across files
     3 | make(x: int): int { return x; }
       | ^~~~
-lib.pep:25:1: note: also declared here
-   25 | make(x: int, y: int): Point {
+lib.pep:27:1: note: also declared here
+   27 | make(x: int, y: int): Point {
       | ^~~~
 </code></pre>
 <p>An exported name must be unique too, even across modules that are reached

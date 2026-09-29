@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -370,14 +370,16 @@ value, or write the type yourself. Prefer <code>var</code> whenever the type is 
 the value.</p>
 <pre><code class="language-pepper"># Declaring variables: inferred, explicitly typed, constant, and module-level.
 
-# Module-level variables (globals) live for the whole program.
-var request_count = 0;
-long total_bytes = 0;
-var greeting: String = "hello";
+# Module-level variables (globals) live for the whole program. Any thread
+# can reach them, so they are const and of a thread-safe type: a number, or
+# an Atomic for state that changes.
+const max_requests = 10;
+const request_count = Atomic&lt;int&gt;(0);
+const total_bytes = Atomic&lt;long&gt;(0);
 
 record(bytes: int) {
-    request_count += 1;
-    total_bytes += bytes;
+    request_count.fetch_add(1);
+    total_bytes.fetch_add(bytes);
 }
 
 main(): int {
@@ -404,9 +406,9 @@ main(): int {
 
     record(100);
     record(250);
-    assert(request_count == 2, "two requests recorded");
-    assert(total_bytes == 350, "350 bytes in total");
-    assert(greeting == "hello", "globals are visible in every function");
+    assert(request_count.load() == 2, "two requests recorded");
+    assert(total_bytes.load() == 350, "350 bytes in total");
+    assert(request_count.load() &lt; max_requests, "globals are visible in every function");
 
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 &amp;&amp; scale == 1.5, "floating point");
@@ -445,9 +447,17 @@ main.pep:1:7: note: 'LIMIT' declared const here
 <h3 id="module-level-variables"><a class="header" href="#module-level-variables">Module-level variables</a></h3>
 <p>A variable declared outside any function is a module-level (global) variable. It
 exists for the whole run of the program and every function in the file can read
-and assign it. Its initializer can be any expression, including a function call.
-Like other top-level declarations, a global is private to its file unless you
-mark it <code>export</code> (see <a href="visibility.html">Visibility</a>).</p>
+it. Its initializer can be any expression, including a function call, and runs
+before <code>main</code>. Like other top-level declarations, a global is private to its
+file unless you mark it <code>export</code> (see <a href="visibility.html">Visibility</a>).</p>
+<p>Any function can run on any thread, so every thread can reach a global. It
+must therefore be declared <code>const</code> and have a thread-safe type, such as a
+number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or a <code>[Shared]</code> struct (see
+<a href="threads.html#module-scope-variables">Module-scope variables</a>). A global that
+changes is an <code>Atomic&lt;T&gt;</code>:</p>
+<pre><code class="language-pepper">const max_retries = 3;
+const requests = Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
+</code></pre>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>
 in C++:</p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -199,7 +199,7 @@ values, and <code>[Shared]</code> structs such as <code>Atomic&lt;T&gt;</code>, 
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 
-    var hits = Atomic&lt;long&gt;(0);
+    const hits = Atomic&lt;long&gt;(0);
 
     work() {
         hits.fetch_add(1);

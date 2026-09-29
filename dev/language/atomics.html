@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -271,7 +271,7 @@ struct Config {
 }
 
 # A module-scope Atomic that every function can share.
-var next_id = Atomic&lt;long&gt;(0);
+const next_id = Atomic&lt;long&gt;(0);
 
 new_id(): long {
     return next_id.fetch_add(1) + 1;

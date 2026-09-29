@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -189,7 +189,7 @@ that claim to be.</p>
 <h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
 <pre><code class="language-pepper">import async;
 
-var finished = Atomic&lt;int&gt;(0);
+const finished = Atomic&lt;int&gt;(0);
 
 # A thread body is a function that takes nothing and returns nothing.
 count_to_a_million() {
@@ -250,6 +250,8 @@ worker.join();
 </code></pre>
 <p>Capture only thread-safe values (numbers, <code>Atomic&lt;T&gt;</code>, <code>[Shared]</code> structs):
 the compiler does not check a closure’s captures yet (see Limitations).</p>
+<p>Every module-scope variable is <code>const</code> and thread-safe, so any thread may
+use one (see <a href="#module-scope-variables">below</a>).</p>
 <p>The <a href="../reference/async-thread.html">Thread reference</a> documents every method.</p>
 <h2 id="processor-counts"><a class="header" href="#processor-counts">Processor counts</a></h2>
 <ul>
@@ -267,8 +269,8 @@ hardware.</li>
 <pre><code class="language-pepper">import [Thread, ThreadLocal] from async;
 
 # One variable, a separate value on every thread.
-var calls = ThreadLocal&lt;int&gt;();
-var totals = Atomic&lt;long&gt;(0);
+const calls = ThreadLocal&lt;int&gt;();
+const totals = Atomic&lt;long&gt;(0);
 
 record_call() {
     calls.set(calls.get() + 1);
@@ -323,8 +325,8 @@ struct Settings {
 
 # Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
 # of them can replace them.
-var current = Atomic&lt;Settings&gt;(Settings(8080, 3));
-var seen = Atomic&lt;long&gt;(0);
+const current = Atomic&lt;Settings&gt;(Settings(8080, 3));
+const seen = Atomic&lt;long&gt;(0);
 
 read_settings() {
     var settings = current.load();
@@ -385,14 +387,41 @@ reported at the field:</p>
 note: threads change a shared struct's state through a thread-safe member such as 'Atomic&lt;T&gt;'
 </code></pre>
 <p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves.</p>
+<h3 id="module-scope-variables"><a class="header" href="#module-scope-variables">Module-scope variables</a></h3>
+<p>Every module-scope variable is implicitly shared, exported or not: any
+function can use it, and any function can run on any thread. So it follows
+the same two rules as a field of a <code>[Shared]</code> struct:</p>
+<ul>
+<li><strong>It must be <code>const</code>.</strong> To change the value, give it a thread-safe type such
+as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a value per thread.</li>
+<li><strong>It must have a thread-safe type</strong> from the list above. A <code>String</code>, an
+<code>Array</code>, a struct that is not <code>[Shared]</code>, or a trait value cannot be a
+module-scope variable; keep it in a local, or in a <code>ThreadLocal&lt;T&gt;</code>.</li>
+</ul>
+<pre><code class="language-pepper">const max_workers = 8;                  # a number
+const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
+const settings = Settings(8080, 3);     # a [Shared] struct
+const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
+</code></pre>
+<p>A variable that breaks a rule is reported at its name or type:</p>
+<pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
+    1 | var hits = 0;
+      |     ^~~~
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic&lt;T&gt;' or 'ThreadLocal&lt;T&gt;'
+</code></pre>
+<pre><code class="language-text">main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
+    2 | const origin: Plain = Plain();
+      |               ^~~~~
+main.pep:1:8: note: 'Plain' is not declared [Shared]
+    1 | struct Plain { var x: int; }
+      |        ^~~~~
+</code></pre>
+<p>Module-scope variables are initialized before <code>main</code> runs, in the order they
+are declared, and each file’s after those of the files it imports and of the
+runtime. So an initializer may use the variables of the files it imports.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <p>Thread safety is not complete yet:</p>
 <ul>
-<li><strong>Module-scope variables are not checked.</strong> Every thread can reach every
-module-scope variable, and the compiler does not yet require them to be
-thread-safe. Only use thread-safe variables, such as an <code>Atomic&lt;T&gt;</code> or a
-<code>[Shared]</code> struct, from more than one thread. A <code>String</code> or <code>Array</code> used
-from two threads at once can corrupt memory.</li>
 <li>There are no mutexes, condition variables or channels yet. Coordinate
 threads with <code>Atomic&lt;T&gt;</code> and <code>join()</code>.</li>
 <li><strong>Closure captures are not checked.</strong> Every function type counts as

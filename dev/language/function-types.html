@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -358,8 +358,9 @@ pick(squared: bool): (int) =&gt; int {
     return negate;
 }
 
-# A module-level function variable.
-var handler = increment;
+# A module-level function variable. Every module-level variable is const;
+# an Atomic lets it change.
+const handler = Atomic&lt;(int) =&gt; int&gt;(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine&lt;T&gt; = (T, T) =&gt; T;
@@ -373,8 +374,8 @@ fold(values: int[], combine: Combine&lt;int&gt;, start: int): int {
 }
 
 # A function that returns nothing has the return type void.
-var events = 0;
-record(n: int) { events += n; }
+const events = Atomic&lt;int&gt;(0);
+record(n: int) { events.fetch_add(n); }
 
 main(): int {
     var t = Transform();
@@ -397,9 +398,9 @@ main(): int {
     var chosen = pick(false);
     assert(chosen(5) == -5, "call a stored returned function");
 
-    assert(handler(1) == 2, "global function value");
-    handler = square;
-    assert(handler(3) == 9, "reassigned global");
+    assert(handler.load()(1) == 2, "global function value");
+    handler.store(square);
+    assert(handler.load()(3) == 9, "replaced global");
 
     var numbers = Array&lt;int&gt;();
     numbers.append(1);
@@ -410,7 +411,7 @@ main(): int {
     var callback: (int) =&gt; void = record;
     callback(2);
     callback(5);
-    assert(events == 7, "void function values");
+    assert(events.load() == 7, "void function values");
     return 0;
 }
 </code></pre>
@@ -418,6 +419,10 @@ main(): int {
 <li><strong>Fields.</strong> A field of function type is called like a method:
 <code>t.op(4)</code>. Inside the struct, <code>op(x)</code> and <code>this.op(x)</code> both call it.</li>
 <li><strong>Arrays.</strong> <code>pipeline[1](5)</code> indexes the array and calls the element.</li>
+<li><strong>Module-level variables.</strong> Every module-level variable is <code>const</code> (see
+<a href="threads.html#module-scope-variables">Module-scope variables</a>), so one whose
+function changes is an <code>Atomic</code>: <code>handler.load()(1)</code> calls the current
+function and <code>handler.store(square)</code> replaces it.</li>
 <li><strong>Return values.</strong> <code>pick(true)(5)</code> calls the function that <code>pick</code> returns.</li>
 <li><strong><code>void</code> results.</strong> A function without a return value has a function type
 ending in <code>=&gt; void</code>, such as <code>(int) =&gt; void</code>.</li>

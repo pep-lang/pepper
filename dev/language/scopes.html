@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -187,7 +187,8 @@ when the object is destroyed. It plays the role of Python’s <code>with</code> 
 <code>using</code>, but the cleanup is ordinary destruction: it runs through the same
 reference counting as every other object (see
 <a href="memory.html">Memory and reference counting</a>).</p>
-<pre><code class="language-pepper">var open_sessions = 0;
+<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
+const open_sessions = Atomic&lt;int&gt;(0);
 
 # A scope object: enter() hands out what the block works with, and the
 # destructor calls exit() when the last reference goes away.
@@ -195,7 +196,7 @@ struct Session {
     var user: String;
 
     construct(this.user = "") {
-        open_sessions += 1;
+        open_sessions.fetch_add(1);
     }
 
     destruct {
@@ -207,7 +208,7 @@ struct Session {
     }
 
     exit() {
-        open_sessions -= 1;
+        open_sessions.fetch_sub(1);
     }
 }
 
@@ -241,13 +242,13 @@ first_user(): String {
 
 main(): int {
     with (var session = Session("grace")) {
-        assert(open_sessions == 1, "open inside the block");
+        assert(open_sessions.load() == 1, "open inside the block");
         assert(session.user == "grace", "bound to what enter() returned");
     }
-    assert(open_sessions == 0, "closed at the end of the block");
+    assert(open_sessions.load() == 0, "closed at the end of the block");
 
     assert(first_user() == "ada", "the value was returned");
-    assert(open_sessions == 0, "closed on return as well");
+    assert(open_sessions.load() == 0, "closed on return as well");
 
     var hits = 0;
     with (var s = Lookup(Session("linus"))) {

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -207,7 +207,7 @@ so destroy one only after the threads that used it have exited.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 
-    var calls = async.ThreadLocal&lt;int&gt;();
+    const calls = async.ThreadLocal&lt;int&gt;();
 
     count_call() {
         calls.set(calls.get() + 1);

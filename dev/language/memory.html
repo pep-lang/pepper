@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d31f2fe.js";
+            window.path_to_searchindex_js = "../searchindex-53472bef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -254,13 +254,14 @@ expression. Each of those releases its reference exactly once, when it goes
 away. When the last reference is released, the object is destroyed: its
 destructor runs, and then its fields release their own references, which may
 destroy further objects in turn.</p>
-<pre><code class="language-pepper">var destroyed = 0;
+<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic&lt;int&gt;(0);
 
 struct Tracked {
     var name: String;
     construct(this.name = "") {}
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -278,15 +279,15 @@ main(): int {
     {
         var a = Tracked("a");
     }
-    assert(destroyed == 1, "a was destroyed at the end of its block");
+    assert(destroyed.load() == 1, "a was destroyed at the end of its block");
 
     # 2. While another reference exists, the object stays alive.
     var b = Tracked("b");
     var also_b = b;
     b = Tracked("b2");          # b lets go of the first object...
-    assert(destroyed == 1, "...but also_b still holds it");
+    assert(destroyed.load() == 1, "...but also_b still holds it");
     also_b = b;                 # the last reference moves away
-    assert(destroyed == 2, "the first object is destroyed now");
+    assert(destroyed.load() == 2, "the first object is destroyed now");
 
     # 3. Fields and containers hold references too.
     var holder = Holder();
@@ -294,22 +295,22 @@ main(): int {
         var c = Tracked("c");
         holder.item = c;
     }
-    assert(destroyed == 2, "holder.item keeps c alive after its scope");
+    assert(destroyed.load() == 2, "holder.item keeps c alive after its scope");
     holder = Holder();          # the old Holder dies and releases c
-    assert(destroyed == 3, "releasing the holder released its field");
+    assert(destroyed.load() == 3, "releasing the holder released its field");
 
     var list = Array&lt;Tracked&gt;();
     list.append(Tracked("d"));
-    assert(destroyed == 3, "the array holds d");
+    assert(destroyed.load() == 3, "the array holds d");
     list.clear();
-    assert(destroyed == 4, "clearing the array released d");
+    assert(destroyed.load() == 4, "clearing the array released d");
 
     # 4. Returned objects belong to the caller; unused results are
     #    destroyed right away.
     var e = make("e");
-    assert(destroyed == 4, "e is alive in main");
+    assert(destroyed.load() == 4, "e is alive in main");
     make("temporary");
-    assert(destroyed == 5, "a result nobody keeps is destroyed immediately");
+    assert(destroyed.load() == 5, "a result nobody keeps is destroyed immediately");
     return 0;
 }
 </code></pre>
@@ -339,7 +340,8 @@ inside the method, <code>this</code> refers to the caller’s object.</p>
 directly or through a chain, keep each other’s counts above zero even after
 nothing else refers to them. Their destructors never run and their memory is
 never freed.</p>
-<pre><code class="language-pepper">var destroyed = 0;
+<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic&lt;int&gt;(0);
 
 struct Person {
     var name: String;
@@ -350,7 +352,7 @@ struct Person {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -363,7 +365,7 @@ main(): int {
         ann.friends.append(bob);
         bob.friends.append(ann);
     }
-    assert(destroyed == 0, "the cycle leaked both objects");
+    assert(destroyed.load() == 0, "the cycle leaked both objects");
 
     # Break the cycle before letting go, and both are destroyed.
     {
@@ -373,7 +375,7 @@ main(): int {
         dan.friends.append(cat);
         dan.friends.clear();    # Dan no longer holds Cat
     }
-    assert(destroyed == 2, "without the cycle, both were destroyed");
+    assert(destroyed.load() == 2, "without the cycle, both were destroyed");
     return 0;
 }
 </code></pre>
@@ -389,7 +391,8 @@ closure that captures <code>this</code> in a field of <code>this</code>.</p>
 alive. Use it for back pointers: a child’s parent, a document’s folder, an
 observer’s subject. The owner holds strong references down the tree, and
 everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
-<pre><code class="language-pepper">var destroyed = 0;
+<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
+const destroyed = Atomic&lt;int&gt;(0);
 
 struct Folder {
     var name: String;
@@ -400,7 +403,7 @@ struct Folder {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 }
 
@@ -416,7 +419,7 @@ struct Document {
     }
 
     destruct {
-        destroyed += 1;
+        destroyed.fetch_add(1);
     }
 
     String path() {
