@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -224,7 +224,8 @@ main(): int {
 </code></pre>
 <ul>
 <li><code>Thread.spawn(body, name)</code> starts a new thread that runs <code>body</code>, a function
-of type <code>ThreadBody</code> (an alias for <code>() =&gt; void</code>), and returns its <code>Thread</code>. The name is optional.</li>
+of type <code>ThreadBody</code> (an alias for <code>shared () =&gt; void</code>), and returns its
+<code>Thread</code>. The name is optional.</li>
 <li><code>join()</code> waits for the body to return. After <code>join()</code>, the joining thread
 sees everything the other thread did. A thread can be joined once.</li>
 <li><code>Thread.current()</code> returns the calling thread’s <code>Thread</code>. For a spawned
@@ -248,8 +249,17 @@ var step: long = 5;
 var worker = async.Thread.spawn(() =&gt; { total.fetch_add(step); });
 worker.join();
 </code></pre>
-<p>Capture only thread-safe values (numbers, <code>Atomic&lt;T&gt;</code>, <code>[Shared]</code> structs):
-the compiler does not check a closure’s captures yet (see Limitations).</p>
+<p>The body is a <a href="function-types.html#sharing-function-values-between-threads"><code>shared</code> function value</a>,
+so the closure may capture only thread-safe values (numbers, <code>Atomic&lt;T&gt;</code>,
+<code>[Shared]</code> structs, <code>shared</code> function values). The compiler checks each
+capture and reports one that is not thread-safe where the closure uses it:</p>
+<pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
+    5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
+      |                                              ^~~~
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+    4 |     var name = "worker";
+      |         ^~~~
+</code></pre>
 <p>Every module-scope variable is <code>const</code> and thread-safe, so any thread may
 use one (see <a href="#module-scope-variables">below</a>).</p>
 <p>The <a href="../reference/async-thread.html">Thread reference</a> documents every method.</p>
@@ -363,11 +373,17 @@ types:</p>
 <ul>
 <li>numbers and <code>bool</code>;</li>
 <li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
-<li>function types, such as <code>() =&gt; void</code>;</li>
+<li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
+<a href="function-types.html#sharing-function-values-between-threads">Function types</a>);</li>
 <li><code>[Shared]</code> structs, and weak references to them.</li>
 </ul>
 <p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
-thread-safe.</p>
+thread-safe, and neither is a plain function type such as <code>() =&gt; void</code>:</p>
+<pre><code class="language-text">main.pep:3:14: error: field 'F' of shared struct 'H' has type '() =&gt; void', which is not thread-safe
+    3 |     const F: () =&gt; void;
+      |              ^~~~~~~~~~
+note: declare the function type 'shared () =&gt; void' to share it between threads
+</code></pre>
 </li>
 </ul>
 <p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
@@ -395,13 +411,15 @@ the same two rules as a field of a <code>[Shared]</code> struct:</p>
 <li><strong>It must be <code>const</code>.</strong> To change the value, give it a thread-safe type such
 as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a value per thread.</li>
 <li><strong>It must have a thread-safe type</strong> from the list above. A <code>String</code>, an
-<code>Array</code>, a struct that is not <code>[Shared]</code>, or a trait value cannot be a
-module-scope variable; keep it in a local, or in a <code>ThreadLocal&lt;T&gt;</code>.</li>
+<code>Array</code>, a struct that is not <code>[Shared]</code>, a trait value, or a plain function
+value cannot be a module-scope variable; keep it in a local, or in a
+<code>ThreadLocal&lt;T&gt;</code>.</li>
 </ul>
 <pre><code class="language-pepper">const max_workers = 8;                  # a number
 const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
+const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared function
 </code></pre>
 <p>A variable that breaks a rule is reported at its name or type:</p>
 <pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
@@ -420,14 +438,9 @@ main.pep:1:8: note: 'Plain' is not declared [Shared]
 are declared, and each file’s after those of the files it imports and of the
 runtime. So an initializer may use the variables of the files it imports.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
-<p>Thread safety is not complete yet:</p>
 <ul>
 <li>There are no mutexes, condition variables or channels yet. Coordinate
 threads with <code>Atomic&lt;T&gt;</code> and <code>join()</code>.</li>
-<li><strong>Closure captures are not checked.</strong> Every function type counts as
-thread-safe, but a closure that captures a <code>String</code> or <code>Array</code> and runs on
-another thread shares that value’s plain reference count with the thread
-that created it. Capture only thread-safe values in a thread body.</li>
 </ul>
 
                     </main>

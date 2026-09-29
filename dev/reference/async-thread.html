@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -200,10 +200,14 @@ number, so it can be compared, hashed and used as a <code>HashMap</code> key.</p
 <li><code>Thread.id</code></li>
 </ul>
 <h2 id="threadbody"><a class="header" href="#threadbody">ThreadBody</a></h2>
-<pre><code class="language-pepper">type ThreadBody = () =&gt; void
+<pre><code class="language-pepper">type ThreadBody = shared () =&gt; void
 </code></pre>
 <p>The type of a thread’s body: a function that takes no arguments and
 returns nothing. <code>Thread.spawn</code> runs one on a new thread.</p>
+<p>It is a <code>shared</code> function type, because the body runs on another thread:
+a named function, or a closure that captures only thread-safe values
+(numbers, <code>Atomic&lt;T&gt;</code>, <code>[Shared]</code> structs, other <code>shared</code> function
+values). A closure capturing a <code>String</code>, say, is a compile error.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>Thread.spawn</code></li>

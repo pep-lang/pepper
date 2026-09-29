@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -193,9 +193,10 @@
 <li><a href="async-thread_local.html">ThreadLocal</a>: a variable with a separate value on every thread</li>
 <li><a href="async-cpus.html">Processor counts</a>: <code>logical_cpus()</code> and <code>physical_cpus()</code></li>
 </ul>
-<p>Only thread-safe values can be shared between threads: numbers, function
-values, and <code>[Shared]</code> structs such as <code>Atomic&lt;T&gt;</code>, <code>Thread</code> and
-<code>ThreadLocal&lt;T&gt;</code>. See the language guide’s Threads chapter.</p>
+<p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
+function values (such as a thread’s body), and <code>[Shared]</code> structs such as
+<code>Atomic&lt;T&gt;</code>, <code>Thread</code> and <code>ThreadLocal&lt;T&gt;</code>. See the language guide’s
+Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 

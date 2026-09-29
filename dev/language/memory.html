@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -471,6 +471,10 @@ on one thread. A struct declared <code>[Shared]</code> has atomic counts instead
 its references can be copied and dropped on any thread. The compiler requires
 such a struct’s fields to be <code>const</code> and thread-safe. See
 <a href="threads.html#what-threads-can-share">What threads can share</a>.</p>
+<p>Function values follow the same split: a plain function type such as
+<code>() =&gt; void</code> has plain counts and stays on one thread, and a
+<a href="function-types.html#sharing-function-values-between-threads"><code>shared</code> function type</a>
+such as <code>shared () =&gt; void</code> has atomic counts.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -245,8 +245,8 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 (see <a href="language/structs.html#implicit-conversions">implicit conversions</a>).
 There is no function or method overloading yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
-<li>Threads can share only thread-safe values, but the compiler does not yet
-check what a closure captures, and there are no mutexes or channels (see
+<li>Threads can share only thread-safe values, which the compiler checks,
+closure captures included; there are no mutexes or channels yet (see
 <a href="language/threads.html#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a

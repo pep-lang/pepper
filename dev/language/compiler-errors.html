@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5a2d0e44.js";
+            window.path_to_searchindex_js = "../searchindex-6bfa0c8d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -356,6 +356,16 @@ initializer, an assignment, an argument and a <code>return</code>:</p>
 main.pep:6:8: note: declare it with 'extend Circle with Shape'
     6 | struct Circle {
       |        ^~~~~~
+</code></pre>
+<p><strong>A value that is not thread-safe given to another thread</strong> (see
+<a href="threads.html#what-threads-can-share">Threads</a>): here a thread body, a
+<code>shared</code> function value, that captures a <code>String</code>:</p>
+<pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
+    5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
+      |                                              ^~~~
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+    4 |     var name = "worker";
+      |         ^~~~
 </code></pre>
 <p><strong>The same name declared twice in one scope:</strong></p>
 <pre><code class="language-text">main.pep:3:9: error: redefinition of 'n'
