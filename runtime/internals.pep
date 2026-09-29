@@ -9,11 +9,11 @@ extern char* getenv(char* name);
 extern int puts(char* s);
 extern void abort();
 
-# The message is a raw `char*`, not a `String`: codegen passes string
+# The message is a raw `__ptr<char>` (C `char*`), not a `String`: codegen passes string
 # literals as their global pointers (no temporary allocation), so hot paths
 # like array index bounds checks stay allocation-free. Non-literal messages
 # are lowered to `msg.c_str()` at the call site.
-export assert(condition: bool, msg: char*): void {
+export assert(condition: bool, msg: __ptr<char>): void {
     if (!condition) {
         panic(msg);
     }
@@ -29,7 +29,7 @@ _pep_trace_enabled(): bool {
 }
 var _pep_trace_on = _pep_trace_enabled();
 
-export _pep_malloc(size: ulong): void* {
+export _pep_malloc(size: ulong): __ptr<void> {
     var p = malloc(size);
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
@@ -38,14 +38,14 @@ export _pep_malloc(size: ulong): void* {
     return p;
 }
 
-export _pep_free(p: void*) {
+export _pep_free(p: __ptr<void>) {
     if (p != __null) {
         free(p);
         _pep_live_allocs_count = _pep_live_allocs_count - 1;
     }
 }
 
-export _pep_realloc(p: void*, prevSize: ulong, newSize: ulong): void* {
+export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void> {
     # C realloc preserves contents up to min(prev,new); net-zero on the
     # counter. The extension region is uninitialized — zero it so fresh
     var np = realloc(p, newSize);
@@ -64,7 +64,7 @@ export _pep_live_allocs(): long {
     return _pep_live_allocs_count;
 }
 
-export panic(msg: char*) {
+export panic(msg: __ptr<char>) {
     if (msg == __null) {
         puts("Assertion failed with no additional information");
     } else {
@@ -74,7 +74,7 @@ export panic(msg: char*) {
 }
 
 # ── Formatting helpers (fixed-width, so no string-length measurement needed) ─
-hex(v: ulong): char* {
+hex(v: ulong): __ptr<char> {
     var buf = _pep_malloc(17);
     var i = 0;
     while (i < 16) {
@@ -86,7 +86,7 @@ hex(v: ulong): char* {
     return buf;
 }
 
-dec(v: long): char* {
+dec(v: long): __ptr<char> {
     var buf = _pep_malloc(24);
     var n = 0;
     var neg = 0;
@@ -107,7 +107,7 @@ dec(v: long): char* {
     return buf;
 }
 
-floatstr(v: double): char* {
+floatstr(v: double): __ptr<char> {
     var ip = v as long;
     var fp = (v - (ip as double)) * 1000000.0;
     var digits = fp as long;
@@ -129,7 +129,7 @@ floatstr(v: double): char* {
 }
 
 # ── Trace (gated by PEP_TRACE) ───────────────────────────────────────────────
-export trace_region(ptr: void*, size: ulong, name: char*) {
+export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
         var n = 0;
@@ -162,7 +162,7 @@ export trace_region(ptr: void*, size: ulong, name: char*) {
     }
 }
 
-export trace_ptr(ptr: void*, name: char*) {
+export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
         var n = 0;
@@ -182,7 +182,7 @@ export trace_ptr(ptr: void*, name: char*) {
     }
 }
 
-export trace_int(value: long, name: char*) {
+export trace_int(value: long, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
         var n = 0;
@@ -203,10 +203,10 @@ export trace_int(value: long, name: char*) {
 }
 
 # ── Swap the first pointer-sized bytes of two slots in a struct buffer ──────
-export _pep_swap_refs(p: void*, stride: ulong, i: ulong, j: ulong) {
+export _pep_swap_refs(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
     if (i != j) {
-        var a: void* = p + (i * stride);
-        var b: void* = p + (j * stride);
+        var a: __ptr<void> = p + (i * stride);
+        var b: __ptr<void> = p + (j * stride);
         var len = stride;
         if (len > 8) { len = 8; }
         var tmp = _pep_malloc(len);
@@ -219,10 +219,10 @@ export _pep_swap_refs(p: void*, stride: ulong, i: ulong, j: ulong) {
 # ── Move the first pointer-sized bytes of one slot into another (raw
 # reference transfer, no refcount change) and null the source so it releases
 # nothing later: a shifted slot must not keep a stale copy of the reference.
-export _pep_move_ref(p: void*, stride: ulong, i: ulong, j: ulong) {
+export _pep_move_ref(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
     if (i != j) {
-        var a: void* = p + (i * stride);
-        var b: void* = p + (j * stride);
+        var a: __ptr<void> = p + (i * stride);
+        var b: __ptr<void> = p + (j * stride);
         var len = stride;
         if (len > 8) { len = 8; }
         memcpy(b, a, len);
@@ -231,7 +231,7 @@ export _pep_move_ref(p: void*, stride: ulong, i: ulong, j: ulong) {
 }
 
 # ── FNV-1a 64-bit (same constants as the compiler's __address lowering) ─────
-export _pep_hash_bytes(data: void*, length: ulong): u64 {
+export _pep_hash_bytes(data: __ptr<void>, length: ulong): u64 {
     if (data == __null || length == 0) { return -3750763034362895579; }
     var h = -3750763034362895579;
     var i = 0;
@@ -245,13 +245,13 @@ export _pep_hash_bytes(data: void*, length: ulong): u64 {
 # ── UTF-8 helpers (length-based; no NUL assumptions on language data) ───────
 # C strings from getenv are NUL-terminated by the C standard; a byte walk is
 # the only way to measure them (never used for language string data).
-export _pep_c_strlen(s: char*): ulong {
+export _pep_c_strlen(s: __ptr<char>): ulong {
     var i = 0;
     while (s[i] != 0) { i = i + 1; }
     return i;
 }
 
-export _pep_utf8_length(s: char*, size: ulong): ulong {
+export _pep_utf8_length(s: __ptr<char>, size: ulong): ulong {
     if (s == __null || size == 0) { return 0; }
     var i = 0;
     var count = 0;
@@ -280,20 +280,20 @@ export _pep_utf8_length(s: char*, size: ulong): ulong {
     return count;
 }
 
-export _pep_utf8_size(s: char*, size: ulong, chars: ulong): ulong {
+export _pep_utf8_size(s: __ptr<char>, size: ulong, chars: ulong): ulong {
     if (s == __null) { return 0; }
     if (chars == 0) { return size; }
     if (!_pep_utf8_valid(s, size)) { return 0; }
     return _pep_utf8_char_offset(s, size, chars);
 }
 
-export _pep_utf8_compare(a: char*, a_size: ulong, b: char*, b_size: ulong, size: ulong): bool {
+export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: ulong, size: ulong): bool {
     if (size == 0) {
         return a_size == b_size && memcmp(a, b, a_size) == 0;
     }
     return a_size >= size && b_size >= size && memcmp(a, b, size) == 0;
 }
-_pep_utf8_valid(data: void*, size: ulong): bool {
+_pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     if (data == __null || size == 0) { return true; }
     var i = 0;
     while (i < size) {
@@ -320,7 +320,7 @@ _pep_utf8_valid(data: void*, size: ulong): bool {
     }
     return true;
 }
-export _pep_utf8_find(haystack: void*, haystackSize: ulong, needle: void*, needleSize: ulong): long {
+export _pep_utf8_find(haystack: __ptr<void>, haystackSize: ulong, needle: __ptr<void>, needleSize: ulong): long {
     if (haystack == __null || haystackSize == 0) { return -1; }
     if (needleSize == 0) { return 0; }
     if (needle == __null) { return -1; }
@@ -340,7 +340,7 @@ export _pep_utf8_find(haystack: void*, haystackSize: ulong, needle: void*, needl
     return -1;
 }
 
-export _pep_utf8_char_offset(data: void*, size: ulong, chars: ulong): ulong {
+export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulong {
     if (data == __null || size == 0) { return 0; }
     var i = 0;
     var count = 0;
@@ -370,7 +370,7 @@ export _pep_utf8_char_offset(data: void*, size: ulong, chars: ulong): ulong {
 }
 
 # ── print backing (the `print` builtin lowers to these by name) ─────────────
-_pep_print(s: char*) {
+_pep_print(s: __ptr<char>) {
     if (s != __null) { puts(s); }
 }
 

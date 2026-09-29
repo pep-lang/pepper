@@ -759,8 +759,8 @@ fn chained_pointer_arithmetic() {
             r#"
 test(): int {
     String s = "abcdef";
-    char* p = s.c_str();
-    char* r = p + 1 + 1;
+    __ptr<char> p = s.c_str();
+    __ptr<char> r = p + 1 + 1;
     return r[0] as int - 99;
 }
 "#

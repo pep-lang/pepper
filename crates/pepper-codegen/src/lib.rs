@@ -3083,7 +3083,8 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// `expr as T` — static cast (spec docs/pepper.md: "equivalent of
     /// static_cast; compile error if the cast cannot succeed"). Numeric and
     /// bool targets only; struct casts are rejected. A pointer may cast to an
-    /// integer (address-as-integer for C ABI interop).
+    /// integer (address-as-integer for C ABI interop) or to another pointer
+    /// type.
     fn codegen_cast(&mut self, expr: &Expression, ty: &TypeName) -> Result<BasicValueEnum<'ctx>, String> {
         // Source signedness decides zext vs sext on widening (same rule as
         // ops::coerce); resolve it before codegen_expr mutates the frame.
@@ -3099,6 +3100,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let identity = match (val, target) {
             (BasicValueEnum::IntValue(from), BasicTypeEnum::IntType(to)) => from.get_type() == to,
             (BasicValueEnum::FloatValue(from), BasicTypeEnum::FloatType(to)) => from.get_type() == to,
+            (BasicValueEnum::PointerValue(_), BasicTypeEnum::PointerType(_)) => true,
             _ => false,
         };
         let result = match (val, target) {
@@ -3178,6 +3180,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicValueEnum::IntValue(v)
                 }
             }
+            // Pointer to pointer (`p as __ptr<char>`): LLVM pointers are
+            // opaque, so only the sema pointee (index stride) changes.
+            (BasicValueEnum::PointerValue(_), BasicTypeEnum::PointerType(_)) => val,
             (BasicValueEnum::PointerValue(from), BasicTypeEnum::IntType(to)) => {
                 // Address-as-integer for C ABI interop (e.g. hex-dumping a pointer).
                 BasicValueEnum::IntValue(

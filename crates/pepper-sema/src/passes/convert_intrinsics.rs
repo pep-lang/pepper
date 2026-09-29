@@ -5,6 +5,11 @@ use crate::model::{Block, Declaration, Expression, FunctionDef, Module, Statemen
 use crate::type_name::TypeName;
 
 fn convert_type_string(ty: &mut TypeName) {
+    // Inner-first, so `__ptr<__ptr<int>>` → `int**` and `Array<__ptr<char>>`
+    // → `Array<char*>`.
+    for sub in &mut ty.sub_types {
+        convert_type_string(sub);
+    }
     if ty.name == "__ptr" {
         if ty.sub_types.len() != 1 {
             panic!("__ptr<T> takes only a single generic type argument");
@@ -16,6 +21,10 @@ fn convert_type_string(ty: &mut TypeName) {
 
 fn convert_expression(expr: &mut Expression) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        // Type positions inside expressions: `x as __ptr<T>`, `sizeof<__ptr<T>>`.
+        if let Expression::Cast { ty, .. } | Expression::SizeOf(ty) = e {
+            convert_type_string(ty);
+        }
         if let Expression::FunctionCall { function, args } = e {
             let base = function.split('<').next().unwrap_or(function);
             if base == "__is_pod" || base == "__default" {
@@ -151,13 +160,8 @@ pub fn convert_intrinsics(module: &mut Module) {
         for method in &mut st.method_members {
             convert_function(method);
         }
-        // Constructor params + return type.
-        convert_type_string(&mut st.constructor.ty);
-        for param in &mut st.constructor.parameters {
-            convert_type_string(&mut param.ty);
-        }
-        if let Some(body) = &mut st.constructor.body {
-            crate::passes::walk_block(body, &mut convert_expression);
-        }
+        // Constructor and destructor: signature, expressions, and body locals.
+        convert_function(&mut st.constructor);
+        convert_function(&mut st.destructor);
     }
 }

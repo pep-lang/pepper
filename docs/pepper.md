@@ -265,6 +265,27 @@ name can bind to a different symbol per platform:
 
 `LinkName` takes exactly one non-empty string, and an extern may carry at most one.
 
+### Pointers
+
+Pepper spells a raw pointer `__ptr<T>`: `__ptr<void>`, `__ptr<char>`, `__ptr<__ptr<int>>`. A pointer supports
+`p + n` (strides by `sizeof<T>`, bytes for `__ptr<void>`), indexing `p[i]`, comparison with `__null`, casts to an
+integer (`p as ulong`) or to another pointer type (`p as __ptr<char>`), and passing to externs that take `T*`.
+
+C-style `T*` (`void*`, `char*`, `int**`) is accepted **only** in `extern` declarations, whose parameter and return
+types mirror the C prototype. Anywhere else — function parameters and returns, struct fields, locals, globals,
+type alias targets, generic arguments, casts — `T*` is a parse error:
+
+```
+extern void* memset(void* p, int c, ulong n);   # ok: extern prototype
+
+clear(p: __ptr<void>, n: ulong) {               # ok
+    memset(p, 0, n);
+}
+
+clear(p: void*, n: ulong) { ... }
+# error: C pointer syntax `void*` is only allowed in extern declarations; use `__ptr<void>`
+```
+
 ## Exporting functions
 
 The `[Export]` attribute attached to any global function will create a C linkage exported function. Types used

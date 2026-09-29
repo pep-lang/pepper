@@ -190,8 +190,9 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         break;
     }
 
-    // pointer suffix: one or more `*` (e.g. char*, void**) — same shape as
-    // the extern declaration grammar, so runtime code can take raw pointers.
+    // pointer suffix: one or more `*` (e.g. char*, void**). Parsed in every
+    // type position so a misplaced `T*` gets a targeted error; it is legal only
+    // in extern declarations (see `check_pointer_syntax`).
     loop {
         ws(input)?;
         if input.starts_with('*') {
@@ -2081,6 +2082,151 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
     }
 
     Ok(Module { imports, declarations })
+}
+
+// ── C pointer syntax check ───────────────────────────────────────────────────
+//
+// `T*` is C syntax and belongs only in `extern` declarations, whose parameter
+// and return types mirror the C prototype. Everywhere else Pepper spells a
+// pointer `__ptr<T>`. The grammar still parses the `*` suffix in every type
+// position (so a misplaced `void*` gets this targeted message rather than a
+// bare "parse error"); the rule is enforced on the finished AST because PEG
+// probes (e.g. `a<b*c` tried as a generic type literal, or `a * b` tried as
+// the declaration `a* b`) parse `*`-suffixed types that never reach the tree.
+
+/// A rejected C-style pointer type: byte offset of the type and the message.
+pub(crate) struct PointerSyntaxError {
+    pub offset: usize,
+    pub message: String,
+}
+
+/// Reject `T*` in every type position outside `extern` function declarations.
+pub(crate) fn check_pointer_syntax(m: &Module) -> std::result::Result<(), PointerSyntaxError> {
+    m.declarations.iter().try_for_each(ptr_check_decl)
+}
+
+fn ptr_check_type(t: &TypeName) -> std::result::Result<(), PointerSyntaxError> {
+    let stars = t.name.len() - t.name.trim_end_matches('*').len();
+    if stars > 0 {
+        let base = TypeName { name: t.name[..t.name.len() - stars].to_string(), ..t.clone() };
+        let written = format!("{}{}", base, "*".repeat(stars));
+        let suggested = format!("{}{}{}", "__ptr<".repeat(stars), base, ">".repeat(stars));
+        return Err(PointerSyntaxError {
+            offset: t.span.start,
+            message: format!(
+                "C pointer syntax `{}` is only allowed in extern declarations; use `{}`",
+                written, suggested
+            ),
+        });
+    }
+    t.generic_types.iter().try_for_each(ptr_check_type)
+}
+
+fn ptr_check_attrs(attrs: &[Attribute]) -> std::result::Result<(), PointerSyntaxError> {
+    attrs.iter().try_for_each(|a| ptr_check_expr(&a.body))
+}
+
+fn ptr_check_generic_params(ps: &[GenericParam]) -> std::result::Result<(), PointerSyntaxError> {
+    ps.iter().filter_map(|p| p.default.as_ref()).try_for_each(ptr_check_type)
+}
+
+fn ptr_check_var(v: &VariableDecl) -> std::result::Result<(), PointerSyntaxError> {
+    ptr_check_attrs(&v.attributes)?;
+    ptr_check_type(&v.type_name)?;
+    v.default_value.as_ref().map_or(Ok(()), ptr_check_expr)
+}
+
+fn ptr_check_fn(f: &FunctionDecl) -> std::result::Result<(), PointerSyntaxError> {
+    ptr_check_attrs(&f.attributes)?;
+    if f.external {
+        // Extern prototypes mirror C and may use `T*` freely.
+        return Ok(());
+    }
+    ptr_check_generic_params(&f.generic_params)?;
+    ptr_check_type(&f.return_type)?;
+    f.parameters.iter().try_for_each(ptr_check_var)?;
+    f.body.as_ref().map_or(Ok(()), ptr_check_block)
+}
+
+fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PointerSyntaxError> {
+    match d {
+        Declaration::Variable(v) => ptr_check_var(v),
+        Declaration::Function(f) => ptr_check_fn(f),
+        Declaration::Struct(s) => {
+            ptr_check_attrs(&s.attributes)?;
+            ptr_check_generic_params(&s.generic_params)?;
+            s.fields.iter().try_for_each(ptr_check_var)?;
+            s.methods.iter().try_for_each(ptr_check_fn)?;
+            s.constructor.as_ref().map_or(Ok(()), ptr_check_fn)?;
+            s.destructor.as_ref().map_or(Ok(()), ptr_check_block)
+        }
+        Declaration::Trait(t) => {
+            ptr_check_attrs(&t.attributes)?;
+            ptr_check_generic_params(&t.generic_params)?;
+            t.methods.iter().try_for_each(ptr_check_fn)
+        }
+        Declaration::Extend(e) => {
+            ptr_check_attrs(&e.attributes)?;
+            ptr_check_type(&e.target)?;
+            e.traits.iter().try_for_each(ptr_check_type)?;
+            e.methods.iter().try_for_each(ptr_check_fn)
+        }
+        Declaration::TypeAlias(a) => {
+            ptr_check_attrs(&a.attributes)?;
+            ptr_check_generic_params(&a.generic_params)?;
+            ptr_check_type(&a.target)
+        }
+    }
+}
+
+fn ptr_check_block(b: &Block) -> std::result::Result<(), PointerSyntaxError> {
+    ptr_check_attrs(&b.attributes)?;
+    b.statements.iter().try_for_each(ptr_check_stmt)
+}
+
+fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PointerSyntaxError> {
+    match s {
+        Statement::Expression(e) => ptr_check_expr(e),
+        Statement::Block(b) => ptr_check_block(b),
+        Statement::Declaration(d) => ptr_check_decl(d),
+        Statement::Branch(b) => {
+            ptr_check_expr(&b.condition)?;
+            ptr_check_block(&b.if_block)?;
+            b.else_block.as_ref().map_or(Ok(()), ptr_check_block)
+        }
+        Statement::While(w) => {
+            ptr_check_expr(&w.condition)?;
+            ptr_check_block(&w.block)
+        }
+        Statement::Return(r) => ptr_check_expr(&r.expr),
+        Statement::LoopBreak(_) => Ok(()),
+    }
+}
+
+fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PointerSyntaxError> {
+    match e {
+        Expression::Literal { .. } | Expression::SymbolRef { .. } => Ok(()),
+        Expression::TypeLiteral(t) | Expression::SizeOf(t) => ptr_check_type(t),
+        Expression::Unary { operand, .. } => ptr_check_expr(operand),
+        Expression::Cast { expr, ty, .. } => {
+            ptr_check_expr(expr)?;
+            ptr_check_type(ty)
+        }
+        Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } => {
+            ptr_check_expr(lhs)?;
+            ptr_check_expr(rhs)
+        }
+        Expression::Ternary { condition, true_expr, false_expr, .. } => {
+            ptr_check_expr(condition)?;
+            ptr_check_expr(true_expr)?;
+            ptr_check_expr(false_expr)
+        }
+        Expression::MemberAccess { lhs, .. } => ptr_check_expr(lhs),
+        Expression::FunctionCall { function, arguments, .. } => {
+            ptr_check_expr(function)?;
+            arguments.iter().try_for_each(ptr_check_expr)
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
