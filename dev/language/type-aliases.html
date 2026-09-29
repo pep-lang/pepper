@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -289,13 +289,16 @@ declares it. Mark it <code>export</code> to let files that import it use it; see
 <a href="visibility.html">Visibility</a> and <a href="modules.html">Modules and imports</a>.</p>
 <h2 id="recursive-aliases"><a class="header" href="#recursive-aliases">Recursive aliases</a></h2>
 <p>An alias must not refer to itself, directly or through other aliases. The
-compiler reports the cycle when the alias is used:</p>
+compiler reports the cycle at the alias, with a note at each alias it passes
+through:</p>
 <pre><code class="language-pepper">type Celsius = Degrees;
 type Degrees = Celsius;
 </code></pre>
-<pre><code class="language-text">error: type alias Celsius is recursive: Celsius
-main.pep:1:6: note: type alias Celsius declared here
+<pre><code class="language-text">main.pep:1:6: error: type alias 'Celsius' refers to itself
     1 | type Celsius = Degrees;
+      |      ^~~~~~~
+main.pep:2:6: note: through type alias 'Degrees', declared here
+    2 | type Degrees = Celsius;
       |      ^~~~~~~
 </code></pre>
 

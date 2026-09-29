@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -354,11 +354,12 @@ instance, prefixes its private helpers with <code>_io_</code>.</p>
 same C function.</li>
 <li><strong>Concrete overrides</strong> of an exported generic function, such as <code>hash&lt;int&gt;</code>
 alongside <code>hash&lt;T&gt;</code>. Overriding one the runtime already provides, such as
-<code>hash&lt;String&gt;</code>, is still a duplicate. Concrete overrides work only for
-primitive types and <code>String</code>: <code>hash&lt;Point&gt;</code> declares a second generic
-function with a type parameter named <code>Point</code>, which collides with <code>hash&lt;T&gt;</code>.
-Type parameters are compared by position, not by name, so a private
-<code>pick&lt;U&gt;</code> also collides with <code>pick&lt;T&gt;</code>.</li>
+<code>hash&lt;String&gt;</code>, is still a duplicate. The exemption covers only overrides
+for primitive types and <code>String</code>: an override for a struct, such as
+<code>hash&lt;Point&gt;</code>, collides with <code>hash&lt;T&gt;</code> when the two are in different files,
+so declare it in the same file as the generic function. Type parameters
+are compared by position, not by name, so a private <code>pick&lt;U&gt;</code> also
+collides with <code>pick&lt;T&gt;</code>.</li>
 <li><strong>Declarations that a <code>[Target(...)]</code> attribute drops</strong> for the platform
 being compiled (see <a href="platform-selection.html">Platform selection</a>). This is
 why <code>lib.pep</code> above can declare <code>platform_name</code> twice.</li>

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-a23cc414.js"></script>
@@ -230,11 +230,6 @@ standard library covers strings, arrays, hash maps and sets, atomics, and
 file-system access. That is enough to write real programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>There is no <code>else if</code>; nest an <code>if</code> inside the <code>else</code> block instead.</li>
-<li>A function that returns nothing cannot <code>return</code> early: <code>return</code> always
-needs a value.</li>
-<li>String literals have no escape sequences, so <code>"\n"</code> is a backslash
-followed by the letter <code>n</code>.</li>
 <li>There are no closures or lambdas yet. You can pass named functions as
 values (see <a href="language/function-types.html">function types</a>).</li>
 <li>Calling a method through a trait type does not work yet. You can declare
@@ -242,8 +237,7 @@ traits and conform to them, but not dispatch through them.</li>
 <li>There is no threading API in the standard library yet.</li>
 <li>Reference counting does not reclaim cycles: two objects that refer to each
 other are never freed. Weak references are being designed.</li>
-<li><code>print</code> writes each argument on its own line, and floating-point values
-print incorrectly, so avoid printing them for now.</li>
+<li><code>print</code> writes each argument on its own line.</li>
 </ul>
 <p>Each chapter of this book says plainly what is and is not supported. When a
 chapter shows a feature, the example was compiled and run to check it.</p>

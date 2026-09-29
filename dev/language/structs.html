@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -299,9 +299,11 @@ default: <code>float fahrenheit = 32.0</code>. The <code>name: Type</code> form 
 use is not accepted in a constructor yet.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
-<li>A struct has at most one constructor. Pepper has no constructor
+<li>A struct has at most one constructor, and declaring a second is an error
+(<code>redefinition of the constructor of 'S'</code>). Pepper has no constructor
 overloading: use default arguments, or a <a href="#static-methods">static method</a>
-for each alternative way to build the object.</li>
+for each alternative way to build the object. Likewise, a struct has at
+most one destructor.</li>
 </ul>
 <p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
 <pre><code class="language-pepper">struct Point {
@@ -438,10 +440,7 @@ is the operator, with the return type written first:</p>
         return cents == other.cents;
     }
 
-    # `!=` is not derived from `==`: define it too.
-    bool !=(Money other) {
-        return cents != other.cents;
-    }
+    # `!=` is derived from `==` when the struct does not define it.
 
     # `a + b` calls `a.+(b)` and returns a new Money.
     Money +(Money other) {
@@ -507,35 +506,34 @@ can be any type. These binary operators can be defined:</p>
 <tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> `</td></tr>
 <tr><td>Comparison and logical</td><td><code>==</code> <code>!=</code> <code>&gt;</code> <code>&gt;=</code> <code>&amp;&amp;</code> `</td></tr>
-<tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>^=</code></td></tr>
+<tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Keep these rules in mind:</p>
 <ul>
-<li>Each operator is its own method. <code>!=</code> is not derived from <code>==</code>, and <code>+=</code> is
-not rewritten to <code>a = a + b</code>; define each one you want to use.</li>
-<li>Comparison and logical operators should return <code>bool</code>. Arithmetic, bitwise
-and compound assignment operators should return the struct’s own type; a
-compound assignment usually changes <code>this</code> and returns it.</li>
+<li>Each operator is its own method, with one exception: when a struct defines
+<code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. <code>+=</code> is not rewritten to
+<code>a = a + b</code>; define each one you want to use.</li>
+<li>Comparison operators must return <code>bool</code>; any other return type is an error
+(<code>comparison operator '==' must return 'bool', not 'String'</code>). Logical
+operators should return <code>bool</code> too. Arithmetic, bitwise and compound
+assignment operators usually return the struct’s own type; a compound
+assignment usually changes <code>this</code> and returns it.</li>
 <li>The left operand decides: <code>a + b</code> uses the method on <code>a</code>’s type. An
 expression with a number on the left and a struct on the right, such as
 <code>2 * v</code>, is not supported.</li>
 <li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) cannot be declared
-yet, because the parser reads the <code>&lt;</code> as the start of generic arguments.
-<code>|=</code> cannot be overloaded yet either.</li>
+yet, because the parser reads the <code>&lt;</code> as the start of generic arguments.</li>
 <li>Unary operators (<code>-a</code>, <code>!a</code>, <code>~a</code>) cannot be overloaded yet.</li>
 </ul>
-<blockquote>
-<p><strong>Note:</strong> <code>var r = a - b;</code> currently assumes that an arithmetic operator
-returns the struct’s own type. If yours returns something else, such as an
-<code>int</code>, give the variable its type explicitly: <code>int r = a - b;</code>.</p>
-</blockquote>
+<p>The result of an operator has the type its method returns, so with
+<code>int -(V other)</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
 <h3 id="comparing-structs"><a class="header" href="#comparing-structs">Comparing structs</a></h3>
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
-for <code>!=</code>. Define <code>==</code> and <code>!=</code> when two distinct objects with the same
-contents should count as equal, as <code>String</code> and <code>Array</code> do. <code>===</code> always
+for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> always
 compares identity, whatever methods the struct declares.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it with the element type,

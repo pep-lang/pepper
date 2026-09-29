@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -329,6 +329,30 @@ code stopped making sense:</p>
     2 |     var x = ;
       |             ^
 </code></pre>
+<p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
+a number is never a struct and one struct type is never another. The check
+applies wherever a value flows into a typed place: a variable’s initializer, an
+assignment, an argument and a <code>return</code>:</p>
+<pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
+    2 |     int x = "hello";
+      |     ^~~
+</code></pre>
+<pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
+    3 |     return g(5);
+      |            ^
+</code></pre>
+<pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
+    2 |     return "a";
+      |            ^~~
+</code></pre>
+<p><strong>The same name declared twice in one scope:</strong></p>
+<pre><code class="language-text">main.pep:3:9: error: redefinition of 'n'
+    3 |     var n = 2;
+      |         ^
+main.pep:2:9: note: previous definition is here
+    2 |     var n = 1;
+      |         ^
+</code></pre>
 <p><strong>Looping over something that cannot be iterated</strong> (see
 <a href="iteration.html">Iteration</a>):</p>
 <pre><code class="language-text">main.pep:3:19: error: type 'int' is not iterable: implement Iterable&lt;T&gt; (iterate()) or Iterator&lt;T&gt; (next() and current())
@@ -347,12 +371,9 @@ prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="../reference/internals.html"><code>assert</code> and
 <code>panic</code></a>.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
-<p>The compiler does not yet check every type. Some mismatches that should be
-errors compile without one, for example storing an <code>int</code> in a variable
-declared <code>String</code>, returning a <code>String</code> from a function declared to return
-<code>int</code>, or declaring the same local variable twice in one scope. Until these
-checks exist, read such code carefully: the resulting program has undefined
-behavior.</p>
+<p>The type check does not compare the type arguments of generic structs yet, so
+<code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
+resulting program has undefined behavior.</p>
 
                     </main>
 

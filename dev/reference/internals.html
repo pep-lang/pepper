@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -251,8 +251,8 @@ digits of the address, then, with no separator, the first 8 bytes read as
 a little-endian 64-bit word. The word is omitted when <code>ptr</code> is <code>__null</code>
 or <code>size</code> is less than 8. Only those 8 bytes are read, whatever <code>size</code> is.
 The line goes to standard output.</p>
-<p>Each traced call allocates buffers it never frees, so <code>_pep_live_allocs()</code>
-counts them. <code>name</code> must be shorter than about 470 bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>ptr</code> — the start of the region to trace</li>
@@ -265,9 +265,8 @@ counts them. <code>name</code> must be shorter than about 470 bytes.</p>
 <p>Prints <code>name: </code> followed by the address <code>ptr</code> as 16 uppercase hex digits
 when tracing is on (the <code>PEP_TRACE</code> environment variable is set, checked
 once at program start). Does nothing otherwise.</p>
-<p>Each traced call allocates buffers it never frees, so
-<code>_pep_live_allocs()</code> counts them. <code>name</code> must be shorter than about 490
-bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>ptr</code> — the address to print; it is not dereferenced</li>
@@ -279,9 +278,8 @@ bytes.</p>
 <p>Prints <code>name: </code> followed by <code>value</code> in signed decimal when tracing is on
 (the <code>PEP_TRACE</code> environment variable is set, checked once at program
 start). Does nothing otherwise.</p>
-<p>Each traced call allocates buffers it never frees, so
-<code>_pep_live_allocs()</code> counts them. <code>name</code> must be shorter than about 485
-bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the number to print</li>

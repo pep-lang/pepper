@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -692,8 +692,7 @@ leaves it truncated or partly written.</p>
 truncating it first, in 64 KiB chunks.</p>
 <p>Only the contents are copied: <code>to</code> keeps its own permissions and
 timestamps (a new file gets the defaults of <code>File.create</code>). A failure
-part way leaves <code>to</code> partly written. <code>from</code> and <code>to</code> must be
-different files: <code>to</code> is truncated before <code>from</code> is read.</p>
+part way leaves <code>to</code> partly written.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>from</code> — the file to copy</li>
@@ -701,7 +700,7 @@ different files: <code>to</code> is truncated before <code>from</code> is read.<
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes copied; an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
+<li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();

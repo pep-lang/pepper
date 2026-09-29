@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-a23cc414.js"></script>
@@ -228,11 +228,6 @@ standard library covers strings, arrays, hash maps and sets, atomics, and
 file-system access. That is enough to write real programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>There is no <code>else if</code>; nest an <code>if</code> inside the <code>else</code> block instead.</li>
-<li>A function that returns nothing cannot <code>return</code> early: <code>return</code> always
-needs a value.</li>
-<li>String literals have no escape sequences, so <code>"\n"</code> is a backslash
-followed by the letter <code>n</code>.</li>
 <li>There are no closures or lambdas yet. You can pass named functions as
 values (see <a href="#function-types-and-references">function types</a>).</li>
 <li>Calling a method through a trait type does not work yet. You can declare
@@ -240,8 +235,7 @@ traits and conform to them, but not dispatch through them.</li>
 <li>There is no threading API in the standard library yet.</li>
 <li>Reference counting does not reclaim cycles: two objects that refer to each
 other are never freed. Weak references are being designed.</li>
-<li><code>print</code> writes each argument on its own line, and floating-point values
-print incorrectly, so avoid printing them for now.</li>
+<li><code>print</code> writes each argument on its own line.</li>
 </ul>
 <p>Each chapter of this book says plainly what is and is not supported. When a
 chapter shows a feature, the example was compiled and run to check it.</p>
@@ -341,22 +335,24 @@ file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
 the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
-<code>runtime/</code> folder of the repository. The compiler looks for it relative to the
-directory you run it from, in this order:</p>
+<code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
 <ol>
-<li><code>runtime/</code></li>
-<li><code>.pep/runtime/</code></li>
-<li><code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to five levels up</li>
+<li>The directory named by the <code>PEPPER_RUNTIME</code> environment variable, if it is
+set. Nothing else is searched.</li>
+<li>Starting from the directory you run it from: <code>runtime/</code>, <code>.pep/runtime/</code>,
+then <code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to five levels up.</li>
+<li>Starting from the directory that holds the compiler executable:
+<code>runtime/</code> beside it, then in each parent directory, up to five levels up.</li>
 </ol>
-<p>So compiling anywhere inside your clone of the repository just works. For a
-project somewhere else, link or copy the runtime into the project’s <code>.pep</code>
-folder once:</p>
+<p>So a compiler built in <code>target/release</code> finds the runtime of the clone it was
+built from, wherever you run it. To use a different runtime, set
+<code>PEPPER_RUNTIME</code> or link the runtime into a project’s <code>.pep</code> folder:</p>
 <pre><code class="language-sh">mkdir .pep
 ln -s /path/to/pepper/runtime .pep/runtime
 </code></pre>
-<p>If the compiler cannot find the runtime, every use of a built-in type fails,
-with errors such as <code>call to undeclared function 'String'</code> on the first string
-literal.</p>
+<p>If the compiler cannot find the runtime, it stops with an error:</p>
+<pre><code class="language-text">error: cannot find the Pepper runtime: no runtime directory near /home/me/project or the compiler; set PEPPER_RUNTIME to its path
+</code></pre>
 <p>The compiler also writes intermediate files to <code>.pep/build/</code> under the
 directory you run it from.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
@@ -500,8 +496,8 @@ parameter as <code>name: type</code>. A parameter can have a default value, as <
 does in <code>greet</code>. A function that returns nothing leaves out the return type.
 See <a href="#functions">Functions</a>.</li>
 <li><code>if</code> and <code>while</code> do not need parentheses around the condition, but the body
-always needs braces. There is no <code>else if</code>: put another <code>if</code> inside the
-<code>else</code> block. See <a href="#control-flow">Control flow</a>.</li>
+always needs braces. Chain conditions with <code>else if</code>. See
+<a href="#control-flow">Control flow</a>.</li>
 <li><code>+=</code> updates a variable in place, and <code>+</code> joins two strings.</li>
 <li><code>print</code> writes one value per line. Called with several arguments, it prints
 each one on its own line.</li>
@@ -839,8 +835,10 @@ type, so you can use whichever reads better and assign freely between them.</p>
 <p><code>int</code> is 32 bits and <code>long</code> is 64 bits on every platform. <code>sizeof&lt;T&gt;()</code> gives the
 size of a type in bytes.</p>
 <p>Integer literals are written in decimal (<code>42</code>) or hexadecimal (<code>0xFF</code>). A literal
-on its own is an <code>int</code>; it takes a wider type when you store it in a variable of
-that type (<code>long big = 9000000000;</code>).</p>
+on its own is an <code>int</code> when its value fits in an <code>int</code>, and a <code>long</code> otherwise, so
+<code>var big = 3000000000;</code> is a <code>long</code>. It takes another type when you store it in a
+variable of that type (<code>u64 huge = 9000000000000000000;</code>). A hexadecimal literal
+is a 64-bit bit pattern: <code>u64 all = 0xFFFFFFFFFFFFFFFF;</code> sets every bit.</p>
 <pre><code class="language-pepper"># Integer types: widths, signedness, wraparound and conversions.
 main(): int {
     # Each width has a short name and a descriptive alias.
@@ -886,12 +884,12 @@ main(): int {
 <p>Storing a value that does not fit in the destination keeps its low bits, as in
 C: a <code>u16</code> holding 65535 becomes 0 when you add 1 and store the result, and
 <code>70000 as u16</code> is 4464.</p>
-<blockquote>
-<p><strong>Watch out:</strong> <code>var big = 3000000000;</code> makes an <code>int</code>, because the literal is
-an <code>int</code>, and the value silently wraps to -1294967296. Write the type when a
-value needs more than 32 bits: <code>long big = 3000000000;</code>. A literal larger than
-the largest <code>long</code> (9223372036854775807) currently crashes the compiler.</p>
-</blockquote>
+<p>A decimal literal larger than the largest <code>long</code> (9223372036854775807), or a
+hexadecimal literal with more than 64 bits, is an error:</p>
+<pre><code class="language-text">main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
+    2 |     var f = 99999999999999999999;
+      |             ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating point</a></h3>
 <p><code>float</code> is a 32-bit and <code>double</code> a 64-bit IEEE 754 number (<code>f32</code> and <code>f64</code> are
 aliases). A literal with a decimal point or an exponent, such as <code>0.25</code> or <code>1e3</code>,
@@ -938,9 +936,33 @@ to the same object rather than a copy, so a change made with <code>append</code>
 through both names. <a href="#memory-and-reference-counting">Memory and reference counting</a> explains how
 references work, and the <a href="#string"><code>String</code></a> reference lists every
 method.</p>
-<p>String literals are taken exactly as written between the quotes. There are no
-escape sequences: <code>"a\nb"</code> is four characters, a backslash included, and a
-string cannot contain a <code>"</code> character.</p>
+<p>A backslash in a string literal starts an escape sequence, as in C and Rust:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Escape</th><th>Character</th></tr>
+</thead>
+<tbody>
+<tr><td><code>\n</code></td><td>newline</td></tr>
+<tr><td><code>\t</code></td><td>tab</td></tr>
+<tr><td><code>\r</code></td><td>carriage return</td></tr>
+<tr><td><code>\0</code></td><td>the zero byte</td></tr>
+<tr><td><code>\\</code></td><td>a backslash</td></tr>
+<tr><td><code>\"</code></td><td>a double quote</td></tr>
+<tr><td><code>\'</code></td><td>a single quote</td></tr>
+<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code></td></tr>
+<tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper">print("name:\t\"Pepper\"");   # name:	"Pepper"
+print("caf\u{e9}");            # café
+</code></pre>
+<p>Any other character after a backslash is an error:</p>
+<pre><code class="language-text">main.pep:2:13: error: unknown escape sequence '\q'
+    2 |     print("a\qb");
+      |             ^~
+</code></pre>
 <h3 id="other-built-in-types"><a class="header" href="#other-built-in-types">Other built-in types</a></h3>
 <ul>
 <li><code>void</code> means “no value”. It is the return type of a function that returns
@@ -1031,20 +1053,24 @@ main(): int {
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
 <code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>. Give struct
 variables a value before you use them.</p>
-<blockquote>
-<p><strong>Watch out:</strong> when <code>var</code> infers the type of an arithmetic expression, it
-takes the type of the <em>left</em> operand. <code>var m = 1 + 0.5;</code> is an <code>int</code> holding
-1, and with <code>u8 small = 250;</code>, <code>var s = small + 10;</code> is a <code>u8</code> holding 4. The
-arithmetic itself follows C (see below); only the inferred variable type is
-affected. Write the type when you mix types: <code>double m = 1 + 0.5;</code>.</p>
-</blockquote>
+<p>When <code>var</code> infers the type of an arithmetic expression, it takes the type the
+arithmetic produces under C’s rules (see <a href="#arithmetic-follows-c">Arithmetic follows C</a>):
+<code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,
+<code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
 <pre><code class="language-pepper">const LIMIT = 3;
 const RATIO: double = 0.5;
 </code></pre>
-<p>The compiler does not enforce this yet: assigning to a <code>const</code> compiles and
-changes the value. Treat <code>const</code> as documentation for now.</p>
+<p>Assigning to a <code>const</code>, with <code>=</code>, a compound assignment, <code>++</code> or <code>--</code>, is an
+error:</p>
+<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'LIMIT'
+    5 |     LIMIT = 4;
+      |     ^~~~~
+main.pep:1:7: note: 'LIMIT' declared const here
+    1 | const LIMIT = 3;
+      |       ^~~~~
+</code></pre>
 <h3 id="module-level-variables"><a class="header" href="#module-level-variables">Module-level variables</a></h3>
 <p>A variable declared outside any function is a module-level (global) variable. It
 exists for the whole run of the program and every function in the file can read
@@ -1205,25 +1231,24 @@ main(): int {
 <tr><td>Identity</td><td><code>===</code> (two references to the same object)</td></tr>
 <tr><td>Logical</td><td><code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>~</code> <code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr>
-<tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code></td></tr>
+<tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
 <tr><td>Increment</td><td><code>++</code> <code>--</code>, prefix or postfix</td></tr>
 <tr><td>Conditional</td><td><code>condition ? a : b</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Some operators have limits today:</p>
+<p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
+one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
+reads <code>items[0]</code> from an empty array.</p>
+<p><code>**</code> raises an integer to an integer power, and is right-associative:
+<code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. The exponent can be any integer expression. A negative
+exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
+of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
+<p>Some operators have limits today:</p>
 <ul>
-<li><strong><code>&amp;&amp;</code> and <code>||</code> evaluate both operands.</strong> They do not short-circuit yet, so
-<code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> still reads <code>items[0]</code> when the array is
-empty, and panics. Guard such checks with a nested <code>if</code> instead (see
-<a href="#control-flow">Control flow</a>).</li>
-<li><strong><code>**</code> works on integers with a constant exponent from 0 to 31</strong>, such as
-<code>2 ** 10</code>. It is right-associative: <code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. A floating-point
-operand or an exponent held in a variable is a compile error
-(<code>unsupported op Pow</code>), and a negative literal exponent (<code>2 ** -1</code>) crashes the
-compiler.</li>
-<li><strong><code>|=</code> and <code>^=</code> do not work yet.</strong> <code>|=</code> crashes the compiler and <code>^=</code> performs
-<code>|=</code>. Write <code>x = x | y</code> and <code>x = x ^ y</code> instead.</li>
+<li><strong><code>**</code> works only on integers.</strong> A floating-point operand is a compile error
+(<code>unsupported op Pow</code>).</li>
 <li><strong><code>===</code></strong> compares struct references. It is not supported for numbers.</li>
 </ul>
 <p>Operators bind in this order, tightest first:</p>
@@ -1260,12 +1285,11 @@ around each block are required, even for a single statement.</p>
 classify(n: int): String {
     if n &lt; 0 {
         return "negative";
+    } else if n == 0 {
+        return "zero";
     } else {
-        if n == 0 {
-            return "zero";
-        }
+        return "positive";
     }
-    return "positive";
 }
 
 main(): int {
@@ -1291,14 +1315,12 @@ main(): int {
     var parity = temperature % 2 == 0 ? "even" : "odd";
     assert(parity == "even", "20 is even");
 
-    # &amp;&amp; and || evaluate both operands, so guard a check that could fail
-    # with a nested if rather than with &amp;&amp;.
+    # &amp;&amp; and || stop at the first operand that decides the result, so the
+    # count check guards the index.
     var readings = Array&lt;int&gt;();
     var starts_high = false;
-    if (readings.count() &gt; 0) {
-        if (readings[0] &gt; 100) {
-            starts_high = true;
-        }
+    if (readings.count() &gt; 0 &amp;&amp; readings[0] &gt; 100) {
+        starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");
     return 0;
@@ -1307,35 +1329,28 @@ main(): int {
 <p>The condition is usually a <code>bool</code>, but a number also works: any value other
 than zero counts as true, as in C.</p>
 <h3 id="chains-of-conditions"><a class="header" href="#chains-of-conditions">Chains of conditions</a></h3>
-<p><code>else if</code> is not supported yet: <code>else</code> must be followed by a block.</p>
+<p><code>else if</code> tests another condition when the ones before it were false. The
+first true condition’s block runs, and the final <code>else</code> block, if there is
+one, runs when none was true:</p>
 <pre><code class="language-pepper">if x &gt; 0 {
     return 1;
-} else if x &lt; 0 {    # error
+} else if x &lt; 0 {
     return -1;
-}
-</code></pre>
-<pre><code>main.pep:4:12: error: expected '{'
-    4 |     } else if x &lt; 0 {
-      |            ^~
-</code></pre>
-<p>Nest the second <code>if</code> inside the <code>else</code> block instead, or return early from each
-branch as <code>classify</code> does in the example above:</p>
-<pre><code class="language-pepper">if x &gt; 0 {
-    return 1;
 } else {
-    if x &lt; 0 {
-        return -1;
-    }
+    return 0;
 }
 </code></pre>
 <p>For a choice between two values, the conditional operator
 <code>condition ? a : b</code> is often shorter than an <code>if</code>.</p>
 <h3 id="guarding-a-check"><a class="header" href="#guarding-a-check">Guarding a check</a></h3>
-<p><code>&amp;&amp;</code> and <code>||</code> do not short-circuit yet: both operands are always evaluated. A
-condition such as <code>items.count() &gt; 0 &amp;&amp; items[0] &gt; 100</code> still reads <code>items[0]</code>
-when the array is empty, which panics with <code>Array index read out of bounds</code>.
-Until this is fixed, put the guard in its own <code>if</code>, as the example does with
-<code>readings</code>.</p>
+<p><code>&amp;&amp;</code> and <code>||</code> short-circuit, as in C: the right operand is evaluated only when
+the left one does not already decide the result. A guard can therefore come
+first in the same condition:</p>
+<pre><code class="language-pepper">if items.count() &gt; 0 &amp;&amp; items[0] &gt; 100 {
+    print("starts high");
+}
+</code></pre>
+<p>When <code>items</code> is empty, <code>items[0]</code> is never read.</p>
 <h2 id="while"><a class="header" href="#while"><code>while</code></a></h2>
 <p><code>while</code> repeats its block as long as the condition is true. The condition is
 checked before each iteration, so the body may run zero times. As with <code>if</code>,
@@ -1425,9 +1440,7 @@ it, or move the loops into a function and <code>return</code> from it.</p>
 <p><code>return value;</code> leaves the current function and hands <code>value</code> back to the
 caller. It works from anywhere in the function, including from inside loops.
 See <a href="#functions">Functions</a>.</p>
-<p>A function that returns nothing cannot use a bare <code>return;</code> yet: <code>return</code> must
-be followed by a value, and <code>return;</code> is a parse error (<code>expected expression</code>).
-Structure the function with <code>if</code>/<code>else</code> so that it runs off the end instead.</p>
+<p>In a function that returns nothing, a bare <code>return;</code> leaves the function early.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
 <p>A function is a named block of code that takes parameters and can return a
@@ -1515,15 +1528,28 @@ is a compile error:</p>
 log_line(message: String): void { print(message); }
 void log_c(String message) { print(message); }
 </code></pre>
-<p>Such a function ends when it reaches the closing brace. A bare <code>return;</code> is not
-supported yet (see <a href="#return">Control flow</a>).</p>
-<h2 id="return-types-are-not-inferred"><a class="header" href="#return-types-are-not-inferred">Return types are not inferred</a></h2>
-<p>Always write the return type of a function that returns a value. Return type
-inference is not implemented: a function without a return type is compiled as
-returning a 32-bit <code>int</code>, so a <code>long</code> result is silently truncated, a <code>double</code>
-loses its fraction, and returning a <code>String</code> or a struct crashes the compiler or
-the program. For example, <code>half(x: double) { return x / 2; }</code> returns 2 for
-<code>half(5.0)</code>, not 2.5.</p>
+<p>Such a function ends when it reaches the closing brace, or earlier at a bare
+<code>return;</code>:</p>
+<pre><code class="language-pepper">log_positive(n: int) {
+    if n &lt;= 0 {
+        return;
+    }
+    print(n);
+}
+</code></pre>
+<p>In a function that returns a value, <code>return;</code> is an error:</p>
+<pre><code class="language-text">main.pep:2:5: error: non-void function 'f' should return a value
+    2 |     return;
+      |     ^~~~~~
+</code></pre>
+<h2 id="inferred-return-types"><a class="header" href="#inferred-return-types">Inferred return types</a></h2>
+<p>A function without a return type gets one from its <code>return</code> statements. It
+returns <code>void</code> when no <code>return</code> has a value, and otherwise the type of the first
+<code>return</code> that has one, so <code>half(x: double) { return x / 2; }</code> returns a
+<code>double</code>. <code>main</code> with no return type returns an <code>int</code>, and reaching its closing
+brace exits with 0.</p>
+<p>Writing the return type is still clearer for a function that returns a value,
+and it lets the compiler check each <code>return</code> against it.</p>
 <h2 id="parameters"><a class="header" href="#parameters">Parameters</a></h2>
 <p>Parameters are passed by value. For numbers and <code>bool</code>, the function receives
 its own copy. For a <code>String</code>, an <code>Array</code> or any other struct, the value is a
@@ -1585,12 +1611,8 @@ main(): int {
 }
 </code></pre>
 <p>To print several values on one line, build a <code>String</code> with <code>+</code> first.</p>
-<blockquote>
-<p><strong>Known problem:</strong> printing a <code>float</code> or <code>double</code> currently shows the wrong
-digits after the decimal point (for example, <code>print(0.5)</code> prints
-<code>0.000005</code>). Convert to an integer with <code>as</code> if you need to print a
-floating-point value today.</p>
-</blockquote>
+<p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
+<code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
 <code>panic(message)</code>. See <a href="#built-in-functions">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
@@ -1917,9 +1939,11 @@ default: <code>float fahrenheit = 32.0</code>. The <code>name: Type</code> form 
 use is not accepted in a constructor yet.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
-<li>A struct has at most one constructor. Pepper has no constructor
+<li>A struct has at most one constructor, and declaring a second is an error
+(<code>redefinition of the constructor of 'S'</code>). Pepper has no constructor
 overloading: use default arguments, or a <a href="#static-methods">static method</a>
-for each alternative way to build the object.</li>
+for each alternative way to build the object. Likewise, a struct has at
+most one destructor.</li>
 </ul>
 <p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
 <pre><code class="language-pepper">struct Point {
@@ -2056,10 +2080,7 @@ is the operator, with the return type written first:</p>
         return cents == other.cents;
     }
 
-    # `!=` is not derived from `==`: define it too.
-    bool !=(Money other) {
-        return cents != other.cents;
-    }
+    # `!=` is derived from `==` when the struct does not define it.
 
     # `a + b` calls `a.+(b)` and returns a new Money.
     Money +(Money other) {
@@ -2125,35 +2146,34 @@ can be any type. These binary operators can be defined:</p>
 <tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> `</td></tr>
 <tr><td>Comparison and logical</td><td><code>==</code> <code>!=</code> <code>&gt;</code> <code>&gt;=</code> <code>&amp;&amp;</code> `</td></tr>
-<tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>^=</code></td></tr>
+<tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Keep these rules in mind:</p>
 <ul>
-<li>Each operator is its own method. <code>!=</code> is not derived from <code>==</code>, and <code>+=</code> is
-not rewritten to <code>a = a + b</code>; define each one you want to use.</li>
-<li>Comparison and logical operators should return <code>bool</code>. Arithmetic, bitwise
-and compound assignment operators should return the struct’s own type; a
-compound assignment usually changes <code>this</code> and returns it.</li>
+<li>Each operator is its own method, with one exception: when a struct defines
+<code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. <code>+=</code> is not rewritten to
+<code>a = a + b</code>; define each one you want to use.</li>
+<li>Comparison operators must return <code>bool</code>; any other return type is an error
+(<code>comparison operator '==' must return 'bool', not 'String'</code>). Logical
+operators should return <code>bool</code> too. Arithmetic, bitwise and compound
+assignment operators usually return the struct’s own type; a compound
+assignment usually changes <code>this</code> and returns it.</li>
 <li>The left operand decides: <code>a + b</code> uses the method on <code>a</code>’s type. An
 expression with a number on the left and a struct on the right, such as
 <code>2 * v</code>, is not supported.</li>
 <li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) cannot be declared
-yet, because the parser reads the <code>&lt;</code> as the start of generic arguments.
-<code>|=</code> cannot be overloaded yet either.</li>
+yet, because the parser reads the <code>&lt;</code> as the start of generic arguments.</li>
 <li>Unary operators (<code>-a</code>, <code>!a</code>, <code>~a</code>) cannot be overloaded yet.</li>
 </ul>
-<blockquote>
-<p><strong>Note:</strong> <code>var r = a - b;</code> currently assumes that an arithmetic operator
-returns the struct’s own type. If yours returns something else, such as an
-<code>int</code>, give the variable its type explicitly: <code>int r = a - b;</code>.</p>
-</blockquote>
+<p>The result of an operator has the type its method returns, so with
+<code>int -(V other)</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
 <h3 id="comparing-structs"><a class="header" href="#comparing-structs">Comparing structs</a></h3>
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
-for <code>!=</code>. Define <code>==</code> and <code>!=</code> when two distinct objects with the same
-contents should count as equal, as <code>String</code> and <code>Array</code> do. <code>===</code> always
+for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> always
 compares identity, whatever methods the struct declares.</p>
 <h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
 <p>An indexer lets you write <code>object[index]</code>. Declare it with the element type,
@@ -2588,10 +2608,11 @@ main(): int {
 uses the override; every other call uses the generic version. The standard
 library uses this to give <a href="#hashmap-and-hashset"><code>hash&lt;String&gt;</code></a> a
 content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity.</p>
-<p>Overrides currently work only for the built-in primitive types (<code>int</code>,
-<code>float</code>, <code>bool</code>, <code>u8</code>, and so on) and <code>String</code>. Writing an override for your
-own struct type, such as <code>describe&lt;Point&gt;</code>, compiles, but calls still use the
-generic version.</p>
+<p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
+one of your own structs, such as <code>describe&lt;Point&gt;</code>. An override for a struct
+must be in the same file as the generic function: in another file it is
+reported as a duplicate declaration (see
+<a href="#one-namespace-for-the-whole-program">Visibility</a>).</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="#extending-generic-structs">extension</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -2703,13 +2724,16 @@ declares it. Mark it <code>export</code> to let files that import it use it; see
 <a href="#visibility">Visibility</a> and <a href="#modules-and-imports">Modules and imports</a>.</p>
 <h2 id="recursive-aliases"><a class="header" href="#recursive-aliases">Recursive aliases</a></h2>
 <p>An alias must not refer to itself, directly or through other aliases. The
-compiler reports the cycle when the alias is used:</p>
+compiler reports the cycle at the alias, with a note at each alias it passes
+through:</p>
 <pre><code class="language-pepper">type Celsius = Degrees;
 type Degrees = Celsius;
 </code></pre>
-<pre><code class="language-text">error: type alias Celsius is recursive: Celsius
-main.pep:1:6: note: type alias Celsius declared here
+<pre><code class="language-text">main.pep:1:6: error: type alias 'Celsius' refers to itself
     1 | type Celsius = Degrees;
+      |      ^~~~~~~
+main.pep:2:6: note: through type alias 'Degrees', declared here
+    2 | type Degrees = Celsius;
       |      ^~~~~~~
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -2718,9 +2742,9 @@ main.pep:1:6: note: type alias Celsius declared here
 <em>extension</em>, and describe a set of behavior that several types share with a
 <em>trait</em>. Extensions can be written anywhere, so you can add methods to a
 library type, such as <code>String</code>, from your own code.</p>
-<p>Extensions work today. Traits can be declared and attached to types, but the
-compiler does not do anything with them yet beyond that; see
-<a href="#what-traits-do-not-do-yet">What traits do not do yet</a>.</p>
+<p>Extensions work today. Traits can be declared and attached to types, and the
+compiler checks that a type provides the trait’s methods, but a trait cannot
+be used as a type yet; see <a href="#what-traits-do-not-do-yet">What traits do not do yet</a>.</p>
 <h2 id="extensions"><a class="header" href="#extensions">Extensions</a></h2>
 <p>An <code>extend</code> block adds methods to a struct declared elsewhere, whether in the
 same file, another file, or the standard library:</p>
@@ -2794,11 +2818,10 @@ called the same way.</li>
 <p><code>extend Box&lt;T&gt;</code>, using the struct’s own type parameter name, adds the methods
 to every specialization: <code>Box&lt;int&gt;</code>, <code>Box&lt;String&gt;</code>, and so on. The example
 above does this.</p>
-<p>You can also write <code>extend Box&lt;int&gt;</code> to target one specialization, but this is
-not reliable yet: the methods are currently added to every specialization of
-<code>Box</code> that the program uses, and they fail to compile for the other ones. Use
-it only when the program uses a single specialization of the struct.</p>
-<p>Two more limitations of extensions today:</p>
+<p><code>extend Box&lt;int&gt;</code> targets one specialization: its methods exist only on
+<code>Box&lt;int&gt;</code>, and calling one on a <code>Box&lt;String&gt;</code> is an error
+(<code>no member named 'doubled' in 'Box&lt;String&gt;'</code>).</p>
+<p>Two limitations of extensions today:</p>
 <ul>
 <li>A <code>for</code> loop over <code>this</code> inside an extension of <code>Array&lt;int&gt;</code> does not
 compile. Loop with an index instead.</li>
@@ -2860,9 +2883,39 @@ once.</li>
 <li>The methods in the extension are ordinary methods of the struct, so you
 call them on a <code>Square</code> as usual.</li>
 </ul>
+<p>The compiler checks that the type has every method the trait declares, either
+in the extension or in the struct itself. A missing method is an error at the
+extension, with a note at the trait’s method:</p>
+<pre><code class="language-text">main.pep:9:8: error: 'Square' does not implement 'area', required by trait 'Shape'
+    9 | extend Square with Shape {
+      |        ^~~~~~
+main.pep:2:5: note: 'area' declared here
+    2 |     area(): int;
+      |     ^~~~
+</code></pre>
+<h3 id="default-method-bodies"><a class="header" href="#default-method-bodies">Default method bodies</a></h3>
+<p>A trait method can have a body. A type that has the trait and does not define
+that method gets the trait’s body as its own method; a type that defines the
+method keeps its own. Inside a default body, the trait’s type parameters and
+<code>this</code> stand for the types named in the <code>with</code> clause:</p>
+<pre><code class="language-pepper">trait Shape {
+    area(): int;
+    sides(): int { return 4; }
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+}
+</code></pre>
+<p>Here <code>Square(3).sides()</code> returns 4.</p>
+<blockquote>
+<p><strong>Known problem:</strong> a default body that uses a string literal does not work
+yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
+method in each extension instead.</p>
+</blockquote>
 <h3 id="what-traits-do-not-do-yet"><a class="header" href="#what-traits-do-not-do-yet">What traits do not do yet</a></h3>
-<p>Traits are currently documentation that the compiler records but does not
-use. In particular:</p>
+<p>Beyond checking conformance and supplying default bodies, the compiler does not
+use traits yet. In particular:</p>
 <ul>
 <li>
 <p><strong>A trait cannot be used as a type.</strong> A parameter, variable, or field of
@@ -2872,23 +2925,13 @@ accepts any <code>Shape</code>:</p>
     return shape.area();
 }
 </code></pre>
-<pre><code class="language-text">main.pep:5:1: error: unknown param type Shape
+<pre><code class="language-text">main.pep:5:16: error: unknown type name 'Shape'
     5 | measure(shape: Shape): int {
-      | ^~~~~~~
+      |                ^~~~~
 </code></pre>
 <p>To write code that works with several types today, use a
 <a href="#generic-functions-1">generic function</a>: <code>total_area&lt;T&gt;</code> accepts
 any <code>T</code> that has an <code>area()</code> method.</p>
-</li>
-<li>
-<p><strong>Conformance is not checked.</strong> <code>extend Square with Shape {}</code> compiles even
-though it leaves out the trait’s methods. The error, if any, appears only
-when something calls a missing method.</p>
-</li>
-<li>
-<p><strong>Default method bodies are not inherited.</strong> The parser accepts a trait
-method with a body, but the body is not added to types that have the
-trait. Write every method in the extension.</p>
 </li>
 <li>
 <p><strong>Generic parameters cannot require a trait.</strong> There is no syntax yet for
@@ -3171,10 +3214,10 @@ main(): int {
 </code></pre>
 <p>Some things to keep in mind:</p>
 <ul>
-<li><strong>Declaring the trait is optional.</strong> Traits are not checked yet, so the loop
-looks only at which methods a type has. Writing
-<code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your intent (see
-<a href="#traits-and-extensions">Traits and extensions</a>).</li>
+<li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
+type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
+intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
+<code>current()</code> (see <a href="#traits-and-extensions">Traits and extensions</a>).</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that same object, so it is
 exhausted afterwards. An iterable starts a new, independent pass every time
@@ -3210,18 +3253,15 @@ loop. Each pass gets a new loop variable, and struct values declared in the
 body are released at the end of every pass, whether the pass ends normally or
 by <code>continue</code>, <code>break</code>, or <code>return</code>. Leaving the loop early also releases the
 hidden iterator, so a destructor on a custom iterator runs at that point.</p>
-<p>Two limitations apply today:</p>
-<ul>
-<li>Using the loop variable or a body local after the loop does not yet produce
-a clear error: the compiler fails with an internal
-<code>Instruction does not dominate all uses</code> message instead of
-<code>use of undeclared identifier</code>.</li>
-<li>Do not give the loop variable the same name as a variable declared before
-the loop. The compiler currently mishandles the outer variable after the
-loop and fails with the same internal error. Going the other way works: a
-variable declared inside a nested loop’s body may reuse the outer loop
-variable’s name.</li>
-</ul>
+<p>Using the loop variable or a body local after the loop is an error, the same as
+for any name that is out of scope:</p>
+<pre><code class="language-text">main.pep:6:12: error: use of undeclared identifier 'i'
+    6 |     return i;
+      |            ^
+</code></pre>
+<p>The loop variable, or a local in the loop body, may have the same name as a
+variable declared before the loop. It hides the outer variable inside the loop,
+and the outer variable keeps its value afterwards.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scoped-blocks-with-with"><a class="header" href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a></h1>
 <p>A <code>with</code> block enters a scope object, binds what it hands out, and cleans up
@@ -3748,11 +3788,12 @@ instance, prefixes its private helpers with <code>_io_</code>.</p>
 same C function.</li>
 <li><strong>Concrete overrides</strong> of an exported generic function, such as <code>hash&lt;int&gt;</code>
 alongside <code>hash&lt;T&gt;</code>. Overriding one the runtime already provides, such as
-<code>hash&lt;String&gt;</code>, is still a duplicate. Concrete overrides work only for
-primitive types and <code>String</code>: <code>hash&lt;Point&gt;</code> declares a second generic
-function with a type parameter named <code>Point</code>, which collides with <code>hash&lt;T&gt;</code>.
-Type parameters are compared by position, not by name, so a private
-<code>pick&lt;U&gt;</code> also collides with <code>pick&lt;T&gt;</code>.</li>
+<code>hash&lt;String&gt;</code>, is still a duplicate. The exemption covers only overrides
+for primitive types and <code>String</code>: an override for a struct, such as
+<code>hash&lt;Point&gt;</code>, collides with <code>hash&lt;T&gt;</code> when the two are in different files,
+so declare it in the same file as the generic function. Type parameters
+are compared by position, not by name, so a private <code>pick&lt;U&gt;</code> also
+collides with <code>pick&lt;T&gt;</code>.</li>
 <li><strong>Declarations that a <code>[Target(...)]</code> attribute drops</strong> for the platform
 being compiled (see <a href="#platform-selection">Platform selection</a>). This is
 why <code>lib.pep</code> above can declare <code>platform_name</code> twice.</li>
@@ -4167,7 +4208,8 @@ holds a counted reference, and follows the same rules as any other reference
 <code>compare_exchange</code> take a reference to the new value and release the one they
 replace, and <code>load</code> and <code>exchange</code> give you your own reference. The swap in
 the slot is itself atomic, so concurrent stores never leak or release a value
-twice.</li>
+twice. When the <code>Atomic</code> itself is destroyed, it releases the reference it
+holds.</li>
 </ul>
 <h2 id="concurrency-today"><a class="header" href="#concurrency-today">Concurrency today</a></h2>
 <p>Pepper does not have threads yet. The language and the runtime have no way to
@@ -4269,8 +4311,10 @@ it is valid until the String is destroyed or grows (for example with
 <code>append</code> or <code>+=</code>). An empty <code>String()</code> has no buffer, so its <code>c_str()</code> is
 <code>__null</code>; check before you pass it to a C function that does not accept
 <code>NULL</code>.</li>
-<li>To turn a C string back into a <code>String</code>, pass the constructor the pointer,
-the byte size, and the number of code points:
+<li>To turn a C string back into a <code>String</code>, pass the pointer to the
+constructor: <code>String(p)</code> copies a NUL-terminated C string, and
+<code>String(p, size)</code> copies <code>size</code> bytes. If you already know the number of
+code points, pass it as a third argument:
 <code>String(p, size, String.length_of(p, size))</code>. The constructor copies the
 bytes, so you still own (and may free) the C buffer.</li>
 </ul>
@@ -4300,12 +4344,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<blockquote>
-<p><strong>Warning:</strong> the compiler does not stop you from passing a <code>String</code>
-variable directly to a <code>char*</code> parameter (<code>strlen(name)</code>). That passes a
-pointer to the String object instead of its characters, and C reads garbage.
-Always write <code>name.c_str()</code>.</p>
-</blockquote>
+<p>Passing a <code>String</code> value directly to an extern’s <code>char*</code> parameter is an error:</p>
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+    4 |     return strlen(name) as int;
+      |                   ^~~~
+</code></pre>
 <h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
 <p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
 ends its prototype with <code>...</code> after at least one named parameter:</p>
@@ -4900,6 +4943,30 @@ code stopped making sense:</p>
     2 |     var x = ;
       |             ^
 </code></pre>
+<p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
+a number is never a struct and one struct type is never another. The check
+applies wherever a value flows into a typed place: a variable’s initializer, an
+assignment, an argument and a <code>return</code>:</p>
+<pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
+    2 |     int x = "hello";
+      |     ^~~
+</code></pre>
+<pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
+    3 |     return g(5);
+      |            ^
+</code></pre>
+<pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
+    2 |     return "a";
+      |            ^~~
+</code></pre>
+<p><strong>The same name declared twice in one scope:</strong></p>
+<pre><code class="language-text">main.pep:3:9: error: redefinition of 'n'
+    3 |     var n = 2;
+      |         ^
+main.pep:2:9: note: previous definition is here
+    2 |     var n = 1;
+      |         ^
+</code></pre>
 <p><strong>Looping over something that cannot be iterated</strong> (see
 <a href="#iteration">Iteration</a>):</p>
 <pre><code class="language-text">main.pep:3:19: error: type 'int' is not iterable: implement Iterable&lt;T&gt; (iterate()) or Iterator&lt;T&gt; (next() and current())
@@ -4918,12 +4985,9 @@ prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
-<p>The compiler does not yet check every type. Some mismatches that should be
-errors compile without one, for example storing an <code>int</code> in a variable
-declared <code>String</code>, returning a <code>String</code> from a function declared to return
-<code>int</code>, or declaring the same local variable twice in one scope. Until these
-checks exist, read such code carefully: the resulting program has undefined
-behavior.</p>
+<p>The type check does not compare the type arguments of generic structs yet, so
+<code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
+resulting program has undefined behavior.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="documentation-comments"><a class="header" href="#documentation-comments">Documentation comments</a></h1>
 <p>Comments explain code to the people who read it. Pepper has one comment
@@ -5165,8 +5229,8 @@ digits of the address, then, with no separator, the first 8 bytes read as
 a little-endian 64-bit word. The word is omitted when <code>ptr</code> is <code>__null</code>
 or <code>size</code> is less than 8. Only those 8 bytes are read, whatever <code>size</code> is.
 The line goes to standard output.</p>
-<p>Each traced call allocates buffers it never frees, so <code>_pep_live_allocs()</code>
-counts them. <code>name</code> must be shorter than about 470 bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>ptr</code> — the start of the region to trace</li>
@@ -5179,9 +5243,8 @@ counts them. <code>name</code> must be shorter than about 470 bytes.</p>
 <p>Prints <code>name: </code> followed by the address <code>ptr</code> as 16 uppercase hex digits
 when tracing is on (the <code>PEP_TRACE</code> environment variable is set, checked
 once at program start). Does nothing otherwise.</p>
-<p>Each traced call allocates buffers it never frees, so
-<code>_pep_live_allocs()</code> counts them. <code>name</code> must be shorter than about 490
-bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>ptr</code> — the address to print; it is not dereferenced</li>
@@ -5193,9 +5256,8 @@ bytes.</p>
 <p>Prints <code>name: </code> followed by <code>value</code> in signed decimal when tracing is on
 (the <code>PEP_TRACE</code> environment variable is set, checked once at program
 start). Does nothing otherwise.</p>
-<p>Each traced call allocates buffers it never frees, so
-<code>_pep_live_allocs()</code> counts them. <code>name</code> must be shorter than about 485
-bytes.</p>
+<p>A traced call frees what it allocates. Only the first 400 bytes of
+<code>name</code> are printed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the number to print</li>
@@ -5272,12 +5334,10 @@ NUL-terminated C string:</p>
 <ul>
 <li>with <code>Length</code> nonzero, <code>Size</code> becomes the byte length of its first
 <code>Length</code> code points (0 if the C string is not valid UTF-8);</li>
-<li>with <code>Length</code> 0, <code>Size</code> becomes the C string’s whole byte length, and
-<code>Length</code> is <strong>not</strong> computed but stays 0, so <code>length()</code> and <code>empty()</code>
-are wrong for that String. Pass the count, for example from
-<code>String.length_of(data, size)</code>.</li>
+<li>with <code>Length</code> 0, <code>Size</code> becomes the C string’s whole byte length.</li>
 </ul>
-<p><code>Length</code> is trusted, not checked against the data. Runs in O(Size).</p>
+<p>When <code>Length</code> is 0, it is counted from the bytes. A nonzero <code>Length</code> is
+trusted, not checked against the data. Runs in O(Size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>data</code> — the bytes to copy; <code>__null</code> for an empty String (then pass no sizes, because they are stored as given)</li>
@@ -5549,10 +5609,6 @@ or past <code>length()</code>, the result is an empty String. Runs in O(Size).</
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String that holds the selected code points</li>
-</ul>
-<p><strong>Note</strong></p>
-<ul>
-<li>a <code>count</code> of 0 with <code>start</code> in range does not currently return an empty String: the constructor receives a byte size of 0 and measures the rest of the buffer as a C string</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "TEST";
@@ -8526,8 +8582,7 @@ leaves it truncated or partly written.</p>
 truncating it first, in 64 KiB chunks.</p>
 <p>Only the contents are copied: <code>to</code> keeps its own permissions and
 timestamps (a new file gets the defaults of <code>File.create</code>). A failure
-part way leaves <code>to</code> partly written. <code>from</code> and <code>to</code> must be
-different files: <code>to</code> is truncated before <code>from</code> is read.</p>
+part way leaves <code>to</code> partly written.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>from</code> — the file to copy</li>
@@ -8535,7 +8590,7 @@ different files: <code>to</code> is truncated before <code>from</code> is read.<
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the number of bytes copied; an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
+<li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();

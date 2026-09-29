@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -193,12 +193,11 @@ around each block are required, even for a single statement.</p>
 classify(n: int): String {
     if n &lt; 0 {
         return "negative";
+    } else if n == 0 {
+        return "zero";
     } else {
-        if n == 0 {
-            return "zero";
-        }
+        return "positive";
     }
-    return "positive";
 }
 
 main(): int {
@@ -224,14 +223,12 @@ main(): int {
     var parity = temperature % 2 == 0 ? "even" : "odd";
     assert(parity == "even", "20 is even");
 
-    # &amp;&amp; and || evaluate both operands, so guard a check that could fail
-    # with a nested if rather than with &amp;&amp;.
+    # &amp;&amp; and || stop at the first operand that decides the result, so the
+    # count check guards the index.
     var readings = Array&lt;int&gt;();
     var starts_high = false;
-    if (readings.count() &gt; 0) {
-        if (readings[0] &gt; 100) {
-            starts_high = true;
-        }
+    if (readings.count() &gt; 0 &amp;&amp; readings[0] &gt; 100) {
+        starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");
     return 0;
@@ -240,35 +237,28 @@ main(): int {
 <p>The condition is usually a <code>bool</code>, but a number also works: any value other
 than zero counts as true, as in C.</p>
 <h3 id="chains-of-conditions"><a class="header" href="#chains-of-conditions">Chains of conditions</a></h3>
-<p><code>else if</code> is not supported yet: <code>else</code> must be followed by a block.</p>
+<p><code>else if</code> tests another condition when the ones before it were false. The
+first true condition’s block runs, and the final <code>else</code> block, if there is
+one, runs when none was true:</p>
 <pre><code class="language-pepper">if x &gt; 0 {
     return 1;
-} else if x &lt; 0 {    # error
+} else if x &lt; 0 {
     return -1;
-}
-</code></pre>
-<pre><code>main.pep:4:12: error: expected '{'
-    4 |     } else if x &lt; 0 {
-      |            ^~
-</code></pre>
-<p>Nest the second <code>if</code> inside the <code>else</code> block instead, or return early from each
-branch as <code>classify</code> does in the example above:</p>
-<pre><code class="language-pepper">if x &gt; 0 {
-    return 1;
 } else {
-    if x &lt; 0 {
-        return -1;
-    }
+    return 0;
 }
 </code></pre>
 <p>For a choice between two values, the conditional operator
 <code>condition ? a : b</code> is often shorter than an <code>if</code>.</p>
 <h3 id="guarding-a-check"><a class="header" href="#guarding-a-check">Guarding a check</a></h3>
-<p><code>&amp;&amp;</code> and <code>||</code> do not short-circuit yet: both operands are always evaluated. A
-condition such as <code>items.count() &gt; 0 &amp;&amp; items[0] &gt; 100</code> still reads <code>items[0]</code>
-when the array is empty, which panics with <code>Array index read out of bounds</code>.
-Until this is fixed, put the guard in its own <code>if</code>, as the example does with
-<code>readings</code>.</p>
+<p><code>&amp;&amp;</code> and <code>||</code> short-circuit, as in C: the right operand is evaluated only when
+the left one does not already decide the result. A guard can therefore come
+first in the same condition:</p>
+<pre><code class="language-pepper">if items.count() &gt; 0 &amp;&amp; items[0] &gt; 100 {
+    print("starts high");
+}
+</code></pre>
+<p>When <code>items</code> is empty, <code>items[0]</code> is never read.</p>
 <h2 id="while"><a class="header" href="#while"><code>while</code></a></h2>
 <p><code>while</code> repeats its block as long as the condition is true. The condition is
 checked before each iteration, so the body may run zero times. As with <code>if</code>,
@@ -358,9 +348,7 @@ it, or move the loops into a function and <code>return</code> from it.</p>
 <p><code>return value;</code> leaves the current function and hands <code>value</code> back to the
 caller. It works from anywhere in the function, including from inside loops.
 See <a href="functions.html">Functions</a>.</p>
-<p>A function that returns nothing cannot use a bare <code>return;</code> yet: <code>return</code> must
-be followed by a value, and <code>return;</code> is a parse error (<code>expected expression</code>).
-Structure the function with <code>if</code>/<code>else</code> so that it runs off the end instead.</p>
+<p>In a function that returns nothing, a bare <code>return;</code> leaves the function early.</p>
 
                     </main>
 

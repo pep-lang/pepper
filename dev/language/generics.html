@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -384,10 +384,11 @@ main(): int {
 uses the override; every other call uses the generic version. The standard
 library uses this to give <a href="../reference/hash.html"><code>hash&lt;String&gt;</code></a> a
 content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by identity.</p>
-<p>Overrides currently work only for the built-in primitive types (<code>int</code>,
-<code>float</code>, <code>bool</code>, <code>u8</code>, and so on) and <code>String</code>. Writing an override for your
-own struct type, such as <code>describe&lt;Point&gt;</code>, compiles, but calls still use the
-generic version.</p>
+<p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
+one of your own structs, such as <code>describe&lt;Point&gt;</code>. An override for a struct
+must be in the same file as the generic function: in another file it is
+reported as a duplicate declaration (see
+<a href="visibility.html#one-namespace-for-the-whole-program">Visibility</a>).</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="traits-and-extensions.html#extending-generic-structs">extension</a>.</p>
 

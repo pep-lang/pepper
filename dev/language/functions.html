@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -267,15 +267,28 @@ is a compile error:</p>
 log_line(message: String): void { print(message); }
 void log_c(String message) { print(message); }
 </code></pre>
-<p>Such a function ends when it reaches the closing brace. A bare <code>return;</code> is not
-supported yet (see <a href="control-flow.html#return">Control flow</a>).</p>
-<h2 id="return-types-are-not-inferred"><a class="header" href="#return-types-are-not-inferred">Return types are not inferred</a></h2>
-<p>Always write the return type of a function that returns a value. Return type
-inference is not implemented: a function without a return type is compiled as
-returning a 32-bit <code>int</code>, so a <code>long</code> result is silently truncated, a <code>double</code>
-loses its fraction, and returning a <code>String</code> or a struct crashes the compiler or
-the program. For example, <code>half(x: double) { return x / 2; }</code> returns 2 for
-<code>half(5.0)</code>, not 2.5.</p>
+<p>Such a function ends when it reaches the closing brace, or earlier at a bare
+<code>return;</code>:</p>
+<pre><code class="language-pepper">log_positive(n: int) {
+    if n &lt;= 0 {
+        return;
+    }
+    print(n);
+}
+</code></pre>
+<p>In a function that returns a value, <code>return;</code> is an error:</p>
+<pre><code class="language-text">main.pep:2:5: error: non-void function 'f' should return a value
+    2 |     return;
+      |     ^~~~~~
+</code></pre>
+<h2 id="inferred-return-types"><a class="header" href="#inferred-return-types">Inferred return types</a></h2>
+<p>A function without a return type gets one from its <code>return</code> statements. It
+returns <code>void</code> when no <code>return</code> has a value, and otherwise the type of the first
+<code>return</code> that has one, so <code>half(x: double) { return x / 2; }</code> returns a
+<code>double</code>. <code>main</code> with no return type returns an <code>int</code>, and reaching its closing
+brace exits with 0.</p>
+<p>Writing the return type is still clearer for a function that returns a value,
+and it lets the compiler check each <code>return</code> against it.</p>
 <h2 id="parameters"><a class="header" href="#parameters">Parameters</a></h2>
 <p>Parameters are passed by value. For numbers and <code>bool</code>, the function receives
 its own copy. For a <code>String</code>, an <code>Array</code> or any other struct, the value is a
@@ -337,12 +350,8 @@ main(): int {
 }
 </code></pre>
 <p>To print several values on one line, build a <code>String</code> with <code>+</code> first.</p>
-<blockquote>
-<p><strong>Known problem:</strong> printing a <code>float</code> or <code>double</code> currently shows the wrong
-digits after the decimal point (for example, <code>print(0.5)</code> prints
-<code>0.000005</code>). Convert to an integer with <code>as</code> if you need to print a
-floating-point value today.</p>
-</blockquote>
+<p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
+<code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
 <code>panic(message)</code>. See <a href="../reference/internals.html">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>

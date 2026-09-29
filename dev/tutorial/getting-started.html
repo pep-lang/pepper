@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -255,22 +255,24 @@ file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
 the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
-<code>runtime/</code> folder of the repository. The compiler looks for it relative to the
-directory you run it from, in this order:</p>
+<code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
 <ol>
-<li><code>runtime/</code></li>
-<li><code>.pep/runtime/</code></li>
-<li><code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to five levels up</li>
+<li>The directory named by the <code>PEPPER_RUNTIME</code> environment variable, if it is
+set. Nothing else is searched.</li>
+<li>Starting from the directory you run it from: <code>runtime/</code>, <code>.pep/runtime/</code>,
+then <code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to five levels up.</li>
+<li>Starting from the directory that holds the compiler executable:
+<code>runtime/</code> beside it, then in each parent directory, up to five levels up.</li>
 </ol>
-<p>So compiling anywhere inside your clone of the repository just works. For a
-project somewhere else, link or copy the runtime into the project’s <code>.pep</code>
-folder once:</p>
+<p>So a compiler built in <code>target/release</code> finds the runtime of the clone it was
+built from, wherever you run it. To use a different runtime, set
+<code>PEPPER_RUNTIME</code> or link the runtime into a project’s <code>.pep</code> folder:</p>
 <pre><code class="language-sh">mkdir .pep
 ln -s /path/to/pepper/runtime .pep/runtime
 </code></pre>
-<p>If the compiler cannot find the runtime, every use of a built-in type fails,
-with errors such as <code>call to undeclared function 'String'</code> on the first string
-literal.</p>
+<p>If the compiler cannot find the runtime, it stops with an error:</p>
+<pre><code class="language-text">error: cannot find the Pepper runtime: no runtime directory near /home/me/project or the compiler; set PEPPER_RUNTIME to its path
+</code></pre>
 <p>The compiler also writes intermediate files to <code>.pep/build/</code> under the
 directory you run it from.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>

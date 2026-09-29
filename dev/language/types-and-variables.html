@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -206,8 +206,10 @@ type, so you can use whichever reads better and assign freely between them.</p>
 <p><code>int</code> is 32 bits and <code>long</code> is 64 bits on every platform. <code>sizeof&lt;T&gt;()</code> gives the
 size of a type in bytes.</p>
 <p>Integer literals are written in decimal (<code>42</code>) or hexadecimal (<code>0xFF</code>). A literal
-on its own is an <code>int</code>; it takes a wider type when you store it in a variable of
-that type (<code>long big = 9000000000;</code>).</p>
+on its own is an <code>int</code> when its value fits in an <code>int</code>, and a <code>long</code> otherwise, so
+<code>var big = 3000000000;</code> is a <code>long</code>. It takes another type when you store it in a
+variable of that type (<code>u64 huge = 9000000000000000000;</code>). A hexadecimal literal
+is a 64-bit bit pattern: <code>u64 all = 0xFFFFFFFFFFFFFFFF;</code> sets every bit.</p>
 <pre><code class="language-pepper"># Integer types: widths, signedness, wraparound and conversions.
 main(): int {
     # Each width has a short name and a descriptive alias.
@@ -253,12 +255,12 @@ main(): int {
 <p>Storing a value that does not fit in the destination keeps its low bits, as in
 C: a <code>u16</code> holding 65535 becomes 0 when you add 1 and store the result, and
 <code>70000 as u16</code> is 4464.</p>
-<blockquote>
-<p><strong>Watch out:</strong> <code>var big = 3000000000;</code> makes an <code>int</code>, because the literal is
-an <code>int</code>, and the value silently wraps to -1294967296. Write the type when a
-value needs more than 32 bits: <code>long big = 3000000000;</code>. A literal larger than
-the largest <code>long</code> (9223372036854775807) currently crashes the compiler.</p>
-</blockquote>
+<p>A decimal literal larger than the largest <code>long</code> (9223372036854775807), or a
+hexadecimal literal with more than 64 bits, is an error:</p>
+<pre><code class="language-text">main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
+    2 |     var f = 99999999999999999999;
+      |             ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating point</a></h3>
 <p><code>float</code> is a 32-bit and <code>double</code> a 64-bit IEEE 754 number (<code>f32</code> and <code>f64</code> are
 aliases). A literal with a decimal point or an exponent, such as <code>0.25</code> or <code>1e3</code>,
@@ -305,9 +307,33 @@ to the same object rather than a copy, so a change made with <code>append</code>
 through both names. <a href="memory.html">Memory and reference counting</a> explains how
 references work, and the <a href="../reference/string.html"><code>String</code></a> reference lists every
 method.</p>
-<p>String literals are taken exactly as written between the quotes. There are no
-escape sequences: <code>"a\nb"</code> is four characters, a backslash included, and a
-string cannot contain a <code>"</code> character.</p>
+<p>A backslash in a string literal starts an escape sequence, as in C and Rust:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Escape</th><th>Character</th></tr>
+</thead>
+<tbody>
+<tr><td><code>\n</code></td><td>newline</td></tr>
+<tr><td><code>\t</code></td><td>tab</td></tr>
+<tr><td><code>\r</code></td><td>carriage return</td></tr>
+<tr><td><code>\0</code></td><td>the zero byte</td></tr>
+<tr><td><code>\\</code></td><td>a backslash</td></tr>
+<tr><td><code>\"</code></td><td>a double quote</td></tr>
+<tr><td><code>\'</code></td><td>a single quote</td></tr>
+<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code></td></tr>
+<tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper">print("name:\t\"Pepper\"");   # name:	"Pepper"
+print("caf\u{e9}");            # café
+</code></pre>
+<p>Any other character after a backslash is an error:</p>
+<pre><code class="language-text">main.pep:2:13: error: unknown escape sequence '\q'
+    2 |     print("a\qb");
+      |             ^~
+</code></pre>
 <h3 id="other-built-in-types"><a class="header" href="#other-built-in-types">Other built-in types</a></h3>
 <ul>
 <li><code>void</code> means “no value”. It is the return type of a function that returns
@@ -398,20 +424,24 @@ main(): int {
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
 <code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>. Give struct
 variables a value before you use them.</p>
-<blockquote>
-<p><strong>Watch out:</strong> when <code>var</code> infers the type of an arithmetic expression, it
-takes the type of the <em>left</em> operand. <code>var m = 1 + 0.5;</code> is an <code>int</code> holding
-1, and with <code>u8 small = 250;</code>, <code>var s = small + 10;</code> is a <code>u8</code> holding 4. The
-arithmetic itself follows C (see below); only the inferred variable type is
-affected. Write the type when you mix types: <code>double m = 1 + 0.5;</code>.</p>
-</blockquote>
+<p>When <code>var</code> infers the type of an arithmetic expression, it takes the type the
+arithmetic produces under C’s rules (see <a href="#arithmetic-follows-c">Arithmetic follows C</a>):
+<code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,
+<code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
 <pre><code class="language-pepper">const LIMIT = 3;
 const RATIO: double = 0.5;
 </code></pre>
-<p>The compiler does not enforce this yet: assigning to a <code>const</code> compiles and
-changes the value. Treat <code>const</code> as documentation for now.</p>
+<p>Assigning to a <code>const</code>, with <code>=</code>, a compound assignment, <code>++</code> or <code>--</code>, is an
+error:</p>
+<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'LIMIT'
+    5 |     LIMIT = 4;
+      |     ^~~~~
+main.pep:1:7: note: 'LIMIT' declared const here
+    1 | const LIMIT = 3;
+      |       ^~~~~
+</code></pre>
 <h3 id="module-level-variables"><a class="header" href="#module-level-variables">Module-level variables</a></h3>
 <p>A variable declared outside any function is a module-level (global) variable. It
 exists for the whole run of the program and every function in the file can read
@@ -572,25 +602,24 @@ main(): int {
 <tr><td>Identity</td><td><code>===</code> (two references to the same object)</td></tr>
 <tr><td>Logical</td><td><code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code></td></tr>
 <tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>~</code> <code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr>
-<tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code></td></tr>
+<tr><td>Assignment</td><td><code>=</code> <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
 <tr><td>Increment</td><td><code>++</code> <code>--</code>, prefix or postfix</td></tr>
 <tr><td>Conditional</td><td><code>condition ? a : b</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>Some operators have limits today:</p>
+<p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
+one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
+reads <code>items[0]</code> from an empty array.</p>
+<p><code>**</code> raises an integer to an integer power, and is right-associative:
+<code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. The exponent can be any integer expression. A negative
+exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
+of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
+<p>Some operators have limits today:</p>
 <ul>
-<li><strong><code>&amp;&amp;</code> and <code>||</code> evaluate both operands.</strong> They do not short-circuit yet, so
-<code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> still reads <code>items[0]</code> when the array is
-empty, and panics. Guard such checks with a nested <code>if</code> instead (see
-<a href="control-flow.html">Control flow</a>).</li>
-<li><strong><code>**</code> works on integers with a constant exponent from 0 to 31</strong>, such as
-<code>2 ** 10</code>. It is right-associative: <code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. A floating-point
-operand or an exponent held in a variable is a compile error
-(<code>unsupported op Pow</code>), and a negative literal exponent (<code>2 ** -1</code>) crashes the
-compiler.</li>
-<li><strong><code>|=</code> and <code>^=</code> do not work yet.</strong> <code>|=</code> crashes the compiler and <code>^=</code> performs
-<code>|=</code>. Write <code>x = x | y</code> and <code>x = x ^ y</code> instead.</li>
+<li><strong><code>**</code> works only on integers.</strong> A floating-point operand is a compile error
+(<code>unsupported op Pow</code>).</li>
 <li><strong><code>===</code></strong> compares struct references. It is not supported for numbers.</li>
 </ul>
 <p>Operators bind in this order, tightest first:</p>

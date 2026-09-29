@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -246,8 +246,10 @@ it is valid until the String is destroyed or grows (for example with
 <code>append</code> or <code>+=</code>). An empty <code>String()</code> has no buffer, so its <code>c_str()</code> is
 <code>__null</code>; check before you pass it to a C function that does not accept
 <code>NULL</code>.</li>
-<li>To turn a C string back into a <code>String</code>, pass the constructor the pointer,
-the byte size, and the number of code points:
+<li>To turn a C string back into a <code>String</code>, pass the pointer to the
+constructor: <code>String(p)</code> copies a NUL-terminated C string, and
+<code>String(p, size)</code> copies <code>size</code> bytes. If you already know the number of
+code points, pass it as a third argument:
 <code>String(p, size, String.length_of(p, size))</code>. The constructor copies the
 bytes, so you still own (and may free) the C buffer.</li>
 </ul>
@@ -277,12 +279,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<blockquote>
-<p><strong>Warning:</strong> the compiler does not stop you from passing a <code>String</code>
-variable directly to a <code>char*</code> parameter (<code>strlen(name)</code>). That passes a
-pointer to the String object instead of its characters, and C reads garbage.
-Always write <code>name.c_str()</code>.</p>
-</blockquote>
+<p>Passing a <code>String</code> value directly to an extern’s <code>char*</code> parameter is an error:</p>
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+    4 |     return strlen(name) as int;
+      |                   ^~~~
+</code></pre>
 <h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
 <p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
 ends its prototype with <code>...</code> after at least one named parameter:</p>

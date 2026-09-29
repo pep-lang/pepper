@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
+            window.path_to_searchindex_js = "../searchindex-db707087.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a23cc414.js"></script>
@@ -249,12 +249,10 @@ NUL-terminated C string:</p>
 <ul>
 <li>with <code>Length</code> nonzero, <code>Size</code> becomes the byte length of its first
 <code>Length</code> code points (0 if the C string is not valid UTF-8);</li>
-<li>with <code>Length</code> 0, <code>Size</code> becomes the C string’s whole byte length, and
-<code>Length</code> is <strong>not</strong> computed but stays 0, so <code>length()</code> and <code>empty()</code>
-are wrong for that String. Pass the count, for example from
-<code>String.length_of(data, size)</code>.</li>
+<li>with <code>Length</code> 0, <code>Size</code> becomes the C string’s whole byte length.</li>
 </ul>
-<p><code>Length</code> is trusted, not checked against the data. Runs in O(Size).</p>
+<p>When <code>Length</code> is 0, it is counted from the bytes. A nonzero <code>Length</code> is
+trusted, not checked against the data. Runs in O(Size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>data</code> — the bytes to copy; <code>__null</code> for an empty String (then pass no sizes, because they are stored as given)</li>
@@ -526,10 +524,6 @@ or past <code>length()</code>, the result is an empty String. Runs in O(Size).</
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String that holds the selected code points</li>
-</ul>
-<p><strong>Note</strong></p>
-<ul>
-<li>a <code>count</code> of 0 with <code>start</code> in range does not currently return an empty String: the constructor receives a byte size of 0 and measures the rest of the buffer as a C string</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "TEST";
