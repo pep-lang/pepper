@@ -140,6 +140,14 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             let this_type = of(this, table, current)?;
             table.lookup(&this_type)?.returns.get(method).cloned()
         }
+        // `source.iterate()` if the source is Iterable, else the source.
+        Expression::ForIterator(source) => {
+            let source_type = of(source, table, current)?;
+            match table.lookup(&source_type)?.returns.get("iterate") {
+                Some(iterator) => Some(iterator.clone()),
+                None => Some(source_type),
+            }
+        }
         Expression::Index { lhs, .. } => {
             let lhs_type = of(lhs, table, current)?;
             // Pointer receiver (`T*`): the element is the pointee, and the

@@ -18,7 +18,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 
 const KEYWORDS: &[&str] = &[
-    "import", "from", "struct", "var", "const", "if", "else", "while", "return", "extern",
+    "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
     "extend", "export",
 ];
@@ -225,6 +225,16 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                         collect_locals_upto(&w.block, offset, out);
                     }
                 }
+                ast::Statement::For(f) => {
+                    if f.block.span.start <= offset && offset < f.block.span.end {
+                        out.push(Symbol {
+                            name: f.binding.name.clone(),
+                            name_span: f.binding.name_span,
+                            ty: variable_type(&f.binding),
+                        });
+                        collect_locals_upto(&f.block, offset, out);
+                    }
+                }
                 _ => {}
             }
         }
@@ -342,6 +352,11 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
             }
             ast::Statement::While(w) => {
                 if let Some(found) = find_expr_in_block(&w.block, offset) {
+                    return Some(found);
+                }
+            }
+            ast::Statement::For(f) => {
+                if let Some(found) = find_expr_in_block(&f.block, offset) {
                     return Some(found);
                 }
             }

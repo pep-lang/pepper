@@ -430,6 +430,15 @@ impl<'a> Checker<'a, '_> {
                 self.expression(&w.condition);
                 self.block(&w.block);
             }
+            Statement::For(f) => {
+                // The iterable is evaluated outside the loop variable's scope.
+                self.expression(&f.iterable);
+                self.scopes.push((HashSet::new(), false));
+                self.type_name(&f.binding.type_name);
+                self.bind(&f.binding.name);
+                self.block(&f.block);
+                self.scopes.pop();
+            }
             Statement::Return(r) => self.expression(&r.expr),
             Statement::LoopBreak(_) => {}
         }

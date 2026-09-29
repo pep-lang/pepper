@@ -420,6 +420,17 @@ pub struct While {
     pub span: Span,
 }
 
+/// `for (var x in expr) { ... }`: iterate `expr` via the iterator protocol
+/// (`iterate()`, or `next()` + `current()`). The binding is a `var` or typed
+/// declaration with no default value.
+#[derive(Debug, Clone)]
+pub struct For {
+    pub binding: VariableDecl,
+    pub iterable: Expression,
+    pub block: Block,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
     pub expr: Expression,
@@ -442,6 +453,7 @@ pub enum Statement {
     Declaration(Declaration),
     Branch(Branch),
     While(While),
+    For(For),
     Return(ReturnStatement),
     LoopBreak(LoopBreak),
 }
@@ -454,6 +466,7 @@ impl Statement {
             Statement::Declaration(d) => d.span(),
             Statement::Branch(b) => b.span,
             Statement::While(w) => w.span,
+            Statement::For(f) => f.span,
             Statement::Return(r) => r.span,
             Statement::LoopBreak(l) => l.span,
         }
@@ -850,6 +863,12 @@ impl Display for While {
     }
 }
 
+impl Display for For {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "for ({} in {}) {}", self.binding, self.iterable, self.block)
+    }
+}
+
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "return {}", self.expr)
@@ -869,6 +888,7 @@ impl Display for Statement {
             Statement::Declaration(Declaration::TypeAlias(t)) => write!(f, "{};", t),
             Statement::Branch(b) => write!(f, "{}", b),
             Statement::While(w) => write!(f, "{}", w),
+            Statement::For(fr) => write!(f, "{}", fr),
             Statement::Return(r) => write!(f, "{};", r),
             Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
         }

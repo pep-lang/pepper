@@ -68,16 +68,74 @@ if x > 0 {
 ### Loops
 
 ```
-for (var x in [0, 2, 4]) {
+var nums = Array<int>();
+nums.append(0);
+nums.append(2);
+nums.append(4);
+
+for (var x in nums) {
     print(x, "\n");
 }
 
-var nums = [0, 2, 4];
 var idx = 0;
-while (idx < nums.size()) {
-    print(nums[idx++], "\n");
+while (idx < nums.count()) {
+    print(nums[idx], "\n");
+    idx = idx + 1;
 }
 ```
+
+`break` and `continue` work in both. As with `if` and `while`, the parentheses around a `for` header are optional
+(`for var x in nums { ... }`), and the loop variable may be typed (`for (int x in nums)`, `for (var x: int in nums)`).
+
+#### Iteration
+
+A `for` loop works with any type that follows the iterator protocol (`runtime/iterator.pep`):
+
+```
+export trait Iterator<T> {
+    bool next();     # advance; true if there is a current element
+    T current();     # the element next() just moved to
+}
+
+export trait Iterable<T> {
+    iterate(): Iterator<T>;
+}
+```
+
+`for (var x in source) { body }` behaves exactly like:
+
+```
+{
+    var it = source.iterate();   # or `var it = source;` when source is itself an Iterator
+    while (it.next()) {
+        var x = it.current();
+        { body }
+    }
+}
+```
+
+The loop picks the form by the methods the source's type has, like C++ range-for: `iterate()` first, else `next()` and
+`current()`. A type with neither is a compile error:
+`type Foo is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())`. Traits are not
+checked yet, so declaring one (`extend Foo with Iterator<int> {}`) documents intent rather than being required.
+
+- The loop variable is a copy, like any `var`: rebinding it does not write back to the collection. For struct elements
+  it is another reference to the same object, so `x.Field = ...` does change the element.
+- The iterator holds a reference to its source, so iterating a temporary (`for (var x in make_list())`) keeps it alive
+  for the whole loop. Leaving the loop by `break` or `return` releases the iterator; a destructor on it runs then.
+- When the source is itself an iterator stored in a variable, the loop shares that object: it is exhausted afterwards.
+- `current()` before the first `next()`, or after `next()` returned false, panics.
+
+Built-in iterables:
+
+| Type | Yields |
+|---|---|
+| `Array<T>` | each element, in order (`ArrayIterator<T>`) |
+| `String` | each code point, as a one-code-point `String` (the same value as `s[i]`; `StringIterator`) |
+
+Modifying an `Array` or `String` while a loop iterates it panics (`Array modified during iteration`). Every mutating
+`Array` method counts, element stores (`arr[i] = v`) included; for `String`, `append` and `grow`. Modifying it after the
+loop is fine.
 
 ## Functions
 

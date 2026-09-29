@@ -100,7 +100,7 @@ pub(crate) fn max_pos() -> usize {
 
 const RESERVED: &[&str] = &[
     "import", "struct", "var", "const",
-    "if", "else", "while", "return", "extern",
+    "if", "else", "while", "for", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
     "trait", "extend", "type", "export",
@@ -1007,6 +1007,46 @@ fn while_loop(input: &mut &str) -> Result<While> {
     Ok(While { condition, block, span: Span { start, end } })
 }
 
+/// `for (var x in expr) { ... }` / `for (T x in expr) { ... }`. As with `if`
+/// and `while` the parentheses are optional. `in` is contextual, not reserved.
+fn for_loop(input: &mut &str) -> Result<For> {
+    let start = pos(input);
+    if !input.starts_with("for") || input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(bt(input));
+    }
+    *input = &input[3..];
+    ws(input)?;
+    let parenthesized = input.starts_with('(');
+    if parenthesized {
+        *input = &input[1..];
+        ws(input)?;
+    }
+    // Past `for`, a malformed header is an error, not a different statement.
+    let binding = variable_declaration(input, vec![]).map_err(|_| cut(input))?;
+    if binding.is_const || binding.default_value.is_some() {
+        return Err(cut(input));
+    }
+    ws(input)?;
+    if !input.starts_with("in") || input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(cut(input));
+    }
+    *input = &input[2..];
+    ws(input)?;
+    let iterable = expression(input)?;
+    ws(input)?;
+    if parenthesized {
+        if !input.starts_with(')') {
+            return Err(cut(input));
+        }
+        *input = &input[1..];
+        ws(input)?;
+    }
+    let block = block(input, vec![])?;
+    let end = block.span.end;
+    ws(input)?;
+    Ok(For { binding, iterable, block, span: Span { start, end } })
+}
+
 fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     let start = pos(input);
     if !input.starts_with("return") || input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -1059,6 +1099,9 @@ fn statement(input: &mut &str) -> Result<Statement> {
     }
     if input.starts_with("while") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::While(while_loop(input)?));
+    }
+    if input.starts_with("for") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+        return Ok(Statement::For(for_loop(input)?));
     }
     if input.starts_with("return") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Statement::Return(return_statement(input)?));
@@ -2407,6 +2450,11 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
             ptr_check_expr(&w.condition)?;
             ptr_check_block(&w.block)
         }
+        Statement::For(fr) => {
+            ptr_check_type(&fr.binding.type_name)?;
+            ptr_check_expr(&fr.iterable)?;
+            ptr_check_block(&fr.block)
+        }
         Statement::Return(r) => ptr_check_expr(&r.expr),
         Statement::LoopBreak(_) => Ok(()),
     }
@@ -3115,6 +3163,49 @@ f() { var r = c.Result<int>.ok(1); }");
             Statement::While(_) => {}
             other => panic!("{:?}", other),
         }
+    }
+
+    #[test]
+    fn test_for_loop_forms() {
+        for (src, name, ty) in [
+            ("for (var x in nums) { total += x; }", "x", "__auto"),
+            ("for var x in nums { total += x; }", "x", "__auto"),
+            ("for (int x in nums) { total += x; }", "x", "int"),
+            ("for (var x: int in nums) { total += x; }", "x", "int"),
+            ("for (var p in make_points()) { }", "p", "__auto"),
+        ] {
+            let mut input = src;
+            match statement(&mut input).unwrap_or_else(|e| panic!("{}: {:?}", src, e)) {
+                Statement::For(f) => {
+                    assert_eq!(f.binding.name, name, "{}", src);
+                    assert_eq!(f.binding.type_name.to_string(), ty, "{}", src);
+                }
+                other => panic!("{}: {:?}", src, other),
+            }
+            assert!(input.trim().is_empty(), "{}: left {:?}", src, input);
+        }
+    }
+
+    #[test]
+    fn test_for_loop_rejects_malformed_headers() {
+        for src in [
+            "for (x in nums) { }",          // binding needs `var` or a type
+            "for (var x = 1 in nums) { }",  // no default value
+            "for (const x in nums) { }",    // loop variable is not const
+            "for (var x of nums) { }",      // `in`, not `of`
+            "for (var x in nums { }",       // unclosed header
+        ] {
+            let mut input = src;
+            assert!(statement(&mut input).is_err(), "{} should not parse", src);
+        }
+    }
+
+    #[test]
+    fn test_for_prefixed_identifiers_are_not_loops() {
+        let mut input = "format(x)";
+        assert!(matches!(statement(&mut input).unwrap(), Statement::Expression(_)));
+        let mut input = "var forward = 1";
+        assert!(matches!(statement(&mut input).unwrap(), Statement::Declaration(_)));
     }
 
     #[test]

@@ -838,6 +838,14 @@ impl Rewriter<'_, '_> {
                 self.expression(&mut w.condition);
                 self.block(&mut w.block);
             }
+            Statement::For(f) => {
+                self.expression(&mut f.iterable);
+                self.scopes.push(Scope::Values(HashSet::new()));
+                self.type_name(&mut f.binding.type_name);
+                self.bind(&f.binding.name);
+                self.block(&mut f.block);
+                self.scopes.pop();
+            }
             Statement::Return(r) => self.expression(&mut r.expr),
             Statement::LoopBreak(_) => {}
         }

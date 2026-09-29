@@ -243,6 +243,12 @@ pub enum Expression {
         method: String,
         args: Vec<Expression>,
     },
+    /// The iterator a `for` loop drives, built from its source expression:
+    /// `source.iterate()` when the source's type declares `iterate()`
+    /// (Iterable<T>), else the source itself when it declares `next()` and
+    /// `current()` (Iterator<T>). Chosen by type, like C++ range-for; the
+    /// builder emits it only as the default of the loop's hidden iterator.
+    ForIterator(Box<Expression>),
 }
 
 // ── Statements ───────────────────────────────────────────────────────────────

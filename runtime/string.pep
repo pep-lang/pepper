@@ -1,9 +1,12 @@
 import "internals";
 
+# `append` and `grow` bump Version; a StringIterator panics when it sees a
+# Version other than the one it started with (modified during iteration).
 export struct String {
     __ptr<char> Data;
     ulong Length;
     ulong Size;
+    ulong Version;
 
     new(__ptr<char> data = __null, this.Size = 0, this.Length = 0) {
         if (data) {
@@ -35,6 +38,7 @@ export struct String {
 
     void grow(ulong newSize) {
         if (newSize > Size) {
+            Version = Version + 1;
             Data = _pep_realloc(Data, Size + 1, newSize + 1);
             Size = newSize;
             Data[Size] = 0;
@@ -42,6 +46,7 @@ export struct String {
     }
 
     void append(String rhs) {
+        Version = Version + 1;
         ulong oldSize = Size;
         grow(Size + rhs.Size);
         memcpy(Data + oldSize, rhs.Data, rhs.Size);
@@ -81,6 +86,15 @@ export struct String {
 
     ulong size() {
         return Size;
+    }
+
+    # Iterable<String>: `for (var c in s)` visits each code point as a
+    # one-code-point String, the same value `s[i]` gives.
+    StringIterator iterate() {
+        var it = StringIterator();
+        it.Source = this;
+        it.Version = Version;
+        return it;
     }
 
     bool empty() {
@@ -145,5 +159,41 @@ export struct String {
         String result = clone();
         result.append(rhs);
         return result;
+    }
+}
+
+# Iterator<String> over a String's code points (String.iterate()). Walks the
+# UTF-8 bytes forward, so a whole loop is O(size) rather than an O(size)
+# `s[i]` lookup per index.
+export struct StringIterator {
+    String Source;
+    # Byte offsets of the current code point and of the one after it.
+    ulong Offset;
+    ulong NextOffset;
+    ulong Version;
+    bool Started;
+
+    # Advance to the next code point; false once past the end (and after).
+    bool next() {
+        assert(Source.Version == Version, "String modified during iteration");
+        if (Started) {
+            Offset = NextOffset;
+        } else {
+            Started = true;
+        }
+        if (Offset >= Source.Size) {
+            NextOffset = Offset;
+            return false;
+        }
+        NextOffset = Offset + _pep_utf8_char_offset(Source.Data + Offset, Source.Size - Offset, 1);
+        return true;
+    }
+
+    # The code point the last successful next() moved to.
+    String current() {
+        assert(Source.Version == Version, "String modified during iteration");
+        assert(Started, "StringIterator.current() before next()");
+        assert(Offset < Source.Size, "StringIterator.current() past the end");
+        return String(Source.Data + Offset, NextOffset - Offset, 1);
     }
 }

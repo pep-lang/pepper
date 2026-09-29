@@ -136,6 +136,21 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             }
             TypeName::auto()
         }
+        // `source.iterate()` if the source is Iterable, else the source
+        // itself (an Iterator). Unknown until the source's struct is known.
+        Expression::ForIterator(source) => {
+            let source_type = type_of_expr(source, scopes, current_struct);
+            if source_type.is_empty() || source_type.to_string() == crate::type_name::AUTO {
+                return TypeName::auto();
+            }
+            let Some((_, methods)) = scopes.methods.iter().find(|(ty, _)| *ty == source_type.to_string()) else {
+                return TypeName::auto();
+            };
+            match methods.iter().find(|(m, _)| m == "iterate") {
+                Some((_, iterator)) => iterator.clone(),
+                None => source_type,
+            }
+        }
         Expression::Binary { op, lhs, .. } => {
             // Assignment resolves to the lhs type; comparisons to bool.
             if op.is_assignment() {

@@ -1000,6 +1000,21 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_var_def(&mut self, var: &VariableDef) -> Result<(), String> {
+        // A `for` loop's hidden iterator: substitute the concrete source
+        // (`source.iterate()` or `source` itself), so the refcount rules below
+        // see an ordinary method call or read. Sema types it best-effort;
+        // fall back to the substituted expression's type.
+        if let Some(Expression::ForIterator(source)) = &var.default {
+            let mut lowered = var.clone();
+            let iterator = self.for_loop_iterator(source)?;
+            if lowered.ty.to_string() == pepper_sema::type_name::AUTO {
+                if let Some(ty) = self.value_sema_type(&iterator) {
+                    lowered.ty = TypeName::new(&ty);
+                }
+            }
+            lowered.default = Some(iterator);
+            return self.codegen_var_def(&lowered);
+        }
         // Struct-typed vars hold POINTERS (C++ ref semantics): `this`
         // (malloc'd) and locals initialized from a ctor call.
         let is_struct_ref = self.structs.contains_key(&var.ty.to_string());
@@ -1136,6 +1151,25 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.track_scope_local(&var.name, &var.ty.to_string(), alloca);
         }
         Ok(())
+    }
+
+    /// The iterator a `for` loop drives over `source`: `source.iterate()` when
+    /// its type declares `iterate()` (Iterable<T>), else `source` itself when
+    /// it declares `next()` and `current()` (Iterator<T>).
+    fn for_loop_iterator(&self, source: &Expression) -> Result<Expression, String> {
+        let ty = self.struct_name_of(source).unwrap_or_else(|| "<unknown>".to_string());
+        let methods = self.structs.get(&ty).map(|d| &d.methods);
+        let declares = |m: &str| methods.is_some_and(|ms| ms.contains_key(m));
+        if declares("iterate") {
+            Ok(Expression::MethodCall { this: Box::new(source.clone()), method: "iterate".to_string(), args: vec![] })
+        } else if declares("next") && declares("current") {
+            Ok(source.clone())
+        } else {
+            Err(format!(
+                "type {} is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())",
+                ty
+            ))
+        }
     }
 
     // ── Branch + ternary + while (BranchGen.cpp, LoopGen.cpp) ───────────────
@@ -2381,6 +2415,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 function: name,
                 args,
             } => self.codegen_call(name, args),
+            // Only a var default in well-formed models (codegen_var_def).
+            Expression::ForIterator(source) => {
+                let iterator = self.for_loop_iterator(source)?;
+                self.codegen_expr(&iterator)
+            }
             Expression::MethodCall { this, method, args } => {
                 // Receiver is a buffer slot (`Data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they

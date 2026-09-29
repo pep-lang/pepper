@@ -212,6 +212,7 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, String> {
             condition: expression(&wh.condition)?,
             block: block(&wh.block)?,
         })),
+        ast::Statement::For(f) => for_loop(f),
         ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
             expr: Some(expression(&ret.expr)?),
         })),
@@ -222,6 +223,63 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, String> {
             },
         })),
     }
+}
+
+thread_local! {
+    /// Numbers each lowered `for` loop's hidden iterator local.
+    static FOR_LOOPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Lower `for (var x in source) body` to
+///
+/// ```text
+/// {
+///     var __for_iterator_N = <ForIterator(source)>;
+///     while (__for_iterator_N.next()) {
+///         var x = __for_iterator_N.current();
+///         { body }
+///     }
+/// }
+/// ```
+///
+/// Refcounting needs nothing new: the iterator is an owned local of the outer
+/// block (released at loop exit, `break` and `return` included) and `x` is a
+/// while-body local (released at the end of every iteration and at
+/// `continue`). The body keeps its own block so it may shadow `x`.
+fn for_loop(f: &ast::For) -> Result<Statement, String> {
+    let n = FOR_LOOPS.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    });
+    let iterator = format!("__for_iterator_{}", n);
+    let iterator_ref = || Box::new(Expression::SymbolRef { id: iterator.clone(), ty: TypeName::auto() });
+    let hidden_iterator = VariableDef {
+        name: iterator.clone(),
+        ty: TypeName::auto(),
+        default: Some(Expression::ForIterator(Box::new(expression(&f.iterable)?))),
+        hidden: true,
+        kind: Kind::Variable,
+        attributes: vec![],
+    };
+    let mut element = variable_def(&f.binding, Kind::Variable)?;
+    element.default = Some(Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![] });
+    let body = Block {
+        name: String::new(),
+        items: vec![Statement::Declaration(Declaration::Variable(element)), Statement::Block(block(&f.block)?)],
+        attributes: vec![],
+    };
+    Ok(Statement::Block(Block {
+        name: String::new(),
+        items: vec![
+            Statement::Declaration(Declaration::Variable(hidden_iterator)),
+            Statement::While(While {
+                condition: Expression::MethodCall { this: iterator_ref(), method: "next".to_string(), args: vec![] },
+                block: body,
+            }),
+        ],
+        attributes: vec![],
+    }))
 }
 
 fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, String> {

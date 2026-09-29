@@ -59,10 +59,20 @@ pub fn transform_pass(module: &mut Module) {
     resolve_implicit_types(module);
     resolve_operators(module);
 
-    // Second pass, resolve dependent types/calls
-    gather_generics(module);
-    specialize_structs(module);
-    specialize_functions(module);
+    // Second pass, resolve dependent types/calls. Specializing can expose
+    // further generic uses (`Map<String, int>` → field `Array<String>` →
+    // `Array<String>.iterate()` returning `ArrayIterator<String>`), so repeat
+    // until no new specialization appears. Bounded, since a type that nests
+    // itself (`Foo<T>` holding a `Foo<Array<T>>`) never reaches a fixpoint.
+    for _ in 0..16 {
+        let before = (module.structs.len(), module.functions.len());
+        gather_generics(module);
+        specialize_structs(module);
+        specialize_functions(module);
+        if (module.structs.len(), module.functions.len()) == before {
+            break;
+        }
+    }
     convert_intrinsics(module);
     resolve_resolvables(module, false);
     convert_member_refs(module);
@@ -170,6 +180,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
                 walk_expression(arg, f);
             }
         }
+        Expression::ForIterator(source) => walk_expression(source, f),
     }
 }
 

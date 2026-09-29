@@ -8,11 +8,17 @@ import "internals";
 # each moved reference is re-counted in its new slot; swap exchanges raw
 # pointer slots via _pep_swap_refs because it moves two references without
 # changing their count.
+#
+# Every mutating method (element store, append, insert, remove_at, pop, clear,
+# truncate, swap) bumps Version; an ArrayIterator panics when it sees a
+# Version other than the one it started with, so modifying an Array while a
+# `for` loop iterates it is a panic rather than skipped or repeated elements.
 
 export struct Array<T> {
     __ptr<T> Data;
     ulong Size;
     ulong Capacity;
+    ulong Version;
 
     new(ulong capacity = 0) {
         if (capacity > 0) {
@@ -28,6 +34,14 @@ export struct Array<T> {
             __i = __i + 1;
         }
         _pep_free(Data);
+    }
+
+    # Iterable<T>: `for (var x in array)` visits each element in order.
+    ArrayIterator<T> iterate() {
+        var it = ArrayIterator<T>();
+        it.Source = this;
+        it.Version = Version;
+        return it;
     }
 
     ulong count() {
@@ -66,11 +80,13 @@ export struct Array<T> {
 
     T [](ulong idx, T value) {
         assert(idx < Size, "Array index write out of bounds");
+        Version = Version + 1;
         Data[idx] = value;
         return Data[idx];
     }
 
     void append(T item) {
+        Version = Version + 1;
         grow();
         Data[Size] = item;
         Size = Size + 1;
@@ -78,6 +94,7 @@ export struct Array<T> {
 
     void insert(ulong idx, T item) {
         assert(idx <= Size, "Array insert index out of bounds");
+        Version = Version + 1;
         grow();
         # Backward shift as a raw pointer move: each slot's reference is
         # transferred to its new position without changing its count, exactly
@@ -94,6 +111,7 @@ export struct Array<T> {
     }
     T remove_at(ulong idx) {
         assert(idx < Size, "Array remove index out of bounds");
+        Version = Version + 1;
         T removed = Data[idx];
         # The copy above acquired a reference for `removed`; release the
         # slot's own reference now — the forward shift below overwrites this
@@ -115,6 +133,7 @@ export struct Array<T> {
 
     T pop() {
         assert(Size > 0, "Array pop on empty Array");
+        Version = Version + 1;
         T r = Data[Size - 1];
         Data[Size - 1] = __default<T>();
         Size = Size - 1;
@@ -132,6 +151,7 @@ export struct Array<T> {
     }
 
     void clear() {
+        Version = Version + 1;
         ulong __i = 0;
         while (__i < Size) {
             Data[__i] = __default<T>();
@@ -142,6 +162,7 @@ export struct Array<T> {
 
     void truncate(ulong count) {
         if (count < Size) {
+            Version = Version + 1;
             ulong __i = count;
             while (__i < Size) {
                 Data[__i] = __default<T>();
@@ -154,6 +175,7 @@ export struct Array<T> {
     void swap(ulong a, ulong b) {
         assert(a < Size, "Array swap index out of bounds");
         assert(b < Size, "Array swap index out of bounds");
+        Version = Version + 1;
         _pep_swap_refs(Data, sizeof<T>(), a, b);
     }
 
@@ -229,5 +251,36 @@ export struct Array<T> {
         Array<T> result = clone();
         result.append_all(rhs);
         return result;
+    }
+}
+
+
+# Iterator<T> over an Array (Array.iterate()). Holds a reference to the
+# Array, so iterating a temporary keeps it alive for the whole loop.
+export struct ArrayIterator<T> {
+    Array<T> Source;
+    ulong Index;
+    ulong Version;
+    bool Started;
+
+    # Advance to the next element; false once past the end (and after).
+    bool next() {
+        assert(Source.Version == Version, "Array modified during iteration");
+        if (Started) {
+            if (Index < Source.Size) {
+                Index = Index + 1;
+            }
+        } else {
+            Started = true;
+        }
+        return Index < Source.Size;
+    }
+
+    # The element the last successful next() moved to.
+    T current() {
+        assert(Source.Version == Version, "Array modified during iteration");
+        assert(Started, "ArrayIterator.current() before next()");
+        assert(Index < Source.Size, "ArrayIterator.current() past the end");
+        return Source[Index];
     }
 }
