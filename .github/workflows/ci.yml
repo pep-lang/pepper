@@ -10,14 +10,14 @@
 #
 # Linux and macOS both work end to end -- the suite passes for the 18, 19 and
 # 20 that apt serves and for all five majors via Homebrew, and each compiles,
-# links and runs a program. macOS is kept off the push path because
-# private-repo macOS minutes bill at ten times the Linux rate, not because it
-# is expected to fail; reach it through `platform-test`.
+# links and runs a program. `test-macos` runs the suite on macOS against the
+# default LLVM; like `llvm-versions` it is not a required check.
 #
-# Windows and Linux jobs run on self-hosted runners labelled pepper-windows
-# and pepper-linux (a Windows service and a WSL systemd service on the
-# maintainer's machine). The Linux runner has LLVM 18-20 preinstalled and may
-# `sudo apt-get` to add others.
+# Every job runs on a self-hosted runner: pepper-windows and pepper-linux (a
+# Windows service and a WSL systemd service on the maintainer's machine) and
+# pepper-macos (a launchd service on an arm64 Mac, with rustup and Homebrew
+# llvm@20). The Linux runner has LLVM 18-20 preinstalled and may
+# `sudo apt-get` to add others; the Mac adds other majors with brew.
 name: CI
 
 on:
@@ -115,6 +115,33 @@ jobs:
       # reference`) in the same PR.
       - name: Standard library reference is current
         run: cargo run -p pepper-docgen --locked -- check
+
+  # The suite on macOS against the default LLVM, from Homebrew. Not required:
+  # the Windows job above is the merge gate.
+  test-macos:
+    runs-on: pepper-macos
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show toolchain
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Provision LLVM
+        shell: bash
+        run: bash scripts/ci-provision-llvm.sh
+
+      # See the test job: build beside the checkout, where its clean step
+      # cannot reach, so cargo rebuilds only what changed.
+      - name: Use persistent target dir
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: cargo test --workspace --locked
 
   # Which LLVM versions to test is not a fixed list: it is every major this
   # workspace supports that apt can actually install, discovered here. Ubuntu

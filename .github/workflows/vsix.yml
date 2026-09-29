@@ -17,9 +17,9 @@
 # vsix as a run artifact instead, so a branch can be tested without replacing
 # the released extension.
 #
-# The x64 Windows and Linux legs run on self-hosted runners and must pass.
-# The other four legs run on GitHub-hosted runners, which GitHub can refuse
-# to start (a billing or spending-limit block fails them in seconds, before
+# The x64 Windows and Linux legs and both macOS legs run on self-hosted
+# runners and must pass. The two arm64 Windows and Linux legs run on
+# GitHub-hosted runners, which GitHub can refuse to start (a billing or spending-limit block fails them in seconds, before
 # any step). Those legs are allowed to fail: the package job bundles every
 # server that was built and names the missing platforms in a warning. On a
 # platform without a bundled server the extension still highlights and tells
@@ -55,18 +55,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # One native runner per target; the runner's preinstalled rustc
-        # matches the host arch, so no cross-compilation is needed.
-        # macos-latest is arm64; the free Intel macOS label is
-        # macos-15-intel (macos-14 is itself an arm64 image). The x64
-        # Windows and Linux legs run on the self-hosted pepper-* runners.
+        # One native runner per target, except macOS: both darwin legs run
+        # on the self-hosted arm64 pepper-macos runner, and the x64 one names
+        # its Rust target explicitly. Apple's toolchain links either arch
+        # without extra setup, and Rosetta runs the x64 binary for the smoke
+        # test. `rust-target` empty means the host target.
         include:
-          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", hosted: false }
-          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe", hosted: true }
-          - { target: linux-x64, runs-on: pepper-linux, exe: "", hosted: false }
-          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "", hosted: true }
-          - { target: darwin-x64, runs-on: macos-15-intel, exe: "", hosted: true }
-          - { target: darwin-arm64, runs-on: macos-latest, exe: "", hosted: true }
+          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", hosted: false, rust-target: "" }
+          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe", hosted: true, rust-target: "" }
+          - { target: linux-x64, runs-on: pepper-linux, exe: "", hosted: false, rust-target: "" }
+          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "", hosted: true, rust-target: "" }
+          - { target: darwin-x64, runs-on: pepper-macos, exe: "", hosted: false, rust-target: x86_64-apple-darwin }
+          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", hosted: false, rust-target: "" }
     runs-on: ${{ matrix.runs-on }}
     # A GitHub-hosted leg that fails (or never starts) does not block the
     # package job; see the header.
@@ -89,7 +89,9 @@ jobs:
           cargo --version
           node --version
 
+      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
       - name: Cache cargo registry
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
           path: |
@@ -99,10 +101,32 @@ jobs:
           key: cargo-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ matrix.target }}-
 
+      # Checkout's clean step deletes target/, so a self-hosted runner builds
+      # beside the checkout instead, as in the CI workflow. One directory per
+      # target keeps the two darwin legs, which share a runner, apart.
+      - name: Use persistent target dir (self-hosted)
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-vsix-${{ matrix.target }}" >> "$GITHUB_ENV"
+
+      # Where the release binary lands: under CARGO_TARGET_DIR when set, and
+      # under a per-triple directory when a Rust target is named.
+      - name: Locate server binary
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+        run: |
+          dir="${CARGO_TARGET_DIR:-target}"
+          [ -n "$RUST_TARGET" ] && dir="$dir/$RUST_TARGET"
+          echo "PEPPER_LSP_BIN=$dir/release/pepper-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"
+
       # Release build, as required for the bundled server. No features: the
       # LSP crate never links LLVM, so -p selects exactly what to build.
       - name: Build pepper-lsp (release)
-        run: cargo build --release -p pepper-lsp --locked
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+        run: cargo build --release -p pepper-lsp --locked ${RUST_TARGET:+--target "$RUST_TARGET"}
 
       # Prove the binary that ships actually serves LSP requests before it is
       # packaged; the smoke test spawns it over stdio and exercises diagnostics,
@@ -110,7 +134,6 @@ jobs:
       - name: Smoke test release server
         shell: bash
         env:
-          PEPPER_LSP_BIN: target/release/pepper-lsp${{ matrix.exe }}
           PEPPER_REPO_ROOT: ${{ github.workspace }}
         run: node tools/lsp/smoke-test.mjs tests/String.Methods/test.pep
 
@@ -118,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pepper-lsp-${{ matrix.target }}
-          path: target/release/pepper-lsp${{ matrix.exe }}
+          path: ${{ env.PEPPER_LSP_BIN }}
           if-no-files-found: error
 
   package:
@@ -159,7 +182,7 @@ jobs:
           for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
             if [ ! -d "servers/pepper-lsp-$target" ]; then
               case "$target" in
-                win32-x64|linux-x64)
+                win32-x64|linux-x64|darwin-x64|darwin-arm64)
                   echo "::error::no pepper-lsp server was built for $target"
                   exit 1 ;;
               esac
