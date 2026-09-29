@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -278,7 +278,14 @@ directory you run it from.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
-Misspell <code>greeting</code> as <code>greting</code>, and you get:</p>
+Store the message in a variable first, then misspell its name:</p>
+<pre><code class="language-pepper">main(): int {
+    var greeting = "Hello, world!";
+    print(greting);
+    return 0;
+}
+</code></pre>
+<p>The compiler reports:</p>
 <pre><code class="language-text">main.pep:3:11: error: use of undeclared identifier 'greting'
     3 |     print(greting);
       |           ^~~~~~~

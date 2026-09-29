@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -294,9 +294,10 @@ reference):</p>
     exit();      # the cleanup; call it from the destructor
 }
 </code></pre>
-<p>Traits are not checked yet, so the block goes by the methods a type has:
-a type without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the
-trait (<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent.</p>
+<p>A <code>with</code> block goes by the methods a type has, not by the trait: a type
+without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the trait
+(<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent, and the
+compiler then checks that the type has both <code>enter()</code> and <code>exit()</code>.</p>
 <h2 id="when-exit-runs"><a class="header" href="#when-exit-runs">When <code>exit()</code> runs</a></h2>
 <p>The block keeps two locals: the scope object and the bound value. Both are
 released on every path out of the block (the end of the body, <code>return</code>,

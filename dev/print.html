@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4f68acc7.js"></script>
@@ -223,14 +223,18 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
+traits with default methods, function types and function references,
 modules, <code>Result</code>-based error handling, iteration, <code>with</code> blocks, weak
-references, and calling C. The
-standard library covers strings, arrays, hash maps and sets, atomics, and
-file-system access. That is enough to write real programs, but expect gaps.
+references, and calling C. The standard library covers strings, arrays, hash
+maps and sets, atomics, and file-system access. That is enough to write real
+programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>There are no closures or lambdas yet. You can pass named functions as
-values (see <a href="#function-types-and-references">function types</a>).</li>
+<li>Functions are values: a named function can be stored, passed and called
+through a function type such as <code>(int) =&gt; int</code> (see
+<a href="#function-types-and-references">function types</a>). Closure literals, such as
+<code>(x) =&gt; x * 2</code>, and capturing local variables are the next phase and are not
+implemented yet.</li>
 <li>Calling a method through a trait type does not work yet. You can declare
 traits and conform to them, but not dispatch through them.</li>
 <li>There is no threading API in the standard library yet.</li>
@@ -360,7 +364,14 @@ directory you run it from.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
-Misspell <code>greeting</code> as <code>greting</code>, and you get:</p>
+Store the message in a variable first, then misspell its name:</p>
+<pre><code class="language-pepper">main(): int {
+    var greeting = "Hello, world!";
+    print(greting);
+    return 0;
+}
+</code></pre>
+<p>The compiler reports:</p>
 <pre><code class="language-text">main.pep:3:11: error: use of undeclared identifier 'greting'
     3 |     print(greting);
       |           ^~~~~~~
@@ -1239,7 +1250,6 @@ main(): int {
 </tbody>
 </table>
 </div>
-<p>Some operators have limits today:</p>
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
 one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
 reads <code>items[0]</code> from an empty array.</p>
@@ -1813,9 +1823,10 @@ Referring to a named function allocates nothing: every reference to <code>square
 shares one static function object.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Closures and lambdas.</strong> Pepper has no anonymous functions yet, and a
-function value cannot capture local variables. Only named free functions can
-be used as values. Closures are planned.</li>
+<li><strong>Closure literals.</strong> Pepper has no anonymous functions yet, such as
+<code>(x) =&gt; x * 2</code>, and a function value cannot capture local variables. Only
+named free functions can be used as values. Closure literals are the next
+phase of this feature.</li>
 <li><strong>Generic functions, methods, constructors and <code>extern</code> functions</strong> cannot be
 referenced as values. Naming a generic function without a call reports
 <code>use of undeclared identifier</code>, and naming a method without a call
@@ -2146,8 +2157,8 @@ can be any type. These binary operators can be defined:</p>
 </thead>
 <tbody>
 <tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code></td></tr>
-<tr><td>Bitwise</td><td><code>&amp;</code> `</td></tr>
-<tr><td>Comparison and logical</td><td><code>==</code> <code>!=</code> <code>&gt;</code> <code>&gt;=</code> <code>&amp;&amp;</code> `</td></tr>
+<tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>&gt;&gt;</code></td></tr>
+<tr><td>Comparison and logical</td><td><code>==</code> <code>!=</code> <code>&gt;</code> <code>&gt;=</code> <code>&amp;&amp;</code> <code>||</code></td></tr>
 <tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
 </tbody>
 </table>
@@ -2331,7 +2342,9 @@ itself (<code>a = a</code>) changes nothing.</li>
 <li><strong>A parameter’s function returns.</strong> The function held its parameters for
 as long as it ran.</li>
 <li><strong>The object that holds a field is destroyed</strong>, or a container removes an
-element (<code>clear()</code>, <code>remove_at()</code>, overwriting <code>list[i]</code>, and so on).</li>
+element (<code>clear()</code>, overwriting <code>list[i]</code>, and so on). <code>remove_at()</code> and
+<code>pop()</code> are the exception: they hand the container’s reference to the
+caller, so <code>var x = list.remove_at(0);</code> leaves the count unchanged.</li>
 <li><strong>A temporary is no longer needed.</strong> A result that is not stored anywhere,
 like the one from <code>make("temporary");</code>, is released at the end of the
 statement. The same goes for a call result passed straight to another
@@ -2856,6 +2869,18 @@ extend String {
     }
 }
 
+# One specialization of a generic library type can be extended, and its
+# methods can loop over `this`.
+extend Array&lt;int&gt; {
+    total(): int {
+        var sum = 0;
+        for (var x in this) {
+            sum += x;
+        }
+        return sum;
+    }
+}
+
 struct Box&lt;T&gt; {
     var value: T;
 }
@@ -2873,6 +2898,11 @@ main(): int {
     assert(Temperature.freezing() == Temperature(0.0), "static method and operator from an extension");
 
     assert("hello".exclaim() == "hello!", "String extension");
+
+    var numbers = Array&lt;int&gt;();
+    numbers.append(2);
+    numbers.append(3);
+    assert(numbers.total() == 5, "Array&lt;int&gt; extension loops over this");
 
     var b = Box&lt;int&gt;();
     b.value = 5;
@@ -2899,12 +2929,9 @@ above does this.</p>
 <p><code>extend Box&lt;int&gt;</code> targets one specialization: its methods exist only on
 <code>Box&lt;int&gt;</code>, and calling one on a <code>Box&lt;String&gt;</code> is an error
 (<code>no member named 'doubled' in 'Box&lt;String&gt;'</code>).</p>
-<p>Two limitations of extensions today:</p>
-<ul>
-<li>A <code>for</code> loop over <code>this</code> inside an extension of <code>Array&lt;int&gt;</code> does not
-compile. Loop with an index instead.</li>
-<li>An extension cannot add fields; declare every field in the struct itself.</li>
-</ul>
+<p>A library type’s specialization can be extended the same way. The example’s
+<code>extend Array&lt;int&gt;</code> adds <code>total()</code>, which loops over <code>this</code> with <code>for</code>.</p>
+<p>An extension cannot add fields; declare every field in the struct itself.</p>
 <h2 id="traits"><a class="header" href="#traits">Traits</a></h2>
 <p>A trait names a set of methods. Declare one with <code>trait</code> and method
 signatures ending in <code>;</code>. Then declare that a type has the trait with
@@ -3454,9 +3481,10 @@ reference):</p>
     exit();      # the cleanup; call it from the destructor
 }
 </code></pre>
-<p>Traits are not checked yet, so the block goes by the methods a type has:
-a type without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the
-trait (<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent.</p>
+<p>A <code>with</code> block goes by the methods a type has, not by the trait: a type
+without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the trait
+(<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent, and the
+compiler then checks that the type has both <code>enter()</code> and <code>exit()</code>.</p>
 <h2 id="when-exit-runs"><a class="header" href="#when-exit-runs">When <code>exit()</code> runs</a></h2>
 <p>The block keeps two locals: the scope object and the bound value. Both are
 released on every path out of the block (the end of the body, <code>return</code>,
@@ -3814,6 +3842,9 @@ call it, even though <code>Point</code> itself is exported:</p>
 <pre><code class="language-text">main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
+lib.pep:42:5: note: declared here
+   42 |     norm(): int {
+      |     ^~~~
 </code></pre>
 <p>Likewise, a trait that a private extension implements is only available
 through that extension in its own file. Extending a struct does not make a
@@ -3947,6 +3978,9 @@ main(): int { return area(1, 2); }
 <pre><code class="language-text">main.pep:2:22: error: 'area' is exported by deps/geometry/shapes.pep, which this file does not import; add an import for it
     2 | main(): int { return area(1, 2); }
       |                      ^~~~
+deps/geometry/shapes.pep:3:8: note: declared here
+    3 | export area(w: int, h: int): int {
+      |        ^~~~
 </code></pre>
 <h2 id="imports-come-first"><a class="header" href="#imports-come-first">Imports come first</a></h2>
 <p>Every import comes before all of a file’s declarations and re-exports:</p>
@@ -4102,8 +4136,9 @@ and their exports, such as <code>String</code>, <code>Array</code>, and <code>Re
 everywhere without an import.</p>
 <p><code>--import NAME</code> adds a module, or a file <code>NAME.pep</code>, found on the search paths
 to that prelude, so every file sees its exports without importing it. A name
-that resolves to neither is an error:
-<code>--import no_such_module: cannot find module 'no_such_module'</code>.</p>
+that resolves to neither is an error:</p>
+<pre><code class="language-text">error: --import no_such_module: cannot find module 'no_such_module' (no no_such_module/module.pep) or file no_such_module.pep in /home/you/pepper/runtime
+</code></pre>
 <p>A prelude module may redefine an export of the runtime, such as <code>panic</code>: it is
 loaded ahead of the runtime and its definition wins. It must declare the name
 itself (<code>export panic(...)</code>); re-exporting another function under a runtime
@@ -4367,8 +4402,8 @@ below for an example).</p>
 <p>Some things to know about <code>extern</code> declarations:</p>
 <ul>
 <li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
-Pepper functions use is a parse error on an extern, and so is <code>__ptr&lt;T&gt;</code> as a
-parameter type: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
+Pepper functions use is a parse error on an extern, and <code>__ptr&lt;T&gt;</code> as a
+parameter type is an error too: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
 <li>An extern is private to its file, like every declaration. Write
 <code>export extern ...</code> to let files that import this one call it (see
 <a href="#visibility">Visibility</a>).</li>
@@ -4556,13 +4591,14 @@ main(): int {
     free(b.data);
     b.data = __null;
 
-    # A pointer to pointers: indexing yields the inner pointer.
+    # A pointer to pointers: indexing yields the inner pointer, and indexing
+    # again reads or writes through it.
     var rows = malloc(2 * sizeof&lt;__ptr&lt;int&gt;&gt;()) as __ptr&lt;__ptr&lt;int&gt;&gt;;
     var row = malloc(sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
-    row[0] = 7;
     rows[1] = row;
-    var inner: __ptr&lt;int&gt; = rows[1];
-    assert(inner[0] == 7, "rows[1] is the row pointer");
+    rows[1][0] = 7;
+    assert(rows[1][0] == 7, "rows[1][0] reads through the row pointer");
+    assert(row[0] == 7, "rows[1] is the row pointer");
     free(row);
     free(rows);
     return 0;
@@ -4573,14 +4609,8 @@ end of an allocation, using memory after <code>free</code>, or forgetting to <co
 behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
-<p>Two current limitations:</p>
-<ul>
-<li>Indexing twice in one expression through a pointer to pointers
-(<code>rows[1][0]</code>) is not supported yet; read the inner pointer into a variable
-first, as the example does.</li>
-<li>Pepper function values are Pepper objects, not C function pointers, so you
-cannot pass a Pepper function as a C callback (for example to <code>qsort</code>).</li>
-</ul>
+<p>Pepper function values are Pepper objects, not C function pointers, so you
+cannot pass a Pepper function as a C callback (for example to <code>qsort</code>).</p>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
 the declared one. Pepper code calls the extern by its declared name, and the
@@ -9339,6 +9369,10 @@ cargo run -p pepper-docgen -- reference       # regenerate the reference after c
 cargo run -p pepper-docgen -- build           # render into target/docs-site/dev/
 cargo run -p pepper-docgen -- build --version 0.2.0 --site &lt;dir&gt;
 </code></pre>
+<h2 id="keeping-the-book-current"><a class="header" href="#keeping-the-book-current">Keeping the book current</a></h2>
+<p>Documentation changes land in the same PR as the code they describe. The
+checklist of what to update for each kind of change is in <code>AGENTS.md</code>, under
+“Keep the documentation current”.</p>
 <h2 id="examples-are-tested"><a class="header" href="#examples-are-tested">Examples are tested</a></h2>
 <p>Every runnable example lives in <code>docs/examples/</code>: a single <code>name.pep</code>, or a
 folder <code>name/</code> whose entry point is <code>main.pep</code>. Chapters pull them in with

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -300,6 +300,9 @@ call it, even though <code>Point</code> itself is exported:</p>
 <pre><code class="language-text">main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
+lib.pep:42:5: note: declared here
+   42 |     norm(): int {
+      |     ^~~~
 </code></pre>
 <p>Likewise, a trait that a private extension implements is only available
 through that extension in its own file. Extending a struct does not make a

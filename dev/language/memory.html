@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -322,7 +322,9 @@ itself (<code>a = a</code>) changes nothing.</li>
 <li><strong>A parameter’s function returns.</strong> The function held its parameters for
 as long as it ran.</li>
 <li><strong>The object that holds a field is destroyed</strong>, or a container removes an
-element (<code>clear()</code>, <code>remove_at()</code>, overwriting <code>list[i]</code>, and so on).</li>
+element (<code>clear()</code>, overwriting <code>list[i]</code>, and so on). <code>remove_at()</code> and
+<code>pop()</code> are the exception: they hand the container’s reference to the
+caller, so <code>var x = list.remove_at(0);</code> leaves the count unchanged.</li>
 <li><strong>A temporary is no longer needed.</strong> A result that is not stored anywhere,
 like the one from <code>make("temporary");</code>, is released at the end of the
 statement. The same goes for a call result passed straight to another

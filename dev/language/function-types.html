@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -372,9 +372,10 @@ Referring to a named function allocates nothing: every reference to <code>square
 shares one static function object.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Closures and lambdas.</strong> Pepper has no anonymous functions yet, and a
-function value cannot capture local variables. Only named free functions can
-be used as values. Closures are planned.</li>
+<li><strong>Closure literals.</strong> Pepper has no anonymous functions yet, such as
+<code>(x) =&gt; x * 2</code>, and a function value cannot capture local variables. Only
+named free functions can be used as values. Closure literals are the next
+phase of this feature.</li>
 <li><strong>Generic functions, methods, constructors and <code>extern</code> functions</strong> cannot be
 referenced as values. Naming a generic function without a call reports
 <code>use of undeclared identifier</code>, and naming a method without a call

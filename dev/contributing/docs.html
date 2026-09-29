@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -192,6 +192,10 @@ cargo run -p pepper-docgen -- reference       # regenerate the reference after c
 cargo run -p pepper-docgen -- build           # render into target/docs-site/dev/
 cargo run -p pepper-docgen -- build --version 0.2.0 --site &lt;dir&gt;
 </code></pre>
+<h2 id="keeping-the-book-current"><a class="header" href="#keeping-the-book-current">Keeping the book current</a></h2>
+<p>Documentation changes land in the same PR as the code they describe. The
+checklist of what to update for each kind of change is in <code>AGENTS.md</code>, under
+“Keep the documentation current”.</p>
 <h2 id="examples-are-tested"><a class="header" href="#examples-are-tested">Examples are tested</a></h2>
 <p>Every runnable example lives in <code>docs/examples/</code>: a single <code>name.pep</code>, or a
 folder <code>name/</code> whose entry point is <code>main.pep</code>. Chapters pull them in with

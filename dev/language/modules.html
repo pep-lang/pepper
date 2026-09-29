@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -249,6 +249,9 @@ main(): int { return area(1, 2); }
 <pre><code class="language-text">main.pep:2:22: error: 'area' is exported by deps/geometry/shapes.pep, which this file does not import; add an import for it
     2 | main(): int { return area(1, 2); }
       |                      ^~~~
+deps/geometry/shapes.pep:3:8: note: declared here
+    3 | export area(w: int, h: int): int {
+      |        ^~~~
 </code></pre>
 <h2 id="imports-come-first"><a class="header" href="#imports-come-first">Imports come first</a></h2>
 <p>Every import comes before all of a file’s declarations and re-exports:</p>
@@ -404,8 +407,9 @@ and their exports, such as <code>String</code>, <code>Array</code>, and <code>Re
 everywhere without an import.</p>
 <p><code>--import NAME</code> adds a module, or a file <code>NAME.pep</code>, found on the search paths
 to that prelude, so every file sees its exports without importing it. A name
-that resolves to neither is an error:
-<code>--import no_such_module: cannot find module 'no_such_module'</code>.</p>
+that resolves to neither is an error:</p>
+<pre><code class="language-text">error: --import no_such_module: cannot find module 'no_such_module' (no no_such_module/module.pep) or file no_such_module.pep in /home/you/pepper/runtime
+</code></pre>
 <p>A prelude module may redefine an export of the runtime, such as <code>panic</code>: it is
 loaded ahead of the runtime and its definition wins. It must declare the name
 itself (<code>export panic(...)</code>); re-exporting another function under a runtime

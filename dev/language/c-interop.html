@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -222,8 +222,8 @@ below for an example).</p>
 <p>Some things to know about <code>extern</code> declarations:</p>
 <ul>
 <li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
-Pepper functions use is a parse error on an extern, and so is <code>__ptr&lt;T&gt;</code> as a
-parameter type: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
+Pepper functions use is a parse error on an extern, and <code>__ptr&lt;T&gt;</code> as a
+parameter type is an error too: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
 <li>An extern is private to its file, like every declaration. Write
 <code>export extern ...</code> to let files that import this one call it (see
 <a href="visibility.html">Visibility</a>).</li>
@@ -411,13 +411,14 @@ main(): int {
     free(b.data);
     b.data = __null;
 
-    # A pointer to pointers: indexing yields the inner pointer.
+    # A pointer to pointers: indexing yields the inner pointer, and indexing
+    # again reads or writes through it.
     var rows = malloc(2 * sizeof&lt;__ptr&lt;int&gt;&gt;()) as __ptr&lt;__ptr&lt;int&gt;&gt;;
     var row = malloc(sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
-    row[0] = 7;
     rows[1] = row;
-    var inner: __ptr&lt;int&gt; = rows[1];
-    assert(inner[0] == 7, "rows[1] is the row pointer");
+    rows[1][0] = 7;
+    assert(rows[1][0] == 7, "rows[1][0] reads through the row pointer");
+    assert(row[0] == 7, "rows[1] is the row pointer");
     free(row);
     free(rows);
     return 0;
@@ -428,14 +429,8 @@ end of an allocation, using memory after <code>free</code>, or forgetting to <co
 behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
-<p>Two current limitations:</p>
-<ul>
-<li>Indexing twice in one expression through a pointer to pointers
-(<code>rows[1][0]</code>) is not supported yet; read the inner pointer into a variable
-first, as the example does.</li>
-<li>Pepper function values are Pepper objects, not C function pointers, so you
-cannot pass a Pepper function as a C callback (for example to <code>qsort</code>).</li>
-</ul>
+<p>Pepper function values are Pepper objects, not C function pointers, so you
+cannot pass a Pepper function as a C callback (for example to <code>qsort</code>).</p>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
 the declared one. Pepper code calls the extern by its declared name, and the

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bba45b0d.js";
+            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -222,6 +222,18 @@ extend String {
     }
 }
 
+# One specialization of a generic library type can be extended, and its
+# methods can loop over `this`.
+extend Array&lt;int&gt; {
+    total(): int {
+        var sum = 0;
+        for (var x in this) {
+            sum += x;
+        }
+        return sum;
+    }
+}
+
 struct Box&lt;T&gt; {
     var value: T;
 }
@@ -239,6 +251,11 @@ main(): int {
     assert(Temperature.freezing() == Temperature(0.0), "static method and operator from an extension");
 
     assert("hello".exclaim() == "hello!", "String extension");
+
+    var numbers = Array&lt;int&gt;();
+    numbers.append(2);
+    numbers.append(3);
+    assert(numbers.total() == 5, "Array&lt;int&gt; extension loops over this");
 
     var b = Box&lt;int&gt;();
     b.value = 5;
@@ -265,12 +282,9 @@ above does this.</p>
 <p><code>extend Box&lt;int&gt;</code> targets one specialization: its methods exist only on
 <code>Box&lt;int&gt;</code>, and calling one on a <code>Box&lt;String&gt;</code> is an error
 (<code>no member named 'doubled' in 'Box&lt;String&gt;'</code>).</p>
-<p>Two limitations of extensions today:</p>
-<ul>
-<li>A <code>for</code> loop over <code>this</code> inside an extension of <code>Array&lt;int&gt;</code> does not
-compile. Loop with an index instead.</li>
-<li>An extension cannot add fields; declare every field in the struct itself.</li>
-</ul>
+<p>A library type’s specialization can be extended the same way. The example’s
+<code>extend Array&lt;int&gt;</code> adds <code>total()</code>, which loops over <code>this</code> with <code>for</code>.</p>
+<p>An extension cannot add fields; declare every field in the struct itself.</p>
 <h2 id="traits"><a class="header" href="#traits">Traits</a></h2>
 <p>A trait names a set of methods. Declare one with <code>trait</code> and method
 signatures ending in <code>;</code>. Then declare that a type has the trait with
