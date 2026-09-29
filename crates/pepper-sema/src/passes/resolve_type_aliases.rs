@@ -285,6 +285,13 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
                 subst_expr(arg, aliases, values);
             }
         }
+        Expression::FunctionRef { ty, .. } => subst(ty, aliases),
+        Expression::Invoke { callee, args } => {
+            subst_expr(callee, aliases, values);
+            for arg in args {
+                subst_expr(arg, aliases, values);
+            }
+        }
     }
 }
 

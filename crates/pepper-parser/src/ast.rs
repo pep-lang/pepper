@@ -88,8 +88,15 @@ impl TypeName {
     }
 }
 
+/// Internal name of a function type: `(P1, P2) => R` is
+/// `__function<R, P1, P2>` (return type first, then the parameters).
+pub const FUNCTION_TYPE: &str = "__function";
+
 impl Display for TypeName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.name == FUNCTION_TYPE && !self.generic_types.is_empty() {
+            return write!(f, "({}) => {}", join(&self.generic_types[1..], ", "), self.generic_types[0]);
+        }
         if self.generic_types.is_empty() {
             write!(f, "{}", self.name)
         } else {

@@ -21,6 +21,8 @@ pub const AUTO: &str = "__auto";
 pub const VOID: &str = "void";
 pub const BOOL: &str = "bool";
 pub const VOID_PTR: &str = "void*";
+/// Internal name of function types: `(P1, P2) => R` is `__function<R, P1, P2>`.
+pub const FUNCTION: &str = "__function";
 
 /// Integral-type alias set from `TypeName.cpp:23-45`.
 pub static INTEGRAL_TYPES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
@@ -123,6 +125,42 @@ impl TypeName {
 
     pub fn is_function(&self) -> bool {
         self.flags == TypeFlags::Function
+    }
+
+    /// A function type `(P...) => R`, spelled `__function<R, P...>`.
+    pub fn is_function_type(&self) -> bool {
+        self.name == FUNCTION && !self.sub_types.is_empty()
+    }
+
+    /// Function type `(params) => ret`.
+    pub fn function_type(ret: TypeName, params: Vec<TypeName>) -> Self {
+        let mut args = vec![ret];
+        args.extend(params);
+        Self::with_args(FUNCTION, args)
+    }
+
+    /// Return type of a function type.
+    pub fn function_return(&self) -> Option<&TypeName> {
+        if self.is_function_type() { self.sub_types.first() } else { None }
+    }
+
+    /// Parameter types of a function type.
+    pub fn function_params(&self) -> &[TypeName] {
+        if self.is_function_type() { &self.sub_types[1..] } else { &[] }
+    }
+
+    /// The type as the programmer writes it: `(int) => bool` for function
+    /// types (recursively), `Name<args>` otherwise. For error messages.
+    pub fn display(&self) -> String {
+        if self.is_function_type() {
+            let params: Vec<String> = self.function_params().iter().map(|p| p.display()).collect();
+            return format!("({}) => {}", params.join(", "), self.sub_types[0].display());
+        }
+        if self.is_generic() {
+            let subs: Vec<String> = self.sub_types.iter().map(|t| t.display()).collect();
+            return format!("{}<{}>", self.name, subs.join(", "));
+        }
+        self.name.clone()
     }
 
     pub fn is_generic(&self) -> bool {

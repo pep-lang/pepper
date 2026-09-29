@@ -71,6 +71,7 @@ pub fn compile(
     pepper_sema::apply_platform_filters(&mut module).map_err(|d| module.sources.render(&d))?;
     struct_body::apply(&mut module).map_err(|d| module.sources.render(&d))?;
     transform_pass(&mut module).map_err(|d| module.sources.render(&d))?;
+    pepper_sema::passes::check_function_types::check_function_types(&module)?;
 
     Ok(module)
 }

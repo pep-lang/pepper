@@ -139,6 +139,20 @@ test(): int {
 }
 
 #[test]
+fn imported_functions_are_function_values() {
+    let main = r#"
+import geometry as g;
+import [rect_area as area] from geometry;
+combine(f: (int, int) => int, a: int, b: int): int { return f(a, b); }
+test(): int {
+    var qualified = g.rect_area;
+    return combine(qualified, 2, 3) * 100 + combine(area, 1, 4);
+}
+"#;
+    assert_eq!(run("function_values", &with_geometry(main)), 604);
+}
+
+#[test]
 fn symbol_list_import_binds_local_names() {
     let main = r#"
 import [make, Point as Pt, rect_area as area, revealed] from geometry;

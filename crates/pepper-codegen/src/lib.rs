@@ -1550,6 +1550,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             // `x as T` has the cast target's type.
             Expression::Cast { ty, .. } => Some(ty.to_string()),
+            Expression::FunctionRef { ty, .. } => Some(ty.to_string()),
+            Expression::Invoke { callee, .. } => {
+                let callee_ty = pepper_sema::passes::gather_generics::parse_type_string(&self.value_sema_type(callee)?);
+                callee_ty.function_return().map(|t| t.to_string())
+            }
             // Both ternary arms have the same declared type (enforced by
             // sema): report it so consumers (var defs, refcount helpers)
             // see the arm's type, not nothing.
@@ -1596,7 +1601,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             | Expression::ThisRef
             | Expression::MemberRef { .. }
             | Expression::Index { .. }
-            | Expression::ArrayIndex { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
+            | Expression::ArrayIndex { .. }
+            | Expression::FunctionRef { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
             Expression::MethodCall { this, method, .. } if method == "__index_get" => {
                 let receiver_is_ptr = self
                     .value_sema_type(this)
@@ -1625,7 +1631,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// destroys a temporary shared_ptr.
     fn is_owned_rvalue(&self, expr: &Expression) -> bool {
         match expr {
-            Expression::MethodCall { .. } | Expression::FunctionCall { .. } => {
+            Expression::MethodCall { .. } | Expression::FunctionCall { .. } | Expression::Invoke { .. } => {
                 self.is_struct_ref_name(&self.value_sema_type(expr))
             }
             // A ternary of two owned rvalues is one owned rvalue: the arm's
@@ -2497,6 +2503,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                 function: name,
                 args, ..
             } => self.codegen_call(name, args),
+            Expression::FunctionRef { function, ty } => {
+                Ok(BasicValueEnum::PointerValue(self.function_object(function, &ty.to_string())?))
+            }
+            Expression::Invoke { callee, args } => self.codegen_invoke(callee, args),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
@@ -2879,6 +2889,165 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(result)
     }
 
+    /// LLVM type of a value of sema type `ty` as passed and returned: struct
+    /// references are pointers.
+    fn abi_type(&self, ty: &str) -> Result<BasicTypeEnum<'ctx>, String> {
+        match self.types.get(ty) {
+            Some(BasicTypeEnum::StructType(_)) => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).into()),
+            Some(other) => Ok(other),
+            None => Err(format!("unknown type {}", ty)),
+        }
+    }
+
+    /// LLVM signature of a function value's invoke entry point: the function
+    /// object first, then the declared parameters.
+    fn invoke_fn_type(&self, fn_ty: &TypeName) -> Result<inkwell::types::FunctionType<'ctx>, String> {
+        let mut params: Vec<BasicTypeEnum<'ctx>> = vec![self.context.ptr_type(inkwell::AddressSpace::default()).into()];
+        for param in fn_ty.function_params() {
+            params.push(self.abi_type(&param.to_string())?);
+        }
+        let ret = fn_ty.function_return().ok_or_else(|| format!("not a function type: {}", fn_ty.display()))?;
+        if is_void(ret) {
+            let meta: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = params.iter().map(|p| (*p).into()).collect();
+            Ok(self.context.void_type().fn_type(&meta, false))
+        } else {
+            Ok(llvm_fn_type(self.abi_type(&ret.to_string())?, &params, false))
+        }
+    }
+
+    /// The static function object for free function `name`, of function
+    /// type `ty`: `{ refcount, invoke, destroy }` with an invoke thunk that
+    /// forwards to `name`. Its refcount starts at 2^30, so the balanced
+    /// acquire/release pairs of the slots holding it never reach zero: the
+    /// object is immortal and never freed.
+    fn function_object(&mut self, name: &str, ty: &str) -> Result<PointerValue<'ctx>, String> {
+        let global_name = format!("__function_object.{}", name);
+        if let Some(global) = self.module.get_global(&global_name) {
+            return Ok(global.as_pointer_value());
+        }
+        let struct_type = self
+            .structs
+            .get(ty)
+            .map(|d| d.llvm_type)
+            .ok_or_else(|| format!("function type {} has no struct", ty))?;
+        let target = *self.functions.get(name).ok_or_else(|| format!("unknown function {}", name))?;
+        let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(ty);
+        let thunk_type = self.invoke_fn_type(&fn_ty)?;
+        let thunk = self.module.add_function(
+            &format!("__function_thunk.{}", name),
+            thunk_type,
+            Some(inkwell::module::Linkage::Private),
+        );
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        self.builder.position_at_end(entry);
+        let forwarded: Vec<BasicValueEnum<'ctx>> = thunk.get_param_iter().skip(1).collect();
+        let coerced = self.coerce_args(target.get_type(), &forwarded, &[]);
+        let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
+        let call = self.builder.build_call(target, &meta, "forward").map_err(|e| e.to_string())?;
+        match call.try_as_basic_value().basic() {
+            Some(v) if thunk_type.get_return_type().is_some() => {
+                self.builder.build_return(Some(&v)).map_err(|e| e.to_string())?;
+            }
+            _ => {
+                self.builder.build_return(None).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let thunk_ptr = thunk.as_global_value().as_pointer_value();
+        let init = struct_type.const_named_struct(&[
+            self.context.i32_type().const_int(1 << 30, false).into(),
+            thunk_ptr.into(),
+            ptr_type.const_null().into(),
+        ]);
+        let global = self.module.add_global(struct_type, None, &global_name);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_initializer(&init);
+        Ok(global.as_pointer_value())
+    }
+
+    /// Call through a function value: load its invoke entry point and call
+    /// it with the function object followed by the arguments. The callee is
+    /// accessed like a method receiver (no refcount work); an owned-rvalue
+    /// callee (`make_adder(1)(2)`) is a temporary released after the call.
+    fn codegen_invoke(&mut self, callee: &Expression, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
+        let callee_ty_name = self
+            .value_sema_type(callee)
+            .ok_or_else(|| "cannot call a value of unknown type".to_string())?;
+        let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(&callee_ty_name);
+        if !fn_ty.is_function_type() {
+            return Err(format!("cannot call a value of type {}", fn_ty.display()));
+        }
+        if args.len() != fn_ty.function_params().len() {
+            return Err(format!(
+                "a function of type {} takes {} argument(s), but {} were given",
+                fn_ty.display(),
+                fn_ty.function_params().len(),
+                args.len()
+            ));
+        }
+        let struct_type = self
+            .structs
+            .get(&callee_ty_name)
+            .map(|d| d.llvm_type)
+            .ok_or_else(|| format!("function type {} has no struct", callee_ty_name))?;
+        let invoke_type = self.invoke_fn_type(&fn_ty)?;
+
+        let callee_temp = self.owned_temp_type(callee);
+        let object = self.codegen_expr(callee)?.into_pointer_value();
+        // Calling a null function value panics, never jumps through null.
+        if self.functions.contains_key("assert") {
+            let is_set = self.builder.build_is_not_null(object, "fn_set").map_err(|e| e.to_string())?;
+            let msg = self
+                .builder
+                .build_global_string_ptr("called a null function value", "str")
+                .map_err(|e| e.to_string())?
+                .as_pointer_value();
+            self.call_function("assert", vec![is_set.into(), msg.into()])?;
+        }
+        let slot = self
+            .builder
+            .build_struct_gep(struct_type, object, 1, "invoke_slot")
+            .map_err(|e| e.to_string())?;
+        let entry = self
+            .builder
+            .build_load(self.context.ptr_type(inkwell::AddressSpace::default()), slot, "invoke")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value();
+
+        let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
+        let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![object.into()];
+        let mut arg_names: Vec<String> = vec![String::new()];
+        for arg in args {
+            let v = self.codegen_expr(arg)?;
+            if let Some(ty) = self.owned_temp_type(arg) {
+                owned_arg_temps.push((v, ty));
+            }
+            arg_names.push(self.numeric_source_name(arg, &v));
+            arg_vals.push(v);
+        }
+        let coerced = self.coerce_args(invoke_type, &arg_vals, &arg_names);
+        let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(invoke_type, entry, &meta, "call")
+            .map_err(|e| e.to_string())?;
+        for (temp, ty) in owned_arg_temps {
+            self.release_temp(&ty, temp)?;
+        }
+        if let Some(ty) = callee_temp {
+            self.release_temp(&ty, object.into())?;
+        }
+        Ok(call
+            .try_as_basic_value()
+            .basic()
+            .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
     fn codegen_print(&mut self, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
         for arg in args {
             // An owned-rvalue argument is a temporary: released once the
@@ -2982,12 +3151,31 @@ impl<'ctx> CodeGenerator<'ctx> {
                 })
             }
         };
-        // Coerce args to the declared param types (e.g. i32 refcount → i64
-        // for trace_int).
+        let coerced = self.coerce_args(fn_value.get_type(), &args, arg_names);
+        let meta_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+            coerced.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_call(fn_value, &meta_args, "call")
+            .map_err(|e| e.to_string())?;
+        Ok(call
+            .try_as_basic_value()
+            .basic()
+            .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
+    /// Coerce call arguments to the parameter types of `fn_type` (e.g. i32
+    /// refcount → i64 for trace_int), widening integers by the signedness
+    /// of their sema type names in `arg_names`.
+    fn coerce_args(
+        &self,
+        fn_type: inkwell::types::FunctionType<'ctx>,
+        args: &[BasicValueEnum<'ctx>],
+        arg_names: &[String],
+    ) -> Vec<BasicValueEnum<'ctx>> {
         let mut coerced: Vec<BasicValueEnum<'ctx>> = vec![];
         for (idx, arg) in args.iter().enumerate() {
-            let param_ty: Option<BasicTypeEnum<'ctx>> = fn_value
-                .get_type()
+            let param_ty: Option<BasicTypeEnum<'ctx>> = fn_type
                 .get_param_types()
                 .get(idx)
                 .and_then(|m| match m {
@@ -3057,7 +3245,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // so integers narrower than int widen to int by their own
                 // signedness and float widens to double.
                 (None, BasicValueEnum::IntValue(v))
-                    if fn_value.get_type().is_var_arg() && v.get_type().get_bit_width() < 32 =>
+                    if fn_type.is_var_arg() && v.get_type().get_bit_width() < 32 =>
                 {
                     let i32t = self.context.i32_type();
                     let unsigned = v.get_type().get_bit_width() == 1
@@ -3070,7 +3258,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     widened.map(BasicValueEnum::IntValue).unwrap_or(*arg)
                 }
                 (None, BasicValueEnum::FloatValue(v))
-                    if fn_value.get_type().is_var_arg() && v.get_type().get_bit_width() < 64 =>
+                    if fn_type.is_var_arg() && v.get_type().get_bit_width() < 64 =>
                 {
                     self.builder
                         .build_float_ext(*v, self.context.f64_type(), "vararg")
@@ -3081,16 +3269,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             };
             coerced.push(coerced_val);
         }
-        let meta_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
-            coerced.iter().map(|a| (*a).into()).collect();
-        let call = self
-            .builder
-            .build_call(fn_value, &meta_args, "call")
-            .map_err(|e| e.to_string())?;
-        Ok(call
-            .try_as_basic_value()
-            .basic()
-            .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+        coerced
     }
 
     fn codegen_binary(

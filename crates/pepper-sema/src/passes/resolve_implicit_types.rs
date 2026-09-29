@@ -18,6 +18,8 @@ struct Scopes {
     methods: Vec<(String, Vec<(String, TypeName)>)>,
     /// Free-function and extern name → return type.
     functions: Vec<(String, TypeName)>,
+    /// Free functions usable as values: name → function type.
+    function_types: Vec<(String, TypeName)>,
 }
 
 impl Scopes {
@@ -30,6 +32,7 @@ impl Scopes {
             structs: vec![],
             methods: vec![],
             functions: vec![],
+            function_types: vec![],
         }
     }
 
@@ -69,6 +72,57 @@ impl Scopes {
 
     fn in_method(&self) -> bool {
         self.function_depth.is_some()
+    }
+
+    /// Declared type of field `name` on struct type `ty`.
+    fn field_type(&self, ty: &TypeName, name: &str) -> Option<TypeName> {
+        let key = ty.to_string();
+        self.structs
+            .iter()
+            .find(|(t, _)| *t == key)
+            .and_then(|(_, fields)| fields.iter().find(|f| f.name == name))
+            .map(|f| f.ty.clone())
+    }
+
+    /// Whether struct type `ty` declares a method `name`.
+    fn has_method(&self, ty: &TypeName, name: &str) -> bool {
+        let key = ty.to_string();
+        self.methods
+            .iter()
+            .any(|(t, methods)| *t == key && methods.iter().any(|(m, _)| m == name))
+    }
+
+    /// Function type of the free function `name`, when a bare `name` in
+    /// value position refers to it: no local, parameter, or field (of the
+    /// enclosing struct) shadows it.
+    fn function_value(&self, name: &str, current_struct: Option<&TypeName>) -> Option<TypeName> {
+        if self.find_param(name).is_some() || self.find_symbol(name).is_some() {
+            return None;
+        }
+        if let Some(st) = current_struct {
+            if self.field_type(st, name).is_some() || self.has_method(st, name) {
+                return None;
+            }
+        }
+        self.function_types.iter().find(|(n, _)| n == name).map(|(_, ty)| ty.clone())
+    }
+
+    /// When a call `name(args)` calls through a function value rather than a
+    /// function, the callee expression and its function type: a local,
+    /// parameter or global of function type, or (in a method) a field of
+    /// function type that no method of the same name shadows.
+    fn value_callee(&self, name: &str, current_struct: Option<&TypeName>) -> Option<(Expression, TypeName)> {
+        let local = self.find_param(name).or_else(|| self.find_symbol(name));
+        if let Some(ty) = local {
+            return ty.is_function_type().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty));
+        }
+        let st = current_struct?;
+        if self.has_method(st, name) {
+            return None;
+        }
+        let ty = self.field_type(st, name).filter(|t| t.is_function_type())?;
+        let callee = Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: name.to_string(), loc: Loc::NONE };
+        Some((callee, ty))
     }
 }
 
@@ -112,8 +166,17 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return TypeName::new(id);
                 }
             }
+            // A free function used as a value.
+            if let Some(ty) = scopes.function_value(id, current_struct) {
+                return ty;
+            }
             TypeName::auto()
         }
+        Expression::FunctionRef { ty, .. } => ty.clone(),
+        Expression::Invoke { callee, .. } => type_of_expr(callee, scopes, current_struct)
+            .function_return()
+            .cloned()
+            .unwrap_or_else(TypeName::auto),
         Expression::ThisRef => {
             if let Some(st) = current_struct {
                 st.clone()
@@ -133,6 +196,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                         return ret.clone();
                     }
                 }
+            }
+            // `obj.callback(x)` calls through a field of function type.
+            if let Some(ret) = scopes.field_type(&this_type, method).as_ref().and_then(|t| t.function_return()) {
+                return ret.clone();
             }
             TypeName::auto()
         }
@@ -186,6 +253,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
         Expression::FunctionCall { function, .. } => {
+            // A call through a local, parameter or field of function type.
+            if let Some((_, ty)) = scopes.value_callee(function, current_struct) {
+                return ty.function_return().cloned().unwrap_or_else(TypeName::auto);
+            }
             // Inside a method, a bare call naming one of the struct's own
             // methods is that method (convert_member_refs later rewrites it
             // to `this.m(..)`): class scope comes before file scope, so a
@@ -298,6 +369,9 @@ pub fn resolve_implicit_types(module: &mut Module) {
         function_returns.push((e.name.clone(), e.ty.clone()));
     }
 
+    // Free functions usable as values (`var f = square;`).
+    let function_values = crate::passes::function_types::referenceable_functions(module);
+
     // Global variables are visible from every scope (C++ global scope).
     let global_symbols: Vec<(String, TypeName)> = module
         .globals
@@ -317,6 +391,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         scopes.structs = struct_fields.clone();
         scopes.methods = struct_methods.clone();
         scopes.functions = function_returns.clone();
+        scopes.function_types = function_values.clone();
         scopes.symbols[0].extend(global_symbols.iter().cloned());
 
         // Resolve field types with defaults.
@@ -351,6 +426,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         scopes.methods = own_methods;
 
         // Constructor body.
+        resolve_parameter_defaults(&mut st.constructor.parameters, &mut scopes, &Some(current_struct.clone()));
         if let Some(body) = &mut st.constructor.body {
             scopes.push(&st.constructor.name);
             scopes.params.push(st.constructor.parameters.clone());
@@ -376,6 +452,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
                 }
                 None => current_struct.clone(),
             };
+            resolve_parameter_defaults(&mut method.parameters, &mut scopes, &Some(method_struct.clone()));
             if let Some(body) = &mut method.body {
                 scopes.push(&method.name);
                 scopes.params.push(method.parameters.clone());
@@ -394,7 +471,9 @@ pub fn resolve_implicit_types(module: &mut Module) {
             scopes.structs = struct_fields.clone();
             scopes.methods = struct_methods.clone();
             scopes.functions = function_returns.clone();
+            scopes.function_types = function_values.clone();
             scopes.symbols[0].extend(global_symbols.iter().cloned());
+            resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             scopes.function_depth = Some(scopes.names.len() - 1);
@@ -408,6 +487,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
     scopes.structs = struct_fields.clone();
     scopes.methods = struct_methods.clone();
     scopes.functions = function_returns.clone();
+    scopes.function_types = function_values.clone();
     scopes.symbols[0].extend(global_symbols.iter().cloned());
     for var in &mut module.globals {
         if var.ty.to_string() == crate::type_name::AUTO {
@@ -422,6 +502,16 @@ pub fn resolve_implicit_types(module: &mut Module) {
             resolve_expression(default, &mut scopes, &None, None);
         }
         scopes.symbols[0].push((var.name.clone(), var.ty.clone()));
+    }
+}
+
+/// Default arguments are resolved in the declaring scope (no locals), so a
+/// default such as `this.op = square` names the free function.
+fn resolve_parameter_defaults(parameters: &mut [VariableDef], scopes: &mut Scopes, current_struct: &Option<TypeName>) {
+    for param in parameters {
+        if let Some(default) = &mut param.default {
+            resolve_expression(default, scopes, current_struct, None);
+        }
     }
 }
 
@@ -494,6 +584,34 @@ fn resolve_expression(
     _var: Option<&mut VariableDef>,
 ) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
+        let current = current_struct.as_ref();
+        // Calls through function values: `f(x)` on a local, parameter,
+        // global or field of function type, and `obj.callback(x)`.
+        if let Expression::FunctionCall { function, args, .. } = e {
+            if let Some((callee, _)) = scopes.value_callee(function, current) {
+                *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
+                return;
+            }
+        }
+        if let Expression::MethodCall { this, method, args, loc } = e {
+            let this_type = type_of_expr(this, scopes, current);
+            if !scopes.has_method(&this_type, method)
+                && scopes.field_type(&this_type, method).is_some_and(|t| t.is_function_type())
+            {
+                let callee = Expression::MemberRef { lhs: std::mem::replace(this, Box::new(Expression::ThisRef)), name: method.clone(), loc: *loc };
+                *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
+                return;
+            }
+        }
+        // A bare free-function name in value position is a function value.
+        if let Expression::SymbolRef { id, ty, .. } = e {
+            if ty.to_string() == crate::type_name::AUTO && id != "this" {
+                if let Some(fn_ty) = scopes.function_value(id, current) {
+                    *e = Expression::FunctionRef { function: id.clone(), ty: fn_ty };
+                    return;
+                }
+            }
+        }
         if let Expression::SymbolRef { id, ty, loc } = e {
             if ty.to_string() == crate::type_name::AUTO && id != "this" {
                 let resolved = if let Some(st) = current_struct {

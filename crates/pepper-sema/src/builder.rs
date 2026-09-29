@@ -196,9 +196,13 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 ast::Expression::TypeLiteral(ty) => type_name_from(ty).to_string(),
                 ast::Expression::SymbolRef { id: name, .. } => name.clone(),
                 ast::Expression::Literal { value: lit, .. } => lit.to_string(),
+                // Any other callee (`fs[0](x)`, `make_adder(1)(2)`) is an
+                // expression producing a function value.
                 other => {
-                    // Fall back to the display form for exotic targets.
-                    format!("{}", other)
+                    return Ok(Expression::Invoke {
+                        callee: Box::new(expression(other)?),
+                        args: arguments.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+                    });
                 }
             };
             Ok(Expression::FunctionCall {

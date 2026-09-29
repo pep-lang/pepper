@@ -70,6 +70,17 @@ fn private_function_is_rejected() {
 }
 
 #[test]
+fn private_function_reference_is_rejected() {
+    let err = compile("private_fn_ref", LIB, "main(): int { var f = helper; return f(); }").unwrap_err();
+    assert!(err.contains("'helper' is private to") && err.contains("lib.pep"), "{}", err);
+}
+
+#[test]
+fn exported_function_reference_is_usable() {
+    compile("exported_fn_ref", LIB, "main(): int { var f: (int) => Point = make; return f(1).x; }").expect("exported function as a value");
+}
+
+#[test]
 fn private_struct_is_rejected() {
     let err = compile("private_struct", LIB, "main(): int { var h = Hidden(); return 0; }").unwrap_err();
     assert!(err.contains("'Hidden' is private to"), "{}", err);

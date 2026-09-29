@@ -23,6 +23,8 @@ pub mod resolve_operators;
 pub mod release_field_refs;
 pub mod convert_print_calls;
 pub mod platform;
+pub mod function_types;
+pub mod check_function_types;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -38,6 +40,7 @@ use specialize_functions::specialize_functions;
 use specialize_structs::specialize_structs;
 use tag_generics::tag_generics;
 use convert_print_calls::convert_print_calls;
+use function_types::synthesize_function_types;
 
 /// Run every pass in the ported order (25 entries, repeats included),
 /// stopping at the first pass that reports an error.
@@ -55,6 +58,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
+    step!(synthesize_function_types(module));
     step!(resolve_literals(module));
     step!(tag_generics(module));
     step!(convert_string_literals(module));
@@ -64,6 +68,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(apply_extensions(module, false)); // apply generic/concrete extensions
     step!(specialize_structs(module));
     step!(specialize_functions(module));
+    step!(synthesize_function_types(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false)); // resolve what remains
     step!(apply_extensions(module, true)); // apply specialized extensions
@@ -88,6 +93,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false));
     step!(convert_member_refs(module));
+    step!(synthesize_function_types(module));
 
     // final pass
     step!(release_field_refs(module));
@@ -95,6 +101,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
     step!(convert_print_calls(module));
     step!(resolve_resolvables(module, true));
+    // Types inferred by the final resolve (e.g. `var f = square;`).
+    step!(synthesize_function_types(module));
     Ok(())
 }
 
@@ -189,6 +197,13 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         }
         Expression::MethodCall { this, args, .. } => {
             walk_expression(this, f);
+            for arg in args {
+                walk_expression(arg, f);
+            }
+        }
+        Expression::FunctionRef { .. } => {}
+        Expression::Invoke { callee, args } => {
+            walk_expression(callee, f);
             for arg in args {
                 walk_expression(arg, f);
             }

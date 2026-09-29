@@ -156,6 +156,47 @@ Array<uint> fibonacci_sequence(uint count) {
 }
 ```
 
+### Function types and function references
+
+A function type is written `(parameter types) => return type`. A free function's name without a call is a value of
+that type, and calling a function value calls the function:
+
+```
+square(x: int): int { return x * x; }
+negate(x: int): int { return -x; }
+
+apply(f: (int) => int, x: int): int {
+    return f(x);
+}
+
+struct Transform {
+    var op: (int) => int;
+}
+
+main(): int {
+    var f = square;               # f: (int) => int
+    var g: (int) => int = negate;
+    var t = Transform();
+    t.op = f;
+    var ops = Array<(int) => int>();
+    ops.append(g);
+    return apply(square, 3) + t.op(2) + ops[0](1);   # 9 + 4 - 1
+}
+```
+
+- `=>` is right-associative: `(int) => (int) => int` is a function that returns a function. `() => void` takes
+  nothing and returns nothing. Function types work anywhere a type does, including type aliases
+  (`type Predicate<T> = (T) => bool;`) and generic arguments.
+- A function value is a reference like a struct value, and follows the same reference-counting rules. Referring to a
+  named function allocates nothing: it yields that function's static function object.
+- A function-typed variable or field that was never assigned is null, and calling it panics with
+  `called a null function value`.
+- A function value must match the type of the variable, field, parameter or return it flows into: passing
+  `(String) => int` where `(int) => int` is expected is a compile error, as is calling with the wrong number of
+  arguments. `int` and `i32` (and the other primitive aliases) name the same type.
+- A local, parameter or field shadows a free function of the same name. Generic functions, methods, constructors and
+  externs cannot be referenced as values yet.
+
 ## Structures
 
 Pepper's object model is built around structures and traits. There is no inheritance in Pepper, rather structures have

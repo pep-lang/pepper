@@ -256,6 +256,19 @@ pub enum Expression {
         /// Location of the method name.
         loc: Loc,
     },
+    /// A named free function used as a value (`var f = square;`): a
+    /// reference to the function's static function object, of function type
+    /// `ty` (`__function<R, P...>`).
+    FunctionRef {
+        function: String,
+        ty: TypeName,
+    },
+    /// Call through a function value: `f(x)`, `obj.callback(x)`,
+    /// `make_adder(1)(2)`. `callee` evaluates to a function object.
+    Invoke {
+        callee: Box<Expression>,
+        args: Vec<Expression>,
+    },
     /// The iterator a `for` loop drives, built from its source expression:
     /// `source.iterate()` when the source's type declares `iterate()`
     /// (Iterable<T>), else the source itself when it declares `next()` and

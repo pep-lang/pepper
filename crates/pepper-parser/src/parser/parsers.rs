@@ -258,6 +258,9 @@ fn identifier(input: &mut &str) -> Result<String> {
 }
 
 fn type_name(input: &mut &str) -> Result<TypeName> {
+    if input.starts_with('(') {
+        return function_type_name(input);
+    }
     let mut ty = type_name_base(input)?;
     // End of the last token of the type, excluding trailing whitespace.
     let mut end = ty.span.end;
@@ -296,6 +299,53 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
 
     ty.span.end = end;
     Ok(ty)
+}
+
+/// Function type `(P1, P2) => R`, lowered to `__function<R, P1, P2>` so
+/// aliases, generic substitution and specialization treat it like any other
+/// generic type. `=>` is right-associative: `(int) => (int) => int` returns a
+/// function. A parenthesized list not followed by `=>` is not a type.
+fn function_type_name(input: &mut &str) -> Result<TypeName> {
+    let before = *input;
+    let start = pos(input);
+    *input = &input[1..];
+    let mut params = vec![];
+    loop {
+        ws(input)?;
+        if input.starts_with(')') {
+            *input = &input[1..];
+            break;
+        }
+        match type_name(input) {
+            Ok(ty) => params.push(ty),
+            Err(_) => {
+                *input = before;
+                return Err(bt(input));
+            }
+        }
+        ws(input)?;
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with(')') {
+            *input = &input[1..];
+            break;
+        }
+        *input = before;
+        return Err(bt(input));
+    }
+    ws(input)?;
+    if !input.starts_with("=>") {
+        *input = before;
+        return Err(bt(input));
+    }
+    *input = &input[2..];
+    ws(input)?;
+    let ret = type_name(input)?;
+    let mut generic_types = vec![ret];
+    generic_types.extend(params);
+    Ok(TypeName { name: FUNCTION_TYPE.to_string(), generic_types, span: Span { start, end: pos(input) } })
 }
 
 /// Extend `name` with `.segment`s written directly after it: a qualified
@@ -2589,6 +2639,48 @@ mod tests {
         let _guard = track_source(s.len());
         let mut input = s;
         expression(&mut input).expect("expression parse should succeed")
+    }
+
+    // ── Function types ──
+
+    fn parse_type(s: &str) -> TypeName {
+        let _guard = track_source(s.len());
+        let mut input = s;
+        type_name(&mut input).expect("type parse should succeed")
+    }
+
+    #[test]
+    fn function_type_lowers_to_function_generic() {
+        let ty = parse_type("(int, String) => bool");
+        assert_eq!(ty.name, FUNCTION_TYPE);
+        let args: Vec<String> = ty.generic_types.iter().map(|t| t.to_string()).collect();
+        assert_eq!(args, ["bool", "int", "String"]);
+        assert_eq!(ty.to_string(), "(int, String) => bool");
+    }
+
+    #[test]
+    fn function_type_arrow_is_right_associative() {
+        let ty = parse_type("(int) => (int) => int");
+        assert_eq!(ty.to_string(), "(int) => (int) => int");
+        assert_eq!(ty.generic_types[0].name, FUNCTION_TYPE);
+        assert_eq!(parse_type("() => void").to_string(), "() => void");
+        assert_eq!(parse_type("Array<(int) => int>").to_string(), "Array<(int) => int>");
+    }
+
+    #[test]
+    fn function_types_in_declarations() {
+        let m = parse("apply(f: (int) => int, x: int): (int) => int { var g: (int) => int = f; return g; }\n\
+                       struct S { var op: (String) => void; }\n\
+                       type Op = (int) => int;\n");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("expected a function") };
+        assert_eq!(f.parameters[0].type_name.to_string(), "(int) => int");
+        assert_eq!(f.return_type.to_string(), "(int) => int");
+    }
+
+    #[test]
+    fn parenthesized_expressions_are_not_function_types() {
+        let m = parse("f(): int { var a = (1 + 2) * 3; (a) + 1; return (a); }\n");
+        assert_eq!(m.declarations.len(), 1);
     }
 
     // ── Literals ──
