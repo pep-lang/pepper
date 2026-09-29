@@ -222,3 +222,37 @@ test(): int {
         0
     );
 }
+
+// ── None: the value type of a result with nothing to return ─────────────────
+
+#[test]
+fn none_value() {
+    // Ok and Err of Result<None>, and a function returning one; the None
+    // instances must be released (live-alloc counter back to baseline).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+check(bool good): Result<None> {
+    if (good) {
+        return Result<None>.ok(None());
+    }
+    return Result<None>.err(Error("bad"));
+}
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var ok = check(true);
+        if (!ok.is_ok()) { return -1; }
+        var n = ok.unwrap();
+        var err = check(false);
+        if (!err.is_err()) { return -2; }
+        if (err.Error.Message.length() != 3) { return -3; }
+    }
+    var after = _pep_live_allocs();
+    if (after != before) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

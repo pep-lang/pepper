@@ -12,6 +12,11 @@ export struct Error {
     }
 }
 
+# The value of a result that carries no value on success:
+# `Result<None>.ok(None())` (Rust's `Result<(), E>`).
+export struct None {
+}
+
 export struct Result<TValue, TError=Error> {
     bool IsOk;
     TValue Value;

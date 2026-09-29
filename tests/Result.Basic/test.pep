@@ -24,5 +24,11 @@ main(): int {
     var e = Result<int>();
     if (e.is_ok()) { return 10; }
 
+    # None: the value type of a result with nothing to return.
+    var n = Result<None>.ok(None());
+    if (!n.is_ok()) { return 11; }
+    var m = Result<None>.err(Error("no"));
+    if (!m.is_err() || m.Error.Message.length() != 2) { return 12; }
+
     return 0;
 }

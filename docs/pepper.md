@@ -14,6 +14,7 @@
 * `Array<T>` - A dynamic array of `T`s.
 * `Result<TValue, TError=Error>` - A success-or-failure value (Rust `Result`-analogous); see [Results](#results).
 * `Error` - The default error type for `Result`: a struct holding a `String Message`.
+* `None` - An empty struct, the value type of a `Result` with nothing to return on success: `Result<None>`.
 
 ### Naming conventions
 
@@ -386,3 +387,11 @@ err.ok_or(-1);                       # -1 (fallback when IsOk is false)
 ```
 
 `Error` is a struct with a single `String Message` field: `var e = Error("boom"); e.Message`.
+
+An operation with nothing to return on success uses `None`, an empty struct, as its value type (Rust's
+`Result<(), E>`):
+
+```
+var done = Result<None>.ok(None());
+var failed = Result<None>.err(Error("disk full"));
+```
