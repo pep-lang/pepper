@@ -7,17 +7,12 @@
 use pepper_codegen::CodeGenerator;
 use pepper_sema::model::Module as SemaModule;
 
-/// `_pep_live_allocs()` is a process-wide counter, so leak-census tests must
-/// not run concurrently with each other; serialize on this lock.
-static CENSUS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 /// Build the full module (runtime prelude + test source) and run sema.
 fn build_module(source: &str) -> SemaModule {
     pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile")
 }
 
 fn compile_jit_with_runtime(source: &str) -> i32 {
-    let _census = CENSUS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut module = build_module(source);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");

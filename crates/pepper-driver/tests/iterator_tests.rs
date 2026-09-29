@@ -9,9 +9,6 @@ use pepper_codegen::CodeGenerator;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// `_pep_live_allocs()` is a process-wide counter: serialize the census.
-static CENSUS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
@@ -19,7 +16,6 @@ fn repo_root() -> PathBuf {
 /// Compile + JIT `test()`; return (result, net live-allocation delta), or the
 /// compile error.
 fn try_compile_jit_census(source: &str) -> Result<(i32, i64), String> {
-    let _census = CENSUS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source)?;
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");

@@ -8,6 +8,8 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod support;
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
@@ -74,9 +76,10 @@ fn documentation_examples_compile_and_run() {
     let only = std::env::var("PEPPER_DOCS_EXAMPLE").unwrap_or_default();
     let examples: Vec<_> = examples().into_iter().filter(|(name, _)| name.starts_with(&only)).collect();
     assert!(!examples.is_empty(), "no examples in docs/examples");
-    let failures: Vec<String> = examples
-        .iter()
-        .filter_map(|(name, entry)| run(name, entry).err().map(|e| format!("docs/examples/{}: {}", name, e)))
-        .collect();
+    let failures: Vec<String> =
+        support::parallel_map(&examples, |(name, entry)| run(name, entry).err().map(|e| format!("docs/examples/{}: {}", name, e)))
+            .into_iter()
+            .flatten()
+            .collect();
     assert!(failures.is_empty(), "{} of {} examples failed:\n\n{}", failures.len(), examples.len(), failures.join("\n\n"));
 }

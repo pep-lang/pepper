@@ -43,7 +43,8 @@ export _pep_assert(condition: bool, message: __ptr<char>): void {
 # concurrently. It lives in a raw malloc'd slot: an Atomic<long> would
 # allocate through _pep_malloc itself. The prelude's globals are initialized
 # before any other file's, and this is the first of them, so the slot exists
-# before anything allocates.
+# before anything allocates. Every JIT engine carries its own copy of this
+# global, so tests that count allocations can run in parallel.
 _pep_new_live_allocs_slot(): __ptr<long> {
     var slot = malloc(8);
     memset(slot, 0, 8);

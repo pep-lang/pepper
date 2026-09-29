@@ -580,8 +580,9 @@ Debugging aids: set `PEP_TRACE` to make `_pep_trace_ptr` and
 print every constructor, acquire, release, and destructor with the new count. `_pep_live_allocs()` counts live
 allocations (an atomic counter, since threads allocate concurrently);
 leak-census tests (`crates/pepper-driver/tests/shared_ptr_semantics_tests.rs`)
-read it through the JIT. The counter is process-wide, so those tests have to
-account for concurrency.
+read it through the JIT. The counter lives in a runtime global, and every
+JIT engine has its own copy of the runtime, so each test counts only its own
+program's allocations and census tests run in parallel with no lock.
 
 ---
 
@@ -741,6 +742,18 @@ Harness gotchas: runtime discovery and several harnesses `chdir` to the
 repository root (a process-wide change; every test sets the same
 directory). Temp directories are named after the test, so give new tests
 unique names.
+
+Keep the suite parallel. Cargo runs test binaries one after another, so a
+test that loops over many programs (every example, fixture, or simulated
+host) is wall-clock time for the whole suite: spread the loop with
+`support::parallel_map` (`crates/pepper-driver/tests/support/mod.rs`,
+`mod support;` in the test file), giving each item its own temp directory.
+The compiler keeps its state in thread-locals (the simulated host included),
+so programs compile independently on separate threads; do not add a global
+lock. `RUST_TEST_THREADS=1` makes both the harness and `parallel_map`
+serial. The front end (parsing the whole runtime for every program) is most
+of each test's cost, which is why `pepper-parser`, `pepper-sema` and
+`pepper-files` build at `opt-level = 1` in the dev profile.
 
 ---
 

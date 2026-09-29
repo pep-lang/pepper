@@ -13,6 +13,8 @@ use pepper_codegen::CodeGenerator;
 use std::path::PathBuf;
 use std::process::Command;
 
+mod support;
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
@@ -440,13 +442,12 @@ fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), Stri
 
 #[test]
 fn other_platforms_compile() {
-    let mut failures = vec![];
-    for (os, arch) in SIMULATED_HOSTS {
-        for (name, source) in all_programs() {
-            if let Err(e) = codegen_as(os, arch, name, source) {
-                failures.push(format!("{os}/{arch} {name}: {e}"));
-            }
-        }
-    }
+    let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| all_programs().into_iter().map(move |p| (host, p))).collect();
+    let failures: Vec<String> = support::parallel_map(&cases, |&((os, arch), (name, source))| {
+        codegen_as(os, arch, name, source).err().map(|e| format!("{os}/{arch} {name}: {e}"))
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

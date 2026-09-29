@@ -18,18 +18,24 @@
 # pepper-macos (a launchd service on an arm64 Mac, with rustup and Homebrew
 # llvm@20). The Linux runner has LLVM 18-20 preinstalled and may
 # `sudo apt-get` to add others; the Mac adds other majors with brew.
+#
+# Draft PRs get only the Linux jobs, as a quick check; `test` and `test-macos`
+# are skipped until the PR is marked ready for review, which starts a full run.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+    # The defaults plus ready_for_review, so leaving draft runs the full suite.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
-# A newer commit on the same ref makes older runs irrelevant.
+# A newer commit on a PR makes its older runs irrelevant, so cancel them.
+# Runs on main queue instead: each merged commit gets a complete result.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -43,6 +49,7 @@ env:
 jobs:
   test:
     runs-on: pepper-windows
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
     # seconds. 45 leaves room for a slow download without hanging forever.
     timeout-minutes: 45
@@ -120,6 +127,7 @@ jobs:
   # the Windows job above is the merge gate.
   test-macos:
     runs-on: pepper-macos
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     timeout-minutes: 30
 
     steps:

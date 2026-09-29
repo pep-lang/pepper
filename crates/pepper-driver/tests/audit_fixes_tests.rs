@@ -19,12 +19,8 @@ fn try_jit(source: &str) -> Result<i32, String> {
     generator.jit_execute(&mut module, "test")
 }
 
-/// `_pep_live_allocs()` is a process-wide counter: serialize the census.
-static CENSUS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 /// Compile + JIT `test()`; return (result, net live-allocation delta).
 fn jit_census(source: &str) -> (i32, i64) {
-    let _census = CENSUS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).unwrap_or_else(|e| panic!("compile error: {e}"));
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");

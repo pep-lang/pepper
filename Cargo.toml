@@ -61,3 +61,16 @@ path = "src/lib.rs"
 [[bin]]
 name = "pepper"
 path = "src/main.rs"
+
+# The front end parses and checks the whole runtime for every program the
+# tests compile, and unoptimized it is most of the suite's run time: level 1
+# halves it (43s to 28s on 4 cores) without slowing an edit-and-rebuild,
+# which is dominated by linking the test binaries. Debug info is kept.
+[profile.dev.package.pepper-parser]
+opt-level = 1
+
+[profile.dev.package.pepper-sema]
+opt-level = 1
+
+[profile.dev.package.pepper-files]
+opt-level = 1

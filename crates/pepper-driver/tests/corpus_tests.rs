@@ -6,6 +6,8 @@ use pepper_sema::passes::transform_pass;
 use pepper_sema::struct_body;
 use std::path::{Path, PathBuf};
 
+mod support;
+
 fn tests_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -42,9 +44,15 @@ fn corpus_fixtures() -> Vec<(String, PathBuf)> {
     out
 }
 
+/// This process's build directory; each fixture builds in its own
+/// subdirectory.
+fn corpus_build_root() -> PathBuf {
+    std::env::temp_dir().join(format!("pepper_corpus_test_{}", std::process::id()))
+}
+
 /// Compile a `.pep` source with the runtime discovery ON (imports resolved
 /// from tests/ and runtime/), emit + link, then spawn the binary.
-fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
+fn compile_and_run(name: &str, entry: &Path) -> Result<std::process::ExitStatus, String> {
     let mut merged = pepper_driver::compiler::merge(&load(entry)?)?;
 
     pepper_sema::apply_platform_filters(&mut merged).map_err(|d| d.to_string())?;
@@ -55,10 +63,11 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let mut generator = CodeGenerator::new(&ctx, "test");
     generator.generate(&mut merged).map_err(|d| d.to_string())?;
 
-    // Emit + link. The directory is per process: CI runs several jobs on one
-    // host at once, and a shared path lets one job overwrite or exec another
-    // job's binary mid-link ("Text file busy", "file truncated").
-    let build_dir = std::env::temp_dir().join(format!("pepper_corpus_test_{}", std::process::id()));
+    // Emit + link. The directory is per process and per fixture: CI runs
+    // several jobs on one host at once, and fixtures build in parallel, so a
+    // shared path lets one build overwrite or exec another's binary mid-link
+    // ("Text file busy", "file truncated").
+    let build_dir = corpus_build_root().join(name);
     std::fs::create_dir_all(&build_dir).unwrap();
     let obj_path = build_dir.join("corpus.o");
     let out_path = build_dir.join(if cfg!(windows) { "corpus_bin.exe" } else { "corpus_bin" });
@@ -83,20 +92,19 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
 /// exit 0.
 #[test]
 fn corpus_files_compile_and_run() {
-    let mut tested = 0usize;
-    let mut failures: Vec<String> = vec![];
-    for (name, test_path) in corpus_fixtures() {
-        tested += 1;
-        let result = compile_and_run(&test_path);
-        match result {
-            Ok(status) if status.success() => {}
-            Ok(status) => failures.push(format!("{}: exited with {}", name, status)),
-            Err(e) => failures.push(format!("{}: {}", name, e)),
+    let fixtures = corpus_fixtures();
+    let tested = fixtures.len();
+    let failures: Vec<String> = support::parallel_map(&fixtures, |(name, test_path)| {
+        match compile_and_run(name, test_path) {
+            Ok(status) if status.success() => None,
+            Ok(status) => Some(format!("{}: exited with {}", name, status)),
+            Err(e) => Some(format!("{}: {}", name, e)),
         }
-    }
-    let _ = std::fs::remove_dir_all(
-        std::env::temp_dir().join(format!("pepper_corpus_test_{}", std::process::id())),
-    );
+    })
+    .into_iter()
+    .flatten()
+    .collect();
+    let _ = std::fs::remove_dir_all(corpus_build_root());
     assert!(tested > 0, "no corpus tests found");
     assert!(
         failures.is_empty(),

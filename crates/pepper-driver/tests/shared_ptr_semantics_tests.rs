@@ -6,10 +6,6 @@
 
 use pepper_codegen::CodeGenerator;
 
-/// `_pep_live_allocs()` is a process-wide counter, so leak-census tests must
-/// not run concurrently with each other; serialize on this lock.
-static CENSUS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 fn compile_jit_with_runtime(source: &str) -> i32 {
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
     let ctx = inkwell::context::Context::create();
@@ -20,7 +16,6 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 /// Compile + JIT and return (entry result, net live-allocation delta). The
 /// census is taken around the entry call so it reflects only the test body.
 fn compile_jit_census(source: &str) -> (i32, i64) {
-    let _census = CENSUS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
