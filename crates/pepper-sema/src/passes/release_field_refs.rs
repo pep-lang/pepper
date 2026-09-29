@@ -1,6 +1,6 @@
 //! Port of `source/Sema/ReleaseFieldRefs.h`: struct-typed fields get
-//! `__release` calls in reverse declaration order just before the dtor's
-//! final `_pep_free`.
+//! `__release` calls in reverse declaration order at the end of the dtor
+//! (the object itself is freed by `__release`, not the dtor).
 
 use crate::model::*;
 use crate::symbols::SymbolTable;
@@ -38,8 +38,8 @@ pub fn release_field_refs(module: &mut Module) {
         let Some(body) = &mut dtor.body else {
             continue;
         };
-        // Insert the releases in reverse declaration order just before the
-        // last instruction (free).
+        // Append the releases in reverse declaration order, after the user's
+        // destructor body.
         let mut releases: Vec<Statement> = field_names
             .iter()
             .map(|name| {
@@ -56,9 +56,6 @@ pub fn release_field_refs(module: &mut Module) {
             })
             .collect();
         releases.reverse();
-        let insert_at = body.items.len().saturating_sub(1);
-        for (offset, release) in releases.into_iter().enumerate() {
-            body.items.insert(insert_at + offset, release);
-        }
+        body.items.extend(releases);
     }
 }

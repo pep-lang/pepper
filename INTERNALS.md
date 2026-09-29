@@ -253,15 +253,18 @@ cross-compilation.
 `struct_body::apply` runs `resolve_type_aliases` first, so no alias
 survives into later stages. Then, for each struct:
 
-- `apply_synthesized` inserts a `u32 __refcount` head field (default 0). It
+- `apply_synthesized` inserts the two head fields: `u32 __refcount`
+  (default 0) and `u32 __weakcount` (default 1: weak references plus one
+  held by all strong references together, as in a C++ control block). It
   fills the `__acquire` body (null check, `++__refcount`, `trace_*` calls)
-  and the `__release` body (null check, `--`, and at 0 a call to `__dtor`).
+  and the `__release` body (null check, `--`, and at 0 a call to `__dtor`,
+  then `--__weakcount` and `_pep_free(this)` if that reached 0).
 - `finish` builds the constructor. A hidden `size` local is patched with the
   real ABI size in codegen by `patched_ctor`. The constructor calls `this =
   _pep_malloc(size)`, initializes each field (explicit default or zero),
   assigns `this.field` constructor parameters (renamed `__init_<field>`),
-  runs the user body, and ends with `return this`. The destructor ends with
-  `_pep_free(this)`. The pass appends `__release`, `__acquire`, and `__dtor`
+  runs the user body, and ends with `return this`. The destructor does not
+  free the object; `__release` does. The pass appends `__release`, `__acquire`, and `__dtor`
   to `method_members`.
 
 ---
@@ -275,7 +278,7 @@ several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
-| 1 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__invoke`, `__destroy`). |
+| 1 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). |
 | 2 | `resolve_literals` | Folds unary minus into numeric literals. |
 | 3 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
 | 4 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
@@ -428,7 +431,8 @@ are null-safe.
 | Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves. |
 | `return` | An lvalue read is acquired before `release_all_scopes`. A call result moves. |
 | Discarded temporary | `Statement::Expression` releases `owned_temp_type(expr)`. Arguments that are owned rvalues are released after the call (`owned_arg_temps` in `codegen_call`). The receiver of `f().x` or `f()[i]` goes on `deferred_temps` and is released at the end of the full expression by `flush_deferred_temps`. Ternary arms use `codegen_expr_in_arm`. |
-| Destruction | At zero, `__release` calls `__dtor`. `__dtor` runs the user's `destruct` body, then the field releases added by `release_field_refs`, then `_pep_free(this)`. |
+| Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
+| `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0). `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
 
 Debugging aids: set `PEP_TRACE` to make the runtime's `trace_ptr`,
 `trace_int`, and `trace_region` print. `_pep_live_allocs()` counts live
@@ -475,6 +479,7 @@ diagnostics"). The mechanics:
 | `array.pep`, `hash.pep` | `Array<T>` (also written `T[]`), `HashMap`, `HashSet`, and their iterators. |
 | `iterator.pep` | `Iterator<T>` and `Iterable<T>` traits, the `for` protocol (`next()`/`current()`, `iterate()`). |
 | `scoped.pep` | `Scoped<T>`, the `with` protocol (`enter()`, and `exit()` called from the destructor). |
+| `weak.pep` | `Weak<T>` over `__weak<T>`; implements `Scoped<T>` (`enter()` upgrades). |
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
@@ -497,7 +502,8 @@ diagnostics"). The mechanics:
 - **Intrinsics available to runtime code**: `__ptr<T>` (a raw pointer, the
   only pointer spelling allowed outside `extern`), `__null`, `sizeof(T)`,
   `__default<T>()`, `__is_pod<T>()`, `__refcount<T>(x)`, `__address<T>(x)`,
-  and `__atomic_load/store/cmpxchg/fetch_{add,sub,and,or,xor}<T>(…)`.
+  `__atomic_load/store/cmpxchg/fetch_{add,sub,and,or,xor}<T>(…)`, and
+  `__weak<T>` with `__weak_from/upgrade/expired<T>(…)`.
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
   `crates/pepper-driver/tests/runtime_docs_tests.rs` enforces it. The

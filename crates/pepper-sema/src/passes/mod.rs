@@ -27,6 +27,7 @@ pub mod function_types;
 pub mod check_function_types;
 pub mod check_bindings;
 pub mod lower_with_blocks;
+pub mod weak_types;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -182,7 +183,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(rhs, f);
         }
         Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
-        Expression::RefCount(_, arg) | Expression::Address(_, arg) => walk_expression(arg, f),
+        Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => walk_expression(arg, f),
         Expression::AtomicLoad(_, arg) => walk_expression(arg, f),
         Expression::AtomicStore(_, ptr, val) => {
             walk_expression(ptr, f);

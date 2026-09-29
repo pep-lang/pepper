@@ -19,7 +19,9 @@ with (scope) { ... }
 ```
 
 - **`name` is bound to `scope.enter()`**, not to `scope` itself. A `Session`
-  can hand out itself; a weak reference hands out the object it points to.
+  can hand out itself; a [`Weak<T>`](memory.md#weak-references) hands out
+  a strong reference to the object it points at, or null once that object is
+  gone.
 - **Without a binding**, the block still holds the result of `enter()` until
   it ends. An `enter()` that returns nothing (declared without a return type)
   has nothing to bind, and binding it is an error.

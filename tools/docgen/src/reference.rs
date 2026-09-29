@@ -21,6 +21,7 @@ const PAGES: &[(&str, &str)] = &[
     ("hash.pep", "HashMap and HashSet"),
     ("iterator.pep", "Iterators"),
     ("scoped.pep", "Scoped"),
+    ("weak.pep", "Weak"),
     ("result.pep", "Result"),
     ("atomic.pep", "Atomic"),
     ("io/module.pep", "The io module"),

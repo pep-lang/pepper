@@ -29,6 +29,8 @@ pub const BOOL: &str = "bool";
 pub const VOID_PTR: &str = "void*";
 /// Internal name of function types: `(P1, P2) => R` is `__function<R, P1, P2>`.
 pub const FUNCTION: &str = "__function";
+/// `__weak<T>`: a weak reference to a struct `T` (`std::weak_ptr<T>`).
+pub const WEAK: &str = "__weak";
 
 /// Integral-type alias set from `TypeName.cpp:23-45`.
 pub static INTEGRAL_TYPES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
@@ -136,6 +138,16 @@ impl TypeName {
     /// A function type `(P...) => R`, spelled `__function<R, P...>`.
     pub fn is_function_type(&self) -> bool {
         self.name == FUNCTION && !self.sub_types.is_empty()
+    }
+
+    /// A weak reference type `__weak<T>`.
+    pub fn is_weak(&self) -> bool {
+        self.name == WEAK && self.sub_types.len() == 1
+    }
+
+    /// The `T` of `__weak<T>`.
+    pub fn weak_target(&self) -> Option<&TypeName> {
+        if self.is_weak() { self.sub_types.first() } else { None }
     }
 
     /// Function type `(params) => ret`.

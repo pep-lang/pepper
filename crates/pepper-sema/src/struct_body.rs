@@ -53,6 +53,31 @@ fn if_block(condition: Expression, items: Vec<Statement>) -> Statement {
         else_block: None,
     })
 }
+/// `this.<field> = this.<field> <op> 1;`
+fn add_to_field(field: &str, op: BinaryOp) -> Statement {
+    Statement::Expression(Expression::Binary {
+        op: BinaryOp::Assign,
+        lhs: Box::new(member_ref(field)),
+        rhs: Box::new(Expression::Binary {
+            op,
+            lhs: Box::new(member_ref(field)),
+            rhs: Box::new(Expression::IntLiteral(1)),
+            loc: Loc::NONE,
+        }),
+        loc: Loc::NONE,
+    })
+}
+
+/// `this.<field> == 0`
+fn field_is_zero(field: &str) -> Expression {
+    Expression::Binary {
+        op: BinaryOp::Equal,
+        lhs: Box::new(member_ref(field)),
+        rhs: Box::new(Expression::IntLiteral(0)),
+        loc: Loc::NONE,
+    }
+}
+
 /// Zero value for a field type: null reference for struct/pointer types,
 /// 0.0 for floats, 0 for everything else (port of `zero_value` in
 /// `StructGen.cpp:35`).
@@ -79,6 +104,19 @@ pub fn apply_synthesized(st: &mut StructDef) {
         st.field_members.insert(
             0,
             var_def("__refcount", TypeName::new("u32"), Some(Expression::IntLiteral(0)), false),
+        );
+    }
+    // Second head field: weak references (`__weak<T>`, a
+    // `std::weak_ptr`), plus one held on behalf of all strong references
+    // together, as in a C++ control block. It starts at 1, so a weak
+    // reference dropped while the object is still being constructed (no
+    // strong owner yet) cannot free it; the last strong release destroys the
+    // object and gives that one up, and whichever count reaches 0 last frees
+    // the memory.
+    if !st.field_members.iter().any(|f| f.name == "__weakcount") {
+        st.field_members.insert(
+            1,
+            var_def("__weakcount", TypeName::new("u32"), Some(Expression::IntLiteral(1)), false),
         );
     }
 
@@ -178,12 +216,20 @@ pub fn apply_synthesized(st: &mut StructDef) {
                         "trace_ptr",
                         vec![Expression::ThisRef, str_lit(format!("dtor: {}", struct_name))],
                     ),
+                    // The strong references' weak reference is still held
+                    // while the destructor runs, so a weak reference
+                    // released inside it (a field pointing back at the
+                    // object) cannot free the memory under it.
                     Statement::Expression(Expression::MethodCall {
                         this: Box::new(Expression::ThisRef),
                         method: "__dtor".to_string(),
                         args: vec![],
                         loc: Loc::NONE,
                     }),
+                    add_to_field("__weakcount", BinaryOp::Sub),
+                    // Destroyed: the memory goes once no weak reference
+                    // remains; otherwise the last weak release frees it.
+                    if_block(field_is_zero("__weakcount"), vec![call("_pep_free", vec![Expression::ThisRef])]),
                 ],
             ),
         ];
@@ -191,7 +237,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
 }
 
 /// Ctor finish: allocation prologue + field inits + user ctor body +
-/// `return this`; dtor gets `_pep_free`; synthesized methods appended
+/// `return this`; synthesized methods appended
 /// (port of `Struct.cpp:159-192`).
 pub fn finish(st: &mut StructDef) -> Result<(), String> {
     let struct_name = st.name.clone();
@@ -322,13 +368,8 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         attributes: vec![],
     });
 
-    // Free at the end of the destructor.
-    if let Some(body) = &mut st.destructor.body {
-        body.items.push(call(
-            "_pep_free",
-            vec![Expression::ThisRef],
-        ));
-    }
+    // The destructor does not free the object: `__release` does, once no
+    // weak reference remains (see apply_synthesized).
 
     // Append synthesized methods in order: release, acquire, dtor.
     let release = st.release.clone();

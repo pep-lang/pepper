@@ -246,6 +246,11 @@ pub enum Expression {
     /// atomic read-modify-write on the T-sized integer value at pointer `p`;
     /// returns the previous value (the old occupant of the slot).
     AtomicFetch(AtomicFetchOp, TypeName, Box<Expression>, Box<Expression>),
+    /// Weak reference intrinsics over struct `T` (see `passes::weak_types`):
+    /// `__weak_from<T>(t)` (a new `__weak<T>` to `t`'s object),
+    /// `__weak_upgrade<T>(w)` (a new strong `T`, or null once destroyed) and
+    /// `__weak_expired<T>(w)` (bool).
+    Weak(WeakOp, TypeName, Box<Expression>),
     /// Free function call by name (possibly specialized `name<args>`)
     FunctionCall {
         function: String,
@@ -302,6 +307,34 @@ impl Expression {
             | Expression::FunctionCall { loc, .. }
             | Expression::MethodCall { loc, .. } => *loc,
             _ => Loc::NONE,
+        }
+    }
+}
+
+/// Which weak reference intrinsic an `Expression::Weak` is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeakOp {
+    From,
+    Upgrade,
+    Expired,
+}
+
+impl WeakOp {
+    /// The intrinsic's source name.
+    pub fn name(self) -> &'static str {
+        match self {
+            WeakOp::From => "__weak_from",
+            WeakOp::Upgrade => "__weak_upgrade",
+            WeakOp::Expired => "__weak_expired",
+        }
+    }
+
+    /// The result type for target `T`.
+    pub fn result(self, target: &TypeName) -> TypeName {
+        match self {
+            WeakOp::From => TypeName::with_args(crate::type_name::WEAK, vec![target.clone()]),
+            WeakOp::Upgrade => target.clone(),
+            WeakOp::Expired => TypeName::bool_(),
         }
     }
 }

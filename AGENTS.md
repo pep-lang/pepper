@@ -128,6 +128,12 @@ The whole model, as a construct mapping:
 Everything else — scope exit, parameter exit, store-release-old — follows
 from "every owned value releases exactly once when it goes out of scope".
 
+`__weak<T>` is `std::weak_ptr<T>`, and the same rules apply to it on the weak
+count: copies acquire, scope exit releases. `__weak_from<T>(t)` is
+`weak_ptr(t)` and `__weak_upgrade<T>(w)` is `w.lock()`; both return a new
+reference (an owned temporary). Neither kind converts to the other
+implicitly.
+
 ## Compiler errors are clang-style diagnostics, located at the exact token
 
 Every error the compiler, the language server, or a test harness shows is a

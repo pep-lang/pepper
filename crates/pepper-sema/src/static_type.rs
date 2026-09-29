@@ -140,6 +140,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             let this_type = of(this, table, current)?;
             table.lookup(&this_type)?.returns.get(method).cloned()
         }
+        Expression::Weak(op, ty, _) => Some(op.result(ty)),
         // `source.iterate()` if the source is Iterable, else the source.
         Expression::ForIterator(source) => {
             let source_type = of(source, table, current)?;

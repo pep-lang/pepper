@@ -55,6 +55,17 @@ fn convert_expression(expr: &mut Expression) {
                 };
                 let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
                 *e = Expression::RefCount(ty, Box::new(arg));
+            } else if let Some(op) = [crate::model::WeakOp::From, crate::model::WeakOp::Upgrade, crate::model::WeakOp::Expired].into_iter().find(|op| op.name() == base)
+                && args.len() == 1
+            {
+                let parsed = crate::passes::gather_generics::parse_type_string(function);
+                let base_name = parsed.name.clone();
+                let ty = match parsed.sub_types.into_iter().next() {
+                    Some(inner) => inner,
+                    None => TypeName::new(&base_name),
+                };
+                let arg = std::mem::replace(&mut args[0], Expression::PointerLiteral);
+                *e = Expression::Weak(op, ty, Box::new(arg));
             } else if base == "__address" && args.len() == 1 {
                 let parsed = crate::passes::gather_generics::parse_type_string(function);
                 let base_name = parsed.name.clone();

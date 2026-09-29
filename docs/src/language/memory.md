@@ -81,12 +81,38 @@ never freed.
 {{#include ../../examples/memory-cycles.pep}}
 ```
 
-Pepper does not have weak references yet, so avoid cycles in long-lived data,
-or break them yourself before the last outside reference goes away: clear the
-container, or overwrite the field, that closes the loop. A common pattern is
-a tree where parents hold their children but children do not hold their
-parent; look a parent up by some other means, such as an index or a key into
-a [`HashMap`](../reference/hash.md).
+To avoid a cycle, make one direction of it a weak reference (next section),
+or break the cycle yourself before the last outside reference goes away:
+clear the container, or overwrite the field, that closes the loop.
+
+## Weak references
+
+A [`Weak<T>`](../reference/weak.md) points at an object without keeping it
+alive. Use it for back pointers: a child's parent, a document's folder, an
+observer's subject. The owner holds strong references down the tree, and
+everything that points back up holds a `Weak<T>`, so there is no cycle.
+
+```pepper
+{{#include ../../examples/memory-weak.pep}}
+```
+
+- **`Weak<T>(object)`** makes the weak reference. It does not change the
+  object's reference count.
+- **A `with` block reaches the object**: `with (var f = folder) { ... }`
+  binds `f` to an ordinary strong reference for the length of the block. When
+  the object has already been destroyed, the body is skipped and the `else`
+  block runs. See [Scoped blocks with `with`](scopes.md).
+- **`expired()`** reports whether the object has been destroyed.
+- **The object is destroyed on time.** When its last strong reference goes,
+  its destructor runs and its fields are released, even if weak references
+  remain. Only the object's small header stays allocated until the last weak
+  reference is gone.
+
+In C++ terms, a struct value is a `std::shared_ptr<T>` and `Weak<T>` wraps
+the built-in `__weak<T>`, a `std::weak_ptr<T>`: `Weak<T>(object)` is
+`weak_ptr(object)`, and entering it with `with` is `lock()`. A weak reference
+made while an object is still inside its constructor cannot be upgraded until
+the constructor returns, as with `weak_from_this()` in C++.
 
 ## Summary
 
@@ -98,4 +124,5 @@ a [`HashMap`](../reference/hash.md).
 | `return a;` | The caller receives a reference to `a`'s object. |
 | `a.method()` | No change: `this` refers to `a`'s object. |
 | `make();` (result unused) | The result is released at the end of the statement. |
+| `var w = Weak<T>(a);` | No change to `a`'s count; `w` does not keep the object alive. |
 | end of a block | Every local declared in the block releases its reference. |

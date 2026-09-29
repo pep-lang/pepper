@@ -122,6 +122,9 @@ impl<'a> Checker<'a> {
 
     /// `value` flows into a slot of type `expected`.
     fn flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
+        if self.weak_flows_into(value, expected, current, slot) {
+            return;
+        }
         if !expected.is_function_type() {
             self.value_flows_into(value, expected, current, slot);
             return;
@@ -147,6 +150,41 @@ impl<'a> Checker<'a> {
             let message = format!("{} expects a function of type '{}', but was given a function of type '{}'", (slot.what)(), expected.display(), actual.display());
             self.report(message, value, slot);
         }
+    }
+
+    /// A `__weak<T>` and a `T` hold different counts (weak and strong), so
+    /// neither converts to the other implicitly: `__weak_from<T>` and
+    /// `__weak_upgrade<T>` do it. Returns true when either side is a weak
+    /// reference, which this check then covers entirely.
+    fn weak_flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) -> bool {
+        // Some passes carry `__weak<T>` as a flat name: re-parse those (and
+        // only those; `parse_type_string` does not take pointer spellings).
+        let weak = |ty: &TypeName| {
+            let s = ty.to_string();
+            if s.starts_with("__weak<") && s.ends_with('>') { crate::passes::gather_generics::parse_type_string(&s) } else { ty.clone() }
+        };
+        let expected = weak(expected);
+        if matches!(value, Expression::PointerLiteral) {
+            return expected.is_weak();
+        }
+        let Some(actual) = static_type::of(value, &self.table, current) else {
+            return expected.is_weak();
+        };
+        let actual = weak(&actual);
+        if !actual.is_weak() && !expected.is_weak() {
+            return false;
+        }
+        if actual.to_string() == crate::type_name::AUTO || expected.to_string() == crate::type_name::AUTO || same_type(&actual, &expected) {
+            return true;
+        }
+        let hint = match (expected.weak_target(), actual.weak_target()) {
+            (Some(target), None) => format!("; use '__weak_from<{}>(...)' to make one", target.display()),
+            (None, Some(target)) => format!("; use '__weak_upgrade<{}>(...)' to get a strong reference", target.display()),
+            _ => String::new(),
+        };
+        let message = (slot.mismatch)(&expected.display(), &actual.display()) + &hint;
+        self.report(message, value, slot);
+        true
     }
 
     fn parameters_of_call(&self, function: &str) -> Option<(String, Vec<TypeName>)> {
@@ -316,7 +354,7 @@ pub fn check_function_types(module: &mut Module) {
     for st in &module.structs {
         // Generic bases are checked through their specializations; the
         // synthesized function-type structs hold no user code.
-        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_function_type() {
+        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_function_type() || st.ty.is_weak() {
             continue;
         }
         let current = st.ty.clone();

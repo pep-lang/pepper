@@ -224,7 +224,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(rhs, aliases, values);
         }
         Expression::SizeOf(ty) | Expression::IsPod(ty) | Expression::Default(ty) => subst(ty, aliases),
-        Expression::RefCount(ty, operand) | Expression::Address(ty, operand) => {
+        Expression::RefCount(ty, operand) | Expression::Address(ty, operand) | Expression::Weak(_, ty, operand) => {
             subst(ty, aliases);
             subst_expr(operand, aliases, values);
         }

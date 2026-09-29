@@ -49,7 +49,8 @@ Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
 
 Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
-modules, `Result`-based error handling, iteration, and calling C. The
+modules, `Result`-based error handling, iteration, `with` blocks, weak
+references, and calling C. The
 standard library covers strings, arrays, hash maps and sets, atomics, and
 file-system access. That is enough to write real programs, but expect gaps.
 Some that you will meet quickly:
@@ -59,8 +60,9 @@ Some that you will meet quickly:
 - Calling a method through a trait type does not work yet. You can declare
   traits and conform to them, but not dispatch through them.
 - There is no threading API in the standard library yet.
-- Reference counting does not reclaim cycles: two objects that refer to each
-  other are never freed. Weak references are being designed.
+- Reference counting does not reclaim cycles on its own: two objects that
+  refer to each other are never freed. Break the cycle with a
+  [weak reference](language/memory.md#weak-references) on one side.
 - `print` writes each argument on its own line.
 
 Each chapter of this book says plainly what is and is not supported. When a

@@ -16,6 +16,10 @@ use inkwell::types::AnyType as _;
 use inkwell::values::AnyValue as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
+
+/// Field index of `__invoke` in a function object: after the
+/// `__refcount`/`__weakcount` head (see `passes::function_types`).
+const FUNCTION_INVOKE_INDEX: u32 = 2;
 use pepper_sema::model::{self as sema, Block, BinaryOp, Branch, Declaration, ExternDef, Expression, FunctionDef, LoopBreak, LoopBreakKind, Module as SemaModule, Statement, StructDef, UnaryOp, VariableDef, While};
 use pepper_sema::model::{Diagnostic, Loc};
 use pepper_sema::type_name::TypeName;
@@ -1582,6 +1586,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Ternary { true_expr, .. } => self.value_sema_type(true_expr),
             // Atomic intrinsics: the load yields T, the store is void, the
             // cmpxchg reports success as bool.
+            Expression::Weak(op, ty, _) => Some(op.result(ty).to_string()),
             Expression::AtomicLoad(ty, _) => Some(ty.to_string()),
             Expression::AtomicStore(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
@@ -1664,6 +1669,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             // An atomic load yields a freshly acquired reference (struct T):
             // an owned rvalue, released by the consuming context.
+            // `__weak_from` and `__weak_upgrade` hand out a new reference
+            // (weak and strong respectively): owned rvalues.
+            Expression::Weak(op, ty, _) if *op != sema::WeakOp::Expired => {
+                self.is_struct_ref_name(&Some(op.result(ty).to_string()))
+            }
             Expression::AtomicLoad(ty, _) => self.is_struct_ref_name(&Some(ty.to_string())),
             // An atomic fetch returns the old slot occupant (struct T): the
             // return site acquires it, so the result is an owned rvalue.
@@ -2242,6 +2252,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Ok(self.context.i32_type().const_zero().into())
                 }
             }
+            Expression::Weak(op, ty, arg) => self.codegen_weak(*op, ty, arg),
             Expression::RefCount(ty, arg) => {
                 // __refcount<T>(t): 0 for POD T; the u32 head field of a
                 // struct object (index 0, inserted by sema's apply_synthesized).
@@ -2953,6 +2964,76 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
+    /// Weak reference intrinsics (`passes::weak_types`). The argument is
+    /// read like a method receiver; an owned-rvalue argument is a temporary
+    /// released once the result exists (so `__weak_from<T>(T())` leaves a
+    /// weak reference to an already destroyed object, as in C++).
+    fn codegen_weak(&mut self, op: sema::WeakOp, ty: &TypeName, arg: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let struct_ty = match self.types.get(&ty.to_string()) {
+            Some(BasicTypeEnum::StructType(sct)) if self.structs.contains_key(&ty.to_string()) => sct,
+            _ => return Err(format!("{}<{}> needs a struct type", op.name(), ty)),
+        };
+        let arg_temp = self.owned_temp_type(arg);
+        let val = self.codegen_expr(arg)?;
+        let ptr = match val {
+            BasicValueEnum::PointerValue(p) => p,
+            other => return Err(format!("{} expects a reference, got {:?}", op.name(), other)),
+        };
+        let result: BasicValueEnum<'ctx> = match op {
+            sema::WeakOp::From => {
+                // The weak reference is taken before a temporary's strong
+                // one is released, so the object's memory stays.
+                self.acquire_ref(&op.result(ty).to_string(), val)?;
+                val
+            }
+            sema::WeakOp::Upgrade | sema::WeakOp::Expired => {
+                // Live iff non-null with a strong reference left. The head
+                // load must not run on null: branch, then phi.
+                let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                let entry = self.builder.get_insert_block().expect("no insert block");
+                let then_block = self.context.append_basic_block(fn_value, "weak_nonnull");
+                let merge_block = self.context.append_basic_block(fn_value, "weak_merge");
+                let is_null = self.builder.build_is_null(ptr, "weak_null").map_err(|e| e.to_string())?;
+                self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(then_block);
+                let head = self
+                    .builder
+                    .build_struct_gep(struct_ty, ptr, 0, "weak_refcount")
+                    .map_err(|e| e.to_string())?;
+                let strong = self
+                    .builder
+                    .build_load(self.context.i32_type(), head, "weak_strong")
+                    .map_err(|e| e.to_string())?
+                    .into_int_value();
+                let live = self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, strong, self.context.i32_type().const_zero(), "weak_live")
+                    .map_err(|e| e.to_string())?;
+                let live_end = self.builder.get_insert_block().expect("no insert block");
+                self.builder.build_unconditional_branch(merge_block).map_err(|e| e.to_string())?;
+                self.builder.position_at_end(merge_block);
+                let phi = self.builder.build_phi(self.context.bool_type(), "weak_is_live").map_err(|e| e.to_string())?;
+                phi.add_incoming(&[(&live, live_end), (&self.context.bool_type().const_zero(), entry)]);
+                let is_live = phi.as_basic_value().into_int_value();
+                if op == sema::WeakOp::Expired {
+                    self.builder.build_not(is_live, "weak_expired").map_err(|e| e.to_string())?.into()
+                } else {
+                    // A new strong reference to a live object, else null.
+                    let upgraded = self
+                        .builder
+                        .build_select(is_live, ptr, self.context.ptr_type(inkwell::AddressSpace::default()).const_null(), "upgraded")
+                        .map_err(|e| e.to_string())?;
+                    self.acquire_ref(&ty.to_string(), upgraded)?;
+                    upgraded
+                }
+            }
+        };
+        if let Some(temp) = arg_temp {
+            self.release_temp(&temp, val)?;
+        }
+        Ok(result)
+    }
+
     /// The static function object for free function `name`, of function
     /// type `ty`: `{ refcount, invoke, destroy }` with an invoke thunk that
     /// forwards to `name`. Its refcount starts at 2^30, so the balanced
@@ -2999,6 +3080,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let thunk_ptr = thunk.as_global_value().as_pointer_value();
         let init = struct_type.const_named_struct(&[
             self.context.i32_type().const_int(1 << 30, false).into(),
+            self.context.i32_type().const_int(1, false).into(),
             thunk_ptr.into(),
             ptr_type.const_null().into(),
         ]);
@@ -3049,7 +3131,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         let slot = self
             .builder
-            .build_struct_gep(struct_type, object, 1, "invoke_slot")
+            .build_struct_gep(struct_type, object, FUNCTION_INVOKE_INDEX, "invoke_slot")
             .map_err(|e| e.to_string())?;
         let entry = self
             .builder

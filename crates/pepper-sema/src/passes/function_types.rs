@@ -5,6 +5,7 @@
 //! ```text
 //! struct __function<R, P...> {
 //!     u32 __refcount;
+//!     u32 __weakcount;
 //!     void* __invoke;    # R invoke(__function<R, P...> self, P... args)
 //!     void* __destroy;   # reserved for closures: releases captured values
 //! }
@@ -43,8 +44,9 @@ pub fn referenceable_functions(module: &Module) -> Vec<(String, TypeName)> {
         .collect()
 }
 
-/// Add a struct for every function type used anywhere in the module that
-/// does not have one yet. Idempotent; run whenever new types may have
+/// Add a struct for every function type and weak reference type
+/// (`__weak<T>`, see `weak_types`) used anywhere in the module that does not
+/// have one yet. Idempotent; run whenever new types may have
 /// appeared (after parsing and after each specialization round).
 pub fn synthesize_function_types(module: &mut Module) {
     let mut found: Vec<TypeName> = vec![];
@@ -82,6 +84,14 @@ pub fn synthesize_function_types(module: &mut Module) {
         if module.structs.iter().any(|st| st.name == name) {
             continue;
         }
+        if let Some(target) = ty.weak_target() {
+            // Only a concrete struct target: `__weak<T>` inside a generic
+            // base waits for its specializations.
+            if module.structs.iter().any(|st| st.name == target.to_string()) {
+                module.structs.push(crate::passes::weak_types::weak_struct(&ty));
+            }
+            continue;
+        }
         let mut st = function_struct(&ty);
         crate::struct_body::apply_synthesized(&mut st);
         crate::struct_body::finish(&mut st).expect("function type struct");
@@ -98,7 +108,7 @@ fn collect(ty: &TypeName, found: &mut Vec<TypeName>, seen: &mut HashSet<String>)
     if let Some(pointee) = ty.name.strip_suffix('*') {
         collect(&TypeName::new(pointee), found, seen);
     }
-    if ty.is_function_type() && seen.insert(ty.to_string()) {
+    if (ty.is_function_type() || ty.is_weak()) && seen.insert(ty.to_string()) {
         found.push(ty.clone());
     }
 }
@@ -157,6 +167,7 @@ fn expression_types(expr: &Expression, add: &mut impl FnMut(&TypeName)) {
         | Expression::FunctionRef { ty, .. }
         | Expression::Cast { ty, .. }
         | Expression::ArrayIndex { ty, .. } => add(ty),
+        Expression::Weak(op, ty, _) => add(&op.result(ty)),
         Expression::FunctionCall { function, .. } if function.contains('<') => {
             add(&crate::passes::gather_generics::parse_type_string(function));
         }
@@ -164,7 +175,7 @@ fn expression_types(expr: &Expression, add: &mut impl FnMut(&TypeName)) {
     });
 }
 
-fn empty_function(name: &str, ty: TypeName, parent: &str) -> FunctionDef {
+pub(crate) fn empty_function(name: &str, ty: TypeName, parent: &str) -> FunctionDef {
     FunctionDef {
         name: name.to_string(),
         ty,

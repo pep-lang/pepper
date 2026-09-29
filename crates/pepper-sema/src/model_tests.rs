@@ -58,8 +58,11 @@ fn basic_struct_builds_refcount_first() {
     // __refcount head field.
     assert_eq!(st.field_members[0].name, "__refcount");
     assert_eq!(st.field_members[0].ty.to_string(), "u32");
+    // __weakcount head field.
+    assert_eq!(st.field_members[1].name, "__weakcount");
+    assert_eq!(st.field_members[1].ty.to_string(), "u32");
     // User field follows.
-    assert_eq!(st.field_members[1].name, "x");
+    assert_eq!(st.field_members[2].name, "x");
     // Synthesized methods appended: release, acquire, dtor.
     let names: Vec<&str> = st.method_members.iter().map(|m| m.name.as_str()).collect();
     assert!(names.contains(&"__release"));

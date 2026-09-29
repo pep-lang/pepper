@@ -40,6 +40,7 @@
   - [HashMap and HashSet](reference/hash.md)
   - [Iterators](reference/iterator.md)
   - [Scoped](reference/scoped.md)
+  - [Weak](reference/weak.md)
   - [Result](reference/result.md)
   - [Atomic](reference/atomic.md)
   - [The io module](reference/io-module.md)

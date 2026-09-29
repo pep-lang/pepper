@@ -336,6 +336,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // `var x = __address<T>(v)` is not mis-inferred as i32.
         Expression::Address(..) => TypeName::new("u64"),
         Expression::RefCount(..) => TypeName::new("u32"),
+        Expression::Weak(op, ty, _) => op.result(ty),
         Expression::AtomicLoad(ty, _) => ty.clone(),
         Expression::AtomicStore(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
