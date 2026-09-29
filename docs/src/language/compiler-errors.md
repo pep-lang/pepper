@@ -179,9 +179,10 @@ main.pep:2:13: error: expected expression
 ```
 
 **A value of the wrong type.** Numbers convert among themselves, as in C, but
-a number is never a struct and one struct type is never another. The check
-applies wherever a value flows into a typed place: a variable's initializer, an
-assignment, an argument and a `return`:
+a number is never a struct and one struct type is never another, except that
+a struct converts to a [trait it declares](traits-and-extensions.md#traits-as-types).
+The check applies wherever a value flows into a typed place: a variable's
+initializer, an assignment, an argument and a `return`:
 
 ```text
 main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
@@ -199,6 +200,18 @@ main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', wh
 main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
       |            ^~~
+```
+
+**A struct used as a trait it does not declare** (see
+[Traits as types](traits-and-extensions.md#traits-as-types)):
+
+```text
+main.pep:11:20: error: 'Circle' does not conform to trait 'Shape'
+   11 |     var s: Shape = Circle();
+      |                    ^~~~~~
+main.pep:6:8: note: declare it with 'extend Circle with Shape'
+    6 | struct Circle {
+      |        ^~~~~~
 ```
 
 **The same name declared twice in one scope:**

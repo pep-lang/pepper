@@ -307,3 +307,56 @@ fn with_no_enter() {
          note: a 'with' scope implements Scoped<T>: 'T enter()' and 'exit()'"
     );
 }
+
+#[test]
+fn struct_does_not_conform_to_trait() {
+    let source = "trait Shape {\n    int area();\n}\nstruct Circle {\n    construct() {}\n}\nmain(): int {\n    Shape s = Circle();\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("struct_does_not_conform_to_trait", source),
+        "main.pep:8:15: error: 'Circle' does not conform to trait 'Shape'\n\
+         \x20   8 |     Shape s = Circle();\n\
+         \x20     |               ^~~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Circle with Shape'\n\
+         \x20   4 | struct Circle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+#[test]
+fn static_trait_member_through_a_value() {
+    let source = "trait Shape {\n    int area();\n    static this unit();\n}\nstruct Square {\n    construct() {}\n}\nextend Square with Shape {\n    int area() { return 1; }\n    static Square unit() { return Square(); }\n}\nmain(): int {\n    Shape s = Square();\n    var u = s.unit();\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("static_trait_member_through_a_value", source),
+        "main.pep:14:15: error: 'unit' is static and cannot be called on a value of trait type 'Shape'\n\
+         \x20  14 |     var u = s.unit();\n\
+         \x20     |               ^~~~\n\
+         main.pep:3:17: note: 'unit' declared here\n\
+         \x20   3 |     static this unit();\n\
+         \x20     |                 ^~~~"
+    );
+}
+
+#[test]
+fn trait_method_signature_mismatch() {
+    let source = "trait Shape {\n    int area();\n}\nstruct Square {\n    construct() {}\n}\nextend Square with Shape {\n    long area() { return 1; }\n}\nmain(): int {\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("trait_method_signature_mismatch", source),
+        "main.pep:8:10: error: 'area' in 'Square' has type '() => long', but trait 'Shape' declares '() => int'\n\
+         \x20   8 |     long area() { return 1; }\n\
+         \x20     |          ^~~~\n\
+         main.pep:2:9: note: 'area' declared here\n\
+         \x20   2 |     int area();\n\
+         \x20     |         ^~~~"
+    );
+}
+
+#[test]
+fn weak_reference_to_trait_type() {
+    let source = "trait Shape {\n    int area();\n}\nstruct Square {\n    construct() {}\n}\nextend Square with Shape {\n    int area() { return 1; }\n}\nmain(): int {\n    var w: Weak<Shape> = __null;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("weak_reference_to_trait_type", source),
+        "main.pep:11:12: error: weak reference to trait type 'Shape' is not supported\n\
+         \x20  11 |     var w: Weak<Shape> = __null;\n\
+         \x20     |            ^~~~~~~~~~~"
+    );
+}

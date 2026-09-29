@@ -290,6 +290,19 @@ pub enum Expression {
     /// once types are known: a null test for a struct or pointer value, no
     /// branch at all otherwise. Never reaches codegen.
     WithEntered(Box<Expression>),
+    /// A struct reference converted to a trait-typed value (`Shape s =
+    /// Square(2);`): the same object, seen through the vtable of `from`'s
+    /// conformance to `to`. Inserted by `convert_to_traits` wherever a value
+    /// of struct type `from` flows into a slot of trait type `to`; a null
+    /// `value` (`__null`) makes a null trait value. Like a shared_ptr
+    /// upcast, it does no refcount work of its own: the consuming slot
+    /// acquires (or the owned rvalue moves) exactly as for `from`.
+    ToTrait {
+        value: Box<Expression>,
+        from: TypeName,
+        to: TypeName,
+        loc: Loc,
+    },
 }
 
 impl Expression {
@@ -305,7 +318,8 @@ impl Expression {
             | Expression::Index { loc, .. }
             | Expression::ArrayIndex { loc, .. }
             | Expression::FunctionCall { loc, .. }
-            | Expression::MethodCall { loc, .. } => *loc,
+            | Expression::MethodCall { loc, .. }
+            | Expression::ToTrait { loc, .. } => *loc,
             _ => Loc::NONE,
         }
     }
@@ -472,6 +486,17 @@ pub struct TraitDef {
     pub loc: Loc,
 }
 
+/// A trait used as a type, with its type arguments substituted
+/// (`Iterator<int>`): the methods a value of this type can call, in vtable
+/// order. Static members and members whose signature names `this` as a type
+/// cannot be called through a value, so they have no slot.
+#[derive(Debug, Clone)]
+pub struct TraitType {
+    pub ty: TypeName,
+    /// Dispatchable methods (signatures only), in trait declaration order.
+    pub methods: Vec<FunctionDef>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ExtensionDef {
     /// Target struct, possibly specialized.
@@ -578,6 +603,9 @@ pub struct Module {
     /// Type aliases (`type Name = Target;`), expanded away by
     /// `resolve_type_aliases` before any other pass.
     pub type_aliases: Vec<TypeAliasDef>,
+    /// Every trait type the program uses as a value type, filled by
+    /// `convert_to_traits`; codegen builds their vtables and dispatch.
+    pub trait_types: Vec<TraitType>,
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,

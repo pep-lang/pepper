@@ -21,7 +21,9 @@ pub fn release_field_refs(module: &mut Module) {
             .filter(|f| {
                 f.ty.is_struct()
                     && (struct_type_strings.contains(&f.ty.to_string())
-                        || symbols.structs.contains_key(&f.ty.to_string()))
+                        || symbols.structs.contains_key(&f.ty.to_string())
+                        // A trait value releases through its vtable.
+                        || crate::traits::is_trait_type(&module.traits, &f.ty))
             })
             .map(|f| f.name.clone())
             .collect();

@@ -48,6 +48,31 @@ impl StructTable {
                 structs.entry(st.ty.name.clone()).or_insert(info);
             }
         }
+        // Traits used as types: what a value of the type can call. The
+        // specialized instances first (`Iterator<int>`), then each base for
+        // lookups of an instance nothing declares.
+        let trait_info = |t: &crate::model::TraitType| StructInfo {
+            fields: vec![],
+            methods: t.methods.iter().map(|m| m.name.clone()).collect(),
+            returns: t
+                .methods
+                .iter()
+                .map(|m| (m.name.clone(), m.ty.clone()))
+                .collect(),
+        };
+        for ty in crate::traits::used_trait_types(module) {
+            if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
+                structs
+                    .entry(ty.to_string())
+                    .or_insert_with(|| trait_info(&crate::traits::instance(def, &ty)));
+            }
+        }
+        for def in &module.traits {
+            let ty = TypeName::new(&def.name);
+            structs
+                .entry(def.name.clone())
+                .or_insert_with(|| trait_info(&crate::traits::instance(def, &ty)));
+        }
         let mut functions = HashMap::new();
         for f in &module.functions {
             functions.insert(f.name.clone(), f.ty.clone());
@@ -213,6 +238,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         // `x as T` has the cast target's type.
         Expression::Cast { ty, .. } => Some(ty.clone()),
         Expression::FunctionRef { ty, .. } => Some(ty.clone()),
+        Expression::ToTrait { to, .. } => Some(to.clone()),
         Expression::Invoke { callee, .. } => of(callee, table, current)?.function_return().cloned(),
         _ => None,
     }

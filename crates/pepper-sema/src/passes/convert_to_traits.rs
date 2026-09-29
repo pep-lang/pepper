@@ -1,0 +1,523 @@
+//! Struct-to-trait conversions. Wherever a value of struct type `S` flows
+//! into a slot of trait type `Tr` (variable initializer, assignment,
+//! argument, return), wrap it in `ToTrait { S → Tr }`: the same object, seen
+//! through the vtable of `S`'s conformance to `Tr`. This is C++'s
+//! `shared_ptr<Derived>` → `shared_ptr<Base>`: the slot acquires (or an owned
+//! rvalue moves in) exactly as it would for an `S`, so the refcount rules
+//! need nothing new.
+//!
+//! Conformance is nominal: `S` must declare `extend S with Tr`. Calls through
+//! a trait value are checked here too: only the trait's dispatchable members
+//! (see `traits::is_dispatchable`) can be called. Finally the pass records
+//! every trait type the program uses, for codegen.
+
+use crate::model::*;
+use crate::static_type::{self, StructTable};
+use crate::traits;
+use crate::type_name::TypeName;
+use std::collections::HashMap;
+
+struct StructFacts {
+    ctor_params: Vec<TypeName>,
+    methods: HashMap<String, Vec<TypeName>>,
+    traits: Vec<TypeName>,
+    loc: Loc,
+}
+
+struct Converter {
+    table: StructTable,
+    trait_defs: Vec<TraitDef>,
+    trait_types: HashMap<String, TraitType>,
+    functions: HashMap<String, Vec<TypeName>>,
+    structs: HashMap<String, StructFacts>,
+}
+
+impl Converter {
+    fn trait_type(&mut self, ty: &TypeName) -> Option<&TraitType> {
+        let def = traits::trait_def(&self.trait_defs, ty)?;
+        let key = ty.to_string();
+        if !self.trait_types.contains_key(&key) {
+            let instance = traits::instance(def, ty);
+            self.trait_types.insert(key.clone(), instance);
+        }
+        self.trait_types.get(&key)
+    }
+
+    /// Reports a weak reference to a trait type (`Weak<Shape>`,
+    /// `__weak<Shape>`) anywhere in `ty`: a weak view needs the concrete
+    /// struct's head, which a trait value hides behind its vtable.
+    fn reject_weak_trait(&self, ty: &TypeName, loc: Loc) -> bool {
+        let parsed = crate::passes::gather_generics::parse_type_string(
+            ty.to_string().trim_end_matches('*'),
+        );
+        if (parsed.name == "Weak" || parsed.name == "__weak")
+            && let Some(target) = parsed.sub_types.first()
+            && traits::is_trait_type(&self.trait_defs, target)
+        {
+            crate::errors::report(
+                Diagnostic::error(format!(
+                    "weak reference to trait type '{}' is not supported",
+                    target.display()
+                ))
+                .at(loc),
+            );
+            return true;
+        }
+        parsed.sub_types.iter().any(|sub| self.reject_weak_trait(sub, loc))
+    }
+
+    /// `value` flows into a slot of type `expected`.
+    fn convert(
+        &mut self,
+        value: &mut Expression,
+        expected: &TypeName,
+        current: Option<&TypeName>,
+        fallback: Loc,
+    ) {
+        if !traits::is_trait_type(&self.trait_defs, expected)
+            || matches!(value, Expression::ToTrait { .. })
+        {
+            return;
+        }
+        // Each arm converts on its own: they may be different structs.
+        if let Expression::Ternary {
+            true_expr,
+            false_expr,
+            ..
+        } = value
+        {
+            self.convert(true_expr, expected, current, fallback);
+            self.convert(false_expr, expected, current, fallback);
+            return;
+        }
+        let loc = if value.loc().is_none() {
+            fallback
+        } else {
+            value.loc()
+        };
+        let from =
+            if matches!(value, Expression::PointerLiteral) {
+                TypeName::void_ptr()
+            } else {
+                let Some(actual) = static_type::of(value, &self.table, current) else {
+                    return;
+                };
+                if traits::is_trait_type(&self.trait_defs, &actual) {
+                    // A trait value of the same type needs nothing; converting
+                    // one trait to another needs supertraits, which do not exist.
+                    if crate::passes::check_function_types::canonical(&actual)
+                        != crate::passes::check_function_types::canonical(expected)
+                    {
+                        crate::errors::report(
+                            Diagnostic::error(format!(
+                                "cannot convert a value of trait type '{}' to trait type '{}'",
+                                actual.display(),
+                                expected.display()
+                            ))
+                            .at(loc),
+                        );
+                    }
+                    return;
+                }
+                let Some(facts) = self.structs.get(&actual.to_string()) else {
+                    // Not a struct: the type checks report the mismatch.
+                    return;
+                };
+                let expected_canonical = crate::passes::check_function_types::canonical(expected);
+                if !facts.traits.iter().any(|t| {
+                    crate::passes::check_function_types::canonical(t) == expected_canonical
+                }) {
+                    crate::errors::report(
+                        Diagnostic::error(format!(
+                            "'{}' does not conform to trait '{}'",
+                            actual.display(),
+                            expected.display()
+                        ))
+                        .at(loc)
+                        .with_note(
+                            format!(
+                                "declare it with 'extend {} with {}'",
+                                actual.display(),
+                                expected.display()
+                            ),
+                            Some(facts.loc),
+                        ),
+                    );
+                    return;
+                }
+                actual
+            };
+        self.trait_type(expected);
+        let inner = std::mem::replace(value, Expression::PointerLiteral);
+        *value = Expression::ToTrait {
+            value: Box::new(inner),
+            from,
+            to: expected.clone(),
+            loc,
+        };
+    }
+
+    /// A trait method implemented with a struct return type where the trait
+    /// returns a trait type (see `apply_extensions::check_signature`): that
+    /// struct must conform to the declared trait type.
+    fn check_covariant_returns(&mut self, module: &Module) {
+        let canonical = crate::passes::check_function_types::canonical;
+        for st in module
+            .structs
+            .iter()
+            .filter(|st| !(st.ty.is_generic() && st.name == st.ty.name))
+        {
+            for declared in &st.traits {
+                let Some(def) = traits::trait_def(&self.trait_defs, declared) else {
+                    continue;
+                };
+                let instance = traits::instance(def, declared);
+                for required in &instance.methods {
+                    if !traits::is_trait_type(&self.trait_defs, &required.ty) {
+                        continue;
+                    }
+                    let Some(have) = st.method_members.iter().find(|m| m.name == required.name)
+                    else {
+                        continue;
+                    };
+                    if traits::is_trait_type(&self.trait_defs, &have.ty) {
+                        continue;
+                    }
+                    let conforms = self.structs.get(&have.ty.to_string()).is_some_and(|facts| {
+                        facts
+                            .traits
+                            .iter()
+                            .any(|t| canonical(t) == canonical(&required.ty))
+                    });
+                    if !conforms {
+                        crate::errors::report(
+                            Diagnostic::error(format!(
+                                "'{}' in '{}' returns '{}', which does not conform to '{}' as trait '{}' requires",
+                                have.name,
+                                st.ty.display(),
+                                have.ty.display(),
+                                required.ty.display(),
+                                declared.display()
+                            ))
+                            .at(have.loc)
+                            .with_note(format!("'{}' declared here", required.name), Some(required.loc)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn arguments(
+        &mut self,
+        params: &[TypeName],
+        args: &mut [Expression],
+        current: Option<&TypeName>,
+        call: Loc,
+    ) {
+        for (param, arg) in params.iter().zip(args.iter_mut()) {
+            self.convert(arg, param, current, call);
+        }
+    }
+
+    /// Parameter types of a call through a trait value, reporting a member
+    /// the value cannot call.
+    fn trait_method_params(
+        &mut self,
+        receiver: &TypeName,
+        method: &str,
+        loc: Loc,
+    ) -> Option<Vec<TypeName>> {
+        // The synthesized refcount members dispatch like any other.
+        if method == "__acquire" || method == "__release" {
+            return Some(vec![]);
+        }
+        let def = traits::trait_def(&self.trait_defs, receiver)?.clone();
+        let instance = self.trait_type(receiver)?.clone();
+        if let Some(m) = instance.methods.iter().find(|m| m.name == method) {
+            return Some(m.parameters.iter().map(|p| p.ty.clone()).collect());
+        }
+        let message = match def.methods.iter().find(|m| m.name == method) {
+            Some(m) if m.is_static => format!(
+                "'{}' is static and cannot be called on a value of trait type '{}'",
+                method,
+                receiver.display()
+            ),
+            Some(_) => format!(
+                "'{}' uses 'this' as a type and cannot be called on a value of trait type '{}'",
+                method,
+                receiver.display()
+            ),
+            None => format!("no member named '{}' in '{}'", method, receiver.display()),
+        };
+        let mut diagnostic = Diagnostic::error(message).at(loc);
+        if let Some(m) = def.methods.iter().find(|m| m.name == method) {
+            diagnostic = diagnostic.with_note(format!("'{}' declared here", method), Some(m.loc));
+        }
+        crate::errors::report(diagnostic);
+        None
+    }
+
+    fn expression(&mut self, expr: &mut Expression, current: Option<&TypeName>) {
+        // Children first, so a nested call's arguments are converted before
+        // the enclosing node reads their types.
+        match expr {
+            Expression::MemberRef { lhs, .. } => self.expression(lhs, current),
+            Expression::Binary { lhs, rhs, .. } => {
+                self.expression(lhs, current);
+                self.expression(rhs, current);
+            }
+            Expression::Unary { operand, .. } => self.expression(operand, current),
+            Expression::Cast { expr, .. } => self.expression(expr, current),
+            Expression::Ternary {
+                condition,
+                true_expr,
+                false_expr,
+            } => {
+                self.expression(condition, current);
+                self.expression(true_expr, current);
+                self.expression(false_expr, current);
+            }
+            Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => {
+                self.expression(lhs, current);
+                self.expression(rhs, current);
+            }
+            Expression::RefCount(_, arg)
+            | Expression::Address(_, arg)
+            | Expression::AtomicLoad(_, arg) => self.expression(arg, current),
+            Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => {
+                self.expression(a, current);
+                self.expression(b, current);
+            }
+            Expression::AtomicCmpXchg(_, a, b, c) => {
+                self.expression(a, current);
+                self.expression(b, current);
+                self.expression(c, current);
+            }
+            Expression::FunctionCall { args, .. } => {
+                for arg in args.iter_mut() {
+                    self.expression(arg, current);
+                }
+            }
+            Expression::MethodCall { this, args, .. } => {
+                self.expression(this, current);
+                for arg in args.iter_mut() {
+                    self.expression(arg, current);
+                }
+            }
+            Expression::Invoke { callee, args } => {
+                self.expression(callee, current);
+                for arg in args.iter_mut() {
+                    self.expression(arg, current);
+                }
+            }
+            Expression::ForIterator(inner) | Expression::WithEntered(inner) => {
+                self.expression(inner, current)
+            }
+            Expression::ToTrait { value, .. } => self.expression(value, current),
+            _ => {}
+        }
+        match expr {
+            Expression::FunctionCall {
+                function,
+                args,
+                loc,
+            } => {
+                if self.reject_weak_trait(&TypeName::new(function), *loc) {
+                    return;
+                }
+                let params = self.functions.get(function.as_str()).cloned().or_else(|| {
+                    self.structs
+                        .get(function.as_str())
+                        .map(|s| s.ctor_params.clone())
+                });
+                if let Some(params) = params {
+                    let loc = *loc;
+                    self.arguments(&params, args, current, loc);
+                }
+            }
+            Expression::MethodCall {
+                this,
+                method,
+                args,
+                loc,
+            } => {
+                let Some(receiver) = static_type::of(this, &self.table, current) else {
+                    return;
+                };
+                let loc = *loc;
+                let params = if traits::is_trait_type(&self.trait_defs, &receiver) {
+                    self.trait_method_params(&receiver, method, loc)
+                } else {
+                    self.structs
+                        .get(&receiver.to_string())
+                        .and_then(|s| s.methods.get(method.as_str()).cloned())
+                };
+                if let Some(params) = params {
+                    self.arguments(&params, args, current, loc);
+                }
+            }
+            Expression::Invoke { callee, args } => {
+                if let Some(fn_ty) =
+                    static_type::of(callee, &self.table, current).filter(|t| t.is_function_type())
+                {
+                    let params = fn_ty.function_params().to_vec();
+                    let loc = callee.loc();
+                    self.arguments(&params, args, current, loc);
+                }
+            }
+            Expression::Binary {
+                op: BinaryOp::Assign,
+                lhs,
+                rhs,
+                loc,
+            } => {
+                if let Some(lhs_type) = static_type::of(lhs, &self.table, current) {
+                    let loc = *loc;
+                    self.convert(rhs, &lhs_type, current, loc);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn block(&mut self, block: &mut Block, returns: &TypeName, current: Option<&TypeName>) {
+        for stmt in &mut block.items {
+            match stmt {
+                Statement::Expression(expr) => self.expression(expr, current),
+                Statement::Block(inner) => self.block(inner, returns, current),
+                Statement::Declaration(Declaration::Variable(var)) => {
+                    let ty = var.ty.clone();
+                    let fallback = if var.type_loc.is_none() {
+                        var.loc
+                    } else {
+                        var.type_loc
+                    };
+                    // An inferred type is checked at its initializer.
+                    if !var.type_loc.is_none() && self.reject_weak_trait(&ty, var.type_loc) {
+                        continue;
+                    }
+                    if let Some(default) = &mut var.default {
+                        self.expression(default, current);
+                        self.convert(default, &ty, current, fallback);
+                    }
+                }
+                Statement::Declaration(_) => {}
+                Statement::Branch(branch) => {
+                    self.expression(&mut branch.condition, current);
+                    self.block(&mut branch.if_block, returns, current);
+                    if let Some(else_block) = &mut branch.else_block {
+                        self.block(else_block, returns, current);
+                    }
+                }
+                Statement::While(wh) => {
+                    self.expression(&mut wh.condition, current);
+                    self.block(&mut wh.block, returns, current);
+                }
+                Statement::Return(ret) => {
+                    let loc = ret.loc;
+                    if let Some(expr) = &mut ret.expr {
+                        self.expression(expr, current);
+                        self.convert(expr, returns, current, loc);
+                    }
+                }
+                Statement::LoopBreak(_) => {}
+            }
+        }
+    }
+
+    fn function(&mut self, function: &mut FunctionDef, current: Option<&TypeName>) {
+        if function.is_generic_func {
+            return;
+        }
+        let returns = function.ty.clone();
+        if let Some(body) = &mut function.body {
+            self.block(body, &returns, current);
+        }
+    }
+}
+
+pub fn convert_to_traits(module: &mut Module) {
+    if module.traits.is_empty() {
+        return;
+    }
+    let concrete = |st: &StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
+    let mut converter = Converter {
+        table: StructTable::build(module),
+        trait_defs: module.traits.clone(),
+        trait_types: HashMap::new(),
+        functions: module
+            .functions
+            .iter()
+            .filter(|f| !f.is_generic_func)
+            .map(|f| {
+                (
+                    f.name.clone(),
+                    f.parameters.iter().map(|p| p.ty.clone()).collect(),
+                )
+            })
+            .collect(),
+        structs: module
+            .structs
+            .iter()
+            .filter(|st| concrete(st))
+            .map(|st| {
+                let facts = StructFacts {
+                    ctor_params: st
+                        .constructor
+                        .parameters
+                        .iter()
+                        .map(|p| p.ty.clone())
+                        .collect(),
+                    methods: st
+                        .method_members
+                        .iter()
+                        .map(|m| {
+                            (
+                                m.name.clone(),
+                                m.parameters.iter().map(|p| p.ty.clone()).collect(),
+                            )
+                        })
+                        .collect(),
+                    traits: st.traits.clone(),
+                    loc: st.loc,
+                };
+                (st.name.clone(), facts)
+            })
+            .collect(),
+    };
+    converter.check_covariant_returns(module);
+    for function in &mut module.functions {
+        converter.function(function, None);
+    }
+    for st in &mut module.structs {
+        if !concrete(st) || st.ty.is_function_type() {
+            continue;
+        }
+        let current = st.ty.clone();
+        converter.function(&mut st.constructor, Some(&current));
+        for method in &mut st.method_members {
+            converter.function(method, Some(&current));
+        }
+    }
+    for var in &mut module.globals {
+        let ty = var.ty.clone();
+        let fallback = if var.type_loc.is_none() {
+            var.loc
+        } else {
+            var.type_loc
+        };
+        if let Some(default) = &mut var.default {
+            converter.expression(default, None);
+            converter.convert(default, &ty, None, fallback);
+        }
+    }
+    // Every trait type in use, for codegen: the declared ones and those the
+    // conversions above introduced.
+    for ty in traits::used_trait_types(module) {
+        converter.trait_type(&ty);
+    }
+    let mut trait_types: Vec<TraitType> = converter.trait_types.into_values().collect();
+    trait_types.sort_by_key(|t| t.ty.to_string());
+    module.trait_types = trait_types;
+}

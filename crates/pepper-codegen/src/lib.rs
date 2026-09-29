@@ -41,6 +41,18 @@ pub struct StructDesc<'ctx> {
     pub method_returns: HashMap<String, String>,
 }
 
+/// A trait used as a type (`Shape`, `Iterator<int>`): its dispatchable
+/// methods in vtable order, after the two refcount slots.
+pub struct TraitDesc {
+    /// `(name, parameter sema types, return sema type)`.
+    pub methods: Vec<(String, Vec<String>, String)>,
+}
+
+/// Vtable slots before the trait's own methods.
+const VTABLE_RELEASE: u64 = 0;
+const VTABLE_ACQUIRE: u64 = 1;
+const VTABLE_METHODS: u64 = 2;
+
 /// Result of generation.
 pub struct Generated {
     pub module: Module<'static>,
@@ -52,6 +64,8 @@ pub struct CodeGenerator<'ctx> {
     pub builder: inkwell::builder::Builder<'ctx>,
     pub types: types::Types<'ctx>,
     pub structs: HashMap<String, StructDesc<'ctx>>,
+    /// Traits used as types, by type name.
+    pub traits: HashMap<String, TraitDesc>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     /// free-function name → return-type sema string (for receiver typing of
@@ -103,6 +117,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             builder,
             types: types::Types::new(context),
             structs: HashMap::new(),
+            traits: HashMap::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
@@ -155,6 +170,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             self.types.ensure_opaque(&st.name);
         }
+        // Trait types are values of their own layout; a field may hold one.
+        for t in &module.trait_types {
+            self.types.register_trait(&t.ty.to_string());
+        }
         for idx in 0..module.structs.len() {
             self.instantiate_struct(&module.structs[idx])?;
         }
@@ -176,6 +195,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         for idx in 0..module.functions.len() {
             self.instantiate_function(&module.functions[idx])?;
+        }
+        for t in &module.trait_types {
+            self.instantiate_trait(t)?;
         }
 
         // File-scope globals: LLVM globals + (if any initializer needs it) a
@@ -207,10 +229,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut non_const: Vec<(String, Expression)> = vec![];
         for var in &module.globals {
             let ty_string = var.ty.to_string();
-            let is_struct_ref = self.structs.contains_key(&ty_string);
-            let llvm_ty: BasicTypeEnum<'ctx> = if is_struct_ref {
-                // Struct-typed globals hold POINTERS (C++ ref semantics).
-                self.context.ptr_type(inkwell::AddressSpace::default()).into()
+            let llvm_ty: BasicTypeEnum<'ctx> = if self.is_reference_name(&ty_string) {
+                // Struct-typed globals hold POINTERS (C++ ref semantics);
+                // trait-typed ones hold the (object, vtable) pair.
+                self.reference_value_type(&ty_string)
             } else {
                 self.types
                     .get(&ty_string)
@@ -232,6 +254,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         &self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
                     );
                 }
+                BasicTypeEnum::ArrayType(at) => global.set_initializer(&at.const_zero()),
                 _ => {}
             }
             if let Some(default) = &var.default {
@@ -303,9 +326,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // value's owner. (No process-exit release — globals live for
                 // the program's lifetime.)
                 let ty_string = self.global_addrs.get(name).unwrap().ty.to_string();
-                if self.structs.contains_key(&ty_string)
-                    && self.is_lvalue_read(expr)
-                {
+                if self.is_reference_name(&ty_string) && self.is_lvalue_read(expr) {
                     self.acquire_ref(&ty_string, value)?;
                 }
                 // Match the global's width (mirrors codegen_var_def).
@@ -703,6 +724,415 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.instantiate_function(&self.patched_ctor(st))
     }
 
+    // ── Traits used as types ────────────────────────────────────────────────
+    //
+    // A trait value is `[2 x ptr]`: the object and the vtable of its struct's
+    // conformance to the trait. The vtable holds the struct's `__release`,
+    // `__acquire`, then its implementations of the trait's methods in
+    // declaration order. Each trait gets thunks named like methods
+    // (`Shape.__release`, `Shape.area`) that take the trait value as `this`
+    // and call through the vtable, so every refcount path and method call
+    // that works by `<Type>.<member>` name works on trait values unchanged.
+    // Releasing through the vtable runs the concrete struct's destructor, as
+    // a C++ virtual destructor does.
+
+    fn instantiate_trait(&mut self, t: &sema::TraitType) -> Result<(), String> {
+        let name = t.ty.to_string();
+        let desc = TraitDesc {
+            methods: t
+                .methods
+                .iter()
+                .map(|m| {
+                    (
+                        m.name.clone(),
+                        m.parameters.iter().map(|p| p.ty.to_string()).collect(),
+                        m.ty.to_string(),
+                    )
+                })
+                .collect(),
+        };
+        self.traits.insert(name.clone(), desc);
+        self.emit_trait_refcount_thunk(&name, "__release", VTABLE_RELEASE)?;
+        self.emit_trait_refcount_thunk(&name, "__acquire", VTABLE_ACQUIRE)?;
+        for (slot, method) in t.methods.iter().enumerate() {
+            self.emit_trait_dispatch_thunk(&name, method, VTABLE_METHODS + slot as u64)?;
+        }
+        Ok(())
+    }
+
+    /// Whether a sema type name is a trait used as a type.
+    fn is_trait_name(&self, name: &str) -> bool {
+        self.traits.contains_key(name)
+    }
+
+    /// Whether a sema type name is a reference: a struct or a trait value.
+    /// References are acquired on copy and released on scope exit.
+    fn is_reference_name(&self, name: &str) -> bool {
+        self.structs.contains_key(name) || self.is_trait_name(name)
+    }
+
+    /// The LLVM type a reference of sema type `name` is stored as: a pointer
+    /// for a struct, `[2 x ptr]` for a trait value.
+    fn reference_value_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
+        match self.types.get(name) {
+            Some(ty @ BasicTypeEnum::ArrayType(_)) if self.types.is_trait(name) => ty,
+            _ => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+        }
+    }
+
+    /// The object a reference points at: the pointer itself for a struct,
+    /// the object half of a trait value.
+    fn object_pointer(
+        &mut self,
+        value: BasicValueEnum<'ctx>,
+    ) -> Result<PointerValue<'ctx>, String> {
+        match value {
+            BasicValueEnum::PointerValue(p) => Ok(p),
+            BasicValueEnum::ArrayValue(a) => Ok(self
+                .builder
+                .build_extract_value(a, 0, "object")
+                .map_err(|e| e.to_string())?
+                .into_pointer_value()),
+            other => Err(format!("expected a reference, got {:?}", other)),
+        }
+    }
+
+    /// Load vtable slot `slot` of trait value `value`.
+    fn vtable_entry(
+        &mut self,
+        value: inkwell::values::ArrayValue<'ctx>,
+        slot: u64,
+    ) -> Result<PointerValue<'ctx>, String> {
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let vtable = self
+            .builder
+            .build_extract_value(value, 1, "vtable")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value();
+        let entry = unsafe {
+            self.builder
+                .build_gep(
+                    ptr_type,
+                    vtable,
+                    &[self.context.i64_type().const_int(slot, false)],
+                    "slot",
+                )
+                .map_err(|e| e.to_string())?
+        };
+        Ok(self
+            .builder
+            .build_load(ptr_type, entry, "entry")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value())
+    }
+
+    /// `Trait.__acquire` / `Trait.__release`: nothing for a null value, else
+    /// the concrete struct's own member through the vtable.
+    fn emit_trait_refcount_thunk(
+        &mut self,
+        trait_name: &str,
+        member: &str,
+        slot: u64,
+    ) -> Result<(), String> {
+        let fat = self
+            .types
+            .get(trait_name)
+            .ok_or_else(|| format!("unknown trait type {}", trait_name))?;
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let thunk = self.module.add_function(
+            &format!("{}.{}", trait_name, member),
+            self.context.void_type().fn_type(&[fat.into()], false),
+            Some(inkwell::module::Linkage::Private),
+        );
+        self.functions
+            .insert(format!("{}.{}", trait_name, member), thunk);
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        let call_block = self.context.append_basic_block(thunk, "call");
+        let done = self.context.append_basic_block(thunk, "done");
+        self.builder.position_at_end(entry);
+        let value = thunk.get_nth_param(0).expect("this").into_array_value();
+        let object = self.object_pointer(value.into())?;
+        let is_null = self
+            .builder
+            .build_is_null(object, "is_null")
+            .map_err(|e| e.to_string())?;
+        self.builder
+            .build_conditional_branch(is_null, done, call_block)
+            .map_err(|e| e.to_string())?;
+        self.builder.position_at_end(call_block);
+        let target = self.vtable_entry(value, slot)?;
+        let target_type = self.context.void_type().fn_type(&[ptr_type.into()], false);
+        self.builder
+            .build_indirect_call(target_type, target, &[object.into()], "")
+            .map_err(|e| e.to_string())?;
+        self.builder
+            .build_unconditional_branch(done)
+            .map_err(|e| e.to_string())?;
+        self.builder.position_at_end(done);
+        self.builder.build_return(None).map_err(|e| e.to_string())?;
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    /// `Trait.method(value, args...)`: call the vtable's implementation with
+    /// the object as `this`. The arguments pass through untouched, so the
+    /// implementation's own parameter acquires and the caller's temporary
+    /// releases are exactly those of a direct call.
+    fn emit_trait_dispatch_thunk(
+        &mut self,
+        trait_name: &str,
+        method: &FunctionDef,
+        slot: u64,
+    ) -> Result<(), String> {
+        let fat = self
+            .types
+            .get(trait_name)
+            .ok_or_else(|| format!("unknown trait type {}", trait_name))?;
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let mut params: Vec<BasicTypeEnum<'ctx>> = vec![];
+        for param in &method.parameters {
+            let ty = self.abi_type(&param.ty.to_string());
+            self.locate(&ty, param.type_loc);
+            params.push(ty?);
+        }
+        let make_type =
+            |this: BasicTypeEnum<'ctx>| -> Result<inkwell::types::FunctionType<'ctx>, String> {
+                let mut all = vec![this];
+                all.extend(params.iter().copied());
+                if is_void(&method.ty) {
+                    let meta: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+                        all.iter().map(|p| (*p).into()).collect();
+                    Ok(self.context.void_type().fn_type(&meta, false))
+                } else {
+                    Ok(llvm_fn_type(
+                        self.abi_type(&method.ty.to_string())?,
+                        &all,
+                        false,
+                    ))
+                }
+            };
+        let thunk_type = make_type(fat)?;
+        let target_type = make_type(ptr_type.into())?;
+        let name = format!("{}.{}", trait_name, method.name);
+        let thunk =
+            self.module
+                .add_function(&name, thunk_type, Some(inkwell::module::Linkage::Private));
+        self.functions.insert(name, thunk);
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        self.builder.position_at_end(entry);
+        let value = thunk.get_nth_param(0).expect("this").into_array_value();
+        let object = self.object_pointer(value.into())?;
+        // Calling through a null trait value panics, never jumps through null.
+        if self.functions.contains_key("assert") {
+            let is_set = self
+                .builder
+                .build_is_not_null(object, "is_set")
+                .map_err(|e| e.to_string())?;
+            let message = format!("called '{}' on a null '{}'", method.name, trait_name);
+            let msg = self
+                .builder
+                .build_global_string_ptr(&message, "str")
+                .map_err(|e| e.to_string())?
+                .as_pointer_value();
+            self.call_function("assert", vec![is_set.into(), msg.into()])?;
+        }
+        let target = self.vtable_entry(value, slot)?;
+        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![object.into()];
+        args.extend(
+            thunk
+                .get_param_iter()
+                .skip(1)
+                .map(|p| inkwell::values::BasicMetadataValueEnum::from(p)),
+        );
+        let call = self
+            .builder
+            .build_indirect_call(target_type, target, &args, "dispatch")
+            .map_err(|e| e.to_string())?;
+        match call.try_as_basic_value().basic() {
+            Some(v) if thunk_type.get_return_type().is_some() => {
+                self.builder
+                    .build_return(Some(&v))
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => {
+                self.builder.build_return(None).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    /// The vtable of struct `from`'s conformance to trait `to`, emitted on
+    /// first use: a private constant array of the struct's members.
+    fn vtable(&mut self, from: &str, to: &str) -> Result<PointerValue<'ctx>, String> {
+        let global_name = format!("__vtable.{}.{}", from, to);
+        if let Some(global) = self.module.get_global(&global_name) {
+            return Ok(global.as_pointer_value());
+        }
+        let desc = self
+            .traits
+            .get(to)
+            .ok_or_else(|| format!("unknown trait type '{}'", to))?;
+        let mut members: Vec<(String, Option<String>)> = vec![
+            ("__release".to_string(), None),
+            ("__acquire".to_string(), None),
+        ];
+        members.extend(
+            desc.methods
+                .iter()
+                .map(|(name, _, ret)| (name.clone(), Some(ret.clone()))),
+        );
+        let mut entries: Vec<PointerValue<'ctx>> = vec![];
+        for (member, declared) in &members {
+            let function = *self
+                .functions
+                .get(&format!("{}.{}", from, member))
+                .ok_or_else(|| {
+                    format!(
+                        "'{}' does not implement '{}', required by trait '{}'",
+                        from, member, to
+                    )
+                })?;
+            // A struct result where the trait returns a trait value converts
+            // on the way out.
+            let returns = self
+                .structs
+                .get(from)
+                .and_then(|d| d.method_returns.get(member))
+                .cloned();
+            let function = match (declared, returns) {
+                (Some(declared), Some(returns))
+                    if self.is_trait_name(declared) && self.structs.contains_key(&returns) =>
+                {
+                    self.covariant_adapter(function, &returns, declared)?
+                }
+                _ => function,
+            };
+            entries.push(function.as_global_value().as_pointer_value());
+        }
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let init = ptr_type.const_array(&entries);
+        let global = self.module.add_global(init.get_type(), None, &global_name);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_constant(true);
+        global.set_initializer(&init);
+        Ok(global.as_pointer_value())
+    }
+
+    /// `function` with its struct result (of type `returns`) converted to
+    /// trait value `declared`, for a vtable slot whose trait declares the
+    /// trait type. The result's one reference moves into the trait value.
+    fn covariant_adapter(
+        &mut self,
+        function: FunctionValue<'ctx>,
+        returns: &str,
+        declared: &str,
+    ) -> Result<FunctionValue<'ctx>, String> {
+        let name = format!(
+            "__trait_adapter.{}.{}",
+            function.get_name().to_string_lossy(),
+            declared
+        );
+        if let Some(existing) = self.module.get_function(&name) {
+            return Ok(existing);
+        }
+        let fat = match self.types.get(declared) {
+            Some(BasicTypeEnum::ArrayType(at)) => at,
+            _ => return Err(format!("unknown trait type '{}'", declared)),
+        };
+        let params: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
+            function.get_type().get_param_types();
+        let adapter = self.module.add_function(
+            &name,
+            fat.fn_type(&params, false),
+            Some(inkwell::module::Linkage::Private),
+        );
+        let vtable = self.vtable(returns, declared)?;
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(adapter, "entry");
+        self.builder.position_at_end(entry);
+        let args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+            adapter.get_param_iter().map(|p| p.into()).collect();
+        let object = self
+            .builder
+            .build_call(function, &args, "result")
+            .map_err(|e| e.to_string())?
+            .try_as_basic_value()
+            .basic()
+            .ok_or_else(|| {
+                format!(
+                    "'{}' returns nothing",
+                    function.get_name().to_string_lossy()
+                )
+            })?;
+        let pair = self
+            .builder
+            .build_insert_value(fat.get_undef(), object, 0, "trait_object")
+            .map_err(|e| e.to_string())?;
+        let pair = self
+            .builder
+            .build_insert_value(pair, vtable, 1, "trait_value")
+            .map_err(|e| e.to_string())?;
+        self.builder
+            .build_return(Some(&pair.into_array_value()))
+            .map_err(|e| e.to_string())?;
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(adapter)
+    }
+
+    /// A trait value is two pointers, which no single atomic instruction
+    /// swaps: `Atomic<T>` holds struct references and numbers only.
+    fn reject_atomic_trait(&self, ty_name: &str) -> Result<(), String> {
+        if self.is_trait_name(ty_name) {
+            return Err(format!(
+                "atomic operations on trait type '{}' are not supported",
+                ty_name
+            ));
+        }
+        Ok(())
+    }
+
+    /// `ToTrait`: pair the object with its vtable. A null object (`__null`)
+    /// makes a null trait value.
+    fn codegen_to_trait(
+        &mut self,
+        value: &Expression,
+        from: &TypeName,
+        to: &TypeName,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let to_name = to.to_string();
+        let fat = match self.types.get(&to_name) {
+            Some(BasicTypeEnum::ArrayType(at)) => at,
+            _ => return Err(format!("unknown trait type '{}'", to_name)),
+        };
+        if from.is_pointer() || matches!(value, Expression::PointerLiteral) {
+            return Ok(fat.const_zero().into());
+        }
+        let object = self.codegen_expr(value)?;
+        let object = self.object_pointer(object)?;
+        let vtable = self.vtable(&from.to_string(), &to_name)?;
+        let pair = self
+            .builder
+            .build_insert_value(fat.get_undef(), object, 0, "trait_object")
+            .map_err(|e| e.to_string())?;
+        let pair = self
+            .builder
+            .build_insert_value(pair, vtable, 1, "trait_value")
+            .map_err(|e| e.to_string())?;
+        Ok(pair.into_array_value().into())
+    }
+
     // ── Struct codegen (ctor + methods) ─────────────────────────────────────
     fn codegen_struct(&mut self, st: &StructDef) -> Result<(), String> {
         let result = self.codegen_struct_unlocated(st);
@@ -768,6 +1198,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicTypeEnum::IntType(it) => BasicValueEnum::IntValue(it.const_zero()),
                 BasicTypeEnum::FloatType(ft) => BasicValueEnum::FloatValue(ft.const_zero()),
                 BasicTypeEnum::PointerType(pt) => BasicValueEnum::PointerValue(pt.const_null()),
+                BasicTypeEnum::ArrayType(at) => BasicValueEnum::ArrayValue(at.const_zero()),
                 other => return Err(format!("unsupported retval type {:?}", other)),
             };
             self.builder
@@ -859,7 +1290,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .push_local(name, Address::with_llvm_ty(name, ty_name, *ty, *alloca));
             // Pass-by-value struct parameter: a copy arrives (acquire), and
             // the function's scope owns it until exit. `this` is never copied.
-            if name != "this" && self.structs.contains_key(ty_name) {
+            if name != "this" && self.is_reference_name(ty_name) {
                 self.acquire_ref(ty_name, *arg)?;
                 self.track_scope_local(name, ty_name, *alloca);
             }
@@ -1091,18 +1522,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         // Struct-typed vars hold POINTERS (C++ ref semantics): `this`
         // (malloc'd) and locals initialized from a ctor call.
-        let is_struct_ref = self.structs.contains_key(&var.ty.to_string());
+        let is_struct_ref = self.is_reference_name(&var.ty.to_string());
         let ty = if is_struct_ref {
-            self.context.ptr_type(inkwell::AddressSpace::default()).into()
+            self.reference_value_type(&var.ty.to_string())
         } else {
-            self.types
-                .get(&var.ty.to_string())
-                .ok_or_else(|| {
-                    let error = format!("unknown type name '{}'", var.ty);
-                    // Point at the written type rather than the name.
-                    self.error_loc = var.type_loc.known().map(|loc| (error.clone(), loc));
-                    error
-                })?
+            self.types.get(&var.ty.to_string()).ok_or_else(|| {
+                let error = format!("unknown type name '{}'", var.ty);
+                // Point at the written type rather than the name.
+                self.error_loc = var.type_loc.known().map(|loc| (error.clone(), loc));
+                error
+            })?
         };
         let alloca = self
             .builder
@@ -1236,11 +1665,23 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// its type declares `iterate()` (Iterable<T>), else `source` itself when
     /// it declares `next()` and `current()` (Iterator<T>).
     fn for_loop_iterator(&self, source: &Expression) -> Result<Expression, String> {
-        let ty = self.struct_name_of(source).unwrap_or_else(|| "<unknown>".to_string());
+        let ty = self
+            .struct_name_of(source)
+            .unwrap_or_else(|| "<unknown>".to_string());
         let methods = self.structs.get(&ty).map(|d| &d.methods);
-        let declares = |m: &str| methods.is_some_and(|ms| ms.contains_key(m));
+        // A trait value (`Iterator<int>`) iterates through its vtable.
+        let trait_methods = self.traits.get(&ty).map(|d| &d.methods);
+        let declares = |m: &str| {
+            methods.is_some_and(|ms| ms.contains_key(m))
+                || trait_methods.is_some_and(|ms| ms.iter().any(|(name, _, _)| name == m))
+        };
         if declares("iterate") {
-            Ok(Expression::MethodCall { this: Box::new(source.clone()), method: "iterate".to_string(), args: vec![], loc: source.loc() })
+            Ok(Expression::MethodCall {
+                this: Box::new(source.clone()),
+                method: "iterate".to_string(),
+                args: vec![],
+                loc: source.loc(),
+            })
         } else if declares("next") && declares("current") {
             Ok(source.clone())
         } else {
@@ -1520,12 +1961,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::MethodCall { this, method, .. } => {
                 let struct_name = self.struct_name_of(this)?;
+                if let Some(desc) = self.traits.get(&struct_name) {
+                    return desc
+                        .methods
+                        .iter()
+                        .find(|(name, _, _)| name == method)
+                        .map(|(_, _, ret)| ret.clone());
+                }
                 self.structs
                     .get(&struct_name)?
                     .method_returns
                     .get(method)
                     .cloned()
             }
+            Expression::ToTrait { to, .. } => Some(to.to_string()),
             Expression::Unary { op, operand, .. } => match *op {
                 // `!x` produces an i1; the arithmetic unaries keep the
                 // operand's type (codegen_unary).
@@ -1601,11 +2050,17 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// specializations are registered (`Array<Array<int>>`), never the base;
     /// unregistered names fall back to their base for abstract receivers.
     fn struct_name_of(&self, expr: &Expression) -> Option<String> {
-        let ty = self.value_sema_type(expr)?.trim_end_matches('*').to_string();
-        if self.structs.contains_key(&ty) {
+        let ty = self
+            .value_sema_type(expr)?
+            .trim_end_matches('*')
+            .to_string();
+        if self.structs.contains_key(&ty) || self.is_trait_name(&ty) {
             return Some(ty);
         }
-        ty.split('<').next().filter(|n| !n.is_empty()).map(|s| s.to_string())
+        ty.split('<')
+            .next()
+            .filter(|n| !n.is_empty())
+            .map(|s| s.to_string())
     }
 
     /// True when an expression reads an existing struct reference (an lvalue
@@ -1628,7 +2083,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             | Expression::MemberRef { .. }
             | Expression::Index { .. }
             | Expression::ArrayIndex { .. }
-            | Expression::FunctionRef { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
+            | Expression::FunctionRef { .. } => {
+                self.is_struct_ref_name(&self.value_sema_type(expr))
+            }
+            // Converting keeps the reference it converts: a read stays a read.
+            Expression::ToTrait { value, .. } => self.is_lvalue_read(value),
             Expression::MethodCall { this, method, .. } if method == "__index_get" => {
                 let receiver_is_ptr = self
                     .value_sema_type(this)
@@ -1657,16 +2116,20 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// destroys a temporary shared_ptr.
     fn is_owned_rvalue(&self, expr: &Expression) -> bool {
         match expr {
-            Expression::MethodCall { .. } | Expression::FunctionCall { .. } | Expression::Invoke { .. } => {
-                self.is_struct_ref_name(&self.value_sema_type(expr))
-            }
+            Expression::MethodCall { .. }
+            | Expression::FunctionCall { .. }
+            | Expression::Invoke { .. } => self.is_struct_ref_name(&self.value_sema_type(expr)),
             // A ternary of two owned rvalues is one owned rvalue: the arm's
             // creation ref flows into the phi, so the consumer releases it
             // once. Mixed lvalue/rvalue arms are not (C++ yields a copy of
             // the lvalue there — no single temporary to destroy).
-            Expression::Ternary { true_expr, false_expr, .. } => {
-                self.is_owned_rvalue(true_expr) && self.is_owned_rvalue(false_expr)
-            }
+            Expression::Ternary {
+                true_expr,
+                false_expr,
+                ..
+            } => self.is_owned_rvalue(true_expr) && self.is_owned_rvalue(false_expr),
+            // A converted call result is still that call's one reference.
+            Expression::ToTrait { value, .. } => self.is_owned_rvalue(value),
             // An atomic load yields a freshly acquired reference (struct T):
             // an owned rvalue, released by the consuming context.
             // `__weak_from` and `__weak_upgrade` hand out a new reference
@@ -1685,7 +2148,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// True when a sema type name names a registered struct.
     fn is_struct_ref_name(&self, ty: &Option<String>) -> bool {
         match ty {
-            Some(t) => self.structs.contains_key(t),
+            Some(t) => self.is_reference_name(t),
             None => false,
         }
     }
@@ -1734,12 +2197,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         scope: &[(String, String, PointerValue<'ctx>)],
     ) -> Result<(), String> {
         for (_name, ty_name, addr) in scope.iter().rev() {
-            let val = self.builder.build_load(
-                self.context.ptr_type(inkwell::AddressSpace::default()),
-                *addr,
-                "scope_release",
-            )
-            .map_err(|e| e.to_string())?;
+            let val = self
+                .builder
+                .build_load(self.reference_value_type(ty_name), *addr, "scope_release")
+                .map_err(|e| e.to_string())?;
             self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val])?;
         }
         Ok(())
@@ -1960,7 +2421,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // `value_ty` are the same values the caller used for the GEP, so this
         // stays in lockstep with it for nested stores (`outer.Data[0][i]`).
         let elem = self.buffer_element_type(elem_name);
-        if !matches!(elem, BasicTypeEnum::StructType(_)) {
+        if !matches!(elem, BasicTypeEnum::StructType(_)) && !self.is_trait_name(elem_name) {
             return Ok(());
         }
         self.store_refcount_ops(elem_name, gep, value_ty, new_val, source)
@@ -1998,6 +2459,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Some(BasicTypeEnum::StructType(_)) => {
                 BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
             }
+            Some(ty @ BasicTypeEnum::ArrayType(_)) if self.is_trait_name(&field_ty_name) => ty,
             _ => return Ok(()),
         };
         self.store_refcount_ops(&field_ty_name, gep, value_ty, new_val, source)
@@ -2022,13 +2484,16 @@ impl<'ctx> CodeGenerator<'ctx> {
     ) -> Result<(), String> {
         let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
         let i64 = self.context.i64_type();
+        // A trait value is the same reference when it is the same object.
+        let old_object = self.object_pointer(old)?;
+        let new_object = self.object_pointer(new_val)?;
         let old_i = self
             .builder
-            .build_ptr_to_int(old.into_pointer_value(), i64, "oldi")
+            .build_ptr_to_int(old_object, i64, "oldi")
             .map_err(|e| e.to_string())?;
         let new_i = self
             .builder
-            .build_ptr_to_int(new_val.into_pointer_value(), i64, "newi")
+            .build_ptr_to_int(new_object, i64, "newi")
             .map_err(|e| e.to_string())?;
         let same = self
             .builder
@@ -2242,9 +2707,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                         BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                        BasicTypeEnum::StructType(_) => {
-                            self.context.ptr_type(inkwell::AddressSpace::default()).const_null().into()
-                        }
+                        BasicTypeEnum::StructType(_) => self
+                            .context
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .const_null()
+                            .into(),
+                        BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
                         _ => self.context.i32_type().const_zero().into(),
                     };
                     Ok(any)
@@ -2256,18 +2724,22 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::RefCount(ty, arg) => {
                 // __refcount<T>(t): 0 for POD T; the u32 head field of a
                 // struct object (index 0, inserted by sema's apply_synthesized).
-                let struct_ty = match self.types.get(&ty.to_string()) {
-                    Some(BasicTypeEnum::StructType(sct)) => sct,
+                // A trait value reads its object's head, which every struct
+                // lays out first: index it as a bare u32.
+                let struct_ty: BasicTypeEnum<'ctx> = match self.types.get(&ty.to_string()) {
+                    Some(BasicTypeEnum::StructType(sct)) => sct.into(),
+                    Some(BasicTypeEnum::ArrayType(_)) if self.is_trait_name(&ty.to_string()) => {
+                        self.context.i32_type().into()
+                    }
                     _ => return Ok(self.context.i32_type().const_int(0, false).into()),
                 };
                 // An owned-rvalue argument is a temporary: its creation ref
                 // is released once the head field is read.
                 let arg_temp = self.owned_temp_type(arg);
                 let val = self.codegen_expr(arg)?;
-                let ptr = match val {
-                    BasicValueEnum::PointerValue(p) => p,
-                    other => return Err(format!("__refcount expects a pointer, got {:?}", other)),
-                };
+                let ptr = self
+                    .object_pointer(val)
+                    .map_err(|_| "__refcount expects a pointer".to_string())?;
                 let zero = self.context.i32_type().const_int(0, false);
                 let ptr_int = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "rcptr").map_err(|e| e.to_string())?;
                 let is_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, ptr_int, self.context.i64_type().const_int(0, false), "refcount_null").map_err(|e| e.to_string())?;
@@ -2302,24 +2774,43 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // folded FNV-1a for POD T.
                 let i64 = self.context.i64_type();
                 let seed = i64.const_int(0xcbf29ce484222325, false);
-                match self.types.get(&ty.to_string()) {
-                    Some(BasicTypeEnum::StructType(_)) => {
+                let lowered = self.types.get(&ty.to_string());
+                let is_reference = matches!(lowered, Some(BasicTypeEnum::StructType(_)))
+                    || self.is_trait_name(&ty.to_string());
+                match lowered {
+                    Some(_) if is_reference => {
                         // An owned-rvalue argument is a temporary: its
                         // creation ref is released once the address is read.
                         let arg_temp = self.owned_temp_type(arg);
                         let val = self.codegen_expr(arg)?;
-                        let ptr = match val {
-                            BasicValueEnum::PointerValue(p) => p,
-                            other => return Err(format!("__address expects a pointer, got {:?}", other)),
-                        };
-                        let ptr_int = self.builder.build_ptr_to_int(ptr, i64, "addrptr").map_err(|e| e.to_string())?;
-                        let is_null = self.builder.build_int_compare(inkwell::IntPredicate::EQ, ptr_int, i64.const_zero(), "addrnul").map_err(|e| e.to_string())?;
+                        // A trait value hashes by its object, like the struct.
+                        let ptr = self
+                            .object_pointer(val)
+                            .map_err(|_| "__address expects a pointer".to_string())?;
+                        let ptr_int = self
+                            .builder
+                            .build_ptr_to_int(ptr, i64, "addrptr")
+                            .map_err(|e| e.to_string())?;
+                        let is_null = self
+                            .builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::EQ,
+                                ptr_int,
+                                i64.const_zero(),
+                                "addrnul",
+                            )
+                            .map_err(|e| e.to_string())?;
                         // Null-guard: branch and phi the result (mirrors `__refcount`).
-                        let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+                        let fn_value = self
+                            .frame
+                            .function
+                            .ok_or_else(|| "no function".to_string())?;
                         let entry = self.builder.get_insert_block().expect("no insert block");
                         let then_block = self.context.append_basic_block(fn_value, "addr_nonnull");
                         let merge_block = self.context.append_basic_block(fn_value, "addr_merge");
-                        self.builder.build_conditional_branch(is_null, merge_block, then_block).map_err(|e| e.to_string())?;
+                        self.builder
+                            .build_conditional_branch(is_null, merge_block, then_block)
+                            .map_err(|e| e.to_string())?;
                         self.builder.position_at_end(then_block);
                         // Fold the address bits through FNV-1a: every
                         // `_pep_malloc` result is pointer-aligned, so a raw
@@ -2349,6 +2840,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // loaded pointer is an owned ref (shared_ptr copy), so
                 // acquire it once. POD/float/pointer T: no ref work.
                 let ty_name = ty.to_string();
+                self.reject_atomic_trait(&ty_name)?;
                 // Struct T occupies the slot as a reference pointer; track
                 // that before remapping `stored` to the pointer type.
                 let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
@@ -2382,6 +2874,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // atomic xchg on the pointer's i64 bits; POD/float/pointer T
                 // has no ref work, so a plain release store suffices.
                 let ty_name = ty.to_string();
+                self.reject_atomic_trait(&ty_name)?;
                 // Struct T swaps the slot's reference pointer atomically;
                 // track that before remapping `stored` to the pointer type.
                 let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
@@ -2425,6 +2918,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // (release it); on failure nothing is released — both args
                 // remain owned by their callers.
                 let ty_name = ty.to_string();
+                self.reject_atomic_trait(&ty_name)?;
                 // Struct T compares the slot's reference pointer; track that
                 // before remapping `stored` to the pointer type.
                 let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
@@ -2542,25 +3036,36 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::FunctionCall {
                 function: name,
-                args, ..
+                args,
+                ..
             } => self.codegen_call(name, args),
-            Expression::FunctionRef { function, ty } => {
-                Ok(BasicValueEnum::PointerValue(self.function_object(function, &ty.to_string())?))
-            }
+            Expression::FunctionRef { function, ty } => Ok(BasicValueEnum::PointerValue(
+                self.function_object(function, &ty.to_string())?,
+            )),
             Expression::Invoke { callee, args } => self.codegen_invoke(callee, args),
+            Expression::ToTrait {
+                value, from, to, ..
+            } => self.codegen_to_trait(value, from, to),
             // lower_with_blocks replaces every one before codegen.
-            Expression::WithEntered(_) => Err("internal error: unlowered 'with' condition".to_string()),
+            Expression::WithEntered(_) => {
+                Err("internal error: unlowered 'with' condition".to_string())
+            }
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
                 self.codegen_expr(&iterator)
             }
-            Expression::MethodCall { this, method, args, .. } => {
+            Expression::MethodCall {
+                this, method, args, ..
+            } => {
                 // Receiver is a buffer slot (`Data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they
                 // address the pointee's own data (`s[0]` on `String s`), so
                 // they dispatch to the pointee when it declares them.
-                if matches!(this.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                if matches!(
+                    this.as_ref(),
+                    Expression::Index { .. } | Expression::ArrayIndex { .. }
+                ) {
                     let lhs = match this.as_ref() {
                         Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
                             lhs.as_ref()
@@ -2568,8 +3073,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         _ => unreachable!(),
                     };
                     let pointee = self.index_element_type(lhs);
-                    let pointee_struct = match pointee {
-                        BasicTypeEnum::StructType(st) => st
+                    let pointee_trait = self
+                        .index_receiver_pointee(lhs)
+                        .filter(|name| self.is_trait_name(name));
+                    let pointee_struct = match (pointee, &pointee_trait) {
+                        (_, Some(name)) => name.clone(),
+                        (BasicTypeEnum::StructType(st), None) => st
                             .get_name()
                             .map(|s| s.to_string_lossy().into_owned())
                             .unwrap_or_default(),
@@ -2579,7 +3088,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .structs
                         .get(&pointee_struct)
                         .map(|d| d.methods.contains_key(method))
-                        .unwrap_or(false);
+                        .unwrap_or(false)
+                        || (pointee_trait.is_some()
+                            && self
+                                .functions
+                                .contains_key(&format!("{}.{}", pointee_struct, method)));
                     if method.starts_with("__index_") || !pointee_declares {
                         return self.codegen_index_method(this, method, args);
                     }
@@ -2847,11 +3360,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         // to T.__release for struct references.
         if name == "release" || name.starts_with("release<") {
             let value = args.first().map(|a| self.codegen_expr(a)).transpose()?;
-            if let (Some(v), Some(parsed)) =
-                (value, name.strip_prefix("release<").and_then(|s| s.strip_suffix('>')))
-            {
+            if let (Some(v), Some(parsed)) = (
+                value,
+                name.strip_prefix("release<")
+                    .and_then(|s| s.strip_suffix('>')),
+            ) {
                 let parsed = pepper_sema::passes::gather_generics::parse_type_string(parsed);
-                let is_struct = matches!(self.types.get(&parsed.to_string()), Some(BasicTypeEnum::StructType(_)));
+                let is_struct = matches!(
+                    self.types.get(&parsed.to_string()),
+                    Some(BasicTypeEnum::StructType(_))
+                ) || self.is_trait_name(&parsed.to_string());
                 if is_struct {
                     return self.call_function(&format!("{}.__release", parsed), vec![v]);
                 }
@@ -2874,9 +3392,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicTypeEnum::IntType(it) => it.const_zero().into(),
                     BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                     BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
-                    BasicTypeEnum::StructType(_) => {
-                        self.context.ptr_type(inkwell::AddressSpace::default()).const_null().into()
-                    }
+                    BasicTypeEnum::StructType(_) => self
+                        .context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null()
+                        .into(),
+                    BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
                     _ => self.context.i32_type().const_zero().into(),
                 };
                 return Ok(any);
@@ -3517,8 +4038,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // stores — same pointer (self-assignment in any form) is a
                 // no-op, otherwise acquire new then release old.
                 let ty_name = lhs_addr.ty.to_string();
-                if self.structs.contains_key(&ty_name) {
-                    self.store_refcount_ops(&ty_name, lhs_addr.ptr, lhs_addr.llvm_ty.unwrap(), coerced, rhs)?;
+                if self.is_reference_name(&ty_name) {
+                    self.store_refcount_ops(
+                        &ty_name,
+                        lhs_addr.ptr,
+                        lhs_addr.llvm_ty.unwrap(),
+                        coerced,
+                        rhs,
+                    )?;
                 }
             }
             if let Some(ty) = rhs_temp {
@@ -3536,8 +4063,51 @@ impl<'ctx> CodeGenerator<'ctx> {
         let rhs_temp = self.owned_temp_type(rhs);
         let lhs_val = self.codegen_expr(lhs)?;
         let rhs_val = self.codegen_expr(rhs)?;
-        let lhs_name = self.value_sema_type(lhs).unwrap_or_else(|| value_type_name(&lhs_val));
-        let rhs_name = self.value_sema_type(rhs).unwrap_or_else(|| value_type_name(&rhs_val));
+        // Trait values compare by identity, like the struct references they
+        // hold: the same object is the same value, whatever the vtable.
+        if matches!(lhs_val, BasicValueEnum::ArrayValue(_))
+            || matches!(rhs_val, BasicValueEnum::ArrayValue(_))
+        {
+            let predicate = match op {
+                BinaryOp::Equal | BinaryOp::Identical => inkwell::IntPredicate::EQ,
+                BinaryOp::NotEqual => inkwell::IntPredicate::NE,
+                _ => {
+                    return Err(format!(
+                        "invalid operands to binary expression ('{}' and '{}')",
+                        self.value_sema_type(lhs).unwrap_or_default(),
+                        self.value_sema_type(rhs).unwrap_or_default()
+                    ));
+                }
+            };
+            let i64 = self.context.i64_type();
+            let l = self.object_pointer(lhs_val)?;
+            let r = self.object_pointer(rhs_val)?;
+            let l = self
+                .builder
+                .build_ptr_to_int(l, i64, "lhs_object")
+                .map_err(|e| e.to_string())?;
+            let r = self
+                .builder
+                .build_ptr_to_int(r, i64, "rhs_object")
+                .map_err(|e| e.to_string())?;
+            let result = self
+                .builder
+                .build_int_compare(predicate, l, r, "same_object")
+                .map_err(|e| e.to_string())?;
+            if let Some(ty) = lhs_temp {
+                self.release_temp(&ty, lhs_val)?;
+            }
+            if let Some(ty) = rhs_temp {
+                self.release_temp(&ty, rhs_val)?;
+            }
+            return Ok(result.into());
+        }
+        let lhs_name = self
+            .value_sema_type(lhs)
+            .unwrap_or_else(|| value_type_name(&lhs_val));
+        let rhs_name = self
+            .value_sema_type(rhs)
+            .unwrap_or_else(|| value_type_name(&rhs_val));
         let result_ty = binary_result_type(op, &lhs_name, &rhs_name);
         let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
         let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);

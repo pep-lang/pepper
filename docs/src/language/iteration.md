@@ -107,6 +107,8 @@ Some things to keep in mind:
   type has. Writing `extend Countdown with Iterator<int> {}` documents your
   intent, and the compiler then checks that `Countdown` has both `next()` and
   `current()` (see [Traits and extensions](traits-and-extensions.md)).
+  Declaring it also lets the type be used as an `Iterator<int>` value, and a
+  `for` loop over such a value calls the methods through the trait.
 - **Looping over an iterator uses it up.** When the source is itself an
   iterator stored in a variable, the loop drives that same object, so it is
   exhausted afterwards. An iterable starts a new, independent pass every time

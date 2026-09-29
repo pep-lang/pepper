@@ -13,7 +13,7 @@ use crate::type_name::TypeName;
 /// (`int` and `i32` are one type), recursively through generic arguments.
 /// Types some passes carry as a flat string (`__function<int, int>` as a
 /// bare name) are re-parsed first.
-fn canonical(ty: &TypeName) -> TypeName {
+pub(crate) fn canonical(ty: &TypeName) -> TypeName {
     let ty = &crate::passes::gather_generics::parse_type_string(&ty.to_string());
     // `__ptr<T>` and `T*` are one type.
     if ty.name == "__ptr" && ty.sub_types.len() == 1 {
@@ -92,20 +92,42 @@ impl<'a> Checker<'a> {
         if crate::arithmetic::is_numeric_type(&canonical(ty).to_string()) {
             return Some(Kind::Numeric);
         }
-        self.module.structs.iter().any(|s| s.name == name).then_some(Kind::Struct)
+        // A trait used as a type is a reference too: struct values reach it
+        // only through `convert_to_traits`, which checked conformance.
+        let reference = self.module.structs.iter().any(|s| s.name == name)
+            || crate::traits::is_trait_type(&self.module.traits, ty);
+        reference.then_some(Kind::Struct)
     }
 
     /// A non-function `value` flowing into a non-function slot: numbers
     /// convert among themselves, but a number is never a struct, and one
     /// struct is never another.
-    fn value_flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
+    fn value_flows_into(
+        &mut self,
+        value: &Expression,
+        expected: &TypeName,
+        current: Option<&TypeName>,
+        slot: &Slot,
+    ) {
         // Raw buffer reads (`Data[i]`) carry no reliable static type.
-        if matches!(value, Expression::PointerLiteral | Expression::Default(_) | Expression::ArrayIndex { .. } | Expression::Index { .. }) {
+        if matches!(
+            value,
+            Expression::PointerLiteral
+                | Expression::Default(_)
+                | Expression::ArrayIndex { .. }
+                | Expression::Index { .. }
+        ) {
             return;
         }
-        let Some(expected_kind) = self.kind_of(expected) else { return };
-        let Some(actual) = static_type::of(value, &self.table, current) else { return };
-        let Some(actual_kind) = self.kind_of(&actual) else { return };
+        let Some(expected_kind) = self.kind_of(expected) else {
+            return;
+        };
+        let Some(actual) = static_type::of(value, &self.table, current) else {
+            return;
+        };
+        let Some(actual_kind) = self.kind_of(&actual) else {
+            return;
+        };
         let mismatch = match (expected_kind, actual_kind) {
             (Kind::Numeric, Kind::Numeric) => false,
             // Different structs; type arguments are not compared, since

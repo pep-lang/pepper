@@ -300,13 +300,13 @@ export trace_int(value: long, name: __ptr<char>) {
     }
 }
 
-# ── Swap the first pointer-sized bytes of two slots in a struct buffer ──────
+# ── Swap two `stride`-byte slots of a buffer (a struct reference is one
+# pointer, a trait value an object and a vtable pointer) ─────────────────────
 export _pep_swap_refs(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
     if (i != j) {
         var a: __ptr<void> = p + (i * stride);
         var b: __ptr<void> = p + (j * stride);
         var len = stride;
-        if (len > 8) { len = 8; }
         var tmp = _pep_malloc(len);
         memcpy(tmp, a, len);
         memcpy(a, b, len);
@@ -314,15 +314,14 @@ export _pep_swap_refs(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
         _pep_free(tmp);
     }
 }
-# ── Move the first pointer-sized bytes of one slot into another (raw
-# reference transfer, no refcount change) and null the source so it releases
-# nothing later: a shifted slot must not keep a stale copy of the reference.
+# ── Move one `stride`-byte slot into another (raw reference transfer, no
+# refcount change) and zero the source so it releases nothing later: a
+# shifted slot must not keep a stale copy of the reference. ───────────────────
 export _pep_move_ref(p: __ptr<void>, stride: ulong, i: ulong, j: ulong) {
     if (i != j) {
         var a: __ptr<void> = p + (i * stride);
         var b: __ptr<void> = p + (j * stride);
         var len = stride;
-        if (len > 8) { len = 8; }
         memcpy(b, a, len);
         memset(a, 0, len);
     }

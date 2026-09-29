@@ -11,6 +11,10 @@ use std::collections::HashMap;
 pub struct Types<'ctx> {
     pub context: &'ctx Context,
     struct_types: HashMap<String, StructType<'ctx>>,
+    /// Traits used as types: a value is `[2 x ptr]` (object, vtable),
+    /// passed and stored by value. An array rather than a struct type keeps
+    /// it apart from struct references, which lower to pointers.
+    trait_types: HashMap<String, BasicTypeEnum<'ctx>>,
 }
 
 /// Integral-type aliases (same set as sema `TypeName::IntegralTypes`).
@@ -44,12 +48,16 @@ impl<'ctx> Types<'ctx> {
         Types {
             context,
             struct_types: HashMap::new(),
+            trait_types: HashMap::new(),
         }
     }
 
     /// Resolve a Pepper type name to an LLVM type; structs must have been
     /// registered first.
     pub fn get(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
+        if let Some(ty) = self.trait_types.get(name) {
+            return Some(*ty);
+        }
         if let Some(st) = self.struct_types.get(name) {
             return Some(BasicTypeEnum::StructType(*st));
         }
@@ -59,6 +67,18 @@ impl<'ctx> Types<'ctx> {
             return Some(BasicTypeEnum::StructType(*st));
         }
         scalar_type(self.context, name)
+    }
+
+    /// Register a trait used as a type: `[2 x ptr]` (object, vtable).
+    pub fn register_trait(&mut self, name: &str) {
+        let ptr = self.context.ptr_type(inkwell::AddressSpace::default());
+        self.trait_types
+            .insert(name.to_string(), ptr.array_type(2).into());
+    }
+
+    /// Whether `name` is a registered trait type.
+    pub fn is_trait(&self, name: &str) -> bool {
+        self.trait_types.contains_key(name)
     }
 
     /// Metadata variant of [`Types::get`].

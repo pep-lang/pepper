@@ -9,6 +9,7 @@ pub(crate) mod scope_walk;
 pub(crate) mod static_type;
 pub mod struct_body;
 pub mod symbols;
+pub mod traits;
 pub mod type_name;
 pub mod visibility;
 pub mod model_tests;

@@ -10,8 +10,9 @@
 #         ...
 #     }
 #
-# Traits are not checked yet, so the loop goes by the methods a type has;
-# declaring the trait (`extend Foo with Iterator<int>`) documents the intent.
+# The loop goes by the methods a type has, so declaring the trait is
+# optional; declaring it (`extend Foo with Iterator<int>`) checks the methods
+# and lets the type be used as an `Iterator<int>` value.
 
 ## Something a `for` loop can step through, one element at a time.
 ##
@@ -21,9 +22,10 @@
 ## `for` loop should go through a separate iterator implements `Iterable<T>`
 ## instead. A type with neither protocol is a compile error in a `for` loop.
 ##
-## Traits are not checked yet: the loop goes by the methods a type has, and
-## declaring the trait (`extend Foo with Iterator<int> {}`) documents the
-## intent.
+## The loop goes by the methods a type has, so declaring the trait is
+## optional. Declaring it (`extend Foo with Iterator<int> {}`) checks that
+## the methods match and lets the type be used as an `Iterator<int>` value,
+## which a `for` loop drives through the trait.
 ##
 ## @typeParam T the type of the elements produced
 ## @example

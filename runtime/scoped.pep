@@ -15,8 +15,8 @@
 #         if (x != __null) { body } else { other }   # null test only for a struct result
 #     }
 #
-# Traits are not checked yet, so `with` goes by the methods a type has;
-# declaring the trait (`extend Foo with Scoped<Bar>`) documents the intent.
+# `with` goes by the methods a type has, so declaring the trait is optional;
+# declaring it (`extend Foo with Scoped<Bar>`) checks the methods.
 
 ## Something a `with` block can enter.
 ##

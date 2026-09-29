@@ -236,14 +236,14 @@ with no extension, and `module_name()` is the output's stem.
     and `release` shells. Top-level `var`s go to `module.globals`. Externs
     go to `module.externs`.
 - **Model** (`model.rs`): `Module { structs, traits, extensions, functions,
-  externs, globals, type_aliases, struct_specs, func_specs, imports,
-  sources: SourceMap }`. Nodes are owned enum trees with no `Rc`/`RefCell`;
+  externs, globals, type_aliases, struct_specs, func_specs, trait_types,
+  imports, sources: SourceMap }`. Nodes are owned enum trees with no `Rc`/`RefCell`;
   passes mutate `&mut Module` in place. The main node types are `StructDef`,
   `FunctionDef` (methods have `parent: Some(struct)`), `ExternDef` (with
   `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
-  `ForIterator`, `WithEntered`), and `Statement`. Each node that names something has a
+  `ForIterator`, `WithEntered`, `ToTrait`), and `Statement`. Each node that names something has a
   `Loc`; `Expression::loc()` returns it (`Loc::NONE` for literals and
   synthesized nodes).
 - **Types**: `type_name::TypeName { name, sub_types, flags }`, with
@@ -309,7 +309,7 @@ several passes run more than once on purpose.
 | 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
 | 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup, and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
-| 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. |
+| 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
 | 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
 | 12 | `synthesize_function_types` | For function types that specialization exposed. |
 | 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes. |
@@ -320,6 +320,7 @@ several passes run more than once on purpose.
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
 | final | `resolve_implicit_types`, `resolve_operators`, `convert_print_calls`, `resolve_resolvables(true)`, `synthesize_function_types` | `convert_print_calls` turns a `String` argument of `print` into `arg.Data`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `convert_to_traits` | Wraps every struct value that flows into a trait-typed slot (initializer, assignment, argument, return) in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a number where a struct is expected or the reverse, or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). Errors are located `Diagnostic`s. |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 
@@ -424,6 +425,43 @@ How the language lowers:
   `cfg(target_arch)` in `Cargo.toml`). Four call sites share this one
   function. Read that file's header before touching backend registration.
 
+### 4.2 Traits used as types (`sema/src/traits.rs`, `passes/convert_to_traits.rs`)
+
+A trait name is a type (`Shape s`, `Array<Shape>`, `Iterator<int>`). The
+value is a struct reference with its concrete type erased, like a
+`shared_ptr` to an abstract base with a virtual destructor.
+
+- **Sema.** `traits::instance` specializes a trait at its type arguments and
+  keeps its *dispatchable* methods (instance methods whose signature does not
+  name `this` as a type) in declaration order: that order is the vtable's.
+  `static_type` knows trait types, so method calls on them type-check and
+  infer like struct calls. `convert_to_traits` inserts `ToTrait { value,
+  from, to }` at conversion sites; conformance is nominal (`extend S with
+  Tr`). Specialization substitutes a struct's declared traits
+  (`Box<int>` gets `Getter<int>`).
+- **Representation.** `Types::register_trait` maps a trait type to
+  `[2 x ptr]`: the object and the vtable. An array rather than a struct
+  type keeps trait values out of every "struct type means pointer" path;
+  they load, store, pass and return by value. `reference_value_type` gives
+  the slot type of any reference, `object_pointer` its object.
+- **Vtables** (`vtable`, emitted on first `ToTrait` for a pair):
+  `__vtable.<Struct>.<Trait>` = `[S.__release, S.__acquire, S.m1, …]`. A
+  trait method the struct implements with a struct result where the trait
+  returns a trait type goes through `covariant_adapter`, which converts
+  the result.
+- **Thunks** (`instantiate_trait`): `Trait.__acquire`, `Trait.__release`
+  and `Trait.method` are ordinary functions taking the trait value as
+  `this`. They null-check (refcount thunks) or assert (method thunks) and
+  call through the vtable. Because they are named like struct members,
+  every refcount path in §5 (`T.__acquire`/`T.__release` by type name) and
+  every method call works on trait values without special cases. The
+  release thunk runs the concrete `__release`, so the last release runs the
+  concrete destructor.
+- **Identity.** `==`/`!=` on trait values compare objects, and
+  `store_refcount_ops` treats the same object as self-assignment.
+  `__address`/`__refcount` read the object. Array slots of a trait type are
+  16 bytes, which `_pep_move_ref`/`_pep_swap_refs` move whole.
+
 ### 4.1 Object emission, linking, running (`driver/src/lib.rs`, `linker.rs`)
 
 `run` writes `<build>/<module>.o` with the host `TargetMachine`. It collects
@@ -457,6 +495,7 @@ are null-safe.
 | Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves. |
 | `return` | An lvalue read is acquired before `release_all_scopes`. A call result moves. |
 | Discarded temporary | `Statement::Expression` releases `owned_temp_type(expr)`. Arguments that are owned rvalues are released after the call (`owned_arg_temps` in `codegen_call`). The receiver of `f().x` or `f()[i]` goes on `deferred_temps` and is released at the end of the full expression by `flush_deferred_temps`. Ternary arms use `codegen_expr_in_arm`. |
+| Trait values | Same rules, same call sites: `Trait.__acquire`/`Trait.__release` are thunks into the vtable (§4.2), so the concrete type's `__release`, and at zero its `__dtor`, run. `ToTrait` does no refcount work of its own: converting an lvalue read acquires as the read would, and an owned rvalue moves. |
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
 | `std::weak_ptr<T>` | `__weak<T>` (`passes/weak_types.rs`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0). `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression::Weak` nodes (`codegen_weak`); the first two are owned rvalues. `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
 
@@ -783,12 +822,14 @@ compiles the code but cannot run it. Run it for real with the
   every file merges into one `Module`. Two private declarations with the
   same name in different files are rejected by visibility rather than kept
   apart. `SymbolTable` lets a later declaration overwrite an earlier one.
-- **Traits have no dynamic dispatch.** Codegen has no trait awareness at
-  all. Traits are recorded on structs by `apply_extensions`, and calls
-  resolve statically by type. `for` chooses `iterate()` or
-  `next()`/`current()` by type (`ForIterator`), not through the trait.
-  `extend S with T` checks conformance and copies default methods, but a
-  trait is never a type you can call through.
+- **Trait values are one level deep.** There are no supertraits, so one
+  trait type never converts to another, and there is no downcast from a
+  trait value back to its struct. Generic parameters cannot require a
+  trait (`<T: Shape>`). `Atomic<T>` of a trait type is rejected: two
+  pointers do not swap atomically. `Weak<T>`/`__weak<T>` of a trait type is rejected by
+  `convert_to_traits`: the weak view needs the concrete struct's head. `for` and `with` still choose their
+  protocol by the methods a type has (`ForIterator`), statically for a
+  struct and through the vtable for a trait value.
 - **Runtime discovery is by location.** The runtime must sit within five
   levels above the current directory or the executable, or be named by
   `PEPPER_RUNTIME`. The compiler reports an error when none is found; the

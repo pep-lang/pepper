@@ -5,9 +5,8 @@ Pepper has no inheritance. Instead, you add behavior to a type with an
 *trait*. Extensions can be written anywhere, so you can add methods to a
 library type, such as `String`, from your own code.
 
-Extensions work today. Traits can be declared and attached to types, and the
-compiler checks that a type provides the trait's methods, but a trait cannot
-be used as a type yet; see [What traits do not do yet](#what-traits-do-not-do-yet).
+A trait is also a type: a value of type `Shape` holds any struct that has the
+`Shape` trait, and calls its methods (see [Traits as types](#traits-as-types)).
 
 ## Extensions
 
@@ -96,33 +95,51 @@ Here `Square(3).sides()` returns 4.
 > yet: it fails to compile (`not a struct`) or the program crashes. Write such a
 > method in each extension instead.
 
-### What traits do not do yet
+### Traits as types
 
-Beyond checking conformance and supplying default bodies, the compiler does not
-use traits yet. In particular:
+A trait's name is also a type. A variable, parameter, field, return value, or
+collection element of type `Shape` holds any struct that declares `Shape`, and
+calling a method on it runs that struct's own method:
 
-- **A trait cannot be used as a type.** A parameter, variable, or field of
-  type `Shape` does not compile, so you cannot yet write one function that
-  accepts any `Shape`:
+```pepper
+{{#include ../../examples/traits-values.pep}}
+```
 
-  ```pepper
-  measure(shape: Shape): int {
-      return shape.area();
-  }
-  ```
+- **Conversion is implicit.** A `Square` becomes a `Shape` wherever a `Shape`
+  is expected: an initializer, an assignment, an argument, a return value.
+- **Conformance is declared.** Only a type that declares the trait with
+  `extend Type with Trait` converts. Having the right methods is not enough:
 
   ```text
-  main.pep:5:16: error: unknown type name 'Shape'
-      5 | measure(shape: Shape): int {
-        |                ^~~~~
+  main.pep:11:20: error: 'Circle' does not conform to trait 'Shape'
+     11 |     var s: Shape = Circle();
+        |                    ^~~~~~
+  main.pep:6:8: note: declare it with 'extend Circle with Shape'
+      6 | struct Circle {
+        |        ^~~~~~
   ```
 
-  To write code that works with several types today, use a
-  [generic function](generics.md#generic-functions): `total_area<T>` accepts
-  any `T` that has an `area()` method.
-- **Generic parameters cannot require a trait.** There is no syntax yet for
-  saying that `T` must have `Shape`.
+- **A trait value is a shared reference** to the struct, like any other
+  struct value (see [Memory](memory.md)). When the last reference goes away,
+  whether it was a `Shape` or a `Square`, the struct's own destructor runs.
+- **Only instance methods are callable through the trait.** Static methods,
+  and methods whose signature uses `this` as a type, need the concrete type;
+  calling one through a trait value is an error.
+- **Methods must match the trait's signature.** An implementation with
+  different parameter or return types is an error. The one exception is a
+  trait method that returns a trait type: the implementation may return a
+  struct that declares that trait, as `iterate()` does in
+  [Iteration](iteration.md#writing-your-own-iterator).
+- `==` and `!=` on trait values compare identity: they are equal when they
+  refer to the same object.
 
-The standard library declares the traits `Iterator<T>` and `Iterable<T>` in
-this spirit: a `for` loop looks for the methods themselves, not for the
-trait. See [Iteration](iteration.md).
+What traits do not do yet:
+
+- **Generic parameters cannot require a trait.** There is no syntax yet for
+  saying that `T` must have `Shape`; a [generic function](generics.md#generic-functions)
+  like `total_area<T>` accepts any `T` with an `area()` method.
+- **A trait value cannot convert back** to its struct, or to another trait.
+- **`Atomic<Shape>` is not supported.** A trait value is two pointers wide
+  and cannot be swapped atomically.
+- **`Weak<Shape>` is not supported.** Take the weak reference to the struct
+  type instead.

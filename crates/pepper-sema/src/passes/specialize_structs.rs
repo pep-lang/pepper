@@ -37,6 +37,12 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         loc: base.loc,
     };
 
+    // Declared traits name the parameters too (`extend Box<T> with
+    // Iterator<T>` gives `Box<int>` the trait `Iterator<int>`).
+    for trait_name in &mut specialized.traits {
+        substitute(trait_name, &type_map);
+    }
+
     // Fields: clone then substitute types.
     for field in &base.field_members {
         let mut f = field.clone();

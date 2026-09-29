@@ -26,14 +26,20 @@ fn apply_to_struct(st: &mut StructDef, ext: &ExtensionDef, traits: &[TraitDef]) 
     for trait_name in &ext.traits {
         st.traits.push(trait_name.clone());
         if let Some(def) = traits.iter().find(|t| t.name == trait_name.name) {
-            conform(st, ext, trait_name, def);
+            conform(st, ext, trait_name, def, traits);
         }
     }
 }
 
 /// `extend S with Trait`: S must have every method the trait declares; a
 /// trait method with a body is S's default when S has none of its own.
-fn conform(st: &mut StructDef, ext: &ExtensionDef, trait_name: &TypeName, def: &TraitDef) {
+fn conform(
+    st: &mut StructDef,
+    ext: &ExtensionDef,
+    trait_name: &TypeName,
+    def: &TraitDef,
+    traits: &[TraitDef],
+) {
     // The trait's parameters take the `with` clause's arguments; `this` in a
     // trait signature is the extended struct.
     let mut type_map: Vec<(String, TypeName)> = def
@@ -44,7 +50,8 @@ fn conform(st: &mut StructDef, ext: &ExtensionDef, trait_name: &TypeName, def: &
         .collect();
     type_map.push(("this".to_string(), st.ty.clone()));
     for required in &def.methods {
-        if st.method_members.iter().any(|m| m.name == required.name) {
+        if let Some(have) = st.method_members.iter().find(|m| m.name == required.name) {
+            check_signature(st, have, required, trait_name, &type_map, traits);
             continue;
         }
         match &required.body {
@@ -70,6 +77,86 @@ fn conform(st: &mut StructDef, ext: &ExtensionDef, trait_name: &TypeName, def: &
                 .with_note(format!("'{}' declared here", required.name), Some(required.loc)),
             ),
         }
+    }
+}
+
+/// A trait method's implementation must have the declared signature: a call
+/// through a value of the trait type passes the declared argument types and
+/// expects the declared result. One exception: where the trait returns a
+/// trait type, the implementation may return a struct that conforms to it
+/// (`EvensIterator iterate()` for `iterate(): Iterator<int>`), which keeps
+/// direct calls static; `convert_to_traits` checks that conformance once
+/// every extension is applied, and codegen converts the result in the
+/// vtable.
+fn check_signature(
+    st: &StructDef,
+    have: &FunctionDef,
+    required: &FunctionDef,
+    trait_name: &TypeName,
+    type_map: &[(String, TypeName)],
+    traits: &[TraitDef],
+) {
+    use crate::passes::check_function_types::canonical;
+    let declared = |ty: &TypeName| {
+        let mut ty = ty.clone();
+        substitute(&mut ty, type_map);
+        // A method declared without a return type returns nothing.
+        if ty.to_string() == crate::type_name::AUTO {
+            TypeName::void()
+        } else {
+            ty
+        }
+    };
+    let actual = |ty: &TypeName| {
+        if ty.to_string() == crate::type_name::AUTO {
+            TypeName::void()
+        } else {
+            ty.clone()
+        }
+    };
+    let signature =
+        |ret: TypeName, params: Vec<TypeName>| TypeName::function_type(ret, params).display();
+    let expected = signature(
+        declared(&required.ty),
+        required
+            .parameters
+            .iter()
+            .map(|p| declared(&p.ty))
+            .collect(),
+    );
+    let found = signature(
+        actual(&have.ty),
+        have.parameters.iter().map(|p| actual(&p.ty)).collect(),
+    );
+    let (have_ret, declared_ret) = (actual(&have.ty), declared(&required.ty));
+    let covariant = crate::traits::is_trait_type(traits, &declared_ret)
+        && !crate::traits::is_trait_type(traits, &have_ret)
+        && have_ret.is_struct()
+        && !have_ret.is_pointer();
+    let same = have.is_static == required.is_static
+        && have.parameters.len() == required.parameters.len()
+        && (covariant || canonical(&have_ret) == canonical(&declared_ret))
+        && have
+            .parameters
+            .iter()
+            .zip(&required.parameters)
+            .all(|(h, r)| canonical(&actual(&h.ty)) == canonical(&declared(&r.ty)));
+    if !same {
+        crate::errors::report(
+            Diagnostic::error(format!(
+                "'{}' in '{}' has type '{}', but trait '{}' declares '{}'",
+                have.name,
+                st.ty.display(),
+                found,
+                trait_name.display(),
+                expected
+            ))
+            .at(have.loc)
+            .with_note(
+                format!("'{}' declared here", required.name),
+                Some(required.loc),
+            ),
+        );
     }
 }
 

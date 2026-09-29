@@ -199,17 +199,32 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
         | Expression::IntLiteral(_)
         | Expression::StringLiteral { .. }
         | Expression::PointerLiteral => {}
-        Expression::MemberRef { lhs, .. } | Expression::ForIterator(lhs) | Expression::WithEntered(lhs) => subst_expr(lhs, aliases, values),
+        Expression::MemberRef { lhs, .. }
+        | Expression::ForIterator(lhs)
+        | Expression::WithEntered(lhs) => subst_expr(lhs, aliases, values),
         Expression::Binary { lhs, rhs, .. } => {
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
         Expression::Unary { operand, .. } => subst_expr(operand, aliases, values),
-        Expression::Cast { expr: inner, ty, .. } => {
+        Expression::ToTrait {
+            value, from, to, ..
+        } => {
+            subst_expr(value, aliases, values);
+            subst(from, aliases);
+            subst(to, aliases);
+        }
+        Expression::Cast {
+            expr: inner, ty, ..
+        } => {
             subst_expr(inner, aliases, values);
             subst(ty, aliases);
         }
-        Expression::Ternary { condition, true_expr, false_expr } => {
+        Expression::Ternary {
+            condition,
+            true_expr,
+            false_expr,
+        } => {
             subst_expr(condition, aliases, values);
             subst_expr(true_expr, aliases, values);
             subst_expr(false_expr, aliases, values);
