@@ -74,7 +74,9 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     };
                     return;
                 }
-                // File-scope globals are visible from struct methods too.
+                // File-scope globals are visible from struct methods too, and
+                // so are struct names: a bare struct name is the receiver of
+                // a static call (`File.open(p)` inside another struct).
                 if globals.contains(id) {
                     return;
                 }
@@ -103,10 +105,13 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
 }
 
 pub fn convert_member_refs(module: &mut Module) {
+    // Names a bare symbol in a method may resolve to outside the struct:
+    // module globals, and struct names (the receiver of a static call).
     let globals: std::collections::HashSet<String> = module
         .globals
         .iter()
         .map(|v| v.name.clone())
+        .chain(module.structs.iter().map(|s| s.name.clone()))
         .collect();
     let struct_count = module.structs.len();
     for st_idx in 0..struct_count {

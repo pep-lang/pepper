@@ -8,6 +8,7 @@ extern int memcmp(void* a, void* b, ulong n);
 extern char* getenv(char* name);
 extern int puts(char* s);
 extern void abort();
+extern int fflush(void* stream);
 
 # The message is a raw `__ptr<char>` (C `char*`), not a `String`: codegen passes string
 # literals as their global pointers (no temporary allocation), so hot paths
@@ -70,6 +71,9 @@ export panic(msg: __ptr<char>) {
     } else {
         puts(msg);
     }
+    # stdout is fully buffered when it is a pipe: flush it, or abort() drops
+    # the message just printed.
+    fflush(__null);
     abort();
 }
 

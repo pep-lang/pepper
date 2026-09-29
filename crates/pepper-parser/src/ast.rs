@@ -240,6 +240,8 @@ pub struct FunctionDecl {
     pub is_static: bool,
     /// Indexer method: `T [](params) { ... }`
     pub is_indexer: bool,
+    /// Extern whose parameter list ends in C's `...` (`printf`, `open`).
+    pub is_variadic: bool,
     pub span: Span,
     /// Attributes preceding the function (`[Name(args)]`).
     pub attributes: Vec<Attribute>,
@@ -572,7 +574,11 @@ impl Display for FunctionDecl {
             write!(f, "export ")?;
         }
         if self.external {
-            write!(f, "extern {} {}({})", self.return_type, self.name, join(&self.parameters, ", "))?;
+            write!(f, "extern {} {}({}", self.return_type, self.name, join(&self.parameters, ", "))?;
+            if self.is_variadic {
+                write!(f, ", ...")?;
+            }
+            write!(f, ")")?;
             return Ok(());
         }
         if self.is_static {

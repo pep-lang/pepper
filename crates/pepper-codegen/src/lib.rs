@@ -67,6 +67,15 @@ pub struct CodeGenerator<'ctx> {
     /// lives in exactly one scope (the innermost at declaration), so shadowed
     /// names release independently.
     scopes: Vec<Vec<(String, String, PointerValue<'ctx>)>>,
+    /// Owned temporaries whose release waits for the end of the full
+    /// expression: the receiver of `f().x` / `f()[i]`, whose field or element
+    /// the rest of the expression still reads (C++ destroys the temporary
+    /// `shared_ptr` at the end of the full expression, not after the member
+    /// access). `(value, sema type name)`, released in reverse order by
+    /// `flush_deferred_temps`.
+    deferred_temps: Vec<(BasicValueEnum<'ctx>, String)>,
+    /// Declared names of the externs (C functions) in the module.
+    extern_names: std::collections::HashSet<String>,
 }
 impl<'ctx> CodeGenerator<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
@@ -90,6 +99,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             global_addrs: HashMap::new(),
             frame: Frame::empty(),
             scopes: Vec::new(),
+            deferred_temps: Vec::new(),
+            extern_names: std::collections::HashSet::new(),
         }
     }
 
@@ -248,6 +259,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             );
             let entry = self.context.append_basic_block(init_fn, "entry");
             self.builder.position_at_end(entry);
+            self.deferred_temps.clear();
             for (name, expr) in &non_const {
                 let value = self.codegen_expr(expr)?;
                 // A struct-ref global initialized from an lvalue read acquires
@@ -283,6 +295,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 };
                 addr.store(&self.builder, value)
                     .ok_or_else(|| format!("global store failed: {}", name))?;
+                self.flush_deferred_temps()?;
             }
             self.builder.build_return(None).map_err(|e| e.to_string())?;
 
@@ -504,6 +517,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Extern + function instantiation (port of FunctionGen.cpp:63-95) ─────
 
     fn instantiate_extern(&mut self, ext: &ExternDef) -> Result<(), String> {
+        self.extern_names.insert(ext.name.clone());
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
         for param in &ext.parameters {
             let ty = self
@@ -516,7 +530,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .types
             .get(&ext.ty.to_string())
             .ok_or_else(|| format!("unknown return type {}", ext.ty))?;
-        let fn_type = llvm_fn_type(return_type, &param_types, false);
+        let fn_type = llvm_fn_type(return_type, &param_types, ext.is_variadic);
         // `[LinkName("sym")]` binds the declared name to a different C symbol.
         let symbol = ext.link_name()?;
         let fn_value = match self.module.get_function(symbol) {
@@ -725,6 +739,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Fresh scope stack for this function: the body is one scope.
         self.scopes.clear();
         self.scopes.push(Vec::new());
+        self.deferred_temps.clear();
 
         // Params must be alloca'd at the top of the entry block BEFORE the
         // body statements so they dominate all uses (LLVM dominance).
@@ -910,6 +925,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Some(ty) = temp_ty {
                     self.release_temp(&ty, value)?;
                 }
+                self.flush_deferred_temps()?;
             }
             Statement::Block(inner) => self.codegen_nested_block(inner)?,
             Statement::Declaration(Declaration::Variable(var)) => {
@@ -945,6 +961,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     value = Some(v);
                 }
+                // The returned value is owned (acquired above) before the
+                // full expression's temporaries go.
+                self.flush_deferred_temps()?;
                 // Early exit: release every tracked slot in every scope.
                 self.release_all_scopes()?;
                 if let (Some(value), Some(retval)) = (value, self.frame.retval) {
@@ -1087,6 +1106,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.builder
                 .build_store(alloca, value)
                 .map_err(|e| e.to_string())?;
+            self.flush_deferred_temps()?;
         } else {
             // No default: zero-initialize so loads are defined (the ctor's
             // `size` var is patched at codegen time on a clone snapshot).
@@ -1135,6 +1155,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.release_temp(&ty, cond)?;
         }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
+        self.flush_deferred_temps()?;
         self.builder
             .build_conditional_branch(cond_bool, then_block, else_block.unwrap_or(merge_block))
             .map_err(|e| e.to_string())?;
@@ -1193,6 +1214,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.release_temp(&ty, cond)?;
         }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
+        self.flush_deferred_temps()?;
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
@@ -1206,10 +1228,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.loop_break = Some((cond_block, merge_block));
 
         // Body. The body is its own scope, re-created on every iteration:
-        // locals declared inside are released at the loop head (which
-        // dominates both the entry and back-edge paths) before the next
-        // condition check. Its index on the scope stack is the break/continue
-        // release boundary (`loop_base_depth`).
+        // locals declared inside are released where each iteration leaves
+        // it — at the end of the body on fall-through, and at a `continue` or
+        // `break` (which release only the locals declared before them). Its
+        // index on the scope stack is the break/continue release boundary
+        // (`loop_base_depth`).
         self.builder.position_at_end(body_block);
         let body_scope = Vec::new();
         self.scopes.push(body_scope);
@@ -1221,30 +1244,34 @@ impl<'ctx> CodeGenerator<'ctx> {
         // body scope so the stack stays balanced.
         let body_scope = self.scopes.pop().unwrap_or_default();
 
-        // Fall-through path: branch to the condition re-check. A `return`
-        // inside the body already terminated it; skip in that case.
+        // Fall-through path: release this iteration's body locals, then
+        // branch to the condition re-check. A `return`, `break` or
+        // `continue` inside the body already terminated it (having released
+        // what it leaves); skip in that case. Releasing here rather than in
+        // `cond_block` matters: a `continue` that precedes a declaration
+        // reaches `cond_block` without passing the local's alloca, so a load
+        // of it there would not be dominated by its definition.
         let body_end = self.builder.get_insert_block().expect("insert block");
         if body_end.get_terminator().is_none() {
+            if !body_scope.is_empty() {
+                self.release_scope(&body_scope)?;
+            }
             self.builder.build_unconditional_branch(cond_block).map_err(|e| e.to_string())?;
         }
 
         self.frame.loop_break = saved;
         self.frame.loop_base_depth = saved_base;
 
-        // Back-edge: release this iteration's body locals, then re-check.
-        // `cond_block` is a single point every completed body iteration
-        // passes through (a `return` already drained the scopes, so an empty
-        // scope releases nothing).
+        // Back-edge: every path into `cond_block` has released its body
+        // locals already; re-check the condition.
         self.builder.position_at_end(cond_block);
-        if !body_scope.is_empty() {
-            self.release_scope(&body_scope)?;
-        }
         let cond_temp = self.owned_temp_type(&wh.condition);
         let cond = self.codegen_expr(&wh.condition)?;
         if let Some(ty) = cond_temp {
             self.release_temp(&ty, cond)?;
         }
         let cond_bool = llvm_ops::as_bool(self.context, &self.builder, cond);
+        self.flush_deferred_temps()?;
         self.builder
             .build_conditional_branch(cond_bool, body_block, merge_block)
             .map_err(|e| e.to_string())?;
@@ -1259,26 +1286,19 @@ impl<'ctx> CodeGenerator<'ctx> {
             .frame
             .loop_break
             .ok_or_else(|| "break/continue outside a loop".to_string())?;
-        // shared_ptr-by-value: exiting the loop destroys exactly the scopes
-        // the jump leaves behind — the same slots a fall-through exit would
-        // release. `break` skips the body scope's cond_block release, so it
-        // releases everything from the innermost scope down to and including
-        // the body scope; `continue` re-enters through cond_block, which
-        // already releases the body scope, so only the scopes above it are
-        // released here. (Outer scopes release at their own tails after the
-        // loop, on every path.)
+        // shared_ptr-by-value: leaving the iteration destroys exactly the
+        // scopes the jump leaves behind. Both `break` and `continue` release
+        // everything from the innermost scope down to and including the body
+        // scope — only the locals declared so far, since the scopes hold
+        // exactly those at this point. (Outer scopes release at their own
+        // tails after the loop, on every path.)
         let base = self
             .frame
             .loop_base_depth
             .ok_or_else(|| "break/continue outside a loop".to_string())?;
         let depth = self.scopes.len();
         let scopes = std::mem::take(&mut self.scopes);
-        for (i, scope) in scopes[base.min(depth - 1)..depth].iter().rev().enumerate() {
-            // The body scope at depth `base`: cond_block releases it on the
-            // continue path (skipped there when empty), so release nothing.
-            if lb.kind == LoopBreakKind::Continue && depth - i == base + 1 {
-                continue;
-            }
+        for scope in scopes[base.min(depth - 1)..depth].iter().rev() {
             self.release_scope(scope)?;
         }
         self.scopes = scopes;
@@ -1329,11 +1349,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
             Expression::FloatLiteral(_) => Some("double".to_string()),
+            // A bare struct name that no local or global shadows is a type
+            // literal: the receiver of a static call `File.open(p)`. Naming
+            // its type lets the call dispatch as `File.open` (no instance).
             Expression::SymbolRef { id, .. } => self
                 .frame
                 .find_local(id)
                 .or_else(|| self.global_addrs.get(id))
-                .map(|a| a.ty.to_string()),
+                .map(|a| a.ty.to_string())
+                .or_else(|| self.structs.contains_key(id).then(|| id.clone())),
             Expression::ThisRef => self
                 .frame
                 .find_local("this")
@@ -1572,6 +1596,30 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.call_function(&format!("{}.{}", ty_name, "__release"), vec![val])?;
         }
         Ok(())
+    }
+
+    /// End of a full expression: release the temporaries whose release was
+    /// deferred while it was evaluated, most recent first.
+    fn flush_deferred_temps(&mut self) -> Result<(), String> {
+        let temps = std::mem::take(&mut self.deferred_temps);
+        for (value, ty) in temps.into_iter().rev() {
+            self.release_temp(&ty, value)?;
+        }
+        Ok(())
+    }
+
+    /// Evaluate `expr` in a conditionally executed region (a ternary arm):
+    /// temporaries deferred inside it are released before the region ends,
+    /// since the end of the enclosing full expression is in a block the
+    /// region does not dominate.
+    fn codegen_expr_in_arm(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let outer = std::mem::take(&mut self.deferred_temps);
+        let result = self.codegen_expr(expr);
+        let flushed = self.flush_deferred_temps();
+        self.deferred_temps = outer;
+        let value = result?;
+        flushed?;
+        Ok(value)
     }
 
     /// Release every tracked slot in every enclosing scope (innermost last,
@@ -1908,7 +1956,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // LLVM value (opaque pointers lose the type).
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 // An owned-rvalue receiver (`f().x`) is a temporary: its
-                // creation ref is released once the field load is done.
+                // creation ref is released at the end of the full expression,
+                // which may still read the field (`f().s == "x"`).
                 let lhs_temp = self.owned_temp_type(lhs);
                 let this_ptr = self.codegen_expr(lhs)?;
                 let base_ptr = match this_ptr {
@@ -1947,7 +1996,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| e.to_string())?,
                 };
                 if let Some(ty) = lhs_temp {
-                    self.release_temp(&ty, this_ptr)?;
+                    self.deferred_temps.push((this_ptr, ty));
                 }
                 Ok(value)
             }
@@ -1963,7 +2012,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // POD Array indexing.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i]`) is a temporary: its
-                // creation ref is released once the element load is done.
+                // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
                 // A nested index (`outer.Data[0][i]`) GEPs the inner
@@ -1989,7 +2038,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .build_load(value_ty, gep, "loadidx")
                     .map_err(|e| e.to_string())?;
                 if let Some(ty) = lhs_temp {
-                    self.release_temp(&ty, slot_ptr.into())?;
+                    self.deferred_temps.push((slot_ptr.into(), ty));
                 }
                 Ok(value)
             }
@@ -2671,7 +2720,25 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
         let mut arg_vals = vec![];
         let mut arg_names: Vec<String> = vec![];
+        let is_extern = self.extern_names.contains(&target);
         for arg in args {
+            // A string literal passed to a C function is its NUL-terminated
+            // global (`puts("hi")`, `getenv("HOME")`), exactly as for
+            // `assert`'s message; convert_string_literals made it a
+            // `String(raw, size, len)` ctor call, whose String object C
+            // would read as garbage.
+            if is_extern {
+                if let Expression::FunctionCall { function, args: inner } = arg {
+                    if let (true, Some(raw @ Expression::StringLiteral { is_raw: true, .. })) =
+                        (function == "String", inner.first())
+                    {
+                        let v = self.codegen_expr(raw)?;
+                        arg_names.push(String::new());
+                        arg_vals.push(v);
+                        continue;
+                    }
+                }
+            }
             let v = self.codegen_expr(arg)?;
             if let Some(ty) = self.owned_temp_type(arg) {
                 owned_arg_temps.push((v, ty));
@@ -2848,6 +2915,31 @@ impl<'ctx> CodeGenerator<'ctx> {
                         self.builder.build_float_trunc(*v, ft, "argf")
                     };
                     converted.map(BasicValueEnum::FloatValue).unwrap_or(*arg)
+                }
+                // An argument in a variadic extern's `...` has no declared
+                // type: C's default argument promotions apply (6.5.2.2p7),
+                // so integers narrower than int widen to int by their own
+                // signedness and float widens to double.
+                (None, BasicValueEnum::IntValue(v))
+                    if fn_value.get_type().is_var_arg() && v.get_type().get_bit_width() < 32 =>
+                {
+                    let i32t = self.context.i32_type();
+                    let unsigned = v.get_type().get_bit_width() == 1
+                        || arg_names.get(idx).is_some_and(|n| llvm_ops::is_unsigned_int_type(n));
+                    let widened = if unsigned {
+                        self.builder.build_int_z_extend(*v, i32t, "vararg")
+                    } else {
+                        self.builder.build_int_s_extend(*v, i32t, "vararg")
+                    };
+                    widened.map(BasicValueEnum::IntValue).unwrap_or(*arg)
+                }
+                (None, BasicValueEnum::FloatValue(v))
+                    if fn_value.get_type().is_var_arg() && v.get_type().get_bit_width() < 64 =>
+                {
+                    self.builder
+                        .build_float_ext(*v, self.context.f64_type(), "vararg")
+                        .map(BasicValueEnum::FloatValue)
+                        .unwrap_or(*arg)
                 }
                 _ => *arg,
             };
@@ -3027,7 +3119,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MemberRef { lhs, name } => {
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 // An owned-rvalue receiver (`f().x = v`) is a temporary: its
-                // creation ref is released once the field address is built.
+                // creation ref is released at the end of the full expression,
+                // after the store through the field address.
                 let lhs_temp = self.owned_temp_type(lhs);
                 let this_ptr = self.codegen_expr(lhs)?;
                 let base_ptr = match this_ptr {
@@ -3054,7 +3147,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| e.to_string())?
                 };
                 if let Some(ty) = lhs_temp {
-                    self.release_temp(&ty, this_ptr)?;
+                    self.deferred_temps.push((this_ptr, ty));
                 }
                 Ok(Address::with_llvm_ty(name, &ty_name, field_ty, gep))
             }
@@ -3062,7 +3155,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // POD Array element store: `arr[i] = v` → GEP + store.
                 let index = self.codegen_expr(rhs)?;
                 // An owned-rvalue receiver (`f()[i] = v`) is a temporary: its
-                // creation ref is released once the slot address is built.
+                // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
                 // A nested index (`outer.Data[0][i] = v`) stores into the
@@ -3082,7 +3175,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .map_err(|e| e.to_string())?
                 };
                 if let Some(ty) = lhs_temp {
-                    self.release_temp(&ty, slot_ptr.into())?;
+                    self.deferred_temps.push((slot_ptr.into(), ty));
                 }
                 Ok(Address::with_llvm_ty("idxl", &elem_name, value_ty, gep))
             }
@@ -3347,7 +3440,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map_err(|e| e.to_string())?;
 
         self.builder.position_at_end(true_block);
-        let true_val = self.codegen_expr(true_expr)?;
+        let true_val = self.codegen_expr_in_arm(true_expr)?;
         // The arm's creation ref survives into the phi: a ternary of owned
         // rvalues is itself an owned rvalue (the consumer releases it once),
         // exactly as C++'s conditional operator yields one temporary.
@@ -3357,7 +3450,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let true_end = self.builder.get_insert_block().expect("insert block");
 
         self.builder.position_at_end(false_block);
-        let false_val = self.codegen_expr(false_expr)?;
+        let false_val = self.codegen_expr_in_arm(false_expr)?;
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| e.to_string())?;
@@ -3501,7 +3594,10 @@ fn apply_op<'ctx>(
             ))
         }
         // Pointer arithmetic: ptr + int / ptr - int (e.g. `Data + idx`).
-        (BasicValueEnum::PointerValue(p), BasicValueEnum::IntValue(i)) => {
+        // Other ops (`ptr == int`) fall through to the mixed comparison.
+        (BasicValueEnum::PointerValue(p), BasicValueEnum::IntValue(i))
+            if matches!(op, BinaryOp::Add | BinaryOp::Sub) =>
+        {
             match op {
                 BinaryOp::Add | BinaryOp::Sub => {
                     let idx = if op == BinaryOp::Add {
@@ -3544,27 +3640,20 @@ fn apply_op<'ctx>(
             let as_int = builder
                 .build_ptr_to_int(ptr_val, context.i64_type(), "p2i")
                 .map_err(|e| e.to_string())?;
+            // `ty_name` names the integer operand (binary_result_type):
+            // widen it to address width by its own signedness.
+            let widen = |i: inkwell::values::IntValue<'ctx>| -> Result<inkwell::values::IntValue<'ctx>, String> {
+                if i.get_type().get_bit_width() >= 64 {
+                    Ok(i)
+                } else if i.get_type().get_bit_width() == 1 || llvm_ops::is_unsigned_int_type(ty_name) {
+                    builder.build_int_z_extend(i, context.i64_type(), "argw").map_err(|e| e.to_string())
+                } else {
+                    builder.build_int_s_extend(i, context.i64_type(), "argw").map_err(|e| e.to_string())
+                }
+            };
             let (li, ri) = match (l_kind, r_kind) {
-                (BasicValueEnum::IntValue(i), _) => {
-                    let li = if i.get_type().get_bit_width() < 64 {
-                        builder
-                            .build_int_s_extend(i, context.i64_type(), "argw")
-                            .map_err(|e| e.to_string())?
-                    } else {
-                        i
-                    };
-                    (li, as_int)
-                }
-                (_, BasicValueEnum::IntValue(i)) => {
-                    let ri = if i.get_type().get_bit_width() < 64 {
-                        builder
-                            .build_int_s_extend(i, context.i64_type(), "argw")
-                            .map_err(|e| e.to_string())?
-                    } else {
-                        i
-                    };
-                    (as_int, ri)
-                }
+                (BasicValueEnum::IntValue(i), _) => (widen(i)?, as_int),
+                (_, BasicValueEnum::IntValue(i)) => (as_int, widen(i)?),
                 _ => return Err(format!("unsupported operand kinds for {:?}", op)),
             };
             let pred = match op {
@@ -3628,6 +3717,15 @@ fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
             lhs_name.to_string()
         } else {
             rhs_name.to_string()
+        }
+    } else if is_comparison(*op) && lhs_name.ends_with('*') != rhs_name.ends_with('*') {
+        // Pointer against integer: name the integer operand, so `coerce`
+        // leaves it at its own width and signedness (naming the pointer
+        // would narrow a `long` to i32) and `apply_op` compares addresses.
+        if lhs_name.ends_with('*') {
+            rhs_name.to_string()
+        } else {
+            lhs_name.to_string()
         }
     } else {
         llvm_ops::result_type(lhs_name, rhs_name)

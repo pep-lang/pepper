@@ -400,6 +400,7 @@ pub fn build(module: &ast::Module) -> Result<Module, String> {
                             .iter()
                             .map(|p| variable_def(p, Kind::Param))
                             .collect::<Result<Vec<_>, _>>()?,
+                        is_variadic: f.is_variadic,
                         attributes: f.attributes.clone(),
                     });
                 } else {

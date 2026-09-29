@@ -99,6 +99,45 @@ fn bad_body(attr: &ast::Attribute) -> String {
     format!("invalid platform predicate in {attr}")
 }
 
+thread_local! {
+    /// `(std::env::consts::OS, std::env::consts::ARCH)` values that replace the
+    /// real host's while `with_simulated_host` runs.
+    static SIMULATED_HOST: std::cell::RefCell<Option<(String, String)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Evaluate `Target(...)` predicates inside `f` as if the host were `os` /
+/// `arch` (spelled as `std::env::consts` spells them: `"windows"`,
+/// `"macos"`, `"linux"`; `"x86_64"`, `"aarch64"`). For tests that push
+/// another platform's code through the platform filter, sema and codegen on
+/// this host, to check it compiles; the result can be neither linked nor
+/// run here. Thread-local, so concurrent tests do not see each other's host.
+pub fn with_simulated_host<R>(os: &str, arch: &str, f: impl FnOnce() -> R) -> R {
+    let previous = SIMULATED_HOST.with(|h| h.replace(Some((os.to_string(), arch.to_string()))));
+    // Restore on unwind too, so a failing test does not leak its host.
+    struct Restore(Option<(String, String)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            SIMULATED_HOST.with(|h| *h.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(previous);
+    f()
+}
+
+fn host_os() -> String {
+    SIMULATED_HOST
+        .with(|h| h.borrow().as_ref().map(|(os, _)| os.clone()))
+        .unwrap_or_else(|| consts::OS.to_string())
+}
+
+fn host_arch() -> String {
+    SIMULATED_HOST
+        .with(|h| h.borrow().as_ref().map(|(_, arch)| arch.clone()))
+        .unwrap_or_else(|| consts::ARCH.to_string())
+}
+
 fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, String> {
     let [value] = arguments else {
         return Err(format!("OS predicate takes exactly one value in {attr}"));
@@ -108,7 +147,7 @@ fn os_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool, S
             "OS predicate value must be a symbol (Windows, Mac, MacOS, Linux) in {attr}"
         ));
     };
-    let host = match consts::OS {
+    let host = match host_os().as_str() {
         "windows" => Some("windows"),
         "macos" => Some("macos"),
         "linux" => Some("linux"),
@@ -143,7 +182,7 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
             "Arch predicate value must be a symbol (x64, aarch64) in {attr}"
         ));
     };
-    let host = match consts::ARCH {
+    let host = match host_arch().as_str() {
         "x86_64" => Some("x64"),
         "aarch64" => Some("aarch64"),
         _ => None,

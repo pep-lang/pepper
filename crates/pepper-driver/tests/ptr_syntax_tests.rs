@@ -220,3 +220,35 @@ test(): int {
         8
     );
 }
+
+#[test]
+fn ptr_compares_with_pointer_and_integer_operands() {
+    // `==`/`!=` with a pointer on either side and a pointer or an integer on
+    // the other compare addresses. A pointer on the left of an integer used
+    // to be taken as pointer arithmetic and failed with "unsupported op
+    // Equal on pointer" (a Windows HANDLE compared with an int local).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    var p = _pep_malloc(8);
+    var q = p;
+    var s = p + 1;
+    long bits = p as long;
+    long minus_one = -1;
+    int small = 7;
+    var r = 0;
+    if (p == q) { r = r + 1; }
+    if (p != s) { r = r + 10; }
+    if (p == bits) { r = r + 100; }
+    if (bits == p) { r = r + 1000; }
+    if (p != minus_one) { r = r + 10000; }
+    if (p != small) { r = r + 100000; }
+    _pep_free(p);
+    return r;
+}
+"#
+        ),
+        111111
+    );
+}

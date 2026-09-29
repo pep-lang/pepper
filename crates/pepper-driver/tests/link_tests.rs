@@ -137,3 +137,23 @@ fn link_name_requires_one_string() {
         assert!(err.contains("LinkName"), "{attr}: unexpected error: {err}");
     }
 }
+
+#[test]
+fn failed_assert_message_survives_a_pipe() {
+    // stdout is fully buffered when it is a pipe; panic() flushes it before
+    // abort(), or the message (and anything printed before it) is lost.
+    let out_path = build_binary(
+        "panic_flush_probe",
+        r#"
+main(): int {
+    print("before");
+    assert(false, "the assert message");
+    return 0;
+}"#,
+    )
+    .expect("compile + link");
+    let output = Command::new(&out_path).output().expect("spawn linked binary");
+    assert!(!output.status.success(), "a failed assert must abort");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("before") && stdout.contains("the assert message"), "stdout: {stdout:?}");
+}

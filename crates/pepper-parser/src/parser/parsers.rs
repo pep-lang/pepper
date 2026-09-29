@@ -1213,6 +1213,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             body: Some(body),
             is_static: false,
             is_indexer: false,
+            is_variadic: false,
             span: Span { start: decl_start, end: pos(input) },
             attributes,
         });
@@ -1268,6 +1269,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             body: Some(body),
             is_static: false,
             is_indexer: false,
+            is_variadic: false,
             span: Span { start: decl_start, end: pos(input) },
             attributes,
         });
@@ -1292,14 +1294,26 @@ fn extern_type_name(input: &mut &str) -> Result<TypeName> {
     Ok(ty)
 }
 
-/// Extern function parameters: `ExternTypeName Identifier` pairs (`char* str`).
-fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
+/// Extern function parameters: `ExternTypeName Identifier` pairs (`char* str`),
+/// optionally ending in C's `...`. Returns the parameters and whether the
+/// list ended in `...` (a variadic function such as `printf` or `open`).
+fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
     if !input.starts_with('(') { return Err(cut(input)); }
     *input = &input[1..];
     let mut params = vec![];
+    let mut variadic = false;
     loop {
         ws(input)?;
         if input.starts_with(')') { break; }
+        if input.starts_with("...") {
+            // `...` must be last and follow at least one named parameter, as in C.
+            if params.is_empty() { return Err(cut(input)); }
+            *input = &input[3..];
+            ws(input)?;
+            if !input.starts_with(')') { return Err(cut(input)); }
+            variadic = true;
+            break;
+        }
         let ty = extern_type_name(input)?;
         ws(input)?;
         let name_span_start = pos(input);
@@ -1317,7 +1331,7 @@ fn extern_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
     }
     *input = &input[1..];
     ws(input)?;
-    Ok(params)
+    Ok((params, variadic))
 }
 
 fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
@@ -1337,7 +1351,7 @@ fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> 
     let name = identifier(input)?;
     let name_span_end = pos(input);
     ws(input)?;
-    let parameters = extern_parameters(input)?;
+    let (parameters, is_variadic) = extern_parameters(input)?;
     ws(input)?;
     if input.starts_with(';') {
         *input = &input[1..];
@@ -1354,6 +1368,7 @@ fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> 
         body: None,
         is_static: false,
         is_indexer: false,
+        is_variadic,
         span: Span { start: decl_start, end: pos(input) },
         attributes,
     })
@@ -1429,6 +1444,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, attributes: &
         body: Some(body),
         is_static: false,
         is_indexer: false,
+        is_variadic: false,
         span: Span { start: decl_start, end: pos(input) },
         attributes: attributes.to_vec(),
     })
@@ -1477,6 +1493,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
                     body: Some(body),
                     is_static,
                     is_indexer: true,
+                    is_variadic: false,
                     span: Span { start: decl_start, end: pos(after) },
                     attributes: attributes.to_vec(),
                 });
@@ -1538,6 +1555,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
                 body: Some(body),
                 is_static,
                 is_indexer: false,
+                is_variadic: false,
                 span: Span { start: decl_start, end: pos(after) },
                 attributes: attributes.to_vec(),
             });
@@ -1611,6 +1629,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
             body,
             is_static,
             is_indexer: false,
+            is_variadic: false,
             span: Span { start: decl_start, end: pos(input) },
             attributes,
         });
@@ -1645,6 +1664,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
             body,
             is_static,
             is_indexer: false,
+            is_variadic: false,
             span: Span { start: decl_start, end: pos(input) },
             attributes,
         });
@@ -1827,6 +1847,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
                 body: Some(body),
                 is_static: false,
                 is_indexer: false,
+                is_variadic: false,
                 span: Span { start: m_attrs.first().map(|a| a.span.start).unwrap_or(new_span_start), end: pos(input) },
                 attributes: m_attrs,
             });

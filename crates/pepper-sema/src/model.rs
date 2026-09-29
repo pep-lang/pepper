@@ -379,6 +379,9 @@ pub struct ExternDef {
     pub name: String,
     pub ty: TypeName,
     pub parameters: Vec<VariableDef>,
+    /// The C prototype ends in `...`: calls may pass arguments beyond
+    /// `parameters`, which get C's default argument promotions.
+    pub is_variadic: bool,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
 }

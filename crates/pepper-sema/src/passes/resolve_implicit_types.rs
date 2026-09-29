@@ -171,6 +171,18 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
         Expression::FunctionCall { function, .. } => {
+            // Inside a method, a bare call naming one of the struct's own
+            // methods is that method (convert_member_refs later rewrites it
+            // to `this.m(..)`): class scope comes before file scope, so a
+            // method `read` wins over an extern `read`.
+            if let Some(st) = current_struct {
+                let own = st.to_string();
+                if let Some((_, methods)) = scopes.methods.iter().find(|(ty, _)| *ty == own) {
+                    if let Some((_, ret)) = methods.iter().find(|(m, _)| m == function) {
+                        return ret.clone();
+                    }
+                }
+            }
             // Specialized call `name<args>`: the instance (not the base)
             // carries the substituted return type.
             if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == function) {
@@ -305,14 +317,23 @@ pub fn resolve_implicit_types(module: &mut Module) {
         }
 
         // Rebuild field table with resolved types for method bodies.
-        scopes.structs = vec![(current_struct.to_string(), st.field_members.clone())];
-        scopes.methods = vec![(
-            current_struct.to_string(),
+        // Other structs stay in the tables: a method body may call another
+        // struct's methods or constructor (`var p = other.parent()`,
+        // `var a = Array<int>()`), and those must type too. The current
+        // struct's entry goes first so its resolved field types win.
+        let current_name = current_struct.to_string();
+        let mut own_structs = vec![(current_name.clone(), st.field_members.clone())];
+        own_structs.extend(struct_fields.iter().filter(|(n, _)| *n != current_name).cloned());
+        scopes.structs = own_structs;
+        let mut own_methods = vec![(
+            current_name.clone(),
             st.method_members
                 .iter()
                 .map(|m| (m.name.clone(), m.ty.clone()))
                 .collect(),
         )];
+        own_methods.extend(struct_methods.iter().filter(|(n, _)| *n != current_name).cloned());
+        scopes.methods = own_methods;
 
         // Constructor body.
         if let Some(body) = &mut st.constructor.body {

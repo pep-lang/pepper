@@ -672,3 +672,30 @@ fn dropped_struct_constructor_attribute_validated() {
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
+
+#[test]
+fn simulated_host_selects_that_platform() {
+    // `with_simulated_host` evaluates predicates as if compiling on another
+    // platform (tests use it to push non-host code through sema/codegen),
+    // and restores the real host afterwards.
+    let source = "[Target(OS(Windows) && Arch(aarch64))] extern int win_arm();\n\
+                  [Target(OS(Mac))] extern int mac_any();\n\
+                  [Target(OS(Linux) && Arch(x64))] extern int linux_x64();\n\
+                  test(): int {\nreturn 0;\n}";
+    let names = |os: &str, arch: &str| -> Vec<String> {
+        pepper_sema::with_simulated_host(os, arch, || {
+            filtered_module(source).externs.iter().map(|e| e.name.clone()).collect()
+        })
+    };
+    assert_eq!(names("windows", "aarch64"), vec!["win_arm"]);
+    assert_eq!(names("windows", "x86_64"), Vec::<String>::new());
+    assert_eq!(names("macos", "x86_64"), vec!["mac_any"]);
+    assert_eq!(names("linux", "x86_64"), vec!["linux_x64"]);
+    // The real host again.
+    let expected = usize::from(
+        (cfg!(target_os = "linux") && cfg!(target_arch = "x86_64"))
+            || cfg!(target_os = "macos")
+            || (cfg!(windows) && cfg!(target_arch = "aarch64")),
+    );
+    assert_eq!(filtered_module(source).externs.len(), expected);
+}

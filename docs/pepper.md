@@ -251,6 +251,14 @@ extern void printf(char* fmt, ...);
 [Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int objid);
 ```
 
+A C function with a variable argument list ends its parameters with `...`, after at least one named parameter:
+`extern int snprintf(char* buf, ulong n, char* fmt, ...);`. The call uses the C calling convention for variadic
+functions (which differs from a plain call on some targets, such as Apple arm64), and each argument past the named
+ones gets C's default argument promotions: integers narrower than `int` widen to `int`, `float` to `double`.
+
+A string literal passed to an extern is a NUL-terminated C string: `strlen("hello")` is 5. A `String` value is
+passed with `s.c_str()`.
+
 A `[Link("name")]` attribute on an extern that survives platform filtering adds `-l{name}` to the link step;
 duplicates are linked once.
 

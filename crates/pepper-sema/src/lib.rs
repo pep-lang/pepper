@@ -11,6 +11,6 @@ pub mod model_tests;
 pub use builder::build;
 pub use model::Module;
 pub use passes::transform_pass;
-pub use passes::platform::apply_platform_filters;
+pub use passes::platform::{apply_platform_filters, with_simulated_host};
 pub use type_name::TypeName;
 pub use visibility::{check_visibility, SourceFile, VisibilityError, VisibilityErrorKind};
