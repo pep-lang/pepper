@@ -33,10 +33,8 @@
 
 use crate::passes::platform::keep;
 use crate::type_name::{is_concrete_override, is_override};
-use pepper_parser::ast::{
-    Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement,
-    StructDecl, TypeName,
-};
+use crate::scope_walk::{ScopeWalk, Scopes};
+use pepper_parser::ast::{Declaration, Module, Span, StructDecl, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
 use std::collections::{HashMap, HashSet};
 
@@ -303,7 +301,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             prelude: &prelude,
             decls: &decls,
             members: &members,
-            scopes: vec![],
+            scopes: Scopes::default(),
             errors: &mut errors,
         };
         checker.module(file.module);
@@ -340,237 +338,17 @@ struct Checker<'a, 'e> {
     prelude: &'a [bool],
     decls: &'a HashMap<&'a str, Vec<Decl<'a>>>,
     members: &'a Members<'a>,
-    /// Locally bound names, innermost last.
-    /// Locally bound names, innermost last; `true` for generic parameters,
-    /// the only names that hide a type.
-    scopes: Vec<(HashSet<String>, bool)>,
+    scopes: Scopes,
     errors: &'e mut Vec<VisibilityError>,
 }
 
-impl<'a> Checker<'a, '_> {
-    fn module(&mut self, module: &'a Module) {
+impl Checker<'_, '_> {
+    fn module(&mut self, module: &Module) {
         // What platform selection drops is never compiled, and linking did
         // not look at it either.
         for decl in module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
-            self.declaration(decl);
+            self.walk_declaration(decl);
         }
-    }
-
-    fn declaration(&mut self, decl: &'a Declaration) {
-        match decl {
-            Declaration::Variable(v) => {
-                self.type_name(&v.type_name);
-                if let Some(e) = &v.default_value {
-                    self.expression(e);
-                }
-                self.bind(&v.name);
-            }
-            Declaration::Function(f) => self.function(f),
-            Declaration::Struct(s) => {
-                self.push_generics(&s.generic_params);
-                self.bind_members(&s.name);
-                for field in &s.fields {
-                    self.type_name(&field.type_name);
-                    if let Some(e) = &field.default_value {
-                        self.expression(e);
-                    }
-                }
-                // Platform selection never drops a constructor or destructor,
-                // whatever its attributes, so both are always checked.
-                if let Some(c) = &s.constructor {
-                    self.function_body(c);
-                }
-                if let Some(d) = &s.destructor {
-                    self.block_body(d);
-                }
-                for m in &s.methods {
-                    self.function(m);
-                }
-                self.scopes.pop();
-                self.scopes.pop();
-            }
-            Declaration::Trait(t) => {
-                self.push_generics(&t.generic_params);
-                for m in &t.methods {
-                    self.function(m);
-                }
-                self.scopes.pop();
-            }
-            Declaration::Extend(e) => {
-                // `extend Foo<T>` introduces T as a generic parameter; bind it
-                // before checking the target and traits that mention it. A
-                // name the program declares as a type specializes instead
-                // (`extend Array<Point>`), and is checked like any reference.
-                self.scopes.push((
-                    e.target
-                        .generic_types
-                        .iter()
-                        .filter(|t| t.generic_types.is_empty() && !self.types.contains(t.name.as_str()))
-                        .map(|t| t.name.clone())
-                        .collect(),
-                    true,
-                ));
-                self.type_name(&e.target);
-                for t in &e.traits {
-                    self.type_name(t);
-                }
-                self.bind_members(&e.target.name);
-                for m in &e.methods {
-                    self.function(m);
-                }
-                self.scopes.pop();
-                self.scopes.pop();
-            }
-            Declaration::TypeAlias(t) => {
-                self.push_generics(&t.generic_params);
-                self.type_name(&t.target);
-                self.scopes.pop();
-            }
-        }
-    }
-
-    /// A function, unless platform selection drops it.
-    fn function(&mut self, f: &'a FunctionDecl) {
-        if keep(&f.attributes).unwrap_or(true) {
-            self.function_body(f);
-        }
-    }
-
-    fn function_body(&mut self, f: &'a FunctionDecl) {
-        self.push_generics(&f.generic_params);
-        self.type_name(&f.return_type);
-        self.scopes.push((HashSet::new(), false));
-        for p in &f.parameters {
-            self.type_name(&p.type_name);
-            if let Some(e) = &p.default_value {
-                self.expression(e);
-            }
-            self.bind(&p.name);
-        }
-        if let Some(body) = &f.body {
-            self.block(body);
-        }
-        self.scopes.pop();
-        self.scopes.pop();
-    }
-
-    /// A block, unless platform selection drops it.
-    fn block(&mut self, block: &'a Block) {
-        if keep(&block.attributes).unwrap_or(true) {
-            self.block_body(block);
-        }
-    }
-
-    fn block_body(&mut self, block: &'a Block) {
-        self.scopes.push((HashSet::new(), false));
-        for stmt in &block.statements {
-            self.statement(stmt);
-        }
-        self.scopes.pop();
-    }
-
-    fn statement(&mut self, stmt: &'a Statement) {
-        match stmt {
-            Statement::Expression(e) => self.expression(e),
-            Statement::Block(b) => self.block(b),
-            Statement::Declaration(d) => self.declaration(d),
-            Statement::Branch(b) => {
-                self.expression(&b.condition);
-                self.block(&b.if_block);
-                if let Some(e) = &b.else_block {
-                    self.block(e);
-                }
-            }
-            Statement::While(w) => {
-                self.expression(&w.condition);
-                self.block(&w.block);
-            }
-            Statement::For(f) => {
-                // The iterable is evaluated outside the loop variable's scope.
-                self.expression(&f.iterable);
-                self.scopes.push((HashSet::new(), false));
-                self.type_name(&f.binding.type_name);
-                self.bind(&f.binding.name);
-                self.block(&f.block);
-                self.scopes.pop();
-            }
-            Statement::With(w) => {
-                // The scope is evaluated outside the binding's scope; the
-                // binding is visible in the body only, not in `else`.
-                self.expression(&w.scope);
-                self.scopes.push((HashSet::new(), false));
-                if let Some(b) = &w.binding {
-                    self.type_name(&b.type_name);
-                    self.bind(&b.name);
-                }
-                self.block(&w.block);
-                self.scopes.pop();
-                if let Some(e) = &w.else_block {
-                    self.block(e);
-                }
-            }
-            Statement::Return(r) => {
-                if let Some(expr) = &r.expr {
-                    self.expression(expr)
-                }
-            }
-            Statement::LoopBreak(_) => {}
-        }
-    }
-
-    fn expression(&mut self, expr: &'a Expression) {
-        match expr {
-            Expression::Literal { .. } => {}
-            Expression::SymbolRef { id, span } => self.reference(id, *span),
-            Expression::TypeLiteral(t) | Expression::SizeOf(t) => self.type_name(t),
-            Expression::Unary { operand, .. } => self.expression(operand),
-            Expression::Cast { expr, ty, .. } => {
-                self.expression(expr);
-                self.type_name(ty);
-            }
-            Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } => {
-                self.expression(lhs);
-                self.expression(rhs);
-            }
-            Expression::Ternary { condition, true_expr, false_expr, .. } => {
-                self.expression(condition);
-                self.expression(true_expr);
-                self.expression(false_expr);
-            }
-            Expression::MemberAccess { lhs, name, name_span, .. } => {
-                self.expression(lhs);
-                self.member(name, *name_span);
-            }
-            Expression::FunctionCall { function, arguments, .. } => {
-                self.expression(function);
-                for a in arguments {
-                    self.expression(a);
-                }
-            }
-        }
-    }
-
-    fn type_name(&mut self, ty: &TypeName) {
-        let base = ty.name.trim_end_matches(|c| c == '*' || c == '[' || c == ']');
-        // Only a generic parameter hides a type: a local or member named
-        // `Point` is a value, as linking also treats it.
-        if self.scopes.iter().any(|(s, generic)| *generic && s.contains(base)) {
-            for g in &ty.generic_types {
-                self.type_name(g);
-            }
-            return;
-        }
-        self.check_reference(base, ty.span);
-        for g in &ty.generic_types {
-            self.type_name(g);
-        }
-    }
-
-    fn reference(&mut self, name: &str, span: Span) {
-        if self.scopes.iter().any(|(s, _)| s.contains(name)) {
-            return;
-        }
-        self.check_reference(name, span);
     }
 
     /// Check a reference not bound locally.
@@ -579,7 +357,7 @@ impl<'a> Checker<'a, '_> {
             return;
         }
         // Not a top-level name: possibly a bare extension method in a method body.
-        let Some(entries) = self.decls.get(name) else { return self.member(name, span) };
+        let Some(entries) = self.decls.get(name) else { return self.visit_member(name, span) };
         if self.imported.get(&span.start).is_some_and(|n| n == name)
             // This file's own declaration counts, unless it is only a concrete
             // override (`pick<int>`) of a generic another file exports: that
@@ -604,11 +382,58 @@ impl<'a> Checker<'a, '_> {
         };
         self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, kind });
     }
+}
+
+impl ScopeWalk for Checker<'_, '_> {
+    fn scopes(&self) -> &Scopes {
+        &self.scopes
+    }
+
+    fn scopes_mut(&mut self) -> &mut Scopes {
+        &mut self.scopes
+    }
+
+    /// The members of `struct_name` visible in this file: its body's, plus
+    /// methods of exported extensions and of this file's own.
+    fn is_member(&self, struct_name: &str, name: &str) -> bool {
+        self.members.of_struct.get(struct_name).is_some_and(|m| m.contains(name))
+            || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
+                ext.iter().any(|&(m, file, exported)| m == name && (exported || file == self.file))
+            })
+    }
+
+    /// `extend Foo<T>` introduces T as a generic parameter. A name the
+    /// program declares as a type specializes instead (`extend
+    /// Array<Point>`), and is checked like any reference.
+    fn extend_params(&self, target: &TypeName) -> HashSet<String> {
+        target
+            .generic_types
+            .iter()
+            .filter(|t| t.generic_types.is_empty() && !self.types.contains(t.name.as_str()))
+            .map(|t| t.name.clone())
+            .collect()
+    }
+
+    fn visit_symbol(&mut self, id: &String, span: Span) {
+        if !self.is_local(id) {
+            self.check_reference(id, span);
+        }
+    }
+
+    fn visit_type_name(&mut self, ty: &TypeName) {
+        let base = ty.name.trim_end_matches(|c| c == '*' || c == '[' || c == ']');
+        // Only a generic parameter hides a type: a local or member named
+        // `Point` is a value, as linking also treats it.
+        if !self.scopes.is_type_local(base) {
+            self.check_reference(base, ty.span);
+        }
+        self.walk_type_name(ty);
+    }
 
     /// A member name (`x.name`, or bare `name` in a method body) that some
     /// extension declares: rejected unless a struct body or an extension
     /// visible to this file declares it too.
-    fn member(&mut self, name: &str, span: Span) {
+    fn visit_member(&mut self, name: &str, span: Span) {
         let Some(entries) = self.members.in_extensions.get(name) else { return };
         let visible = |&(file, exported): &(usize, bool)| exported || file == self.file;
         if entries.iter().any(visible) || self.members.in_struct_bodies.get(name).is_some_and(|s| s.iter().any(visible)) {
@@ -621,36 +446,6 @@ impl<'a> Checker<'a, '_> {
             declared_in: entries[0].0,
             kind: VisibilityErrorKind::PrivateExtension,
         });
-    }
-
-    fn bind(&mut self, name: &str) {
-        if let Some((scope, _)) = self.scopes.last_mut() {
-            scope.insert(name.to_string());
-        }
-    }
-
-    /// Bind `params`, then check their defaults, which may mention them
-    /// (`R<T, E=T>`).
-    fn push_generics(&mut self, params: &[GenericParam]) {
-        self.scopes.push((params.iter().map(|p| p.name.clone()).collect(), true));
-        for p in params {
-            if let Some(d) = &p.default {
-                self.type_name(d);
-            }
-        }
-    }
-
-    /// Bind the members of `struct_name` visible in this file: its body's,
-    /// plus methods of exported extensions and of this file's own.
-    fn bind_members(&mut self, struct_name: &str) {
-        let mut names: HashSet<String> =
-            self.members.of_struct.get(struct_name).map(|m| m.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
-        if let Some(ext) = self.members.of_extensions.get(struct_name) {
-            names.extend(
-                ext.iter().filter(|&&(_, file, exported)| exported || file == self.file).map(|&(m, _, _)| m.to_string()),
-            );
-        }
-        self.scopes.push((names, false));
     }
 }
 

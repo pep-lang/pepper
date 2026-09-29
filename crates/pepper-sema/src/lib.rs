@@ -5,6 +5,7 @@ pub mod model;
 pub mod modules;
 pub mod passes;
 pub mod program;
+pub(crate) mod scope_walk;
 pub(crate) mod static_type;
 pub mod struct_body;
 pub mod symbols;

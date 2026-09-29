@@ -22,9 +22,8 @@
 //! non-prelude files that the referencing file did not import.
 
 use crate::passes::platform::keep;
-use pepper_parser::ast::{
-    Block, Declaration, Expression, FunctionDecl, GenericParam, Module, Span, Statement, TypeName,
-};
+use crate::scope_walk::{ScopeWalkMut, Scopes};
+use pepper_parser::ast::{Declaration, Expression, FunctionDecl, Module, Span, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 use std::collections::{HashMap, HashSet};
 
@@ -350,9 +349,8 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             types: &types,
             names: &names,
             members: &members,
-            scopes: vec![],
+            scopes: Scopes::default(),
             imported: HashMap::new(),
-            current_struct: None,
             errors: &mut errors,
         };
         rewriter.module(&mut files[i].module);
@@ -644,17 +642,6 @@ fn bind_imports(
     b
 }
 
-/// One level of names bound inside a declaration.
-enum Scope {
-    /// Parameters and locals: they hide imports used as values.
-    Values(HashSet<String>),
-    /// Generic parameters: they hide imports as values and as types.
-    Generics(HashSet<String>),
-    /// The members of a struct visible in this file, looked up in
-    /// [`Members`] rather than copied.
-    Members(String),
-}
-
 /// Struct member names, for shadowing inside method bodies.
 #[derive(Default)]
 struct Members {
@@ -676,11 +663,8 @@ struct Rewriter<'a, 'e> {
     /// Every file's display name, for diagnostics.
     names: &'a [String],
     members: &'a Members,
-    /// Locally bound names, innermost last.
-    scopes: Vec<Scope>,
+    scopes: Scopes,
     imported: HashMap<usize, String>,
-    /// The struct whose body or extension is being walked.
-    current_struct: Option<String>,
     errors: &'e mut Vec<ModuleError>,
 }
 
@@ -701,204 +685,13 @@ impl Rewriter<'_, '_> {
             {
                 f.name = c;
             }
-            self.declaration(decl);
+            self.walk_declaration(decl);
         }
-    }
-
-    /// `name` is bound locally where a value is expected: a parameter,
-    /// local, generic parameter, or visible member.
-    fn is_local(&self, name: &str) -> bool {
-        self.scopes.iter().any(|s| match s {
-            Scope::Values(names) | Scope::Generics(names) => names.contains(name),
-            Scope::Members(st) => self.is_visible_member(st, name),
-        })
-    }
-
-    /// `name` is bound locally where a type is expected (a type position,
-    /// or a generic call such as `f<int>()`): only generic parameters. A
-    /// local or member is a value, and sema never binds a type or a generic
-    /// call to it.
-    fn is_type_local(&self, name: &str) -> bool {
-        self.scopes.iter().any(|s| matches!(s, Scope::Generics(names) if names.contains(name)))
     }
 
     /// Hidden where it is used: as a value (`value`), or as a type.
     fn is_hidden(&self, name: &str, value: bool) -> bool {
-        if value { self.is_local(name) } else { self.is_type_local(name) }
-    }
-
-    fn is_visible_member(&self, struct_name: &str, name: &str) -> bool {
-        self.members.of_body.get(struct_name).is_some_and(|m| m.contains(name))
-            || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
-                ext.iter().any(|(m, file, exported)| m == name && (*exported || *file == self.file))
-            })
-    }
-
-    fn declaration(&mut self, decl: &mut Declaration) {
-        match decl {
-            Declaration::Variable(v) => {
-                self.type_name(&mut v.type_name);
-                if let Some(e) = &mut v.default_value {
-                    self.expression(e);
-                }
-                self.bind(&v.name);
-            }
-            Declaration::Function(f) => self.function(f),
-            Declaration::Struct(s) => {
-                let outer = self.current_struct.replace(s.name.clone());
-                self.push_generics(&mut s.generic_params);
-                self.bind_members(&s.name.clone());
-                for field in &mut s.fields {
-                    self.type_name(&mut field.type_name);
-                    if let Some(e) = &mut field.default_value {
-                        self.expression(e);
-                    }
-                }
-                // Platform selection never drops a constructor or destructor,
-                // whatever its attributes, so both are always walked.
-                if let Some(c) = &mut s.constructor {
-                    self.function_body(c);
-                }
-                if let Some(d) = &mut s.destructor {
-                    self.block_body(d);
-                }
-                for m in &mut s.methods {
-                    self.function(m);
-                }
-                self.current_struct = outer;
-                self.scopes.pop();
-                self.scopes.pop();
-            }
-            Declaration::Trait(t) => {
-                self.push_generics(&mut t.generic_params);
-                for m in &mut t.methods {
-                    self.function(m);
-                }
-                self.scopes.pop();
-            }
-            Declaration::Extend(e) => {
-                // `extend Box<T>` introduces T; `extend Array<Pt>`, with `Pt`
-                // imported or declared by any file, specializes and is
-                // rewritten (or checked) like any reference.
-                let params = e
-                    .target
-                    .generic_types
-                    .iter()
-                    .filter(|t| {
-                        t.generic_types.is_empty()
-                            && !self.own.contains(&t.name)
-                            && !self.types.contains(&t.name)
-                            && !self.bindings.qualified.contains_key(t.name.split('.').next().unwrap_or(""))
-                            && matches!(resolve_imported(&t.name, self.bindings, self.prelude), Resolution::Unknown)
-                    })
-                    .map(|t| t.name.clone())
-                    .collect();
-                self.scopes.push(Scope::Generics(params));
-                self.type_name(&mut e.target);
-                for t in &mut e.traits {
-                    self.type_name(t);
-                }
-                self.bind_members(&e.target.name.clone());
-                let outer = self.current_struct.replace(e.target.name.clone());
-                for m in &mut e.methods {
-                    self.function(m);
-                }
-                self.current_struct = outer;
-                self.scopes.pop();
-                self.scopes.pop();
-            }
-            Declaration::TypeAlias(t) => {
-                self.push_generics(&mut t.generic_params);
-                self.type_name(&mut t.target);
-                self.scopes.pop();
-            }
-        }
-    }
-
-    /// A function, unless platform selection drops it.
-    fn function(&mut self, f: &mut FunctionDecl) {
-        if keep(&f.attributes).unwrap_or(true) {
-            self.function_body(f);
-        }
-    }
-
-    fn function_body(&mut self, f: &mut FunctionDecl) {
-        self.push_generics(&mut f.generic_params);
-        self.type_name(&mut f.return_type);
-        self.scopes.push(Scope::Values(HashSet::new()));
-        for p in &mut f.parameters {
-            self.type_name(&mut p.type_name);
-            if let Some(e) = &mut p.default_value {
-                self.expression(e);
-            }
-            self.bind(&p.name);
-        }
-        if let Some(body) = &mut f.body {
-            self.block(body);
-        }
-        self.scopes.pop();
-        self.scopes.pop();
-    }
-
-    /// A block, unless platform selection drops it.
-    fn block(&mut self, block: &mut Block) {
-        if keep(&block.attributes).unwrap_or(true) {
-            self.block_body(block);
-        }
-    }
-
-    fn block_body(&mut self, block: &mut Block) {
-        self.scopes.push(Scope::Values(HashSet::new()));
-        for stmt in &mut block.statements {
-            self.statement(stmt);
-        }
-        self.scopes.pop();
-    }
-
-    fn statement(&mut self, stmt: &mut Statement) {
-        match stmt {
-            Statement::Expression(e) => self.expression(e),
-            Statement::Block(b) => self.block(b),
-            Statement::Declaration(d) => self.declaration(d),
-            Statement::Branch(b) => {
-                self.expression(&mut b.condition);
-                self.block(&mut b.if_block);
-                if let Some(e) = &mut b.else_block {
-                    self.block(e);
-                }
-            }
-            Statement::While(w) => {
-                self.expression(&mut w.condition);
-                self.block(&mut w.block);
-            }
-            Statement::For(f) => {
-                self.expression(&mut f.iterable);
-                self.scopes.push(Scope::Values(HashSet::new()));
-                self.type_name(&mut f.binding.type_name);
-                self.bind(&f.binding.name);
-                self.block(&mut f.block);
-                self.scopes.pop();
-            }
-            Statement::With(w) => {
-                self.expression(&mut w.scope);
-                self.scopes.push(Scope::Values(HashSet::new()));
-                if let Some(b) = &mut w.binding {
-                    self.type_name(&mut b.type_name);
-                    self.bind(&b.name);
-                }
-                self.block(&mut w.block);
-                self.scopes.pop();
-                if let Some(e) = &mut w.else_block {
-                    self.block(e);
-                }
-            }
-            Statement::Return(r) => {
-                if let Some(expr) = &mut r.expr {
-                    self.expression(expr)
-                }
-            }
-            Statement::LoopBreak(_) => {}
-        }
+        if value { self.is_local(name) } else { self.scopes.is_type_local(name) }
     }
 
     /// The qualifier `q` names an imported module here (not shadowed).
@@ -986,7 +779,52 @@ impl Rewriter<'_, '_> {
         Some(c)
     }
 
-    fn expression(&mut self, expr: &mut Expression) {
+    /// `name` is a method some extension (visible here or not) adds to the
+    /// struct whose methods are being walked. Sema sees every extension, so
+    /// a rewritten reference of that name would bind to the method.
+    fn is_any_extension_method(&self, name: &str) -> bool {
+        self.scopes
+            .current_struct()
+            .and_then(|s| self.members.of_extensions.get(s))
+            .is_some_and(|ext| ext.iter().any(|(m, _, _)| m == name))
+    }
+}
+
+impl ScopeWalkMut for Rewriter<'_, '_> {
+    fn scopes(&self) -> &Scopes {
+        &self.scopes
+    }
+
+    fn scopes_mut(&mut self) -> &mut Scopes {
+        &mut self.scopes
+    }
+
+    fn is_member(&self, struct_name: &str, name: &str) -> bool {
+        self.members.of_body.get(struct_name).is_some_and(|m| m.contains(name))
+            || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
+                ext.iter().any(|(m, file, exported)| m == name && (*exported || *file == self.file))
+            })
+    }
+
+    /// `extend Box<T>` introduces T; `extend Array<Pt>`, with `Pt` imported
+    /// or declared by any file, specializes and is rewritten (or checked)
+    /// like any reference.
+    fn extend_params(&self, target: &TypeName) -> HashSet<String> {
+        target
+            .generic_types
+            .iter()
+            .filter(|t| {
+                t.generic_types.is_empty()
+                    && !self.own.contains(&t.name)
+                    && !self.types.contains(&t.name)
+                    && !self.bindings.qualified.contains_key(t.name.split('.').next().unwrap_or(""))
+                    && matches!(resolve_imported(&t.name, self.bindings, self.prelude), Resolution::Unknown)
+            })
+            .map(|t| t.name.clone())
+            .collect()
+    }
+
+    fn visit_expression(&mut self, expr: &mut Expression) {
         if let Expression::MemberAccess { lhs, name, span, .. } = expr
             && let Expression::SymbolRef { id, .. } = lhs.as_ref()
             && let Some(target) = self.qualifier(id)
@@ -1000,39 +838,16 @@ impl Rewriter<'_, '_> {
             }
             return;
         }
-        match expr {
-            Expression::Literal { .. } => {}
-            Expression::SymbolRef { id, span } => {
-                if let Some(c) = self.unqualified(id, *span, true) {
-                    *id = c;
-                }
-            }
-            Expression::TypeLiteral(t) | Expression::SizeOf(t) => self.type_name(t),
-            Expression::Unary { operand, .. } => self.expression(operand),
-            Expression::Cast { expr, ty, .. } => {
-                self.expression(expr);
-                self.type_name(ty);
-            }
-            Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } => {
-                self.expression(lhs);
-                self.expression(rhs);
-            }
-            Expression::Ternary { condition, true_expr, false_expr, .. } => {
-                self.expression(condition);
-                self.expression(true_expr);
-                self.expression(false_expr);
-            }
-            Expression::MemberAccess { lhs, .. } => self.expression(lhs),
-            Expression::FunctionCall { function, arguments, .. } => {
-                self.expression(function);
-                for a in arguments {
-                    self.expression(a);
-                }
-            }
+        self.walk_expression(expr);
+    }
+
+    fn visit_symbol(&mut self, id: &mut String, span: Span) {
+        if let Some(c) = self.unqualified(id, span, true) {
+            *id = c;
         }
     }
 
-    fn type_name(&mut self, ty: &mut TypeName) {
+    fn visit_type_name(&mut self, ty: &mut TypeName) {
         let base_len = ty.name.trim_end_matches(|c| c == '*' || c == '[' || c == ']').len();
         let (base, suffix) = ty.name.split_at(base_len);
         let (base, suffix) = (base.to_string(), suffix.to_string());
@@ -1058,38 +873,6 @@ impl Rewriter<'_, '_> {
         if let Some(c) = resolved {
             ty.name = c + &suffix;
         }
-        for g in &mut ty.generic_types {
-            self.type_name(g);
-        }
-    }
-
-    fn bind(&mut self, name: &str) {
-        if let Some(Scope::Values(names) | Scope::Generics(names)) = self.scopes.last_mut() {
-            names.insert(name.to_string());
-        }
-    }
-
-    fn push_generics(&mut self, params: &mut [GenericParam]) {
-        self.scopes.push(Scope::Generics(params.iter().map(|p| p.name.clone()).collect()));
-        for p in params {
-            if let Some(d) = &mut p.default {
-                self.type_name(d);
-            }
-        }
-    }
-
-    /// `name` is a method some extension (visible here or not) adds to the
-    /// struct whose methods are being walked. Sema sees every extension, so
-    /// a rewritten reference of that name would bind to the method.
-    fn is_any_extension_method(&self, name: &str) -> bool {
-        self.current_struct
-            .as_ref()
-            .and_then(|s| self.members.of_extensions.get(s))
-            .is_some_and(|ext| ext.iter().any(|(m, _, _)| m == name))
-    }
-
-    /// Bind the members of `struct_name` visible in this file.
-    fn bind_members(&mut self, struct_name: &str) {
-        self.scopes.push(Scope::Members(struct_name.to_string()));
+        self.walk_type_name(ty);
     }
 }
