@@ -1373,3 +1373,24 @@ test(): int {
         45
     );
 }
+
+// ── assert with a null message ──────────────────────────────────────────────
+
+#[test]
+fn assert_with_null_message() {
+    // `__null` is already a `char*`: the message used to be lowered through
+    // `String.c_str`, which dereferenced null even when the assert held.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    assert(true, __null);
+    var p: __ptr<char> = __null;
+    assert(1 < 2, p);
+    return 7;
+}
+"#
+        ),
+        7
+    );
+}

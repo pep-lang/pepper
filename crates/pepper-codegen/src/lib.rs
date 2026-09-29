@@ -2780,9 +2780,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // The message must be a `char*`: an argument already typed
                     // as a pointer (`char*`, `__ptr<T>`) is passed through,
                     // everything else (notably `String`) lowers via `c_str`.
-                    let ptr = self
-                        .value_sema_type(other)
-                        .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<"));
+                    // `__null` is a pointer too: calling `c_str` on it would
+                    // dereference null before `assert` even runs.
+                    let ptr = matches!(other, Expression::PointerLiteral)
+                        || self
+                            .value_sema_type(other)
+                            .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<"));
                     (v, ptr, self.owned_temp_type(other))
                 }
             };
