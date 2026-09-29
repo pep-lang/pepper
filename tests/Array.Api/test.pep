@@ -42,9 +42,13 @@ main(): int {
     s.insert(0, Widget());
     assert(__refcount<Widget>(w) == 2, "insert shifts without refcount churn");
     assert(s[1].tag == 5, "shifted element is intact");
+    # remove_at moves the slot's reference out to `gone` rather than copying
+    # it, so the count stays at two: `w` and `gone`.
     var gone = s.remove_at(1);
-    assert(gone.tag == 5 && __refcount<Widget>(w) == 1, "remove_at transfers the reference");
+    assert(gone.tag == 5 && __refcount<Widget>(w) == 2, "remove_at transfers the reference");
+    s.append(w);
+    assert(__refcount<Widget>(w) == 3, "append acquires again");
     s.clear();
-    assert(__refcount<Widget>(w) == 1, "clear releases the Array's reference");
+    assert(__refcount<Widget>(w) == 2, "clear releases the Array's reference");
     return 0;
 }

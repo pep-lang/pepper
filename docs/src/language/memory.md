@@ -60,7 +60,9 @@ Concretely, a reference is released when:
 - **A parameter's function returns.** The function held its parameters for
   as long as it ran.
 - **The object that holds a field is destroyed**, or a container removes an
-  element (`clear()`, `remove_at()`, overwriting `list[i]`, and so on).
+  element (`clear()`, overwriting `list[i]`, and so on). `remove_at()` and
+  `pop()` are the exception: they hand the container's reference to the
+  caller, so `var x = list.remove_at(0);` leaves the count unchanged.
 - **A temporary is no longer needed.** A result that is not stored anywhere,
   like the one from `make("temporary");`, is released at the end of the
   statement. The same goes for a call result passed straight to another

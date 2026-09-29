@@ -600,7 +600,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
 | Driver integration | `crates/pepper-driver/tests/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
 | Diagnostics | `crates/pepper-driver/tests/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
-| Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests` (**ignored**). |
+| Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
 | Runtime docs | `crates/pepper-driver/tests/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
@@ -613,17 +613,8 @@ To run a subset:
 cargo test --workspace --test module_tests            # one integration binary
 cargo test --workspace utf8                           # name substring
 cargo test -p pepper-parser                           # one crate
-cargo test --workspace -- --ignored                   # the known gaps
 cargo test --workspace --no-default-features --features llvm19-1
 ```
-
-Known ignored tests (ignored does not mean passing):
-
-- `corpus_tests::corpus_files_compile_and_run`: `tests/Array.Api` aborts
-  on its `remove_at transfers the reference` assert, which expects
-  `__refcount<Widget>(w) == 1` while both `w` and `gone` hold the element.
-  `Trait.Generic` now passes. The `#[ignore]` reason string still names
-  trait dispatch.
 
 Harness gotchas: runtime discovery and several harnesses `chdir` to the
 repository root (a process-wide change; every test sets the same
@@ -813,5 +804,3 @@ compiles the code but cannot run it. Run it for real with the
   itself through generics stops there instead of looping forever.
 - **Unused CLI flags**: `-g`, `-v`, `-T`, `--Tall`; `--MSVC` returns an
   error. Only the first source file is compiled.
-- **Stale guidance**: `.agents/skills/test/SKILL.md` still says "most"
-  corpus fixtures fail. Only `Array.Api` fails (section 9).

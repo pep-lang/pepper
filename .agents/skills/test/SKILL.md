@@ -32,8 +32,7 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 The suite has several hundred tests and grows with nearly every change, so
 no count is kept here: a run is good when every `test result:` line says
-`0 failed`. A few tests are `#[ignore]`d on purpose (see **Corpus
-behavior**).
+`0 failed`. No test is `#[ignore]`d.
 
 | Where | What |
 |---|---|
@@ -41,7 +40,7 @@ behavior**).
 | `pepper-sema` | model tests in `src/model_tests.rs` (parse + build + transform → resolved model) and visibility tests in `src/visibility.rs` |
 | `pepper-codegen` | `src/target.rs`: the host's own triple resolves to a target machine. It runs alone in its binary because inkwell's execution-engine constructors register the host backend as a side effect, which a JIT test running first could mask. `tests/codegen_tests.rs`: codegen + JIT, asserting the value `test()` returns |
 | `pepper-files` | runtime discovery (`src/runtime.rs`) |
-| `pepper-driver` | one integration test binary per feature in `tests/*_tests.rs`: most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` is `#[ignore]`d (see below) |
+| `pepper-driver` | one integration test binary per feature in `tests/*_tests.rs`: most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` runs every corpus fixture (see below) |
 | `tools/lsp` | language server tests in `src/tests.rs` |
 | root `pepper` | `tests/parser_corpus.rs`: every `tests/**/*.pep` file must parse into a well-formed module |
 | `xtask` | unit tests in `src/main.rs` for the setup scripts' flag handling and generated cargo config |
@@ -51,7 +50,7 @@ behavior**).
 ## Corpus behavior
 
 - `tests/parser_corpus.rs` treats the corpus as the executable spec for the parser: every file must parse with at least one declaration. Adding a `.pep` file extends it automatically.
-- `crates/pepper-driver/tests/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. It is `#[ignore]`d because one fixture still fails (see the `#[ignore]` reason there). Ignored ≠ passing — don't count it toward success, and check its progress with `-- --ignored`.
+- `crates/pepper-driver/tests/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. Every fixture must exit 0; a new `tests/<Name>/test.pep` joins the run automatically.
 
 ## Diagnosing failures
 

@@ -193,9 +193,8 @@ cargo test --workspace
 
 `--workspace` is not optional. The repository root is itself a package, so a
 bare `cargo test` runs only its single integration test and **silently skips
-every crate** under `crates/`. Every test should pass. One is ignored: the
-corpus test in `crates/pepper-driver/tests/corpus_tests.rs`, because one of
-its fixtures still fails (the `#[ignore]` reason names it).
+every crate** under `crates/`. A good run has `0 failed` on every
+`test result:` line; nothing is ignored.
 
 Those commands build against the default LLVM 20. For any other version, name
 it — the same count should pass:

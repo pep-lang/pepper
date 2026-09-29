@@ -77,12 +77,9 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
         .map_err(|e| format!("spawn failed: {}", e))
 }
 
-/// KNOWN GAPS: 1 of 17 corpus fixtures fails. `Array.Api` aborts on its
-/// "remove_at transfers the reference" assert, which expects a refcount of 1
-/// while two locals hold the element. `Trait.Generic` passes since the trait
-/// conformance work (#82). Ignored until fixed; NOT a pass.
+/// Compiles, links, and runs every `tests/<Name>/test.pep` fixture; each must
+/// exit 0.
 #[test]
-#[ignore = "1/17 corpus fixture fails: Array.Api remove_at refcount assert"]
 fn corpus_files_compile_and_run() {
     let mut tested = 0usize;
     let mut failures: Vec<String> = vec![];
