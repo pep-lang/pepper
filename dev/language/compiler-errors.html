@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7f4f3964.js";
+            window.path_to_searchindex_js = "../searchindex-b3e16786.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -339,9 +339,9 @@ A raw pointer is never a struct either: a <code>__ptr&lt;char&gt;</code> is not 
 <code>c_str()</code>).
 The check applies wherever a value flows into a typed place: a variable’s
 initializer, an assignment, an argument and a <code>return</code>:</p>
-<pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
+<pre><code class="language-text">main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
     2 |     int x = "hello";
-      |     ^~~
+      |             ^~~~~~~
 </code></pre>
 <pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);

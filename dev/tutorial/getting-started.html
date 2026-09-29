@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7f4f3964.js";
+            window.path_to_searchindex_js = "../searchindex-b3e16786.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -327,9 +327,14 @@ release whose tag starts with <code>vsix-v</code>. Download it and install it in
 with <strong>Extensions: Install from VSIX…</strong> from the command palette. The
 language server is bundled with the extension, so there is nothing else to
 install.</p>
-<p>Two things are useful once it is installed:</p>
+<p>A few things are useful once it is installed:</p>
 <ul>
 <li><strong>Pepper: Restart Language Server</strong> restarts the server on demand.</li>
+<li>Where a value is converted by an
+<a href="../language/structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a>,
+the editor shows the call it stands for as an inlay hint (<code>Path(</code> before
+<code>"notes.txt"</code> and <code>)</code> after), and hovering the value says so. The
+<code>pepper.inlayHints.implicitConversions</code> setting turns the hints off.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
 built yourself (<code>cargo build --release -p pepper-lsp</code> builds
 <code>target/release/pepper-lsp</code>). The server restarts whenever that file
