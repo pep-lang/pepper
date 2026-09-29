@@ -55,8 +55,10 @@ fn compile_and_run(entry: &Path) -> Result<std::process::ExitStatus, String> {
     let mut generator = CodeGenerator::new(&ctx, "test");
     generator.generate(&mut merged).map_err(|d| d.to_string())?;
 
-    // Emit + link.
-    let build_dir = std::env::temp_dir().join("pepper_corpus_test");
+    // Emit + link. The directory is per process: CI runs several jobs on one
+    // host at once, and a shared path lets one job overwrite or exec another
+    // job's binary mid-link ("Text file busy", "file truncated").
+    let build_dir = std::env::temp_dir().join(format!("pepper_corpus_test_{}", std::process::id()));
     std::fs::create_dir_all(&build_dir).unwrap();
     let obj_path = build_dir.join("corpus.o");
     let out_path = build_dir.join(if cfg!(windows) { "corpus_bin.exe" } else { "corpus_bin" });
@@ -92,6 +94,9 @@ fn corpus_files_compile_and_run() {
             Err(e) => failures.push(format!("{}: {}", name, e)),
         }
     }
+    let _ = std::fs::remove_dir_all(
+        std::env::temp_dir().join(format!("pepper_corpus_test_{}", std::process::id())),
+    );
     assert!(tested > 0, "no corpus tests found");
     assert!(
         failures.is_empty(),
