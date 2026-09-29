@@ -517,9 +517,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             .get(&ext.ty.to_string())
             .ok_or_else(|| format!("unknown return type {}", ext.ty))?;
         let fn_type = llvm_fn_type(return_type, &param_types, false);
-        let fn_value = match self.module.get_function(&ext.name) {
+        // `[LinkName("sym")]` binds the declared name to a different C symbol.
+        let symbol = ext.link_name()?;
+        let fn_value = match self.module.get_function(symbol) {
             Some(f) => f,
-            None => self.module.add_function(&ext.name, fn_type, None),
+            None => self.module.add_function(symbol, fn_type, None),
         };
         self.functions.insert(ext.name.clone(), fn_value);
         self.fn_returns.insert(ext.name.clone(), ext.ty.to_string());

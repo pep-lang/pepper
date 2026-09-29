@@ -61,3 +61,79 @@ main(): int {
     let status = Command::new(&out_path).status().expect("spawn linked binary");
     assert!(status.success(), "linked binary exited with {}", status);
 }
+
+/// Compile `source` to a native binary in a fresh temp dir named `name`, link
+/// it, and return the path of the executable.
+fn build_binary(name: &str, source: &str) -> Result<PathBuf, String> {
+    let root = repo_root();
+    std::env::set_current_dir(&root).unwrap();
+
+    let dir = std::env::temp_dir().join(format!("pepper_{name}_test"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src_path = dir.join(format!("{name}.pep"));
+    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+    std::fs::write(&src_path, source).unwrap();
+
+    let options = pepper_driver::Options::parse_from(vec![
+        "pepper".to_string(),
+        src_path.to_string_lossy().into_owned(),
+        "-o".to_string(),
+        out_path.to_string_lossy().into_owned(),
+    ]);
+    let code = pepper_driver::run(options)?;
+    assert_eq!(code, 0);
+    Ok(out_path)
+}
+
+#[test]
+fn link_name_binds_extern_to_c_symbol() {
+    // `pep_abs` exists in no library: the call only links if [LinkName]
+    // made the object reference `llabs` (libc / the UCRT) instead. `llabs`
+    // takes a 64-bit `long long` on every target, matching Pepper's `long`.
+    let out_path = build_binary(
+        "link_name_probe",
+        r#"
+[LinkName("llabs")] extern long pep_abs(long v);
+
+main(): int {
+    return pep_abs(-7) == 7 ? 0 : 1;
+}"#,
+    )
+    .expect("compile + link");
+    let status = Command::new(&out_path).status().expect("spawn linked binary");
+    assert!(status.success(), "linked binary exited with {}", status);
+}
+
+#[test]
+fn link_name_combines_with_target() {
+    // Each platform binds the same Pepper name to its own symbol; the
+    // dropped declaration's symbol must never reach the object. (`labs` is
+    // 64-bit only on LP64 targets; Windows' `long` is 32-bit.)
+    let out_path = build_binary(
+        "link_name_target_probe",
+        r#"
+[Target(OS(Windows))] [LinkName("llabs")] extern long pep_abs(long v);
+[Target(!OS(Windows))] [LinkName("labs")] extern long pep_abs(long v);
+
+main(): int {
+    return pep_abs(-9) == 9 ? 0 : 1;
+}"#,
+    )
+    .expect("compile + link");
+    let status = Command::new(&out_path).status().expect("spawn linked binary");
+    assert!(status.success(), "linked binary exited with {}", status);
+}
+
+#[test]
+fn link_name_requires_one_string() {
+    for (name, attr) in [
+        ("link_name_bare", "[LinkName]"),
+        ("link_name_empty", "[LinkName(\"\")]"),
+        ("link_name_two", "[LinkName(\"a\", \"b\")]"),
+        ("link_name_twice", "[LinkName(\"labs\")] [LinkName(\"llabs\")]"),
+    ] {
+        let source = format!("{attr} extern long pep_abs(long v);\nmain(): int {{ return pep_abs(-1) as int - 1; }}");
+        let err = build_binary(name, &source).expect_err(attr);
+        assert!(err.contains("LinkName"), "{attr}: unexpected error: {err}");
+    }
+}

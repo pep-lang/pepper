@@ -252,6 +252,19 @@ extern void printf(char* fmt, ...);
 A `[Link("name")]` attribute on an extern that survives platform filtering adds `-l{name}` to the link step;
 duplicates are linked once.
 
+`[LinkName("symbol")]` binds an extern to a C symbol whose name differs from the declared one. Pepper code calls
+the extern by its declared name; the object file references `symbol`. Combined with `[Target(...)]`, one Pepper
+name can bind to a different symbol per platform:
+
+```
+[LinkName("llabs")] extern long abs64(long v);
+
+[Target(OS(Mac) && Arch(x64))] [LinkName("stat$INODE64")] extern int stat(char* path, void* buf);
+[Target(OS(Mac) && Arch(aarch64))] extern int stat(char* path, void* buf);
+```
+
+`LinkName` takes exactly one non-empty string, and an extern may carry at most one.
+
 ## Exporting functions
 
 The `[Export]` attribute attached to any global function will create a C linkage exported function. Types used

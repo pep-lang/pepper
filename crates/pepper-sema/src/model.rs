@@ -380,6 +380,37 @@ pub struct ExternDef {
     pub attributes: Vec<ast::Attribute>,
 }
 
+impl ExternDef {
+    /// The C symbol this extern binds to: the argument of a
+    /// `[LinkName("sym")]` attribute, else the declared name. Pepper code
+    /// always calls the extern by its declared name.
+    pub fn link_name(&self) -> Result<&str, String> {
+        let mut found: Option<&str> = None;
+        for attr in &self.attributes {
+            let ast::Expression::FunctionCall { function, arguments, .. } = &attr.body else {
+                if matches!(&attr.body, ast::Expression::SymbolRef { id, .. } if id == "LinkName") {
+                    return Err(format!("LinkName on extern '{}' needs a symbol: [LinkName(\"sym\")]", self.name));
+                }
+                continue;
+            };
+            if !matches!(function.as_ref(), ast::Expression::SymbolRef { id, .. } if id == "LinkName") {
+                continue;
+            }
+            let [ast::Expression::Literal { value: ast::Literal::String(sym), .. }] = arguments.as_slice() else {
+                return Err(format!("LinkName on extern '{}' takes exactly one string: [LinkName(\"sym\")]", self.name));
+            };
+            if sym.is_empty() {
+                return Err(format!("LinkName on extern '{}' must not be empty", self.name));
+            }
+            if found.is_some() {
+                return Err(format!("extern '{}' has more than one LinkName", self.name));
+            }
+            found = Some(sym.as_str());
+        }
+        Ok(found.unwrap_or(&self.name))
+    }
+}
+
 /// Type alias definition: `type Name<P1, P2=Default> = Target;`. The target
 /// may reference the alias's parameters; uses are expanded at resolution.
 #[derive(Debug, Clone)]
