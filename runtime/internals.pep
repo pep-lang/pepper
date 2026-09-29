@@ -98,9 +98,14 @@ dec(v: long): __ptr<char> {
         v = v / 10;
     }
     if (neg == 1) { buf[n] = 45; n = n + 1; }
+    # Digits were produced least-significant first: reverse in place by
+    # swapping pairs (copying buf[n-1-i] over buf[i] for every i mirrors the
+    # second half onto the first instead).
     var i = 0;
-    while (i < n) {
+    while (i < n / 2) {
+        var t = buf[i];
         buf[i] = buf[n - 1 - i];
+        buf[n - 1 - i] = t;
         i = i + 1;
     }
     buf[n] = 0;

@@ -521,7 +521,35 @@ impl<'ctx> CodeGenerator<'ctx> {
         let symbol = ext.link_name()?;
         let fn_value = match self.module.get_function(symbol) {
             Some(f) => f,
-            None => self.module.add_function(symbol, fn_type, None),
+            None => {
+                let f = self.module.add_function(symbol, fn_type, None);
+                // C ABI: integer arguments/returns narrower than int carry
+                // signext/zeroext (as clang emits), so the callee may rely on
+                // the upper bits of the register (required on e.g. Apple
+                // arm64, and assumed by clang-built x86-64 code).
+                use inkwell::attributes::{Attribute, AttributeLoc};
+                let ext_attr = |ty_name: &str, llvm_ty: &BasicTypeEnum<'ctx>| -> Option<Attribute> {
+                    let BasicTypeEnum::IntType(it) = llvm_ty else { return None };
+                    if it.get_bit_width() >= 32 {
+                        return None;
+                    }
+                    let kind = if it.get_bit_width() == 1 || llvm_ops::is_unsigned_int_type(ty_name) {
+                        "zeroext"
+                    } else {
+                        "signext"
+                    };
+                    Some(self.context.create_enum_attribute(Attribute::get_named_enum_kind_id(kind), 0))
+                };
+                for (i, (param, llvm_ty)) in ext.parameters.iter().zip(&param_types).enumerate() {
+                    if let Some(a) = ext_attr(&param.ty.to_string(), llvm_ty) {
+                        f.add_attribute(AttributeLoc::Param(i as u32), a);
+                    }
+                }
+                if let Some(a) = ext_attr(&ext.ty.to_string(), &return_type) {
+                    f.add_attribute(AttributeLoc::Return, a);
+                }
+                f
+            }
         };
         self.functions.insert(ext.name.clone(), fn_value);
         self.fn_returns.insert(ext.name.clone(), ext.ty.to_string());
@@ -897,8 +925,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .return_block
                     .ok_or_else(|| "return outside function".to_string())?;
                 let mut value: Option<BasicValueEnum<'ctx>> = None;
+                let mut value_name: Option<String> = None;
                 if let Some(expr) = &ret.expr {
                     let v = self.codegen_expr(expr)?;
+                    value_name = Some(self.numeric_source_name(expr, &v));
                     // shared_ptr-by-value: returning a struct reference is a
                     // copy of an lvalue (local, param, field, index slot, or
                     // `this`), so acquire the new ref BEFORE releasing this
@@ -925,11 +955,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .retval_type
                         .clone()
                         .unwrap_or_default();
+                    // The source's sema name carries its signedness: a `u16`
+                    // returned as `long` zero-extends.
                     let coerced = llvm_ops::coerce(
                         self.context,
                         &self.builder,
                         value,
-                        &value_type_name(&value),
+                        &value_name.unwrap_or_else(|| value_type_name(&value)),
                         &retval_ty,
                     );
                     self.builder
@@ -976,7 +1008,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             // Integer literals codegen as i32; adjust into the alloca's width
             // so the full word is defined (widen e.g. the ctor's `u64 size`,
             // truncate e.g. `u8 b = 200` — a mismatched-width store is invalid
-            // IR and loads back garbage).
+            // IR and loads back garbage). A numeric target converts with C
+            // semantics from the source's sema type: unsigned sources
+            // zero-extend (`long l = u16 65535` stays 65535) and int<->float
+            // converts rather than storing the raw bits.
+            let target_name = var.ty.to_string();
+            let numeric_value = matches!(value, BasicValueEnum::IntValue(_) | BasicValueEnum::FloatValue(_));
+            let value = if numeric_value
+                && llvm_ops::is_numeric_type(&target_name)
+                && value.get_type() != ty
+            {
+                let src_name = self.numeric_source_name(default, &value);
+                llvm_ops::coerce(self.context, &self.builder, value, &src_name, &target_name)
+            } else {
+                value
+            };
             let value = match (&value, ty) {
                 (BasicValueEnum::IntValue(v), BasicTypeEnum::IntType(it))
                     if v.get_type().get_bit_width() < it.get_bit_width() =>
@@ -1247,6 +1293,23 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame.exited = true;
         self.builder.build_unconditional_branch(target).map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Type name of an already-generated numeric value for conversion
+    /// decisions: the declared sema type (which carries signedness — LLVM
+    /// flattens `u16` and `i16` to i16) when it agrees with the value's
+    /// kind, else the name implied by the LLVM value.
+    fn numeric_source_name(&self, expr: &Expression, value: &BasicValueEnum<'ctx>) -> String {
+        let fallback = value_type_name(value);
+        match self.value_sema_type(expr) {
+            Some(name)
+                if llvm_ops::is_numeric_type(&name)
+                    && llvm_ops::is_float_type(&name) == matches!(value, BasicValueEnum::FloatValue(_)) =>
+            {
+                name
+            }
+            _ => fallback,
+        }
     }
 
     /// Sema type string of an expression's value, as declared (pointer
@@ -2307,6 +2370,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .unwrap_or(false);
                     let mangled = format!("{}.{}", pointee_struct, method);
                     let mut arg_vals = if is_static { vec![] } else { vec![elem_val] };
+                    let mut arg_names: Vec<String> = if is_static { vec![] } else { vec![String::new()] };
                     // Owned-rvalue arguments are temporaries (shared_ptr): their
                     // creation ref is released after the call, at the end of the
                     // full expression. Lvalue reads are not — the callee's param
@@ -2317,12 +2381,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                         if let Some(ty) = self.owned_temp_type(arg) {
                             owned_arg_temps.push((v, ty));
                         }
+                        arg_names.push(self.numeric_source_name(arg, &v));
                         arg_vals.push(v);
                     }
                     for extra in self.missing_args(&mangled, args.len())? {
-                        arg_vals.push(self.codegen_expr(&extra)?);
+                        let v = self.codegen_expr(&extra)?;
+                        arg_names.push(self.numeric_source_name(&extra, &v));
+                        arg_vals.push(v);
                     }
-                    let result = self.call_function(&mangled, arg_vals)?;
+                    let result = self.call_function_typed(&mangled, arg_vals, &arg_names)?;
                     for (temp, ty) in owned_arg_temps {
                         self.release_temp(&ty, temp)?;
                     }
@@ -2367,11 +2434,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .unwrap_or(false);
                 let this_temp = if is_static { None } else { self.owned_temp_type(this.as_ref()) };
                 let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![];
+                let mut arg_names: Vec<String> = vec![];
                 let mut this_val_opt: Option<BasicValueEnum<'ctx>> = None;
                 if !is_static {
                     let this_val = self.codegen_expr(this)?;
                     this_val_opt = Some(this_val);
                     arg_vals.push(this_val);
+                    arg_names.push(String::new());
                 }
                 // Owned-rvalue arguments are temporaries (shared_ptr): their
                 // creation ref is released after the call, at the end of the
@@ -2383,12 +2452,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                     if let Some(ty) = self.owned_temp_type(arg) {
                         owned_arg_temps.push((v, ty));
                     }
+                    arg_names.push(self.numeric_source_name(arg, &v));
                     arg_vals.push(v);
                 }
                 for extra in self.missing_args(&mangled, args.len())? {
-                    arg_vals.push(self.codegen_expr(&extra)?);
+                    let v = self.codegen_expr(&extra)?;
+                    arg_names.push(self.numeric_source_name(&extra, &v));
+                    arg_vals.push(v);
                 }
-                let result = self.call_function(&mangled, arg_vals)?;
+                let result = self.call_function_typed(&mangled, arg_vals, &arg_names)?;
                 if let (Some(ty), Some(this_val)) = (this_temp, this_val_opt) {
                     self.release_temp(&ty, this_val)?;
                 }
@@ -2598,17 +2670,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Lvalue reads are not — the callee's param entry owns them.
         let mut owned_arg_temps: Vec<(BasicValueEnum<'ctx>, String)> = Vec::new();
         let mut arg_vals = vec![];
+        let mut arg_names: Vec<String> = vec![];
         for arg in args {
             let v = self.codegen_expr(arg)?;
             if let Some(ty) = self.owned_temp_type(arg) {
                 owned_arg_temps.push((v, ty));
             }
+            arg_names.push(self.numeric_source_name(arg, &v));
             arg_vals.push(v);
         }
         for extra in self.missing_args(&target, args.len())? {
-            arg_vals.push(self.codegen_expr(&extra)?);
+            let v = self.codegen_expr(&extra)?;
+            arg_names.push(self.numeric_source_name(&extra, &v));
+            arg_vals.push(v);
         }
-        let result = self.call_function(&target, arg_vals)?;
+        let result = self.call_function_typed(&target, arg_vals, &arg_names)?;
         for (temp, ty) in owned_arg_temps {
             self.release_temp(&ty, temp)?;
         }
@@ -2626,7 +2702,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                     self.call_function("_pep_print", vec![value])?;
                 }
                 BasicValueEnum::IntValue(v) => {
-                    let wide = if v.get_type().get_bit_width() < 64 {
+                    // Unsigned (and bool) sources widen zero-extended, or a
+                    // u16 65535 prints as -1.
+                    let unsigned = v.get_type().get_bit_width() == 1
+                        || self
+                            .value_sema_type(arg)
+                            .is_some_and(|s| llvm_ops::is_unsigned_int_type(&s));
+                    let wide = if v.get_type().get_bit_width() < 64 && unsigned {
+                        self.builder
+                            .build_int_z_extend(v, self.context.i64_type(), "printw")
+                            .map_err(|e| e.to_string())?
+                    } else if v.get_type().get_bit_width() < 64 {
                         self.builder
                             .build_int_s_extend(v, self.context.i64_type(), "printw")
                             .map_err(|e| e.to_string())?
@@ -2677,6 +2763,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         name: &str,
         args: Vec<BasicValueEnum<'ctx>>,
     ) -> Result<BasicValueEnum<'ctx>, String> {
+        self.call_function_typed(name, args, &[])
+    }
+
+    /// `call_function` with the sema type names of (a prefix of) the
+    /// arguments, so integer arguments widen by their own signedness (a
+    /// `u16` passed to a `long` parameter zero-extends).
+    fn call_function_typed(
+        &mut self,
+        name: &str,
+        args: Vec<BasicValueEnum<'ctx>>,
+        arg_names: &[String],
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         let fn_value = match self.functions.get(name) {
             Some(f) => *f,
             None => return Err(format!("unknown function {}", name)),
@@ -2706,7 +2804,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                     Some(BasicTypeEnum::IntType(it)),
                     BasicValueEnum::IntValue(v),
                 ) => {
-                    if it.get_bit_width() > v.get_type().get_bit_width() {
+                    let unsigned = v.get_type().get_bit_width() == 1
+                        || arg_names.get(idx).is_some_and(|n| llvm_ops::is_unsigned_int_type(n));
+                    if it.get_bit_width() > v.get_type().get_bit_width() && unsigned {
+                        BasicValueEnum::IntValue(
+                            self.builder
+                                .build_int_z_extend(*v, it, "argw")
+                                .unwrap_or(*v),
+                        )
+                    } else if it.get_bit_width() > v.get_type().get_bit_width() {
                         BasicValueEnum::IntValue(
                             self.builder
                                 .build_int_s_extend(*v, it, "argw")
@@ -2723,6 +2829,26 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
                 (Some(BasicTypeEnum::IntType(_)), BasicValueEnum::PointerValue(_)) => *arg,
+                // int -> float parameter converts the value (C 6.3.1.4)
+                // instead of passing the integer bits.
+                (Some(BasicTypeEnum::FloatType(ft)), BasicValueEnum::IntValue(v)) => {
+                    let unsigned = v.get_type().get_bit_width() == 1
+                        || arg_names.get(idx).is_some_and(|n| llvm_ops::is_unsigned_int_type(n));
+                    let converted = if unsigned {
+                        self.builder.build_unsigned_int_to_float(*v, ft, "argf")
+                    } else {
+                        self.builder.build_signed_int_to_float(*v, ft, "argf")
+                    };
+                    converted.map(BasicValueEnum::FloatValue).unwrap_or(*arg)
+                }
+                (Some(BasicTypeEnum::FloatType(ft)), BasicValueEnum::FloatValue(v)) if v.get_type() != ft => {
+                    let converted = if v.get_type().get_bit_width() < ft.get_bit_width() {
+                        self.builder.build_float_ext(*v, ft, "argf")
+                    } else {
+                        self.builder.build_float_trunc(*v, ft, "argf")
+                    };
+                    converted.map(BasicValueEnum::FloatValue).unwrap_or(*arg)
+                }
                 _ => *arg,
             };
             coerced.push(coerced_val);
@@ -3113,7 +3239,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // (`true` = 1, not -1; u8 200 stays positive); signed types
                         // sign-extend.
                         let unsigned = source_name.as_deref().is_some_and(|s| {
-                            matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong")
+                            llvm_ops::is_unsigned_int_type(s)
                                 || s == "bool"
                             // `void*` indexes load one byte (unsigned char in C);
                             // a sign-extension would turn 0xC8 into all-F.
@@ -3153,7 +3279,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // `u8 200 as float` reinterprets as -56.0.
                 let unsigned = from.get_type().get_bit_width() == 1
                     || source_name.as_deref().is_some_and(|s| {
-                        matches!(s, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong") || s == "bool"
+                        llvm_ops::is_unsigned_int_type(s) || s == "bool"
                     });
                 let v = if unsigned {
                     self.builder.build_unsigned_int_to_float(from, to, "cast").map_err(|e| e.to_string())?
@@ -3171,7 +3297,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // fptosi is poison above the *signed* range of the target;
                     // unsigned targets (u8..ulong) need fptoui, mirroring the
                     // signedness rule on the int->float arm.
-                    let unsigned = matches!(name.as_str(), "u8" | "byte" | "u32" | "uint" | "u64" | "ulong");
+                    let unsigned = llvm_ops::is_unsigned_int_type(&name);
                     let v = if unsigned {
                         self.builder.build_float_to_unsigned_int(from, to, "cast").map_err(|e| e.to_string())?
                     } else {
@@ -3295,6 +3421,7 @@ fn value_type_name<'ctx>(value: &BasicValueEnum<'ctx>) -> String {
         BasicValueEnum::IntValue(v) => match v.get_type().get_bit_width() {
             1 => "bool".to_string(),
             8 => "i8".to_string(),
+            16 => "i16".to_string(),
             32 => "i32".to_string(),
             64 => "i64".to_string(),
             w => format!("i{}", w),

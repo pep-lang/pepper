@@ -20,6 +20,8 @@ fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum
         "i1" => BasicTypeEnum::IntType(context.bool_type()),
         "i8" | "char" => BasicTypeEnum::IntType(context.i8_type()),
         "u8" | "byte" => BasicTypeEnum::IntType(context.i8_type()),
+        "i16" | "short" => BasicTypeEnum::IntType(context.i16_type()),
+        "u16" | "ushort" => BasicTypeEnum::IntType(context.i16_type()),
         "i32" | "int" => BasicTypeEnum::IntType(context.i32_type()),
         "u32" | "uint" => BasicTypeEnum::IntType(context.i32_type()),
         "i64" | "long" => BasicTypeEnum::IntType(context.i64_type()),

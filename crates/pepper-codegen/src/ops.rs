@@ -12,36 +12,13 @@ use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 /// sum like 300 must not wrap in 8-bit arithmetic. C-style promotion also
 /// governs signedness: an operand keeps its unsignedness only when it is as
 /// wide as the promoted result, so `u32`/`u64` operands yield a `"u32"`/
-/// `"u64"` result while narrower unsigned operands (`u8`, `byte`) promote to
+/// `"u64"` result while narrower unsigned operands (`u8`, `u16`) promote to
 /// signed int. The returned name is load-bearing — it selects udiv/urem/ushr
 /// and ULT-family ops in `int_binary` and zext-vs-sext in `codegen_cast`.
 /// Floats promote to the wider float; non-numeric operands keep the lhs type
 /// (pointer arithmetic is handled by `apply_op`).
 pub fn result_type(lhs: &str, rhs: &str) -> String {
-    let numeric = |n: &str| {
-        matches!(
-            n,
-            "bool"
-                | "i1"
-                | "i8"
-                | "char"
-                | "u8"
-                | "byte"
-                | "i32"
-                | "int"
-                | "u32"
-                | "uint"
-                | "i64"
-                | "long"
-                | "u64"
-                | "ulong"
-                | "f32"
-                | "float"
-                | "f64"
-                | "double"
-        )
-    };
-    if !numeric(lhs) || !numeric(rhs) {
+    if !is_numeric_type(lhs) || !is_numeric_type(rhs) {
         // Non-numeric operand: keep the lhs type.
         return lhs.to_string();
     }
@@ -49,6 +26,7 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         match n {
             "bool" | "i1" => 1,
             "i8" | "char" | "u8" | "byte" => 8,
+            "i16" | "short" | "u16" | "ushort" => 16,
             "f64" | "double" | "i64" | "long" | "u64" | "ulong" => 64,
             _ => 32,
         }
@@ -58,13 +36,11 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         return if w > 32 { "f64".to_string() } else { "f32".to_string() };
     }
     // C-style integer promotion: an operand keeps its unsignedness only when
-    // it is as wide as the promoted result — u8/byte promote to signed int,
+    // it is as wide as the promoted result — u8/u16 promote to signed int,
     // while u32/u64 stay unsigned. The name drives op selection (udiv/sdiv)
     // and cast signedness, so it must name the value actually produced.
     let promoted = if w > 32 { 64 } else { 32 };
-    let keeps_unsigned = |n: &str| {
-        matches!(n, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong") && width(n) == promoted
-    };
+    let keeps_unsigned = |n: &str| is_unsigned_int_type(n) && width(n) == promoted;
     let unsigned = keeps_unsigned(lhs) || keeps_unsigned(rhs);
     match (w > 32, unsigned) {
         (true, true) => "u64".to_string(),
@@ -72,6 +48,42 @@ pub fn result_type(lhs: &str, rhs: &str) -> String {
         (false, true) => "u32".to_string(),
         (false, false) => "i32".to_string(),
     }
+}
+
+/// Whether a type name is a numeric primitive (bool, integer or float,
+/// including the C-style aliases).
+pub fn is_numeric_type(n: &str) -> bool {
+    matches!(
+        n,
+        "bool"
+            | "i1"
+            | "i8"
+            | "char"
+            | "u8"
+            | "byte"
+            | "i16"
+            | "short"
+            | "u16"
+            | "ushort"
+            | "i32"
+            | "int"
+            | "u32"
+            | "uint"
+            | "i64"
+            | "long"
+            | "u64"
+            | "ulong"
+            | "f32"
+            | "float"
+            | "f64"
+            | "double"
+    )
+}
+
+/// Whether a type name is one of the unsigned integer primitives (or an
+/// alias). Selects zext/udiv/urem/lshr/ULT and fptoui/uitofp.
+pub fn is_unsigned_int_type(name: &str) -> bool {
+    matches!(name, "u8" | "byte" | "u16" | "ushort" | "u32" | "uint" | "u64" | "ulong")
 }
 
 pub fn is_float_type(name: &str) -> bool {
@@ -118,7 +130,7 @@ pub fn coerce<'ctx>(
                 BasicValueEnum::IntValue(as_bool(context, builder, value))
             } else {
                 let target = int_type_of_name(context, to);
-                let unsigned = matches!(to, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong");
+                let unsigned = is_unsigned_int_type(to);
                 let v = if unsigned {
                     builder.build_float_to_unsigned_int(value.into_float_value(), target, "f2i")
                 } else {
@@ -144,7 +156,7 @@ pub fn coerce<'ctx>(
                 context.f32_type()
             };
             let unsigned = from_i.get_type().get_bit_width() == 1
-                || matches!(from, "u8" | "byte" | "void" | "u32" | "uint" | "u64" | "ulong");
+                || is_unsigned_int_type(from) || from == "void";
             let v = if unsigned {
                 builder.build_unsigned_int_to_float(from_i, target, "i2f")
             } else {
@@ -169,7 +181,7 @@ pub fn coerce<'ctx>(
                 // i1 (bool) and unsigned sources widen with zext, not sext —
                 // `u8 b = 200` must stay 200, not become -56. A void* byte
                 // load is an unsigned char in C, so "void" extends too.
-                let unsigned = matches!(from, "u8" | "byte" | "void" | "u32" | "uint" | "u64" | "ulong")
+                let unsigned = is_unsigned_int_type(from) || from == "void"
                     || from_ty.get_bit_width() == 1;
                 let ext = if unsigned {
                     builder.build_int_z_extend(from_i, to_i, "zext")
@@ -198,6 +210,7 @@ fn int_type_of_name<'ctx>(context: &'ctx Context, name: &str) -> inkwell::types:
     match name {
         "bool" | "i1" => context.bool_type(),
         "i8" | "char" | "u8" | "byte" => context.i8_type(),
+        "i16" | "short" | "u16" | "ushort" => context.i16_type(),
         "u32" | "uint" => context.i32_type(),
         "i64" | "long" | "u64" | "ulong" => context.i64_type(),
         _ => context.i32_type(),
@@ -214,7 +227,7 @@ pub fn int_binary<'ctx>(
     ty_name: &str,
 ) -> Option<IntValue<'ctx>> {
     use pepper_sema::model::BinaryOp::*;
-    let unsigned = matches!(ty_name, "u8" | "byte" | "u32" | "uint" | "u64" | "ulong");
+    let unsigned = is_unsigned_int_type(ty_name);
     let v = match op {
         Add => builder.build_int_add(lhs, rhs, "add").ok()?,
         Sub => builder.build_int_sub(lhs, rhs, "sub").ok()?,

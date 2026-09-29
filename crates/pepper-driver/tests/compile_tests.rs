@@ -343,6 +343,45 @@ fn continue_skips_iteration() {
     );
 }
 
+// ── Implicit numeric conversions (var init, argument, return) ──────────────
+
+#[test]
+fn implicit_conversions_follow_source_signedness() {
+    // Initialization, argument passing and return convert as C does: an
+    // unsigned source zero-extends and an int converts to float by value.
+    // Each of these used to sign-extend (`u8 200` became -56) or store the
+    // raw integer bits into a double slot.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"widen(long v): long { return v; }
+to_double(double v): double { return v; }
+ret_u8(u8 v): long { return v; }
+ret_int(int v): double { return v; }
+
+test(): int {
+    u8 a = 200;
+    long la = a;
+    if (la != 200) { return 1; }
+    int i = 3;
+    double d = i;
+    if (d != 3.0) { return 2; }
+    uint u = 4294967295;
+    double du = u;
+    if (du != 4294967295.0) { return 3; }
+    if (widen(a) != 200) { return 4; }
+    if (to_double(i) != 3.0) { return 5; }
+    if (ret_u8(200) != 200) { return 6; }
+    if (ret_int(5) != 5.0) { return 7; }
+    char c = -1;
+    long lc = c;
+    if (lc != -1 || widen(c) != -1) { return 8; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
 // ── [Target] on type aliases and module-scope variables ────────────────────
 
 #[test]

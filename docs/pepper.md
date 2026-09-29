@@ -3,8 +3,9 @@
 ## Core Types
 
 * `i8`, `u8`, `char`, `byte` - 8-bit signed/unsigned characters/integers
+* `i16`, `u16`, `short`, `ushort` - 16-bit signed/unsigned integers
 * `i32`, `u32`, `int`, `uint` - 32-bit signed/unsigned integers
-* `i64`, `u32`, `long`, `ulong` - 64-bit signed/unsigned integers
+* `i64`, `u64`, `long`, `ulong` - 64-bit signed/unsigned integers
 * `float`, `double` - 32 and 64-bit IEEE floating point numbers
 * `void` - The absence of a type, mostly used for non-value returning functions
 
