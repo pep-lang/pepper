@@ -568,3 +568,32 @@ fn an_implementation_must_match_the_declared_signature() {
     );
     assert!(error.contains("error: 'area' in 'Square' has type '() => long', but trait 'Shape' declares '() => int'"), "{}", error);
 }
+
+#[test]
+fn a_default_method_calls_the_function_its_trait_author_meant() {
+    // S happens to have its own `helper` and field `count`, which T's author
+    // could not know about: `helper()` and `count` in the default are the
+    // top-level function and variable.
+    let (result, leaked) = run(r#"
+const count = 10;
+helper(): int { return 1; }
+trait T {
+    area(): int;
+    total(): int { return helper() + count + area(); }
+}
+struct S {
+    var count: int;
+    construct() { count = 500; }
+    helper(): int { return 100; }
+}
+extend S with T { area(): int { return 1000; } }
+test(): int {
+    var s = S();
+    T t = S();
+    return s.total() + t.total();
+}
+"#);
+    // 1 + 10 + 1000, twice: directly and through the trait value.
+    assert_eq!(result, 2022);
+    assert_eq!(leaked, 0);
+}

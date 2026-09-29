@@ -65,6 +65,7 @@ fn conform(
         match &required.body {
             Some(_) => {
                 let mut method = clone_method(required, &st.name);
+                method.trait_default = Some(def.methods.iter().map(|m| m.name.clone()).collect());
                 substitute(&mut method.ty, &type_map);
                 for param in &mut method.parameters {
                     substitute(&mut param.ty, &type_map);

@@ -547,6 +547,10 @@ pub struct FunctionDef {
     pub attributes: Vec<ast::Attribute>,
     /// Location of the declared name.
     pub loc: Loc,
+    /// A trait's default method copied into a struct that conforms to the
+    /// trait: the trait's method names. A bare call in its body binds only
+    /// to those (on `this`), never to a method only the struct declares.
+    pub trait_default: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]

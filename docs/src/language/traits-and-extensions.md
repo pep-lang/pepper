@@ -96,6 +96,12 @@ A default method can have type parameters of its own (see
 uses this for its `map<U>` and `filter` [adapters](iteration.md#adapters),
 which every type that declares `Iterator<T>` gets.
 
+A default body sees only what its trait declares: a bare call to one of the
+trait's methods calls it on `this`, and any other bare name means what it
+means where the trait is declared (a top-level function or variable), even
+when a conforming type happens to have a method or field of that name. Call
+through `this` explicitly only for the trait's own methods.
+
 > **Known problem:** a default body that uses a string literal does not work
 > yet: it fails to compile (`not a struct`) or the program crashes. Write such a
 > method in each extension instead.

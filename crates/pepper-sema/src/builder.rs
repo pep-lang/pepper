@@ -510,6 +510,7 @@ fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Functi
         .at(loc(declared.span)));
     }
     Ok(FunctionDef {
+        trait_default: None,
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
         generic_params: decl.generic_params.iter().map(generic_param_from).collect(),
@@ -597,6 +598,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
             f
         }
         None => FunctionDef {
+            trait_default: None,
             name: ty.to_string(),
             ty: ty.clone(),
             generic_params: vec![],
@@ -616,6 +618,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
     };
     let destructor = match &decl.destructor {
         Some(body) => FunctionDef {
+            trait_default: None,
             name: "__dtor".to_string(),
             ty: TypeName::void(),
             generic_params: vec![],
@@ -629,6 +632,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
             loc: loc(decl.name_span),
         },
         None => FunctionDef {
+            trait_default: None,
             name: "__dtor".to_string(),
             ty: TypeName::void(),
             generic_params: vec![],
@@ -666,6 +670,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
 
 fn empty_method(parent: &str, name: &str) -> FunctionDef {
     FunctionDef {
+        trait_default: None,
         name: name.to_string(),
         ty: TypeName::void(),
         generic_params: vec![],

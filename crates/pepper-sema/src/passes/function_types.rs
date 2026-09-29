@@ -195,6 +195,7 @@ fn expression_types(expr: &Expression, add: &mut impl FnMut(&TypeName)) {
 
 pub(crate) fn empty_function(name: &str, ty: TypeName, parent: &str) -> FunctionDef {
     FunctionDef {
+        trait_default: None,
         name: name.to_string(),
         ty,
         generic_params: vec![],

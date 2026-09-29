@@ -417,6 +417,7 @@ pub(crate) fn closure_struct(
     constructor.parameters = ctor_params;
     constructor.loc = loc;
     let call = FunctionDef {
+        trait_default: None,
         name: CALL_METHOD.to_string(),
         ty: ret,
         generic_params: vec![],

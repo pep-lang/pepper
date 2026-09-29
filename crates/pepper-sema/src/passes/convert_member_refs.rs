@@ -151,6 +151,13 @@ pub fn convert_member_refs(module: &mut Module) {
                 .iter()
                 .map(|p| p.name.clone())
                 .collect();
+            // A trait's default method sees only the trait: its methods, on
+            // `this`, and no fields. What its author wrote could not name
+            // members a conforming struct happens to have.
+            let (fields, method_names) = match &st.method_members[method_idx].trait_default {
+                Some(trait_methods) => (vec![], trait_methods.clone()),
+                None => (fields.clone(), method_names.clone()),
+            };
             if let Some(body) = &mut st.method_members[method_idx].body {
                 convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
             }
