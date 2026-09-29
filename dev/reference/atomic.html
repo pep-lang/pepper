@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "../searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4f68acc7.js"></script>
+        <script src="../toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,7 +185,7 @@
 <h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
 <p>Source: <code>runtime/atomic.pep</code></p>
 <h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
-<pre><code class="language-pepper">struct Atomic&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that threads can read and update without data races,
 like C++ <code>std::atomic&lt;T&gt;</code>.</p>
@@ -196,8 +196,10 @@ the new reference and release the one they replace, and <code>load</code> hands 
 caller its own reference. Memory ordering: <code>load</code> is an acquire,
 <code>store</code> a release, and <code>compare_exchange</code> and the <code>fetch_*</code> operations are
 acquire-release.</p>
-<p><code>Atomic</code> is itself a struct, so copies of it share one slot: pass the
-Atomic around (or keep it in a global) to share the value between threads.</p>
+<p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
+be used from several threads at once: pass the Atomic around (or keep it
+in a global) to share the value between threads. A struct <code>T</code> must be
+thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is a compile error.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the stored value</li>
@@ -212,7 +214,7 @@ Atomic around (or keep it in a global) to share the value between threads.</p>
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="data"><a class="header" href="#data">Data</a></h4>
-<pre><code class="language-pepper">__ptr&lt;T&gt; Data
+<pre><code class="language-pepper">const Data: __ptr&lt;T&gt;
 </code></pre>
 <p>The heap slot the value lives in: <code>sizeof&lt;T&gt;()</code> bytes for a POD <code>T</code>,
 or one reference pointer for a struct <code>T</code>. Allocated by the

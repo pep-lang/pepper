@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "../searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4f68acc7.js"></script>
+        <script src="../toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -379,6 +379,10 @@ main(): int {
 <p>To avoid a cycle, make one direction of it a weak reference (next section),
 or break the cycle yourself before the last outside reference goes away:
 clear the container, or overwrite the field, that closes the loop.</p>
+<p>A <a href="function-types.html#closures">closure</a> holds a reference to every struct it
+captures, including <code>this</code>, so a closure stored inside an object it captures
+closes a cycle too. The compiler reports the direct case, a method storing a
+closure that captures <code>this</code> in a field of <code>this</code>.</p>
 <h2 id="weak-references"><a class="header" href="#weak-references">Weak references</a></h2>
 <p>A <a href="../reference/weak.html"><code>Weak&lt;T&gt;</code></a> points at an object without keeping it
 alive. Use it for back pointers: a child’s parent, a document’s folder, an
@@ -457,6 +461,12 @@ the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>
 <code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. A weak reference
 made while an object is still inside its constructor cannot be upgraded until
 the constructor returns, as with <code>weak_from_this()</code> in C++.</p>
+<h2 id="references-and-threads"><a class="header" href="#references-and-threads">References and threads</a></h2>
+<p>Reference counts are plain, fast increments, so a struct’s objects must stay
+on one thread. A struct declared <code>[Shared]</code> has atomic counts instead, and
+its references can be copied and dropped on any thread. The compiler requires
+such a struct’s fields to be <code>const</code> and thread-safe. See
+<a href="threads.html#what-threads-can-share">What threads can share</a>.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>

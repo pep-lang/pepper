@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "../searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4f68acc7.js"></script>
+        <script src="../toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -356,8 +356,9 @@ main(): int {
 <code>panic(message)</code>. See <a href="../reference/internals.html">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
-variable, pass to another function, or return. See
-<a href="function-types.html">Function types and references</a>.</p>
+variable, pass to another function, or return, and a closure such as
+<code>(x: int) =&gt; x * 2</code> is a function written where it is used. See
+<a href="function-types.html">Function types and closures</a>.</p>
 
                     </main>
 

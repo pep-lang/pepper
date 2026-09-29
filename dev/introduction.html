@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4f68acc7.js"></script>
+        <script src="toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,8 +194,8 @@ exact token you need to change.</li>
 no ownership annotations to learn. Structs hold data, methods and
 extensions add behavior, and traits describe what a type can do.</li>
 <li><strong>Concurrent safety.</strong> Shared data should be safe to use from more than one
-thread. Today that means <code>Atomic&lt;T&gt;</code>, which the compiler lowers to native
-atomic instructions; more is planned.</li>
+thread. Only thread-safe values can be shared: numbers, <code>Atomic&lt;T&gt;</code>, and
+structs declared <code>[Shared]</code>, whose fields the compiler checks.</li>
 </ul>
 <p>Here is a complete Pepper program:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -226,19 +226,22 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
 traits (with default methods, and usable as types), function types and
-function references, modules, <code>Result</code>-based error handling, iteration,
+closures, modules, <code>Result</code>-based error handling, iteration,
 <code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
-maps and sets, atomics, and file-system access. That is enough to write real
+maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>Functions are values: a named function can be stored, passed and called
-through a function type such as <code>(int) =&gt; int</code> (see
-<a href="language/function-types.html">function types</a>). Closure literals, such as
-<code>(x) =&gt; x * 2</code>, and capturing local variables are the next phase and are not
-implemented yet.</li>
+<li>Functions are values: a named function or a closure such as
+<code>(x: int) =&gt; x * 2</code> can be stored, passed and called through a function
+type such as <code>(int) =&gt; int</code> (see
+<a href="language/function-types.html">function types and closures</a>). Methods,
+constructors and generic functions cannot be named as values yet; wrap one
+in a closure instead.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
-<li>There is no threading API in the standard library yet.</li>
+<li>Threads can share only thread-safe values, but the compiler does not yet
+check module-scope variables, and there are no mutexes or channels (see
+<a href="language/threads.html#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="language/memory.html#weak-references">weak reference</a> on one side.</li>

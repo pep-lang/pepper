@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4f68acc7.js"></script>
+        <script src="toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,8 +192,8 @@ exact token you need to change.</li>
 no ownership annotations to learn. Structs hold data, methods and
 extensions add behavior, and traits describe what a type can do.</li>
 <li><strong>Concurrent safety.</strong> Shared data should be safe to use from more than one
-thread. Today that means <code>Atomic&lt;T&gt;</code>, which the compiler lowers to native
-atomic instructions; more is planned.</li>
+thread. Only thread-safe values can be shared: numbers, <code>Atomic&lt;T&gt;</code>, and
+structs declared <code>[Shared]</code>, whose fields the compiler checks.</li>
 </ul>
 <p>Here is a complete Pepper program:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -224,19 +224,22 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
 traits (with default methods, and usable as types), function types and
-function references, modules, <code>Result</code>-based error handling, iteration,
+closures, modules, <code>Result</code>-based error handling, iteration,
 <code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
-maps and sets, atomics, and file-system access. That is enough to write real
+maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>Functions are values: a named function can be stored, passed and called
-through a function type such as <code>(int) =&gt; int</code> (see
-<a href="#function-types-and-references">function types</a>). Closure literals, such as
-<code>(x) =&gt; x * 2</code>, and capturing local variables are the next phase and are not
-implemented yet.</li>
+<li>Functions are values: a named function or a closure such as
+<code>(x: int) =&gt; x * 2</code> can be stored, passed and called through a function
+type such as <code>(int) =&gt; int</code> (see
+<a href="#function-types-and-closures">function types and closures</a>). Methods,
+constructors and generic functions cannot be named as values yet; wrap one
+in a closure instead.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
-<li>There is no threading API in the standard library yet.</li>
+<li>Threads can share only thread-safe values, but the compiler does not yet
+check module-scope variables, and there are no mutexes or channels (see
+<a href="#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
 <a href="#weak-references">weak reference</a> on one side.</li>
@@ -817,9 +820,10 @@ at a time and builds each word with <code>+=</code>, since the <code>String</cod
 <a href="#types-and-variables">language guide</a> covers each topic in
 depth, including features this tour skipped:
 <a href="#generics">generics</a>,
-<a href="#function-types-and-references">function types</a>,
+<a href="#function-types-and-closures">function types and closures</a>,
 <a href="#traits-and-extensions">traits and extensions</a>,
-<a href="#atomics-and-concurrency">atomics</a>, and
+<a href="#atomics">atomics</a>,
+<a href="#threads-and-shared-data">threads</a>, and
 <a href="#calling-c">calling C</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="types-and-variables"><a class="header" href="#types-and-variables">Types and variables</a></h1>
@@ -986,7 +990,7 @@ and <code>int[][]</code> for <code>Array&lt;Array&lt;int&gt;&gt;</code>. See <a 
 <li><code>Result&lt;TValue, TError&gt;</code>, <code>Error</code> and <code>None</code> describe operations that can
 fail. See <a href="#error-handling-with-result">Error handling with Result</a>.</li>
 <li><code>Atomic&lt;T&gt;</code> is a value that threads can update safely. See
-<a href="#atomics-and-concurrency">Atomics and concurrency</a>.</li>
+<a href="#atomics">Atomics</a> and <a href="#threads-and-shared-data">Threads and shared data</a>.</li>
 </ul>
 <h3 id="raw-pointers-and-__null"><a class="header" href="#raw-pointers-and-__null">Raw pointers and <code>__null</code></a></h3>
 <p>For talking to C, Pepper has raw pointers, written <code>__ptr&lt;T&gt;</code> (for example
@@ -1628,13 +1632,16 @@ main(): int {
 <code>panic(message)</code>. See <a href="#built-in-functions">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
-variable, pass to another function, or return. See
-<a href="#function-types-and-references">Function types and references</a>.</p>
+variable, pass to another function, or return, and a closure such as
+<code>(x: int) =&gt; x * 2</code> is a function written where it is used. See
+<a href="#function-types-and-closures">Function types and closures</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="function-types-and-references"><a class="header" href="#function-types-and-references">Function types and references</a></h1>
+<h1 id="function-types-and-closures"><a class="header" href="#function-types-and-closures">Function types and closures</a></h1>
 <p>Functions in Pepper are values. You can store a function in a variable, a
 field or an array, pass it to another function, and return it. This lets you
-choose behavior at run time: a sort order, a callback, a step in a pipeline.</p>
+choose behavior at run time: a sort order, a callback, a step in a pipeline.
+A function value is either a named function or a closure, an anonymous
+function written where it is used.</p>
 <h2 id="function-types"><a class="header" href="#function-types">Function types</a></h2>
 <p>A function type is written <code>(parameter types) =&gt; return type</code>:</p>
 <div class="table-wrapper">
@@ -1787,6 +1794,130 @@ main(): int {
 <li><strong><code>void</code> results.</strong> A function without a return value has a function type
 ending in <code>=&gt; void</code>, such as <code>(int) =&gt; void</code>.</li>
 </ul>
+<h2 id="closures"><a class="header" href="#closures">Closures</a></h2>
+<p>A closure literal is a parameter list, <code>=&gt;</code>, and a body. The body is an
+expression or a block:</p>
+<pre><code class="language-pepper"># Closure literals: anonymous functions that capture values.
+struct Counter {
+    int count;
+    construct(this.count = 0) {}
+    add(n: int) { count += n; }
+}
+
+apply(f: (int) =&gt; int, x: int): int {
+    return f(x);
+}
+
+# A closure can outlive the function that made it: it keeps its own copy
+# of 'n'.
+make_adder(n: int): (int) =&gt; int {
+    return (x) =&gt; x + n;
+}
+
+struct Scaler {
+    int factor;
+    construct(this.factor = 1) {}
+
+    # Inside a method, a closure can use 'this' and the struct's members.
+    scaler(): (int) =&gt; int {
+        return (x) =&gt; x * factor;
+    }
+}
+
+main(): int {
+    # Parameter types written out: the closure's type is (int) =&gt; int.
+    var double = (x: int) =&gt; x * 2;
+    assert(double(21) == 42, "expression body");
+
+    # With a function type to fill, the parameter types can be left out.
+    var add: (int, int) =&gt; int = (a, b) =&gt; a + b;
+    assert(add(40, 2) == 42, "types from the variable");
+    assert(apply((x) =&gt; x * x, 5) == 25, "types from the parameter");
+
+    # A block body, with the return type written after the parameters.
+    var clamp = (x: int, low: int, high: int): int =&gt; {
+        if x &lt; low { return low; }
+        if x &gt; high { return high; }
+        return x;
+    };
+    assert(clamp(7, 0, 5) == 5, "block body");
+
+    # Captured values.
+    var add_five = make_adder(5);
+    assert(add_five(10) == 15, "captured parameter");
+    var offset = 100;
+    var shift = (x: int) =&gt; x + offset;
+    assert(shift(1) == 101, "captured local");
+
+    # A captured struct is shared, so the closure can change the object.
+    var counter = Counter();
+    var bump = () =&gt; counter.add(1);
+    bump();
+    bump();
+    assert(counter.count == 2, "shared struct");
+
+    var triple = Scaler(3).scaler();
+    assert(triple(4) == 12, "captured this");
+
+    # A closure can return a closure.
+    var adder: (int) =&gt; (int) =&gt; int = (a) =&gt; (b) =&gt; a + b;
+    assert(adder(2)(3) == 5, "curried");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>Parameter types.</strong> <code>(x: int) =&gt; x * 2</code> writes the parameter type. When the
+closure goes straight into a slot of function type (a typed variable, a
+parameter, an assignment, a <code>return</code>, a field), the types come from that
+slot, so <code>(a, b) =&gt; a + b</code> is enough. With no slot to take them from, a
+parameter without a type is an error:</p>
+<pre><code>main.pep:2:14: error: cannot infer the type of parameter 'x'; write it: (x: Type) =&gt; ...
+</code></pre>
+</li>
+<li>
+<p><strong>Return type.</strong> It is inferred from the body, or from the slot. To write
+it, put it after the parameters: <code>(x: int): long =&gt; x</code>.</p>
+</li>
+<li>
+<p><strong>Body.</strong> An expression body is the value the closure returns. A block body
+uses <code>return</code> like a function. A closure whose type returns <code>void</code> can have
+an expression body such as <code>() =&gt; counter.add(1)</code>; the value is discarded.</p>
+</li>
+<li>
+<p><strong>Calling.</strong> A closure is called like any function value, and can be called
+where it is written: <code>((x: int) =&gt; x + 1)(2)</code>.</p>
+</li>
+</ul>
+<h3 id="captured-values"><a class="header" href="#captured-values">Captured values</a></h3>
+<p>A closure can use the local variables and parameters around it. It keeps a
+copy of each one it uses, made when the closure is created, so it can outlive
+the function that created it (<code>make_adder</code> above).</p>
+<p>A captured variable must never be assigned, before or after the closure is
+created, inside the closure or outside it. Then the copy and the variable can
+never differ:</p>
+<pre><code class="language-pepper">var count = 0;
+var f = () =&gt; count;
+count = 5;   # error
+</code></pre>
+<pre><code>main.pep:4:5: error: cannot assign to 'count' because a closure captures it
+main.pep:3:19: note: captured here; a closure keeps a copy, so the variable must not change
+</code></pre>
+<p>The rule applies to <code>++</code>, <code>--</code> and compound assignments too. Only the
+variable is fixed: a captured struct is a reference to the same object, so the
+closure can call its methods and change its fields (<code>counter</code> above). To share
+a changing number, capture a struct that holds it, such as a <code>Counter</code> or an
+<a href="#atomics"><code>Atomic&lt;int&gt;</code></a>.</p>
+<h3 id="this-in-methods"><a class="header" href="#this-in-methods"><code>this</code> in methods</a></h3>
+<p>A closure written in a method can use <code>this</code>, the struct’s fields and its
+methods. It captures <code>this</code> (one reference to the object), never a copy of
+the fields, so it sees the fields’ current values.</p>
+<p>Storing such a closure in a field of the same object would make the object
+and the closure keep each other alive forever (a reference cycle), so that
+direct case is an error:</p>
+<pre><code>main.pep:4:15: error: storing a closure that captures 'this' in field 'measure' of 'this' creates a reference cycle that is never freed
+</code></pre>
+<p>Capture a <a href="#weak-references">weak reference</a> to the object instead.</p>
 <h2 id="type-checking"><a class="header" href="#type-checking">Type checking</a></h2>
 <p>A function value must match the type it flows into exactly: the same parameter
 types in the same order and the same return type. The aliases of a primitive
@@ -1820,17 +1951,26 @@ hides the function inside its scope. Inside a function with a parameter named
 reference-counting rules (see <a href="#memory-and-reference-counting">Memory and reference counting</a>).
 Referring to a named function allocates nothing: every reference to <code>square</code>
 shares one static function object.</p>
+<p>Creating a closure allocates one object holding the captured values, like
+constructing a struct. Copying the closure adds a reference to that object,
+and when the last reference goes, the object releases what it captured.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Closure literals.</strong> Pepper has no anonymous functions yet, such as
-<code>(x) =&gt; x * 2</code>, and a function value cannot capture local variables. Only
-named free functions can be used as values. Closure literals are the next
-phase of this feature.</li>
 <li><strong>Generic functions, methods, constructors and <code>extern</code> functions</strong> cannot be
 referenced as values. Naming a generic function without a call reports
 <code>use of undeclared identifier</code>, and naming a method without a call
 (<code>var f = s.get;</code>) reports <code>no member named 'get' in 'S'</code>. To use one of these
-as a value, write a named free function that calls it.</li>
+as a value, write a named free function that calls it, or a closure:
+<code>(x: int) =&gt; s.get(x)</code>.</li>
+<li><strong>Parameter types from generic calls.</strong> A closure’s parameter types come
+from a slot whose type is known where the closure is written. Passing
+<code>(x) =&gt; x + 1</code> to a generic function whose parameter is <code>(T) =&gt; T</code> does not
+infer <code>T</code>; write the argument <code>apply&lt;int&gt;((x) =&gt; x + 1, 2)</code> or the
+parameter type <code>(x: int) =&gt; x + 1</code>.</li>
+<li><strong>Closures in trait default methods</strong> cannot use <code>this</code> or the members of
+the struct yet.</li>
+<li><strong>C callbacks.</strong> A closure cannot be passed to a C function that expects a
+function pointer.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="structs-1"><a class="header" href="#structs-1">Structs</a></h1>
@@ -2212,7 +2352,7 @@ behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p
 <p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
 one copies it, as in C.</p>
 <p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
-<a href="#function-types-and-references">function values</a>, is a <em>reference</em> to an object on the
+<a href="#function-types-and-closures">function values</a>, is a <em>reference</em> to an object on the
 heap. Assigning a reference, passing it to a function, or storing it in a
 field or an array shares the object. Nothing is copied.</p>
 <pre><code class="language-pepper">struct Account {
@@ -2398,6 +2538,10 @@ main(): int {
 <p>To avoid a cycle, make one direction of it a weak reference (next section),
 or break the cycle yourself before the last outside reference goes away:
 clear the container, or overwrite the field, that closes the loop.</p>
+<p>A <a href="#closures">closure</a> holds a reference to every struct it
+captures, including <code>this</code>, so a closure stored inside an object it captures
+closes a cycle too. The compiler reports the direct case, a method storing a
+closure that captures <code>this</code> in a field of <code>this</code>.</p>
 <h2 id="weak-references"><a class="header" href="#weak-references">Weak references</a></h2>
 <p>A <a href="#weak"><code>Weak&lt;T&gt;</code></a> points at an object without keeping it
 alive. Use it for back pointers: a child’s parent, a document’s folder, an
@@ -2476,6 +2620,12 @@ the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>
 <code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. A weak reference
 made while an object is still inside its constructor cannot be upgraded until
 the constructor returns, as with <code>weak_from_this()</code> in C++.</p>
+<h2 id="references-and-threads"><a class="header" href="#references-and-threads">References and threads</a></h2>
+<p>Reference counts are plain, fast increments, so a struct’s objects must stay
+on one thread. A struct declared <code>[Shared]</code> has atomic counts instead, and
+its references can be copied and dropped on any thread. The compiler requires
+such a struct’s fields to be <code>const</code> and thread-safe. See
+<a href="#what-threads-can-share">What threads can share</a>.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -2806,7 +2956,7 @@ main(): int {
 <p>The arguments at the use site fill the alias’s parameters in order, and
 omitted ones take their defaults. <code>Outcome&lt;int&gt;</code> becomes
 <code>Result&lt;int, Error&gt;</code>, and <code>Lookup&lt;int&gt;</code> becomes <code>HashMap&lt;String, int&gt;</code>.
-Aliases are especially handy for <a href="#function-types-and-references">function types</a>, which
+Aliases are especially handy for <a href="#function-types-and-closures">function types</a>, which
 are long to write out: <code>Predicate&lt;int&gt;</code> reads better than <code>(int) =&gt; bool</code>.</p>
 <h2 id="aliases-across-files"><a class="header" href="#aliases-across-files">Aliases across files</a></h2>
 <p>Like other top-level declarations, an alias is private to the file that
@@ -4259,12 +4409,12 @@ elsewhere (see <a href="#platform-selection">Platform selection</a>):</p>
 [Target(OS(Linux))] export linux_open as open;
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="atomics-and-concurrency"><a class="header" href="#atomics-and-concurrency">Atomics and concurrency</a></h1>
+<h1 id="atomics"><a class="header" href="#atomics">Atomics</a></h1>
 <p>An <strong>atomic</strong> value can be read and updated by several threads at once without
 a data race: every operation on it happens as one indivisible step. Pepper
 provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>std::atomic&lt;T&gt;</code>.</p>
-<p>This chapter also describes what concurrency support Pepper has today, which
-is limited: there is no way to start a thread from Pepper yet.</p>
+<p>Threads themselves, and the rules for what they can share, are in
+<a href="#threads-and-shared-data">Threads and shared data</a>.</p>
 <h2 id="atomict"><a class="header" href="#atomict">Atomic&lt;T&gt;</a></h2>
 <p><code>Atomic&lt;T&gt;</code> is part of the runtime, so you can use it without an import. The
 <a href="#atomic">Atomic reference</a> documents every method.</p>
@@ -4334,11 +4484,18 @@ the same object), not the objects’ contents.</li>
 floating-point or struct <code>T</code> compiles, but stops the program when it runs.</li>
 <li><strong><code>is_lock_free()</code></strong> is true for any number type of 8 bytes or less, and for
 any struct type.</li>
+<li><strong>A struct <code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so
+its <code>T</code> must be a <code>[Shared]</code> struct too (or a number, pointer or function
+type). <code>Atomic&lt;String&gt;</code> is a compile error. See
+<a href="#what-threads-can-share">What threads can share</a>.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
-<pre><code class="language-pepper">struct Config {
-    String Name;
-    construct(this.Name = "") {}
+<pre><code class="language-pepper"># An Atomic can only hold a thread-safe struct: one declared [Shared], whose
+# fields are const and thread-safe.
+[Shared]
+struct Config {
+    const Version: int;
+    construct(this.Version = 0) {}
 }
 
 # A module-scope Atomic that every function can share.
@@ -4370,19 +4527,19 @@ main(): int {
     assert(n.load() == 7, "both names see the store");
 
     # An Atomic can hold a struct reference.
-    var first = Config("first");
+    var first = Config(1);
     var current = Atomic&lt;Config&gt;(first);
-    assert(current.load().Name == "first", "load returns the reference");
+    assert(current.load().Version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
-    var lookalike = Config("first");
-    var second = Config("second");
+    var lookalike = Config(1);
+    var second = Config(2);
     assert(!current.compare_exchange(lookalike, second), "a different object");
     assert(current.compare_exchange(first, second), "the same object");
-    assert(current.load().Name == "second", "swapped");
+    assert(current.load().Version == 2, "swapped");
 
     var old = current.exchange(first);
-    assert(old.Name == "second", "exchange hands back the old reference");
+    assert(old.Version == 2, "exchange hands back the old reference");
     return 0;
 }
 </code></pre>
@@ -4393,11 +4550,12 @@ even when many threads call it at once.</li>
 operations do not cover, load the current value, compute the new one, and
 <code>compare_exchange</code>; if another thread changed the value in between, the
 exchange fails and you try again with a fresh <code>load()</code>.</li>
-<li><strong>Sharing an Atomic.</strong> <code>Atomic</code> is a struct, so copying one copies a
-reference: every copy shares the same slot. To share a value, pass the
-<code>Atomic</code> around or keep it in a module-scope variable.</li>
-<li><strong>Atomic struct references.</strong> An <code>Atomic&lt;T&gt;</code> whose <code>T</code> is a struct type
-holds a counted reference, and follows the same rules as any other reference
+<li><strong>Sharing an Atomic.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so copying one
+copies a reference: every copy shares the same slot, on any thread. To
+share a value, pass the <code>Atomic</code> around or keep it in a module-scope
+variable.</li>
+<li><strong>Atomic struct references.</strong> An <code>Atomic&lt;T&gt;</code> whose <code>T</code> is a <code>[Shared]</code>
+struct type holds a counted reference, and follows the same rules as any other reference
 (see <a href="#memory-and-reference-counting">Memory and reference counting</a>): <code>store</code> and a successful
 <code>compare_exchange</code> take a reference to the new value and release the one they
 replace, and <code>load</code> and <code>exchange</code> give you your own reference. The swap in
@@ -4405,40 +4563,231 @@ the slot is itself atomic, so concurrent stores never leak or release a value
 twice. When the <code>Atomic</code> itself is destroyed, it releases the reference it
 holds.</li>
 </ul>
-<h2 id="concurrency-today"><a class="header" href="#concurrency-today">Concurrency today</a></h2>
-<p>Pepper does not have threads yet. The language and the runtime have no way to
-start a thread, no mutexes or other locks, and no thread-safety checks.</p>
-<p>What works today:</p>
+<h2 id="atomics-and-threads"><a class="header" href="#atomics-and-threads">Atomics and threads</a></h2>
+<p><code>Atomic&lt;T&gt;</code> is how threads share a value that changes. Keep it in a
+module-scope variable, or in a <code>const</code> field of a <code>[Shared]</code> struct, and every
+thread sees the same slot. <a href="#threads-and-shared-data">Threads and shared data</a> shows it
+together with <code>Thread.spawn</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="threads-and-shared-data"><a class="header" href="#threads-and-shared-data">Threads and shared data</a></h1>
+<p>The <code>async</code> module starts and manages operating-system threads. Pepper keeps
+threads safe by controlling what they can share: only <strong>thread-safe</strong> values
+can be reached from more than one thread, and the compiler checks the types
+that claim to be.</p>
+<h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
+<pre><code class="language-pepper">import async;
+
+var finished = Atomic&lt;int&gt;(0);
+
+# A thread body is a function that takes nothing and returns nothing.
+count_to_a_million() {
+    var me = async.Thread.current();
+    assert(me.name() == "counter", "a spawned thread sees its own Thread");
+    var total: long = 0;
+    var i = 0;
+    while (i &lt; 1000000) {
+        total = total + 1;
+        i = i + 1;
+    }
+    finished.fetch_add(1);
+}
+
+main(): int {
+    var main_thread = async.Thread.current();
+    assert(main_thread.name() == "main", "the main thread is named main");
+
+    var first = async.Thread.spawn(count_to_a_million, "counter");
+    var second = async.Thread.spawn(count_to_a_million, "counter");
+    assert(first.id() != second.id(), "every thread has its own id");
+
+    first.join();
+    second.join();
+    assert(first.is_finished(), "join waits for the body to return");
+    assert(finished.load() == 2, "both bodies ran");
+
+    # How many threads can run at once, and on how many cores.
+    assert(async.logical_cpus() &gt;= async.physical_cpus(), "hyperthreads count once in physical_cpus");
+    return 0;
+}
+</code></pre>
 <ul>
-<li><code>Atomic&lt;T&gt;</code> operations are real atomic instructions. When threads are
-created outside Pepper, for example by a host program in another language
-that calls into Pepper functions, those threads can safely share
-<code>Atomic&lt;T&gt;</code> values of number types. Pepper’s own test suite does exactly
-that, calling a Pepper function that uses <code>fetch_add</code> from several threads.</li>
+<li><code>Thread.spawn(body, name)</code> starts a new thread that runs <code>body</code>, a function
+of type <code>ThreadBody</code> (an alias for <code>() =&gt; void</code>), and returns its <code>Thread</code>. The name is optional.</li>
+<li><code>join()</code> waits for the body to return. After <code>join()</code>, the joining thread
+sees everything the other thread did. A thread can be joined once.</li>
+<li><code>Thread.current()</code> returns the calling thread’s <code>Thread</code>. For a spawned
+thread it is the same object that <code>spawn</code> returned. The main thread’s is
+named <code>main</code>.</li>
+<li><code>id()</code> returns the thread’s <code>ThreadId</code>, a number that no other thread in
+the program has. Ids come from the runtime, starting at 1, and are not the
+operating system’s thread ids. A <code>ThreadId</code> can be compared and used as a
+<code>HashMap</code> key.</li>
+<li><code>is_finished()</code> reports whether the body has returned. <code>is_joinable()</code>
+reports whether <code>join()</code> may be called.</li>
+<li><code>Thread.sleep(milliseconds)</code> pauses the calling thread.</li>
+<li>Dropping every reference to a <code>Thread</code> without joining it <strong>detaches</strong> the
+thread. It keeps running, and its resources are freed when it finishes.</li>
+<li>A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</li>
 </ul>
-<p>What does not:</p>
+<p>The body can be a named function or a <a href="#function-types-and-closures">closure</a>. A
+closure passes data to the thread through its captures:</p>
+<pre><code class="language-pepper">var total = Atomic&lt;long&gt;(0);
+var step: long = 5;
+var worker = async.Thread.spawn(() =&gt; { total.fetch_add(step); });
+worker.join();
+</code></pre>
+<p>Capture only thread-safe values (numbers, <code>Atomic&lt;T&gt;</code>, <code>[Shared]</code> structs):
+the compiler does not check a closure’s captures yet (see Limitations).</p>
+<p>The <a href="#thread">Thread reference</a> documents every method.</p>
+<h2 id="processor-counts"><a class="header" href="#processor-counts">Processor counts</a></h2>
 <ul>
-<li><strong>Reference counts are not atomic.</strong> Copying or releasing a struct
-reference updates its count with ordinary, non-atomic instructions. Two
-threads that copy or release references to the same object at the same time
-can corrupt its count, freeing it too early or never. Until this changes, do
-not share struct values, including <code>String</code> and <code>Array</code>, between threads.
-This also applies to <code>Atomic&lt;T&gt;</code> with a struct <code>T</code>: the slot’s own swap is
-atomic, but the object’s count is not.</li>
-<li>Ordinary variables and struct fields have no protection against data races.</li>
+<li><code>async.logical_cpus()</code> returns how many threads the machine can run at the
+same moment. A core with hyperthreading (SMT) counts two or more times.
+This is a good default size for a pool of CPU-bound worker threads.</li>
+<li><code>async.physical_cpus()</code> counts each physical core once. On Linux it reads
+the kernel’s CPU topology, on macOS <code>hw.physicalcpu</code>, and on Windows
+<code>GetLogicalProcessorInformationEx</code>. Inside a virtual machine it counts the
+cores the hypervisor presents, because the guest cannot see the host’s
+hardware.</li>
 </ul>
-<h2 id="where-pepper-is-heading"><a class="header" href="#where-pepper-is-heading">Where Pepper is heading</a></h2>
-<p>The goal is for Pepper to make concurrent code safe by construction: code
-that shares data between threads without synchronization should be a compile
-error, not a bug found in production. The current design plans point toward:</p>
+<h2 id="per-thread-values-with-threadlocal"><a class="header" href="#per-thread-values-with-threadlocal">Per-thread values with ThreadLocal</a></h2>
+<p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread:</p>
+<pre><code class="language-pepper">import [Thread, ThreadLocal] from async;
+
+# One variable, a separate value on every thread.
+var calls = ThreadLocal&lt;int&gt;();
+var totals = Atomic&lt;long&gt;(0);
+
+record_call() {
+    calls.set(calls.get() + 1);
+}
+
+work() {
+    record_call();
+    record_call();
+    record_call();
+    totals.fetch_add(calls.get());   # 3 on every thread
+}
+
+main(): int {
+    record_call();
+    var a = Thread.spawn(work);
+    var b = Thread.spawn(work);
+    a.join();
+    b.join();
+    assert(totals.load() == 6, "each thread counted its own calls");
+    assert(calls.get() == 1, "the main thread's value is its own");
+    return 0;
+}
+</code></pre>
 <ul>
-<li>a thread API that accepts only values that are safe to send to another
-thread, such as number types, <code>Atomic&lt;T&gt;</code>, and types the compiler can prove
-are immutable or internally synchronized, with an error that names the
-offending value;</li>
-<li>atomic reference counting for values that cross threads.</li>
+<li><code>get()</code> returns the calling thread’s value, or the default of <code>T</code> (zero, or
+null for a struct) until that thread calls <code>set</code>.</li>
+<li><code>set(value)</code> replaces only the calling thread’s value.</li>
+<li><code>is_set()</code> and <code>clear()</code> test for and remove the calling thread’s value.</li>
+<li>When a thread exits, its value is released.</li>
 </ul>
-<p>None of this is implemented yet, and the details may change.</p>
+<p>A <code>ThreadLocal</code> is usually a module-scope variable. Its <code>T</code> does not need to
+be thread-safe, because each value stays on the thread that stored it. The
+<a href="#threadlocal">ThreadLocal reference</a> has the details.</p>
+<h2 id="what-threads-can-share"><a class="header" href="#what-threads-can-share">What threads can share</a></h2>
+<p>Every struct value is a counted reference (see
+<a href="#memory-and-reference-counting">Memory and reference counting</a>). Updating a count from two
+threads at once can free an object too early or never, so by default a
+struct’s counts are plain, fast increments, and its objects must stay on one
+thread.</p>
+<p>A struct declared <code>[Shared]</code> has <strong>atomic</strong> reference counts, so references
+to one object can be copied and dropped on any thread:</p>
+<pre><code class="language-pepper">import async;
+
+# A struct that threads can share: declared [Shared], every field const and
+# thread-safe.
+[Shared]
+struct Settings {
+    const Port: int;
+    const Retries: int;
+    construct(this.Port = 0, this.Retries = 0) {}
+}
+
+# Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
+# of them can replace them.
+var current = Atomic&lt;Settings&gt;(Settings(8080, 3));
+var seen = Atomic&lt;long&gt;(0);
+
+read_settings() {
+    var settings = current.load();
+    seen.fetch_add(settings.Port);
+}
+
+main(): int {
+    var readers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        readers.append(async.Thread.spawn(read_settings));
+        i = i + 1;
+    }
+    for (var reader in readers) {
+        reader.join();
+    }
+    assert(seen.load() == 4 * 8080, "every reader saw the settings");
+
+    current.store(Settings(9090, 5));
+    assert(current.load().Port == 9090, "replaced");
+    return 0;
+}
+</code></pre>
+<p>The compiler checks every <code>[Shared]</code> struct:</p>
+<ul>
+<li>
+<p><strong>Every field must be <code>const</code>.</strong> It is set once, by the constructor, and
+never assigned again, so threads cannot race on it. To change shared state,
+give the struct a thread-safe member such as an <code>Atomic&lt;T&gt;</code>.</p>
+</li>
+<li>
+<p><strong>Every field must have a thread-safe type.</strong> These are the thread-safe
+types:</p>
+<ul>
+<li>numbers and <code>bool</code>;</li>
+<li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
+<li>function types, such as <code>() =&gt; void</code>;</li>
+<li><code>[Shared]</code> structs, and weak references to them.</li>
+</ul>
+<p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
+thread-safe.</p>
+</li>
+</ul>
+<p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
+<code>Atomic&lt;T&gt;</code> is <code>[Shared]</code>, so <code>Atomic&lt;int&gt;</code> and <code>Atomic&lt;Settings&gt;</code> are fine,
+and <code>Atomic&lt;String&gt;</code> is an error that points at the code that names it:</p>
+<pre><code class="language-text">main.pep:2:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    2 |     var a = Atomic&lt;String&gt;();
+      |             ^~~~~~~~~~~~~~
+runtime/atomic.pep:40:17: note: required by field 'Data' declared here
+runtime/string.pep:33:15: note: 'String' is not declared [Shared]
+</code></pre>
+<p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
+reported at the field:</p>
+<pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
+    3 |     int Count;
+      |         ^~~~~
+note: threads change a shared struct's state through a thread-safe member such as 'Atomic&lt;T&gt;'
+</code></pre>
+<p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves.</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<p>Thread safety is not complete yet:</p>
+<ul>
+<li><strong>Module-scope variables are not checked.</strong> Every thread can reach every
+module-scope variable, and the compiler does not yet require them to be
+thread-safe. Only use thread-safe variables, such as an <code>Atomic&lt;T&gt;</code> or a
+<code>[Shared]</code> struct, from more than one thread. A <code>String</code> or <code>Array</code> used
+from two threads at once can corrupt memory.</li>
+<li>There are no mutexes, condition variables or channels yet. Coordinate
+threads with <code>Atomic&lt;T&gt;</code> and <code>join()</code>.</li>
+<li><strong>Closure captures are not checked.</strong> Every function type counts as
+thread-safe, but a closure that captures a <code>String</code> or <code>Array</code> and runs on
+another thread shares that value’s plain reference count with the thread
+that created it. Capture only thread-safe values in a thread body.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -4688,8 +5037,46 @@ end of an allocation, using memory after <code>free</code>, or forgetting to <co
 behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
-<p>Pepper function values are Pepper objects, not C function pointers, so you
-cannot pass a Pepper function as a C callback (for example to <code>qsort</code>).</p>
+<h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
+<p>A Pepper <a href="#function-types-and-closures">function value</a> is a Pepper object, not a C
+function pointer. To hand a function to C as a callback, such as the
+comparison function of <code>qsort</code>, take its address with
+<code>__function_pointer(name)</code>. The result is a <code>__ptr&lt;void&gt;</code>:</p>
+<pre><code class="language-pepper">extern void qsort(void* base, ulong count, ulong size, void* compare);
+
+# C calls this with pointers to two elements: a C-compatible signature.
+compare_ints(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+    __ptr&lt;int&gt; x = a;
+    __ptr&lt;int&gt; y = b;
+    if (x[0] &lt; y[0]) { return -1; }
+    if (x[0] &gt; y[0]) { return 1; }
+    return 0;
+}
+
+main(): int {
+    __ptr&lt;int&gt; numbers = _pep_malloc(4 * sizeof&lt;int&gt;());
+    numbers[0] = 30;
+    numbers[1] = 10;
+    numbers[2] = 40;
+    numbers[3] = 20;
+    qsort(numbers, 4, sizeof&lt;int&gt;(), __function_pointer(compare_ints));
+    assert(numbers[0] == 10 &amp;&amp; numbers[3] == 40, "sorted");
+    _pep_free(numbers);
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The argument must name a free function, or a static method of the struct
+whose method uses it. Inside a generic struct the static method is the one
+for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> gives the
+operating system a destructor for its <code>T</code>.</li>
+<li>C calls the function with the C calling convention, so give it
+C-compatible parameter and return types: numbers and <code>__ptr&lt;T&gt;</code>. C knows
+nothing of reference counts, so a struct parameter or return value would
+not be counted correctly.</li>
+<li>A name that is not a function is reported as
+<code>use of undeclared identifier</code>.</li>
+</ul>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
 the declared one. Pepper code calls the extern by its declared name, and the
@@ -7415,7 +7802,7 @@ is used.</p>
 <h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
 <p>Source: <code>runtime/atomic.pep</code></p>
 <h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
-<pre><code class="language-pepper">struct Atomic&lt;T&gt;
+<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
 </code></pre>
 <p>A value of type <code>T</code> that threads can read and update without data races,
 like C++ <code>std::atomic&lt;T&gt;</code>.</p>
@@ -7426,8 +7813,10 @@ the new reference and release the one they replace, and <code>load</code> hands 
 caller its own reference. Memory ordering: <code>load</code> is an acquire,
 <code>store</code> a release, and <code>compare_exchange</code> and the <code>fetch_*</code> operations are
 acquire-release.</p>
-<p><code>Atomic</code> is itself a struct, so copies of it share one slot: pass the
-Atomic around (or keep it in a global) to share the value between threads.</p>
+<p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
+be used from several threads at once: pass the Atomic around (or keep it
+in a global) to share the value between threads. A struct <code>T</code> must be
+thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is a compile error.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the stored value</li>
@@ -7442,7 +7831,7 @@ Atomic around (or keep it in a global) to share the value between threads.</p>
 </code></pre>
 <h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="data-2"><a class="header" href="#data-2">Data</a></h4>
-<pre><code class="language-pepper">__ptr&lt;T&gt; Data
+<pre><code class="language-pepper">const Data: __ptr&lt;T&gt;
 </code></pre>
 <p>The heap slot the value lives in: <code>sizeof&lt;T&gt;()</code> bytes for a POD <code>T</code>,
 or one reference pointer for a struct <code>T</code>. Allocated by the
@@ -9447,6 +9836,381 @@ sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
         var n = list.Value.count();
     }
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-async-module"><a class="header" href="#the-async-module">The async module</a></h1>
+<p>Threads and concurrency, modeled on Rust’s <code>std::thread</code> and C++
+<code>std::thread</code>.</p>
+<p>Like <code>io</code>, <code>async</code> is a module: bring it in with <code>import async</code> (and write
+<code>async.Thread</code>, <code>async.logical_cpus()</code>) or import names directly with
+<code>import [Thread, ThreadLocal] from async</code>.</p>
+<ul>
+<li><a href="#thread">Thread</a>: starting, naming and joining threads, <code>ThreadId</code> and <code>ThreadBody</code></li>
+<li><a href="#threadlocal">ThreadLocal</a>: a variable with a separate value on every thread</li>
+<li><a href="#processor-counts-1">Processor counts</a>: <code>logical_cpus()</code> and <code>physical_cpus()</code></li>
+</ul>
+<p>Only thread-safe values can be shared between threads: numbers, function
+values, and <code>[Shared]</code> structs such as <code>Atomic&lt;T&gt;</code>, <code>Thread</code> and
+<code>ThreadLocal&lt;T&gt;</code>. See the language guide’s Threads chapter.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    var hits = Atomic&lt;long&gt;(0);
+
+    work() {
+        hits.fetch_add(1);
+    }
+
+    main(): int {
+        var workers = Array&lt;async.Thread&gt;();
+        var n = async.logical_cpus();
+        var i: ulong = 0;
+        while (i &lt; n) {
+            workers.append(async.Thread.spawn(work));
+            i = i + 1;
+        }
+        for (var worker in workers) {
+            worker.join();
+        }
+        assert(hits.load() == n as long, "every worker ran");
+        return 0;
+    }
+</code></pre>
+<p>Source: <code>runtime/async/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/thread.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="thread"><a class="header" href="#thread">Thread</a></h1>
+<p>Threads: starting, naming, identifying and joining operating-system
+threads.</p>
+<p>Source: <code>runtime/async/thread.pep</code></p>
+<h2 id="threadid"><a class="header" href="#threadid">ThreadId</a></h2>
+<pre><code class="language-pepper">type ThreadId = ulong
+</code></pre>
+<p>Identifies a thread for as long as the program runs: every thread,
+whether started with <code>Thread.spawn</code> or not, gets a distinct id the first
+time it is asked for one, and ids are never reused.</p>
+<p>Ids are assigned by the runtime in the order threads ask for them, starting
+at 1; they are not the operating system’s thread ids. A <code>ThreadId</code> is a
+number, so it can be compared, hashed and used as a <code>HashMap</code> key.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Thread.id</code></li>
+</ul>
+<h2 id="threadbody"><a class="header" href="#threadbody">ThreadBody</a></h2>
+<pre><code class="language-pepper">type ThreadBody = () =&gt; void
+</code></pre>
+<p>The type of a thread’s body: a function that takes no arguments and
+returns nothing. <code>Thread.spawn</code> runs one on a new thread.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Thread.spawn</code></li>
+</ul>
+<h2 id="thread-1"><a class="header" href="#thread-1">Thread</a></h2>
+<pre><code class="language-pepper">[Shared] struct Thread
+</code></pre>
+<p>An operating-system thread.</p>
+<p>Start one with <code>Thread.spawn</code>, which runs a function on a new thread and
+returns its <code>Thread</code>, and wait for it to finish with <code>join()</code>. Every
+thread, including the main thread, can get its own <code>Thread</code> with
+<code>Thread.current()</code>.</p>
+<p>A <code>Thread</code> is <code>[Shared]</code>: the thread that started it and the thread itself
+can both hold it. Dropping every reference without joining detaches the
+thread: it keeps running, and its resources are freed when it finishes.</p>
+<p>The body runs until it returns; there is no way to stop a thread from the
+outside. A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    var total = Atomic&lt;long&gt;(0);
+
+    add_ten() {
+        total.fetch_add(10);
+    }
+
+    main(): int {
+        var a = async.Thread.spawn(add_ten, "adder a");
+        var b = async.Thread.spawn(add_ten, "adder b");
+        a.join();
+        b.join();
+        assert(total.load() == 20, "both threads ran");
+        return 0;
+    }
+</code></pre>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h4 id="id"><a class="header" href="#id">Id</a></h4>
+<pre><code class="language-pepper">const Id: ThreadId
+</code></pre>
+<p>The thread’s id.</p>
+<h4 id="namedata"><a class="header" href="#namedata">NameData</a></h4>
+<pre><code class="language-pepper">const NameData: __ptr&lt;char&gt;
+</code></pre>
+<p>The name’s UTF-8 bytes, NUL-terminated, or null for an unnamed thread.</p>
+<h4 id="namesize"><a class="header" href="#namesize">NameSize</a></h4>
+<pre><code class="language-pepper">const NameSize: ulong
+</code></pre>
+<p>The name’s size in bytes.</p>
+<h4 id="namelength"><a class="header" href="#namelength">NameLength</a></h4>
+<pre><code class="language-pepper">const NameLength: ulong
+</code></pre>
+<p>The name’s length in code points.</p>
+<h4 id="body"><a class="header" href="#body">Body</a></h4>
+<pre><code class="language-pepper">const Body: ThreadBody
+</code></pre>
+<p>The function the thread runs (a no-op for a thread that was not
+started by <code>spawn</code>, such as the main thread).</p>
+<h4 id="handle-1"><a class="header" href="#handle-1">Handle</a></h4>
+<pre><code class="language-pepper">const Handle: Atomic&lt;__ptr&lt;void&gt;&gt;
+</code></pre>
+<p>The operating-system handle while the thread can still be joined or
+detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.</p>
+<h4 id="finished"><a class="header" href="#finished">Finished</a></h4>
+<pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
+</code></pre>
+<p>1 once the body has returned, else 0.</p>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
+<pre><code class="language-pepper">construct(String name, ThreadBody body)
+</code></pre>
+<p>Creates a <code>Thread</code> value for a thread that is already running. Programs
+get threads from <code>spawn</code> and <code>current()</code> instead; a <code>Thread</code> made
+directly is not attached to any thread and cannot be joined.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the thread’s name; empty for an unnamed thread</li>
+<li><code>body</code> — the function the thread runs</li>
+</ul>
+<h3 id="static-methods-7"><a class="header" href="#static-methods-7">Static methods</a></h3>
+<h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
+<pre><code class="language-pepper">static Thread spawn(ThreadBody body, String name = "")
+</code></pre>
+<p>Starts a new thread that runs <code>body</code>.</p>
+<p>The new thread starts right away and runs until <code>body</code> returns. Its
+<code>Thread.current()</code> is the <code>Thread</code> returned here.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the function to run on the new thread</li>
+<li><code>name</code> — a name for the thread, returned by <code>name()</code>; empty by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new thread, to <code>join()</code> or query</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot create another thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
+    worker.join();
+</code></pre>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">static Thread current()
+</code></pre>
+<p>Returns the <code>Thread</code> of the thread that calls it.</p>
+<p>For a thread started with <code>spawn</code> this is the <code>Thread</code> that <code>spawn</code>
+returned. Any other thread (the main thread, or one started by C code)
+gets a <code>Thread</code> the first time it asks and the same one afterwards; the
+main thread’s is named <code>main</code>, the others are unnamed. Such a <code>Thread</code>
+cannot be joined.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the calling thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var me = Thread.current();
+    print(me.name(), "\n");   # "main" on the main thread
+</code></pre>
+<h4 id="sleep"><a class="header" href="#sleep">sleep</a></h4>
+<pre><code class="language-pepper">static void sleep(ulong milliseconds)
+</code></pre>
+<p>Pauses the calling thread for at least <code>milliseconds</code> milliseconds.</p>
+<p>The operating system may sleep longer, but never shorter.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
+</ul>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
+<pre><code class="language-pepper">ThreadId id()
+</code></pre>
+<p>Returns the thread’s id, which no other thread in the program has.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the thread’s id</li>
+</ul>
+<h4 id="name-1"><a class="header" href="#name-1">name</a></h4>
+<pre><code class="language-pepper">String name()
+</code></pre>
+<p>Returns the name the thread was given.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the name passed to <code>spawn</code>, <code>main</code> for the main thread, or an empty String for an unnamed thread</li>
+</ul>
+<h4 id="is_finished"><a class="header" href="#is_finished">is_finished</a></h4>
+<pre><code class="language-pepper">bool is_finished()
+</code></pre>
+<p>Reports whether the thread’s body has returned.</p>
+<p>A thread that is not finished may finish at any moment, so a <code>false</code>
+result can be out of date by the time it is used. Always false for a
+<code>Thread</code> that was not started by <code>spawn</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once the body has returned</li>
+</ul>
+<h4 id="is_joinable"><a class="header" href="#is_joinable">is_joinable</a></h4>
+<pre><code class="language-pepper">bool is_joinable()
+</code></pre>
+<p>Reports whether <code>join()</code> can be called: the thread was started by
+<code>spawn</code> and has not been joined yet.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if the thread can be joined</li>
+</ul>
+<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
+<pre><code class="language-pepper">void join()
+</code></pre>
+<p>Waits for the thread’s body to return.</p>
+<p>Returns right away if it already has. A thread can be joined once; a
+<code>Thread</code> from <code>current()</code> for a thread not started by <code>spawn</code> cannot be
+joined at all. Everything the thread did before it finished is visible
+to the caller after <code>join()</code> returns.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the thread cannot be joined (see <code>is_joinable()</code>), or if a thread tries to join itself</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/thread_local.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="threadlocal"><a class="header" href="#threadlocal">ThreadLocal</a></h1>
+<p>Per-thread values: <code>ThreadLocal&lt;T&gt;</code> gives every thread its own copy of a
+variable.</p>
+<p>Source: <code>runtime/async/thread_local.pep</code></p>
+<h2 id="threadlocal-1"><a class="header" href="#threadlocal-1">ThreadLocal</a></h2>
+<pre><code class="language-pepper">[Shared] struct ThreadLocal&lt;T&gt;
+</code></pre>
+<p>A variable with a separate value on every thread, like C++
+<code>thread_local</code> or Rust’s <code>thread_local!</code>.</p>
+<p>Each thread that calls <code>set</code> stores its own value, and <code>get</code> returns the
+calling thread’s value (the default of <code>T</code>, zero or null, until that thread
+sets one). When a thread exits, its value is released.</p>
+<p>A <code>ThreadLocal</code> is <code>[Shared]</code>, so one object can be used from every
+thread; it is usually a module-scope variable. <code>T</code> does not have to be
+thread-safe, because each value stays on the thread that stored it.</p>
+<p>Destroying a <code>ThreadLocal</code> releases the calling thread’s value only. Values
+that other threads still hold are released on Windows and leak elsewhere,
+so destroy one only after the threads that used it have exited.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-thread value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    var calls = async.ThreadLocal&lt;int&gt;();
+
+    count_call() {
+        calls.set(calls.get() + 1);
+    }
+
+    main(): int {
+        count_call();
+        count_call();
+        assert(calls.get() == 2, "two calls on this thread");
+        return 0;
+    }
+</code></pre>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h4 id="key"><a class="header" href="#key">Key</a></h4>
+<pre><code class="language-pepper">const Key: ulong
+</code></pre>
+<p>The operating-system thread-local key.</p>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a thread-local variable. No thread has a value yet.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system has no thread-local keys left</li>
+</ul>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<pre><code class="language-pepper">T get()
+</code></pre>
+<p>Returns the calling thread’s value.</p>
+<p>For a struct <code>T</code> the caller gets its own reference.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
+</ul>
+<h4 id="set"><a class="header" href="#set">set</a></h4>
+<pre><code class="language-pepper">void set(T value)
+</code></pre>
+<p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
+struct <code>T</code>, releasing) the one it held. Other threads’ values are not
+affected.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value for this thread</li>
+</ul>
+<h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
+<pre><code class="language-pepper">bool is_set()
+</code></pre>
+<p>Reports whether the calling thread has stored a value since it started
+or last called <code>clear()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if this thread has a value</li>
+</ul>
+<h4 id="clear-2"><a class="header" href="#clear-2">clear</a></h4>
+<pre><code class="language-pepper">void clear()
+</code></pre>
+<p>Removes the calling thread’s value, releasing it for a struct <code>T</code>.
+<code>get()</code> returns the default of <code>T</code> afterwards.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/cpus.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="processor-counts-1"><a class="header" href="#processor-counts-1">Processor counts</a></h1>
+<p>Processor counts.</p>
+<p>Source: <code>runtime/async/cpus.pep</code></p>
+<h2 id="logical_cpus"><a class="header" href="#logical_cpus">logical_cpus</a></h2>
+<pre><code class="language-pepper">logical_cpus(): ulong
+</code></pre>
+<p>Returns the number of logical processors the operating system can run
+threads on: every hardware thread, so a core with hyperthreading (SMT)
+counts two or more times.</p>
+<p>This is the upper bound on how many threads can run at the same moment,
+and a sensible default size for a pool of CPU-bound worker threads. Inside
+a virtual machine or container it counts the processors the guest sees.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of logical processors, at least 1</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>physical_cpus</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    main(): int {
+        print(async.logical_cpus(), " logical processors\n");
+        return 0;
+    }
+</code></pre>
+<h2 id="physical_cpus"><a class="header" href="#physical_cpus">physical_cpus</a></h2>
+<pre><code class="language-pepper">physical_cpus(): ulong
+</code></pre>
+<p>Returns the number of physical processor cores: hardware threads that
+share a core through hyperthreading (SMT) count once.</p>
+<p>On Linux the count comes from the kernel’s CPU topology
+(<code>/sys/devices/system/cpu</code>), on macOS from <code>hw.physicalcpu</code>, and on
+Windows from <code>GetLogicalProcessorInformationEx</code>. Inside a virtual machine
+the guest cannot see the host’s hardware, so this counts the cores the
+hypervisor presents. Where the topology is not available, it returns
+<code>logical_cpus()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of physical cores, at least 1 and at most <code>logical_cpus()</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>logical_cpus</code></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
 <p>This book lives in <code>docs/</code> and is rendered with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>.

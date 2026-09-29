@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Atomics and concurrency - The Pepper Programming Language</title>
+        <title>Atomics - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
+            window.path_to_searchindex_js = "../searchindex-9ac4a8e3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4f68acc7.js"></script>
+        <script src="../toc-24c54ee6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,12 +181,12 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="atomics-and-concurrency"><a class="header" href="#atomics-and-concurrency">Atomics and concurrency</a></h1>
+                        <h1 id="atomics"><a class="header" href="#atomics">Atomics</a></h1>
 <p>An <strong>atomic</strong> value can be read and updated by several threads at once without
 a data race: every operation on it happens as one indivisible step. Pepper
 provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>std::atomic&lt;T&gt;</code>.</p>
-<p>This chapter also describes what concurrency support Pepper has today, which
-is limited: there is no way to start a thread from Pepper yet.</p>
+<p>Threads themselves, and the rules for what they can share, are in
+<a href="threads.html">Threads and shared data</a>.</p>
 <h2 id="atomict"><a class="header" href="#atomict">Atomic&lt;T&gt;</a></h2>
 <p><code>Atomic&lt;T&gt;</code> is part of the runtime, so you can use it without an import. The
 <a href="../reference/atomic.html">Atomic reference</a> documents every method.</p>
@@ -256,11 +256,18 @@ the same object), not the objects’ contents.</li>
 floating-point or struct <code>T</code> compiles, but stops the program when it runs.</li>
 <li><strong><code>is_lock_free()</code></strong> is true for any number type of 8 bytes or less, and for
 any struct type.</li>
+<li><strong>A struct <code>T</code> must be thread-safe.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so
+its <code>T</code> must be a <code>[Shared]</code> struct too (or a number, pointer or function
+type). <code>Atomic&lt;String&gt;</code> is a compile error. See
+<a href="threads.html#what-threads-can-share">What threads can share</a>.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
-<pre><code class="language-pepper">struct Config {
-    String Name;
-    construct(this.Name = "") {}
+<pre><code class="language-pepper"># An Atomic can only hold a thread-safe struct: one declared [Shared], whose
+# fields are const and thread-safe.
+[Shared]
+struct Config {
+    const Version: int;
+    construct(this.Version = 0) {}
 }
 
 # A module-scope Atomic that every function can share.
@@ -292,19 +299,19 @@ main(): int {
     assert(n.load() == 7, "both names see the store");
 
     # An Atomic can hold a struct reference.
-    var first = Config("first");
+    var first = Config(1);
     var current = Atomic&lt;Config&gt;(first);
-    assert(current.load().Name == "first", "load returns the reference");
+    assert(current.load().Version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
-    var lookalike = Config("first");
-    var second = Config("second");
+    var lookalike = Config(1);
+    var second = Config(2);
     assert(!current.compare_exchange(lookalike, second), "a different object");
     assert(current.compare_exchange(first, second), "the same object");
-    assert(current.load().Name == "second", "swapped");
+    assert(current.load().Version == 2, "swapped");
 
     var old = current.exchange(first);
-    assert(old.Name == "second", "exchange hands back the old reference");
+    assert(old.Version == 2, "exchange hands back the old reference");
     return 0;
 }
 </code></pre>
@@ -315,11 +322,12 @@ even when many threads call it at once.</li>
 operations do not cover, load the current value, compute the new one, and
 <code>compare_exchange</code>; if another thread changed the value in between, the
 exchange fails and you try again with a fresh <code>load()</code>.</li>
-<li><strong>Sharing an Atomic.</strong> <code>Atomic</code> is a struct, so copying one copies a
-reference: every copy shares the same slot. To share a value, pass the
-<code>Atomic</code> around or keep it in a module-scope variable.</li>
-<li><strong>Atomic struct references.</strong> An <code>Atomic&lt;T&gt;</code> whose <code>T</code> is a struct type
-holds a counted reference, and follows the same rules as any other reference
+<li><strong>Sharing an Atomic.</strong> <code>Atomic</code> is a <code>[Shared]</code> struct, so copying one
+copies a reference: every copy shares the same slot, on any thread. To
+share a value, pass the <code>Atomic</code> around or keep it in a module-scope
+variable.</li>
+<li><strong>Atomic struct references.</strong> An <code>Atomic&lt;T&gt;</code> whose <code>T</code> is a <code>[Shared]</code>
+struct type holds a counted reference, and follows the same rules as any other reference
 (see <a href="memory.html">Memory and reference counting</a>): <code>store</code> and a successful
 <code>compare_exchange</code> take a reference to the new value and release the one they
 replace, and <code>load</code> and <code>exchange</code> give you your own reference. The swap in
@@ -327,40 +335,11 @@ the slot is itself atomic, so concurrent stores never leak or release a value
 twice. When the <code>Atomic</code> itself is destroyed, it releases the reference it
 holds.</li>
 </ul>
-<h2 id="concurrency-today"><a class="header" href="#concurrency-today">Concurrency today</a></h2>
-<p>Pepper does not have threads yet. The language and the runtime have no way to
-start a thread, no mutexes or other locks, and no thread-safety checks.</p>
-<p>What works today:</p>
-<ul>
-<li><code>Atomic&lt;T&gt;</code> operations are real atomic instructions. When threads are
-created outside Pepper, for example by a host program in another language
-that calls into Pepper functions, those threads can safely share
-<code>Atomic&lt;T&gt;</code> values of number types. Pepper’s own test suite does exactly
-that, calling a Pepper function that uses <code>fetch_add</code> from several threads.</li>
-</ul>
-<p>What does not:</p>
-<ul>
-<li><strong>Reference counts are not atomic.</strong> Copying or releasing a struct
-reference updates its count with ordinary, non-atomic instructions. Two
-threads that copy or release references to the same object at the same time
-can corrupt its count, freeing it too early or never. Until this changes, do
-not share struct values, including <code>String</code> and <code>Array</code>, between threads.
-This also applies to <code>Atomic&lt;T&gt;</code> with a struct <code>T</code>: the slot’s own swap is
-atomic, but the object’s count is not.</li>
-<li>Ordinary variables and struct fields have no protection against data races.</li>
-</ul>
-<h2 id="where-pepper-is-heading"><a class="header" href="#where-pepper-is-heading">Where Pepper is heading</a></h2>
-<p>The goal is for Pepper to make concurrent code safe by construction: code
-that shares data between threads without synchronization should be a compile
-error, not a bug found in production. The current design plans point toward:</p>
-<ul>
-<li>a thread API that accepts only values that are safe to send to another
-thread, such as number types, <code>Atomic&lt;T&gt;</code>, and types the compiler can prove
-are immutable or internally synchronized, with an error that names the
-offending value;</li>
-<li>atomic reference counting for values that cross threads.</li>
-</ul>
-<p>None of this is implemented yet, and the details may change.</p>
+<h2 id="atomics-and-threads"><a class="header" href="#atomics-and-threads">Atomics and threads</a></h2>
+<p><code>Atomic&lt;T&gt;</code> is how threads share a value that changes. Keep it in a
+module-scope variable, or in a <code>const</code> field of a <code>[Shared]</code> struct, and every
+thread sees the same slot. <a href="threads.html">Threads and shared data</a> shows it
+together with <code>Thread.spawn</code>.</p>
 
                     </main>
 
@@ -370,7 +349,7 @@ offending value;</li>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../language/c-interop.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/threads.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -384,7 +363,7 @@ offending value;</li>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../language/c-interop.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/threads.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
