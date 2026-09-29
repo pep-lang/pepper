@@ -12,6 +12,18 @@
 # extension version from tools/vscode-pepper/package.json: repeat pushes
 # replace the asset on the existing release, and a version bump opens a new
 # one. `pepper.lspPath` remains as a dev override for using your own build.
+#
+# Only a run on main publishes; a dispatch on any other branch uploads the
+# vsix as a run artifact instead, so a branch can be tested without replacing
+# the released extension.
+#
+# The x64 Windows and Linux legs run on self-hosted runners and must pass.
+# The other four legs run on GitHub-hosted runners, which GitHub can refuse
+# to start (a billing or spending-limit block fails them in seconds, before
+# any step). Those legs are allowed to fail: the package job bundles every
+# server that was built and names the missing platforms in a warning. On a
+# platform without a bundled server the extension still highlights and tells
+# the user how to point `pepper.lspPath` at their own build.
 name: VSIX
 
 on:
@@ -19,7 +31,9 @@ on:
     branches: [main]
     paths:
       - "crates/pepper-parser/**"
+      - "crates/pepper-sema/**"
       - "crates/pepper-files/**"
+      - "Cargo.lock"
       - "tools/lsp/**"
       - "tools/vscode-pepper/**"
       - ".github/workflows/vsix.yml"
@@ -47,13 +61,16 @@ jobs:
         # macos-15-intel (macos-14 is itself an arm64 image). The x64
         # Windows and Linux legs run on the self-hosted pepper-* runners.
         include:
-          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe" }
-          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe" }
-          - { target: linux-x64, runs-on: pepper-linux, exe: "" }
-          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "" }
-          - { target: darwin-x64, runs-on: macos-15-intel, exe: "" }
-          - { target: darwin-arm64, runs-on: macos-latest, exe: "" }
+          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", hosted: false }
+          - { target: win32-arm64, runs-on: windows-11-arm, exe: ".exe", hosted: true }
+          - { target: linux-x64, runs-on: pepper-linux, exe: "", hosted: false }
+          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, exe: "", hosted: true }
+          - { target: darwin-x64, runs-on: macos-15-intel, exe: "", hosted: true }
+          - { target: darwin-arm64, runs-on: macos-latest, exe: "", hosted: true }
     runs-on: ${{ matrix.runs-on }}
+    # A GitHub-hosted leg that fails (or never starts) does not block the
+    # package job; see the header.
+    continue-on-error: ${{ matrix.hosted }}
     # No LLVM download, so the budget is dominated by cargo.
     timeout-minutes: 20
 
@@ -109,6 +126,9 @@ jobs:
     permissions:
       contents: write
     needs: build
+    # Run even when a hosted build leg failed; the bundle step decides whether
+    # what was built is enough (the self-hosted targets are required).
+    if: ${{ !cancelled() }}
     # npm ci + vsce packaging; no compilation here.
     timeout-minutes: 15
 
@@ -122,23 +142,36 @@ jobs:
           cache: npm
           cache-dependency-path: tools/vscode-pepper/package-lock.json
 
-      # All six server binaries, one directory per artifact. Fails if any
-      # build leg produced nothing.
+      # Every server binary that was built, one directory per artifact.
       - name: Collect server binaries
         uses: actions/download-artifact@v4
         with:
           path: servers
 
       # The extension resolves the bundled server at
-      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js).
+      # server/<platform>-<arch>/pepper-lsp[.exe] (src/extension.js). The
+      # self-hosted targets are required; a missing hosted target is a warning.
       - name: Bundle servers into extension
         shell: bash
         run: |
           set -euo pipefail
+          missing=()
           for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            if [ ! -d "servers/pepper-lsp-$target" ]; then
+              case "$target" in
+                win32-x64|linux-x64)
+                  echo "::error::no pepper-lsp server was built for $target"
+                  exit 1 ;;
+              esac
+              missing+=("$target")
+              continue
+            fi
             mkdir -p "tools/vscode-pepper/server/$target"
             cp "servers/pepper-lsp-$target/"* "tools/vscode-pepper/server/$target/"
           done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::warning::vsix has no bundled server for: ${missing[*]} (their GitHub-hosted build legs failed)"
+          fi
           # Artifact download does not preserve file permissions (files arrive
           # 644), and vsce zips with the on-disk mode, so restore the exec bit
           # or the POSIX binaries would be installed non-executable.
@@ -154,11 +187,21 @@ jobs:
         working-directory: tools/vscode-pepper
         run: npx --yes @vscode/vsce@3 package --out pepper-language.vsix
 
+      # A branch dispatch keeps the vsix as a run artifact; only main publishes.
+      - name: Upload vsix (branch dispatch)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepper-language-vsix
+          path: tools/vscode-pepper/pepper-language.vsix
+          if-no-files-found: error
+
       # Publish the vsix as a release asset, tagged by the extension version
       # in package.json: repeat pushes replace the asset on the existing
       # release, a version bump opens a new one. The tag is read from the
       # file that owns it, never re-derived.
       - name: Publish to GitHub release
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
