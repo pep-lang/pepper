@@ -245,3 +245,57 @@ fn deprecated_new_offers_a_quick_fix() {
     assert!(quick_fixes(&uri, text, Range::new(Position::new(0, 0), Position::new(0, 1))).is_empty());
     assert!(quick_fixes(&uri, &text.replace("new(", "construct("), Range::new(Position::new(2, 5), Position::new(2, 5))).is_empty());
 }
+
+const CONVERTED: &str = r#"struct Name {
+    var text: String;
+    [Implicit]
+    construct(String text = "") { this.text = text; }
+}
+
+greet(n: Name): String { return n.text; }
+
+main(): int {
+    var who = "ada";
+    greet(who);
+    greet("bob");
+    var typed: Name = who;
+    var plain = "stays a String";
+    return 0;
+}
+"#;
+
+#[test]
+fn hover_shows_implicit_conversions() {
+    let (uri, text, program) = load("conversions", CONVERTED, "main.pep");
+    let note = "Converted to `Name` by its `[Implicit]` constructor from `String`.";
+    let variable = hover(&uri, &text, &program, at(&text, "greet(who)", 0, 7));
+    assert!(variable.contains(note), "{}", variable);
+    let literal = hover(&uri, &text, &program, at(&text, "\"bob\"", 0, 2));
+    assert!(literal.contains(note), "{}", literal);
+    let initializer = hover(&uri, &text, &program, at(&text, "= who", 0, 3));
+    assert!(initializer.contains(note), "{}", initializer);
+    let plain = hover(&uri, &text, &program, at(&text, "\"stays", 0, 2));
+    assert!(!plain.contains("Converted"), "{}", plain);
+}
+
+#[test]
+fn inlay_hints_wrap_converted_values() {
+    let (_, text, program) = load("conversion_hints", CONVERTED, "main.pep");
+    let sema = sema_model_of(&program).expect("sema");
+    let hints: Vec<(Position, String)> = conversion_hints(&text, &sema)
+        .into_iter()
+        .map(|h| match h.label {
+            InlayHintLabel::String(label) => (h.position, label),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    let position = |needle: &str, delta: usize| byte_to_lsp_pos(&text, at(&text, needle, 0, delta));
+    assert_eq!(hints, vec![
+        (position("who);", 0), "Name(".to_string()),
+        (position("who);", 3), ")".to_string()),
+        (position("\"bob\"", 0), "Name(".to_string()),
+        (position("\"bob\"", 5), ")".to_string()),
+        (position("who;", 0), "Name(".to_string()),
+        (position("who;", 3), ")".to_string()),
+    ]);
+}

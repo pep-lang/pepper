@@ -122,6 +122,8 @@ which converts from a `String`, so `dir.join("logs")` and
   Conversions never chain: if `Tag` converts from `Name` and `Name` from
   `String`, a `String` does not become a `Tag`.
 - **Each conversion is a constructor call**, so it allocates a new object.
+  The VS Code extension shows the call as an inlay hint around the converted
+  value, and hovering the value names the constructor.
   The converted value is a temporary like any constructor call's result: it
   is released after the call it was passed to (see
   [Memory and reference counting](memory.md)).
@@ -140,9 +142,9 @@ Conversions are opt-in: a constructor without `[Implicit]` never runs on its
 own. When a value would fit such a constructor, the type error says so:
 
 ```text
-main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
+main.pep:6:27: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
     6 | main(): int { return show("x"); }
-      |                      ^~~~
+      |                           ^~~
 main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]
     3 |     construct(String text) { this.text = text; }
       |     ^~~~~~~~~

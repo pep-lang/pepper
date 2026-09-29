@@ -174,9 +174,14 @@ with **Extensions: Install from VSIX...** from the command palette. The
 language server is bundled with the extension, so there is nothing else to
 install.
 
-Two things are useful once it is installed:
+A few things are useful once it is installed:
 
 - **Pepper: Restart Language Server** restarts the server on demand.
+- Where a value is converted by an
+  [`[Implicit]` constructor](../language/structs.md#implicit-conversions),
+  the editor shows the call it stands for as an inlay hint (`Path(` before
+  `"notes.txt"` and `)` after), and hovering the value says so. The
+  `pepper.inlayHints.implicitConversions` setting turns the hints off.
 - The `pepper.lspPath` setting points the extension at a language server you
   built yourself (`cargo build --release -p pepper-lsp` builds
   `target/release/pepper-lsp`). The server restarts whenever that file

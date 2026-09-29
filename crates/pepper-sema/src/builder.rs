@@ -98,10 +98,11 @@ fn unary_op(op: &str, prefix: bool) -> Option<UnaryOp> {
 
 fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
     match expr {
-        ast::Expression::Literal { value: lit, .. } => match lit {
+        ast::Expression::Literal { value: lit, span } => match lit {
             ast::Literal::String(value) => Ok(Expression::StringLiteral {
                 value: value.clone(),
                 is_raw: false,
+                loc: loc(*span),
             }),
             ast::Literal::Integer(v) => Ok(Expression::IntLiteral(*v)),
             ast::Literal::Float(v) => Ok(Expression::FloatLiteral(*v)),

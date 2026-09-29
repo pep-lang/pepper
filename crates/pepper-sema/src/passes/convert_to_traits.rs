@@ -41,10 +41,13 @@ struct Implicit {
     from: TypeName,
     /// The constructor call's name (`Path`, `Box<int>`).
     callee: String,
+    /// The constructor, for the language server.
+    constructor: Loc,
 }
 
 struct Converter {
     implicit: HashMap<String, Implicit>,
+    conversions: Vec<Conversion>,
     table: StructTable,
     trait_defs: Vec<TraitDef>,
     trait_types: HashMap<String, TraitType>,
@@ -210,6 +213,18 @@ impl Converter {
         }
         if !self.fits(value, &actual, &implicit.from) {
             return;
+        }
+        // A specialized body converts once per specialization; the source
+        // location is one place.
+        let at = value.loc();
+        let record = Conversion {
+            at,
+            from: actual.clone(),
+            to: expected.clone(),
+            constructor: implicit.constructor,
+        };
+        if !at.is_none() && !self.conversions.contains(&record) {
+            self.conversions.push(record);
         }
         let inner = std::mem::replace(value, Expression::PointerLiteral);
         *value = Expression::FunctionCall {
@@ -566,6 +581,7 @@ pub fn convert_to_traits(module: &mut Module) {
             let entry = Implicit {
                 from: from.clone(),
                 callee: st.ty.to_string(),
+                constructor: st.constructor.loc,
             };
             implicit.insert(st.name.clone(), entry.clone());
             implicit.insert(st.ty.to_string(), entry);
@@ -576,6 +592,7 @@ pub fn convert_to_traits(module: &mut Module) {
     }
     let mut converter = Converter {
         implicit,
+        conversions: vec![],
         table: StructTable::build(module),
         trait_defs: module.traits.clone(),
         trait_types: HashMap::new(),
@@ -653,4 +670,5 @@ pub fn convert_to_traits(module: &mut Module) {
     let mut trait_types: Vec<TraitType> = converter.trait_types.into_values().collect();
     trait_types.sort_by_key(|t| t.ty.to_string());
     module.trait_types = trait_types;
+    module.conversions = converter.conversions;
 }

@@ -199,6 +199,8 @@ pub enum Expression {
     StringLiteral {
         value: String,
         is_raw: bool,
+        /// The literal in the source; `Loc::NONE` for synthesized ones.
+        loc: Loc,
     },
     /// Null pointer literal
     PointerLiteral,
@@ -379,7 +381,8 @@ impl Expression {
             | Expression::FunctionPointer { loc, .. }
             | Expression::MethodCall { loc, .. }
             | Expression::MakeClosure { loc, .. }
-            | Expression::ToTrait { loc, .. } => *loc,
+            | Expression::ToTrait { loc, .. }
+            | Expression::StringLiteral { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
             _ => Loc::NONE,
         }
@@ -575,6 +578,18 @@ pub struct StructDef {
 /// The attribute that makes a struct shareable between threads.
 pub const SHARED_ATTRIBUTE: &str = "Shared";
 
+/// A value converted by an `[Implicit]` constructor: `to(value)` where the
+/// value was a `from`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Conversion {
+    /// The converted value in the source.
+    pub at: Loc,
+    pub from: TypeName,
+    pub to: TypeName,
+    /// The `[Implicit]` constructor.
+    pub constructor: Loc,
+}
+
 /// The attribute that lets a one-argument constructor convert implicitly:
 /// a value of its parameter's type flowing into a slot of the struct's type
 /// becomes a call to it (`passes::convert_to_traits`).
@@ -742,6 +757,10 @@ pub struct Module {
     /// Every trait type the program uses as a value type, filled by
     /// `convert_to_traits`; codegen builds their vtables and dispatch.
     pub trait_types: Vec<TraitType>,
+    /// Every implicit constructor conversion `convert_to_traits` inserted
+    /// where the converted value has a source location, for the language
+    /// server's hover and inlay hints.
+    pub conversions: Vec<Conversion>,
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,

@@ -810,9 +810,9 @@ fn plain_constructor_suggested_for_a_mismatch() {
             "plain_constructor_hint",
             "struct Label {\n    String text;\n    construct(String text) { this.text = text; }\n}\nshow(l: Label): int { return 0; }\nmain(): int { return show(\"x\"); }\n"
         ),
-        "main.pep:6:22: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'\n\
+        "main.pep:6:27: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'\n\
          \x20   6 | main(): int { return show(\"x\"); }\n\
-         \x20     |                      ^~~~\n\
+         \x20     |                           ^~~\n\
          main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]\n\
          \x20   3 |     construct(String text) { this.text = text; }\n\
          \x20     |     ^~~~~~~~~"

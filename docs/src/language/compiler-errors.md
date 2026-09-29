@@ -190,9 +190,9 @@ The check applies wherever a value flows into a typed place: a variable's
 initializer, an assignment, an argument and a `return`:
 
 ```text
-main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
+main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
     2 |     int x = "hello";
-      |     ^~~
+      |             ^~~~~~~
 ```
 
 ```text

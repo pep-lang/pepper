@@ -687,6 +687,14 @@ diagnostics"). The mechanics:
   `imported` maps that linking recorded. Hover text includes the
   declaration's doc comment (`declaration_doc`, `member_doc` →
   `DocComment::to_markdown`).
+- **Implicit conversions.** `convert_to_traits` records each conversion it
+  inserts whose value has a location in `Module::conversions` (string
+  literals carry their `Loc` for this, and the `String` constructor call
+  they become keeps it). `hover_at` runs sema once and appends a note when
+  the offset is inside a converted value (`conversion_at`); `inlay_hint`
+  returns `To(` / `)` around each one in the document (`conversion_hints`),
+  unless the client's `inlayHints.implicitConversions` initialization option
+  is `false`.
 - Completion lists keywords, globals, locals, and struct members.
   Document symbols come from the AST.
 - Runtime discovery is the same as the compiler's (section 2.2): from the

@@ -25,6 +25,7 @@ fn str_lit(value: String) -> Expression {
     Expression::StringLiteral {
         value,
         is_raw: true,
+        loc: Loc::NONE,
     }
 }
 

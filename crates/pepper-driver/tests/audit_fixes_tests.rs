@@ -491,9 +491,9 @@ test(): int {
 fn value_type_mismatches_are_errors() {
     assert_eq!(
         error_of("int_from_string", "main(): int {\n    int x = \"hello\";\n    return x;\n}\n"),
-        "main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'\n\
+        "main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'\n\
          \x20   2 |     int x = \"hello\";\n\
-         \x20     |     ^~~"
+         \x20     |             ^~~~~~~"
     );
     assert_eq!(
         error_of("return_string_from_int", "f(): int {\n    return \"a\";\n}\nmain(): int { return f(); }\n"),

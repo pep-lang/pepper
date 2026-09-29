@@ -14,11 +14,12 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use pepper_parser::ast::{self, Span};
 use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
-use pepper_sema::model::{Module as SemaModule, StructDef};
+use pepper_sema::model::{Conversion, Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
@@ -533,6 +534,59 @@ struct PepperLsp {
     client: Client,
     /// Open documents, keyed by URI string.
     docs: Mutex<HashMap<String, String>>,
+    /// Show `[Implicit]` constructor conversions as inlay hints: the
+    /// client's `inlayHints.implicitConversions` initialization option,
+    /// on unless it says `false`.
+    conversion_hints: AtomicBool,
+}
+
+/// The implicit conversions of the document (`program.files[0]`), in
+/// source order.
+fn document_conversions(sema: &SemaModule) -> Vec<&Conversion> {
+    let mut found: Vec<&Conversion> = sema.conversions.iter().filter(|c| c.at.file == FileId(0)).collect();
+    found.sort_by_key(|c| (c.at.span.start, c.at.span.end));
+    found
+}
+
+/// The innermost implicit conversion of the document covering `offset`.
+fn conversion_at(sema: &SemaModule, offset: usize) -> Option<&Conversion> {
+    document_conversions(sema)
+        .into_iter()
+        .filter(|c| c.at.span.start <= offset && offset < c.at.span.end)
+        .min_by_key(|c| c.at.span.end - c.at.span.start)
+}
+
+/// The hover line for a conversion.
+fn conversion_note(c: &Conversion) -> String {
+    format!(
+        "Converted to `{}` by its `[Implicit]` constructor from `{}`.",
+        c.to.display(),
+        c.from.display()
+    )
+}
+
+/// The inlay hints around each converted value: `Path(` before and `)`
+/// after, so the call the compiler inserts is visible.
+fn conversion_hints(text: &str, sema: &SemaModule) -> Vec<InlayHint> {
+    let hint = |offset: usize, label: String| InlayHint {
+        position: byte_to_lsp_pos(text, offset),
+        label: InlayHintLabel::String(label),
+        kind: None,
+        text_edits: None,
+        tooltip: None,
+        padding_left: None,
+        padding_right: None,
+        data: None,
+    };
+    document_conversions(sema)
+        .into_iter()
+        .filter(|c| c.at.span.end <= text.len())
+        .flat_map(|c| {
+            let mut open = hint(c.at.span.start, format!("{}(", c.to.display()));
+            open.tooltip = Some(InlayHintTooltip::String(conversion_note(c)));
+            [open, hint(c.at.span.end, ")".to_string())]
+        })
+        .collect()
 }
 
 /// The loaded, linked program rooted at an open document, which is
@@ -659,7 +713,7 @@ fn quick_fixes(uri: &Url, text: &str, range: Range) -> Vec<CodeActionOrCommand> 
 
 impl PepperLsp {
     fn new(client: Client) -> Self {
-        Self { client, docs: Mutex::new(HashMap::new()) }
+        Self { client, docs: Mutex::new(HashMap::new()), conversion_hints: AtomicBool::new(true) }
     }
 
     fn doc(&self, uri: &Url) -> Option<String> {
@@ -748,8 +802,24 @@ impl PepperLsp {
     }
 
     /// Hover at `offset` in `text`, the document `uri`, which is
-    /// `program.files[0]` when its program loaded.
+    /// `program.files[0]` when its program loaded. A value an `[Implicit]`
+    /// constructor converts says so below what the hover shows for it.
     fn hover_at(uri: &Url, text: &str, program: Option<&Program>, offset: usize) -> Option<Hover> {
+        let sema = program.and_then(|p| sema_model_of(p).ok());
+        let hover = Self::hover_expression(uri, text, program, sema.as_ref(), offset);
+        let Some(conversion) = sema.as_ref().and_then(|m| conversion_at(m, offset)) else {
+            return hover;
+        };
+        let note = conversion_note(conversion);
+        let value = match hover.map(|h| h.contents) {
+            Some(HoverContents::Markup(m)) => format!("{}\n\n---\n\n{}", m.value, note),
+            _ => note,
+        };
+        Some(Hover { contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value }), range: None })
+    }
+
+    /// What hover shows for the expression or type at `offset`.
+    fn hover_expression(uri: &Url, text: &str, program: Option<&Program>, sema: Option<&SemaModule>, offset: usize) -> Option<Hover> {
         let ast = parse_source(uri.as_str(), text).ok()?;
         let md = |content: String| HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: content });
         let imported = |(spelled, target): (String, imports::Target)| {
@@ -786,7 +856,6 @@ impl PepperLsp {
         {
             return imported(found);
         }
-        let sema = program.and_then(|p| sema_model_of(p).ok());
         // Docs of a name that is not a local, parameter, or member.
         let global_doc = |id: &str| {
             let local = locals.iter().chain(&struct_members).any(|s| s.name == id);
@@ -832,7 +901,7 @@ impl PepperLsp {
                     .map(|s| s.ty.clone())
                     .or_else(|| {
                         // Cross-file: look up in the sema model.
-                        sema.as_ref().and_then(|m| {
+                        sema.and_then(|m| {
                             m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())
                                 .or_else(|| m.structs.iter().find(|s| s.name == *id).map(|s| format!("struct {}", s.ty.to_string())))
                                 .or_else(|| m.traits.iter().find(|t| t.name == *id).map(|_| "trait".to_string()))
@@ -846,13 +915,13 @@ impl PepperLsp {
                 let rendered = if is_this(expr) {
                     struct_members.iter().find(|s| s.name == *name).map(|s| s.ty.clone())
                         .or_else(|| {
-                            sema.as_ref()
+                            sema
                                 .and_then(|m| enclosing_struct.and_then(|s| find_sema_struct(m, &s.name)))
                                 .and_then(|st| struct_member_type(st, name))
                         })
                         .unwrap_or_else(|| "unknown".to_string())
                 } else {
-                    sema.as_ref()
+                    sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .unwrap_or_else(|| "unknown".to_string())
                 };
@@ -861,12 +930,12 @@ impl PepperLsp {
             ast::Expression::FunctionCall { function, .. } => match &**function {
                 ast::Expression::SymbolRef { id, .. } => {
                     let rendered = globals.iter().find(|s| s.name == *id).map(|s| s.ty.clone())
-                        .or_else(|| sema.as_ref().and_then(|m| m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())))
+                        .or_else(|| sema.and_then(|m| m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())))
                         .unwrap_or_else(|| "unknown".to_string());
                     Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
                 }
                 ast::Expression::MemberAccess { lhs, name, .. } => {
-                    let rendered = sema.as_ref()
+                    let rendered = sema
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .unwrap_or_else(|| "unknown".to_string());
                     Some(Hover { contents: md(with_doc(format!(".`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
@@ -1060,9 +1129,17 @@ impl PepperLsp {
 
 #[async_trait]
 impl LanguageServer for PepperLsp {
-    async fn initialize(&self, _params: InitializeParams) -> LspResult<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> LspResult<InitializeResult> {
+        let hints = params
+            .initialization_options
+            .as_ref()
+            .and_then(|o| o.pointer("/inlayHints/implicitConversions"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        self.conversion_hints.store(hints, Ordering::Relaxed);
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![".".to_string(), "(".to_string()]),
@@ -1103,6 +1180,25 @@ impl LanguageServer for PepperLsp {
         let uri = params.text_document.uri.clone();
         self.docs.lock().unwrap().remove(uri.as_str());
         self.client.publish_diagnostics(uri, vec![], None).await;
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> LspResult<Option<Vec<InlayHint>>> {
+        if !self.conversion_hints.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
+        let uri = params.text_document.uri;
+        let Some(text) = self.doc(&uri) else {
+            return Ok(None);
+        };
+        let Some(sema) = self.program(&uri).ok().and_then(|p| sema_model_of(&p).ok()) else {
+            return Ok(None);
+        };
+        let range = params.range;
+        let hints = conversion_hints(&text, &sema)
+            .into_iter()
+            .filter(|h| h.position >= range.start && h.position <= range.end)
+            .collect();
+        Ok(Some(hints))
     }
 
     async fn hover(&self, params: HoverParams) -> LspResult<Option<Hover>> {

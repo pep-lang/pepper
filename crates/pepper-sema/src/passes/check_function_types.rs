@@ -153,8 +153,10 @@ impl<'a> Checker<'a> {
         // global (`strlen("hi")`).
         let literal = match value {
             Expression::StringLiteral { is_raw: true, .. } => true,
+            // `convert_string_literals` gives the call its literal's location;
+            // a `String(...)` the user wrote has its own.
             Expression::FunctionCall { function, args, loc } => {
-                function == "String" && loc.is_none() && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, .. }))
+                function == "String" && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, loc: literal, .. }) if literal == loc)
             }
             _ => false,
         };

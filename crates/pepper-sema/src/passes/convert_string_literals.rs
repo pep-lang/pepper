@@ -6,7 +6,7 @@
 use crate::model::{Expression, Module, VariableDef};
 
 fn convert(expr: &mut Expression) {
-    if let Expression::StringLiteral { value, is_raw } = expr {
+    if let Expression::StringLiteral { value, is_raw, loc } = expr {
         // Raw literals are `char*` globals (synthesized ctor tracing and the
         // first ctor argument); they must not become ctor calls.
         if *is_raw {
@@ -18,11 +18,14 @@ fn convert(expr: &mut Expression) {
                 Expression::StringLiteral {
                     value: value.clone(),
                     is_raw: true,
+                    loc: *loc,
                 },
                 Expression::IntLiteral(value.len() as i64),
                 Expression::IntLiteral(value.chars().count() as i64),
             ],
-            loc: crate::model::Loc::NONE,
+            // The literal's own location, so errors about the String
+            // point at it.
+            loc: *loc,
         };
     }
 }
