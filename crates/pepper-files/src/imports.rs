@@ -107,6 +107,32 @@ impl ModuleRoots {
         root
     }
 
+    /// The module folder the file `path` belongs to, if any.
+    pub fn module_of(&self, path: &Path) -> Option<PathBuf> {
+        let path = self.normalized(path);
+        self.of_dir(path.parent()?)
+    }
+
+    /// The namespace of the file `path` (see
+    /// `pepper_parser::namespace`): for a file of a module, the module's
+    /// name and the file's path inside it (`io/file` for `io/file.pep`);
+    /// otherwise the file's name. Without its extension, and with any
+    /// character a namespace cannot hold replaced by `_`.
+    pub fn namespace_of(&self, path: &Path) -> String {
+        let normalized = self.normalized(path);
+        let stem = normalized.with_extension("");
+        let key = match self.module_of(path) {
+            Some(root) => {
+                let module = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let inner = stem.strip_prefix(&root).unwrap_or(&stem);
+                let parts: Vec<String> = inner.iter().map(|c| c.to_string_lossy().into_owned()).collect();
+                format!("{}/{}", module, parts.join("/"))
+            }
+            None => stem.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        };
+        key.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '/' { c } else { '_' }).collect()
+    }
+
     /// Where a file import from `from` to the file `target` lands. Only
     /// [`Placement::SameModule`] is allowed: the target lies under the
     /// module's folder (for a file outside any module, its own folder) and

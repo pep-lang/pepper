@@ -1198,3 +1198,122 @@ fn a_blocked_own_override_names_the_other_file() {
     assert!(err.contains("'conv' is private to") && err.contains("lib.pep"), "{}", err);
     assert!(!err.contains("is private to C:") || !err.contains("main.pep; declare"), "{}", err);
 }
+
+#[test]
+fn private_names_are_per_file() {
+    // Each file's private function, struct (with a method), and module
+    // variable are its own, whatever other files declare.
+    let files = [
+        (
+            "lib.pep",
+            "helper(): int { return 1; }\nstruct Cell { var v: int; int get() { return v + base; } }\nconst base = 10;\n\
+             export from_lib(): int { var c = Cell(); c.v = helper(); return c.get(); }",
+        ),
+        (
+            "main.pep",
+            "import \"lib\";\nhelper(): int { return 2; }\nstruct Cell { var v: int; int get() { return v * base; } }\nconst base = 100;\n\
+             test(): int { var c = Cell(); c.v = helper(); return c.get() + from_lib(); }",
+        ),
+    ];
+    // main: 2 * 100; lib: 1 + 10.
+    assert_eq!(run("private_names_per_file", &files), 211);
+}
+
+#[test]
+fn private_names_of_same_named_files_in_different_modules_are_distinct() {
+    // `a/util.pep` and `b/util.pep` share a file name; their namespaces are
+    // the module-qualified paths `a/util` and `b/util`.
+    let files = [
+        ("a/module.pep", "import \"util\";\nexport a_value(): int { return from_a_util(); }"),
+        ("a/util.pep", "helper(): int { return 1; }\nexport from_a_util(): int { return helper(); }"),
+        ("b/module.pep", "import \"util\";\nexport b_value(): int { return from_b_util(); }"),
+        ("b/util.pep", "helper(): int { return 2; }\nexport from_b_util(): int { return helper(); }"),
+        ("main.pep", "import a;\nimport b;\ntest(): int { return a.a_value() * 10 + b.b_value(); }"),
+    ];
+    assert_eq!(run("same_named_files", &files), 12);
+}
+
+#[test]
+fn a_private_name_may_repeat_an_export_of_another_file() {
+    // main's private `twice` shadows nothing and is shadowed by nothing: lib
+    // keeps calling its own exported `twice`.
+    let files = [
+        ("lib.pep", "export twice(x: int): int { return x * 2; }\nexport four(): int { return twice(2); }"),
+        ("main.pep", "import [four] from \"lib\";\ntwice(x: int): int { return x + x + 1; }\ntest(): int { return twice(3) * 10 + four(); }"),
+    ];
+    assert_eq!(run("private_repeats_export", &files), 74);
+}
+
+#[test]
+fn a_reexported_private_declaration_is_reached_under_its_file() {
+    // `export secret as shown` publishes lib's private `secret`; main's own
+    // private `secret` stays distinct.
+    let files = [
+        ("lib.pep", "secret(): int { return 5; }\nexport secret as shown;"),
+        ("main.pep", "import \"lib\";\nsecret(): int { return 7; }\ntest(): int { return shown() * 10 + secret(); }"),
+    ];
+    assert_eq!(run("reexported_private", &files), 57);
+}
+
+#[test]
+fn a_struct_override_beside_its_private_struct_is_an_override() {
+    // lib's `Point` is mangled; `describe<Point>` must still name it, or
+    // it would read as a second generic and `describe<Point>(...)` would
+    // call `describe<T>`.
+    let lib = "struct Point { var x: int; }\ndescribe<T>(v: T): int { return 1; }\n\
+               describe<Point>(p: Point): int { return 2; }\n\
+               export run(): int { return describe<int>(5) * 10 + describe<Point>(Point()); }";
+    let files = [("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return run(); }")];
+    assert_eq!(run("struct_override_private", &files), 12);
+}
+
+#[test]
+fn private_declarations_are_local_to_the_object() {
+    // A mangled name is never a global symbol: nothing else can name it,
+    // and ELF linkers would read `helper@lib` as a symbol version.
+    let files = [
+        ("lib.pep", "helper(): int { return 1; }\nconst count = 2;\nexport api(): int { return helper() + count; }"),
+        ("main.pep", "import \"lib\";\ntest(): int { return api(); }"),
+    ];
+    let mut module = compile("private_linkage", &files).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    generator.generate(&mut module).expect("generate");
+    let internal = inkwell::module::Linkage::Internal;
+    assert_eq!(generator.module.get_function("helper@lib").expect("helper").get_linkage(), internal);
+    assert_eq!(generator.module.get_global("count@lib").expect("count").get_linkage(), internal);
+    assert_ne!(generator.module.get_function("api").expect("api").get_linkage(), internal);
+}
+
+#[test]
+fn an_exported_generic_keeps_its_name_beside_a_private_struct_override() {
+    // `describe<Point>` after the exported `describe<T>` shares its name:
+    // the generic stays exported, and the override stays an override.
+    let lib = "struct Point { var x: int; }\nexport describe<T>(v: T): int { return 1; }\n\
+               describe<Point>(p: Point): int { return 2; }\n\
+               export run(): int { return describe<Point>(Point()); }";
+    let files = [("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return describe<int>(3) * 10 + run(); }")];
+    assert_eq!(run("exported_generic_private_override", &files), 12);
+}
+
+#[test]
+fn a_constructor_error_quotes_a_private_struct_as_written() {
+    let files = [
+        ("lib.pep", "struct Point { var x: int; construct(this.y = 0) {} }\nexport make(): int { var p = Point(); return p.x; }"),
+        ("main.pep", "import \"lib\";\ntest(): int { return make(); }"),
+    ];
+    let err = error("ctor_quotes_private", &files);
+    assert!(err.contains("constructor parameter 'this.y' has no matching field in 'Point'"), "{}", err);
+}
+
+#[test]
+fn private_generics_with_private_overrides_stay_per_file() {
+    // Each lib's private `describe<int>` overrides its own private
+    // `describe<T>`; neither makes the name public.
+    let a = "describe<T>(v: T): int { return 1; }\ndescribe<int>(v: int): int { return 2; }\n\
+             export from_a(): int { return describe<int>(0) * 10 + describe<bool>(true); }";
+    let b = "describe<T>(v: T): int { return 3; }\ndescribe<int>(v: int): int { return 4; }\n\
+             export from_b(): int { return describe<int>(0) * 10 + describe<bool>(true); }";
+    let main = "import \"a\";\nimport \"b\";\ntest(): int { return from_a() * 100 + from_b(); }";
+    assert_eq!(run("private_overrides_per_file", &[("a.pep", a), ("b.pep", b), ("main.pep", main)]), 2143);
+}

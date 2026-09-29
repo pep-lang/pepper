@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use pepper_parser::ast::{self, Span};
 use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
+use pepper_parser::namespace::{demangle, demangle_known, demangle_name};
 use pepper_sema::model::{Conversion, Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::lsp_types::*;
@@ -439,8 +440,14 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
 
 // ── Sema lookups (merged model; no spans needed) ──────────────────────────────
 
+/// The struct `name`, as the document spells it: the document's own (which
+/// linking may have given a mangled name), else the one named `name`.
 fn find_sema_struct<'a>(module: &'a SemaModule, name: &str) -> Option<&'a StructDef> {
-    module.structs.iter().find(|s| s.name == name)
+    module
+        .structs
+        .iter()
+        .find(|s| s.loc.file == FileId(0) && demangle_name(&s.name) == name)
+        .or_else(|| module.structs.iter().find(|s| s.name == name))
 }
 
 fn struct_member_type(st: &StructDef, name: &str) -> Option<String> {
@@ -453,24 +460,26 @@ fn is_this(expr: &ast::Expression) -> bool {
 
 // ── Doc comments ──────────────────────────────────────────────────────────────
 
+/// Separates a hover's signature from the doc comment after it.
+const DOC_SEPARATOR: &str = "\n\n---\n\n";
+
 /// `value` followed by `doc`, the Markdown of a declaration's doc comment.
 fn with_doc(value: String, doc: Option<String>) -> String {
     match doc {
-        Some(doc) if !doc.is_empty() => format!("{}\n\n---\n\n{}", value, doc),
+        Some(doc) if !doc.is_empty() => format!("{}{}{}", value, DOC_SEPARATOR, doc),
         _ => value,
     }
 }
 
 /// The doc comment of the top-level declaration `name`, from the first
 /// program file declaring it (the document, then its imports, then the
-/// runtime), as Markdown.
+/// runtime), as Markdown. The document's own declaration may carry a
+/// mangled name, and is matched as written.
 fn declaration_doc(program: &Program, name: &str) -> Option<String> {
-    program.files.iter().find_map(|f| {
-        let decl = f
-            .module
-            .declarations
-            .iter()
-            .find(|d| !matches!(d, ast::Declaration::Extend(_)) && d.name() == name)?;
+    program.files.iter().enumerate().find_map(|(i, f)| {
+        let decl = f.module.declarations.iter().find(|d| {
+            !matches!(d, ast::Declaration::Extend(_)) && (d.name() == name || (i == 0 && demangle_name(d.name()) == name))
+        })?;
         Some(pepper_parser::doc::doc_comment_of(&f.source, decl)?.to_markdown())
     })
 }
@@ -487,9 +496,24 @@ fn declaration_doc_at(program: &Program, file: usize, name_span: Span) -> Option
 /// trait, or extension of `owner`, as Markdown. With no known owner, only a
 /// member name that one type alone declares has a doc to show.
 fn member_doc(program: &Program, owner: Option<&str>, name: &str) -> Option<String> {
+    // The document's own type first: it may carry a mangled name, and
+    // shadows another file's type of the same name.
+    if owner.is_some() && let Some(doc) = member_doc_in(&program.files[..1], owner, name, demangle_name) {
+        return Some(doc);
+    }
+    member_doc_in(&program.files, owner, name, |n| n)
+}
+
+/// [`member_doc`] over `files`, with each type's name spelled by `spell`.
+fn member_doc_in(
+    files: &[pepper_sema::ProgramFile],
+    owner: Option<&str>,
+    name: &str,
+    spell: fn(&str) -> &str,
+) -> Option<String> {
     // (owner, source, offset of the member's first token)
     let mut found: Vec<(&str, &str, usize)> = vec![];
-    for f in &program.files {
+    for f in files {
         for decl in &f.module.declarations {
             let (type_name, fields, methods): (&str, &[ast::VariableDecl], &[ast::FunctionDecl]) = match decl {
                 ast::Declaration::Struct(s) => (&s.name, &s.fields, &s.methods),
@@ -497,7 +521,7 @@ fn member_doc(program: &Program, owner: Option<&str>, name: &str) -> Option<Stri
                 ast::Declaration::Extend(e) => (&e.target.name, &[], &e.methods),
                 _ => continue,
             };
-            if owner.is_some_and(|o| o != type_name) {
+            if owner.is_some_and(|o| o != spell(type_name)) {
                 continue;
             }
             let field = fields.iter().find(|v| v.name == name).map(|v| v.span.start);
@@ -650,6 +674,7 @@ fn lsp_diagnostic(d: &diag::Diagnostic, uri: &Url, program: &[(&str, &str)]) -> 
         }
         None => (Range::default(), d.message.clone()),
     };
+    let message = demangle(&message).into_owned();
     let related: Vec<DiagnosticRelatedInformation> = d
         .notes
         .iter()
@@ -659,7 +684,7 @@ fn lsp_diagnostic(d: &diag::Diagnostic, uri: &Url, program: &[(&str, &str)]) -> 
             let uri = if loc.file.0 == 0 { uri.clone() } else { Url::from_file_path(name).ok()? };
             Some(DiagnosticRelatedInformation {
                 location: Location::new(uri, span_to_range(text, loc.span)),
-                message: note.message.clone(),
+                message: demangle(&note.message).into_owned(),
             })
         })
         .collect();
@@ -821,7 +846,19 @@ impl PepperLsp {
     /// What hover shows for the expression or type at `offset`.
     fn hover_expression(uri: &Url, text: &str, program: Option<&Program>, sema: Option<&SemaModule>, offset: usize) -> Option<Hover> {
         let ast = parse_source(uri.as_str(), text).ok()?;
-        let md = |content: String| HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: content });
+        // Private names are mangled in the linked program; hovers spell them
+        // as written. Only the signature before a doc comment is rewritten,
+        // and only with the program's own namespaces.
+        let namespaces: Vec<&str> = program.map(|p| p.files.iter().map(|f| f.namespace.as_str()).collect()).unwrap_or_default();
+        let md = |content: String| {
+            let (head, doc) = content.split_once(DOC_SEPARATOR).map_or((content.as_str(), None), |(h, d)| (h, Some(d)));
+            let mut value = demangle_known(head, &namespaces).into_owned();
+            if let Some(doc) = doc {
+                value.push_str(DOC_SEPARATOR);
+                value.push_str(doc);
+            }
+            HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value })
+        };
         let imported = |(spelled, target): (String, imports::Target)| {
             let program = program?;
             let value = match target {

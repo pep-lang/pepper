@@ -62,11 +62,12 @@ compiler::compile → compile_sources                               (driver/src/
     imports::search_paths         -I dirs, then runtime dirs
     resolve_forced                --import NAME → prelude, ahead of the runtime
     program::load                 parse_source every reachable file; resolve imports
-    modules::link                 bind imports/exports; rewrite m.x, aliases → FileScope
+    modules::link                 bind imports/exports; rewrite m.x, aliases; mangle
+                                  private names (helper@io/file) → FileScope
   compiler::merge
     Program::check                linking errors, then visibility::check_visibility
     builder::build_file(i)        AST → sema model, locations carry FileId(i)
-    Module::merge                 all files into ONE sema Module (one namespace)
+    Module::merge                 all files into ONE sema Module (names already unique)
   compiler::run_passes
     apply_platform_filters        drop [Target(...)] that is false on the host
     struct_body::apply            resolve_type_aliases; __refcount, ctor, dtor,
@@ -134,8 +135,24 @@ with no extension, and `module_name()` is the output's stem.
 - **`modules::link`** binds every file's imports and `export x as y`
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
-  declaration it denotes. After this step every reference is spelled the way
-  the single-namespace model resolves it. For each file it records a
+  declaration it denotes. It also gives each file's **private** top-level
+  declarations, and every reference to them, a mangled name
+  (`pepper_parser::namespace::mangle`: `helper@io/file`), keyed on the
+  file's `ProgramFile::namespace`, which `load` computes with
+  `ModuleRoots::namespace_of` (module name plus path inside the module, or
+  the file stem outside any module; made unique with `#2`, `#3` in load
+  order). Exports, externs, and concrete overrides keep their names; so do
+  the root file's private names, unless another file keeps the same name
+  (so `main` and a JIT test's `test` stay findable). `own_names` decides
+  this. A function's generic parameter named after one of the file's own
+  types (`describe<Point>`) is that type, so it is renamed too
+  (`visit_function_generics`) and the function stays a concrete override.
+  Codegen gives every mangled declaration internal linkage
+  (`set_private_linkage`): no other object can name it, and ELF linkers
+  read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged
+  model resolves it, with no two files' private names alike. Runtime
+  functions the compiler calls by name (`_pep_malloc`, `_pep_print*`) must
+  therefore be exported. For each file it records a
   `FileScope`: `imported` (span start → declaration, used by visibility) and
   `named` (used by the LSP). Errors are `ModuleError { file, span, message,
   unresolved }`.
@@ -151,11 +168,11 @@ with no extension, and `module_name()` is the output's stem.
   the program also declares a struct `T` (a runtime `extend ArrayIterator<T>`
   must not see a user's `struct T`).
 - **`Program::check`** reports link errors first and then
-  `visibility::check_visibility`. That check covers private symbols, symbols
-  that were not imported, private names declared in several files (they
-  would silently merge), and duplicate exports. Extern redeclarations and
-  concrete generic overrides (`hash<String>` of `hash<T>`, see
-  `type_name::is_concrete_override`) are exempt.
+  `visibility::check_visibility`. That check covers private symbols (a
+  reference linking left unrenamed is matched against other files' mangled
+  names by its demangled spelling), symbols that were not imported,
+  duplicate exports, and concrete overrides declared in several files. Extern
+  redeclarations are exempt.
 
 ### 2.3 Parsing (`crates/pepper-parser`)
 
@@ -274,8 +291,9 @@ with no extension, and `module_name()` is the output's stem.
   twice, the later entry overwrites the earlier one. `static_type::of`
   gives a best-effort static type for operator resolution and print
   conversion.
-- `Module::merge` concatenates vectors. **There is one global namespace**:
-  modules exist only up to `modules::link`. The driver's `compiler::merge`
+- `Module::merge` concatenates vectors into one namespace. Modules exist
+  only up to `modules::link`, which has already made every private name
+  unique by mangling it. The driver's `compiler::merge`
   then orders `module.globals` by `Program::initialization_order`: the
   prelude first (in reverse load order, so the runtime precedes the forced
   imports built on it), then every file after the files it imports. Globals
@@ -595,6 +613,10 @@ diagnostics"). The mechanics:
   `Loc::NONE` value for nodes the compiler synthesized.
 - `Diagnostic { severity, message, loc, notes }` has the builders
   `Diagnostic::error(msg).at(loc).with_note(msg, Some(loc))` and `or_at`.
+- Rendering spells mangled private names as written
+  (`pepper_parser::namespace::demangle`), so messages may name model
+  types and functions directly, **in single quotes**: only quoted names
+  are demangled, so a path or string holding an `@` is left alone.
 - Rendering goes through the `Sources` trait, which is implemented by
   `SourceMap` (`module.sources`, filled by `compiler::merge` in load order,
   so `FileId(i)` is `program.files[i]`) and by `Program`. `render_in(name,
@@ -638,7 +660,8 @@ diagnostics"). The mechanics:
   a module does not re-export them (`io/module.pep` re-exports only the
   public types).
 - **Lowered by name.** `print` → `_pep_print`/`_pep_print_int`/
-  `_pep_print_float`. Every constructor calls `_pep_malloc`, and `__release`
+  `_pep_print_float`. A name the compiler synthesizes must be exported:
+  linking mangles private names per file. Every constructor calls `_pep_malloc`, and `__release`
   calls `_pep_free` once the weak count reaches 0. `__acquire` and `__release` call `_pep_trace_ptr`
   and `_pep_trace_int`. Compiler-generated checks (null function and trait
   values) call `_pep_assert`, which takes a raw `char*`.
@@ -851,7 +874,7 @@ Validate the arguments and report a located error. Add driver tests (see
 Write twin declarations with the same name and signature, guarded
 `[Target(OS(Windows))]` and `[Target(!OS(Windows))]` (see
 `runtime/io/path.pep`, `sys_posix.pep`, and `sys_windows.pep`). Dropped
-twins do not count as duplicates for visibility. Use `[LinkName]` when the
+twins are never compiled together. Use `[LinkName]` when the
 C symbol differs by platform, and `[Link]` for extra libraries. Cover the
 other platforms in `platform_tests.rs` with `with_simulated_host`, which
 compiles the code but cannot run it. Run it for real with the
@@ -924,10 +947,18 @@ compiles the code but cannot run it. Run it for real with the
 
 ## 13. Known limitations and sharp edges
 
-- **Single global namespace.** Module linking rewrites names, and then
-  every file merges into one `Module`. Two private declarations with the
-  same name in different files are rejected by visibility rather than kept
-  apart. `SymbolTable` lets a later declaration overwrite an earlier one.
+- **Mangled private names.** Every file merges into one `Module`; private
+  names are kept apart only by mangling (`helper@io/file`). Anything that
+  shows a model name to the user must go through `pepper_parser::namespace`:
+  `demangle` (single-quoted names in messages; `Diagnostic::render` and the
+  LSP's diagnostics), `demangle_known` (only the program's own namespaces;
+  the LSP's hover signatures, never doc comments), or `demangle_name` (one
+  bare name). The LSP matches the document's own declarations by their
+  demangled names before other files' (`find_sema_struct`,
+  `declaration_doc`, `member_doc`). Code that synthesizes a reference by name
+  (`_pep_print_int`) can reach only a declaration that keeps its name, so
+  it must be exported. Exported names still share one namespace across
+  modules. `SymbolTable` lets a later declaration overwrite an earlier one.
 - **Trait values are one level deep.** There are no supertraits, so one
   trait type never converts to another, and there is no downcast from a
   trait value back to its struct. Generic parameters cannot require a

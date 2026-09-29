@@ -247,7 +247,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
                 .map(|f| f.ty.clone())
                 .ok_or_else(|| {
                     format!(
-                        "constructor parameter this.{} has no matching field on {}",
+                        "constructor parameter 'this.{}' has no matching field in '{}'",
                         field, struct_name
                     )
                 })?;

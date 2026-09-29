@@ -112,46 +112,46 @@ way, and is visible in every file without an import. The runtime's own helpers
 are private, so calling one, such as the integer formatter `dec`, reports
 `'dec' is private to` followed by the path of the runtime's `internals.pep`.
 
-## One namespace for the whole program
+## Each file has its own namespace
 
-Visibility controls who may *use* a name, but all the files of a program still
-share one namespace for their declarations. Two files may not both declare the
-same top-level name, even if both declarations are private:
+A private declaration belongs to its file alone, so two files may each
+declare a private name without clashing. Here `main.pep` and `lib.pep` each
+have their own `Counter` and `make`, and each file's code reaches its own:
 
 ```pepper
-import "lib";
-
-make(x: int): int { return x; }   # lib.pep also has a private make()
-main(): int { return make(1); }
+{{#include ../../examples/visibility-namespaces/lib.pep}}
 ```
 
-```text
-main.pep:3:1: error: private 'make' is also declared in lib.pep; top-level names must be unique across files
-    3 | make(x: int): int { return x; }
-      | ^~~~
-lib.pep:27:1: note: also declared here
-   27 | make(x: int, y: int): Point {
-      | ^~~~
+```pepper
+{{#include ../../examples/visibility-namespaces/main.pep}}
 ```
 
-An exported name must be unique too, even across modules that are reached
-through different qualifiers: `exported 'f' is also declared in b/module.pep`.
-Give private helpers names that are unlikely to collide, for example with a
-prefix for the file or module they belong to. The runtime's io module, for
-instance, prefixes its private helpers with `_io_`.
+This holds across modules too: two modules may each have a `util.pep` with a
+private `helper`. Files are told apart by their path inside their module
+(`io/file.pep`), not by their file name alone.
 
-A few kinds of declaration are exempt from this rule:
+Exported names are different: they share one namespace across the whole
+program, because importers reach them by name. Two files may not export the
+same name, even from modules reached through different qualifiers:
+`exported 'f' is also declared in b/module.pep`. A private name may repeat an
+exported one from another file; in the file that declares it, the file's own
+declaration is the one that name refers to.
 
-- **`extern` declarations**, since every declaration of an extern names the
-  same C function.
-- **Concrete overrides** of an exported generic function, such as `hash<int>`
-  alongside `hash<T>`. Overriding one the runtime already provides, such as
-  `hash<String>`, is still a duplicate. The exemption covers only overrides
-  for primitive types and `String`: an override for a struct, such as
-  `hash<Point>`, collides with `hash<T>` when the two are in different files,
-  so declare it in the same file as the generic function. Type parameters
-  are compared by position, not by name, so a private `pick<U>` also
-  collides with `pick<T>`.
+A few kinds of declaration are not private in this sense:
+
+- **`extern` declarations** name a C function, which is the same function in
+  every file. Several files may declare the same extern.
+- **Concrete overrides** of a generic function, such as `hash<int>` alongside
+  `hash<T>`, take the generic function's name: they replace its version for
+  those types wherever it is called. So each override may be declared in only
+  one file (`override 'hash<int>' is also declared in b.pep`), and overriding
+  one the runtime already provides, such as `hash<String>`, is also an error.
+  An override must be for a generic function you can see: overriding another
+  file's private generic function reports that it is private. The exemption
+  covers only overrides for primitive types and `String`: `hash<Point>` is a
+  second generic function whose type parameter is named `Point`, private to
+  its file like any other declaration.
 - **Declarations that a `[Target(...)]` attribute drops** for the platform
-  being compiled (see [Platform selection](platform-selection.md)). This is
-  why `lib.pep` above can declare `platform_name` twice.
+  being compiled (see [Platform selection](platform-selection.md)) are never
+  compiled. This is why the first `lib.pep` above can declare `platform_name`
+  twice.

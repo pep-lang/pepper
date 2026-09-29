@@ -818,3 +818,16 @@ fn plain_constructor_suggested_for_a_mismatch() {
          \x20     |     ^~~~~~~~~"
     );
 }
+
+#[test]
+fn private_name_is_shown_as_written() {
+    // The root's private `Error` shares a name with the runtime's export, so
+    // linking mangles it; the message spells it as written.
+    let source = "struct Error { var x: int; }\nmain(): int {\n    var e = Error();\n    return e.y;\n}\n";
+    assert_eq!(
+        error_of("private_name_shown_as_written", source),
+        "main.pep:4:14: error: no member named 'y' in 'Error'\n\
+         \x20   4 |     return e.y;\n\
+         \x20     |              ^"
+    );
+}

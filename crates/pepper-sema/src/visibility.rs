@@ -12,14 +12,18 @@
 //! those declarations is exported. Names with no top-level declaration
 //! (builtins, intrinsics, primitive types) are not this check's concern.
 //!
-//! Because the merged program still has one namespace, a private name must
-//! not also be declared in another file: the two would silently merge.
-//! Externs are exempt, since every `extern` of a name is the same C symbol,
-//! and a concrete override (`hash<String>` of `hash<T>`, as
-//! `type_name::is_concrete_override` defines it) is a distinct declaration.
-//! Anything else with generic parameters is a generic base, compared by
-//! parameter count, not spelling: `pick<T>` and `pick<U>` collide, and so do
-//! `hash<Point>` and `hash<T>`, since a user type is not an override.
+//! Linking has already given private declarations names no other file can
+//! spell (see [`pepper_parser::namespace`]), so two files may each declare a
+//! private `helper`. A reference that names another file's private
+//! declaration is left unrenamed by linking; it is matched here by its
+//! demangled name and reported as private. What keeps its name in the merged
+//! program must still be unique: an exported declaration of a non-prelude
+//! file, and a concrete override (`hash<String>` of `hash<T>`, as
+//! `type_name::is_concrete_override` defines it), which takes its generic's
+//! name. Externs are exempt, since every `extern` of a name is the same C
+//! symbol. Anything else with generic parameters is a generic base, compared
+//! by parameter count, not spelling: `pick<T>` and `pick<U>` collide, and so
+//! do `hash<Point>` and `hash<T>`, since a user type is not an override.
 //!
 //! Declarations that platform selection drops (a false `[Target(...)]`) are
 //! ignored as declarations: they can never collide or be referenced.
@@ -36,6 +40,7 @@ use crate::type_name::{is_concrete_override, is_override};
 use crate::scope_walk::{ScopeWalk, Scopes};
 use pepper_parser::ast::{Declaration, Module, Span, StructDecl, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
+use pepper_parser::namespace::{SEPARATOR, demangle_name};
 use std::collections::{HashMap, HashSet};
 
 /// One parsed source file.
@@ -63,8 +68,8 @@ pub enum VisibilityErrorKind {
     Private,
     /// A reference to a method of another file's private extension.
     PrivateExtension,
-    /// A private declaration whose name another file also declares.
-    Duplicate,
+    /// A private concrete override (`hash<int>`) another file also declares.
+    DuplicateOverride,
     /// A reference to another file's export that this file did not import.
     NotImported,
     /// An exported declaration of a non-prelude file whose name another file
@@ -108,8 +113,8 @@ impl VisibilityError {
                 "exported '{}' is also declared in {}; top-level names must be unique across files, even in different modules",
                 self.name, other
             ),
-            VisibilityErrorKind::Duplicate => format!(
-                "private '{}' is also declared in {}; top-level names must be unique across files",
+            VisibilityErrorKind::DuplicateOverride => format!(
+                "override '{}' is also declared in {}; a generic may be overridden for the same types in only one file",
                 self.name, other
             ),
         }
@@ -119,7 +124,7 @@ impl VisibilityError {
     /// ids are indices into `files`.
     pub fn to_diagnostic(&self, files: &[SourceFile]) -> Diagnostic {
         let note = match self.kind {
-            VisibilityErrorKind::Duplicate => "also declared here",
+            VisibilityErrorKind::DuplicateOverride => "also declared here",
             _ => "declared here",
         };
         let declared_at = declaration_span(files[self.declared_in].module, &self.name, self.kind)
@@ -152,7 +157,7 @@ fn declaration_span(module: &Module, name: &str, kind: VisibilityErrorKind) -> O
             e.methods.iter().find(|m| m.name == name).map(|m| m.name_span)
         }
         Declaration::Extend(_) => None,
-        d if d.name() == name => Some(d.name_span()),
+        d if demangle_name(d.name()) == name => Some(d.name_span()),
         _ => None,
     })
 }
@@ -180,6 +185,8 @@ fn is_generic_base(d: &Decl) -> bool {
 /// Check every file's references against the other files' exports.
 pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     let mut decls: HashMap<&str, Vec<Decl>> = HashMap::new();
+    // Mangled private declarations, by the name the user wrote.
+    let mut private: HashMap<String, Vec<Decl>> = HashMap::new();
     let mut types: HashSet<&str> = HashSet::new();
     let mut members = Members::default();
     for (i, file) in files.iter().enumerate() {
@@ -223,6 +230,12 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         }
     }
 
+    for (name, entries) in &decls {
+        if name.contains(SEPARATOR) {
+            private.entry(demangle_name(name).to_string()).or_default().extend(entries.iter().cloned());
+        }
+    }
+
     // A concrete override is identified by its arguments; a generic base
     // only by how many parameters it has.
     let shape = |d: &Decl| -> Vec<Option<String>> {
@@ -241,15 +254,16 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         // repeat each other, by design: the runtime is one unit, and a forced
         // import may supply its own definition of a runtime export. Every
         // other file's names must be unique.
-        for d in entries.iter().filter(|d| !d.external && (!d.exported || !exempt[d.file])) {
+        // Private declarations are mangled apart, except overrides.
+        let kept_name = |d: &&Decl| d.exported || is_override(d.generics.iter().copied());
+        for d in entries.iter().filter(|d| !d.external && (!d.exported || !exempt[d.file])).filter(kept_name) {
             if let Some(other) = entries.iter().find(|o| o.file != d.file && shape(o) == shape(d)) {
-                errors.push(VisibilityError {
-                    file: d.file,
-                    span: d.span,
-                    name: name.to_string(),
-                    declared_in: other.file,
-                    kind: if d.exported { VisibilityErrorKind::DuplicateExport } else { VisibilityErrorKind::Duplicate },
-                });
+                let (name, kind) = if d.exported {
+                    (name.to_string(), VisibilityErrorKind::DuplicateExport)
+                } else {
+                    (format!("{}<{}>", name, d.generics.join(", ")), VisibilityErrorKind::DuplicateOverride)
+                };
+                errors.push(VisibilityError { file: d.file, span: d.span, name, declared_in: other.file, kind });
             }
         }
     }
@@ -262,7 +276,10 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             if entries.iter().any(|e| e.file == d.file && is_base_of_d(&e)) {
                 continue;
             }
-            if let Some(base) = entries.iter().find(|e| e.file != d.file && !e.exported && is_base_of_d(e)) {
+            // The base may be private under its own name (in the root file)
+            // or mangled.
+            let private_bases = entries.iter().filter(|e| !e.exported).chain(private.get(*name).into_iter().flatten());
+            if let Some(base) = private_bases.into_iter().find(|e| e.file != d.file && is_base_of_d(e)) {
                 errors.push(VisibilityError {
                     file: d.file,
                     span: d.span,
@@ -301,6 +318,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             types: &types,
             prelude: &prelude,
             decls: &decls,
+            private: &private,
             members: &members,
             scopes: Scopes::default(),
             errors: &mut errors,
@@ -340,6 +358,8 @@ struct Checker<'a, 'e> {
     /// Per file: its exports are visible without an import.
     prelude: &'a [bool],
     decls: &'a HashMap<&'a str, Vec<Decl<'a>>>,
+    /// Other files' private declarations, by the name the user wrote.
+    private: &'a HashMap<String, Vec<Decl<'a>>>,
     members: &'a Members<'a>,
     scopes: Scopes,
     errors: &'e mut Vec<VisibilityError>,
@@ -359,8 +379,17 @@ impl Checker<'_, '_> {
         if self.own.contains(name) {
             return;
         }
-        // Not a top-level name: possibly a bare extension method in a method body.
-        let Some(entries) = self.decls.get(name) else { return self.visit_member(name, span) };
+        let Some(entries) = self.decls.get(name) else {
+            // Linking leaves a reference to another file's private
+            // declaration unrenamed.
+            if let Some(d) = self.private.get(name).and_then(|p| p.iter().find(|d| d.file != self.file)) {
+                let kind = VisibilityErrorKind::Private;
+                self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in: d.file, kind });
+                return;
+            }
+            // Not a top-level name: possibly a bare extension method in a method body.
+            return self.visit_member(name, span);
+        };
         if self.imported.get(&span.start).is_some_and(|n| n == name)
             // This file's own declaration counts, unless it is only a concrete
             // override (`pick<int>`) of a generic another file exports: that
@@ -622,17 +651,28 @@ mod tests {
     }
 
     #[test]
-    fn private_names_must_be_unique_across_files() {
+    fn private_names_may_repeat_across_files() {
+        // Linking mangles each file's private names apart.
         let errors = check(&[
             ("a.pep", "helper(): int { return 1; }\nvar counter = 1;\nextern int puts(char* s);\nexport f(): int { return 0; }"),
             ("b.pep", "helper(): int { return 2; }\nexport var counter = 2;\nextern int puts(char* s);\nexport f(): int { return 0; }"),
         ]);
+        assert!(errors.is_empty(), "{:?}", errors);
+    }
+
+    #[test]
+    fn a_private_override_may_be_declared_in_only_one_file() {
+        // An override keeps its generic's name, so two would collide.
+        let errors = check(&[
+            ("lib.pep", "export hash<T>(T value): u64 { return 0; }"),
+            ("a.pep", "hash<int>(int v): u64 { return 1; }"),
+            ("b.pep", "hash<int>(int v): u64 { return 2; }\nhash<u64>(u64 v): u64 { return 3; }"),
+        ]);
         assert_eq!(
             errors,
             vec![
-                "a.pep:1:1: private 'helper' is also declared in b.pep; top-level names must be unique across files",
-                "a.pep:2:5: private 'counter' is also declared in b.pep; top-level names must be unique across files",
-                "b.pep:1:1: private 'helper' is also declared in a.pep; top-level names must be unique across files",
+                "a.pep:1:1: override 'hash<int>' is also declared in b.pep; a generic may be overridden for the same types in only one file",
+                "b.pep:1:1: override 'hash<int>' is also declared in a.pep; a generic may be overridden for the same types in only one file",
             ]
         );
     }
@@ -647,28 +687,16 @@ mod tests {
     }
 
     #[test]
-    fn user_type_argument_is_a_generic_base_not_an_override() {
-        // The compiler reads `hash<Point>` as a second generic base whose
-        // parameter is named `Point`; it would replace `hash<T>` everywhere.
-        let errors = check(&[
-            ("lib.pep", "export hash<T>(T value): u64 { return 0; }"),
-            ("main.pep", "struct Point { }\nhash<Point>(Point p): u64 { return 42; }"),
-        ]);
-        assert_eq!(errors.len(), 1, "{:?}", errors);
-        assert!(errors[0].starts_with("main.pep:2:1: private 'hash' is also declared in lib.pep"), "{:?}", errors);
-    }
-
-    #[test]
-    fn generic_duplicates_collide_whatever_their_parameter_names() {
+    fn private_generics_may_repeat_across_files() {
+        // `hash<Point>` is a second generic base whose parameter is named
+        // `Point`, not an override; private, it is mangled apart from the
+        // exported `hash<T>` like any private name.
         let errors = check(&[
             ("a.pep", "pick<T>(v: T): int { return 1; }"),
             ("b.pep", "pick<U>(v: U): int { return 2; }\nexport hash<T>(v: T): u64 { return 0; }\nexport hash<int>(v: int): u64 { return 1; }"),
-            ("c.pep", "hash<K>(v: K): u64 { return 2; }\nhash<u64>(v: u64): u64 { return 3; }"),
+            ("c.pep", "struct Point { }\nhash<Point>(Point p): u64 { return 42; }\nhash<u64>(v: u64): u64 { return 3; }"),
         ]);
-        assert_eq!(errors.len(), 3, "{:?}", errors);
-        assert!(errors[0].starts_with("a.pep:1:1: private 'pick' is also declared in b.pep"), "{:?}", errors);
-        assert!(errors[1].starts_with("b.pep:1:1: private 'pick' is also declared in a.pep"), "{:?}", errors);
-        assert!(errors[2].starts_with("c.pep:1:1: private 'hash' is also declared in b.pep"), "{:?}", errors);
+        assert!(errors.is_empty(), "{:?}", errors);
     }
 
     #[test]

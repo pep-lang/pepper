@@ -233,10 +233,10 @@ their version.
   function with a parameter named `area` is an error that asks you to rename
   one of them.
 
-Imports bind names; they do not create separate namespaces. All files of a
-program share one namespace for their declarations, so two modules may not
-export the same name, even though users reach them through different
-qualifiers. See [One namespace for the whole program](visibility.md#one-namespace-for-the-whole-program).
+Each file has its own namespace for its private declarations, so files and
+modules may reuse private names freely. Exported names share one namespace,
+so two modules may not export the same name, even though users reach them
+through different qualifiers. See [Each file has its own namespace](visibility.md#each-file-has-its-own-namespace).
 
 ## Platform-specific imports
 

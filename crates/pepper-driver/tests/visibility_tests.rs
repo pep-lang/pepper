@@ -119,11 +119,9 @@ fn private_extension_method_is_rejected() {
 }
 
 #[test]
-fn private_name_declared_in_two_files_is_rejected() {
-    // Both files would otherwise merge into one `helper` and silently call
-    // the wrong one.
-    let err = compile("duplicate", LIB, "helper(): int { return 2; }\nmain(): int { return helper(); }").unwrap_err();
-    assert!(err.contains("private 'helper' is also declared in"), "{}", err);
+fn private_name_declared_in_two_files_is_allowed() {
+    // Each file's private names live in its own namespace.
+    compile("duplicate", LIB, "helper(): int { return 2; }\nmain(): int { return helper(); }").expect("private names per file");
 }
 
 #[test]
@@ -132,12 +130,13 @@ fn leak_census_helper_is_exported() {
 }
 
 #[test]
-fn private_override_of_runtime_generic_for_user_type_is_rejected() {
-    // Only primitive and String overrides exist; `hash<Pt>` would be a second
-    // generic base silently replacing the runtime's `hash<T>`.
-    let main = "struct Pt { var x: int; }\nhash<Pt>(Pt p): u64 { return 42; }\nmain(): int { return hash<int>(5) as int; }";
-    let err = compile("override", LIB, main).unwrap_err();
-    assert!(err.contains("private 'hash' is also declared in") && err.contains("hash.pep"), "{}", err);
+fn private_generic_named_like_a_runtime_export_stays_in_its_file() {
+    // Only primitive and String overrides exist; `hash<Pt>` is a second
+    // generic base, private to this file: it does not replace the runtime's
+    // `hash<T>`, which the runtime's own hash tables still call.
+    let main = "struct Pt { var x: int; }\nhash<Pt>(Pt p): u64 { return 42; }\n\
+                main(): int { var s = HashSet<int>(); s.insert(1); return hash<Pt>(Pt()) as int; }";
+    compile("override", LIB, main).expect("a private generic stays in its file");
 }
 
 #[test]

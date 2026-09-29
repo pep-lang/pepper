@@ -338,8 +338,10 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
         }
         index.insert(key, file);
         resolved.push(targets);
+        let namespace = roots.namespace_of(&path);
         files.push(ProgramFile {
             name,
+            namespace,
             source,
             module,
             prelude,
@@ -383,6 +385,17 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
                 files[t].prelude_part = true;
                 part.push(t);
             }
+        }
+    }
+    // Namespaces must be unique: `util.pep` beside the root and a runtime
+    // `util.pep`, both outside any module, are told apart by load order.
+    let mut taken = std::collections::HashSet::new();
+    for f in &mut files {
+        let base = f.namespace.clone();
+        let mut n = 1;
+        while !taken.insert(f.namespace.clone()) {
+            n += 1;
+            f.namespace = format!("{}#{}", base, n);
         }
     }
     let (scopes, link_errors) = link(&mut files);

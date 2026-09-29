@@ -435,17 +435,18 @@ export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulon
 }
 
 # ── print backing (the `print` builtin lowers to these by name) ─────────────
-_pep_print(s: __ptr<char>) {
+# Exported so they keep their names: a private name is mangled per file.
+export _pep_print(s: __ptr<char>) {
     if (s != __null) { puts(s); }
 }
 
-_pep_print_int(v: long) {
+export _pep_print_int(v: long) {
     var s = dec(v);
     puts(s);
     _pep_free(s);
 }
 
-_pep_print_float(v: double) {
+export _pep_print_float(v: double) {
     var s = floatstr(v);
     puts(s);
     _pep_free(s);

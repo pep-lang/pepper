@@ -109,9 +109,10 @@ content-based hash, while `hash<T>` hashes other structs by identity.
 
 An override can name a built-in type (`int`, `bool`, `String`, and so on) or
 one of your own structs, such as `describe<Point>`. An override for a struct
-must be in the same file as the generic function: in another file it is
-reported as a duplicate declaration (see
-[Visibility](visibility.md#one-namespace-for-the-whole-program)).
+must be in the same file as the generic function: in another file,
+`describe<Point>` is a second, private generic function whose type parameter
+is named `Point` (see
+[Visibility](visibility.md#each-file-has-its-own-namespace)).
 
 To add methods to a generic struct from outside its declaration, use an
 [extension](traits-and-extensions.md#extending-generic-structs).

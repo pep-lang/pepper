@@ -98,6 +98,11 @@ macro_rules! scope_walker {
                 self.walk_type_name(ty);
             }
 
+            /// A function's generic parameters, before they are bound: a
+            /// parameter that names a type (`describe<Point>`) makes the
+            /// function a concrete override rather than a generic.
+            fn visit_function_generics(&mut self, _params: &$($m)? [GenericParam]) {}
+
             /// The member name of `x.name`, after `x` is walked.
             fn visit_member(&mut self, _name: &str, _name_span: Span) {}
 
@@ -189,6 +194,7 @@ macro_rules! scope_walker {
             }
 
             fn walk_function_body(&mut self, f: &$($m)? FunctionDecl) {
+                self.visit_function_generics(&$($m)? f.generic_params);
                 self.push_generics(&$($m)? f.generic_params);
                 self.visit_type_name(&$($m)? f.return_type);
                 self.scopes_mut().push(Scope::Values(HashSet::new()));

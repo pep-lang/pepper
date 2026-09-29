@@ -28,7 +28,7 @@ export Box;
 export struct Box<T> { var value: T; }
 "#,
     ),
-    ("util.pep", "export twice(x: int): int { return x * 2; }\n"),
+    ("util.pep", "export twice(x: int): int { return x * 2; }\nstruct Tally { var n: int; }\n## Counts; ask jane@corp.com.\nexport tally(): Tally { return Tally(); }\n"),
 ];
 
 /// Write `GEOMETRY` plus `main` (as `main.pep`) under a fresh directory for
@@ -173,6 +173,27 @@ fn prelude_function_leads_to_the_runtime() {
     let (file, rest) = definition(&uri, &text, &program, at(&text, "assert", 0, 0));
     assert_eq!(file, "runtime/internals.pep");
     assert!(rest.starts_with("assert(condition"), "{}", rest);
+}
+
+#[test]
+fn hover_spells_a_private_type_as_written() {
+    // util's private `Tally` is mangled in the linked program.
+    let main = "import \"util\";\ntest(): int { var t = tally(); return t.n; }\n";
+    let (uri, text, program) = load("private_type_hover", main, "main.pep");
+    let shown = hover(&uri, &text, &program, at(&text, "tally", 0, 1));
+    assert!(shown.contains("tally(): Tally`"), "{}", shown);
+    // The doc comment is shown as written.
+    assert!(shown.contains("ask jane@corp.com."), "{}", shown);
+    assert_eq!(shown.matches('@').count(), 1, "{}", shown);
+}
+
+#[test]
+fn hover_on_a_mangled_own_struct_shows_its_own_docs() {
+    // The runtime exports `Error`, so the document's own `Error` is mangled.
+    let main = "## My own error.\nstruct Error { var x: int; }\ntest(): int { var e = Error(); return e.x; }\n";
+    let (uri, text, program) = load("own_mangled_struct", main, "main.pep");
+    let shown = hover(&uri, &text, &program, at(&text, "Error()", 0, 1));
+    assert!(shown.contains("My own error."), "{}", shown);
 }
 
 #[test]

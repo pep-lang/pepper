@@ -27,8 +27,12 @@
 //! A diagnostic points into a file through a [`Loc`]: a [`FileId`] plus a
 //! byte [`Span`]. Whoever loaded the files owns the [`SourceMap`] that turns
 //! the id back into a name and text; the parser and sema only ever see ids.
+//!
+//! Rendering spells private names as the user wrote them (see
+//! [`crate::namespace`]).
 
 use crate::ast::Span;
+use crate::namespace::demangle;
 use std::fmt::Write;
 
 /// Index of a file in the [`SourceMap`] of a compile.
@@ -188,11 +192,11 @@ impl Diagnostic {
         match self.loc.and_then(|loc| sources.get(loc.file).map(|(n, t)| (loc, n, t))) {
             Some((loc, name, text)) => {
                 let p = loc.span.start_position(text);
-                let _ = writeln!(out, "{}:{}:{}: {}: {}{}", name, p.line + 1, p.col + 1, self.severity.label(), self.message, self.code_suffix());
+                let _ = writeln!(out, "{}:{}:{}: {}: {}{}", name, p.line + 1, p.col + 1, self.severity.label(), demangle(&self.message), self.code_suffix());
                 snippet(text, loc.span, self.fix_on_line(loc, text), out);
             }
             None => {
-                let _ = writeln!(out, "{}: {}{}", self.severity.label(), self.message, self.code_suffix());
+                let _ = writeln!(out, "{}: {}{}", self.severity.label(), demangle(&self.message), self.code_suffix());
             }
         }
         for note in &self.notes {
@@ -223,7 +227,7 @@ impl Diagnostic {
 impl std::fmt::Display for Diagnostic {
     /// The message alone, without location or notes.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
+        f.write_str(&demangle(&self.message))
     }
 }
 

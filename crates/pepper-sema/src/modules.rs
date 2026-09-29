@@ -1,9 +1,11 @@
 //! Module linking: binds each file's imports and re-exports, then rewrites
 //! every imported spelling (`m.sqrt`, an alias `power`, a qualified type
 //! `m.Point`) to the name of the declaration it denotes. Runs on the per-file
-//! ASTs before they are merged into one sema `Module`, which still has a
-//! single namespace: after linking, every reference is spelled the way the
-//! rest of the compiler resolves it.
+//! ASTs before they are merged into one sema `Module`, which has a single
+//! namespace: after linking, every reference is spelled the way the rest of
+//! the compiler resolves it. So linking also gives each file's private
+//! declarations, and the references to them, names no other file can spell
+//! (see [`pepper_parser::namespace`] and [`own_names`]).
 //!
 //! A file's *exports* are its `export` declarations plus its `export x as y`
 //! re-exports. A module's exports are those of its `module.pep`. What a file
@@ -23,14 +25,18 @@
 
 use crate::passes::platform::keep;
 use crate::scope_walk::{ScopeWalkMut, Scopes};
-use pepper_parser::ast::{Declaration, Expression, FunctionDecl, Module, Span, TypeName};
+use pepper_parser::ast::{Declaration, Expression, FunctionDecl, GenericParam, Module, Span, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
+use pepper_parser::namespace;
 use std::collections::{HashMap, HashSet};
 
 /// One parsed file of a program, with its imports resolved to other files.
 pub struct ProgramFile {
     /// Display name used in diagnostics (usually the path).
     pub name: String,
+    /// The namespace its private names are mangled with (see
+    /// [`pepper_parser::namespace`]), unique in the program.
+    pub namespace: String,
     pub source: String,
     pub module: Module,
     /// A runtime or forced-import file: its exports are visible to every file
@@ -115,11 +121,11 @@ fn exported_overrides(module: &Module) -> impl Iterator<Item = &str> {
 /// Linking renames the declaration and its export by this one rule.
 fn override_rename(
     name: &str,
-    own: &HashSet<String>,
+    own: &Own,
     bindings: &Bindings,
     prelude: &HashMap<String, String>,
 ) -> Option<String> {
-    if own.contains(name) {
+    if own.contains_key(name) {
         return None;
     }
     match resolve_imported(name, bindings, prelude) {
@@ -138,22 +144,59 @@ fn named_decls(module: &Module) -> impl Iterator<Item = &Declaration> {
     module.declarations.iter().filter(|d| !matches!(d, Declaration::Extend(_)) && keep(d.attributes()).unwrap_or(true))
 }
 
+/// A file's own names, each mapped to the name its declaration takes in the
+/// merged program: a private one mangled with the file's namespace (see
+/// [`pepper_parser::namespace`]), any other its own.
+type Own = HashMap<String, String>;
+
+/// Whether `d` keeps its name in the merged program: an export, whose
+/// importers spell it that way; an extern, which names a C symbol; or a
+/// concrete override (`hash<int>`), which takes its generic's name.
+fn keeps_name(d: &Declaration) -> bool {
+    d.is_exported() || matches!(d, Declaration::Function(f) if f.external || is_override(f))
+}
+
+/// Every file's [`Own`] names. A concrete override (`f<int>` of a generic
+/// `f<T>`) declares no new name: it may sit next to an import of the
+/// generic.
+///
+/// The root file's private names are mangled only where another file keeps
+/// the same name, which would collide with them: otherwise its entry point
+/// (`main`) and its other functions keep the names a host or test harness
+/// looks them up by. Every other file's private names are mangled.
+fn own_names(files: &[ProgramFile]) -> Vec<Own> {
+    let kept: HashSet<&str> =
+        files.iter().skip(1).flat_map(|f| named_decls(&f.module)).filter(|d| keeps_name(d)).map(|d| d.name()).collect();
+    files
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            // One name, one declaration in the merged program: when a file
+            // declares a name more than once (an exported generic and a
+            // private override of it for a struct), all take the public
+            // name. A private override (`describe<int>`) makes none public.
+            let kept_here: HashSet<&str> = named_decls(&f.module)
+                .filter(|d| d.is_exported() || matches!(d, Declaration::Function(func) if func.external))
+                .map(|d| d.name())
+                .collect();
+            named_decls(&f.module)
+                .filter(|d| !matches!(d, Declaration::Function(func) if is_override(func)))
+                .map(|d| {
+                    let name = d.name();
+                    let mangled = !kept_here.contains(name) && (i > 0 || kept.contains(name));
+                    (name.to_string(), if mangled { namespace::mangle(name, &f.namespace) } else { name.to_string() })
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// Bind every file's imports and re-exports and rewrite imported spellings
 /// in place. Returns each file's scope and every linking error.
 pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     let n = files.len();
     let names: Vec<String> = files.iter().map(|f| f.name.clone()).collect();
-    // A file's own names. A concrete override (`f<int>` of a generic `f<T>`)
-    // declares no new name: it may sit next to an import of the generic.
-    let own: Vec<HashSet<String>> = files
-        .iter()
-        .map(|f| {
-            named_decls(&f.module)
-                .filter(|d| !matches!(d, Declaration::Function(func) if is_override(func)))
-                .map(|d| d.name().to_string())
-                .collect()
-        })
-        .collect();
+    let own = own_names(files);
 
     // Every type the program declares: in `extend Box<X>`, a declared `X`
     // specializes rather than introducing a parameter.
@@ -320,7 +363,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     for (i, f) in files.iter().enumerate() {
         for d in f.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             match d {
-                Declaration::Struct(s) => members.of_body.entry(s.name.clone()).or_default().extend(
+                Declaration::Struct(s) => members.of_body.entry(own[i].get(&s.name).unwrap_or(&s.name).clone()).or_default().extend(
                     s.fields.iter().map(|x| x.name.clone()).chain(s.methods.iter().filter(kept_method).map(|m| m.name.clone())),
                 ),
                 Declaration::Extend(e) => {
@@ -340,7 +383,12 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     let mut scopes = vec![];
     for i in 0..n {
         let named = named_bindings(i, files, &own[i], &bindings[i], &exports, &prelude);
+        let own_types = named_decls(&files[i].module)
+            .filter(|d| matches!(d, Declaration::Struct(_) | Declaration::TypeAlias(_) | Declaration::Trait(_)))
+            .map(|d| d.name().to_string())
+            .collect();
         let mut rewriter = Rewriter {
+            own_types,
             file: i,
             own: &own[i],
             bindings: &bindings[i],
@@ -367,7 +415,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
 fn named_bindings(
     i: usize,
     files: &[ProgramFile],
-    own: &HashSet<String>,
+    own: &Own,
     bindings: &Bindings,
     exports: &[HashMap<String, String>],
     prelude: &HashMap<String, String>,
@@ -396,7 +444,7 @@ fn resolve_reexports(
     i: usize,
     files: &[ProgramFile],
     direct: &HashMap<String, String>,
-    own: &HashSet<String>,
+    own: &Own,
     bindings: &Bindings,
     exports: &[HashMap<String, String>],
     prelude: &HashMap<String, String>,
@@ -421,7 +469,7 @@ fn resolve_reexports(
             }
         }
         let first = ea.symbol.split('.').next().unwrap_or(&ea.symbol);
-        if bindings.unresolved.contains(first) && !own.contains(first) {
+        if bindings.unresolved.contains(first) && !own.contains_key(first) {
             continue;
         }
         match resolve_top_level(&ea.symbol, own, bindings, exports, prelude) {
@@ -446,6 +494,18 @@ fn resolve_reexports(
     out
 }
 
+/// Give the named declaration `decl` the name `name`.
+fn rename(decl: &mut Declaration, name: String) {
+    match decl {
+        Declaration::Function(f) => f.name = name,
+        Declaration::Struct(s) => s.name = name,
+        Declaration::TypeAlias(t) => t.name = name,
+        Declaration::Trait(t) => t.name = name,
+        Declaration::Variable(v) => v.name = name,
+        Declaration::Extend(_) => {}
+    }
+}
+
 /// Every prelude file's exports, re-exports included: visible everywhere
 /// without an import. Name -> the declaration it denotes.
 fn prelude_exports(files: &[ProgramFile], exports: &[HashMap<String, String>]) -> HashMap<String, String> {
@@ -465,7 +525,7 @@ fn prelude_exports(files: &[ProgramFile], exports: &[HashMap<String, String>]) -
 /// Resolve a re-export's symbol (`x` or `q.x`) in file scope.
 fn resolve_top_level(
     symbol: &str,
-    own: &HashSet<String>,
+    own: &Own,
     bindings: &Bindings,
     exports: &[HashMap<String, String>],
     prelude: &HashMap<String, String>,
@@ -476,8 +536,8 @@ fn resolve_top_level(
         };
         return exports[target].get(name).cloned().ok_or_else(|| format!("'{}' is not exported by '{}'", name, q));
     }
-    if own.contains(symbol) {
-        return Ok(symbol.to_string());
+    if let Some(c) = own.get(symbol) {
+        return Ok(c.clone());
     }
     match resolve_imported(symbol, bindings, prelude) {
         Resolution::Declared(c, _) => Ok(c),
@@ -522,7 +582,7 @@ fn bind_imports(
     i: usize,
     files: &[ProgramFile],
     exports: &[HashMap<String, String>],
-    own: &HashSet<String>,
+    own: &Own,
     errors: &mut Vec<ModuleError>,
 ) -> Bindings {
     let mut b = Bindings::default();
@@ -550,7 +610,7 @@ fn bind_imports(
     // name to different declarations make it ambiguous, reported on use.
     for (imp, target) in imports().filter(|(imp, _)| imp.symbols.is_none()) {
         if let Some(q) = imp.qualifier() {
-            if own.contains(q) {
+            if own.contains_key(q) {
                 errors.push(ModuleError {
                     unresolved: false,
                     file: i,
@@ -571,7 +631,7 @@ fn bind_imports(
         }
         // The merge is order-independent: equal keeps, different -> None.
         for (name, c) in &exports[target] {
-            if own.contains(name) {
+            if own.contains_key(name) {
                 continue;
             }
             match b.unqualified.get(name) {
@@ -601,7 +661,7 @@ fn bind_imports(
                 continue;
             };
             let local = s.local_name();
-            if own.contains(local) {
+            if own.contains_key(local) {
                 errors.push(ModuleError {
                     unresolved: false,
                     file: i,
@@ -653,7 +713,7 @@ struct Members {
 
 struct Rewriter<'a, 'e> {
     file: usize,
-    own: &'a HashSet<String>,
+    own: &'a Own,
     bindings: &'a Bindings,
     exports: &'a [HashMap<String, String>],
     /// Prelude exports: visible without an import.
@@ -663,6 +723,8 @@ struct Rewriter<'a, 'e> {
     /// Every file's display name, for diagnostics.
     names: &'a [String],
     members: &'a Members,
+    /// The types this file declares (structs, aliases, traits).
+    own_types: HashSet<String>,
     scopes: Scopes,
     imported: HashMap<usize, String>,
     errors: &'e mut Vec<ModuleError>,
@@ -681,9 +743,17 @@ impl Rewriter<'_, '_> {
             // call sites do.
             if let Declaration::Function(f) = decl
                 && is_override(f)
-                && let Some(c) = override_rename(&f.name, self.own, self.bindings, self.prelude)
             {
-                f.name = c;
+                if let Some(c) = override_rename(&f.name, self.own, self.bindings, self.prelude) {
+                    f.name = c;
+                } else if let Some(c) = self.own.get(&f.name) {
+                    // An override of this file's own generic takes its name.
+                    f.name = c.clone();
+                }
+            } else if let Some(c) = self.own.get(decl.name()) {
+                // A private declaration takes its mangled name.
+                let c = c.clone();
+                rename(decl, c);
             }
             self.walk_declaration(decl);
         }
@@ -696,7 +766,7 @@ impl Rewriter<'_, '_> {
 
     /// The qualifier `q` names an imported module here (not shadowed).
     fn qualifier(&self, q: &str) -> Option<usize> {
-        if self.own.contains(q) || self.is_local(q) {
+        if self.own.contains_key(q) || self.is_local(q) {
             return None;
         }
         self.bindings.qualified.get(q).copied()
@@ -721,8 +791,12 @@ impl Rewriter<'_, '_> {
     /// An unqualified name: rewritten when an import (or a prelude
     /// re-export) binds it.
     fn unqualified(&mut self, name: &str, span: Span, value: bool) -> Option<String> {
-        if self.own.contains(name) || self.is_hidden(name, value) {
+        if self.is_hidden(name, value) {
             return None;
+        }
+        // The file's own declaration: renamed when it is private.
+        if let Some(c) = self.own.get(name) {
+            return (c != name).then(|| c.clone());
         }
         // A prelude name is recorded like an import even when it needs no
         // rewriting: a forced module's `export step` makes `step`, declared
@@ -815,13 +889,26 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
             .iter()
             .filter(|t| {
                 t.generic_types.is_empty()
-                    && !self.own.contains(&t.name)
+                    && !self.own.contains_key(&t.name)
                     && !self.types.contains(&t.name)
                     && !self.bindings.qualified.contains_key(t.name.split('.').next().unwrap_or(""))
                     && matches!(resolve_imported(&t.name, self.bindings, self.prelude), Resolution::Unknown)
             })
             .map(|t| t.name.clone())
             .collect()
+    }
+
+    /// A parameter named after one of this file's own types is that type
+    /// (`describe<Point>` overrides `describe<T>` for `Point`), so it takes
+    /// the type's mangled name, as sema compares the two by name.
+    fn visit_function_generics(&mut self, params: &mut [GenericParam]) {
+        for p in params {
+            if self.own_types.contains(&p.name)
+                && let Some(c) = self.own.get(&p.name)
+            {
+                p.name = c.clone();
+            }
+        }
     }
 
     fn visit_expression(&mut self, expr: &mut Expression) {

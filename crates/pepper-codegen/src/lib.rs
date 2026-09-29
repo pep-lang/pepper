@@ -242,6 +242,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| format!("unknown global type {}", ty_string))?
             };
             let global = self.module.add_global(llvm_ty, None, &var.name);
+            set_private_linkage(global, &var.name);
             // Every global is defined at link time: zero/null base initializer;
             // const arms below override it. Non-const defaults are stored by
             // the ctor-registered init fn before `main` runs.
@@ -564,6 +565,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 llvm_fn_type(return_type, &param_types, false)
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
+            set_private_linkage(fn_value.as_global_value(), &mangled);
             self.functions.insert(mangled.clone(), fn_value);
             self.param_defaults.insert(
                 mangled.clone(),
@@ -690,6 +692,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             llvm_fn_type(return_type, &param_types, false)
         };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
+        set_private_linkage(fn_value.as_global_value(), &function.name);
         self.functions.insert(function.name.clone(), fn_value);
         self.fn_returns.insert(function.name.clone(), function.ty.to_string());
         self.param_defaults.insert(
@@ -3795,11 +3798,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             .ok_or_else(|| "cannot call a value of unknown type".to_string())?;
         let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(&callee_ty_name);
         if !fn_ty.is_function_type() {
-            return Err(format!("cannot call a value of type {}", fn_ty.display()));
+            return Err(format!("cannot call a value of type '{}'", fn_ty.display()));
         }
         if args.len() != fn_ty.function_params().len() {
             return Err(format!(
-                "a function of type {} takes {} argument(s), but {} were given",
+                "a function of type '{}' takes {} argument(s), but {} were given",
                 fn_ty.display(),
                 fn_ty.function_params().len(),
                 args.len()
@@ -4991,5 +4994,15 @@ fn binary_result_type(op: &BinaryOp, lhs_name: &str, rhs_name: &str) -> String {
         }
     } else {
         llvm_ops::result_type(lhs_name, rhs_name)
+    }
+}
+
+/// A file's private declaration (its name mangled by module linking, see
+/// `pepper_parser::namespace`) is local to the object: no other object can
+/// name it, and ELF linkers would read the `@` of a global symbol as a
+/// symbol version.
+fn set_private_linkage(value: inkwell::values::GlobalValue<'_>, name: &str) {
+    if name.contains(pepper_sema::namespace::SEPARATOR) {
+        value.set_linkage(inkwell::module::Linkage::Internal);
     }
 }

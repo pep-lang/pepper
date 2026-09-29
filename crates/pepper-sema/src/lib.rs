@@ -22,3 +22,4 @@ pub use passes::platform::{apply_platform_filters, with_simulated_host};
 pub use type_name::TypeName;
 pub use visibility::{check_visibility, SourceFile, VisibilityError, VisibilityErrorKind};
 pub use modules::{FileScope, ModuleError, ProgramFile};
+pub use pepper_parser::namespace;
