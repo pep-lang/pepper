@@ -58,6 +58,10 @@ pub struct FileScope {
     /// private `x`. The declaration's own name, written elsewhere in the
     /// file, gets no such pass.
     pub imported: HashMap<usize, String>,
+    /// The names the file's `import [...]` lists and `export x as y`
+    /// re-exports bind, as span start (of the list entry, or of the
+    /// re-exported symbol) -> declaration name, for the editor to follow.
+    pub named: HashMap<usize, String>,
 }
 
 /// A module-linking error, anchored in one file.
@@ -336,6 +340,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
 
     let mut scopes = vec![];
     for i in 0..n {
+        let named = named_bindings(i, files, &own[i], &bindings[i], &exports, &prelude);
         let mut rewriter = Rewriter {
             file: i,
             own: &own[i],
@@ -352,11 +357,38 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
         };
         rewriter.module(&mut files[i].module);
         let imported = std::mem::take(&mut rewriter.imported);
-        scopes.push(FileScope { imported });
+        scopes.push(FileScope { imported, named });
     }
     errors.sort_by_key(|e| (e.file, e.span.start));
     errors.dedup();
     (scopes, errors)
+}
+
+/// File `i`'s import-list entries and re-exports that denote a declaration,
+/// for [`FileScope::named`]. The others were reported while binding.
+fn named_bindings(
+    i: usize,
+    files: &[ProgramFile],
+    own: &HashSet<String>,
+    bindings: &Bindings,
+    exports: &[HashMap<String, String>],
+    prelude: &HashMap<String, String>,
+) -> HashMap<usize, String> {
+    let mut named = HashMap::new();
+    for (imp, target) in files[i].module.imports.iter().zip(&files[i].imports) {
+        let (Some(symbols), Some(target)) = (&imp.symbols, target) else { continue };
+        for s in symbols {
+            if let Some(c) = exports[*target].get(&s.name) {
+                named.insert(s.span.start, c.clone());
+            }
+        }
+    }
+    for ea in &files[i].module.exports {
+        if let Ok(c) = resolve_top_level(&ea.symbol, own, bindings, exports, prelude) {
+            named.insert(ea.symbol_span.start, c);
+        }
+    }
+    named
 }
 
 /// File `i`'s exports: its `export` declarations (`direct`) plus its

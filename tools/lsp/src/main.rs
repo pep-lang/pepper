@@ -4,7 +4,12 @@
 //! spans) and from a full semantic check of the merged program (runtime
 //! prelude + resolved imports + the open document). Hover, completion,
 //! go-to-definition, and document symbols are computed from the parsed AST
-//! plus the sema model.
+//! plus the sema model; names reached through imports are followed using
+//! what linking recorded (see `imports`).
+
+mod imports;
+#[cfg(test)]
+mod tests;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -331,8 +336,13 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
             continue;
         }
         match stmt {
-            ast::Statement::Expression(e) => {
+            ast::Statement::Expression(e) | ast::Statement::Return(ast::ReturnStatement { expr: e, .. }) => {
                 if let Some(found) = expr_at(e, offset) {
+                    return Some(found);
+                }
+            }
+            ast::Statement::Declaration(ast::Declaration::Variable(v)) => {
+                if let Some(found) = v.default_value.as_ref().and_then(|e| expr_at(e, offset)) {
                     return Some(found);
                 }
             }
@@ -342,6 +352,9 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                 }
             }
             ast::Statement::Branch(br) => {
+                if let Some(found) = expr_at(&br.condition, offset) {
+                    return Some(found);
+                }
                 if let Some(found) = find_expr_in_block(&br.if_block, offset) {
                     return Some(found);
                 }
@@ -352,11 +365,17 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
                 }
             }
             ast::Statement::While(w) => {
+                if let Some(found) = expr_at(&w.condition, offset) {
+                    return Some(found);
+                }
                 if let Some(found) = find_expr_in_block(&w.block, offset) {
                     return Some(found);
                 }
             }
             ast::Statement::For(f) => {
+                if let Some(found) = expr_at(&f.iterable, offset) {
+                    return Some(found);
+                }
                 if let Some(found) = find_expr_in_block(&f.block, offset) {
                     return Some(found);
                 }
@@ -427,6 +446,17 @@ fn program_names(program: &Program) -> Vec<(&str, &str)> {
     program.files.iter().map(|f| (f.name.as_str(), f.source.as_str())).collect()
 }
 
+/// A program file's path as hovers show it: its folder and file name
+/// (`geo/module.pep`), which name a module file and its module.
+fn file_label(name: &str) -> String {
+    let path = std::path::Path::new(name);
+    let file = path.file_name().map_or(name.into(), |f| f.to_string_lossy());
+    match path.parent().and_then(|p| p.file_name()) {
+        Some(dir) => format!("{}/{}", dir.to_string_lossy(), file),
+        None => file.into_owned(),
+    }
+}
+
 /// `d` as an LSP diagnostic on the document (`program[0]`, file id 0), with
 /// its notes as related information. A location in another file, or none,
 /// lands at the top of the document with that file's name in the message.
@@ -488,12 +518,6 @@ impl PepperLsp {
         pepper_sema::program::load_program(root, &setup)
     }
 
-    /// Build the merged sema model for `uri`: runtime prelude + resolved
-    /// imports + the open document.
-    fn sema_model(&self, uri: &Url) -> Option<SemaModule> {
-        sema_model_of(&self.program(uri).ok()?).ok()
-    }
-
     /// Import errors in the program's document (`program.files[0]`),
     /// references to symbols another file did not `export` or this file did
     /// not import, and private names it shares with other files.
@@ -550,7 +574,31 @@ impl PepperLsp {
     /// Hover at `offset` in document `uri`.
     fn hover(&self, uri: &Url, offset: usize) -> Option<Hover> {
         let text = self.doc(uri)?;
-        let ast = parse_source(uri.as_str(), &text).ok()?;
+        Self::hover_at(uri, &text, self.program(uri).ok().as_ref(), offset)
+    }
+
+    /// Hover at `offset` in `text`, the document `uri`, which is
+    /// `program.files[0]` when its program loaded.
+    fn hover_at(uri: &Url, text: &str, program: Option<&Program>, offset: usize) -> Option<Hover> {
+        let ast = parse_source(uri.as_str(), text).ok()?;
+        let md = |content: String| HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: content });
+        let imported = |(spelled, target): (String, imports::Target)| {
+            let program = program?;
+            let value = match target {
+                imports::Target::Declaration { file, symbol } if file == 0 => format!("`{}` — `{}`", spelled, symbol.ty),
+                imports::Target::Declaration { file, symbol } => {
+                    format!("`{}` — `{}`\n\nfrom `{}`", spelled, symbol.ty, file_label(&program.files[file].name))
+                }
+                imports::Target::File(file) => format!("`{}` — `{}`", spelled, file_label(&program.files[file].name)),
+            };
+            Some(Hover { contents: md(value), range: None })
+        };
+        if let Some(program) = program
+            && let Some(found) =
+                imports::in_imports(program, &ast, offset).or_else(|| imports::in_type(program, &ast, offset))
+        {
+            return imported(found);
+        }
         let expr = find_expr(&ast, offset)?;
 
         let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
@@ -559,9 +607,13 @@ impl PepperLsp {
         let locals: Vec<Symbol> = locals_at(body, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
-        let sema = self.sema_model(uri);
-
-        let md = |content: String| HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value: content });
+        let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
+        if let Some(program) = program
+            && let Some(found) = imports::in_expression(program, &ast, expr, is_local)
+        {
+            return imported(found);
+        }
+        let sema = program.and_then(|p| sema_model_of(p).ok());
 
         match expr {
             ast::Expression::Literal { value, .. } => {
@@ -629,7 +681,29 @@ impl PepperLsp {
     /// Go-to-definition at `offset`.
     fn definition(&self, uri: &Url, offset: usize) -> Option<Vec<Location>> {
         let text = self.doc(uri)?;
-        let ast = parse_source(uri.as_str(), &text).ok()?;
+        Self::definition_at(uri, &text, self.program(uri).ok().as_ref(), offset)
+    }
+
+    /// Go-to-definition at `offset` in `text`, the document `uri`, which is
+    /// `program.files[0]` when its program loaded.
+    fn definition_at(uri: &Url, text: &str, program: Option<&Program>, offset: usize) -> Option<Vec<Location>> {
+        let ast = parse_source(uri.as_str(), text).ok()?;
+        let imported = |(_, target): (String, imports::Target)| {
+            let program = program?;
+            let (file, span) = match target {
+                imports::Target::Declaration { file, symbol } => (file, symbol.name_span),
+                imports::Target::File(file) => (file, Span::none()),
+            };
+            let f = &program.files[file];
+            let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
+            Some(vec![Location::new(target_uri, span_to_range(&f.source, span))])
+        };
+        if let Some(program) = program
+            && let Some(found) =
+                imports::in_imports(program, &ast, offset).or_else(|| imports::in_type(program, &ast, offset))
+        {
+            return imported(found);
+        }
         let expr = find_expr(&ast, offset)?;
 
         let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
@@ -638,6 +712,12 @@ impl PepperLsp {
         let locals: Vec<Symbol> = locals_at(body, offset);
         let globals = collect_globals(&ast);
         let struct_members: Vec<Symbol> = enclosing_struct.map(collect_struct_members).unwrap_or_default();
+        let is_local = |id: &str| locals.iter().chain(&struct_members).chain(&globals).any(|s| s.name == id);
+        if let Some(program) = program
+            && let Some(found) = imports::in_expression(program, &ast, expr, is_local)
+        {
+            return imported(found);
+        }
 
         let target_span = match expr {
             ast::Expression::SymbolRef { id, .. } => locals.iter().find(|s| s.name == *id)
@@ -654,7 +734,7 @@ impl PepperLsp {
             _ => None,
         }?;
 
-        Some(vec![Location::new(uri.clone(), span_to_range(&text, target_span))])
+        Some(vec![Location::new(uri.clone(), span_to_range(text, target_span))])
     }
 
     /// Document symbols for `uri`.

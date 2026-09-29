@@ -1,0 +1,185 @@
+//! Hover and go-to-definition through imports, on a file tree written to a
+//! temp directory and loaded with the runtime, as the server loads it.
+
+use super::*;
+use pepper_sema::program::{Mode, Root, Setup, load_program};
+
+/// A module, as in the driver's module tests: `module.pep` exports some of
+/// its own declarations and re-exports from a file of the same module.
+const GEOMETRY: &[(&str, &str)] = &[
+    (
+        "deps/geometry/module.pep",
+        r#"import "shapes";
+
+export struct Point { var x: int; var y: int; }
+export make(x: int, y: int): Point {
+    var p = Point();
+    p.x = x;
+    p.y = y;
+    return p;
+}
+export area as rect_area;
+export Box;
+"#,
+    ),
+    (
+        "deps/geometry/shapes.pep",
+        r#"export area(w: int, h: int): int { return w * h; }
+export struct Box<T> { var value: T; }
+"#,
+    ),
+    ("util.pep", "export twice(x: int): int { return x * 2; }\n"),
+];
+
+/// Write `GEOMETRY` plus `main` (as `main.pep`) under a fresh directory for
+/// `test`, and load the program rooted at `root` (a path in the tree).
+fn load(test: &str, main: &str, root: &str) -> (Url, String, Program) {
+    let dir = std::env::temp_dir().join(format!("pepper_lsp_{}", test));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (path, text) in GEOMETRY.iter().chain(&[("main.pep", main)]) {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let path = dir.join(root);
+    let uri = Url::from_file_path(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let deps = [dir.join("deps")];
+    let setup = Setup { import_dirs: &deps, mode: Mode::Lenient, ..Default::default() };
+    let program = load_program(Root { name: uri.to_string(), source: text.clone(), path }, &setup).unwrap();
+    (uri, text, program)
+}
+
+/// The byte offset of the `nth` (0-based) occurrence of `needle` in `text`,
+/// plus `delta`.
+fn at(text: &str, needle: &str, nth: usize, delta: usize) -> usize {
+    text.match_indices(needle).nth(nth).unwrap_or_else(|| panic!("no {:?} #{}", needle, nth)).0 + delta
+}
+
+fn hover(uri: &Url, text: &str, program: &Program, offset: usize) -> String {
+    match PepperLsp::hover_at(uri, text, Some(program), offset).map(|h| h.contents) {
+        Some(HoverContents::Markup(m)) => m.value,
+        other => panic!("no hover at {}: {:?}", offset, other),
+    }
+}
+
+/// The definition at `offset`: the file it is in (folder and name) and the
+/// text at its range's start.
+fn definition(uri: &Url, text: &str, program: &Program, offset: usize) -> (String, String) {
+    let locations = PepperLsp::definition_at(uri, text, Some(program), offset).expect("a definition");
+    let loc = &locations[0];
+    let path = loc.uri.to_file_path().unwrap();
+    let source = std::fs::read_to_string(&path).unwrap();
+    let line = source.lines().nth(loc.range.start.line as usize).unwrap_or("");
+    (file_label(&path.to_string_lossy()), line[loc.range.start.character as usize..].to_string())
+}
+
+const ALIAS: &str = r#"import geometry as g;
+test(): int {
+    var p: g.Point = g.make(1, 2);
+    var b = g.Box<int>();
+    b.value = g.rect_area(2, 5);
+    return p.y + b.value;
+}
+"#;
+
+#[test]
+fn qualified_function_leads_to_its_module_file() {
+    let (uri, text, program) = load("qualified_fn", ALIAS, "main.pep");
+    let make = at(&text, "g.make", 0, 3);
+    let h = hover(&uri, &text, &program, make);
+    assert!(h.contains("make(x: int, y: int): Point") && h.contains("geometry/module.pep"), "{}", h);
+    let (file, rest) = definition(&uri, &text, &program, make);
+    assert_eq!(file, "geometry/module.pep");
+    assert!(rest.starts_with("make(x: int"), "{}", rest);
+}
+
+#[test]
+fn qualified_reexport_leads_to_the_declaring_file() {
+    let (uri, text, program) = load("qualified_reexport", ALIAS, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "rect_area", 0, 0));
+    assert_eq!(file, "geometry/shapes.pep");
+    assert!(rest.starts_with("area(w: int"), "{}", rest);
+}
+
+#[test]
+fn qualifier_leads_to_the_module() {
+    let (uri, text, program) = load("qualifier", ALIAS, "main.pep");
+    let q = at(&text, "g.make", 0, 0);
+    assert!(hover(&uri, &text, &program, q).contains("geometry/module.pep"));
+    assert_eq!(definition(&uri, &text, &program, q).0, "geometry/module.pep");
+    // The module name in the import, too.
+    assert_eq!(definition(&uri, &text, &program, at(&text, "geometry", 0, 1)).0, "geometry/module.pep");
+}
+
+#[test]
+fn qualified_types_lead_to_their_declarations() {
+    let (uri, text, program) = load("qualified_types", ALIAS, "main.pep");
+    let point = at(&text, "g.Point", 0, 2);
+    assert!(hover(&uri, &text, &program, point).contains("struct Point"));
+    let (file, rest) = definition(&uri, &text, &program, point);
+    assert_eq!(file, "geometry/module.pep");
+    assert!(rest.starts_with("Point {"), "{}", rest);
+    // A generic construction, re-exported from another file.
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "g.Box", 0, 3));
+    assert_eq!(file, "geometry/shapes.pep");
+    assert!(rest.starts_with("Box<T>"), "{}", rest);
+}
+
+#[test]
+fn listed_symbols_and_aliases_lead_to_their_declarations() {
+    let main = r#"import [make, Point as Pt, rect_area as area] from geometry;
+test(): int {
+    var p: Pt = make(2, 3);
+    return area(p.x, p.y);
+}
+"#;
+    let (uri, text, program) = load("listed", main, "main.pep");
+    // A use of an alias, in a return statement.
+    let use_ = at(&text, "area(p.x", 0, 0);
+    let h = hover(&uri, &text, &program, use_);
+    assert!(h.starts_with("`area` — `area(w: int, h: int): int`"), "{}", h);
+    assert_eq!(definition(&uri, &text, &program, use_).0, "geometry/shapes.pep");
+    // An aliased type, and a call in an initializer.
+    assert!(definition(&uri, &text, &program, at(&text, "Pt =", 0, 0)).1.starts_with("Point {"));
+    assert!(definition(&uri, &text, &program, at(&text, "make(2", 0, 0)).1.starts_with("make(x"));
+    // The entries of the import list.
+    assert!(definition(&uri, &text, &program, at(&text, "rect_area as", 0, 0)).1.starts_with("area(w"));
+    assert!(definition(&uri, &text, &program, at(&text, "as Pt", 0, 3)).1.starts_with("Point {"));
+}
+
+#[test]
+fn file_import_leads_to_the_file() {
+    let main = "import \"util\";\ntest(): int { return twice(3); }\n";
+    let (uri, text, program) = load("file_import", main, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "twice", 0, 0));
+    assert!(file.ends_with("/util.pep"), "{}", file);
+    assert!(rest.starts_with("twice(x"), "{}", rest);
+    assert!(definition(&uri, &text, &program, at(&text, "\"util\"", 0, 2)).0.ends_with("/util.pep"));
+}
+
+#[test]
+fn reexport_leads_to_the_reexported_declaration() {
+    let (uri, text, program) = load("reexport", "", "deps/geometry/module.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "export area", 0, 7));
+    assert_eq!(file, "geometry/shapes.pep");
+    assert!(rest.starts_with("area(w"), "{}", rest);
+}
+
+#[test]
+fn prelude_function_leads_to_the_runtime() {
+    let main = "test(): int { assert(true, \"ok\"); return 0; }\n";
+    let (uri, text, program) = load("prelude", main, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "assert", 0, 0));
+    assert_eq!(file, "runtime/internals.pep");
+    assert!(rest.starts_with("assert(condition"), "{}", rest);
+}
+
+#[test]
+fn a_local_hides_a_qualifier() {
+    let main = "import geometry as g;\ntest(): int {\n    var g = 7;\n    return g;\n}\n";
+    let (uri, text, program) = load("local_hides", main, "main.pep");
+    let use_ = at(&text, "return g", 0, 7);
+    assert_eq!(hover(&uri, &text, &program, use_), "`g` — `int`");
+    assert_eq!(definition(&uri, &text, &program, use_).0, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
+}
