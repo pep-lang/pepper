@@ -54,7 +54,7 @@ pub fn link_driver() -> PathBuf {
 /// flags itself; these are the ones it does not add.
 fn default_system_libraries() -> &'static [&'static str] {
     if cfg!(windows) {
-        // Pepper's documented Windows defaults (docs/pepper.md).
+        // Pepper's documented Windows defaults (docs/src/language/linking.md).
         &["kernel32", "user32", "shell32"]
     } else {
         &[]

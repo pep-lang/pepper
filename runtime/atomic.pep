@@ -7,9 +7,43 @@
 
 import "internals";
 
+## A value of type `T` that threads can read and update without data races,
+## like C++ `std::atomic<T>`.
+##
+## `T` may be a numeric type, a pointer, or a struct type. For a struct `T`
+## the Atomic holds a counted reference and every operation follows
+## `std::shared_ptr` rules: `store` and a successful `compare_exchange` acquire
+## the new reference and release the one they replace, and `load` hands the
+## caller its own reference. Memory ordering: `load` is an acquire,
+## `store` a release, and `compare_exchange` and the `fetch_*` operations are
+## acquire-release.
+##
+## `Atomic` is itself a struct, so copies of it share one slot: pass the
+## Atomic around (or keep it in a global) to share the value between threads.
+##
+## @typeParam T the type of the stored value
+## @example
+##     main(): int {
+##         var counter = Atomic<long>(0);
+##         var before = counter.fetch_add(5);   # before == 0
+##         if (counter.load() != 5) { return 1; }
+##         return 0;
+##     }
 export struct Atomic<T> {
+    ## The heap slot the value lives in: `sizeof<T>()` bytes for a POD `T`,
+    ## or one reference pointer for a struct `T`. Allocated by the
+    ## constructor and never null afterwards. Internal storage; access it only
+    ## through the methods, which keep every access atomic.
     __ptr<T> Data;
 
+    ## Creates an Atomic holding `value`.
+    ##
+    ## For a struct `T` the Atomic acquires a reference to `value`.
+    ##
+    ## @param value the initial value; defaults to zero for a POD `T` and null for a struct `T`
+    ## @example
+    ##     var a = Atomic<int>(41);
+    ##     var p = Atomic<Point>();   # holds null until a store
     construct(T value = __default<T>()) {
         # A struct T occupies its reference pointer in the slot; a POD T
         # occupies sizeof(T) bytes of the value itself.
@@ -22,20 +56,61 @@ export struct Atomic<T> {
         _pep_free(this.Data);
     }
 
+    ## Atomically reads the current value, with acquire ordering.
+    ##
+    ## For a struct `T` the returned reference is acquired for the caller, so
+    ## it stays valid even if another thread stores a new value afterwards.
+    ##
+    ## @returns the value currently stored
     T load() {
         return __atomic_load<T>(this.Data);
     }
 
+    ## Atomically replaces the stored value with `v`, with release ordering.
+    ##
+    ## For a struct `T` this is a `shared_ptr` assignment: the slot acquires
+    ## `v` and releases its previous occupant, and the swap is a single atomic
+    ## exchange, so concurrent stores never leak or double-release.
+    ##
+    ## @param v the new value
     void store(T v) {
         __atomic_store<T>(this.Data, v);
     }
 
-    # True iff *Data == expected (in which case *Data = desired).
+    ## Atomically replaces the stored value with `desired` if and only if it
+    ## currently equals `expected` (a compare-and-swap).
+    ##
+    ## Equality is bitwise: a struct `T` compares references (the same object,
+    ## not equal contents), and a floating-point `T` compares bit patterns, so
+    ## `0.0` and `-0.0` differ. Unlike C++ `compare_exchange_strong`,
+    ## `expected` is not updated on failure; call `load()` to retry. On success
+    ## a struct slot acquires `desired` and releases the old occupant; on
+    ## failure no reference count changes.
+    ##
+    ## @param expected the value the slot must hold for the exchange to happen
+    ## @param desired the value to store when it does
+    ## @returns true if the slot held `expected` and now holds `desired`, false if it was left unchanged
+    ## @example
+    ##     var cur = counter.load();
+    ##     while (!counter.compare_exchange(cur, cur + 1)) {
+    ##         cur = counter.load();
+    ##     }
     bool compare_exchange(T expected, T desired) {
         return __atomic_cmpxchg<T>(this.Data, expected, desired);
     }
 
-    # Returns the previous value; atomically replaced by v.
+    ## Atomically replaces the stored value with `v` and returns the value it
+    ## replaced.
+    ##
+    ## Implemented as a `compare_exchange` retry loop, so under heavy
+    ## contention it may retry several times. For a struct `T` the slot
+    ## acquires `v`, and the caller owns the returned reference.
+    ##
+    ## @param v the new value
+    ## @returns the value stored immediately before the exchange
+    ## @example
+    ##     var e = Atomic<int>(1);
+    ##     var old = e.exchange(2);   # old == 1, e.load() == 2
     T exchange(T v) {
         var old = this.load();
         while (true) {
@@ -46,31 +121,84 @@ export struct Atomic<T> {
         }
     }
 
-    # True when the slot's operations are native atomics: every POD T with a
-    # slot of 8 bytes or less, and struct T (a pointer swap).
+    ## Reports whether this Atomic's slot fits a native atomic instruction,
+    ## so its operations never need a lock or an atomic library call.
+    ##
+    ## True for every POD `T` of 8 bytes or less and for every struct `T`
+    ## (whose slot is one pointer). The answer depends only on `T`, never on
+    ## the stored value.
+    ##
+    ## @returns true when the operations are lock-free
     bool is_lock_free() {
         return __is_pod<T>() ? sizeof<T>() <= 8 : true;
     }
 
-    # Returns the previous value; atomically adds v. Integer T only, like
-    # std::atomic<T>::fetch_add — one method per operation (Pepper has no
-    # method overloading), each a single native atomicrmw on the slot.
+    # One method per operation (Pepper has no method overloading), each a
+    # single native atomicrmw on the slot.
+
+    ## Atomically adds `v` to the stored value and returns the value before
+    ## the addition, like `std::atomic<T>::fetch_add`.
+    ##
+    ## Integer `T` only. Overflow wraps around. For a non-integer `T` (a
+    ## floating-point or struct type) the call compiles but aborts the
+    ## program when it runs.
+    ##
+    ## @param v the amount to add
+    ## @returns the value stored immediately before the addition
+    ## @example
+    ##     var c = Atomic<long>(10);
+    ##     var old = c.fetch_add(5);   # old == 10, c.load() == 15
     T fetch_add(T v) {
         return __atomic_fetch_add<T>(this.Data, v);
     }
 
+    ## Atomically subtracts `v` from the stored value and returns the value
+    ## before the subtraction, like `std::atomic<T>::fetch_sub`.
+    ##
+    ## Integer `T` only. Overflow wraps around. For a non-integer `T` the call
+    ## compiles but aborts the program when it runs.
+    ##
+    ## @param v the amount to subtract
+    ## @returns the value stored immediately before the subtraction
     T fetch_sub(T v) {
         return __atomic_fetch_sub<T>(this.Data, v);
     }
 
+    ## Atomically replaces the stored value with its bitwise AND with `v` and
+    ## returns the value before the operation, like
+    ## `std::atomic<T>::fetch_and`.
+    ##
+    ## Integer `T` only. For a non-integer `T` the call compiles but aborts
+    ## the program when it runs.
+    ##
+    ## @param v the mask to AND with
+    ## @returns the value stored immediately before the operation
     T fetch_and(T v) {
         return __atomic_fetch_and<T>(this.Data, v);
     }
 
+    ## Atomically replaces the stored value with its bitwise OR with `v` and
+    ## returns the value before the operation, like
+    ## `std::atomic<T>::fetch_or`.
+    ##
+    ## Integer `T` only. For a non-integer `T` the call compiles but aborts
+    ## the program when it runs.
+    ##
+    ## @param v the bits to OR in
+    ## @returns the value stored immediately before the operation
     T fetch_or(T v) {
         return __atomic_fetch_or<T>(this.Data, v);
     }
 
+    ## Atomically replaces the stored value with its bitwise XOR with `v` and
+    ## returns the value before the operation, like
+    ## `std::atomic<T>::fetch_xor`.
+    ##
+    ## Integer `T` only. For a non-integer `T` the call compiles but aborts
+    ## the program when it runs.
+    ##
+    ## @param v the bits to XOR with
+    ## @returns the value stored immediately before the operation
     T fetch_xor(T v) {
         return __atomic_fetch_xor<T>(this.Data, v);
     }

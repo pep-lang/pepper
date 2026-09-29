@@ -1,0 +1,97 @@
+# Introduction
+
+Pepper is a compiled programming language for writing fast, native programs
+that are safe by default. Like Rust and Swift, it aims to rule out whole
+classes of memory bugs without asking you to manage memory by hand. It puts
+three things first:
+
+- **Clarity.** Code should say what it does. Pepper has a small, familiar
+  syntax, one way to write most things, and error messages that point at the
+  exact token you need to change.
+- **Simplicity.** There is no inheritance, no garbage collector to tune, and
+  no ownership annotations to learn. Structs hold data, methods and
+  extensions add behavior, and traits describe what a type can do.
+- **Concurrent safety.** Shared data should be safe to use from more than one
+  thread. Today that means `Atomic<T>`, which the compiler lowers to native
+  atomic instructions; more is planned.
+
+Here is a complete Pepper program:
+
+```pepper
+{{#include ../examples/tutorial-hello.pep}}
+```
+
+## How Pepper manages memory
+
+Every struct value in Pepper is a reference to an object on the heap, and the
+object is freed when the last reference to it goes away. The model is exactly
+C++'s `std::shared_ptr<T>` passed by value: storing a reference in a
+variable, a field, an array element or a parameter adds a reference, and that
+reference is released when the variable goes out of scope or is overwritten.
+There is no separate notion of a "borrowed" reference to learn. Numbers and
+other primitive values are copied, as in C.
+
+Because the rules are the same everywhere, you can predict exactly when an
+object is freed and when its destructor runs. The chapter on
+[memory and reference counting](language/memory.md) covers the model in
+detail.
+
+## How Pepper is built
+
+The compiler is written in Rust. It parses your program, checks it, and
+generates native code through [LLVM](https://llvm.org), then links an
+executable with the system's C toolchain. The same compiler powers a language
+server, so editors such as VS Code show Pepper's errors as you type.
+
+Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
+
+## Current status
+
+Pepper is young. The core language works and is tested: variables, functions,
+structs with constructors, destructors and methods, generics, type aliases,
+modules, `Result`-based error handling, iteration, and calling C. The
+standard library covers strings, arrays, hash maps and sets, atomics, and
+file-system access. That is enough to write real programs, but expect gaps.
+Some that you will meet quickly:
+
+- There is no `else if`; nest an `if` inside the `else` block instead.
+- A function that returns nothing cannot `return` early: `return` always
+  needs a value.
+- String literals have no escape sequences, so `"\n"` is a backslash
+  followed by the letter `n`.
+- There are no closures or lambdas yet. You can pass named functions as
+  values (see [function types](language/function-types.md)).
+- Calling a method through a trait type does not work yet. You can declare
+  traits and conform to them, but not dispatch through them.
+- There is no threading API in the standard library yet.
+- Reference counting does not reclaim cycles: two objects that refer to each
+  other are never freed. Weak references are being designed.
+- `print` writes each argument on its own line, and floating-point values
+  print incorrectly, so avoid printing them for now.
+
+Each chapter of this book says plainly what is and is not supported. When a
+chapter shows a feature, the example was compiled and run to check it.
+
+## How this book is organized
+
+- **Tutorial.** [Getting started](tutorial/getting-started.md) builds the
+  compiler and runs your first program. [A tour of Pepper](tutorial/tour.md)
+  then walks through the main features by building a small word-counting
+  program.
+- **Language guide.** One chapter per part of the language, from
+  [types and variables](language/types-and-variables.md) to
+  [calling C](language/c-interop.md). Read it in order, or jump to the topic
+  you need.
+- **Standard library reference.** Every type and function in the runtime,
+  generated from the runtime's own documentation comments. Start at the
+  [overview](reference/README.md).
+
+Every complete program in this book lives in the repository's
+`docs/examples/` folder and is compiled and run by the test suite, so what
+you read is what works.
+
+## Versions of this book
+
+This documentation is versioned with the compiler. Use the version picker in
+the top-right corner of each page to switch between releases; `dev` follows the `main`
+branch. Read the version that matches the compiler you are using.

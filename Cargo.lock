@@ -617,6 +617,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pepper-docgen"
+version = "0.1.0"
+dependencies = [
+ "pepper-parser",
+ "serde_json",
+]
+
+[[package]]
 name = "pepper-driver"
 version = "0.1.0"
 dependencies = [

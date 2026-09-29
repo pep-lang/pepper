@@ -4,6 +4,10 @@ Conventions that apply to any agent (or person) working here. Tool-specific
 workflows live in `.agents/skills/`; this file is for rules that hold
 everywhere.
 
+[`INTERNALS.md`](INTERNALS.md) is the map of the compiler: where each stage
+lives, how it works, and the patterns the code follows. User-facing
+documentation is the book in `docs/` (see `docs/src/contributing/docs.md`).
+
 ## Workflow
 
 - Before doing any work, start a new branch from the current default.
@@ -174,3 +178,52 @@ main.pep:1:1: note: declared here
 - **Test the rendered output** for a new error in
   `crates/pepper-driver/tests/diagnostic_tests.rs`: the header line, the
   source line, and the caret.
+
+## Library code is documented with `##` doc comments
+
+Every public declaration in library code (`runtime/`, and any library added
+later) carries a doc comment directly above it (above its attributes, with
+no blank line between): a run of `##` lines in a JSDoc-like format. Pepper's
+only comment syntax is `#`; a doc comment is just `#` comments starting
+`##`. Public means exported and not `_`-prefixed, plus every
+non-`_` field, constructor, and method of such a struct, trait, or
+extension. `_`-prefixed names (`_pep_malloc`, `_io_sys_open`) are internals
+shared between runtime files and are exempt.
+
+```pepper
+## Removes and returns the element at `index`, shifting later elements down.
+##
+## Runs in O(count - index).
+##
+## @param index position of the element to remove
+## @returns the removed element
+## @panics if `index` is not less than `count()`
+## @example
+##     var a = Array<int>();
+##     a.append(1);
+##     a.append(2);
+##     var x = a.remove_at(0);   # x == 1; a holds [2]
+T remove_at(ulong index) { ... }
+```
+
+- **Description first**: what it does, in the third person ("Returns …",
+  "Appends …"), then what a caller needs: edge cases, ownership, cost,
+  platform differences. Markdown; code in backticks.
+- **Tags**, each described (lowercase start, no trailing period):
+  `@typeParam T` for each generic parameter of a generic struct, trait,
+  alias, or function; `@param name` for each parameter, constructors
+  included; `@returns` whenever a value is returned (for `IoResult<T>`, say
+  what the value is and when it fails); `@panics` for every `assert`/`panic`
+  a caller can trigger. Optional: `@example` (indented code), `@see`,
+  `@note`.
+- A field or type alias may use a single line: `## The byte length.`
+- A `##` block at the top of a file, followed by a blank line, introduces
+  that file's page in the reference.
+- Keep implementation notes that only matter to maintainers in `#` comments
+  inside the body; the doc comment is the API contract.
+- **Enforced**: `crates/pepper-driver/tests/runtime_docs_tests.rs` runs
+  `pepper_parser::doc::check_documented` over every `.pep` file under
+  `runtime/` and fails with a clang-style error for each public declaration
+  without a comment, description, or required tag, and for tags naming a
+  parameter that does not exist. The language server shows these comments on
+  hover.

@@ -1,0 +1,364 @@
+<!-- Generated from runtime/io/types.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+
+# Errors and platform types
+
+Source: `runtime/io/types.pep`
+
+## FileHandle
+
+```pepper
+[Target(!OS(Windows))] type FileHandle = int
+```
+
+The raw operating-system handle of an open file: a POSIX file descriptor.
+
+`File.Handle` holds one. A valid descriptor is `>= 0`; a `File` that is
+closed (or was never opened) holds `-1`. The standard streams are
+descriptors 0, 1 and 2. On Windows this is a `HANDLE` instead.
+
+**See also**
+- `File`
+
+**Note**
+- code that must build for every target should not rely on this being an `int`
+
+## ErrorCode
+
+```pepper
+[Target(!OS(Windows))] type ErrorCode = int
+```
+
+The raw platform error code carried by `IoError.Code`: a POSIX `errno`
+value such as `ENOENT` (2). On Windows this is a `DWORD` from
+`GetLastError()` instead.
+
+The numbers differ between platforms (and a few between Linux and
+macOS), so portable code classifies an error with the `IoError`
+predicates (`is_not_found()`, ...) rather than comparing codes.
+
+**See also**
+- `IoError`
+
+## Mode
+
+```pepper
+[Target(!OS(Windows))] type Mode = uint
+```
+
+File mode bits as reported in `Metadata.Permissions`: on POSIX the
+`mode_t` permission bits `mode & 07777` (the `rwx` bits for owner, group
+and others plus setuid, setgid and sticky; the file-type bits are
+removed). On Windows the same field holds `FILE_ATTRIBUTE_*` bits
+instead.
+
+**See also**
+- `Metadata`
+
+## FileHandle
+
+```pepper
+[Target(OS(Windows))] type FileHandle = __ptr<void>
+```
+
+The raw operating-system handle of an open file: a Windows `HANDLE`.
+
+`File.Handle` holds one. A `File` that is closed (or was never opened)
+holds null; neither null nor `INVALID_HANDLE_VALUE` (-1) is a valid
+handle. The standard streams are the handles from `GetStdHandle`. On
+POSIX this is an `int` file descriptor instead.
+
+**See also**
+- `File`
+
+**Note**
+- code that must build for every target should not rely on this being a `__ptr<void>`
+
+## ErrorCode
+
+```pepper
+[Target(OS(Windows))] type ErrorCode = uint
+```
+
+The raw platform error code carried by `IoError.Code`: a Windows
+`DWORD` error code from `GetLastError()`, such as `ERROR_FILE_NOT_FOUND`
+(2). On POSIX this is an `errno` value instead.
+
+The numbers differ between platforms, so portable code classifies an
+error with the `IoError` predicates (`is_not_found()`, ...) rather than
+comparing codes.
+
+**See also**
+- `IoError`
+
+## Mode
+
+```pepper
+[Target(OS(Windows))] type Mode = uint
+```
+
+File attribute bits as reported in `Metadata.Permissions`: on Windows the
+whole `FILE_ATTRIBUTE_*` word of the file (`FILE_ATTRIBUTE_READONLY` is
+1, `FILE_ATTRIBUTE_DIRECTORY` 16, `FILE_ATTRIBUTE_REPARSE_POINT` 1024,
+...). On POSIX the same field holds `mode_t` permission bits instead.
+
+**See also**
+- `Metadata`
+
+## Offset
+
+```pepper
+type Offset = long
+```
+
+A byte position or distance within a file, as taken and returned by the
+`File.seek*` methods: a signed 64-bit integer on every target (`off_t` on
+POSIX, `LARGE_INTEGER` on Windows), so files larger than 4 GiB work
+everywhere.
+
+## IoError
+
+```pepper
+struct IoError
+```
+
+An I/O failure: the raw platform error code plus a human-readable
+message.
+
+There are no enums, so the kind of error is a set of predicates over the
+code (`is_not_found()`, `is_permission_denied()`, ...), each of which
+knows the matching codes on the current platform. Test with those rather
+than comparing `Code` against numbers. Failures that Pepper detects
+itself (invalid UTF-8, an empty path, a short write, a closed `File`)
+use the platform's own code for the kind they are (`EINVAL` /
+`ERROR_INVALID_PARAMETER` for invalid input, `ENOENT` /
+`ERROR_FILE_NOT_FOUND` for an empty path, ...), so the predicates hold
+for them too. A short write uses `EIO` / `ERROR_WRITE_FAULT` and a closed
+`File` uses `EBADF` / `ERROR_INVALID_HANDLE`; no predicate matches those.
+
+**See also**
+- `IoResult`
+
+**Example**
+```pepper
+    import io;
+
+    var r = io.File.open(io.Path("settings.txt"));
+    if (r.is_err()) {
+        if (r.Error.is_not_found()) {
+            print("no settings file");
+        } else {
+            print(r.Error.Message);
+        }
+    }
+```
+
+### Fields
+
+#### Code
+
+```pepper
+ErrorCode Code
+```
+
+The raw platform error code: an `errno` value on POSIX, a
+`GetLastError()` code on Windows; 0 means no error.
+
+#### Message
+
+```pepper
+String Message
+```
+
+A human-readable description: the platform's text for `Code`
+(`strerror` on POSIX, `FormatMessageW` on Windows, without its
+trailing period and line break), or Pepper's own text such as
+`"empty path"` for errors it detects itself.
+
+### Constructor
+
+#### IoError()
+
+```pepper
+construct(ErrorCode code = 0, String message = "")
+```
+
+Creates an error from a platform code and a message.
+
+The default, `IoError()`, has code 0 and an empty message; no
+predicate holds for it.
+
+**Parameters**
+- `code` — the raw platform error code (`errno` on POSIX, `GetLastError()` on Windows)
+- `message` — the human-readable description
+
+### Static methods
+
+#### last
+
+```pepper
+static IoError last()
+```
+
+Captures the calling thread's last platform error now: `errno` on
+POSIX, `GetLastError()` on Windows, with the platform's message for
+it.
+
+Call it immediately after the failing system call; any call in
+between (including one that allocates) may overwrite the code.
+
+**Returns**
+- an error holding the current `errno` / `GetLastError()` code and its message
+
+### Methods
+
+#### is_not_found
+
+```pepper
+bool is_not_found()
+```
+
+Returns whether the error means the file or directory does not exist.
+
+Matches `ENOENT` on POSIX, and `ERROR_FILE_NOT_FOUND` or
+`ERROR_PATH_NOT_FOUND` on Windows. An empty path fails with this kind
+on POSIX (with the message `"empty path"`), and in `File.open_with`
+on every platform.
+
+**Returns**
+- true when a path, or a directory on the way to it, is missing
+
+#### is_permission_denied
+
+```pepper
+bool is_permission_denied()
+```
+
+Returns whether the operation was refused for lack of permission.
+
+Matches `EACCES` or `EPERM` on POSIX, and `ERROR_ACCESS_DENIED` on
+Windows (which Windows also reports for, among others, deleting a
+read-only file).
+
+**Returns**
+- true when access was denied
+
+#### is_already_exists
+
+```pepper
+bool is_already_exists()
+```
+
+Returns whether the operation failed because its target already
+exists, such as `Directory.create` on an existing path or opening with
+`create_new`.
+
+Matches `EEXIST` on POSIX, and `ERROR_FILE_EXISTS` or
+`ERROR_ALREADY_EXISTS` on Windows.
+
+**Returns**
+- true when the target already exists
+
+#### is_not_a_directory
+
+```pepper
+bool is_not_a_directory()
+```
+
+Returns whether a path that had to name a directory names something
+else, such as `Directory.open` or `Directory.remove` on a file (or,
+on POSIX, a file used as a directory in the middle of a path).
+
+Matches `ENOTDIR` on POSIX, and `ERROR_DIRECTORY` (267, "the directory
+name is invalid") on Windows.
+
+**Returns**
+- true when a directory was expected
+
+#### is_is_a_directory
+
+```pepper
+bool is_is_a_directory()
+```
+
+Returns whether an operation that needs a file was given a directory,
+such as reading from a directory opened as a `File`.
+
+Matches `EISDIR` on POSIX, and `ERROR_DIRECTORY_NOT_SUPPORTED` on
+Windows (which `File` reads report for a directory handle).
+
+**Returns**
+- true when a directory was given where a file was expected
+
+#### is_directory_not_empty
+
+```pepper
+bool is_directory_not_empty()
+```
+
+Returns whether a directory could not be removed because it still has
+entries (`Directory.remove` on a non-empty directory).
+
+Matches `ENOTEMPTY` on POSIX (39 on Linux, 66 on macOS) and
+`ERROR_DIR_NOT_EMPTY` on Windows.
+
+**Returns**
+- true when the directory is not empty
+
+#### is_invalid_input
+
+```pepper
+bool is_invalid_input()
+```
+
+Returns whether an argument was invalid: bad options (such as opening
+with no access mode), data that is not valid UTF-8 where text was
+expected, or a malformed path.
+
+Matches `EINVAL` on POSIX, and `ERROR_INVALID_PARAMETER` or
+`ERROR_INVALID_NAME` on Windows.
+
+**Returns**
+- true when the input was invalid
+
+#### is_interrupted
+
+```pepper
+bool is_interrupted()
+```
+
+Returns whether the operation was interrupted before it finished.
+
+Matches `EINTR` on POSIX and `ERROR_OPERATION_ABORTED` on Windows.
+The io functions retry interrupted POSIX opens, reads and writes
+themselves, so callers rarely see this.
+
+**Returns**
+- true when the operation was interrupted
+
+## IoResult
+
+```pepper
+type IoResult<T> = Result<T, IoError>
+```
+
+The result of an io operation: `Value` on success, an `IoError` on
+failure. Check `is_ok()` / `is_err()` before reading `Value` or `Error`;
+operations that produce nothing return `IoResult<None>`.
+
+**Type parameters**
+- `T` — the value an operation produces on success
+
+**See also**
+- `IoError`
+
+**Example**
+```pepper
+    import io;
+
+    var cwd = io.Directory.current();
+    if (cwd.is_ok()) {
+        print(cwd.Value.to_string());
+    } else {
+        print(cwd.Error.Message);
+    }
+```

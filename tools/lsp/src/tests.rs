@@ -184,6 +184,47 @@ fn a_local_hides_a_qualifier() {
     assert_eq!(definition(&uri, &text, &program, use_).0, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
 }
 
+const DOCUMENTED: &str = r#"## A counter.
+struct Counter {
+    ## How many so far.
+    int Count;
+
+    ## Adds `by` to the count.
+    ##
+    ## @param by the amount to add
+    ## @returns the new count
+    int add(int by) {
+        Count = Count + by;
+        return Count;
+    }
+}
+
+## Doubles `x`.
+##
+## @param x the value
+## @returns twice `x`
+double_it(x: int): int { return x * 2; }
+
+test(): int {
+    Counter c = Counter();
+    c.add(1);
+    return double_it(c.Count);
+}
+"#;
+
+#[test]
+fn hover_shows_doc_comments() {
+    let (uri, text, program) = load("docs", DOCUMENTED, "main.pep");
+    let call = hover(&uri, &text, &program, at(&text, "double_it(c", 0, 1));
+    assert!(call.contains("Doubles `x`."), "{}", call);
+    assert!(call.contains("**Parameters**\n- `x` — the value"), "{}", call);
+    assert!(call.contains("**Returns**\n- twice `x`"), "{}", call);
+    let method = hover(&uri, &text, &program, at(&text, "c.add", 0, 3));
+    assert!(method.contains("Adds `by` to the count."), "{}", method);
+    let field = hover(&uri, &text, &program, at(&text, "c.Count", 0, 3));
+    assert!(field.contains("How many so far."), "{}", field);
+}
+
 #[test]
 fn deprecated_new_offers_a_quick_fix() {
     let uri = Url::parse("file:///t.pep").unwrap();

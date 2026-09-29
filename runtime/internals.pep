@@ -2,6 +2,16 @@
 extern void* malloc(ulong size);
 extern void free(void* p);
 extern void* realloc(void* p, ulong size);
+## Copies `n` bytes from `src` to `dest` (the C library's `memcpy`).
+##
+## The regions must not overlap, and both must be valid for `n` bytes.
+## Nothing is bounds-checked, and no reference counts change: copying a
+## struct reference with it neither acquires nor releases. Runs in O(n).
+## This declaration discards C's return value.
+##
+## @param dest the start of the destination region, a `__ptr<void>`
+## @param src the start of the source region, a `__ptr<void>`
+## @param n the number of bytes to copy; 0 copies nothing
 export extern void memcpy(void* dest, void* src, ulong n);
 extern void memset(void* p, int c, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
@@ -10,10 +20,20 @@ extern int puts(char* s);
 extern void abort();
 extern int fflush(void* stream);
 
-# The message is a raw `__ptr<char>` (C `char*`), not a `String`: codegen passes string
-# literals as their global pointers (no temporary allocation), so hot paths
-# like array index bounds checks stay allocation-free. Non-literal messages
-# are lowered to `msg.c_str()` at the call site.
+## Panics with `msg` when `condition` is false; otherwise does nothing.
+##
+## The check always runs; there is no release mode that removes it.
+## The message is a raw `__ptr<char>` (C `char*`), not a `String`. A string
+## literal is passed as its global pointer with no temporary allocation,
+## which keeps hot paths like array index bounds checks allocation-free. A
+## non-literal `String` message is lowered to `msg.c_str()` at the call site.
+##
+## @param condition the condition that must hold
+## @param msg the NUL-terminated message to print on failure; `__null` prints
+##   a generic message
+## @panics if `condition` is false: prints `msg` and aborts (see `panic`)
+## @example
+##     assert(count > 0, "count must be positive");
 export assert(condition: bool, msg: __ptr<char>): void {
     if (!condition) {
         panic(msg);
@@ -65,6 +85,18 @@ export _pep_live_allocs(): long {
     return _pep_live_allocs_count;
 }
 
+## Prints `msg` and aborts the program. It never returns.
+##
+## Writes `msg` and a newline to standard output with `puts`, or
+## "Assertion failed with no additional information" when `msg` is
+## `__null`. Then it flushes every C output stream, so the message is not
+## lost when stdout is a pipe, and calls C `abort()`. No destructors or
+## releases run, and the process ends abnormally (SIGABRT on POSIX).
+##
+## @param msg the NUL-terminated message to print, or `__null`
+## @panics always
+## @example
+##     panic("unreachable");
 export panic(msg: __ptr<char>) {
     if (msg == __null) {
         puts("Assertion failed with no additional information");
@@ -138,6 +170,24 @@ floatstr(v: double): __ptr<char> {
 }
 
 # ── Trace (gated by PEP_TRACE) ───────────────────────────────────────────────
+## Prints `name`, the address `ptr`, and the first 8 bytes at `ptr` when
+## tracing is on. Does nothing otherwise.
+##
+## Tracing is on when the `PEP_TRACE` environment variable is set to any
+## value, even an empty one. It is read once at program start. The line has
+## the form `name: AAAAAAAAAAAAAAAAWWWWWWWWWWWWWWWW`: 16 uppercase hex
+## digits of the address, then, with no separator, the first 8 bytes read as
+## a little-endian 64-bit word. The word is omitted when `ptr` is `__null`
+## or `size` is less than 8. Only those 8 bytes are read, whatever `size` is.
+## The line goes to standard output.
+##
+## Each traced call allocates buffers it never frees, so `_pep_live_allocs()`
+## counts them. `name` must be shorter than about 470 bytes.
+##
+## @param ptr the start of the region to trace
+## @param size the region's size in bytes; the word is printed only when it
+##   is at least 8
+## @param name a NUL-terminated label for the line, or `__null` for none
 export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
@@ -171,6 +221,16 @@ export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
     }
 }
 
+## Prints `name: ` followed by the address `ptr` as 16 uppercase hex digits
+## when tracing is on (the `PEP_TRACE` environment variable is set, checked
+## once at program start). Does nothing otherwise.
+##
+## Each traced call allocates buffers it never frees, so
+## `_pep_live_allocs()` counts them. `name` must be shorter than about 490
+## bytes.
+##
+## @param ptr the address to print; it is not dereferenced
+## @param name a NUL-terminated label for the line, or `__null` for none
 export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
@@ -191,6 +251,18 @@ export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     }
 }
 
+## Prints `name: ` followed by `value` in signed decimal when tracing is on
+## (the `PEP_TRACE` environment variable is set, checked once at program
+## start). Does nothing otherwise.
+##
+## Each traced call allocates buffers it never frees, so
+## `_pep_live_allocs()` counts them. `name` must be shorter than about 485
+## bytes.
+##
+## @param value the number to print
+## @param name a NUL-terminated label for the line, or `__null` for none
+## @example
+##     trace_int(count, "count");   # prints "count: 3" under PEP_TRACE=1
 export trace_int(value: long, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);

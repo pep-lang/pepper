@@ -4,7 +4,7 @@ Pepper is a compiled programming language. This repository holds the compiler,
 written in Rust: the root `pepper` crate is the CLI, and the stages live in
 `crates/` as `pepper-parser`, `pepper-sema`, `pepper-codegen`, and `pepper-driver`. Codegen goes through LLVM via `inkwell`.
 
-See [`docs/pepper.md`](docs/pepper.md) for the language itself.
+See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; build it with `cargo run -p pepper-docgen -- serve`) for the language itself, and [`INTERNALS.md`](INTERNALS.md) for how the compiler works.
 
 ## Setting up a development environment
 

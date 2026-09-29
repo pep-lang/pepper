@@ -197,7 +197,7 @@ pub enum Expression {
         operand: Box<Expression>,
         loc: Loc,
     },
-    /// `expr as Type` — static cast (spec docs/pepper.md).
+    /// `expr as Type` — static cast (docs/src/language/types-and-variables.md).
     Cast {
         expr: Box<Expression>,
         ty: TypeName,

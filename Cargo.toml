@@ -12,6 +12,8 @@ members = [
     "xtask",
     # Language server: parser + sema only, no LLVM linkage.
     "tools/lsp",
+    # Documentation site builder: parser only, no LLVM linkage.
+    "tools/docgen",
 ]
 
 [workspace.package]

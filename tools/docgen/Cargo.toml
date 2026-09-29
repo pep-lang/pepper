@@ -1,0 +1,11 @@
+[package]
+name = "pepper-docgen"
+version.workspace = true
+edition.workspace = true
+
+# Builds the documentation site (docs/): generates the standard library
+# reference from the runtime's doc comments and renders the book with mdBook
+# into a versioned folder. Parser only, so it never links LLVM.
+[dependencies]
+pepper-parser = { path = "../../crates/pepper-parser" }
+serde_json.workspace = true

@@ -696,7 +696,7 @@ fn unary(input: &mut &str) -> Result<Expression> {
     cast(input)
 }
 
-/// `expr as Type` — static cast (spec docs/pepper.md). Sits between the unary
+/// `expr as Type` — static cast (docs/src/language/types-and-variables.md). Sits between the unary
 /// and `**` levels, so `as` binds tighter than unary: `-x as int` parses as
 /// `-(x as int)` and `2 ** 3 as float` as `(2 ** 3) as float`. C-style
 /// `(int)x` is NOT a cast.

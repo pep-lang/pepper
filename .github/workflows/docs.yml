@@ -1,0 +1,92 @@
+# Publishes the documentation site (docs/, rendered by `pepper-docgen build`)
+# to the gh-pages branch, one folder per version:
+#
+#   push to main       -> dev/      (the unreleased docs, replaced each time)
+#   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match Cargo.toml)
+#
+# Only the folder being built is replaced; every other version already on
+# gh-pages is kept, so the docs of every release stay available. versions.json
+# and index.html are regenerated from the folders present.
+#
+# GitHub Pages must be set to deploy from the gh-pages branch (Settings >
+# Pages > Build and deployment > Deploy from a branch).
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+# Publishes must not cancel each other: a cancelled release build would leave
+# that version missing. They queue instead.
+concurrency:
+  group: docs-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: pepper-linux
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -euxo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mdBook
+        run: |
+          if ! command -v mdbook; then
+            cargo install mdbook --locked
+          fi
+          mdbook --version
+
+      - name: Choose the version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            version="${REF_NAME#v}"
+            crate_version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+            if [ "$version" != "$crate_version" ]; then
+              echo "::error::tag $REF_NAME does not match the workspace version $crate_version in Cargo.toml"
+              exit 1
+            fi
+          else
+            version=dev
+          fi
+          echo "DOCS_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Check out the published site
+        run: |
+          # A self-hosted runner keeps .git between runs; forget the last
+          # run's worktree, whose folder checkout has already cleaned away.
+          git worktree prune
+          rm -rf site
+          if git fetch --depth 1 origin gh-pages; then
+            git worktree add site FETCH_HEAD
+            git -C site switch -c gh-pages
+          else
+            git worktree add --detach site
+            git -C site switch --orphan gh-pages
+          fi
+
+      - name: Build the docs
+        run: cargo run -p pepper-docgen -- build --version "$DOCS_VERSION" --site site
+
+      - name: Publish
+        run: |
+          cd site
+          git add -A
+          if git diff --cached --quiet; then
+            echo "docs $DOCS_VERSION unchanged"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Publish docs $DOCS_VERSION from $GITHUB_SHA"
+          git push origin gh-pages

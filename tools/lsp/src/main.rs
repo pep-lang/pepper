@@ -400,6 +400,83 @@ fn is_this(expr: &ast::Expression) -> bool {
     matches!(expr, ast::Expression::MemberAccess { lhs, .. } if matches!(&**lhs, ast::Expression::SymbolRef { id, .. } if id.as_str() == "this"))
 }
 
+// ── Doc comments ──────────────────────────────────────────────────────────────
+
+/// `value` followed by `doc`, the Markdown of a declaration's doc comment.
+fn with_doc(value: String, doc: Option<String>) -> String {
+    match doc {
+        Some(doc) if !doc.is_empty() => format!("{}\n\n---\n\n{}", value, doc),
+        _ => value,
+    }
+}
+
+/// The doc comment of the top-level declaration `name`, from the first
+/// program file declaring it (the document, then its imports, then the
+/// runtime), as Markdown.
+fn declaration_doc(program: &Program, name: &str) -> Option<String> {
+    program.files.iter().find_map(|f| {
+        let decl = f
+            .module
+            .declarations
+            .iter()
+            .find(|d| !matches!(d, ast::Declaration::Extend(_)) && d.name() == name)?;
+        Some(pepper_parser::doc::doc_comment_of(&f.source, decl)?.to_markdown())
+    })
+}
+
+/// The doc comment of the top-level declaration in `program.files[file]`
+/// whose name token is at `name_span`, as Markdown.
+fn declaration_doc_at(program: &Program, file: usize, name_span: Span) -> Option<String> {
+    let f = program.files.get(file)?;
+    let decl = f.module.declarations.iter().find(|d| d.name_span() == name_span)?;
+    Some(pepper_parser::doc::doc_comment_of(&f.source, decl)?.to_markdown())
+}
+
+/// The doc comment of member `name` (a field or method) of the struct,
+/// trait, or extension of `owner`, as Markdown. With no known owner, only a
+/// member name that one type alone declares has a doc to show.
+fn member_doc(program: &Program, owner: Option<&str>, name: &str) -> Option<String> {
+    // (owner, source, offset of the member's first token)
+    let mut found: Vec<(&str, &str, usize)> = vec![];
+    for f in &program.files {
+        for decl in &f.module.declarations {
+            let (type_name, fields, methods): (&str, &[ast::VariableDecl], &[ast::FunctionDecl]) = match decl {
+                ast::Declaration::Struct(s) => (&s.name, &s.fields, &s.methods),
+                ast::Declaration::Trait(t) => (&t.name, &[], &t.methods),
+                ast::Declaration::Extend(e) => (&e.target.name, &[], &e.methods),
+                _ => continue,
+            };
+            if owner.is_some_and(|o| o != type_name) {
+                continue;
+            }
+            let field = fields.iter().find(|v| v.name == name).map(|v| v.span.start);
+            let method = methods
+                .iter()
+                .find(|m| m.name == name)
+                .map(|m| m.attributes.iter().map(|a| a.span.start).chain([m.span.start]).min().unwrap_or(m.span.start));
+            if let Some(start) = field.or(method) {
+                found.push((type_name, &f.source, start));
+            }
+        }
+    }
+    match found.as_slice() {
+        [(_, source, start)] => Some(pepper_parser::doc::doc_comment_before(source, *start)?.to_markdown()),
+        _ => None,
+    }
+}
+
+/// The struct name of a rendered type: `Array<int>` and `int[]` are
+/// `Array`; `unknown` is none.
+fn type_base_name(ty: &str) -> Option<String> {
+    let ty = ty.trim();
+    if ty.ends_with("[]") {
+        return Some("Array".to_string());
+    }
+    let base = ty.split('<').next().unwrap_or(ty).trim();
+    let base = base.rsplit('.').next().unwrap_or(base);
+    (!base.is_empty() && base != "unknown").then(|| base.to_string())
+}
+
 // ── Server ────────────────────────────────────────────────────────────────────
 
 struct PepperLsp {
@@ -628,10 +705,13 @@ impl PepperLsp {
         let imported = |(spelled, target): (String, imports::Target)| {
             let program = program?;
             let value = match target {
-                imports::Target::Declaration { file, symbol } if file == 0 => format!("`{}` — `{}`", spelled, symbol.ty),
-                imports::Target::Declaration { file, symbol } => {
-                    format!("`{}` — `{}`\n\nfrom `{}`", spelled, symbol.ty, file_label(&program.files[file].name))
+                imports::Target::Declaration { file, symbol } if file == 0 => {
+                    with_doc(format!("`{}` — `{}`", spelled, symbol.ty), declaration_doc_at(program, file, symbol.name_span))
                 }
+                imports::Target::Declaration { file, symbol } => with_doc(
+                    format!("`{}` — `{}`\n\nfrom `{}`", spelled, symbol.ty, file_label(&program.files[file].name)),
+                    declaration_doc_at(program, file, symbol.name_span),
+                ),
                 imports::Target::File(file) => format!("`{}` — `{}`", spelled, file_label(&program.files[file].name)),
             };
             Some(Hover { contents: md(value), range: None })
@@ -657,6 +737,32 @@ impl PepperLsp {
             return imported(found);
         }
         let sema = program.and_then(|p| sema_model_of(p).ok());
+        // Docs of a name that is not a local, parameter, or member.
+        let global_doc = |id: &str| {
+            let local = locals.iter().chain(&struct_members).any(|s| s.name == id);
+            if local { None } else { program.and_then(|p| declaration_doc(p, id)) }
+        };
+        // Docs of member `name` of `lhs`: its type when the hover can tell
+        // (`this`, a typed variable, a type name for a static call).
+        let member_docs = |lhs: &ast::Expression, name: &str| {
+            let program = program?;
+            let owner = match lhs {
+                ast::Expression::SymbolRef { id, .. } if id == "this" => enclosing_struct.map(|s| s.name.clone()),
+                ast::Expression::SymbolRef { id, .. } => {
+                    match locals.iter().rev().chain(&struct_members).chain(&globals).find(|s| s.name == *id) {
+                        Some(symbol) => type_base_name(&symbol.ty),
+                        None => Some(id.clone()),
+                    }
+                }
+                ast::Expression::FunctionCall { function, .. } => match &**function {
+                    ast::Expression::SymbolRef { id, .. } => Some(id.clone()),
+                    ast::Expression::TypeLiteral(t) => Some(t.name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            member_doc(program, owner.as_deref(), name)
+        };
 
         match expr {
             ast::Expression::Literal { value, .. } => {
@@ -684,9 +790,9 @@ impl PepperLsp {
                         })
                     })
                     .unwrap_or_else(|| "unknown".to_string());
-                Some(Hover { contents: md(format!("`{}` — `{}`", id, rendered)), range: None })
+                Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
             }
-            ast::Expression::MemberAccess { name, .. } => {
+            ast::Expression::MemberAccess { lhs, name, .. } => {
                 let rendered = if is_this(expr) {
                     struct_members.iter().find(|s| s.name == *name).map(|s| s.ty.clone())
                         .or_else(|| {
@@ -700,20 +806,20 @@ impl PepperLsp {
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .unwrap_or_else(|| "unknown".to_string())
                 };
-                Some(Hover { contents: md(format!("`.`{}` — `{}`", name, rendered)), range: None })
+                Some(Hover { contents: md(with_doc(format!("`.`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
             }
             ast::Expression::FunctionCall { function, .. } => match &**function {
                 ast::Expression::SymbolRef { id, .. } => {
                     let rendered = globals.iter().find(|s| s.name == *id).map(|s| s.ty.clone())
                         .or_else(|| sema.as_ref().and_then(|m| m.functions.iter().find(|f| f.name == *id).map(|f| f.ty.to_string())))
                         .unwrap_or_else(|| "unknown".to_string());
-                    Some(Hover { contents: md(format!("`{}` — `{}`", id, rendered)), range: None })
+                    Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
                 }
-                ast::Expression::MemberAccess { name, .. } => {
+                ast::Expression::MemberAccess { lhs, name, .. } => {
                     let rendered = sema.as_ref()
                         .and_then(|m| m.structs.iter().find_map(|st| struct_member_type(st, name)))
                         .unwrap_or_else(|| "unknown".to_string());
-                    Some(Hover { contents: md(format!(".`{}` — `{}`", name, rendered)), range: None })
+                    Some(Hover { contents: md(with_doc(format!(".`{}` — `{}`", name, rendered), member_docs(lhs, name))), range: None })
                 }
                 _ => None,
             },

@@ -1,0 +1,18 @@
+[book]
+title = "The Pepper Programming Language"
+description = "A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety."
+language = "en"
+src = "src"
+
+[build]
+# A chapter listed in SUMMARY.md but missing is an error, not a silent stub.
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/justinboswell/pepper"
+edit-url-template = "https://github.com/justinboswell/pepper/edit/main/docs/{path}"
+additional-js = ["theme/version-switcher.js"]
+additional-css = ["theme/version-switcher.css"]
+
+[output.html.search]
+enable = true

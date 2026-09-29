@@ -110,6 +110,12 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      # docs/src/reference/ is generated from the runtime's doc comments; a
+      # runtime change must regenerate it (`cargo run -p pepper-docgen --
+      # reference`) in the same PR.
+      - name: Standard library reference is current
+        run: cargo run -p pepper-docgen --locked -- check
+
   # Which LLVM versions to test is not a fixed list: it is every major this
   # workspace supports that apt can actually install, discovered here. Ubuntu
   # 24.04 currently serves 18, 19 and 20 from its own repositories, and picks up

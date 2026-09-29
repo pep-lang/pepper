@@ -3632,7 +3632,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
-    /// `expr as T` — static cast (spec docs/pepper.md: "equivalent of
+    /// `expr as T` — static cast (docs/src/language/types-and-variables.md: "equivalent of
     /// static_cast; compile error if the cast cannot succeed"). Numeric and
     /// bool targets only; struct casts are rejected. A pointer may cast to an
     /// integer (address-as-integer for C ABI interop) or to another pointer

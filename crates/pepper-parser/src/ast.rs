@@ -133,7 +133,7 @@ pub enum Expression {
         operand: Box<Expression>,
         span: Span,
     },
-    /// `expr as Type` — a static cast (spec docs/pepper.md: "equivalent of
+    /// `expr as Type` — a static cast (docs/src/language/types-and-variables.md: "equivalent of
     /// static_cast; compile error if the cast cannot succeed").
     Cast {
         expr: Box<Expression>,
