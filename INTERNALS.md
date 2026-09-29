@@ -334,7 +334,7 @@ several passes run more than once on purpose.
 | 4 | `tag_generics` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`). |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
 | 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
-| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup, and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). |
+| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures::sync_closures` in the same fixpoint loop (§2.6). |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. |
 | 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. |
@@ -871,9 +871,6 @@ compiles the code but cannot run it. Run it for real with the
   non-`[Shared]` structs. Spawning such a closure shares their plain counts
   across threads. Splitting function types into thread-safe and not is the
   fix.
-- **`var v = p[i]` through a `__ptr<T>` infers `int`** inside some
-  functions, silently truncating a wider `T` (seen with `__ptr<ulong>`).
-  Declare the type (`ulong v = p[i];`) until inference is fixed.
 
 - **Single global namespace.** Module linking rewrites names, and then
   every file merges into one `Module`. Two private declarations with the

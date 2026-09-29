@@ -124,7 +124,7 @@ A pointer supports these operations:
 
 | Operation | Meaning |
 |---|---|
-| `p[i]` | reads or writes the element `i` places from `p` |
+| `p[i]` | reads or writes the element `i` places from `p`; its type is `T`, so `var v = p[i]` declares a `T` |
 | `p + n` | the address `n` elements after `p` (`n` bytes for `__ptr<void>`) |
 | `p == __null`, `p != __null` | compares with the null pointer |
 | `p == q`, `p != q` | compares two addresses (a pointer also compares with an integer address) |

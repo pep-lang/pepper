@@ -234,3 +234,69 @@ test(): int {
         111111
     );
 }
+
+#[test]
+fn var_from_ptr_index_infers_the_pointee_type() {
+    // `var v = p[i]` takes the pointee's type, so a `ulong` above 2^32
+    // survives the read. It used to infer `int` (truncating) whenever `p`
+    // was a parameter or field: in a free function, a static method, a
+    // method reading a field, a generic struct's method, and through a
+    // pointer to a pointer.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+free_read(p: __ptr<ulong>, i: ulong): ulong {
+    var v = p[i];
+    return v;
+}
+free_equal(p: __ptr<ulong>): bool {
+    var v = p[1];
+    return v == 5000000001;
+}
+struct Slots {
+    __ptr<ulong> Data;
+    construct() { Data = _pep_malloc(16); }
+    static read(p: __ptr<ulong>): ulong {
+        var v = p[0];
+        return v;
+    }
+    read_field(): ulong {
+        var v = Data[1];
+        return v;
+    }
+}
+struct Reader<T> {
+    static read(p: __ptr<T>): T {
+        var v = p[0];
+        return v;
+    }
+}
+nested(pp: __ptr<__ptr<ulong>>): ulong {
+    var p = pp[0];
+    var v = p[1];
+    return v;
+}
+test(): int {
+    __ptr<ulong> p = _pep_malloc(16);
+    p[0] = 5000000000;
+    p[1] = 5000000001;
+    __ptr<__ptr<ulong>> pp = _pep_malloc(8);
+    pp[0] = p;
+    var s = Slots();
+    s.Data[1] = 5000000002;
+    var r = 0;
+    if (free_read(p, 1) == 5000000001) { r = r + 1; }
+    if (free_equal(p)) { r = r + 10; }
+    if (Slots.read(p) == 5000000000) { r = r + 100; }
+    if (s.read_field() == 5000000002) { r = r + 1000; }
+    if (Reader<ulong>.read(p) == 5000000000) { r = r + 10000; }
+    if (nested(pp) == 5000000001) { r = r + 100000; }
+    _pep_free(pp);
+    _pep_free(p);
+    return r;
+}
+"#
+        ),
+        111111
+    );
+}

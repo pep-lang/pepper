@@ -27,6 +27,13 @@ sum(values: __ptr<int>, count: int): int {
     return total;
 }
 
+# `var` takes the element type from the pointer: `big` is a ulong, so a value
+# above 2^32 reads back whole.
+first(values: __ptr<ulong>): ulong {
+    var big = values[0];
+    return big;
+}
+
 main(): int {
     # Indexing reads and writes elements of T.
     var numbers = malloc(4 * sizeof<int>()) as __ptr<int>;
@@ -35,6 +42,11 @@ main(): int {
     numbers[2] = 30;
     numbers[3] = 40;
     assert(sum(numbers, 4) == 100, "indexing reads what was written");
+
+    var wide = malloc(sizeof<ulong>()) as __ptr<ulong>;
+    wide[0] = 5000000000;
+    assert(first(wide) == 5000000000, "var v = p[i] has the pointee's type");
+    free(wide);
 
     # p + n moves by n elements, not n bytes.
     var third = numbers + 2;

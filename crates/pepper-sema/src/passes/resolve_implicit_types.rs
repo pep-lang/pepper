@@ -353,6 +353,18 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::AtomicStore(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),
+        // `p[i]` through a raw pointer reads the pointee (codegen GEPs
+        // through it), so `var v = p[i]` on a `__ptr<ulong>` is a `ulong`.
+        // Struct receivers become `__index_get` calls in resolve_operators
+        // and are typed as method calls on the next run.
+        Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
+            if let Expression::ArrayIndex { ty, .. } = expr {
+                if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                    return ty.clone();
+                }
+            }
+            pointee(&type_of_expr(lhs, scopes, current_struct)).unwrap_or_else(TypeName::auto)
+        }
         // `x as T` resolves to the cast target.
         Expression::Cast { ty, .. } => ty.clone(),
         // Both ternary arms have the same type (enforced by sema): report it
@@ -360,6 +372,21 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::Ternary { true_expr, .. } => type_of_expr(true_expr, scopes, current_struct),
         _ => TypeName::auto(),
     }
+}
+
+/// The element type of a raw pointer, in either spelling: `__ptr<T>` (before
+/// `convert_intrinsics`) or `T*` (after). `None` for anything else.
+fn pointee(ty: &TypeName) -> Option<TypeName> {
+    let element = if ty.name == "__ptr" && ty.sub_types.len() == 1 {
+        ty.sub_types[0].clone()
+    } else if ty.sub_types.is_empty() {
+        crate::passes::gather_generics::parse_type_string(ty.name.strip_suffix('*')?)
+    } else {
+        return None;
+    };
+    // A `void` pointer indexes bytes and codegen picks the width; there is
+    // no `void` local to infer.
+    (element.to_string() != "void").then_some(element)
 }
 
 pub fn resolve_implicit_types(module: &mut Module) {
