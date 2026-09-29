@@ -9,6 +9,21 @@
 //!       | ^~~~
 //! ```
 //!
+//! A diagnostic may carry suggested [`Fix`]es: edits a tool can apply for
+//! the user. The renderer shows an edit on the diagnostic's own line under
+//! the caret, as clang does with fix-it hints, and the language server
+//! offers each fix as a quick fix:
+//!
+//! ```text
+//! main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct` [deprecated]
+//!     3 |     new(this.x = 1) {}
+//!       |     ^~~
+//!       |     construct
+//! ```
+//!
+//! Deprecations are reported through [`Diagnostic::deprecated`], always
+//! with the fix that migrates the code.
+//!
 //! A diagnostic points into a file through a [`Loc`]: a [`FileId`] plus a
 //! byte [`Span`]. Whoever loaded the files owns the [`SourceMap`] that turns
 //! the id back into a name and text; the parser and sema only ever see ids.
@@ -62,24 +77,82 @@ impl Severity {
     }
 }
 
+/// Replace the text at `loc` with `replacement` (an empty span inserts).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edit {
+    pub loc: Loc,
+    pub replacement: String,
+}
+
+/// A suggested fix: what it does, in the imperative ("replace `new` with
+/// `construct`"), and the edits that do it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fix {
+    pub message: String,
+    pub edits: Vec<Edit>,
+}
+
+impl Fix {
+    /// A fix that replaces the text at `loc` with `replacement`.
+    pub fn replace(message: impl Into<String>, loc: Loc, replacement: impl Into<String>) -> Self {
+        Fix { message: message.into(), edits: vec![Edit { loc, replacement: replacement.into() }] }
+    }
+}
+
+/// The code of every deprecation warning.
+pub const DEPRECATED: &str = "deprecated";
+
 /// One diagnostic: a message at an optional location, followed by notes
-/// (each a diagnostic of its own, usually pointing somewhere else).
+/// (each a diagnostic of its own, usually pointing somewhere else) and any
+/// suggested fixes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub message: String,
     pub loc: Option<Loc>,
     pub notes: Vec<Diagnostic>,
+    /// Which class of diagnostic this is (e.g. [`DEPRECATED`]), shown after
+    /// the message as `[code]`.
+    pub code: Option<&'static str>,
+    pub fixes: Vec<Fix>,
 }
 
 impl Diagnostic {
+    fn with_severity(severity: Severity, message: impl Into<String>) -> Self {
+        Diagnostic { severity, message: message.into(), loc: None, notes: vec![], code: None, fixes: vec![] }
+    }
+
     pub fn error(message: impl Into<String>) -> Self {
-        Diagnostic { severity: Severity::Error, message: message.into(), loc: None, notes: vec![] }
+        Self::with_severity(Severity::Error, message)
+    }
+
+    pub fn warning(message: impl Into<String>) -> Self {
+        Self::with_severity(Severity::Warning, message)
+    }
+
+    /// A warning that `what` (as written in the source, e.g. "`new`") at
+    /// `loc` is deprecated. `instead` says what replaces it, and `fix`
+    /// migrates the code; a deprecation always comes with one.
+    pub fn deprecated(what: &str, instead: &str, loc: Loc, fix: Fix) -> Self {
+        let mut d = Self::warning(format!("{what} is deprecated; {instead}")).at(loc).with_fix(fix);
+        d.code = Some(DEPRECATED);
+        d
+    }
+
+    /// Attach a suggested fix.
+    pub fn with_fix(mut self, fix: Fix) -> Self {
+        self.fixes.push(fix);
+        self
     }
 
     /// Place the diagnostic at `loc` (ignored when it is [`Loc::NONE`]).
     pub fn at(mut self, loc: Loc) -> Self {
         self.loc = loc.known();
+        self
+    }
+
+    fn at_opt(mut self, loc: Option<Loc>) -> Self {
+        self.loc = loc.and_then(Loc::known);
         self
     }
 
@@ -93,12 +166,7 @@ impl Diagnostic {
 
     /// Append a note, optionally pointing at `loc`.
     pub fn with_note(mut self, message: impl Into<String>, loc: Option<Loc>) -> Self {
-        self.notes.push(Diagnostic {
-            severity: Severity::Note,
-            message: message.into(),
-            loc: loc.and_then(Loc::known),
-            notes: vec![],
-        });
+        self.notes.push(Diagnostic::with_severity(Severity::Note, message).at_opt(loc));
         self
     }
 
@@ -120,16 +188,35 @@ impl Diagnostic {
         match self.loc.and_then(|loc| sources.get(loc.file).map(|(n, t)| (loc, n, t))) {
             Some((loc, name, text)) => {
                 let p = loc.span.start_position(text);
-                let _ = writeln!(out, "{}:{}:{}: {}: {}", name, p.line + 1, p.col + 1, self.severity.label(), self.message);
-                snippet(text, loc.span, out);
+                let _ = writeln!(out, "{}:{}:{}: {}: {}{}", name, p.line + 1, p.col + 1, self.severity.label(), self.message, self.code_suffix());
+                snippet(text, loc.span, self.fix_on_line(loc, text), out);
             }
             None => {
-                let _ = writeln!(out, "{}: {}", self.severity.label(), self.message);
+                let _ = writeln!(out, "{}: {}{}", self.severity.label(), self.message, self.code_suffix());
             }
         }
         for note in &self.notes {
             note.render_into(sources, out);
         }
+    }
+}
+
+impl Diagnostic {
+    fn code_suffix(&self) -> String {
+        self.code.map(|c| format!(" [{c}]")).unwrap_or_default()
+    }
+
+    /// The first fix's edit, when the fix is a single edit on the same line
+    /// as `loc` (the one line the snippet shows).
+    fn fix_on_line<'a>(&'a self, loc: Loc, text: &str) -> Option<&'a Edit> {
+        let fix = self.fixes.first()?;
+        let [edit] = fix.edits.as_slice() else { return None };
+        let line_of = |offset: usize| text[..offset.min(text.len())].bytes().filter(|&b| b == b'\n').count();
+        let same_line = edit.loc.file == loc.file
+            && line_of(edit.loc.span.start) == line_of(loc.span.start)
+            && line_of(edit.loc.span.end) == line_of(loc.span.start)
+            && !edit.replacement.contains('\n');
+        same_line.then_some(edit)
     }
 }
 
@@ -144,8 +231,9 @@ impl std::fmt::Display for Diagnostic {
 const TAB_WIDTH: usize = 4;
 
 /// The source line holding `span.start`, then a caret under the start and
-/// `~` under the rest of the span (clipped to that line).
-fn snippet(text: &str, span: Span, out: &mut String) {
+/// `~` under the rest of the span (clipped to that line), then `fix`'s
+/// replacement text under the text it replaces.
+fn snippet(text: &str, span: Span, fix: Option<&Edit>, out: &mut String) {
     let start = span.start.min(text.len());
     let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
     let line_end = text[start..].find('\n').map_or(text.len(), |i| start + i);
@@ -155,11 +243,14 @@ fn snippet(text: &str, span: Span, out: &mut String) {
 
     // Expand tabs, tracking the display columns of the span's ends.
     let mut shown = String::new();
-    let (mut caret_col, mut end_col) = (None, None);
+    let (mut caret_col, mut end_col, mut fix_col) = (None, None, None);
     for (i, c) in line.char_indices() {
         let at = line_start + i;
         if at == start {
             caret_col = Some(shown.chars().count());
+        }
+        if fix.is_some_and(|e| e.loc.span.start == at) {
+            fix_col = Some(shown.chars().count());
         }
         if at == end {
             end_col = Some(shown.chars().count());
@@ -178,6 +269,10 @@ fn snippet(text: &str, span: Span, out: &mut String) {
     let gutter = line_no.to_string().len().max(5);
     let _ = writeln!(out, "{:>gutter$} | {}", line_no, shown);
     let _ = writeln!(out, "{:>gutter$} | {}^{}", "", " ".repeat(caret_col), "~".repeat(end_col - caret_col - 1));
+    if let Some(edit) = fix.filter(|e| !e.replacement.is_empty()) {
+        let fix_col = fix_col.unwrap_or(width);
+        let _ = writeln!(out, "{:>gutter$} | {}{}", "", " ".repeat(fix_col), edit.replacement);
+    }
 }
 
 /// Name and text of each file a diagnostic may point into.
@@ -240,7 +335,8 @@ pub fn colorize(rendered: &str) -> String {
     let mut out = String::new();
     for line in rendered.lines() {
         if let Some((gutter, rest)) = line.split_once(" | ") {
-            if gutter.trim().is_empty() && rest.trim_start().starts_with('^') {
+            // The caret line and any fix-it line under it.
+            if gutter.trim().is_empty() {
                 let _ = writeln!(out, "{} | {}{}{}", gutter, GREEN, rest, RESET);
             } else {
                 let _ = writeln!(out, "{}", line);

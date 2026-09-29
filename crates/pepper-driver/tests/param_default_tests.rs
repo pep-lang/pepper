@@ -1,4 +1,4 @@
-//! A `String` parameter's literal default (`new(String name = "")`) is a
+//! A `String` parameter's literal default (`construct(String name = "")`) is a
 //! String at every call site that omits the argument. Defaults were not
 //! visited by convert_string_literals, so an omitted argument passed the raw
 //! `char*` global where a String reference was expected, and the callee's
@@ -18,7 +18,7 @@ fn string_literal_defaults() {
     let source = r#"
 struct Named {
     String name;
-    new(String n = "anon") { name = n; }
+    construct(String n = "anon") { name = n; }
     String greet(String prefix = "hi ") { return prefix + name; }
 }
 label(String s = ""): int { return s.size(); }

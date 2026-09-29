@@ -35,7 +35,7 @@ export struct HashMap<K, V> {
     int size;
     int tombstones;
 
-    new(ulong initial_capacity = 8) {
+    construct(ulong initial_capacity = 8) {
         ulong cap = 8;
         while (cap < initial_capacity) {
             cap = cap * 2;
@@ -243,7 +243,7 @@ export struct HashSet<K> {
     int size;
     int tombstones;
 
-    new(ulong initial_capacity = 8) {
+    construct(ulong initial_capacity = 8) {
         ulong cap = 8;
         while (cap < initial_capacity) {
             cap = cap * 2;

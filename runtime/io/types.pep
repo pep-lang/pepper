@@ -27,7 +27,7 @@ export struct IoError {
     ErrorCode Code;
     String Message;
 
-    new(ErrorCode code = 0, String message = "") {
+    construct(ErrorCode code = 0, String message = "") {
         this.Code = code;
         this.Message = message;
     }

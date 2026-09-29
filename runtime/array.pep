@@ -20,7 +20,7 @@ export struct Array<T> {
     ulong Capacity;
     ulong Version;
 
-    new(ulong capacity = 0) {
+    construct(ulong capacity = 0) {
         if (capacity > 0) {
             Data = _pep_malloc(sizeof<T>() * capacity);
             Capacity = capacity;

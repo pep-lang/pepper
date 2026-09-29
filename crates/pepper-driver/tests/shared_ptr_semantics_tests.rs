@@ -40,14 +40,14 @@ fn compile_jit_census(source: &str) -> (i32, i64) {
 const POINT: &str = r#"
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 "#;
 
 const TALLY: &str = r#"
 struct Tally {
     int alive;
-    new(this.alive = 1) {}
+    construct(this.alive = 1) {}
     destruct {
         alive = 0;
     }

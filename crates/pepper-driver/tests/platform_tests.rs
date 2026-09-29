@@ -210,11 +210,11 @@ fn struct_platform_split() {
         compile_jit(
             "[Target(OS(Windows))] struct P {\n\
              int x;\n\
-             new(this.x = 1) {}\n\
+             construct(this.x = 1) {}\n\
              }\n\
              [Target(!OS(Windows))] struct P {\n\
              int x;\n\
-             new(this.x = 2) {}\n\
+             construct(this.x = 2) {}\n\
              }\n\
              test(): int {\n\
              var p = P();\n\
@@ -439,7 +439,7 @@ fn method_platform_split() {
         compile_jit(
             "struct S {\n\
              int x;\n\
-             new(this.x = 0) {}\n\
+             construct(this.x = 0) {}\n\
              [Target(OS(Windows))] int get() { return 7; }\n\
              [Target(!OS(Windows))] int get() { return 8; }\n\
              }\n\
@@ -460,7 +460,7 @@ fn extension_method_platform_split() {
         compile_jit(
             "struct S {\n\
              int x;\n\
-             new(this.x = 0) {}\n\
+             construct(this.x = 0) {}\n\
              }\n\
              extend S {\n\
              [Target(OS(Windows))] int get() { return 9; }\n\
@@ -487,7 +487,7 @@ fn trait_method_platform_split() {
                  [Target(!OS(Windows))] int get();\n\
                  }\n\
                  struct S {\n\
-                 new() {}\n\
+                 construct() {}\n\
                  }\n\
                  extend S with T {\n\
                  [Target(OS(Windows))] int get() { return 11; }\n\
@@ -506,7 +506,7 @@ fn trait_method_platform_split() {
     assert!(dropped.traits.is_empty());
     // Same for a dropped extension.
     let dropped_ext = filtered_module(&format!(
-        "trait T {{\nint get();\n}}\nstruct S {{\nnew() {{}}\n}}\n{d} extend S with T {{\nint get() {{ return 1; }}\n}}",
+        "trait T {{\nint get();\n}}\nstruct S {{\nconstruct() {{}}\n}}\n{d} extend S with T {{\nint get() {{ return 1; }}\n}}",
         d = dropped_predicate()
     ));
     assert!(dropped_ext.extensions.is_empty());
@@ -625,7 +625,7 @@ fn constructor_attribute_validated() {
         return;
     }
     let err = platform_err("struct S {\n\
-                           [Target(OS(Windwos))] new() {}\n\
+                           [Target(OS(Windwos))] construct() {}\n\
                            }\ntest(): int {\nreturn 0;\n}");
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
@@ -639,7 +639,7 @@ fn dropped_struct_member_body_is_walked() {
     }
     let err = platform_err(&format!("{d} struct S {{\n\
                            {d} f(): int {{ [Target(OS(Windwos))] {{ return 1; }} return 0; }}\n\
-                           new() {{}}\n\
+                           construct() {{}}\n\
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }
@@ -652,7 +652,7 @@ fn dropped_struct_constructor_attribute_validated() {
         return;
     }
     let err = platform_err(&format!("{d} struct S {{\n\
-                           [Target(OS(Windwos))] new() {{}}\n\
+                           [Target(OS(Windwos))] construct() {{}}\n\
                            }}\ntest(): int {{\nreturn 0;\n}}", d = dropped_predicate()));
     assert!(err.contains("unknown OS value"), "unexpected error: {err}");
 }

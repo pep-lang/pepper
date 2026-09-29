@@ -7,7 +7,7 @@ import "internals";
 export struct Error {
     String Message;
 
-    new(String message = "") {
+    construct(String message = "") {
         this.Message = message;
     }
 }
@@ -23,7 +23,7 @@ export struct Result<TValue, TError=Error> {
     TError Error;
 
     # Default state: an Err holding a default-constructed error.
-    new() {
+    construct() {
         this.IsOk = false;
     }
 

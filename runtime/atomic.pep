@@ -10,7 +10,7 @@ import "internals";
 export struct Atomic<T> {
     __ptr<T> Data;
 
-    new(T value = __default<T>()) {
+    construct(T value = __default<T>()) {
         # A struct T occupies its reference pointer in the slot; a POD T
         # occupies sizeof(T) bytes of the value itself.
         ulong sz = __is_pod<T>() ? sizeof<T>() : 8;

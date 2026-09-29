@@ -385,7 +385,7 @@ fn array_of_structs() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 test(): int {
     var pts = Array<Point>();
@@ -508,7 +508,7 @@ fn refcount_append_pop() {
             r#"
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 test(): int {
     var p = Point();
@@ -536,7 +536,7 @@ fn refcount_clear_destroys_elements() {
             r#"
 struct Tally {
     int alive;
-    new(this.alive = 1) {}
+    construct(this.alive = 1) {}
     destruct {
         alive = 0;
     }
@@ -564,7 +564,7 @@ fn refcount_truncate_releases_tail_only() {
             r#"
 struct Tally {
     int alive;
-    new(this.alive = 1) {}
+    construct(this.alive = 1) {}
     destruct {
         alive = 0;
     }
@@ -596,7 +596,7 @@ fn refcount_clone_and_remove_at() {
             r#"
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 test(): int {
     var a = Array<Point>();
@@ -632,7 +632,7 @@ fn refcount_insert_shifts_without_churn() {
             r#"
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 test(): int {
     var a = Array<Point>();
@@ -697,7 +697,7 @@ fn refcount_shift_of_unreferenced_element() {
             r#"
 struct Tally {
     int alive;
-    new(this.alive = 1) {}
+    construct(this.alive = 1) {}
     destruct {
         alive = 0;
     }

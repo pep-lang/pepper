@@ -274,7 +274,7 @@ pub struct StructDecl {
     pub generic_params: Vec<GenericParam>,
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
-    /// `new(...)` / `construct(...)` constructor
+    /// `construct(...)` constructor
     pub constructor: Option<FunctionDecl>,
     /// `destruct { ... }` destructor body
     pub destructor: Option<Block>,
@@ -595,6 +595,9 @@ pub struct Module {
     pub imports: Vec<Import>,
     pub exports: Vec<ExportAlias>,
     pub declarations: Vec<Declaration>,
+    /// Warnings the parser found, such as deprecated syntax. Their locations
+    /// carry the default `FileId`; the loader remaps them to the file's.
+    pub warnings: Vec<crate::diagnostic::Diagnostic>,
 }
 
 // ── Display ───────────────────────────────────────────────────────────────────
@@ -768,7 +771,7 @@ impl Display for StructDecl {
             let body = constructor.body.as_ref().expect("constructor has a body");
             write!(f, "\n    ")?;
             write_attributes(f, &constructor.attributes)?;
-            write!(f, "new({}) {}", join(&constructor.parameters, ", "), body)?;
+            write!(f, "construct({}) {}", join(&constructor.parameters, ", "), body)?;
         }
         if let Some(destructor) = &self.destructor {
             write!(f, "\n    ")?;

@@ -213,7 +213,8 @@ struct Point {
 ```
 
 Structures can have methods attached to them in their declaration blocks, or via extension elsewhere. Structures have
-a constructor (`construct`, also accepted as `new`) and a destructor (`destruct`). Within a structure's code, the current
+a constructor (`construct`) and a destructor (`destruct`). The older spelling `new` still compiles but is deprecated
+(see [Deprecations](#deprecations)). Within a structure's code, the current
 instance is referred to as `this`.
 
 ```
@@ -670,3 +671,24 @@ lib.pep:1:1: note: declared here
     1 | helper(): int { return 1; }
       | ^~~~~~
 ```
+
+## Deprecations
+
+Syntax on its way out keeps compiling for a while, with a warning that names its replacement and a suggested fix. The
+compiler shows the fix under the code it replaces, clang-style, and the language server offers it as a quick fix:
+
+```
+main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]
+    3 |     new(this.x = 1) {}
+      |     ^~~
+      |     construct
+```
+
+Currently deprecated:
+
+| Deprecated | Replacement |
+|------------|-------------|
+| `new(...)` constructor | `construct(...)` |
+
+In the compiler, a deprecation is a `Diagnostic::deprecated(what, instead, loc, fix)`: a warning with the code
+`deprecated` and at least one `Fix`, whose `Edit`s replace source spans with new text.

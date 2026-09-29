@@ -141,3 +141,24 @@ fn malformed_platform_attribute() {
     assert!(e.starts_with("main.pep:2:1: error: bare symbol `Os` is not a predicate"), "{}", e);
     assert!(e.ends_with("    2 | [Target(Os)]\n      | ^~~~~~~~~~~~"), "{}", e);
 }
+
+#[test]
+fn deprecated_new_warns_with_a_fix_and_still_compiles() {
+    let source = "struct S {\n    int x;\n    new(this.x = 7) {}\n}\ntest(): int {\n    var s = S();\n    return s.x;\n}\n";
+    let program = pepper_driver::compiler::load_with_runtime("main.pep", source).expect("load");
+    assert_eq!(
+        program.render_warnings(),
+        "main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]\n\
+         \x20   3 |     new(this.x = 7) {}\n\
+         \x20     |     ^~~\n\
+         \x20     |     construct"
+    );
+    // The fix points into main.pep, not whichever file the parser saw first.
+    let warnings = program.warnings();
+    assert_eq!(warnings.len(), 1, "the runtime itself uses no deprecated syntax");
+    assert_eq!(warnings[0].fixes[0].edits[0].loc.file, pepper_driver::parser_diagnostic::FileId(0));
+
+    let mut module = pepper_driver::compiler::compile_with_runtime("main.pep", source).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 7);
+}

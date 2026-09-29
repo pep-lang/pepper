@@ -6,12 +6,12 @@ trait Convert<T> {
 struct Foo {
     int x;
 
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 
 struct Bar {
     int y;
-    new(this.y = 42) {}
+    construct(this.y = 42) {}
 }
 
 extend Foo with Convert<Bar> {

@@ -14,7 +14,7 @@ export struct OpenOptions {
     bool Create;
     bool CreateNew;   # fail if it exists (O_EXCL / CREATE_NEW)
 
-    new() {
+    construct() {
     }
 
     OpenOptions read(bool v) {
@@ -63,7 +63,7 @@ export struct Metadata {
     long Created;       # 0 where unavailable
     Mode Permissions;   # mode_t bits (POSIX) / FILE_ATTRIBUTE_* bits (Windows)
 
-    new() {
+    construct() {
     }
 }
 
@@ -93,7 +93,7 @@ export struct File {
     Path Path;
     bool Owned;   # false for stdin/stdout/stderr: never closed by File
 
-    new() {
+    construct() {
         Handle = _io_sys_invalid_handle();
         Owned = true;
     }

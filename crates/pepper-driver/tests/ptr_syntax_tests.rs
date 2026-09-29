@@ -164,7 +164,7 @@ fn ptr_local_in_constructor() {
             r#"
 struct Buf {
     int first = 0;
-    new() {
+    construct() {
         var b: __ptr<char> = _pep_malloc(4) as __ptr<char>;
         b[0] = 3;
         first = b[0] as int;

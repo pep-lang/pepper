@@ -6,7 +6,7 @@ trait XGetter {
 struct Test {
     int x;
 
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 
 extend Test with XGetter {

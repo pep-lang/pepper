@@ -186,7 +186,7 @@ fn operator_overload_struct() {
 struct Point {
     int x = 0;
     int y = 0;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
     Point +(other: Point) {
         return Point(x + other.x, y + other.y);
     }
@@ -349,7 +349,7 @@ fn struct_return_from_function() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-struct Box { int v = 0; new(this.v = 0) {} }
+struct Box { int v = 0; construct(this.v = 0) {} }
 make(v: int): Box {
     return Box(v);
 }
@@ -571,7 +571,7 @@ fn struct_method_call_from_function() {
             r#"
 struct Counter {
     int n = 0;
-    new(this.n = 0) {}
+    construct(this.n = 0) {}
     inc(by: int): int {
         n += by;
         return n;
@@ -598,7 +598,7 @@ fn destructor_runs() {
 var destroyed = 0;
 struct T {
     int v = 0;
-    new(this.v = 0) {}
+    construct(this.v = 0) {}
     destruct {
         destroyed += 1;
     }
@@ -1180,7 +1180,7 @@ fn struct_field_of_array() {
             r#"
 struct Holder {
     Array<int> items;
-    new() {}
+    construct() {}
 }
 test(): int {
     var h = Holder();

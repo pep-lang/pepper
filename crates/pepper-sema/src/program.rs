@@ -8,7 +8,7 @@ use crate::passes::platform::keep;
 use pepper_files::imports::{
     LocalImport, ModuleRoots, Placement, path_key, resolve_forced, resolve_local, resolve_module, search_paths,
 };
-use pepper_parser::diagnostic::{FileId, Sources};
+use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
 use pepper_parser::parser::parse_source;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -64,6 +64,33 @@ impl Program {
             return Ok(());
         }
         Err(errors.iter().map(|e| e.render(&sources)).collect::<Vec<_>>().join("\n"))
+    }
+
+    /// Warnings the parser found in every file (deprecated syntax, ...),
+    /// their locations and fixes pointing at the file they came from.
+    pub fn warnings(&self) -> Vec<Diagnostic> {
+        let mut out = vec![];
+        for (i, f) in self.files.iter().enumerate() {
+            let file = FileId(i as u32);
+            let relocate = |loc: &mut Loc| loc.file = file;
+            for w in &f.module.warnings {
+                let mut w = w.clone();
+                w.loc.iter_mut().for_each(relocate);
+                for note in &mut w.notes {
+                    note.loc.iter_mut().for_each(relocate);
+                }
+                for edit in w.fixes.iter_mut().flat_map(|fix| &mut fix.edits) {
+                    relocate(&mut edit.loc);
+                }
+                out.push(w);
+            }
+        }
+        out
+    }
+
+    /// [`Program::warnings`], rendered clang-style; empty when there are none.
+    pub fn render_warnings(&self) -> String {
+        self.warnings().iter().map(|w| w.render(self)).collect::<Vec<_>>().join("\n")
     }
 
     /// The files as the visibility check sees them.

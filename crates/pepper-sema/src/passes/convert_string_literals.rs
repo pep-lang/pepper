@@ -31,7 +31,7 @@ fn walk_body(body: &mut crate::model::Block) {
     crate::passes::walk_block(body, &mut |expr: &mut Expression| convert(expr));
 }
 
-/// A `String` parameter's literal default (`new(String name = "")`) is
+/// A `String` parameter's literal default (`construct(String name = "")`) is
 /// evaluated at each call site that omits the argument, so it must be a
 /// String like any other literal. Other parameter types keep their literal
 /// (a `__ptr<char>` default stays the raw global).

@@ -2,7 +2,7 @@ struct Countdown {
     int Remaining;
     int Now;
 
-    new(this.Remaining = 0) {}
+    construct(this.Remaining = 0) {}
 
     bool next() {
         if (Remaining == 0) {

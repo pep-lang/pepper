@@ -138,7 +138,7 @@ export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
 export struct Path {
     String Value;
 
-    new(String value = "") {
+    construct(String value = "") {
         this.Value = value;
     }
 

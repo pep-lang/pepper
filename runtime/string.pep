@@ -8,7 +8,7 @@ export struct String {
     ulong Size;
     ulong Version;
 
-    new(__ptr<char> data = __null, this.Size = 0, this.Length = 0) {
+    construct(__ptr<char> data = __null, this.Size = 0, this.Length = 0) {
         if (data) {
             # Size is the authoritative byte length; inline NULs are legal in
             # UTF-8 data, so it is never derived from a terminator. A raw

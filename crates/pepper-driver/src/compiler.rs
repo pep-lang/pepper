@@ -23,7 +23,9 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
         runtime: !options.no_runtime,
         ..Setup::default()
     };
-    merge(&program::load_program(Root::from_file(entry_source)?, &setup)?)
+    let program = program::load_program(Root::from_file(entry_source)?, &setup)?;
+    crate::report_warnings(&program.render_warnings());
+    merge(&program)
 }
 
 /// Check `program` and merge its files, in load order, into one module. The

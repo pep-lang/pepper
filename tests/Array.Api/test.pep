@@ -1,7 +1,7 @@
 struct Widget {
     int tag;
 
-    new(this.tag = 0) {}
+    construct(this.tag = 0) {}
 };
 
 main(): int {

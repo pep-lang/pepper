@@ -324,8 +324,8 @@ fn type_alias_value_shadow_not_rewritten() {
     // alias.
     let module = compile(
         r#"
-struct A { new() {} m(): int { return 1; } }
-struct B { new() {} m(): int { return 2; } }
+struct A { construct() {} m(): int { return 1; } }
+struct B { construct() {} m(): int { return 2; } }
 type S = B;
 var S: A = A();
 main(): int { return S.m(); }
@@ -346,7 +346,7 @@ fn type_alias_free_function_not_rewritten() {
     // function, not rewritten to the alias target's ctor form.
     let module = compile(
         r#"
-struct B { new() {} }
+struct B { construct() {} }
 type S = B;
 S(x: int): int { return x + 100; }
 main(): int { return S(5); }

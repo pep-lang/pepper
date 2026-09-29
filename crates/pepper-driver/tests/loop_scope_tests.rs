@@ -33,7 +33,7 @@ fn continue_before_a_declaration() {
         r#"
 struct Item {
     int v;
-    new(this.v = 0) {}
+    construct(this.v = 0) {}
 }
 test(): int {
     var kept = Array<Item>();

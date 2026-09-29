@@ -13,7 +13,7 @@ export struct DirEntry {
     bool IsDir;
     bool IsSymlink;
 
-    new() {
+    construct() {
     }
 
     # Follows symlinks, like Path.metadata().
@@ -25,7 +25,7 @@ export struct DirEntry {
 export struct Directory {
     Path Path;
 
-    new() {
+    construct() {
     }
 
     # Checks that `path` exists and is a directory.

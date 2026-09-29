@@ -7,6 +7,7 @@
 //!   unary       →  pow       →  postfix     →  atom
 
 use crate::ast::*;
+use crate::diagnostic::{Diagnostic, FileId, Fix, Loc};
 use winnow::error::ErrMode;
 
 
@@ -44,6 +45,29 @@ thread_local! {
     static QUALIFIERS: std::cell::RefCell<std::collections::HashSet<String>> = std::cell::RefCell::new(Default::default());
     /// Set while an expression is probed as a generic type literal.
     static EXPRESSION_PROBE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Warnings found so far in the current parse; `parse_module` moves them
+    /// into the module.
+    static WARNINGS: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(vec![]) };
+}
+
+/// Record a warning. Backtracking can parse the same text twice, so a
+/// warning already recorded at the same location is dropped.
+fn warn(diagnostic: Diagnostic) {
+    WARNINGS.with(|w| {
+        let mut w = w.borrow_mut();
+        if !w.iter().any(|d| d.loc == diagnostic.loc && d.message == diagnostic.message) {
+            w.push(diagnostic);
+        }
+    });
+}
+
+/// Report deprecated syntax at `span`: `what` is how the source spells it,
+/// `instead` explains its replacement, and the fix rewrites the span to
+/// `replacement`.
+fn deprecated_syntax(span: Span, what: &str, instead: &str, replacement: &str) {
+    let loc = Loc::new(FileId::default(), span);
+    let fix = Fix::replace(format!("Replace {what} with `{replacement}`"), loc, replacement);
+    warn(Diagnostic::deprecated(what, instead, loc, fix));
 }
 
 /// Parse a type where an expression could also start (a generic literal
@@ -80,6 +104,7 @@ impl SourceGuard {
         MAX_POS.with(|m| m.set(0));
         EXPECTATION.with(|e| *e.borrow_mut() = None);
         QUALIFIERS.with(|q| q.borrow_mut().clear());
+        WARNINGS.with(|w| w.borrow_mut().clear());
         SourceGuard(prev)
     }
 }
@@ -2059,12 +2084,18 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
         // `[Name(args)]` may precede any struct member: method, field, constructor, destructor, extern.
         let m_attrs = attributes(input)?;
         let after_attrs = *input;
-        if (input.starts_with("new") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
-            || (input.starts_with("construct") && !input[9..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')) {
-            let new_span_start = pos(input);
-            *input = if input.starts_with("construct") { &input[9..] } else { &input[3..] };
+        // `new` is the deprecated spelling of `construct`.
+        let is_new = input.starts_with("new") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+        let is_construct = input.starts_with("construct") && !input[9..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+        if is_new || is_construct {
+            let construct_span_start = pos(input);
+            *input = if is_new { &input[3..] } else { &input[9..] };
+            if is_new {
+                let span = Span { start: construct_span_start, end: construct_span_start + 3 };
+                deprecated_syntax(span, "`new`", "constructors are spelled `construct`, matching `destruct`", "construct");
+            }
             ws(input)?;
-            let new_span_end = pos(input);
+            let construct_span_end = pos(input);
             if !input.starts_with('(') { return Err(cut_expecting(input, "'('")); }
             *input = &input[1..];
             let mut parameters = vec![];
@@ -2086,8 +2117,8 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             ws(input)?;
             constructor = Some(FunctionDecl {
                 is_exported: false,
-                name: "new".into(),
-                name_span: Span { start: new_span_start, end: new_span_end },
+                name: "construct".into(),
+                name_span: Span { start: construct_span_start, end: construct_span_end },
                 generic_params: vec![],
                 return_type: TypeName::auto(),
                 parameters,
@@ -2096,7 +2127,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
                 is_static: false,
                 is_indexer: false,
                 is_variadic: false,
-                span: Span { start: m_attrs.first().map(|a| a.span.start).unwrap_or(new_span_start), end: pos(input) },
+                span: Span { start: m_attrs.first().map(|a| a.span.start).unwrap_or(construct_span_start), end: pos(input) },
                 attributes: m_attrs,
             });
             continue;
@@ -2455,7 +2486,8 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
         return Err(cut_expecting(input, "declaration"));
     }
 
-    Ok(Module { imports, exports, declarations })
+    let warnings = WARNINGS.with(|w| std::mem::take(&mut *w.borrow_mut()));
+    Ok(Module { imports, exports, declarations, warnings })
 }
 
 // ── C pointer syntax check ───────────────────────────────────────────────────
@@ -3421,12 +3453,12 @@ f() { var r = c.Result<int>.ok(1); }");
 
     #[test]
     fn test_constructor_with_this_initializers() {
-        let m = parse("struct S {\n    int x;\n    new(this.x = 0) {\n        x += 1;\n    }\n    destruct {\n        x = 0;\n    }\n}");
+        let m = parse("struct S {\n    int x;\n    construct(this.x = 0) {\n        x += 1;\n    }\n    destruct {\n        x = 0;\n    }\n}");
         match &m.declarations[0] {
             Declaration::Struct(s) => {
                 assert_eq!(s.name, "S");
                 let c = s.constructor.as_ref().expect("constructor");
-                assert_eq!(c.name, "new");
+                assert_eq!(c.name, "construct");
                 assert_eq!(c.parameters.len(), 1);
                 assert_eq!(c.parameters[0].name, "this.x");
                 assert!(c.parameters[0].default_value.is_some());
@@ -3438,13 +3470,28 @@ f() { var r = c.Result<int>.ok(1); }");
     }
 
     #[test]
-    fn test_construct_alias() {
-        // docs spell the constructor `construct`; both must be accepted
-        let m = parse("struct S {\n    int x;\n    construct(this.x = 1) {}\n}");
+    fn test_new_constructor_is_deprecated() {
+        // `new` still parses, with a warning whose fix spells it `construct`
+        let src = "struct S {\n    int x;\n    new(this.x = 1) {}\n}";
+        let m = parse(src);
         match &m.declarations[0] {
-            Declaration::Struct(s) => assert!(s.constructor.is_some()),
+            Declaration::Struct(s) => assert_eq!(s.constructor.as_ref().expect("constructor").name, "construct"),
             other => panic!("{:?}", other),
         }
+        assert_eq!(m.warnings.len(), 1);
+        let w = &m.warnings[0];
+        assert_eq!(w.code, Some(crate::diagnostic::DEPRECATED));
+        let start = src.find("new").unwrap();
+        assert_eq!(w.fixes[0].edits[0].loc.span, Span { start, end: start + 3 });
+        assert_eq!(w.fixes[0].edits[0].replacement, "construct");
+        assert_eq!(
+            w.render_in("t.pep", src),
+            "t.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]\n\
+             \x20   3 |     new(this.x = 1) {}\n\
+             \x20     |     ^~~\n\
+             \x20     |     construct"
+        );
+        assert!(parse("struct S {\n    construct() {}\n}").warnings.is_empty());
     }
 
     #[test]
@@ -3811,7 +3858,7 @@ f() { var r = c.Result<int>.ok(1); }");
     #[test]
     fn test_struct_ctor_destructor_extern_attributes() {
         // Attributes on constructor, destructor, and extern members.
-        let m = parse("struct S {\n    int x;\n    [Export] new(this.x = 0) {\n        x += 1;\n    }\n    [Cleanup(1)] destruct {\n        x = 0;\n    }\n    [Inline] extern int helper(int a);\n}");
+        let m = parse("struct S {\n    int x;\n    [Export] construct(this.x = 0) {\n        x += 1;\n    }\n    [Cleanup(1)] destruct {\n        x = 0;\n    }\n    [Inline] extern int helper(int a);\n}");
         match &m.declarations[0] {
             Declaration::Struct(s) => {
                 let c = s.constructor.as_ref().expect("constructor present");
@@ -3824,7 +3871,7 @@ f() { var r = c.Result<int>.ok(1); }");
                 assert_eq!(s.methods[0].name, "helper");
                 assert_eq!(s.methods[0].attributes.len(), 1);
                 assert_bare_attr(&s.methods[0].attributes[0].body, "Inline");
-                assert_eq!(s.to_string(), "struct S {\n    var x: int\n    [Export] new(var this.x: __auto = 0) {\n    (x += 1);\n}\n    [Cleanup(1)] destruct {\n    (x = 0);\n}\n    [Inline] extern int helper(var a: int)\n}");
+                assert_eq!(s.to_string(), "struct S {\n    var x: int\n    [Export] construct(var this.x: __auto = 0) {\n    (x += 1);\n}\n    [Cleanup(1)] destruct {\n    (x = 0);\n}\n    [Inline] extern int helper(var a: int)\n}");
             }
             other => panic!("{:?}", other),
         }

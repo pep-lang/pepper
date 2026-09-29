@@ -25,7 +25,7 @@ use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 
 const KEYWORDS: &[&str] = &[
     "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
-    "and", "or", "new", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
+    "and", "or", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
     "extend", "export",
 ];
 
@@ -111,7 +111,7 @@ fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
             .map(|p| format!("{}: {}", p.name, type_string(&p.type_name)))
             .collect::<Vec<_>>()
             .join(", ");
-        out.push(Symbol { name: "new".to_string(), name_span: ctor.name_span, ty: format!("new({})", params) });
+        out.push(Symbol { name: "construct".to_string(), name_span: ctor.name_span, ty: format!("construct({})", params) });
     }
     for m in &s.methods {
         out.push(Symbol { name: m.name.clone(), name_span: m.name_span, ty: function_signature(m) });
@@ -482,13 +482,52 @@ fn lsp_diagnostic(d: &diag::Diagnostic, uri: &Url, program: &[(&str, &str)]) -> 
             })
         })
         .collect();
+    let severity = match d.severity {
+        diag::Severity::Error => DiagnosticSeverity::ERROR,
+        diag::Severity::Warning => DiagnosticSeverity::WARNING,
+        diag::Severity::Note => DiagnosticSeverity::INFORMATION,
+    };
+    let deprecated = d.code == Some(diag::DEPRECATED);
     Diagnostic {
         range,
-        severity: Some(DiagnosticSeverity::ERROR),
+        severity: Some(severity),
+        code: d.code.map(|c| NumberOrString::String(c.to_string())),
+        source: d.code.map(|_| "pepper".to_string()),
         message,
         related_information: (!related.is_empty()).then_some(related),
+        tags: deprecated.then(|| vec![DiagnosticTag::DEPRECATED]),
         ..Default::default()
     }
+}
+
+/// The quick fixes for the warnings in `text` (the document `uri`) whose
+/// range overlaps `range`: one code action per suggested fix.
+fn quick_fixes(uri: &Url, text: &str, range: Range) -> Vec<CodeActionOrCommand> {
+    let Ok(module) = pepper_parser::parser::parse_source_diag(text) else { return vec![] };
+    let overlaps = |r: &Range| r.start <= range.end && range.start <= r.end;
+    let mut actions = vec![];
+    for warning in &module.warnings {
+        let lsp = lsp_diagnostic(warning, uri, &[(uri.as_str(), text)]);
+        if !overlaps(&lsp.range) {
+            continue;
+        }
+        for fix in &warning.fixes {
+            let edits = fix
+                .edits
+                .iter()
+                .map(|e| TextEdit { range: span_to_range(text, e.loc.span), new_text: e.replacement.clone() })
+                .collect();
+            actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                title: fix.message.clone(),
+                kind: Some(CodeActionKind::QUICKFIX),
+                diagnostics: Some(vec![lsp.clone()]),
+                edit: Some(WorkspaceEdit { changes: Some(HashMap::from([(uri.clone(), edits)])), ..Default::default() }),
+                is_preferred: Some(true),
+                ..Default::default()
+            }));
+        }
+    }
+    actions
 }
 
 impl PepperLsp {
@@ -558,9 +597,13 @@ impl PepperLsp {
         let Some(text) = self.doc(uri) else { return };
         // A parse error, or one found after parsing (a late import, `T*`
         // outside an extern).
-        if let Err(d) = pepper_parser::parser::parse_source_diag(&text) {
-            diags.push(lsp_diagnostic(&d, uri, &[(uri.as_str(), &text)]));
-        } else if let Ok(program) = self.program(uri) {
+        let parsed = pepper_parser::parser::parse_source_diag(&text);
+        match &parsed {
+            Err(d) => diags.push(lsp_diagnostic(d, uri, &[(uri.as_str(), &text)])),
+            // Warnings (deprecated syntax) come with quick fixes; see `quick_fixes`.
+            Ok(module) => diags.extend(module.warnings.iter().map(|w| lsp_diagnostic(w, uri, &[(uri.as_str(), &text)]))),
+        }
+        if parsed.is_ok() && let Ok(program) = self.program(uri) {
             // Read and parse the program once for both the sema and
             // visibility checks.
             if let Err(d) = sema_model_of(&program) {
@@ -887,6 +930,7 @@ impl LanguageServer for PepperLsp {
                 }),
                 definition_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
                 ..Default::default()
             },
@@ -949,6 +993,13 @@ impl LanguageServer for PepperLsp {
             return Ok(self.definition(&uri, offset).map(Into::into));
         }
         Ok(None)
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let Some(text) = self.doc(&uri) else { return Ok(None) };
+        let actions = quick_fixes(&uri, &text, params.range);
+        Ok((!actions.is_empty()).then_some(actions))
     }
 
     async fn document_symbol(&self, params: DocumentSymbolParams) -> LspResult<Option<DocumentSymbolResponse>> {

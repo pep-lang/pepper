@@ -66,7 +66,7 @@ fn ok_struct_value() {
             r#"
 struct Point {
     int x;
-    new(int v) { this.x = v; }
+    construct(int v) { this.x = v; }
 }
 test(): int {
     var r = Result<Point>.ok(Point(7));
@@ -125,7 +125,7 @@ fn custom_terror() {
             r#"
 struct Code {
     int Value;
-    new(int v) { this.Value = v; }
+    construct(int v) { this.Value = v; }
 }
 test(): int {
     var r = Result<int, Code>.err(Code(500));
@@ -187,7 +187,7 @@ fn struct_value_refcount_balanced() {
             r#"
 struct Point {
     int x;
-    new(int v) { this.x = v; }
+    construct(int v) { this.x = v; }
 }
 test(): int {
     var before = _pep_live_allocs();

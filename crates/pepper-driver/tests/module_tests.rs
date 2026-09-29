@@ -961,11 +961,11 @@ fn constructors_and_destructors_are_linked_and_checked_whatever_their_attributes
     // Platform selection keeps a constructor or destructor whatever its
     // `[Target]`, so its imports are rewritten and its references checked.
     let never = "[Target(OS(Windows) && OS(Linux))]";
-    let main = format!("import geo;\nstruct S {{ var v: int; {never} new() {{ v = geo.seven(); }} }}\ntest(): int {{ var s = S(); return s.v; }}");
+    let main = format!("import geo;\nstruct S {{ var v: int; {never} construct() {{ v = geo.seven(); }} }}\ntest(): int {{ var s = S(); return s.v; }}");
     let files = [("geo/module.pep", "export seven(): int { return 7; }"), ("main.pep", main.as_str())];
     compile("ctor_target_linked", &files).expect("links");
 
-    let main = format!("import \"lib\";\nstruct S {{ var v: int; {never} new() {{ v = secret(); }} }}\ntest(): int {{ return 0; }}");
+    let main = format!("import \"lib\";\nstruct S {{ var v: int; {never} construct() {{ v = secret(); }} }}\ntest(): int {{ return 0; }}");
     let files = [("lib.pep", "secret(): int { return 9; }\nexport f(): int { return 0; }"), ("main.pep", main.as_str())];
     let err = error("ctor_target_checked", &files);
     assert!(err.contains("'secret' is private to"), "{}", err);

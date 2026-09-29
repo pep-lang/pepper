@@ -5,7 +5,7 @@ struct Test {
 struct Foo {
     Test t;
 
-    new(Test z) {
+    construct(Test z) {
         trace_ptr(this, "this".c_str());
         trace_ptr(z, "z".c_str());
         this.t = z;

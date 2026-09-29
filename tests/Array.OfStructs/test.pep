@@ -3,7 +3,7 @@
 struct Test {
     int x;
 
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 };
 
 main(): int {

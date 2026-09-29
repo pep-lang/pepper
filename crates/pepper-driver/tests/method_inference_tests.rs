@@ -19,7 +19,7 @@ fn locals_from_other_structs_in_a_method() {
     let source = r#"
 struct Node {
     String name;
-    new(String n = "") { name = n; }
+    construct(String n = "") { name = n; }
     Node child(String n) { return Node(n); }
 }
 struct Walker {

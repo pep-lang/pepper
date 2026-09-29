@@ -67,7 +67,7 @@ fn run_binary(name: &str, source: &str) -> (bool, String) {
 const ITEM: &str = r#"
 struct Item {
     int v;
-    new(this.v = 0) {}
+    construct(this.v = 0) {}
 }
 "#;
 
@@ -241,7 +241,7 @@ fn custom_iterator_is_driven_directly() {
 struct Countdown {
     int Remaining;
     int Now;
-    new(this.Remaining = 0) {}
+    construct(this.Remaining = 0) {}
     bool next() {
         if (Remaining == 0) {
             return false;
@@ -281,7 +281,7 @@ fn custom_iterable_hands_out_an_iterator() {
         r#"
 struct Evens {
     int Limit;
-    new(this.Limit = 0) {}
+    construct(this.Limit = 0) {}
     EvensIterator iterate() {
         var it = EvensIterator();
         it.Limit = Limit;
@@ -319,7 +319,7 @@ fn iterates_a_field_inside_a_method() {
         r#"{ITEM}
 struct Bag {{
     Array<Item> Items;
-    new() {{
+    construct() {{
         Items = Array<Item>();
     }}
     int total() {{

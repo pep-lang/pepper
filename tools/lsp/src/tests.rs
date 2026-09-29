@@ -183,3 +183,24 @@ fn a_local_hides_a_qualifier() {
     assert_eq!(hover(&uri, &text, &program, use_), "`g` — `int`");
     assert_eq!(definition(&uri, &text, &program, use_).0, file_label(&uri.to_file_path().unwrap().to_string_lossy()));
 }
+
+#[test]
+fn deprecated_new_offers_a_quick_fix() {
+    let uri = Url::parse("file:///t.pep").unwrap();
+    let text = "struct S {\n    int x;\n    new(this.x = 1) {}\n}\n";
+    let actions = quick_fixes(&uri, text, Range::new(Position::new(2, 5), Position::new(2, 5)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Replace `new` with `construct`");
+    assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+    let diagnostic = &action.diagnostics.as_ref().unwrap()[0];
+    assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::WARNING));
+    assert_eq!(diagnostic.tags, Some(vec![DiagnosticTag::DEPRECATED]));
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    assert_eq!(edits, &vec![TextEdit {
+        range: Range::new(Position::new(2, 4), Position::new(2, 7)),
+        new_text: "construct".to_string(),
+    }]);
+    // Nothing to fix away from the warning, or once it is fixed.
+    assert!(quick_fixes(&uri, text, Range::new(Position::new(0, 0), Position::new(0, 1))).is_empty());
+    assert!(quick_fixes(&uri, &text.replace("new(", "construct("), Range::new(Position::new(2, 5), Position::new(2, 5))).is_empty());
+}

@@ -5,7 +5,7 @@ type Pair = Result<int, Error>;
 
 struct Box {
     var v: I;
-    new(this.v = 0) {}
+    construct(this.v = 0) {}
 }
 
 var global_alias_value: I = 3;

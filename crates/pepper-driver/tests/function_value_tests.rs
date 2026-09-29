@@ -43,7 +43,7 @@ negate(x: int): int { return -x; }
 
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 
 make_point(x: int): Point { return Point(x); }
@@ -93,7 +93,7 @@ fn call_through_a_field() {
     let src = format!("{}{}", FUNCTIONS, r#"
 struct Transform {
     var op: (int) => int;
-    new(this.op = square) {}
+    construct(this.op = square) {}
     run(x: int): int { return op(x) + this.op(x); }
 }
 

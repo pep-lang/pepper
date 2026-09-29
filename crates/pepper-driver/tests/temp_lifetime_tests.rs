@@ -30,7 +30,7 @@ const HOLDER: &str = r#"
 struct Holder {
     String s;
     int[] nums;
-    new(String v = "") {
+    construct(String v = "") {
         s = v;
         nums = Array<int>();
         nums.append(4);

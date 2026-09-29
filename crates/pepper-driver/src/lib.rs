@@ -14,7 +14,27 @@ pub use pepper_parser::parser;
 pub use pepper_parser::diagnostic as parser_diagnostic;
 
 use pepper_codegen::CodeGenerator;
+use std::io::IsTerminal;
 use std::path::PathBuf;
+
+/// Whether diagnostics on stderr are colored, like clang: on a terminal,
+/// unless `NO_COLOR` is set.
+pub fn stderr_color() -> bool {
+    std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty())
+}
+
+/// Print rendered warnings to stderr (nothing when `rendered` is empty).
+/// Warnings never stop the compile.
+pub fn report_warnings(rendered: &str) {
+    if rendered.is_empty() {
+        return;
+    }
+    if stderr_color() {
+        eprintln!("{}", parser_diagnostic::colorize(rendered));
+    } else {
+        eprintln!("{}", rendered);
+    }
+}
 
 /// Run the compile pipeline and act per the options: `--emit-ast` dumps the
 /// AST, `--emit-llvm` writes IR, otherwise emit obj and link.
@@ -111,7 +131,9 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
         .ok_or_else(|| "no source files".to_string())?;
     let content = std::fs::read_to_string(entry_source)
         .map_err(|e| format!("cannot read {}: {}", entry_source.display(), e))?;
-    let ast = pepper_parser::parser::parse_source(&entry_source.to_string_lossy(), &content)?;
+    let name = entry_source.to_string_lossy();
+    let ast = pepper_parser::parser::parse_source(&name, &content)?;
+    report_warnings(&ast.warnings.iter().map(|w| w.render_in(&name, &content)).collect::<Vec<_>>().join("\n"));
     println!("{}", ast);
     Ok(0)
 }

@@ -217,7 +217,7 @@ fn struct_keys_by_identity() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 build(): int {
     var m = HashMap<Point, int>();
@@ -357,7 +357,7 @@ fn set_struct_keys_identity() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 build(): int {
     var s = HashSet<Point>();
@@ -425,7 +425,7 @@ fn map_release_frees_contents() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 build(): int {
     var m = HashMap<Point, String>();
@@ -475,7 +475,7 @@ fn many_struct_keys_same_bucket() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 build(): int {
     var m = HashMap<Point, int>(8);
@@ -521,7 +521,7 @@ fn many_struct_set_members_same_bucket() {
 struct Point {
     int x;
     int y;
-    new(this.x = 0, this.y = 0) {}
+    construct(this.x = 0, this.y = 0) {}
 }
 build(): int {
     var s = HashSet<Point>(8);

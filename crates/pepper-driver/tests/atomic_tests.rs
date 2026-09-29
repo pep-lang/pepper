@@ -21,7 +21,7 @@ fn compile_jit_with_runtime(source: &str) -> i32 {
 const POINT: &str = r#"
 struct Point {
     int x;
-    new(this.x = 0) {}
+    construct(this.x = 0) {}
 }
 "#;
 
