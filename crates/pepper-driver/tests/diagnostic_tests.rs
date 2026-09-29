@@ -54,6 +54,17 @@ fn undeclared_identifier() {
 }
 
 #[test]
+fn undeclared_identifier_before_whitespace() {
+    // The caret covers the name, not the space after it.
+    assert_eq!(
+        error_of("undeclared_before_space", "main(): int {\n    return nope + 1;\n}\n"),
+        "main.pep:2:12: error: use of undeclared identifier 'nope'\n\
+         \x20   2 |     return nope + 1;\n\
+         \x20     |            ^~~~"
+    );
+}
+
+#[test]
 fn undeclared_function() {
     assert_eq!(
         error_of("undeclared_function", "main(): int {\n    return frob(1);\n}\n"),
@@ -164,16 +175,42 @@ fn deprecated_new_warns_with_a_fix_and_still_compiles() {
 }
 
 #[test]
+fn function_type_mismatch() {
+    assert_eq!(
+        error_of(
+            "function_type_mismatch",
+            "square(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:12: error: variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'\n\
+         \x20   3 |     var f: (String) => int = square;\n\
+         \x20     |            ^~~~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
 fn with_binding_assigned() {
     let source = "struct S {\n    construct() {}\n    S enter() { return this; }\n    exit() {}\n}\nmain(): int {\n    with (var s = S()) {\n        s = S();\n    }\n    return 0;\n}\n";
     assert_eq!(
         error_of("with_binding_assigned", source),
         "main.pep:8:9: error: cannot assign to 's': it is bound by a 'with' block\n\
          \x20   8 |         s = S();\n\
-         \x20     |         ^~\n\
+         \x20     |         ^\n\
          main.pep:7:15: note: 's' is bound here\n\
          \x20   7 |     with (var s = S()) {\n\
          \x20     |               ^"
+    );
+}
+
+#[test]
+fn recursive_type_alias() {
+    assert_eq!(
+        error_of("recursive_type_alias", "type A = B;\ntype B = Array<A>;\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:6: error: type alias 'A' refers to itself\n\
+         \x20   1 | type A = B;\n\
+         \x20     |      ^\n\
+         main.pep:2:6: note: through type alias 'B', declared here\n\
+         \x20   2 | type B = Array<A>;\n\
+         \x20     |      ^"
     );
 }
 
@@ -184,6 +221,25 @@ fn with_malformed_header() {
         "main.pep:2:16: error: expected '='\n\
          \x20   2 |     with (var x) {\n\
          \x20     |                ^"
+    );
+}
+
+#[test]
+fn subscript_of_an_element_that_is_not_indexable() {
+    // Used to panic in codegen (reading and storing alike).
+    let source = "main(): int {\n    var a = Array<int>();\n    a.append(1);\n    a[0][0] = 3;\n    return a[0][0];\n}\n";
+    assert_eq!(
+        error_of("subscript_not_indexable", source),
+        "main.pep:4:5: error: subscripted value of type 'int' is not a pointer or an indexable struct\n\
+         \x20   4 |     a[0][0] = 3;\n\
+         \x20     |     ^~~~~~~"
+    );
+    let source = "main(): int {\n    var a = Array<int>();\n    a.append(1);\n    return a[0][0];\n}\n";
+    assert_eq!(
+        error_of("subscript_not_indexable_read", source),
+        "main.pep:4:12: error: subscripted value of type 'int' is not a pointer or an indexable struct\n\
+         \x20   4 |     return a[0][0];\n\
+         \x20     |            ^~~~~~~"
     );
 }
 
@@ -200,6 +256,16 @@ fn with_void_binding() {
 }
 
 #[test]
+fn unknown_parameter_type() {
+    assert_eq!(
+        error_of("unknown_parameter_type", "f(x: Nope): int {\n    return 0;\n}\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:6: error: unknown type name 'Nope'\n\
+         \x20   1 | f(x: Nope): int {\n\
+         \x20     |      ^~~~"
+    );
+}
+
+#[test]
 fn with_else_on_int() {
     let source = "struct Counter {\n    construct() {}\n    int enter() { return 1; }\n    exit() {}\n}\nmain(): int {\n    with (var n = Counter()) {\n    } else {\n    }\n    return 0;\n}\n";
     assert_eq!(
@@ -207,6 +273,26 @@ fn with_else_on_int() {
         "main.pep:7:15: error: 'else' requires 'enter()' to return a struct reference, but it returns 'int'\n\
          \x20   7 |     with (var n = Counter()) {\n\
          \x20     |               ^"
+    );
+}
+
+#[test]
+fn bare_return_in_a_non_void_function() {
+    assert_eq!(
+        error_of("bare_return_non_void", "f(x: int): int {\n    if (x > 0) {\n        return;\n    }\n    return 1;\n}\nmain(): int {\n    return f(1);\n}\n"),
+        "main.pep:3:9: error: non-void function 'f' should return a value\n\
+         \x20   3 |         return;\n\
+         \x20     |         ^~~~~~"
+    );
+}
+
+#[test]
+fn unknown_escape_sequence() {
+    assert_eq!(
+        error_of("unknown_escape_sequence", "main(): int {\n    print(\"a\\qb\");\n    return 0;\n}\n"),
+        "main.pep:2:13: error: unknown escape sequence '\\q'\n\
+         \x20   2 |     print(\"a\\qb\");\n\
+         \x20     |             ^~"
     );
 }
 

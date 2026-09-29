@@ -48,6 +48,31 @@ thread_local! {
     /// Warnings found so far in the current parse; `parse_module` moves them
     /// into the module.
     static WARNINGS: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(vec![]) };
+    /// A hard error that is not an unmet expectation (an out-of-range
+    /// literal); it wins over the furthest expectation when the parse fails.
+    static ERROR: std::cell::RefCell<Option<Diagnostic>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Fail the parse with `message` at `span`. The first such error is the one
+/// reported.
+fn error_at(span: Span, message: String) -> ErrMode<&'static str> {
+    fail_with(Diagnostic::error(message).at(Loc::new(FileId::default(), span)))
+}
+
+/// Fail the parse with `diagnostic` (see [`error_at`]).
+fn fail_with(diagnostic: Diagnostic) -> ErrMode<&'static str> {
+    ERROR.with(|e| {
+        let mut e = e.borrow_mut();
+        if e.is_none() {
+            *e = Some(diagnostic);
+        }
+    });
+    ErrMode::Cut("parse error")
+}
+
+/// The hard error recorded by the current parse, if any.
+pub(crate) fn take_error() -> Option<Diagnostic> {
+    ERROR.with(|e| e.borrow_mut().take())
 }
 
 /// Record a warning. Backtracking can parse the same text twice, so a
@@ -105,6 +130,7 @@ impl SourceGuard {
         EXPECTATION.with(|e| *e.borrow_mut() = None);
         QUALIFIERS.with(|q| q.borrow_mut().clear());
         WARNINGS.with(|w| w.borrow_mut().clear());
+        ERROR.with(|e| *e.borrow_mut() = None);
         SourceGuard(prev)
     }
 }
@@ -439,6 +465,10 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     let mut content = String::new();
     while let Some(c) = input.chars().next() {
         if c == '"' { break; }
+        if c == '\\' {
+            content.push(escape_sequence(input)?);
+            continue;
+        }
         content.push(c);
         *input = &input[c.len_utf8()..];
     }
@@ -451,8 +481,70 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     Ok(Literal::String(content))
 }
 
+/// One escape sequence at `input` (which starts at its backslash), as C and
+/// Rust spell them: `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'`, `\xHH` for an
+/// ASCII byte and `\u{H...}` for a code point.
+fn escape_sequence(input: &mut &str) -> Result<char> {
+    let start = pos(input);
+    *input = &input[1..];
+    let Some(c) = input.chars().next() else {
+        return Err(cut_expecting(input, "'\"'"));
+    };
+    *input = &input[c.len_utf8()..];
+    let simple = match c {
+        'n' => Some('\n'),
+        't' => Some('\t'),
+        'r' => Some('\r'),
+        '0' => Some('\0'),
+        '\\' => Some('\\'),
+        '"' => Some('"'),
+        '\'' => Some('\''),
+        _ => None,
+    };
+    if let Some(simple) = simple {
+        return Ok(simple);
+    }
+    let invalid = |input: &mut &str, message: String| Err(error_at(Span { start, end: pos(input) }, message));
+    match c {
+        'x' => {
+            let digits: String = input.chars().take(2).take_while(|d| d.is_ascii_hexdigit()).collect();
+            *input = &input[digits.len()..];
+            match u8::from_str_radix(&digits, 16) {
+                Ok(byte) if digits.len() == 2 && byte < 0x80 => Ok(byte as char),
+                Ok(_) if digits.len() == 2 => invalid(input, "'\\x' escape must be ASCII (at most \\x7F); use '\\u{...}' for other characters".to_string()),
+                _ => invalid(input, "'\\x' escape needs two hexadecimal digits".to_string()),
+            }
+        }
+        'u' => {
+            if !input.starts_with('{') {
+                return invalid(input, "expected '{' after '\\u'".to_string());
+            }
+            let digits: String = input[1..].chars().take_while(|d| d.is_ascii_hexdigit()).collect();
+            *input = &input[1 + digits.len()..];
+            if !input.starts_with('}') || digits.is_empty() || digits.len() > 6 {
+                return invalid(input, "'\\u{...}' escape needs 1 to 6 hexadecimal digits and a closing '}'".to_string());
+            }
+            *input = &input[1..];
+            match u32::from_str_radix(&digits, 16).ok().and_then(char::from_u32) {
+                Some(ch) => Ok(ch),
+                None => invalid(input, format!("'\\u{{{}}}' is not a Unicode code point", digits)),
+            }
+        }
+        other => invalid(input, format!("unknown escape sequence '\\{}'", other)),
+    }
+}
+
 fn numeric_constant(input: &mut &str) -> Result<Literal> {
     let start = *input;
+    let begin = pos(input);
+    // A leading `-` belongs to the literal (`2 ** -1`, `[-1]`).
+    let negative = input.starts_with('-');
+    if negative {
+        *input = &input[1..];
+    }
+    let too_large = |input: &mut &str| {
+        error_at(Span { start: begin, end: pos(input) }, "integer literal is too large to be represented in a 64-bit integer".to_string())
+    };
 
     // hex
     if input.starts_with("0x") {
@@ -464,8 +556,14 @@ fn numeric_constant(input: &mut &str) -> Result<Literal> {
                 break;
             }
         }
-        let hex = &start[2..start.len() - input.len()];
-        return Ok(Literal::Integer(i64::from_str_radix(hex, 16).unwrap()));
+        let hex = &start[2 + negative as usize..start.len() - input.len()];
+        if hex.is_empty() {
+            return Err(cut_expecting(input, "hexadecimal digit"));
+        }
+        // Up to 64 bits of hex is a bit pattern: `0xFFFFFFFFFFFFFFFF` is -1.
+        let bits = u64::from_str_radix(hex, 16).map_err(|_| too_large(input))?;
+        let value = bits as i64;
+        return Ok(Literal::Integer(if negative { value.wrapping_neg() } else { value }));
     }
 
     // integer part
@@ -494,9 +592,14 @@ fn numeric_constant(input: &mut &str) -> Result<Literal> {
 
     let s = &start[..start.len() - input.len()];
     if has_frac || has_exp {
-        Ok(Literal::Float(s.parse().unwrap()))
+        match s.parse() {
+            Ok(value) => Ok(Literal::Float(value)),
+            Err(_) => Err(error_at(Span { start: begin, end: pos(input) }, format!("invalid floating-point literal '{}'", s))),
+        }
     } else {
-        Ok(Literal::Integer(s.parse().unwrap()))
+        // `-9223372036854775808` is representable even though its magnitude
+        // alone is not.
+        s.parse().map(Literal::Integer).map_err(|_| too_large(input))
     }
 }
 
@@ -570,6 +673,8 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
             return Ok(Expression::TypeLiteral(ty));
         }
     }
+    // The span is the name alone, not the whitespace after it.
+    let end = pos(input);
     ws(input)?;
     if input.starts_with('<') {
         let mut probe: &str = before;
@@ -580,7 +685,7 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
             return Ok(Expression::TypeLiteral(ty));
         }
     }
-    Ok(Expression::SymbolRef { id: name, span: Span { start, end: pos(input) } })
+    Ok(Expression::SymbolRef { id: name, span: Span { start, end } })
 }
 
 fn atom(input: &mut &str) -> Result<Expression> {
@@ -1141,7 +1246,14 @@ fn branch(input: &mut &str) -> Result<Branch> {
     if input.starts_with("else") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[4..];
         ws(input)?;
-        else_block = Some(block(input, vec![])?);
+        // `else if` is an else block holding just the nested branch.
+        if input.starts_with("if") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+            let inner = branch(input)?;
+            let span = inner.span;
+            else_block = Some(Block { statements: vec![Statement::Branch(inner)], span, attributes: vec![] });
+        } else {
+            else_block = Some(block(input, vec![])?);
+        }
         ws(input)?;
     }
 
@@ -1272,11 +1384,16 @@ fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
         return Err(bt(input));
     }
     *input = &input[6..];
+    let keyword_end = pos(input);
     ws(input)?;
+    // A bare `return;` (or `return }`) returns no value.
+    if input.starts_with(';') || input.starts_with('}') {
+        return Ok(ReturnStatement { expr: None, span: Span { start, end: keyword_end } });
+    }
     let expr = expression(input)?;
     ws(input)?;
     let end = expr.span().end;
-    Ok(ReturnStatement { expr, span: Span { start, end } })
+    Ok(ReturnStatement { expr: Some(expr), span: Span { start, end } })
 }
 
 /// After a `TypeName name` style declaration the next token must be a boundary
@@ -2155,6 +2272,16 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
         if is_new || is_construct {
             let construct_span_start = pos(input);
             *input = if is_new { &input[3..] } else { &input[9..] };
+            let keyword_span = Span { start: construct_span_start, end: pos(input) };
+            if let Some(previous) = &constructor {
+                let previous: &FunctionDecl = previous;
+                return Err(fail_with(
+                    Diagnostic::error(format!("redefinition of the constructor of '{}'", name))
+                        .at(Loc::new(FileId::default(), keyword_span))
+                        .with_note("previous definition is here", Some(Loc::new(FileId::default(), previous.name_span)))
+                        .with_note("a struct has one constructor; give its parameters default values to allow shorter calls", None),
+                ));
+            }
             if is_new {
                 let span = Span { start: construct_span_start, end: construct_span_start + 3 };
                 deprecated_syntax(span, "`new`", "constructors are spelled `construct`, matching `destruct`", "construct");
@@ -2200,6 +2327,10 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
 
         // destructor: `destruct { ... }`
         if input.starts_with("destruct") && !input[8..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+            let keyword_span = Span { start: pos(input), end: pos(input) + 8 };
+            if destructor.is_some() {
+                return Err(error_at(keyword_span, format!("redefinition of the destructor of '{}'", name)));
+            }
             *input = &input[8..];
             ws(input)?;
             destructor = Some(block(input, m_attrs)?);
@@ -2697,7 +2828,7 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
             ptr_check_block(&w.block)?;
             w.else_block.as_ref().map_or(Ok(()), ptr_check_block)
         }
-        Statement::Return(r) => ptr_check_expr(&r.expr),
+        Statement::Return(r) => r.expr.as_ref().map_or(Ok(()), ptr_check_expr),
         Statement::LoopBreak(_) => Ok(()),
     }
 }
@@ -3542,7 +3673,7 @@ f() { var r = c.Result<int>.ok(1); }");
         match stmt {
             Statement::Return(r) => {
                 match r.expr {
-                    Expression::Literal { value: Literal::Integer(42), .. } => {}
+                    Some(Expression::Literal { value: Literal::Integer(42), .. }) => {}
                     other => panic!("{:?}", other),
                 }
             }

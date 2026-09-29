@@ -49,9 +49,8 @@ test(): int {
 
 #[test]
 fn else_if_chain() {
-    // `else if` is not in the grammar (the reference requires a block after
-    // `else`, LexyParser.h Branch rule); it must not parse. Chained else-if
-    // is a candidate language extension — see proposal notes.
+    // `else if` is an extension over the reference grammar, which requires a
+    // block after `else` (LexyParser.h Branch rule).
     let src = r#"
 test(): int {
     var x = 5;
@@ -64,7 +63,7 @@ test(): int {
     }
 }
 "#;
-    assert!(pepper_parser::parser::parse_source("test.pep", src).is_err());
+    assert_eq!(compile_jit_with_runtime(src), 4);
 }
 
 #[test]
@@ -443,8 +442,7 @@ test(): int {
 
 #[test]
 fn logical_short_circuit() {
-    // `and`/`or` do NOT short-circuit (C++ reference maps LogicalAnd→bitAnd,
-    // LogicalOr→bitOr): the rhs always runs. side must be 1 after both lines.
+    // `&&`/`||` short-circuit: neither line runs boom(), so side stays 0.
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -460,13 +458,13 @@ test(): int {
 }
 "#
         ),
-        11
+        10
     );
 }
 
 #[test]
 fn logical_short_circuit2() {
-    // No short-circuit: `false && boom()` still calls boom(), so side == 1.
+    // Short-circuit: `false && boom()` and `true || boom()` skip boom().
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -484,7 +482,7 @@ test(): int {
 }
 "#
         ),
-        1
+        0
     );
 }
 

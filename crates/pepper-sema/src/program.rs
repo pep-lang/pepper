@@ -139,6 +139,17 @@ impl Default for Setup<'_> {
 pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
     let (runtime_sources, _libs, runtime_dirs) =
         if setup.runtime { pepper_files::runtime::discover() } else { (vec![], vec![], vec![]) };
+    if setup.runtime && setup.mode == Mode::Strict && runtime_sources.is_empty() {
+        let env = pepper_files::runtime::RUNTIME_ENV;
+        return Err(match std::env::var_os(env).filter(|d| !d.is_empty()) {
+            Some(dir) => format!("cannot find the Pepper runtime: {} ({}) has no .pep files", env, dir.to_string_lossy()),
+            None => format!(
+                "cannot find the Pepper runtime: no runtime directory near {} or the compiler; set {} to its path",
+                std::env::current_dir().unwrap_or_default().display(),
+                env
+            ),
+        });
+    }
     let search_paths = search_paths(setup.import_dirs, &runtime_dirs);
     // Forced imports join the prelude ahead of the runtime: where one
     // redefines a runtime export (`panic`), the merged program keeps the

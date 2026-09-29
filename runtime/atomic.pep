@@ -53,6 +53,8 @@ export struct Atomic<T> {
     }
 
     destruct {
+        # Storing the zero value releases a struct T's reference in the slot.
+        __atomic_store<T>(this.Data, __default<T>());
         _pep_free(this.Data);
     }
 

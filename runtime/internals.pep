@@ -148,28 +148,79 @@ dec(v: long): __ptr<char> {
     return buf;
 }
 
+# `v` with six fraction digits, rounded to nearest (`0.5` → "0.500000").
 floatstr(v: double): __ptr<char> {
-    var ip = v as long;
-    var fp = (v - (ip as double)) * 1000000.0;
-    var digits = fp as long;
     var buf = _pep_malloc(64);
     var n = 0;
+    if (v != v) {
+        buf[0] = 110; buf[1] = 97; buf[2] = 110; buf[3] = 0;   # "nan"
+        return buf;
+    }
+    if (v < 0.0) {
+        buf[n] = 45;   # '-'
+        n = n + 1;
+        v = -v;
+    }
+    if (v > 9.0e18) {
+        buf[n] = 105; buf[n + 1] = 110; buf[n + 2] = 102; buf[n + 3] = 0;   # "inf" (or too large for long)
+        return buf;
+    }
+    var ip = v as long;
+    var digits = ((v - (ip as double)) * 1000000.0 + 0.5) as long;
+    # Rounding can carry into the integer part (0.9999996 → 1.000000).
+    if (digits >= 1000000) {
+        ip = ip + 1;
+        digits = digits - 1000000;
+    }
     var s = dec(ip);
-    while (s[n] != 0) { buf[n] = s[n]; n = n + 1; }
-    buf[n] = 46;
+    var i = 0;
+    while (s[i] != 0) { buf[n] = s[i]; n = n + 1; i = i + 1; }
+    _pep_free(s);
+    buf[n] = 46;   # '.'
     n = n + 1;
+    # Least-significant digit first, filling the six places from the right.
     var k = 5;
     while (k >= 0) {
-        buf[n] = (48 + (digits % 10));
+        buf[n + k] = (48 + (digits % 10));
         digits = digits / 10;
-        n = n + 1;
         k = k - 1;
     }
-    buf[n] = 0;
+    buf[n + 6] = 0;
     return buf;
 }
 
 # ── Trace (gated by PEP_TRACE) ───────────────────────────────────────────────
+# Each line is "name: value" in a zeroed 512-byte buffer (so it stays
+# NUL-terminated); the name is capped to leave room for the value.
+
+# Write "name: " at the start of `buf`; returns the length written.
+_pep_trace_prefix(buf: __ptr<char>, name: __ptr<char>): ulong {
+    var n = 0;
+    if (name != __null) {
+        var nl = _pep_c_strlen(name);
+        if (nl > 400) { nl = 400; }
+        memcpy(buf, name, nl);
+        n = nl;
+    }
+    buf[n] = 58;   # ':'
+    buf[n + 1] = 32;   # ' '
+    return n + 2;
+}
+
+# Copy the NUL-terminated `text` to `buf` at `n`, then free `text`; returns
+# the new length.
+_pep_trace_append(buf: __ptr<char>, n: ulong, text: __ptr<char>): ulong {
+    var i = 0;
+    while (text[i] != 0) { buf[n + i] = text[i]; i = i + 1; }
+    _pep_free(text);
+    return n + i;
+}
+
+_pep_trace_emit(buf: __ptr<char>) {
+    puts(buf);
+    _pep_free(buf);
+}
+
 ## Prints `name`, the address `ptr`, and the first 8 bytes at `ptr` when
 ## tracing is on. Does nothing otherwise.
 ##
@@ -181,8 +232,8 @@ floatstr(v: double): __ptr<char> {
 ## or `size` is less than 8. Only those 8 bytes are read, whatever `size` is.
 ## The line goes to standard output.
 ##
-## Each traced call allocates buffers it never frees, so `_pep_live_allocs()`
-## counts them. `name` must be shorter than about 470 bytes.
+## A traced call frees what it allocates. Only the first 400 bytes of
+## `name` are printed.
 ##
 ## @param ptr the start of the region to trace
 ## @param size the region's size in bytes; the word is printed only when it
@@ -191,20 +242,9 @@ floatstr(v: double): __ptr<char> {
 export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
-        var n = 0;
-        if (name != __null) {
-            var nl = _pep_c_strlen(name);
-            memcpy(buf, name, nl);
-            n = nl;
-        }
-        buf[n] = 58;   # ':'
-        n = n + 1;
-        buf[n] = 32;   # ' '
-        n = n + 1;
-        var ah = hex(ptr as ulong);
-        var i = 0;
-        while (i < 16) { buf[n + i] = ah[i]; i = i + 1; }
-        n = n + 16;
+        var n = _pep_trace_prefix(buf, name);
+        var address = hex(ptr as ulong);
+        n = _pep_trace_append(buf, n, address);
         if (ptr != __null && size >= 8) {
             # Build the word at ulong width: each byte zero-extends (u8 →
             # u64), so bytes >= 0x80 stay positive and the full 64-bit word
@@ -214,10 +254,9 @@ export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
                         | ((ptr[3] as ulong) << 24) | ((ptr[4] as ulong) << 32)
                         | ((ptr[5] as ulong) << 40) | ((ptr[6] as ulong) << 48)
                         | ((ptr[7] as ulong) << 56));
-            var j = 0;
-            while (j < 16) { buf[n + j] = w[j]; j = j + 1; }
+            n = _pep_trace_append(buf, n, w);
         }
-        puts(buf);
+        _pep_trace_emit(buf);
     }
 }
 
@@ -225,29 +264,18 @@ export trace_region(ptr: __ptr<void>, size: ulong, name: __ptr<char>) {
 ## when tracing is on (the `PEP_TRACE` environment variable is set, checked
 ## once at program start). Does nothing otherwise.
 ##
-## Each traced call allocates buffers it never frees, so
-## `_pep_live_allocs()` counts them. `name` must be shorter than about 490
-## bytes.
+## A traced call frees what it allocates. Only the first 400 bytes of
+## `name` are printed.
 ##
 ## @param ptr the address to print; it is not dereferenced
 ## @param name a NUL-terminated label for the line, or `__null` for none
 export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
-        var n = 0;
-        if (name != __null) {
-            var nl = _pep_c_strlen(name);
-            memcpy(buf, name, nl);
-            n = nl;
-        }
-        buf[n] = 58;
-        n = n + 1;
-        buf[n] = 32;
-        n = n + 1;
-        var ah = hex(ptr as ulong);
-        var i = 0;
-        while (i < 16) { buf[n + i] = ah[i]; i = i + 1; }
-        puts(buf);
+        var n = _pep_trace_prefix(buf, name);
+        var address = hex(ptr as ulong);
+        _pep_trace_append(buf, n, address);
+        _pep_trace_emit(buf);
     }
 }
 
@@ -255,9 +283,8 @@ export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
 ## (the `PEP_TRACE` environment variable is set, checked once at program
 ## start). Does nothing otherwise.
 ##
-## Each traced call allocates buffers it never frees, so
-## `_pep_live_allocs()` counts them. `name` must be shorter than about 485
-## bytes.
+## A traced call frees what it allocates. Only the first 400 bytes of
+## `name` are printed.
 ##
 ## @param value the number to print
 ## @param name a NUL-terminated label for the line, or `__null` for none
@@ -266,20 +293,10 @@ export trace_ptr(ptr: __ptr<void>, name: __ptr<char>) {
 export trace_int(value: long, name: __ptr<char>) {
     if (_pep_trace_on) {
         var buf = _pep_malloc(512);
-        var n = 0;
-        if (name != __null) {
-            var nl = _pep_c_strlen(name);
-            memcpy(buf, name, nl);
-            n = nl;
-        }
-        buf[n] = 58;
-        n = n + 1;
-        buf[n] = 32;
-        n = n + 1;
-        var s = dec(value);
-        var i = 0;
-        while (s[i] != 0) { buf[n + i] = s[i]; i = i + 1; }
-        puts(buf);
+        var n = _pep_trace_prefix(buf, name);
+        var text = dec(value);
+        _pep_trace_append(buf, n, text);
+        _pep_trace_emit(buf);
     }
 }
 
@@ -456,9 +473,13 @@ _pep_print(s: __ptr<char>) {
 }
 
 _pep_print_int(v: long) {
-    puts(dec(v));
+    var s = dec(v);
+    puts(s);
+    _pep_free(s);
 }
 
 _pep_print_float(v: double) {
-    puts(floatstr(v));
+    var s = floatstr(v);
+    puts(s);
+    _pep_free(s);
 }

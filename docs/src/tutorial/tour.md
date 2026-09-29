@@ -28,8 +28,8 @@ A few things to notice:
   does in `greet`. A function that returns nothing leaves out the return type.
   See [Functions](../language/functions.md).
 - `if` and `while` do not need parentheses around the condition, but the body
-  always needs braces. There is no `else if`: put another `if` inside the
-  `else` block. See [Control flow](../language/control-flow.md).
+  always needs braces. Chain conditions with `else if`. See
+  [Control flow](../language/control-flow.md).
 - `+=` updates a variable in place, and `+` joins two strings.
 - `print` writes one value per line. Called with several arguments, it prints
   each one on its own line.

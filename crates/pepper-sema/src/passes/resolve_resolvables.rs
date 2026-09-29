@@ -48,6 +48,16 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
     for ext in &mut module.extensions {
         if ext.resolved.is_none() {
             let target = ext.target.to_string();
+            // `extend Box<int>` names one specialization: it applies only
+            // once that instance exists, never to the generic base (which
+            // every specialization clones). `extend Box` / `extend Box<T>`
+            // (the struct's own parameters) extend the base.
+            let base = module.structs.iter().find(|st| st.name == ext.target.name);
+            let extends_base = ext.target.sub_types.is_empty()
+                || base.is_some_and(|st| {
+                    st.generic_params.len() == ext.target.sub_types.len()
+                        && st.generic_params.iter().zip(&ext.target.sub_types).all(|(p, a)| a.sub_types.is_empty() && a.name == p.name)
+                });
             let found = view
                 .structs
                 .iter()
@@ -55,10 +65,12 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
                 .or_else(|| {
                     view.structs
                         .iter()
-                        .find(|(name, _)| *name == ext.target.name)
+                        .find(|(name, _)| extends_base && *name == ext.target.name)
                 });
             if let Some((name, _)) = found {
                 ext.resolved = Some(name.clone());
+            } else if base.is_some() && !extends_base {
+                // The specialization is never used: nothing to extend.
             } else if report_missing {
                 crate::errors::report(
                     Diagnostic::error(format!("cannot extend unknown struct '{}'", ext.target)).at(ext.loc),

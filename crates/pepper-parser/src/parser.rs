@@ -48,6 +48,9 @@ fn at(span: Span) -> Loc {
 /// backtracking rewinds the input, so the remaining slice alone would
 /// underreport the failure position.
 fn parse_error(source: &str) -> Diagnostic {
+    if let Some(error) = parsers::take_error() {
+        return error;
+    }
     let furthest = parsers::skip_trivia(source, parsers::max_pos());
     match parsers::expectation() {
         Some(e) if e.offset >= furthest => {

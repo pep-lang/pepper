@@ -58,9 +58,11 @@ name like a function.
   use is not accepted in a constructor yet.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
-- A struct has at most one constructor. Pepper has no constructor
+- A struct has at most one constructor, and declaring a second is an error
+  (`redefinition of the constructor of 'S'`). Pepper has no constructor
   overloading: use default arguments, or a [static method](#static-methods)
-  for each alternative way to build the object.
+  for each alternative way to build the object. Likewise, a struct has at
+  most one destructor.
 
 A `this.field` parameter must have a default. Leaving it out is an error:
 
@@ -151,33 +153,34 @@ can be any type. These binary operators can be defined:
 | Arithmetic | `+` `-` `*` `/` `%` `**` |
 | Bitwise | `&` `|` `^` `>>` |
 | Comparison and logical | `==` `!=` `>` `>=` `&&` `||` |
-| Compound assignment | `+=` `-=` `*=` `/=` `%=` `>>=` `&=` `^=` |
+| Compound assignment | `+=` `-=` `*=` `/=` `%=` `>>=` `&=` `\|=` `^=` |
 
 Keep these rules in mind:
 
-- Each operator is its own method. `!=` is not derived from `==`, and `+=` is
-  not rewritten to `a = a + b`; define each one you want to use.
-- Comparison and logical operators should return `bool`. Arithmetic, bitwise
-  and compound assignment operators should return the struct's own type; a
-  compound assignment usually changes `this` and returns it.
+- Each operator is its own method, with one exception: when a struct defines
+  `==` but not `!=`, `a != b` means `!(a == b)`. `+=` is not rewritten to
+  `a = a + b`; define each one you want to use.
+- Comparison operators must return `bool`; any other return type is an error
+  (`comparison operator '==' must return 'bool', not 'String'`). Logical
+  operators should return `bool` too. Arithmetic, bitwise and compound
+  assignment operators usually return the struct's own type; a compound
+  assignment usually changes `this` and returns it.
 - The left operand decides: `a + b` uses the method on `a`'s type. An
   expression with a number on the left and a struct on the right, such as
   `2 * v`, is not supported.
 - Operators that start with `<` (`<`, `<=`, `<<`, `<<=`) cannot be declared
   yet, because the parser reads the `<` as the start of generic arguments.
-  `|=` cannot be overloaded yet either.
 - Unary operators (`-a`, `!a`, `~a`) cannot be overloaded yet.
 
-> **Note:** `var r = a - b;` currently assumes that an arithmetic operator
-> returns the struct's own type. If yours returns something else, such as an
-> `int`, give the variable its type explicitly: `int r = a - b;`.
+The result of an operator has the type its method returns, so with
+`int -(V other)`, `var r = a - b;` is an `int`.
 
 ### Comparing structs
 
 Without an `==` method, `a == b` on two structs compares identity: it is true
 only when both refer to the same object, exactly like `a === b`. The same goes
-for `!=`. Define `==` and `!=` when two distinct objects with the same
-contents should count as equal, as `String` and `Array` do. `===` always
+for `!=`. Define `==` when two distinct objects with the same contents should
+count as equal, as `String` and `Array` do; `!=` then follows from it. `===` always
 compares identity, whatever methods the struct declares.
 
 ### Indexers

@@ -91,7 +91,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::StringLiteral { .. } => Some(TypeName::new("String")),
         Expression::PointerLiteral => Some(TypeName::void_ptr()),
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),
-        Expression::IntLiteral(_) => Some(TypeName::new("i32")),
+        Expression::IntLiteral(v) => Some(TypeName::new(crate::type_name::int_literal_type(*v))),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
         Expression::MemberRef { lhs, name, .. } => {
             // Specialized clones keep unsubstituted annotations on bare
@@ -189,14 +189,23 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             let ty = crate::passes::gather_generics::parse_type_string(function);
             table.lookup(&ty).map(|_| ty)
         }
-        Expression::Binary { op, lhs, .. } => {
+        Expression::Binary { op, lhs, rhs, .. } => {
             if op.is_assignment() {
                 of(lhs, table, current)
             } else if op.is_comparison() || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                 Some(TypeName::bool_())
             } else {
-                // Arithmetic/bitwise ops keep the lhs's type.
-                of(lhs, table, current)
+                // An operator overload has its method's return type; numeric
+                // operands promote; otherwise the lhs's type.
+                let lhs_ty = of(lhs, table, current)?;
+                if let Some(ret) = table.lookup(&lhs_ty).and_then(|info| info.returns.get(&op.op_name())) {
+                    return Some(ret.clone());
+                }
+                let rhs_ty = of(rhs, table, current).map(|t| t.to_string()).unwrap_or_default();
+                match crate::arithmetic::binary_result(*op, &lhs_ty.to_string(), &rhs_ty) {
+                    Some(promoted) => Some(TypeName::new(&promoted)),
+                    None => Some(lhs_ty),
+                }
             }
         }
         Expression::Ternary { true_expr, .. } => of(true_expr, table, current),

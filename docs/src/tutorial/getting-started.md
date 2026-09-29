@@ -87,25 +87,29 @@ the compiler through cargo: `cargo run --release -- hello.pep -o hello`.
 ### Where the compiler finds the standard library
 
 Every program is compiled together with Pepper's standard library, the
-`runtime/` folder of the repository. The compiler looks for it relative to the
-directory you run it from, in this order:
+`runtime/` folder of the repository. The compiler looks for it in this order:
 
-1. `runtime/`
-2. `.pep/runtime/`
-3. `../runtime/`, `../../runtime/`, and so on, up to five levels up
+1. The directory named by the `PEPPER_RUNTIME` environment variable, if it is
+   set. Nothing else is searched.
+2. Starting from the directory you run it from: `runtime/`, `.pep/runtime/`,
+   then `../runtime/`, `../../runtime/`, and so on, up to five levels up.
+3. Starting from the directory that holds the compiler executable:
+   `runtime/` beside it, then in each parent directory, up to five levels up.
 
-So compiling anywhere inside your clone of the repository just works. For a
-project somewhere else, link or copy the runtime into the project's `.pep`
-folder once:
+So a compiler built in `target/release` finds the runtime of the clone it was
+built from, wherever you run it. To use a different runtime, set
+`PEPPER_RUNTIME` or link the runtime into a project's `.pep` folder:
 
 ```sh
 mkdir .pep
 ln -s /path/to/pepper/runtime .pep/runtime
 ```
 
-If the compiler cannot find the runtime, every use of a built-in type fails,
-with errors such as `call to undeclared function 'String'` on the first string
-literal.
+If the compiler cannot find the runtime, it stops with an error:
+
+```text
+error: cannot find the Pepper runtime: no runtime directory near /home/me/project or the compiler; set PEPPER_RUNTIME to its path
+```
 
 The compiler also writes intermediate files to `.pep/build/` under the
 directory you run it from.

@@ -54,12 +54,10 @@ export struct String {
     ##
     ## - with `Length` nonzero, `Size` becomes the byte length of its first
     ##   `Length` code points (0 if the C string is not valid UTF-8);
-    ## - with `Length` 0, `Size` becomes the C string's whole byte length, and
-    ##   `Length` is **not** computed but stays 0, so `length()` and `empty()`
-    ##   are wrong for that String. Pass the count, for example from
-    ##   `String.length_of(data, size)`.
+    ## - with `Length` 0, `Size` becomes the C string's whole byte length.
     ##
-    ## `Length` is trusted, not checked against the data. Runs in O(Size).
+    ## When `Length` is 0, it is counted from the bytes. A nonzero `Length` is
+    ## trusted, not checked against the data. Runs in O(Size).
     ##
     ## @param data the bytes to copy; `__null` for an empty String (then pass
     ##   no sizes, because they are stored as given)
@@ -79,6 +77,11 @@ export struct String {
             if (Size == 0) {
                 var src = _pep_c_strlen(data);
                 Size = _pep_utf8_size(data, src, Length);
+            }
+            # Callers that know only the bytes (`String(ptr)`,
+            # `String(ptr, size)`) leave the character count to be derived.
+            if (Length == 0) {
+                Length = _pep_utf8_length(data, Size);
             }
             Data = _pep_malloc(Size + 1);
             memcpy(Data, data, Size);
@@ -144,10 +147,14 @@ export struct String {
     ##     s.append("ING");   # s == "TESTING"
     void append(String rhs) {
         Version = Version + 1;
+        # Read rhs before growing: `s.append(s)` makes rhs this String, whose
+        # Size grow() changes and whose Data it may move.
         ulong oldSize = Size;
-        grow(Size + rhs.Size);
-        memcpy(Data + oldSize, rhs.Data, rhs.Size);
-        Length += rhs.Length;
+        ulong addSize = rhs.Size;
+        ulong addLength = rhs.Length;
+        grow(Size + addSize);
+        memcpy(Data + oldSize, rhs.Data, addSize);
+        Length += addLength;
         Data[Size] = 0;
     }
 
@@ -339,9 +346,6 @@ export struct String {
     ## @param start the code-point index of the first code point to copy
     ## @param count the maximum number of code points to copy
     ## @returns a new String that holds the selected code points
-    ## @note a `count` of 0 with `start` in range does not currently return an
-    ##   empty String: the constructor receives a byte size of 0 and measures
-    ##   the rest of the buffer as a C string
     ## @example
     ##     var s = "TEST";
     ##     assert(s.substr(1, 2) == "ES", "middle");
@@ -356,6 +360,10 @@ export struct String {
         ulong avail = length_of(Data + begin, Size - begin);
         if (count > avail) {
             count = avail;
+        }
+        # A zero size would tell the constructor to measure the C string.
+        if (count == 0) {
+            return String();
         }
         ulong len = _pep_utf8_char_offset(Data + begin, Size - begin, count);
         return String(Data + begin, len, count);

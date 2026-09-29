@@ -90,8 +90,8 @@ a little-endian 64-bit word. The word is omitted when `ptr` is `__null`
 or `size` is less than 8. Only those 8 bytes are read, whatever `size` is.
 The line goes to standard output.
 
-Each traced call allocates buffers it never frees, so `_pep_live_allocs()`
-counts them. `name` must be shorter than about 470 bytes.
+A traced call frees what it allocates. Only the first 400 bytes of
+`name` are printed.
 
 **Parameters**
 - `ptr` — the start of the region to trace
@@ -108,9 +108,8 @@ Prints `name: ` followed by the address `ptr` as 16 uppercase hex digits
 when tracing is on (the `PEP_TRACE` environment variable is set, checked
 once at program start). Does nothing otherwise.
 
-Each traced call allocates buffers it never frees, so
-`_pep_live_allocs()` counts them. `name` must be shorter than about 490
-bytes.
+A traced call frees what it allocates. Only the first 400 bytes of
+`name` are printed.
 
 **Parameters**
 - `ptr` — the address to print; it is not dereferenced
@@ -126,9 +125,8 @@ Prints `name: ` followed by `value` in signed decimal when tracing is on
 (the `PEP_TRACE` environment variable is set, checked once at program
 start). Does nothing otherwise.
 
-Each traced call allocates buffers it never frees, so
-`_pep_live_allocs()` counts them. `name` must be shorter than about 485
-bytes.
+A traced call frees what it allocates. Only the first 400 bytes of
+`name` are printed.
 
 **Parameters**
 - `value` — the number to print

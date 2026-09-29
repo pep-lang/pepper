@@ -190,6 +190,7 @@ fn pointer_field(name: &str) -> VariableDef {
         attributes: vec![],
         loc: Loc::NONE,
         type_loc: Loc::NONE,
+        is_const: false,
     }
 }
 

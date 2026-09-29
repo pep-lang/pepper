@@ -453,7 +453,8 @@ pub struct With {
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
-    pub expr: Expression,
+    /// None for a bare `return;`.
+    pub expr: Option<Expression>,
     pub span: Span,
 }
 
@@ -620,7 +621,21 @@ pub struct Module {
 impl Display for Literal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::String(s) => write!(f, "\"{}\"", s),
+            Literal::String(s) => {
+                write!(f, "\"")?;
+                for c in s.chars() {
+                    match c {
+                        '\n' => write!(f, "\\n")?,
+                        '\t' => write!(f, "\\t")?,
+                        '\r' => write!(f, "\\r")?,
+                        '\0' => write!(f, "\\0")?,
+                        '\\' => write!(f, "\\\\")?,
+                        '"' => write!(f, "\\\"")?,
+                        c => write!(f, "{}", c)?,
+                    }
+                }
+                write!(f, "\"")
+            }
             Literal::Integer(v) => write!(f, "{}", v),
             Literal::Float(v) => write!(f, "{}", v),
             Literal::Bool(v) => write!(f, "{}", v),
@@ -909,7 +924,10 @@ impl Display for With {
 
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "return {}", self.expr)
+        match &self.expr {
+            Some(expr) => write!(f, "return {}", expr),
+            None => write!(f, "return"),
+        }
     }
 }
 

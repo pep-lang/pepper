@@ -248,8 +248,7 @@ export _io_string_from(p: __ptr<char>, n: ulong): String {
     return String(p, n, _pep_utf8_length(p, n));
 }
 
-# A one-character String holding the ASCII byte `b` (string literals have no
-# escape sequences, so this is how "\" or a newline is spelled).
+# A one-character String holding the ASCII byte `b`.
 export _io_string_from_byte(b: int): String {
     var buf: __ptr<char> = _pep_malloc(1);
     buf[0] = b;

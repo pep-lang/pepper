@@ -46,7 +46,8 @@ declares it. Mark it `export` to let files that import it use it; see
 ## Recursive aliases
 
 An alias must not refer to itself, directly or through other aliases. The
-compiler reports the cycle when the alias is used:
+compiler reports the cycle at the alias, with a note at each alias it passes
+through:
 
 ```pepper
 type Celsius = Degrees;
@@ -54,8 +55,10 @@ type Degrees = Celsius;
 ```
 
 ```text
-error: type alias Celsius is recursive: Celsius
-main.pep:1:6: note: type alias Celsius declared here
+main.pep:1:6: error: type alias 'Celsius' refers to itself
     1 | type Celsius = Degrees;
+      |      ^~~~~~~
+main.pep:2:6: note: through type alias 'Degrees', declared here
+    2 | type Degrees = Celsius;
       |      ^~~~~~~
 ```

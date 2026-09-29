@@ -77,6 +77,8 @@ pub struct CodeGenerator<'ctx> {
     deferred_temps: Vec<(BasicValueEnum<'ctx>, String)>,
     /// Declared names of the externs (C functions) in the module.
     extern_names: std::collections::HashSet<String>,
+    /// Declared parameter types of each extern, by name.
+    extern_params: std::collections::HashMap<String, Vec<String>>,
     /// The innermost located node an error passed through on its way out,
     /// keyed by the error's text: errors are plain strings inside codegen,
     /// and `generate` attaches this location when it returns one.
@@ -106,6 +108,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             scopes: Vec::new(),
             deferred_temps: Vec::new(),
             extern_names: std::collections::HashSet::new(),
+            extern_params: std::collections::HashMap::new(),
             error_loc: None,
         }
     }
@@ -504,10 +507,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 param_types.push(this_ptr_ty);
             }
             for param in &method.parameters {
-                let ty = self
-                    .types
-                    .get(&param.ty.to_string())
-                    .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+                let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));                self.locate(&ty, param.type_loc);                let ty = ty?;
                 // Struct-typed params are pointers (C++ ref semantics).
                 let ty = match ty {
                     BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
@@ -565,12 +565,10 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn instantiate_extern_unlocated(&mut self, ext: &ExternDef) -> Result<(), String> {
         self.extern_names.insert(ext.name.clone());
+        self.extern_params.insert(ext.name.clone(), ext.parameters.iter().map(|p| p.ty.to_string()).collect());
         let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
         for param in &ext.parameters {
-            let ty = self
-                .types
-                .get(&param.ty.to_string())
-                .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+            let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));            self.locate(&ty, param.type_loc);            let ty = ty?;
             param_types.push(ty);
         }
         let return_type = self
@@ -636,10 +634,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Every declared parameter is a real LLVM parameter; missing trailing
         // arguments are padded from the defaults at the call site.
         for param in &function.parameters {
-            let ty = self
-                .types
-                .get(&param.ty.to_string())
-                .ok_or_else(|| format!("unknown param type {}", param.ty))?;
+            let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));            self.locate(&ty, param.type_loc);            let ty = ty?;
             // Struct-typed params are pointers (C++ ref semantics).
             let ty = match ty {
                 BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
@@ -938,7 +933,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         // at the fall-through exit (a `return` inside already drained all).
         self.frame.exited = false;
         self.scopes.push(Vec::new());
+        let locals = self.frame.locals.len();
         self.codegen_block(inner)?;
+        // Its names go out of scope with it (an outer `x` it shadowed is
+        // visible again).
+        self.frame.locals.truncate(locals);
 
         let current = self.builder.get_insert_block().expect("insert block");
         if !self.frame.exited {
@@ -1276,7 +1275,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.scopes.push(Vec::new());
         self.frame.exited = false;
         self.builder.position_at_end(then_block);
+        let locals = self.frame.locals.len();
         self.codegen_block(&branch.if_block)?;
+        self.frame.locals.truncate(locals);
         let then_end = self.builder.get_insert_block().expect("insert block");
         // Pop the arm scope for stack balance. A `return` inside already
         // released every slot (scopes are non-consuming); on fall-through,
@@ -1295,6 +1296,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.frame.exited = false;
             self.builder.position_at_end(else_b);
             self.codegen_block(branch.else_block.as_ref().expect("else block"))?;
+            self.frame.locals.truncate(locals);
             let else_end = self.builder.get_insert_block().expect("insert block");
             let scope = self.scopes.pop().unwrap_or_default();
             if else_end.get_terminator().is_none() {
@@ -1349,7 +1351,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         let base_depth = self.scopes.len() - 1;
         self.frame.loop_base_depth = Some(base_depth);
         self.frame.exited = false;
+        let locals = self.frame.locals.len();
         self.codegen_block(&wh.block)?;
+        self.frame.locals.truncate(locals);
         // A `return` inside already drained all scopes; pop the (now empty)
         // body scope so the stack stays balanced.
         let body_scope = self.scopes.pop().unwrap_or_default();
@@ -1443,6 +1447,23 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Sema type string of an expression's value, as declared (pointer
+    /// The pointer an index expression subscripts: the buffer pointer, or
+    /// the struct reference whose `Data` it indexes. Anything else (`a[0][0]`
+    /// on an `Array<int>`) is an error rather than a crash.
+    fn subscripted_pointer(&mut self, lhs: &Expression) -> Result<PointerValue<'ctx>, String> {
+        match self.codegen_expr(lhs)? {
+            BasicValueEnum::PointerValue(ptr) => Ok(ptr),
+            _ => Err(self.not_subscriptable(lhs)),
+        }
+    }
+
+    fn not_subscriptable(&self, lhs: &Expression) -> String {
+        match self.value_sema_type(lhs) {
+            Some(ty) => format!("subscripted value of type '{}' is not a pointer or an indexable struct", ty),
+            None => "subscripted value is not a pointer or an indexable struct".to_string(),
+        }
+    }
+
     fn value_sema_type(&self, expr: &Expression) -> Option<String> {
         match expr {
             // Literals carry C's type directly (6.4.4): a bool literal is
@@ -1522,7 +1543,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // unsignedness), non-numeric operands keep the lhs type.
                 // Reporting the declared lhs type would misclassify negative
                 // results as unsigned in casts.
-                if is_comparison(*op) {
+                if is_comparison(*op) || matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                     // A comparison produces an i1, not the promoted operand
                     // type: naming the operand type makes `coerce` a no-op
                     // and apply_op sign-extends `true` into -1.
@@ -1877,7 +1898,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| "nested index: no Data field".to_string())?;
                 (desc.llvm_type, idx, name)
             }
-            _ => return Err("nested index on non-struct element".to_string()),
+            _ => return Err(self.not_subscriptable(lhs)),
         };
         // `slot_ptr` addresses the inner reference; its `Data` field is the
         // raw buffer pointer. GEP the field, then load it to get the buffer.
@@ -2145,7 +2166,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // An owned-rvalue receiver (`f()[i]`) is a temporary: its
                 // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
-                let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
+                let slot_ptr = self.subscripted_pointer(lhs)?;
                 // A nested index (`outer.Data[0][i]`) GEPs the inner
                 // struct's own `Data` buffer (the slot holds its reference);
                 // a plain index GEPs the raw buffer directly. The element and
@@ -2884,6 +2905,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                 }
             }
+            if is_extern {
+                self.check_extern_struct_arg(&target, arg_names.len(), arg)?;
+            }
             let v = self.codegen_expr(arg)?;
             if let Some(ty) = self.owned_temp_type(arg) {
                 owned_arg_temps.push((v, ty));
@@ -3286,6 +3310,31 @@ impl<'ctx> CodeGenerator<'ctx> {
         coerced
     }
 
+    /// A Pepper struct is never a C pointer: passing one to an extern's
+    /// pointer parameter would hand C the object, not its contents.
+    fn check_extern_struct_arg(&mut self, function: &str, index: usize, arg: &Expression) -> Result<(), String> {
+        let Some(param) = self.extern_params.get(function).and_then(|params| params.get(index)).cloned() else {
+            return Ok(());
+        };
+        let Some(arg_ty) = self.value_sema_type(arg) else {
+            return Ok(());
+        };
+        if !self.structs.contains_key(&arg_ty) || !(param.ends_with('*') || param.starts_with("__ptr<")) {
+            return Ok(());
+        }
+        let hint = if arg_ty == "String" { "; pass its 'c_str()'" } else { "" };
+        let result = Err(format!(
+            "cannot pass '{}' to parameter {} of extern '{}' of type '{}'{}",
+            arg_ty,
+            index + 1,
+            function,
+            param,
+            hint
+        ));
+        self.locate(&result, arg.loc());
+        result
+    }
+
     fn codegen_binary(
         &mut self,
         op: &BinaryOp,
@@ -3398,6 +3447,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .ok_or_else(|| "assign store".to_string())?;
             return Ok(coerced);
         }
+        if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+            return self.codegen_logical(*op, lhs, rhs);
+        }
         let lhs_temp = self.owned_temp_type(lhs);
         let rhs_temp = self.owned_temp_type(rhs);
         let lhs_val = self.codegen_expr(lhs)?;
@@ -3492,7 +3544,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // An owned-rvalue receiver (`f()[i] = v`) is a temporary: its
                 // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
-                let slot_ptr = self.codegen_expr(lhs)?.into_pointer_value();
+                let slot_ptr = self.subscripted_pointer(lhs)?;
                 // A nested index (`outer.Data[0][i] = v`) stores into the
                 // inner struct's own `Data` buffer, not its reference slot.
                 let (ptr, elem_name) = match self.nested_index_buffer(lhs, slot_ptr)? {
@@ -3751,6 +3803,49 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         Ok(result)
+    }
+
+    /// `a && b` / `a || b`: `b` runs only when `a` does not decide the
+    /// result. Both operands are tested for truth; the result is a bool.
+    fn codegen_logical(&mut self, op: BinaryOp, lhs: &Expression, rhs: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let fn_value = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let is_and = op == BinaryOp::LogicalAnd;
+        let lhs_temp = self.owned_temp_type(lhs);
+        let lhs_val = self.codegen_expr(lhs)?;
+        let lhs_bool = llvm_ops::as_bool(self.context, &self.builder, lhs_val);
+        if let Some(ty) = lhs_temp {
+            self.release_temp(&ty, lhs_val)?;
+        }
+        let lhs_end = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+        let rhs_block = self.context.append_basic_block(fn_value, if is_and { "and.rhs" } else { "or.rhs" });
+        let merge_block = self.context.append_basic_block(fn_value, if is_and { "and.end" } else { "or.end" });
+        let (on_true, on_false) = if is_and { (rhs_block, merge_block) } else { (merge_block, rhs_block) };
+        self.builder
+            .build_conditional_branch(lhs_bool, on_true, on_false)
+            .map_err(|e| e.to_string())?;
+
+        self.builder.position_at_end(rhs_block);
+        // The rhs runs conditionally, so its temporaries are released in its
+        // own block.
+        let rhs_temp = self.owned_temp_type(rhs);
+        let rhs_val = self.codegen_expr_in_arm(rhs)?;
+        let rhs_bool = llvm_ops::as_bool(self.context, &self.builder, rhs_val);
+        if let Some(ty) = rhs_temp {
+            self.release_temp(&ty, rhs_val)?;
+        }
+        self.builder
+            .build_unconditional_branch(merge_block)
+            .map_err(|e| e.to_string())?;
+        let rhs_end = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+
+        self.builder.position_at_end(merge_block);
+        let phi = self
+            .builder
+            .build_phi(self.context.bool_type(), if is_and { "and" } else { "or" })
+            .map_err(|e| e.to_string())?;
+        let decided = self.context.bool_type().const_int(!is_and as u64, false);
+        phi.add_incoming(&[(&decided, lhs_end), (&rhs_bool, rhs_end)]);
+        Ok(phi.as_basic_value())
     }
 
     fn codegen_ternary(

@@ -20,6 +20,9 @@ struct Scopes {
     functions: Vec<(String, TypeName)>,
     /// Free functions usable as values: name → function type.
     function_types: Vec<(String, TypeName)>,
+    /// While walking a function with no declared return type: the types of
+    /// its `return <value>` statements.
+    returns: Option<Vec<TypeName>>,
 }
 
 impl Scopes {
@@ -33,6 +36,7 @@ impl Scopes {
             methods: vec![],
             functions: vec![],
             function_types: vec![],
+            returns: None,
         }
     }
 
@@ -82,6 +86,16 @@ impl Scopes {
             .find(|(t, _)| *t == key)
             .and_then(|(_, fields)| fields.iter().find(|f| f.name == name))
             .map(|f| f.ty.clone())
+    }
+
+    /// Declared return type of method `name` on struct type `ty`.
+    fn method_return(&self, ty: &TypeName, name: &str) -> Option<TypeName> {
+        let key = ty.to_string();
+        self.methods
+            .iter()
+            .find(|(t, _)| *t == key)
+            .and_then(|(_, methods)| methods.iter().find(|(m, _)| m == name))
+            .map(|(_, ret)| ret.clone())
     }
 
     /// Whether struct type `ty` declares a method `name`.
@@ -218,7 +232,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 None => source_type,
             }
         }
-        Expression::Binary { op, lhs, .. } => {
+        Expression::Binary { op, lhs, rhs, .. } => {
             // Assignment resolves to the lhs type; comparisons to bool.
             if op.is_assignment() {
                 type_of_expr(lhs, scopes, current_struct)
@@ -236,17 +250,26 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             ) {
                 TypeName::bool_()
             } else {
-                // Arithmetic keeps the lhs type (pointer arithmetic stays a
-                // pointer); fall back to auto when the lhs is unknown.
+                // Numeric operands promote (`1 + 0.5` is f64, `u8 + 10` is
+                // i32); otherwise the lhs type (pointer arithmetic stays a
+                // pointer). Auto when the lhs is unknown.
                 let lhs_ty = type_of_expr(lhs, scopes, current_struct);
                 if lhs_ty.is_empty() || lhs_ty.to_string() == crate::type_name::AUTO {
                     TypeName::auto()
+                } else if let Some(ret) = scopes.method_return(&lhs_ty, &op.op_name()) {
+                    // An operator overload (`a + b` → `a.+(b)`) has its
+                    // method's return type.
+                    ret
                 } else {
-                    lhs_ty
+                    let rhs_ty = type_of_expr(rhs, scopes, current_struct);
+                    match crate::arithmetic::binary_result(*op, &lhs_ty.to_string(), &rhs_ty.to_string()) {
+                        Some(promoted) => TypeName::new(&promoted),
+                        None => lhs_ty,
+                    }
                 }
             }
         }
-        Expression::IntLiteral(_) => TypeName::new("i32"),
+        Expression::IntLiteral(v) => TypeName::new(crate::type_name::int_literal_type(*v)),
         Expression::FloatLiteral(_) => TypeName::new("f64"),
         Expression::BoolLiteral(_) => TypeName::bool_(),
         Expression::StringLiteral { .. } => TypeName::new("String"),
@@ -334,6 +357,45 @@ fn walk_struct(st: &StructDef, scopes: &mut Scopes, current_struct: &TypeName, f
 }
 
 pub fn resolve_implicit_types(module: &mut Module) {
+    // Inferring a return type can type the callers' locals, so repeat while
+    // return types change (bounded: each run only replaces `auto`).
+    for _ in 0..8 {
+        if !resolve_once(module) {
+            break;
+        }
+    }
+}
+
+/// Whether `function`'s return type is inferred from its returns: it
+/// declares none and is not an unspecialized generic.
+fn infers_return(function: &FunctionDef) -> bool {
+    function.ty.to_string() == crate::type_name::AUTO && function.generic_params.is_empty()
+}
+
+/// Give `function` the type its returns agree on: `void` when it returns no
+/// value, the first resolved return type otherwise. Returns whether the type
+/// changed.
+fn finish_return_inference(function: &mut FunctionDef, scopes: &mut Scopes) -> bool {
+    let Some(returns) = scopes.returns.take() else {
+        return false;
+    };
+    let inferred = if returns.is_empty() {
+        // `main` is the process entry point: falling off its end exits 0.
+        TypeName::new(if function.name == "main" && function.parent.is_none() { "int" } else { "void" })
+    } else {
+        match returns.into_iter().find(|t| !t.is_empty() && t.to_string() != crate::type_name::AUTO) {
+            Some(ty) => ty,
+            None => return false,
+        }
+    };
+    function.ty = inferred;
+    true
+}
+
+/// One run of the pass; returns whether a function's return type was
+/// inferred.
+fn resolve_once(module: &mut Module) -> bool {
+    let mut inferred = false;
     // Struct field table.
     let struct_fields: Vec<(String, Vec<VariableDef>)> = module
         .structs
@@ -453,6 +515,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
                 None => current_struct.clone(),
             };
             resolve_parameter_defaults(&mut method.parameters, &mut scopes, &Some(method_struct.clone()));
+            scopes.returns = infers_return(method).then(Vec::new);
             if let Some(body) = &mut method.body {
                 scopes.push(&method.name);
                 scopes.params.push(method.parameters.clone());
@@ -460,12 +523,16 @@ pub fn resolve_implicit_types(module: &mut Module) {
                 resolve_block(body, &mut scopes, &Some(method_struct.clone()));
                 scopes.pop();
                 scopes.function_depth = None;
+            } else {
+                scopes.returns = None;
             }
+            inferred |= finish_return_inference(method, &mut scopes);
         }
     }
 
     // Free functions.
     for function in &mut module.functions {
+        let returns = infers_return(function).then(Vec::new);
         if let Some(body) = &mut function.body {
             let mut scopes = Scopes::new();
             scopes.structs = struct_fields.clone();
@@ -474,11 +541,13 @@ pub fn resolve_implicit_types(module: &mut Module) {
             scopes.function_types = function_values.clone();
             scopes.symbols[0].extend(global_symbols.iter().cloned());
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
+            scopes.returns = returns;
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
             scopes.function_depth = Some(scopes.names.len() - 1);
             resolve_block(body, &mut scopes, &None);
             scopes.pop();
+            inferred |= finish_return_inference(function, &mut scopes);
         }
     }
 
@@ -503,6 +572,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
         }
         scopes.symbols[0].push((var.name.clone(), var.ty.clone()));
     }
+    inferred
 }
 
 /// Default arguments are resolved in the declaring scope (no locals), so a
@@ -571,6 +641,10 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
         Statement::Return(ret) => {
             if let Some(expr) = &mut ret.expr {
                 resolve_expression(expr, scopes, current_struct, None);
+                let ty = type_of_expr(expr, scopes, current_struct.as_ref());
+                if let Some(returns) = &mut scopes.returns {
+                    returns.push(ty);
+                }
             }
         }
         Statement::LoopBreak(_) => {}

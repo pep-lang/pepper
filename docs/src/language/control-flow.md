@@ -19,32 +19,17 @@ than zero counts as true, as in C.
 
 ### Chains of conditions
 
-`else if` is not supported yet: `else` must be followed by a block.
+`else if` tests another condition when the ones before it were false. The
+first true condition's block runs, and the final `else` block, if there is
+one, runs when none was true:
 
 ```pepper
 if x > 0 {
     return 1;
-} else if x < 0 {    # error
+} else if x < 0 {
     return -1;
-}
-```
-
-```
-main.pep:4:12: error: expected '{'
-    4 |     } else if x < 0 {
-      |            ^~
-```
-
-Nest the second `if` inside the `else` block instead, or return early from each
-branch as `classify` does in the example above:
-
-```pepper
-if x > 0 {
-    return 1;
 } else {
-    if x < 0 {
-        return -1;
-    }
+    return 0;
 }
 ```
 
@@ -53,11 +38,17 @@ For a choice between two values, the conditional operator
 
 ### Guarding a check
 
-`&&` and `||` do not short-circuit yet: both operands are always evaluated. A
-condition such as `items.count() > 0 && items[0] > 100` still reads `items[0]`
-when the array is empty, which panics with `Array index read out of bounds`.
-Until this is fixed, put the guard in its own `if`, as the example does with
-`readings`.
+`&&` and `||` short-circuit, as in C: the right operand is evaluated only when
+the left one does not already decide the result. A guard can therefore come
+first in the same condition:
+
+```pepper
+if items.count() > 0 && items[0] > 100 {
+    print("starts high");
+}
+```
+
+When `items` is empty, `items[0]` is never read.
 
 ## `while`
 
@@ -127,6 +118,4 @@ it, or move the loops into a function and `return` from it.
 caller. It works from anywhere in the function, including from inside loops.
 See [Functions](functions.md).
 
-A function that returns nothing cannot use a bare `return;` yet: `return` must
-be followed by a value, and `return;` is a parse error (`expected expression`).
-Structure the function with `if`/`else` so that it runs off the end instead.
+In a function that returns nothing, a bare `return;` leaves the function early.

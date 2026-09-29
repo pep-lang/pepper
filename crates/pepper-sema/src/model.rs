@@ -40,6 +40,7 @@ pub enum BinaryOp {
     RShiftAssign,
     BitAndAssign,
     BitOrAssign,
+    BitXorAssign,
 }
 
 impl BinaryOp {
@@ -75,7 +76,8 @@ impl BinaryOp {
             BinaryOp::LShiftAssign => "<<=",
             BinaryOp::RShiftAssign => ">>=",
             BinaryOp::BitAndAssign => "&=",
-            BinaryOp::BitOrAssign => "^=",
+            BinaryOp::BitOrAssign => "|=",
+            BinaryOp::BitXorAssign => "^=",
         };
         base.to_string()
     }
@@ -92,6 +94,7 @@ impl BinaryOp {
             BinaryOp::RShiftAssign => Some(BinaryOp::RShift),
             BinaryOp::BitAndAssign => Some(BinaryOp::BitAnd),
             BinaryOp::BitOrAssign => Some(BinaryOp::BitOr),
+            BinaryOp::BitXorAssign => Some(BinaryOp::BitXor),
             _ => None,
         }
     }
@@ -109,6 +112,7 @@ impl BinaryOp {
                 | BinaryOp::RShiftAssign
                 | BinaryOp::BitAndAssign
                 | BinaryOp::BitOrAssign
+                | BinaryOp::BitXorAssign
         )
     }
 
@@ -219,6 +223,7 @@ pub enum Expression {
         ty: TypeName,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
+        loc: Loc,
     },
     SizeOf(TypeName),
     IsPod(TypeName),
@@ -293,6 +298,7 @@ impl Expression {
             | Expression::Unary { loc, .. }
             | Expression::Cast { loc, .. }
             | Expression::Index { loc, .. }
+            | Expression::ArrayIndex { loc, .. }
             | Expression::FunctionCall { loc, .. }
             | Expression::MethodCall { loc, .. } => *loc,
             _ => Loc::NONE,
@@ -326,6 +332,8 @@ pub struct While {
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
     pub expr: Option<Expression>,
+    /// Location of the returned value ([`Loc::NONE`] when synthesized).
+    pub loc: Loc,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -365,6 +373,8 @@ pub struct VariableDef {
     pub loc: Loc,
     /// Location of the written type; [`Loc::NONE`] when it is inferred.
     pub type_loc: Loc,
+    /// Declared `const`: it may not be assigned after its initialization.
+    pub is_const: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -420,6 +430,8 @@ pub struct StructDef {
 #[derive(Debug, Clone)]
 pub struct TraitDef {
     pub name: String,
+    /// Generic parameters (`T` in `Iterator<T>`), in declaration order.
+    pub generic_params: Vec<GenericParam>,
     pub methods: Vec<FunctionDef>,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,

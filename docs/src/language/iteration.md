@@ -103,10 +103,10 @@ iterable):
 
 Some things to keep in mind:
 
-- **Declaring the trait is optional.** Traits are not checked yet, so the loop
-  looks only at which methods a type has. Writing
-  `extend Countdown with Iterator<int> {}` documents your intent (see
-  [Traits and extensions](traits-and-extensions.md)).
+- **Declaring the trait is optional.** The loop looks only at which methods a
+  type has. Writing `extend Countdown with Iterator<int> {}` documents your
+  intent, and the compiler then checks that `Countdown` has both `next()` and
+  `current()` (see [Traits and extensions](traits-and-extensions.md)).
 - **Looping over an iterator uses it up.** When the source is itself an
   iterator stored in a variable, the loop drives that same object, so it is
   exhausted afterwards. An iterable starts a new, independent pass every time
@@ -150,14 +150,15 @@ body are released at the end of every pass, whether the pass ends normally or
 by `continue`, `break`, or `return`. Leaving the loop early also releases the
 hidden iterator, so a destructor on a custom iterator runs at that point.
 
-Two limitations apply today:
+Using the loop variable or a body local after the loop is an error, the same as
+for any name that is out of scope:
 
-- Using the loop variable or a body local after the loop does not yet produce
-  a clear error: the compiler fails with an internal
-  `Instruction does not dominate all uses` message instead of
-  `use of undeclared identifier`.
-- Do not give the loop variable the same name as a variable declared before
-  the loop. The compiler currently mishandles the outer variable after the
-  loop and fails with the same internal error. Going the other way works: a
-  variable declared inside a nested loop's body may reuse the outer loop
-  variable's name.
+```text
+main.pep:6:12: error: use of undeclared identifier 'i'
+    6 |     return i;
+      |            ^
+```
+
+The loop variable, or a local in the loop body, may have the same name as a
+variable declared before the loop. It hides the outer variable inside the loop,
+and the outer variable keeps its value afterwards.

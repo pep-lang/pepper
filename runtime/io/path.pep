@@ -26,8 +26,7 @@ import "sys_windows";
     return "/";
 }
 [Target(OS(Windows))] export _io_path_separator(): String {
-    # String literals have no escape sequences: build "\" from its byte.
-    return _io_string_from_byte(92);
+    return "\\";
 }
 
 # Length of the prefix before any root separator: always 0 on POSIX; on

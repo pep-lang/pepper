@@ -18,6 +18,12 @@ pub struct TypeName {
 }
 
 pub const AUTO: &str = "__auto";
+
+/// Type of an integer literal, as in C: `i32` when the value fits, else
+/// `i64` (codegen emits the same widths).
+pub fn int_literal_type(value: i64) -> &'static str {
+    if i32::try_from(value).is_ok() { "i32" } else { "i64" }
+}
 pub const VOID: &str = "void";
 pub const BOOL: &str = "bool";
 pub const VOID_PTR: &str = "void*";

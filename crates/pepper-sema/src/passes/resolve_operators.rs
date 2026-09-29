@@ -136,6 +136,7 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                     ty: TypeName::auto(),
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
+                    loc: *loc,
                 };
             }
         }
@@ -159,6 +160,23 @@ fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName
                         this: Box::new(lhs),
                         method: op_name,
                         args: vec![rhs],
+                        loc: *loc,
+                    };
+                } else if *op == BinaryOp::NotEqual
+                    && (index_pointee_declares(lhs, table, current, "==")
+                        || lhs_struct(&**lhs, table, current).is_some_and(|info| info.methods.contains("==")))
+                {
+                    // Without its own `!=`, `a != b` is `!(a == b)`.
+                    let lhs = (**lhs).clone();
+                    let rhs = (**rhs).clone();
+                    *expr = Expression::Unary {
+                        op: UnaryOp::LogicalNot,
+                        operand: Box::new(Expression::MethodCall {
+                            this: Box::new(lhs),
+                            method: "==".to_string(),
+                            args: vec![rhs],
+                            loc: *loc,
+                        }),
                         loc: *loc,
                     };
                 }
@@ -247,6 +265,7 @@ fn compound_index_assign(
         attributes: vec![],
         loc,
         type_loc: Loc::NONE,
+        is_const: false,
     };
     let set = Expression::MethodCall {
         this: Box::new((**container).clone()),

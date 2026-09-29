@@ -816,20 +816,26 @@ export struct File {
     ##
     ## Only the contents are copied: `to` keeps its own permissions and
     ## timestamps (a new file gets the defaults of `File.create`). A failure
-    ## part way leaves `to` partly written. `from` and `to` must be
-    ## different files: `to` is truncated before `from` is read.
+    ## part way leaves `to` partly written.
     ##
     ## @param from the file to copy
     ## @param to the destination file
-    ## @returns the number of bytes copied; an error as for `File.open` on
-    ##   `from` (such as `is_not_found()`), `File.create` on `to`, or a
-    ##   read, write or close failure
+    ## @returns the number of bytes copied; `is_invalid_input()` when `from`
+    ##   and `to` are the same file (after resolving symlinks), which
+    ##   truncating `to` would empty before it was read; otherwise an error
+    ##   as for `File.open` on `from` (such as `is_not_found()`),
+    ##   `File.create` on `to`, or a read, write or close failure
     ## @example
     ##     var n = File.copy(Path("a.txt"), Path("b.txt")).unwrap();
     static IoResult<ulong> copy(Path from, Path to) {
         var src = File.open(from);
         if (src.is_err()) {
             return IoResult<ulong>.err(src.Error);
+        }
+        var from_real = from.canonicalize();
+        var to_real = to.canonicalize();
+        if (from_real.is_ok() && to_real.is_ok() && from_real.Value.Value == to_real.Value.Value) {
+            return IoResult<ulong>.err(IoError(_io_sys_code_invalid_input(), "source and destination are the same file"));
         }
         var dst = File.create(to);
         if (dst.is_err()) {

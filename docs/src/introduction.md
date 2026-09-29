@@ -54,11 +54,6 @@ standard library covers strings, arrays, hash maps and sets, atomics, and
 file-system access. That is enough to write real programs, but expect gaps.
 Some that you will meet quickly:
 
-- There is no `else if`; nest an `if` inside the `else` block instead.
-- A function that returns nothing cannot `return` early: `return` always
-  needs a value.
-- String literals have no escape sequences, so `"\n"` is a backslash
-  followed by the letter `n`.
 - There are no closures or lambdas yet. You can pass named functions as
   values (see [function types](language/function-types.md)).
 - Calling a method through a trait type does not work yet. You can declare
@@ -66,8 +61,7 @@ Some that you will meet quickly:
 - There is no threading API in the standard library yet.
 - Reference counting does not reclaim cycles: two objects that refer to each
   other are never freed. Weak references are being designed.
-- `print` writes each argument on its own line, and floating-point values
-  print incorrectly, so avoid printing them for now.
+- `print` writes each argument on its own line.
 
 Each chapter of this book says plainly what is and is not supported. When a
 chapter shows a feature, the example was compiled and run to check it.

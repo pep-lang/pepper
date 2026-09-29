@@ -30,17 +30,21 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 ## Test layout
 
-Expect ~106 passing and 1 ignored.
+The suite has several hundred tests and grows with nearly every change, so
+no count is kept here: a run is good when every `test result:` line says
+`0 failed`. A few tests are `#[ignore]`d on purpose (see **Corpus
+behavior**).
 
-| Crate | Tests |
+| Where | What |
 |---|---|
-| `pepper-parser` | 53 unit tests in `src/parser/parsers.rs` (grammar: literals, expressions, structs, traits, generics) |
-| `pepper-sema` | 8 model tests in `src/model_tests.rs` (parse + build + transform → resolved model) |
-| `pepper-codegen` | 1 unit test in `src/target.rs` — the host's own triple resolves to a target machine, which is what a CLI run needs. Other tests reach the same code, but inkwell's execution-engine constructors register the host backend as a side effect, so a JIT test running first can mask a wrong registration; this one runs alone in its binary and cannot be masked. Plus 16 tests in `tests/codegen_tests.rs` — codegen + JIT, asserting the value `test()` returns |
-| `pepper-driver` | 18 tests in `tests/compile_tests.rs` (17 JIT value tests + `full_pipeline_link_and_spawn`, which emits an object, links it, and runs the binary) |
-| `pepper-driver` | 1 `#[ignore]`d test in `tests/corpus_tests.rs` (compile-and-run the corpus) |
-| root `pepper` | `tests/parser_corpus.rs` — every `tests/**/*.pep` file must parse into a well-formed module |
-| `xtask` | 6 unit tests in `src/main.rs` — flag resolution (last of `--devtools`/`--no-devtools` wins, identically for both scripts; `--llvm` in each script's spelling; `-ExecutionPolicy Bypass` before `-File`; `--check`/`-h` not provisioning and bad input rejected), reading the generated cargo config back including TOML-escaped Windows paths, and the default LLVM major being readable from the workspace manifest |
+| `pepper-parser` | unit tests in `src/parser/parsers.rs` (grammar), `src/parser.rs` and `src/diagnostic.rs` (error rendering) |
+| `pepper-sema` | model tests in `src/model_tests.rs` (parse + build + transform → resolved model) and visibility tests in `src/visibility.rs` |
+| `pepper-codegen` | `src/target.rs`: the host's own triple resolves to a target machine. It runs alone in its binary because inkwell's execution-engine constructors register the host backend as a side effect, which a JIT test running first could mask. `tests/codegen_tests.rs`: codegen + JIT, asserting the value `test()` returns |
+| `pepper-files` | runtime discovery (`src/runtime.rs`) |
+| `pepper-driver` | one integration test binary per feature in `tests/*_tests.rs`: most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` is `#[ignore]`d (see below) |
+| `tools/lsp` | language server tests in `src/tests.rs` |
+| root `pepper` | `tests/parser_corpus.rs`: every `tests/**/*.pep` file must parse into a well-formed module |
+| `xtask` | unit tests in `src/main.rs` for the setup scripts' flag handling and generated cargo config |
 
 `tests/` also holds the `.pep` fixtures: standalone files at the root (`hello.pep`, `array.pep`, `string.pep`, `struct.pep`, `debug.pep`) and one `test.pep` per feature folder.
 

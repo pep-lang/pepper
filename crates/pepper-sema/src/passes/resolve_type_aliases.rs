@@ -24,6 +24,9 @@ pub fn resolve_type_aliases(module: &mut Module) {
     for def in &module.type_aliases {
         aliases.insert(def.name.clone(), def);
     }
+    if report_cycle(module, &aliases) {
+        return;
+    }
 
     // Value-symbol names visible at module scope. A name bound to a value
     // (global, function) must not be rewritten as an alias use in call
@@ -215,7 +218,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
-        Expression::ArrayIndex { ty, lhs, rhs } => {
+        Expression::ArrayIndex { ty, lhs, rhs, .. } => {
             subst(ty, aliases);
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
@@ -295,10 +298,63 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
     }
 }
 
+/// Report the first alias (in declaration order) whose target refers back to
+/// it, at its name, with a note at each alias the cycle passes through.
+/// Returns whether a cycle was found; expansion is then skipped, since every
+/// use of the cycle would report it again.
+fn report_cycle(module: &Module, aliases: &HashMap<String, &TypeAliasDef>) -> bool {
+    fn names<'a>(ty: &'a TypeName, out: &mut Vec<&'a str>) {
+        out.push(&ty.name);
+        for arg in &ty.sub_types {
+            names(arg, out);
+        }
+    }
+    // Depth-first from `name`, with `path` the aliases on the way; returns
+    // the cycle back to `path[0]` if there is one.
+    fn find<'a>(
+        name: &'a str,
+        aliases: &HashMap<String, &'a TypeAliasDef>,
+        path: &mut Vec<&'a str>,
+        done: &mut HashSet<&'a str>,
+    ) -> bool {
+        let Some(def) = aliases.get(name) else { return false };
+        let mut targets = vec![];
+        names(&def.target, &mut targets);
+        for next in targets {
+            if next == path[0] {
+                return true;
+            }
+            if !aliases.contains_key(next) || path.contains(&next) || done.contains(next) {
+                continue;
+            }
+            path.push(next);
+            if find(next, aliases, path, done) {
+                return true;
+            }
+            path.pop();
+            done.insert(next);
+        }
+        false
+    }
+    for def in &module.type_aliases {
+        let mut path = vec![def.name.as_str()];
+        if find(&def.name, aliases, &mut path, &mut HashSet::new()) {
+            let mut error = Diagnostic::error(format!("type alias '{}' refers to itself", def.name)).at(def.loc);
+            for through in &path[1..] {
+                let loc = aliases[*through].loc;
+                error = error.with_note(format!("through type alias '{}', declared here", through), Some(loc));
+            }
+            crate::errors::report(error);
+            return true;
+        }
+    }
+    false
+}
+
 /// An error in a use of `def`. Type names carry no location, so it points
 /// at the alias's declaration.
 fn alias_error(def: &TypeAliasDef, message: String) -> Diagnostic {
-    Diagnostic::error(message).with_note(format!("type alias {} declared here", def.name), Some(def.loc))
+    Diagnostic::error(message).with_note(format!("type alias '{}' declared here", def.name), Some(def.loc))
 }
 
 /// Expand one type name (and its nested arguments) to a non-alias type.
@@ -311,7 +367,7 @@ fn subst(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>) {
 /// on this descent path: re-entering one means the alias graph is recursive.
 fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, inflight: &mut HashSet<String>, depth: usize) {
     if depth > MAX_EXPANSION_DEPTH {
-        crate::errors::report(Diagnostic::error(format!("type alias expansion too deep for {}", ty)));
+        crate::errors::report(Diagnostic::error(format!("type alias expansion too deep for '{}'", ty)));
         return;
     }
     // Nested arguments first; each is expanded independently.
@@ -325,7 +381,7 @@ fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, infl
         crate::errors::report(alias_error(
             def,
             format!(
-                "type alias {} takes {} type argument(s), {} given",
+                "type alias '{}' takes {} type argument(s), {} given",
                 def.name,
                 def.generic_params.len(),
                 ty.sub_types.len()
@@ -342,7 +398,7 @@ fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, infl
         } else {
             crate::errors::report(alias_error(
                 def,
-                format!("type alias {} requires a type argument for parameter {}", def.name, param.name),
+                format!("type alias '{}' requires a type argument for parameter '{}'", def.name, param.name),
             ));
             return;
         };
@@ -351,7 +407,7 @@ fn expand_node(ty: &mut TypeName, aliases: &HashMap<String, &TypeAliasDef>, infl
 
     let current = ty.to_string();
     if !inflight.insert(current.clone()) {
-        crate::errors::report(alias_error(def, format!("type alias {} is recursive: {}", def.name, current)));
+        crate::errors::report(alias_error(def, format!("type alias '{}' is recursive: '{}'", def.name, current)));
         return;
     }
     let mut next = def.target.clone();

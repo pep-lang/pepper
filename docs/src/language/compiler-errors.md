@@ -178,6 +178,40 @@ main.pep:2:13: error: expected expression
       |             ^
 ```
 
+**A value of the wrong type.** Numbers convert among themselves, as in C, but
+a number is never a struct and one struct type is never another. The check
+applies wherever a value flows into a typed place: a variable's initializer, an
+assignment, an argument and a `return`:
+
+```text
+main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
+    2 |     int x = "hello";
+      |     ^~~
+```
+
+```text
+main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
+    3 |     return g(5);
+      |            ^
+```
+
+```text
+main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
+    2 |     return "a";
+      |            ^~~
+```
+
+**The same name declared twice in one scope:**
+
+```text
+main.pep:3:9: error: redefinition of 'n'
+    3 |     var n = 2;
+      |         ^
+main.pep:2:9: note: previous definition is here
+    2 |     var n = 1;
+      |         ^
+```
+
 **Looping over something that cannot be iterated** (see
 [Iteration](iteration.md)):
 
@@ -205,9 +239,6 @@ status instead of returning from `main`). See [`assert` and
 
 ## Current limitations
 
-The compiler does not yet check every type. Some mismatches that should be
-errors compile without one, for example storing an `int` in a variable
-declared `String`, returning a `String` from a function declared to return
-`int`, or declaring the same local variable twice in one scope. Until these
-checks exist, read such code carefully: the resulting program has undefined
-behavior.
+The type check does not compare the type arguments of generic structs yet, so
+`Array<int> a = Array<String>();` compiles. Read such code carefully: the
+resulting program has undefined behavior.

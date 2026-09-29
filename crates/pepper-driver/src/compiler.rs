@@ -82,13 +82,12 @@ pub fn compile(
     Ok(module)
 }
 
-/// Platform selection, struct bodies, the transform passes, then the
-/// function-type check, on a merged module; errors are rendered against its
-/// sources.
+/// Platform selection, struct bodies and the transform passes (the last of
+/// which checks value types) on a merged module; errors are rendered against
+/// its sources.
 fn run_passes(module: &mut SemaModule) -> Result<(), String> {
     pepper_sema::apply_platform_filters(module).map_err(|d| module.sources.render(&d))?;
     struct_body::apply(module).map_err(|d| module.sources.render(&d))?;
     transform_pass(module).map_err(|d| module.sources.render(&d))?;
-    pepper_sema::passes::check_function_types::check_function_types(module)?;
     Ok(())
 }

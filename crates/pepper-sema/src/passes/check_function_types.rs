@@ -15,6 +15,15 @@ use crate::type_name::TypeName;
 /// bare name) are re-parsed first.
 fn canonical(ty: &TypeName) -> TypeName {
     let ty = &crate::passes::gather_generics::parse_type_string(&ty.to_string());
+    // `__ptr<T>` and `T*` are one type.
+    if ty.name == "__ptr" && ty.sub_types.len() == 1 {
+        return TypeName::new(&format!("{}*", canonical(&ty.sub_types[0])));
+    }
+    if let Some(pointee) = ty.name.strip_suffix('*') {
+        if ty.sub_types.is_empty() {
+            return TypeName::new(&format!("{}*", canonical(&TypeName::new(pointee))));
+        }
+    }
     let name = match ty.name.as_str() {
         "int" => "i32",
         "uint" => "u32",
@@ -35,16 +44,86 @@ fn same_type(a: &TypeName, b: &TypeName) -> bool {
     canonical(a) == canonical(b)
 }
 
+/// Where a value flows: names the slot in a message, and locates the error
+/// when the value itself has no location (a literal).
+struct Slot<'s> {
+    what: &'s dyn Fn() -> String,
+    /// The message for a value of type `.1` where `.0` is expected.
+    mismatch: &'s dyn Fn(&str, &str) -> String,
+    fallback: Loc,
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Numeric,
+    Struct,
+}
+
 struct Checker<'a> {
     module: &'a Module,
     table: StructTable,
-    errors: Vec<String>,
+    errors: Vec<Diagnostic>,
+    /// The generic parameter names of the base being checked through a
+    /// specialization. Specialized bodies may keep a parameter's spelling
+    /// (`T`) in annotations, which says nothing about the type, even when a
+    /// user struct happens to have that name.
+    unbound: Vec<String>,
 }
 
 impl<'a> Checker<'a> {
-    /// `value` flows into a slot of type `expected` (described by `what`).
-    fn flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, what: &dyn Fn() -> String) {
+    fn report(&mut self, message: String, value: &Expression, slot: &Slot) {
+        let at = if value.loc().is_none() { slot.fallback } else { value.loc() };
+        let diagnostic = Diagnostic::error(message).at(at);
+        if !self.errors.iter().any(|d| d.message == diagnostic.message && d.loc == diagnostic.loc) {
+            self.errors.push(diagnostic);
+        }
+    }
+
+    /// What a type certainly is, or `None` when unknown here (unresolved,
+    /// a generic parameter, a pointer, a function).
+    fn kind_of(&self, ty: &TypeName) -> Option<Kind> {
+        let name = ty.to_string();
+        if name == crate::type_name::AUTO || name.is_empty() || ty.is_function_type() || name.ends_with('*') {
+            return None;
+        }
+        if self.unbound.iter().any(|p| *p == ty.name) {
+            return None;
+        }
+        if crate::arithmetic::is_numeric_type(&canonical(ty).to_string()) {
+            return Some(Kind::Numeric);
+        }
+        self.module.structs.iter().any(|s| s.name == name).then_some(Kind::Struct)
+    }
+
+    /// A non-function `value` flowing into a non-function slot: numbers
+    /// convert among themselves, but a number is never a struct, and one
+    /// struct is never another.
+    fn value_flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
+        // Raw buffer reads (`Data[i]`) carry no reliable static type.
+        if matches!(value, Expression::PointerLiteral | Expression::Default(_) | Expression::ArrayIndex { .. } | Expression::Index { .. }) {
+            return;
+        }
+        let Some(expected_kind) = self.kind_of(expected) else { return };
+        let Some(actual) = static_type::of(value, &self.table, current) else { return };
+        let Some(actual_kind) = self.kind_of(&actual) else { return };
+        let mismatch = match (expected_kind, actual_kind) {
+            (Kind::Numeric, Kind::Numeric) => false,
+            // Different structs; type arguments are not compared, since
+            // defaults (`Result<None>` is `Result<None, Error>`) and
+            // aliases may spell one specialization two ways.
+            (Kind::Struct, Kind::Struct) => canonical(expected).name != canonical(&actual).name,
+            _ => true,
+        };
+        if mismatch {
+            let message = (slot.mismatch)(&expected.display(), &actual.display());
+            self.report(message, value, slot);
+        }
+    }
+
+    /// `value` flows into a slot of type `expected`.
+    fn flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) {
         if !expected.is_function_type() {
+            self.value_flows_into(value, expected, current, slot);
             return;
         }
         if matches!(value, Expression::PointerLiteral) {
@@ -62,9 +141,11 @@ impl<'a> Checker<'a> {
             if !known || actual.to_string() == crate::type_name::AUTO || actual.is_pointer() {
                 return;
             }
-            self.errors.push(format!("{} expects a function of type {}, but was given a value of type {}", what(), expected.display(), actual.display()));
+            let message = format!("{} expects a function of type '{}', but was given a value of type '{}'", (slot.what)(), expected.display(), actual.display());
+            self.report(message, value, slot);
         } else if !same_type(&actual, expected) {
-            self.errors.push(format!("{} expects a function of type {}, but was given a function of type {}", what(), expected.display(), actual.display()));
+            let message = format!("{} expects a function of type '{}', but was given a function of type '{}'", (slot.what)(), expected.display(), actual.display());
+            self.report(message, value, slot);
         }
     }
 
@@ -83,10 +164,11 @@ impl<'a> Checker<'a> {
         Some(m.parameters.iter().map(|p| p.ty.clone()).collect())
     }
 
-    fn check_arguments(&mut self, label: &str, params: &[TypeName], args: &[Expression], current: Option<&TypeName>) {
+    fn check_arguments(&mut self, label: &str, params: &[TypeName], args: &[Expression], current: Option<&TypeName>, call: Loc) {
         for (idx, (param, arg)) in params.iter().zip(args).enumerate() {
             let what = || label.replace("{}", &(idx + 1).to_string());
-            self.flows_into(arg, param, current, &what);
+            let mismatch = |expected: &str, actual: &str| format!("cannot pass a value of type '{}' as {}, which has type '{}'", actual, what(), expected);
+            self.flows_into(arg, param, current, &Slot { what: &what, mismatch: &mismatch, fallback: call });
         }
     }
 
@@ -100,37 +182,44 @@ impl<'a> Checker<'a> {
         });
         for node in nodes {
             match &node {
-                Expression::FunctionCall { function, args, .. } => {
+                Expression::FunctionCall { function, args, loc } => {
                     if let Some((label, params)) = self.parameters_of_call(function) {
-                        self.check_arguments(&label, &params, args, current);
+                        self.check_arguments(&label, &params, args, current, *loc);
                     }
                 }
-                Expression::MethodCall { this, method, args, .. } => {
+                Expression::MethodCall { this, method, args, loc } => {
                     if let Some(this_type) = static_type::of(this, &self.table, current) {
                         if let Some(params) = self.parameters_of_method(&this_type, method) {
                             let label = format!("argument {{}} of '{}'", method);
-                            self.check_arguments(&label, &params, args, current);
+                            self.check_arguments(&label, &params, args, current, *loc);
                         }
                     }
                 }
                 Expression::Invoke { callee, args } => {
                     if let Some(fn_ty) = static_type::of(callee, &self.table, current).filter(|t| t.is_function_type()) {
                         if args.len() != fn_ty.function_params().len() {
-                            self.errors.push(format!(
-                                "a function of type {} takes {} argument(s), but {} were given",
+                            let message = format!(
+                                "a function of type '{}' takes {} argument(s), but {} were given",
                                 fn_ty.display(),
                                 fn_ty.function_params().len(),
                                 args.len()
-                            ));
+                            );
+                            let what = String::new;
+                            let mismatch = |_: &str, _: &str| String::new();
+                            self.report(message, callee, &Slot { what: &what, mismatch: &mismatch, fallback: callee.loc() });
                         } else {
-                            let label = format!("argument {{}} of a call through {}", fn_ty.display());
-                            self.check_arguments(&label, fn_ty.function_params(), args, current);
+                            let label = format!("argument {{}} of a call through '{}'", fn_ty.display());
+                            self.check_arguments(&label, fn_ty.function_params(), args, current, callee.loc());
                         }
                     }
                 }
-                Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. } => {
-                    if let Some(lhs_type) = static_type::of(lhs, &self.table, current) {
-                        self.flows_into(rhs, &lhs_type, current, &|| "assignment".to_string());
+                Expression::Binary { op: BinaryOp::Assign, lhs, rhs, loc } => {
+                    // A raw buffer slot (`Data[i] = v`) has no reliable
+                    // static type.
+                    let raw_slot = matches!(**lhs, Expression::Index { .. } | Expression::ArrayIndex { .. });
+                    if let Some(lhs_type) = static_type::of(lhs, &self.table, current).filter(|t| !raw_slot || t.is_function_type()) {
+                        let mismatch = |expected: &str, actual: &str| format!("cannot assign a value of type '{}' to a variable of type '{}'", actual, expected);
+                        self.flows_into(rhs, &lhs_type, current, &Slot { what: &|| "assignment".to_string(), mismatch: &mismatch, fallback: *loc });
                     }
                 }
                 _ => {}
@@ -149,8 +238,7 @@ impl<'a> Checker<'a> {
                 Statement::Declaration(Declaration::Variable(var)) => {
                     if let Some(default) = &var.default {
                         self.expression(default, current);
-                        let name = var.name.clone();
-                        self.flows_into(default, &var.ty, current, &|| format!("variable '{}'", name));
+                        self.variable(var, default, current);
                     }
                 }
                 Statement::Declaration(_) => {}
@@ -169,12 +257,28 @@ impl<'a> Checker<'a> {
                     if let Some(expr) = &ret.expr {
                         self.expression(expr, current);
                         let name = function.name.clone();
-                        self.flows_into(expr, &function.ty, current, &|| format!("the return value of '{}'", name));
+                        let what = || format!("the return value of '{}'", name);
+                        let mismatch = |expected: &str, actual: &str| format!("cannot return a value of type '{}' from '{}', which returns '{}'", actual, name, expected);
+                        self.flows_into(expr, &function.ty, current, &Slot { what: &what, mismatch: &mismatch, fallback: ret.loc });
+                    } else if function.ty.to_string() != crate::type_name::VOID && !ret.loc.is_none() {
+                        let message = format!("non-void function '{}' should return a value", function.name);
+                        if !self.errors.iter().any(|d| d.message == message && d.loc == Some(ret.loc)) {
+                            self.errors.push(Diagnostic::error(message).at(ret.loc));
+                        }
                     }
                 }
                 Statement::LoopBreak(_) => {}
             }
         }
+    }
+
+    /// A variable's initializer flows into the variable.
+    fn variable(&mut self, var: &VariableDef, default: &Expression, current: Option<&TypeName>) {
+        let name = var.name.clone();
+        let what = || format!("variable '{}'", name);
+        let mismatch = |expected: &str, actual: &str| format!("cannot initialize variable '{}' of type '{}' with a value of type '{}'", name, expected, actual);
+        let fallback = if var.type_loc.is_none() { var.loc } else { var.type_loc };
+        self.flows_into(default, &var.ty, current, &Slot { what: &what, mismatch: &mismatch, fallback });
     }
 
     fn function(&mut self, function: &FunctionDef, current: Option<&TypeName>) {
@@ -187,10 +291,26 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// Reject function values whose signature does not match where they flow.
-pub fn check_function_types(module: &Module) -> Result<(), String> {
-    let mut checker = Checker { module, table: StructTable::build(module), errors: vec![] };
+/// Reject values whose type does not match the typed slot they flow into.
+/// Runs as the last transform pass (so the language server reports it too).
+pub fn check_function_types(module: &mut Module) {
+    let module = &*module;
+    let mut checker = Checker { module, table: StructTable::build(module), errors: vec![], unbound: vec![] };
+    // The parameter names of the generic base a specialization came from.
+    let base_params = |name: &str, is_struct: bool| -> Vec<String> {
+        let base = name.split('<').next().unwrap_or(name);
+        if base == name {
+            return vec![];
+        }
+        let params: Vec<&crate::model::GenericParam> = if is_struct {
+            module.structs.iter().filter(|b| b.ty.name == base).flat_map(|b| b.generic_params.iter()).collect()
+        } else {
+            module.functions.iter().filter(|f| f.name == base).flat_map(|f| f.generic_params.iter()).collect()
+        };
+        params.into_iter().map(|p| p.name.clone()).collect()
+    };
     for function in &module.functions {
+        checker.unbound = base_params(&function.name, false);
         checker.function(function, None);
     }
     for st in &module.structs {
@@ -200,18 +320,19 @@ pub fn check_function_types(module: &Module) -> Result<(), String> {
             continue;
         }
         let current = st.ty.clone();
+        checker.unbound = base_params(&st.name, true);
         checker.function(&st.constructor, Some(&current));
         for method in &st.method_members {
             checker.function(method, Some(&current));
         }
     }
+    checker.unbound = vec![];
     for var in &module.globals {
         if let Some(default) = &var.default {
-            let name = var.name.clone();
-            checker.flows_into(default, &var.ty, None, &|| format!("variable '{}'", name));
+            checker.variable(var, default, None);
         }
     }
-    let mut errors = checker.errors;
-    errors.dedup();
-    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+    for error in checker.errors {
+        crate::errors::report(error);
+    }
 }

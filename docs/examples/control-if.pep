@@ -2,12 +2,11 @@
 classify(n: int): String {
     if n < 0 {
         return "negative";
+    } else if n == 0 {
+        return "zero";
     } else {
-        if n == 0 {
-            return "zero";
-        }
+        return "positive";
     }
-    return "positive";
 }
 
 main(): int {
@@ -33,14 +32,12 @@ main(): int {
     var parity = temperature % 2 == 0 ? "even" : "odd";
     assert(parity == "even", "20 is even");
 
-    # && and || evaluate both operands, so guard a check that could fail
-    # with a nested if rather than with &&.
+    # && and || stop at the first operand that decides the result, so the
+    # count check guards the index.
     var readings = Array<int>();
     var starts_high = false;
-    if (readings.count() > 0) {
-        if (readings[0] > 100) {
-            starts_high = true;
-        }
+    if (readings.count() > 0 && readings[0] > 100) {
+        starts_high = true;
     }
     assert(!starts_high, "an empty array does not start high");
     return 0;

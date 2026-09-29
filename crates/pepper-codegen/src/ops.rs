@@ -5,90 +5,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::values::{BasicValueEnum, IntValue, PointerValue};
 
-/// Compute the result type of a mixed-type arithmetic operation.
-///
-/// Integer operands promote to at least 32 bits (port of `largestIntType`
-/// in `OperatorGen.cpp:59-64`: `(bits > 32) ? Int64 : Int32`) — an i8 + u8
-/// sum like 300 must not wrap in 8-bit arithmetic. C-style promotion also
-/// governs signedness: an operand keeps its unsignedness only when it is as
-/// wide as the promoted result, so `u32`/`u64` operands yield a `"u32"`/
-/// `"u64"` result while narrower unsigned operands (`u8`, `u16`) promote to
-/// signed int. The returned name is load-bearing — it selects udiv/urem/ushr
-/// and ULT-family ops in `int_binary` and zext-vs-sext in `codegen_cast`.
-/// Floats promote to the wider float; non-numeric operands keep the lhs type
-/// (pointer arithmetic is handled by `apply_op`).
-pub fn result_type(lhs: &str, rhs: &str) -> String {
-    if !is_numeric_type(lhs) || !is_numeric_type(rhs) {
-        // Non-numeric operand: keep the lhs type.
-        return lhs.to_string();
-    }
-    let width = |n: &str| -> u32 {
-        match n {
-            "bool" | "i1" => 1,
-            "i8" | "char" | "u8" | "byte" => 8,
-            "i16" | "short" | "u16" | "ushort" => 16,
-            "f64" | "double" | "i64" | "long" | "u64" | "ulong" => 64,
-            _ => 32,
-        }
-    };
-    let w = width(lhs).max(width(rhs));
-    if is_float_type(lhs) || is_float_type(rhs) {
-        return if w > 32 { "f64".to_string() } else { "f32".to_string() };
-    }
-    // C-style integer promotion: an operand keeps its unsignedness only when
-    // it is as wide as the promoted result — u8/u16 promote to signed int,
-    // while u32/u64 stay unsigned. The name drives op selection (udiv/sdiv)
-    // and cast signedness, so it must name the value actually produced.
-    let promoted = if w > 32 { 64 } else { 32 };
-    let keeps_unsigned = |n: &str| is_unsigned_int_type(n) && width(n) == promoted;
-    let unsigned = keeps_unsigned(lhs) || keeps_unsigned(rhs);
-    match (w > 32, unsigned) {
-        (true, true) => "u64".to_string(),
-        (true, false) => "i64".to_string(),
-        (false, true) => "u32".to_string(),
-        (false, false) => "i32".to_string(),
-    }
-}
-
-/// Whether a type name is a numeric primitive (bool, integer or float,
-/// including the C-style aliases).
-pub fn is_numeric_type(n: &str) -> bool {
-    matches!(
-        n,
-        "bool"
-            | "i1"
-            | "i8"
-            | "char"
-            | "u8"
-            | "byte"
-            | "i16"
-            | "short"
-            | "u16"
-            | "ushort"
-            | "i32"
-            | "int"
-            | "u32"
-            | "uint"
-            | "i64"
-            | "long"
-            | "u64"
-            | "ulong"
-            | "f32"
-            | "float"
-            | "f64"
-            | "double"
-    )
-}
-
-/// Whether a type name is one of the unsigned integer primitives (or an
-/// alias). Selects zext/udiv/urem/lshr/ULT and fptoui/uitofp.
-pub fn is_unsigned_int_type(name: &str) -> bool {
-    matches!(name, "u8" | "byte" | "u16" | "ushort" | "u32" | "uint" | "u64" | "ulong")
-}
-
-pub fn is_float_type(name: &str) -> bool {
-    matches!(name, "f32" | "float" | "f64" | "double")
-}
+pub use pepper_sema::arithmetic::{is_float_type, is_numeric_type, is_unsigned_int_type, result_type};
 
 /// Coerce a value to the target integer/float type name (port of the coerce
 /// helper in `OperatorGen.cpp`).
@@ -219,7 +136,7 @@ fn int_type_of_name<'ctx>(context: &'ctx Context, name: &str) -> inkwell::types:
 
 /// Signed/unsigned-aware integer binary op (port of `Operations.h:66-89`).
 pub fn int_binary<'ctx>(
-    _context: &'ctx Context,
+    context: &'ctx Context,
     builder: &Builder<'ctx>,
     op: pepper_sema::model::BinaryOp,
     lhs: IntValue<'ctx>,
@@ -247,22 +164,17 @@ pub fn int_binary<'ctx>(
             }
         }
         Pow => {
-            // Integer pow via unrolled multiply loop (rhs small in tests);
-            // fall back to shift for rhs <= 31.
-            let (width, _) = (lhs.get_type().get_bit_width(), ());
-            let rhs_const = rhs.get_zero_extended_constant();
-            match rhs_const {
-                Some(exp) if exp <= 31 => {
+            // A small constant exponent unrolls to multiplies; anything else
+            // runs exponentiation by squaring.
+            match rhs.get_zero_extended_constant() {
+                Some(exp) if exp <= 31 && (unsigned || rhs.get_sign_extended_constant().is_some_and(|e| e >= 0)) => {
                     let mut acc = lhs.get_type().const_int(1, !unsigned);
                     for _ in 0..exp {
                         acc = builder.build_int_mul(acc, lhs, "powmul").ok()?;
                     }
                     acc
                 }
-                _ => {
-                    let _ = width;
-                    return None;
-                }
+                _ => int_pow(context, builder, lhs, rhs, unsigned)?,
             }
         }
         LShift => builder.build_left_shift(lhs, rhs, "shl").ok()?,
@@ -311,6 +223,75 @@ pub fn int_binary<'ctx>(
         _ => return None,
     };
     Some(v)
+}
+
+/// `base ** exp` for integers, by squaring. A negative signed exponent gives
+/// the truncated real result: `1` for base 1, `±1` for base -1, else `0`.
+fn int_pow<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    base: IntValue<'ctx>,
+    exp: IntValue<'ctx>,
+    unsigned: bool,
+) -> Option<IntValue<'ctx>> {
+    use inkwell::IntPredicate::*;
+    let ty = base.get_type();
+    let exp = if exp.get_type() == ty {
+        exp
+    } else if exp.get_type().get_bit_width() < ty.get_bit_width() {
+        builder.build_int_s_extend(exp, ty, "powexp").ok()?
+    } else {
+        builder.build_int_truncate(exp, ty, "powexp").ok()?
+    };
+    let one = ty.const_int(1, false);
+    let zero = ty.const_zero();
+    let entry = builder.get_insert_block()?;
+    let function = entry.get_parent()?;
+    let header = context.append_basic_block(function, "pow.loop");
+    let body = context.append_basic_block(function, "pow.body");
+    let done = context.append_basic_block(function, "pow.done");
+    builder.build_unconditional_branch(header).ok()?;
+
+    builder.position_at_end(header);
+    let acc = builder.build_phi(ty, "pow.acc").ok()?;
+    let factor = builder.build_phi(ty, "pow.factor").ok()?;
+    let remaining = builder.build_phi(ty, "pow.exp").ok()?;
+    let acc_v = acc.as_basic_value().into_int_value();
+    let factor_v = factor.as_basic_value().into_int_value();
+    let remaining_v = remaining.as_basic_value().into_int_value();
+    let more = builder
+        .build_int_compare(if unsigned { NE } else { SGT }, remaining_v, zero, "pow.more")
+        .ok()?;
+    builder.build_conditional_branch(more, body, done).ok()?;
+
+    builder.position_at_end(body);
+    let low_bit = builder.build_and(remaining_v, one, "pow.bit").ok()?;
+    let odd = builder.build_int_compare(NE, low_bit, zero, "pow.odd").ok()?;
+    let multiplied = builder.build_int_mul(acc_v, factor_v, "pow.mul").ok()?;
+    let next_acc = builder.build_select(odd, multiplied, acc_v, "pow.next").ok()?.into_int_value();
+    let squared = builder.build_int_mul(factor_v, factor_v, "pow.square").ok()?;
+    let halved = builder.build_right_shift(remaining_v, one, false, "pow.half").ok()?;
+    let body_end = builder.get_insert_block()?;
+    builder.build_unconditional_branch(header).ok()?;
+
+    acc.add_incoming(&[(&one, entry), (&next_acc, body_end)]);
+    factor.add_incoming(&[(&base, entry), (&squared, body_end)]);
+    remaining.add_incoming(&[(&exp, entry), (&halved, body_end)]);
+
+    builder.position_at_end(done);
+    if unsigned {
+        return Some(acc_v);
+    }
+    let negative = builder.build_int_compare(SLT, exp, zero, "pow.neg").ok()?;
+    let exp_odd = builder.build_and(exp, one, "pow.expbit").ok()?;
+    let exp_odd = builder.build_int_compare(NE, exp_odd, zero, "pow.expodd").ok()?;
+    let minus_one = ty.const_all_ones();
+    let base_is_one = builder.build_int_compare(EQ, base, one, "pow.one").ok()?;
+    let base_is_minus_one = builder.build_int_compare(EQ, base, minus_one, "pow.minusone").ok()?;
+    let sign = builder.build_select(exp_odd, minus_one, one, "pow.sign").ok()?.into_int_value();
+    let fraction = builder.build_select(base_is_minus_one, sign, zero, "pow.frac").ok()?.into_int_value();
+    let fraction = builder.build_select(base_is_one, one, fraction, "pow.frac").ok()?.into_int_value();
+    Some(builder.build_select(negative, fraction, acc_v, "pow").ok()?.into_int_value())
 }
 
 /// Float binary op.

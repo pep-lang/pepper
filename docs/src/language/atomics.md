@@ -65,7 +65,8 @@ Some details differ from C++:
   `compare_exchange` take a reference to the new value and release the one they
   replace, and `load` and `exchange` give you your own reference. The swap in
   the slot is itself atomic, so concurrent stores never leak or release a value
-  twice.
+  twice. When the `Atomic` itself is destroyed, it releases the reference it
+  holds.
 
 ## Concurrency today
 

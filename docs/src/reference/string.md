@@ -99,12 +99,10 @@ NUL-terminated C string:
 
 - with `Length` nonzero, `Size` becomes the byte length of its first
   `Length` code points (0 if the C string is not valid UTF-8);
-- with `Length` 0, `Size` becomes the C string's whole byte length, and
-  `Length` is **not** computed but stays 0, so `length()` and `empty()`
-  are wrong for that String. Pass the count, for example from
-  `String.length_of(data, size)`.
+- with `Length` 0, `Size` becomes the C string's whole byte length.
 
-`Length` is trusted, not checked against the data. Runs in O(Size).
+When `Length` is 0, it is counted from the bytes. A nonzero `Length` is
+trusted, not checked against the data. Runs in O(Size).
 
 **Parameters**
 - `data` — the bytes to copy; `__null` for an empty String (then pass no sizes, because they are stored as given)
@@ -437,9 +435,6 @@ or past `length()`, the result is an empty String. Runs in O(Size).
 
 **Returns**
 - a new String that holds the selected code points
-
-**Note**
-- a `count` of 0 with `start` in range does not currently return an empty String: the constructor receives a byte size of 0 and measures the rest of the buffer as a C string
 
 **Example**
 ```pepper

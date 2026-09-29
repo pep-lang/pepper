@@ -509,7 +509,11 @@ impl<'a> Checker<'a, '_> {
                     self.block(e);
                 }
             }
-            Statement::Return(r) => self.expression(&r.expr),
+            Statement::Return(r) => {
+                if let Some(expr) = &r.expr {
+                    self.expression(expr)
+                }
+            }
             Statement::LoopBreak(_) => {}
         }
     }

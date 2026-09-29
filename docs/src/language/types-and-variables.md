@@ -23,8 +23,10 @@ type, so you can use whichever reads better and assign freely between them.
 size of a type in bytes.
 
 Integer literals are written in decimal (`42`) or hexadecimal (`0xFF`). A literal
-on its own is an `int`; it takes a wider type when you store it in a variable of
-that type (`long big = 9000000000;`).
+on its own is an `int` when its value fits in an `int`, and a `long` otherwise, so
+`var big = 3000000000;` is a `long`. It takes another type when you store it in a
+variable of that type (`u64 huge = 9000000000000000000;`). A hexadecimal literal
+is a 64-bit bit pattern: `u64 all = 0xFFFFFFFFFFFFFFFF;` sets every bit.
 
 ```pepper
 {{#include ../../examples/types-integers.pep}}
@@ -34,10 +36,14 @@ Storing a value that does not fit in the destination keeps its low bits, as in
 C: a `u16` holding 65535 becomes 0 when you add 1 and store the result, and
 `70000 as u16` is 4464.
 
-> **Watch out:** `var big = 3000000000;` makes an `int`, because the literal is
-> an `int`, and the value silently wraps to -1294967296. Write the type when a
-> value needs more than 32 bits: `long big = 3000000000;`. A literal larger than
-> the largest `long` (9223372036854775807) currently crashes the compiler.
+A decimal literal larger than the largest `long` (9223372036854775807), or a
+hexadecimal literal with more than 64 bits, is an error:
+
+```text
+main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
+    2 |     var f = 99999999999999999999;
+      |             ^~~~~~~~~~~~~~~~~~~~
+```
 
 ### Floating point
 
@@ -73,9 +79,32 @@ through both names. [Memory and reference counting](memory.md) explains how
 references work, and the [`String`](../reference/string.md) reference lists every
 method.
 
-String literals are taken exactly as written between the quotes. There are no
-escape sequences: `"a\nb"` is four characters, a backslash included, and a
-string cannot contain a `"` character.
+A backslash in a string literal starts an escape sequence, as in C and Rust:
+
+| Escape | Character |
+|---|---|
+| `\n` | newline |
+| `\t` | tab |
+| `\r` | carriage return |
+| `\0` | the zero byte |
+| `\\` | a backslash |
+| `\"` | a double quote |
+| `\'` | a single quote |
+| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` |
+| `\u{H...}` | the Unicode code point with hexadecimal code `H...` (1 to 6 digits) |
+
+```pepper
+print("name:\t\"Pepper\"");   # name:	"Pepper"
+print("caf\u{e9}");            # café
+```
+
+Any other character after a backslash is an error:
+
+```text
+main.pep:2:13: error: unknown escape sequence '\q'
+    2 |     print("a\qb");
+      |             ^~
+```
 
 ### Other built-in types
 
@@ -135,11 +164,10 @@ A variable declared without a value starts out as zero: `0` for numbers,
 `false` for `bool`, and null for a struct type such as `String`. Give struct
 variables a value before you use them.
 
-> **Watch out:** when `var` infers the type of an arithmetic expression, it
-> takes the type of the *left* operand. `var m = 1 + 0.5;` is an `int` holding
-> 1, and with `u8 small = 250;`, `var s = small + 10;` is a `u8` holding 4. The
-> arithmetic itself follows C (see below); only the inferred variable type is
-> affected. Write the type when you mix types: `double m = 1 + 0.5;`.
+When `var` infers the type of an arithmetic expression, it takes the type the
+arithmetic produces under C's rules (see [Arithmetic follows C](#arithmetic-follows-c)):
+`var m = 1 + 0.5;` is a `double` holding 1.5, and with `u8 small = 250;`,
+`var s = small + 10;` is an `int` holding 260.
 
 ### Constants
 
@@ -150,8 +178,17 @@ const LIMIT = 3;
 const RATIO: double = 0.5;
 ```
 
-The compiler does not enforce this yet: assigning to a `const` compiles and
-changes the value. Treat `const` as documentation for now.
+Assigning to a `const`, with `=`, a compound assignment, `++` or `--`, is an
+error:
+
+```text
+main.pep:5:5: error: cannot assign to const variable 'LIMIT'
+    5 |     LIMIT = 4;
+      |     ^~~~~
+main.pep:1:7: note: 'LIMIT' declared const here
+    1 | const LIMIT = 3;
+      |       ^~~~~
+```
 
 ### Module-level variables
 
@@ -226,23 +263,25 @@ conversions"), so code ported from C gives the same results:
 | Identity | `===` (two references to the same object) |
 | Logical | `&&` (or `and`), `\|\|` (or `or`), `!` |
 | Bitwise | `&` `\|` `^` `~` `<<` `>>` |
-| Assignment | `=` `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` |
+| Assignment | `=` `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` `\|=` `^=` |
 | Increment | `++` `--`, prefix or postfix |
 | Conditional | `condition ? a : b` |
 
 Some operators have limits today:
 
-- **`&&` and `||` evaluate both operands.** They do not short-circuit yet, so
-  `items.count() > 0 && items[0] == 1` still reads `items[0]` when the array is
-  empty, and panics. Guard such checks with a nested `if` instead (see
-  [Control flow](control-flow.md)).
-- **`**` works on integers with a constant exponent from 0 to 31**, such as
-  `2 ** 10`. It is right-associative: `2 ** 3 ** 2` is `2 ** 9`. A floating-point
-  operand or an exponent held in a variable is a compile error
-  (`unsupported op Pow`), and a negative literal exponent (`2 ** -1`) crashes the
-  compiler.
-- **`|=` and `^=` do not work yet.** `|=` crashes the compiler and `^=` performs
-  `|=`. Write `x = x | y` and `x = x ^ y` instead.
+`&&` and `||` short-circuit: the right operand is evaluated only when the left
+one does not decide the result, so `items.count() > 0 && items[0] == 1` never
+reads `items[0]` from an empty array.
+
+`**` raises an integer to an integer power, and is right-associative:
+`2 ** 3 ** 2` is `2 ** 9`. The exponent can be any integer expression. A negative
+exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
+of -1, and 0 otherwise (`2 ** -1` is 0).
+
+Some operators have limits today:
+
+- **`**` works only on integers.** A floating-point operand is a compile error
+  (`unsupported op Pow`).
 - **`===`** compares struct references. It is not supported for numbers.
 
 Operators bind in this order, tightest first:

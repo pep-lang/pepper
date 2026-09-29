@@ -692,15 +692,14 @@ truncating it first, in 64 KiB chunks.
 
 Only the contents are copied: `to` keeps its own permissions and
 timestamps (a new file gets the defaults of `File.create`). A failure
-part way leaves `to` partly written. `from` and `to` must be
-different files: `to` is truncated before `from` is read.
+part way leaves `to` partly written.
 
 **Parameters**
 - `from` — the file to copy
 - `to` — the destination file
 
 **Returns**
-- the number of bytes copied; an error as for `File.open` on `from` (such as `is_not_found()`), `File.create` on `to`, or a read, write or close failure
+- the number of bytes copied; `is_invalid_input()` when `from` and `to` are the same file (after resolving symlinks), which truncating `to` would empty before it was read; otherwise an error as for `File.open` on `from` (such as `is_not_found()`), `File.create` on `to`, or a read, write or close failure
 
 **Example**
 ```pepper

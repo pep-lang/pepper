@@ -892,7 +892,11 @@ impl Rewriter<'_, '_> {
                     self.block(e);
                 }
             }
-            Statement::Return(r) => self.expression(&mut r.expr),
+            Statement::Return(r) => {
+                if let Some(expr) = &mut r.expr {
+                    self.expression(expr)
+                }
+            }
             Statement::LoopBreak(_) => {}
         }
     }

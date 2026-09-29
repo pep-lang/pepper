@@ -25,6 +25,7 @@ pub mod convert_print_calls;
 pub mod platform;
 pub mod function_types;
 pub mod check_function_types;
+pub mod check_bindings;
 pub mod lower_with_blocks;
 
 use apply_extensions::apply_extensions;
@@ -60,6 +61,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
     // First pass
+    step!(check_bindings::check_bindings(module));
     step!(synthesize_function_types(module));
     step!(resolve_literals(module));
     step!(tag_generics(module));
@@ -105,6 +107,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_resolvables(module, true));
     // Types inferred by the final resolve (e.g. `var f = square;`).
     step!(synthesize_function_types(module));
+    step!(check_function_types::check_function_types(module));
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
     Ok(())

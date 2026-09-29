@@ -5,7 +5,7 @@ use crate::model::*;
 use crate::type_name::TypeName;
 
 /// Substitute generic params → args recursively through a TypeName.
-fn substitute(ty: &mut TypeName, type_map: &[(String, TypeName)]) {
+pub(crate) fn substitute(ty: &mut TypeName, type_map: &[(String, TypeName)]) {
     for (param, arg) in type_map {
         ty.replace(param, arg);
     }
@@ -95,7 +95,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     specialized
 }
 
-fn substitute_block(block: &mut Block, type_map: &[(String, TypeName)]) {
+pub(crate) fn substitute_block(block: &mut Block, type_map: &[(String, TypeName)]) {
     for stmt in &mut block.items {
         substitute_statement(stmt, type_map);
     }

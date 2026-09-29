@@ -55,17 +55,36 @@ log_line(message: String): void { print(message); }
 void log_c(String message) { print(message); }
 ```
 
-Such a function ends when it reaches the closing brace. A bare `return;` is not
-supported yet (see [Control flow](control-flow.md#return)).
+Such a function ends when it reaches the closing brace, or earlier at a bare
+`return;`:
 
-## Return types are not inferred
+```pepper
+log_positive(n: int) {
+    if n <= 0 {
+        return;
+    }
+    print(n);
+}
+```
 
-Always write the return type of a function that returns a value. Return type
-inference is not implemented: a function without a return type is compiled as
-returning a 32-bit `int`, so a `long` result is silently truncated, a `double`
-loses its fraction, and returning a `String` or a struct crashes the compiler or
-the program. For example, `half(x: double) { return x / 2; }` returns 2 for
-`half(5.0)`, not 2.5.
+In a function that returns a value, `return;` is an error:
+
+```text
+main.pep:2:5: error: non-void function 'f' should return a value
+    2 |     return;
+      |     ^~~~~~
+```
+
+## Inferred return types
+
+A function without a return type gets one from its `return` statements. It
+returns `void` when no `return` has a value, and otherwise the type of the first
+`return` that has one, so `half(x: double) { return x / 2; }` returns a
+`double`. `main` with no return type returns an `int`, and reaching its closing
+brace exits with 0.
+
+Writing the return type is still clearer for a function that returns a value,
+and it lets the compiler check each `return` against it.
 
 ## Parameters
 
@@ -112,10 +131,8 @@ number.
 
 To print several values on one line, build a `String` with `+` first.
 
-> **Known problem:** printing a `float` or `double` currently shows the wrong
-> digits after the decimal point (for example, `print(0.5)` prints
-> `0.000005`). Convert to an integer with `as` if you need to print a
-> floating-point value today.
+A `float` or `double` prints with six digits after the decimal point, rounded:
+`print(0.5)` prints `0.500000`.
 
 For checks in your programs, the runtime also provides `assert(condition,
 message)`, which stops the program with `message` when `condition` is false, and

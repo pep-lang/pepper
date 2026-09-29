@@ -38,6 +38,7 @@ fn var_def(name: &str, ty: TypeName, default: Option<Expression>, hidden: bool) 
         attributes: vec![],
         loc: Loc::NONE,
         type_loc: Loc::NONE,
+        is_const: false,
     }
 }
 
@@ -96,7 +97,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     rhs: Box::new(Expression::PointerLiteral),
                     loc: Loc::NONE,
                 },
-                vec![Statement::Return(ReturnStatement { expr: None })],
+                vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
             ),
             Statement::Expression(Expression::Binary {
                 op: BinaryOp::Assign,
@@ -138,7 +139,7 @@ pub fn apply_synthesized(st: &mut StructDef) {
                     rhs: Box::new(Expression::PointerLiteral),
                     loc: Loc::NONE,
                 },
-                vec![Statement::Return(ReturnStatement { expr: None })],
+                vec![Statement::Return(ReturnStatement { expr: None, loc: Loc::NONE })],
             ),
             Statement::Expression(Expression::Binary {
                 op: BinaryOp::Assign,
@@ -312,6 +313,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             ty: st.ty.clone(),
             loc: Loc::NONE,
         }),
+        loc: Loc::NONE,
     }));
 
     st.constructor.body = Some(Block {

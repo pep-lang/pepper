@@ -84,10 +84,11 @@ uses the override; every other call uses the generic version. The standard
 library uses this to give [`hash<String>`](../reference/hash.md) a
 content-based hash, while `hash<T>` hashes other structs by identity.
 
-Overrides currently work only for the built-in primitive types (`int`,
-`float`, `bool`, `u8`, and so on) and `String`. Writing an override for your
-own struct type, such as `describe<Point>`, compiles, but calls still use the
-generic version.
+An override can name a built-in type (`int`, `bool`, `String`, and so on) or
+one of your own structs, such as `describe<Point>`. An override for a struct
+must be in the same file as the generic function: in another file it is
+reported as a duplicate declaration (see
+[Visibility](visibility.md#one-namespace-for-the-whole-program)).
 
 To add methods to a generic struct from outside its declaration, use an
 [extension](traits-and-extensions.md#extending-generic-structs).

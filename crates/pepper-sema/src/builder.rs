@@ -75,8 +75,8 @@ fn binary_op(op: &str) -> Option<BinaryOp> {
         "<<=" => BinaryOp::LShiftAssign,
         ">>=" => BinaryOp::RShiftAssign,
         "&=" => BinaryOp::BitAndAssign,
-        // C++ quirk: "^=" maps to BitOrAssign (ModelBuilder.cpp:244); real xor-assign is "^"
-        "^=" => BinaryOp::BitOrAssign,
+        "|=" => BinaryOp::BitOrAssign,
+        "^=" => BinaryOp::BitXorAssign,
         _ => return None,
     })
 }
@@ -125,7 +125,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
         }),
         ast::Expression::SizeOf(ty) => Ok(Expression::SizeOf(type_name_from(ty))),
         ast::Expression::Unary { op, prefix, operand, span } => Ok(Expression::Unary {
-            op: unary_op(op, *prefix).expect("unknown unary operator"),
+            op: unary_op(op, *prefix)
+                .ok_or_else(|| Diagnostic::error(format!("unsupported unary operator '{}'", op)).at(loc(*span)))?,
             operand: Box::new(expression(operand)?),
             loc: loc(*span),
         }),
@@ -135,7 +136,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             loc: loc(*span),
         }),
         ast::Expression::Binary { lhs, op, rhs, span } => Ok(Expression::Binary {
-            op: binary_op(op).expect("unknown binary operator"),
+            op: binary_op(op)
+                .ok_or_else(|| Diagnostic::error(format!("unsupported binary operator '{}'", op)).at(loc(*span)))?,
             lhs: Box::new(expression(lhs)?),
             rhs: Box::new(expression(rhs)?),
             loc: loc(*span),
@@ -223,6 +225,7 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
         attributes: decl.attributes.clone(),
         loc: loc(decl.name_span),
         type_loc: if decl.type_name.span.is_empty() { Loc::NONE } else { loc(decl.type_name.span) },
+        is_const: decl.is_const,
     })
 }
 
@@ -251,7 +254,8 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
         ast::Statement::For(f) => for_loop(f),
         ast::Statement::With(w) => with_block(w),
         ast::Statement::Return(ret) => Ok(Statement::Return(ReturnStatement {
-            expr: Some(expression(&ret.expr)?),
+            expr: ret.expr.as_ref().map(expression).transpose()?,
+            loc: loc(ret.expr.as_ref().map_or(ret.span, |e| e.span())),
         })),
         ast::Statement::LoopBreak(lb) => Ok(Statement::LoopBreak(LoopBreak {
             kind: match lb.kind {
@@ -305,6 +309,7 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
         attributes: vec![],
         loc: at,
         type_loc: Loc::NONE,
+        is_const: false,
     };
     let mut element = variable_def(&f.binding, Kind::Variable)?;
     element.default = Some(Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![], loc: at });
@@ -358,6 +363,7 @@ fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
         attributes: vec![],
         loc: at,
         type_loc: Loc::NONE,
+        is_const: false,
     };
     let enter = Expression::MethodCall {
         this: Box::new(Expression::SymbolRef { id: scope, ty: TypeName::auto(), loc: at }),
@@ -380,6 +386,7 @@ fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
             attributes: vec![],
             loc: at,
             type_loc: Loc::NONE,
+            is_const: false,
         },
     };
     let entered = Expression::WithEntered(Box::new(Expression::SymbolRef {
@@ -409,6 +416,19 @@ fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Func
         .map(|p| variable_def(p, Kind::Param))
         .collect::<Result<Vec<_>, _>>()?;
     let body = decl.body.as_ref().map(block).transpose()?;
+    // A comparison's result is a condition; codegen tests it as an i1.
+    let declared = &decl.return_type;
+    if matches!(decl.name.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=")
+        && declared.name != crate::type_name::AUTO
+        && declared.name != "bool"
+    {
+        return Err(Diagnostic::error(format!(
+            "comparison operator '{}' must return 'bool', not '{}'",
+            decl.name,
+            type_name_from(declared)
+        ))
+        .at(loc(declared.span)));
+    }
     Ok(FunctionDef {
         name: decl.name.clone(),
         ty: type_name_from(&decl.return_type),
@@ -441,6 +461,7 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
 fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
     Ok(TraitDef {
         name: t.name.clone(),
+        generic_params: t.generic_params.iter().map(generic_param_from).collect(),
         methods: t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
         attributes: t.attributes.clone(),
         loc: loc(t.name_span),

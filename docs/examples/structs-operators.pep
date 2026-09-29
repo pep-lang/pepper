@@ -9,10 +9,7 @@ struct Money {
         return cents == other.cents;
     }
 
-    # `!=` is not derived from `==`: define it too.
-    bool !=(Money other) {
-        return cents != other.cents;
-    }
+    # `!=` is derived from `==` when the struct does not define it.
 
     # `a + b` calls `a.+(b)` and returns a new Money.
     Money +(Money other) {

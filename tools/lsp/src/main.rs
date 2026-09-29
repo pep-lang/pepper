@@ -349,7 +349,7 @@ fn find_expr_in_block<'a>(block: &'a ast::Block, offset: usize) -> Option<&'a as
             continue;
         }
         match stmt {
-            ast::Statement::Expression(e) | ast::Statement::Return(ast::ReturnStatement { expr: e, .. }) => {
+            ast::Statement::Expression(e) | ast::Statement::Return(ast::ReturnStatement { expr: Some(e), .. }) => {
                 if let Some(found) = expr_at(e, offset) {
                     return Some(found);
                 }

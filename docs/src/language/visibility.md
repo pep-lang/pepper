@@ -142,11 +142,12 @@ A few kinds of declaration are exempt from this rule:
   same C function.
 - **Concrete overrides** of an exported generic function, such as `hash<int>`
   alongside `hash<T>`. Overriding one the runtime already provides, such as
-  `hash<String>`, is still a duplicate. Concrete overrides work only for
-  primitive types and `String`: `hash<Point>` declares a second generic
-  function with a type parameter named `Point`, which collides with `hash<T>`.
-  Type parameters are compared by position, not by name, so a private
-  `pick<U>` also collides with `pick<T>`.
+  `hash<String>`, is still a duplicate. The exemption covers only overrides
+  for primitive types and `String`: an override for a struct, such as
+  `hash<Point>`, collides with `hash<T>` when the two are in different files,
+  so declare it in the same file as the generic function. Type parameters
+  are compared by position, not by name, so a private `pick<U>` also
+  collides with `pick<T>`.
 - **Declarations that a `[Target(...)]` attribute drops** for the platform
   being compiled (see [Platform selection](platform-selection.md)). This is
   why `lib.pep` above can declare `platform_name` twice.

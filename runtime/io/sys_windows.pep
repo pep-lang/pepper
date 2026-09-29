@@ -123,7 +123,7 @@ import "directory";
     return code == 145;                  # DIR_NOT_EMPTY
 }
 [Target(OS(Windows))] export _io_sys_is_invalid_input(code: ErrorCode): bool {
-    return code == 87 || code == 123;    # INVALID_PARAMETER, INVALID_NAME
+    return code == 87 || code == 123 || code == 131;   # INVALID_PARAMETER, INVALID_NAME, NEGATIVE_SEEK
 }
 [Target(OS(Windows))] export _io_sys_is_interrupted(code: ErrorCode): bool {
     return code == 995;                  # OPERATION_ABORTED
@@ -356,16 +356,31 @@ import "directory";
 # @44.
 
 [Target(OS(Windows))] export _io_sys_list(path: Path): IoResult<DirEntry[]> {
+    # An empty path would search `*`, the current directory; POSIX fails.
+    if (path.Value.Size == 0) {
+        return IoResult<DirEntry[]>.err(IoError(_io_sys_code_not_found(), "empty path"));
+    }
     var w = _io_win_wide(path.join(Path("*")).Value);
     var data = _pep_malloc(592);
     var h = FindFirstFileW(w, data);
     _pep_free(w);
+    var out = Array<DirEntry>();
     if (!_io_sys_handle_valid(h)) {
         var e = IoError.last();
         _pep_free(data);
+        # FILE_NOT_FOUND means nothing matched `*`: an empty directory with
+        # no `.` or `..` entries, as a drive root is. A missing directory
+        # says PATH_NOT_FOUND, but confirm it is a directory regardless.
+        if (e.Code == 2) {
+            var m = _io_sys_stat(path, true);
+            if (m.is_ok()) {
+                if (m.Value.IsDir) {
+                    return IoResult<DirEntry[]>.ok(out);
+                }
+            }
+        }
         return IoResult<DirEntry[]>.err(e);
     }
-    var out = Array<DirEntry>();
     while (true) {
         var name_ptr = (data + 44) as __ptr<u16>;
         var name = _io_win_narrow(name_ptr, _io_win_wide_len(name_ptr));
@@ -502,10 +517,10 @@ import "directory";
     var s = _io_win_narrow(buf, n as int);
     _pep_free(buf);
     var p = s.Data as __ptr<u8>;
-    var n = s.Size;
+    var size = s.Size;
     # "\\?\" is 92 92 63 92; "UNC\" is 85 78 67 92.
-    if (_io_byte(p, n, 0) == 92 && _io_byte(p, n, 1) == 92 && _io_byte(p, n, 2) == 63 && _io_byte(p, n, 3) == 92) {
-        if (_io_byte(p, n, 4) == 85 && _io_byte(p, n, 5) == 78 && _io_byte(p, n, 6) == 67 && _io_byte(p, n, 7) == 92) {
+    if (_io_byte(p, size, 0) == 92 && _io_byte(p, size, 1) == 92 && _io_byte(p, size, 2) == 63 && _io_byte(p, size, 3) == 92) {
+        if (_io_byte(p, size, 4) == 85 && _io_byte(p, size, 5) == 78 && _io_byte(p, size, 6) == 67 && _io_byte(p, size, 7) == 92) {
             var unc = _io_string_from_byte(92);
             unc.append(_io_string_from_byte(92));
             unc.append(_io_slice(s, 8, s.Size));

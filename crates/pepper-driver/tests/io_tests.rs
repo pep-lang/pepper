@@ -179,7 +179,7 @@ main(): int {
         # POSIX: a root makes a path absolute; `\` is an ordinary byte.
         assert(io.Path("/x").is_absolute(), "absolute");
         assert(io.Path("//a//b/").normalize().Value == "/a/b", "leading separators collapse");
-        assert(io.Path("a\b").file_name() == "a\b", "backslash is not a separator");
+        assert(io.Path("a\\b").file_name() == "a\\b", "backslash is not a separator");
     }
     [Target(OS(Windows))] {
         # Windows: `\` and `/` both separate; absolute needs a drive and a
@@ -343,6 +343,9 @@ seeking(base: Path) {
     assert(buf.count() == 5 && buf[2] == 55 && buf[4] == 57, "read appends");
     assert(f.read(buf, 10).Value == 0, "EOF");
     assert(f.seek_current(-4).Value == 6, "seek back");
+    var before_start = f.seek_current(-100);
+    assert(before_start.is_err(), "seek before the start");
+    assert(before_start.Error.is_invalid_input(), "seek before the start is invalid input");
     assert(f.seek_start(0).is_ok(), "rewind");
     assert(f.write_string("AB").is_ok(), "overwrite");
     assert(f.sync().is_ok(), "sync");
@@ -372,6 +375,14 @@ seeking(base: Path) {
     assert(f.read(buf, 1).is_err(), "read after close");
     assert(f.write_string("x").is_err(), "write after close");
 
+    # A file opened only to append can still be synced.
+    var ap = OpenOptions().append(true).open(p);
+    assert(ap.is_ok(), "open to append");
+    assert(ap.Value.write_string("Z").is_ok(), "append");
+    assert(ap.Value.sync().is_ok(), "sync in append mode");
+    assert(ap.Value.close().is_ok(), "close append");
+    assert(File.read_bytes(p).Value.count() == 9, "appended");
+
     # A directory opens read-only but cannot be read.
     var dr = File.open(base);
     assert(dr.is_ok(), "open directory");
@@ -396,6 +407,16 @@ directories(base: Path) {
     assert(File.write_text(d.join_str("a.txt"), "a").is_ok(), "a.txt");
     assert(File.write_text(d.join_str("b.txt"), "bb").is_ok(), "b.txt");
     assert(Directory.create(d.join_str("sub")).is_ok(), "sub");
+
+    # Listing an empty path fails as on POSIX, rather than listing the
+    # current directory.
+    var blank = Directory();
+    blank.Path = Path("");
+    assert(blank.entries().Error.is_not_found(), "list an empty path");
+    var empty_dir = base.join_str("empty");
+    assert(Directory.create(empty_dir).is_ok(), "create empty");
+    assert(Directory.open(empty_dir).Value.entries().Value.count() == 0, "list an empty directory");
+    assert(Directory.remove(empty_dir).is_ok(), "remove empty");
 
     var opened = Directory.open(d);
     assert(opened.is_ok(), "Directory.open");
@@ -427,6 +448,10 @@ directories(base: Path) {
     var c = d.join_str("c.txt");
     assert(File.copy(d.join_str("b.txt"), c).Value == 2, "copy count");
     assert(text(c) == "bb", "copied content");
+    # Copying a file onto itself fails instead of truncating it first.
+    assert(File.copy(c, c).Error.is_invalid_input(), "copy onto itself");
+    assert(File.copy(c, d.join_str(".").join_str("c.txt")).Error.is_invalid_input(), "copy onto itself, other spelling");
+    assert(text(c) == "bb", "self-copy kept content");
     var moved = d.join_str("moved.txt");
     assert(File.rename(c, moved).is_ok(), "rename");
     assert(!c.exists() && moved.exists(), "renamed");

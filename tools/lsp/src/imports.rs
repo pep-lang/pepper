@@ -206,7 +206,7 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
             .or_else(|| in_expression_types(&w.scope, offset))
             .or_else(|| in_block(&w.block, offset))
             .or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, offset))),
-        ast::Statement::Return(r) => in_expression_types(&r.expr, offset),
+        ast::Statement::Return(r) => r.expr.as_ref().and_then(|e| in_expression_types(e, offset)),
         ast::Statement::LoopBreak(_) => None,
     }
 }

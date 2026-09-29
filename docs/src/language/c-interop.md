@@ -67,8 +67,10 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
   `append` or `+=`). An empty `String()` has no buffer, so its `c_str()` is
   `__null`; check before you pass it to a C function that does not accept
   `NULL`.
-- To turn a C string back into a `String`, pass the constructor the pointer,
-  the byte size, and the number of code points:
+- To turn a C string back into a `String`, pass the pointer to the
+  constructor: `String(p)` copies a NUL-terminated C string, and
+  `String(p, size)` copies `size` bytes. If you already know the number of
+  code points, pass it as a third argument:
   `String(p, size, String.length_of(p, size))`. The constructor copies the
   bytes, so you still own (and may free) the C buffer.
 
@@ -76,10 +78,13 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
 {{#include ../../examples/c-strings.pep}}
 ```
 
-> **Warning:** the compiler does not stop you from passing a `String`
-> variable directly to a `char*` parameter (`strlen(name)`). That passes a
-> pointer to the String object instead of its characters, and C reads garbage.
-> Always write `name.c_str()`.
+Passing a `String` value directly to an extern's `char*` parameter is an error:
+
+```text
+main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+    4 |     return strlen(name) as int;
+      |                   ^~~~
+```
 
 ## Variadic functions
 

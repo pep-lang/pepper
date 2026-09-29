@@ -201,12 +201,27 @@ pub fn gather_generics(module: &mut Module) {
 /// rewritten functions have empty `generic_params` and are skipped on later
 /// rounds.
 fn concrete_overrides(module: &mut Module) {
+    // A struct can be an override's argument too (`describe<Point>` of
+    // `describe<T>`), but a struct's name is also a legal generic parameter
+    // name: it overrides only when a generic base of the same name and
+    // arity exists, one with a parameter that names no type.
+    let is_struct = |name: &str| module.structs.iter().any(|st| st.ty.name == name);
+    let names_type = |p: &str| crate::type_name::is_concrete_override(std::iter::once(p)) || is_struct(p);
+    let has_base = |function: &crate::model::FunctionDef| {
+        module.functions.iter().any(|other| {
+            other.name == function.name
+                && other.generic_params.len() == function.generic_params.len()
+                && other.generic_params.iter().any(|p| !names_type(&p.name))
+        })
+    };
     let mut rewrites: Vec<(usize, String)> = vec![];
     for (idx, function) in module.functions.iter().enumerate() {
         if function.generic_params.is_empty() {
             continue;
         }
-        let all_concrete = crate::type_name::is_concrete_override(function.generic_params.iter().map(|p| p.name.as_str()));
+        let params = || function.generic_params.iter().map(|p| p.name.as_str());
+        let all_concrete = crate::type_name::is_concrete_override(params())
+            || (params().all(names_type) && has_base(function));
         if !all_concrete {
             continue;
         }
