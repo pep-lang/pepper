@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
+            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -456,7 +456,9 @@ main(): int {
 <li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
 type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
-<code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).</li>
+<code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
+Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
+<code>for</code> loop over such a value calls the methods through the trait.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that same object, so it is
 exhausted afterwards. An iterable starts a new, independent pass every time

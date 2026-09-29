@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-448a3d06.js";
+            window.path_to_searchindex_js = "../searchindex-ae0c9158.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4f68acc7.js"></script>
@@ -330,9 +330,10 @@ code stopped making sense:</p>
       |             ^
 </code></pre>
 <p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
-a number is never a struct and one struct type is never another. The check
-applies wherever a value flows into a typed place: a variable’s initializer, an
-assignment, an argument and a <code>return</code>:</p>
+a number is never a struct and one struct type is never another, except that
+a struct converts to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>.
+The check applies wherever a value flows into a typed place: a variable’s
+initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
     2 |     int x = "hello";
       |     ^~~
@@ -344,6 +345,15 @@ assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
       |            ^~~
+</code></pre>
+<p><strong>A struct used as a trait it does not declare</strong> (see
+<a href="traits-and-extensions.html#traits-as-types">Traits as types</a>):</p>
+<pre><code class="language-text">main.pep:11:20: error: 'Circle' does not conform to trait 'Shape'
+   11 |     var s: Shape = Circle();
+      |                    ^~~~~~
+main.pep:6:8: note: declare it with 'extend Circle with Shape'
+    6 | struct Circle {
+      |        ^~~~~~
 </code></pre>
 <p><strong>The same name declared twice in one scope:</strong></p>
 <pre><code class="language-text">main.pep:3:9: error: redefinition of 'n'

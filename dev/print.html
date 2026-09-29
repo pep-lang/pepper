@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-448a3d06.js";
+            window.path_to_searchindex_js = "searchindex-ae0c9158.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4f68acc7.js"></script>
@@ -223,9 +223,9 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
-traits with default methods, function types and function references,
-modules, <code>Result</code>-based error handling, iteration, <code>with</code> blocks, weak
-references, and calling C. The standard library covers strings, arrays, hash
+traits (with default methods, and usable as types), function types and
+function references, modules, <code>Result</code>-based error handling, iteration,
+<code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
 maps and sets, atomics, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:</p>
@@ -235,8 +235,7 @@ through a function type such as <code>(int) =&gt; int</code> (see
 <a href="#function-types-and-references">function types</a>). Closure literals, such as
 <code>(x) =&gt; x * 2</code>, and capturing local variables are the next phase and are not
 implemented yet.</li>
-<li>Calling a method through a trait type does not work yet. You can declare
-traits and conform to them, but not dispatch through them.</li>
+<li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>There is no threading API in the standard library yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
@@ -2833,9 +2832,8 @@ main.pep:2:6: note: through type alias 'Degrees', declared here
 <em>extension</em>, and describe a set of behavior that several types share with a
 <em>trait</em>. Extensions can be written anywhere, so you can add methods to a
 library type, such as <code>String</code>, from your own code.</p>
-<p>Extensions work today. Traits can be declared and attached to types, and the
-compiler checks that a type provides the trait’s methods, but a trait cannot
-be used as a type yet; see <a href="#what-traits-do-not-do-yet">What traits do not do yet</a>.</p>
+<p>A trait is also a type: a value of type <code>Shape</code> holds any struct that has the
+<code>Shape</code> trait, and calls its methods (see <a href="#traits-as-types">Traits as types</a>).</p>
 <h2 id="extensions"><a class="header" href="#extensions">Extensions</a></h2>
 <p>An <code>extend</code> block adds methods to a struct declared elsewhere, whether in the
 same file, another file, or the standard library:</p>
@@ -3018,34 +3016,113 @@ extend Square with Shape {
 yet: it fails to compile (<code>not a struct</code>) or the program crashes. Write such a
 method in each extension instead.</p>
 </blockquote>
-<h3 id="what-traits-do-not-do-yet"><a class="header" href="#what-traits-do-not-do-yet">What traits do not do yet</a></h3>
-<p>Beyond checking conformance and supplying default bodies, the compiler does not
-use traits yet. In particular:</p>
-<ul>
-<li>
-<p><strong>A trait cannot be used as a type.</strong> A parameter, variable, or field of
-type <code>Shape</code> does not compile, so you cannot yet write one function that
-accepts any <code>Shape</code>:</p>
-<pre><code class="language-pepper">measure(shape: Shape): int {
+<h3 id="traits-as-types"><a class="header" href="#traits-as-types">Traits as types</a></h3>
+<p>A trait’s name is also a type. A variable, parameter, field, return value, or
+collection element of type <code>Shape</code> holds any struct that declares <code>Shape</code>, and
+calling a method on it runs that struct’s own method:</p>
+<pre><code class="language-pepper"># A trait used as a type holds any struct that declares the trait.
+trait Shape {
+    area(): int;
+    name(): String;
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+    name(): String { return "square"; }
+}
+
+struct Rect {
+    var width: int = 1;
+    var height: int = 1;
+    construct(this.width = 1, this.height = 1) {}
+}
+
+extend Rect with Shape {
+    area(): int { return width * height; }
+    name(): String { return "rect"; }
+}
+
+# One function accepts every Shape; each call runs the value's own method.
+measure(shape: Shape): int {
     return shape.area();
 }
+
+main(): int {
+    # A Square converts to a Shape wherever a Shape is expected.
+    var s: Shape = Square(3);
+    assert(measure(s) == 9, "square through a trait parameter");
+    assert(s.name() == "square", "method of the concrete type");
+
+    # Collections can hold different types that share a trait.
+    var shapes = Array&lt;Shape&gt;();
+    shapes.append(Square(2));
+    shapes.append(Rect(2, 5));
+    var total = 0;
+    for (var shape in shapes) {
+        total = total + shape.area();
+    }
+    assert(total == 14, "sum of areas");
+
+    # Two trait values are equal when they refer to the same object.
+    var same: Shape = s;
+    assert(same == s, "same object");
+    return 0;
+}
 </code></pre>
-<pre><code class="language-text">main.pep:5:16: error: unknown type name 'Shape'
-    5 | measure(shape: Shape): int {
-      |                ^~~~~
-</code></pre>
-<p>To write code that works with several types today, use a
-<a href="#generic-functions-1">generic function</a>: <code>total_area&lt;T&gt;</code> accepts
-any <code>T</code> that has an <code>area()</code> method.</p>
+<ul>
+<li>
+<p><strong>Conversion is implicit.</strong> A <code>Square</code> becomes a <code>Shape</code> wherever a <code>Shape</code>
+is expected: an initializer, an assignment, an argument, a return value.</p>
 </li>
 <li>
-<p><strong>Generic parameters cannot require a trait.</strong> There is no syntax yet for
-saying that <code>T</code> must have <code>Shape</code>.</p>
+<p><strong>Conformance is declared.</strong> Only a type that declares the trait with
+<code>extend Type with Trait</code> converts. Having the right methods is not enough:</p>
+<pre><code class="language-text">main.pep:11:20: error: 'Circle' does not conform to trait 'Shape'
+   11 |     var s: Shape = Circle();
+      |                    ^~~~~~
+main.pep:6:8: note: declare it with 'extend Circle with Shape'
+    6 | struct Circle {
+      |        ^~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>A trait value is a shared reference</strong> to the struct, like any other
+struct value (see <a href="#memory-and-reference-counting">Memory</a>). When the last reference goes away,
+whether it was a <code>Shape</code> or a <code>Square</code>, the struct’s own destructor runs.</p>
+</li>
+<li>
+<p><strong>Only instance methods are callable through the trait.</strong> Static methods,
+and methods whose signature uses <code>this</code> as a type, need the concrete type;
+calling one through a trait value is an error.</p>
+</li>
+<li>
+<p><strong>Methods must match the trait’s signature.</strong> An implementation with
+different parameter or return types is an error. The one exception is a
+trait method that returns a trait type: the implementation may return a
+struct that declares that trait, as <code>iterate()</code> does in
+<a href="#writing-your-own-iterator">Iteration</a>.</p>
+</li>
+<li>
+<p><code>==</code> and <code>!=</code> on trait values compare identity: they are equal when they
+refer to the same object.</p>
 </li>
 </ul>
-<p>The standard library declares the traits <code>Iterator&lt;T&gt;</code> and <code>Iterable&lt;T&gt;</code> in
-this spirit: a <code>for</code> loop looks for the methods themselves, not for the
-trait. See <a href="#iteration">Iteration</a>.</p>
+<p>What traits do not do yet:</p>
+<ul>
+<li><strong>Generic parameters cannot require a trait.</strong> There is no syntax yet for
+saying that <code>T</code> must have <code>Shape</code>; a <a href="#generic-functions-1">generic function</a>
+like <code>total_area&lt;T&gt;</code> accepts any <code>T</code> with an <code>area()</code> method.</li>
+<li><strong>A trait value cannot convert back</strong> to its struct, or to another trait.</li>
+<li><strong><code>Atomic&lt;Shape&gt;</code> is not supported.</strong> A trait value is two pointers wide
+and cannot be swapped atomically.</li>
+<li><strong><code>Weak&lt;Shape&gt;</code> is not supported.</strong> Take the weak reference to the struct
+type instead.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="iteration"><a class="header" href="#iteration">Iteration</a></h1>
 <p>A <code>for</code> loop visits each element of a collection in turn. You can loop over an
@@ -3322,7 +3399,9 @@ main(): int {
 <li><strong>Declaring the trait is optional.</strong> The loop looks only at which methods a
 type has. Writing <code>extend Countdown with Iterator&lt;int&gt; {}</code> documents your
 intent, and the compiler then checks that <code>Countdown</code> has both <code>next()</code> and
-<code>current()</code> (see <a href="#traits-and-extensions">Traits and extensions</a>).</li>
+<code>current()</code> (see <a href="#traits-and-extensions">Traits and extensions</a>).
+Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
+<code>for</code> loop over such a value calls the methods through the trait.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that same object, so it is
 exhausted afterwards. An iterable starts a new, independent pass every time
@@ -5054,9 +5133,10 @@ code stopped making sense:</p>
       |             ^
 </code></pre>
 <p><strong>A value of the wrong type.</strong> Numbers convert among themselves, as in C, but
-a number is never a struct and one struct type is never another. The check
-applies wherever a value flows into a typed place: a variable’s initializer, an
-assignment, an argument and a <code>return</code>:</p>
+a number is never a struct and one struct type is never another, except that
+a struct converts to a <a href="#traits-as-types">trait it declares</a>.
+The check applies wherever a value flows into a typed place: a variable’s
+initializer, an assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:5: error: cannot initialize variable 'x' of type 'int' with a value of type 'String'
     2 |     int x = "hello";
       |     ^~~
@@ -5068,6 +5148,15 @@ assignment, an argument and a <code>return</code>:</p>
 <pre><code class="language-text">main.pep:2:12: error: cannot return a value of type 'String' from 'f', which returns 'int'
     2 |     return "a";
       |            ^~~
+</code></pre>
+<p><strong>A struct used as a trait it does not declare</strong> (see
+<a href="#traits-as-types">Traits as types</a>):</p>
+<pre><code class="language-text">main.pep:11:20: error: 'Circle' does not conform to trait 'Shape'
+   11 |     var s: Shape = Circle();
+      |                    ^~~~~~
+main.pep:6:8: note: declare it with 'extend Circle with Shape'
+    6 | struct Circle {
+      |        ^~~~~~
 </code></pre>
 <p><strong>The same name declared twice in one scope:</strong></p>
 <pre><code class="language-text">main.pep:3:9: error: redefinition of 'n'
@@ -6898,9 +6987,10 @@ element is not inserted.</p>
 <code>current()</code> to the loop variable while <code>next()</code> returns true. A type whose
 <code>for</code> loop should go through a separate iterator implements <code>Iterable&lt;T&gt;</code>
 instead. A type with neither protocol is a compile error in a <code>for</code> loop.</p>
-<p>Traits are not checked yet: the loop goes by the methods a type has, and
-declaring the trait (<code>extend Foo with Iterator&lt;int&gt; {}</code>) documents the
-intent.</p>
+<p>The loop goes by the methods a type has, so declaring the trait is
+optional. Declaring it (<code>extend Foo with Iterator&lt;int&gt; {}</code>) checks that
+the methods match and lets the type be used as an <code>Iterator&lt;int&gt;</code> value,
+which a <code>for</code> loop drives through the trait.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the elements produced</li>

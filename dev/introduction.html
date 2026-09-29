@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-448a3d06.js";
+            window.path_to_searchindex_js = "searchindex-ae0c9158.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4f68acc7.js"></script>
@@ -225,9 +225,9 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, generics, type aliases,
-traits with default methods, function types and function references,
-modules, <code>Result</code>-based error handling, iteration, <code>with</code> blocks, weak
-references, and calling C. The standard library covers strings, arrays, hash
+traits (with default methods, and usable as types), function types and
+function references, modules, <code>Result</code>-based error handling, iteration,
+<code>with</code> blocks, weak references, and calling C. The standard library covers strings, arrays, hash
 maps and sets, atomics, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:</p>
@@ -237,8 +237,7 @@ through a function type such as <code>(int) =&gt; int</code> (see
 <a href="language/function-types.html">function types</a>). Closure literals, such as
 <code>(x) =&gt; x * 2</code>, and capturing local variables are the next phase and are not
 implemented yet.</li>
-<li>Calling a method through a trait type does not work yet. You can declare
-traits and conform to them, but not dispatch through them.</li>
+<li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>There is no threading API in the standard library yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
