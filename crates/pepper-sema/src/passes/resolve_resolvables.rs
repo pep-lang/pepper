@@ -4,7 +4,6 @@
 //! borrow checker (symbol tables are immutable during this pass).
 
 use crate::model::*;
-use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
 
 /// Immutable snapshot of what resolution needs from the module.

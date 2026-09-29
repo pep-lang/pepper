@@ -36,8 +36,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  # Fail fast on a warning-free build rather than letting warnings accumulate?
-  # No: the port still carries known-dead code. Warnings stay visible in logs.
+  # The build is warning-free; warnings are not made errors (a new rustc or
+  # dependency release can add one), but a new one should be fixed, not left.
   RUST_BACKTRACE: 1
 
 jobs:

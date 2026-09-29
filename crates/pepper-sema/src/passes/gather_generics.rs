@@ -1,7 +1,7 @@
 //! Port of `source/Sema/GatherGenerics.h`: record generic uses as specs.
 
 use crate::model::{Block, Declaration, Expression, Module, Statement};
-use crate::passes::{walk_expression, walk_function};
+use crate::passes::walk_function;
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
 use std::collections::HashSet;

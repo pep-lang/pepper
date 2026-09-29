@@ -1,7 +1,7 @@
 //! Port of `source/Sema/ResolveLiterals.h`: Minus+literal folding.
 
 use crate::model::{Expression, Module};
-use crate::passes::{walk_expression, walk_function};
+use crate::passes::walk_function;
 
 pub fn resolve_literals(module: &mut Module) {
     let mut f = |expr: &mut Expression| {

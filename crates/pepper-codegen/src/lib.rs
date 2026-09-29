@@ -13,7 +13,6 @@ use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::{AsValueRef, BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 use inkwell::types::AnyType as _;
-use inkwell::values::AnyValue as _;
 use inkwell::OptimizationLevel;
 use ops as llvm_ops;
 
@@ -524,8 +523,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .get(&struct_name)
                     .ok_or_else(|| format!("unknown this type {}", struct_name))?;
                 let this_ptr_ty = match this_ty {
-                    BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
-                        sct.ptr_type(inkwell::AddressSpace::default()),
+                    BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                        self.context.ptr_type(inkwell::AddressSpace::default()),
                     ),
                     other => other,
                 };
@@ -535,8 +534,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));                self.locate(&ty, param.type_loc);                let ty = ty?;
                 // Struct-typed params are pointers (C++ ref semantics).
                 let ty = match ty {
-                    BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
-                        sct.ptr_type(inkwell::AddressSpace::default()),
+                    BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                        self.context.ptr_type(inkwell::AddressSpace::default()),
                     ),
                     other => other,
                 };
@@ -662,8 +661,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));            self.locate(&ty, param.type_loc);            let ty = ty?;
             // Struct-typed params are pointers (C++ ref semantics).
             let ty = match ty {
-                BasicTypeEnum::StructType(sct) => BasicTypeEnum::PointerType(
-                    sct.ptr_type(inkwell::AddressSpace::default()),
+                BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                    self.context.ptr_type(inkwell::AddressSpace::default()),
                 ),
                 other => other,
             };
@@ -1180,8 +1179,8 @@ impl<'ctx> CodeGenerator<'ctx> {
         // The LLVM return type (struct returns are pointers).
         let ret_ty = self.types.get(&function.ty.to_string());
         let llvm_ret_ty = ret_ty.map(|ty| match ty {
-            BasicTypeEnum::StructType(sct) => {
-                BasicTypeEnum::PointerType(sct.ptr_type(inkwell::AddressSpace::default()))
+            BasicTypeEnum::StructType(_) => {
+                BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
             }
             other => other,
         });
@@ -2604,11 +2603,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&desc.fields[idx].1)
                     .ok_or_else(|| format!("unknown field type {}", desc.fields[idx].1))?;
-                let gep = unsafe {
-                    self.builder
-                        .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
-                        .map_err(|e| e.to_string())?
-                };
+                let gep = self
+                    .builder
+                    .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
+                    .map_err(|e| e.to_string())?;
                 // Struct-typed fields store a reference (the heap object's
                 // pointer), exactly like struct locals and params — load the
                 // stored pointer, not the slot address.
@@ -2875,14 +2873,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // has no ref work, so a plain release store suffices.
                 let ty_name = ty.to_string();
                 self.reject_atomic_trait(&ty_name)?;
-                // Struct T swaps the slot's reference pointer atomically;
-                // track that before remapping `stored` to the pointer type.
-                let is_struct = matches!(self.types.get(&ty_name), Some(BasicTypeEnum::StructType(_)));
-                let stored = match self.types.get(&ty_name) {
-                    Some(BasicTypeEnum::StructType(_)) => {
-                        BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
-                    }
-                    Some(t) => t,
+                // Struct T swaps the slot's reference pointer atomically.
+                let is_struct = match self.types.get(&ty_name) {
+                    Some(t) => matches!(t, BasicTypeEnum::StructType(_)),
                     None => return Err(format!("__atomic_store: unknown type {}", ty_name)),
                 };
                 let ptr = match self.codegen_expr(arg_ptr)? {
@@ -4180,11 +4173,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&ty_name)
                     .ok_or_else(|| format!("unknown field type {}", ty_name))?;
-                let gep = unsafe {
-                    self.builder
-                        .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
-                        .map_err(|e| e.to_string())?
-                };
+                let gep = self
+                    .builder
+                    .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
+                    .map_err(|e| e.to_string())?;
                 if let Some(ty) = lhs_temp {
                     self.deferred_temps.push((this_ptr, ty));
                 }
@@ -4583,6 +4575,7 @@ fn llvm_fn_type<'ctx>(
         // Struct-typed returns are pointers (C++ ref semantics: functions
         // return `this` as a pointer).
         BasicTypeEnum::StructType(sct) => sct
+            .get_context()
             .ptr_type(inkwell::AddressSpace::default())
             .fn_type(&param_meta, varargs),
         BasicTypeEnum::VectorType(vt) => vt.fn_type(&param_meta, varargs),

@@ -7,8 +7,8 @@ use crate::type_name::TypeName;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-/// Applied-extension dedup set. Thread-local: each transform_pass run owns its
-/// own set, so concurrent compilations (test threads) never share indices.
+// Applied-extension dedup set. Thread-local: each transform_pass run owns its
+// own set, so concurrent compilations (test threads) never share indices.
 thread_local! {
     static APPLIED: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
 }

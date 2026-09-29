@@ -3,8 +3,6 @@
 //! debug tracing).
 
 use crate::model::*;
-use crate::symbols::SymbolTable;
-use crate::type_name::{self, TypeName};
 use std::mem;
 
 pub mod resolve_literals;

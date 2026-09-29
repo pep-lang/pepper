@@ -2,7 +2,7 @@
 //! `source/CodeGen/LLVM` struct-type handling.
 
 use inkwell::context::Context;
-use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
+use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum, StructType};
 use pepper_sema::model::StructDef;
 use pepper_sema::type_name::TypeName;
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum
         _ => {
             // Pointer types: `T*`, `void*`.
             if name.ends_with('*') {
-                return Some(BasicTypeEnum::PointerType(context.i8_type().ptr_type(inkwell::AddressSpace::default())));
+                return Some(BasicTypeEnum::PointerType(context.ptr_type(inkwell::AddressSpace::default())));
             }
             return None;
         }

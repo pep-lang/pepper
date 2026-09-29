@@ -10,8 +10,6 @@ struct Scopes {
     params: Vec<Vec<VariableDef>>,
     /// Local symbols per scope: name → type.
     symbols: Vec<Vec<(String, TypeName)>>,
-    /// Index of the innermost function scope, if any.
-    function_depth: Option<usize>,
     /// Struct field tables: struct type string → fields.
     structs: Vec<(String, Vec<VariableDef>)>,
     /// Struct method tables: struct type string → (method name, return type).
@@ -31,7 +29,6 @@ impl Scopes {
             names: vec!["Globals".to_string()],
             params: vec![vec![]],
             symbols: vec![vec![]],
-            function_depth: None,
             structs: vec![],
             methods: vec![],
             functions: vec![],
@@ -72,10 +69,6 @@ impl Scopes {
             }
         }
         None
-    }
-
-    fn in_method(&self) -> bool {
-        self.function_depth.is_some()
     }
 
     /// Declared type of field `name` on struct type `ty`.
@@ -350,13 +343,6 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
     }
 }
 
-/// Walk a struct's ctor + methods with scopes; `f` runs per expression.
-fn walk_struct(st: &StructDef, scopes: &mut Scopes, current_struct: &TypeName, f: &mut impl FnMut(&mut Expression, &Scopes, &TypeName, Option<&mut VariableDef>)) {
-    let _ = scopes;
-    let _ = f;
-    let _ = st;
-}
-
 pub fn resolve_implicit_types(module: &mut Module) {
     // Inferring a return type can type the callers' locals, so repeat while
     // return types change (bounded: each run only replaces `auto`).
@@ -493,10 +479,8 @@ fn resolve_once(module: &mut Module) -> bool {
         if let Some(body) = &mut st.constructor.body {
             scopes.push(&st.constructor.name);
             scopes.params.push(st.constructor.parameters.clone());
-            scopes.function_depth = Some(scopes.names.len() - 1);
             resolve_block(body, &mut scopes, &Some(current_struct.clone()));
             scopes.pop();
-            scopes.function_depth = None;
         }
 
         // Methods.
@@ -520,10 +504,8 @@ fn resolve_once(module: &mut Module) -> bool {
             if let Some(body) = &mut method.body {
                 scopes.push(&method.name);
                 scopes.params.push(method.parameters.clone());
-                scopes.function_depth = Some(scopes.names.len() - 1);
                 resolve_block(body, &mut scopes, &Some(method_struct.clone()));
                 scopes.pop();
-                scopes.function_depth = None;
             } else {
                 scopes.returns = None;
             }
@@ -545,7 +527,6 @@ fn resolve_once(module: &mut Module) -> bool {
             scopes.returns = returns;
             scopes.push(&function.name);
             scopes.params.push(function.parameters.clone());
-            scopes.function_depth = Some(scopes.names.len() - 1);
             resolve_block(body, &mut scopes, &None);
             scopes.pop();
             inferred |= finish_return_inference(function, &mut scopes);

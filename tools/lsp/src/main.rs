@@ -70,6 +70,30 @@ fn span_to_range(source: &str, span: Span) -> Range {
     Range::new(byte_to_lsp_pos(source, span.start), byte_to_lsp_pos(source, span.end))
 }
 
+/// A document symbol. `DocumentSymbol` has no constructor or `Default`, and its
+/// `deprecated` field (superseded by `tags`) must still be named in a struct
+/// literal, so the literal lives here, once.
+#[allow(deprecated)]
+fn new_symbol(
+    name: String,
+    detail: String,
+    kind: SymbolKind,
+    range: Range,
+    selection_range: Range,
+    children: Option<Vec<DocumentSymbol>>,
+) -> DocumentSymbol {
+    DocumentSymbol {
+        name,
+        detail: Some(detail),
+        kind,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range,
+        children,
+    }
+}
+
 // ── Symbols & scopes ──────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -920,94 +944,78 @@ impl PepperLsp {
         for decl in &ast.declarations {
             match decl {
                 ast::Declaration::Function(f) => {
-                    out.push(DocumentSymbol {
-                        name: f.name.clone(),
-                        detail: Some(function_signature(f)),
-                        kind: SymbolKind::FUNCTION,
-                        tags: None,
-                        deprecated: None,
-                        range: span_to_range(&text, f.span),
-                        selection_range: span_to_range(&text, f.name_span),
-                        children: None,
-                    });
+                    out.push(new_symbol(
+                        f.name.clone(),
+                        function_signature(f),
+                        SymbolKind::FUNCTION,
+                        span_to_range(&text, f.span),
+                        span_to_range(&text, f.name_span),
+                        None,
+                    ));
                 }
                 ast::Declaration::Struct(s) => {
                     let mut children = vec![];
                     for field in &s.fields {
-                        children.push(DocumentSymbol {
-                            name: field.name.clone(),
-                            detail: Some(type_string(&field.type_name)),
-                            kind: SymbolKind::FIELD,
-                            tags: None,
-                            deprecated: None,
-                            range: span_to_range(&text, field.span),
-                            selection_range: span_to_range(&text, field.name_span),
-                            children: None,
-                        });
+                        children.push(new_symbol(
+                            field.name.clone(),
+                            type_string(&field.type_name),
+                            SymbolKind::FIELD,
+                            span_to_range(&text, field.span),
+                            span_to_range(&text, field.name_span),
+                            None,
+                        ));
                     }
                     for m in &s.methods {
-                        children.push(DocumentSymbol {
-                            name: m.name.clone(),
-                            detail: Some(function_signature(m)),
-                            kind: SymbolKind::METHOD,
-                            tags: None,
-                            deprecated: None,
-                            range: span_to_range(&text, m.span),
-                            selection_range: span_to_range(&text, m.name_span),
-                            children: None,
-                        });
+                        children.push(new_symbol(
+                            m.name.clone(),
+                            function_signature(m),
+                            SymbolKind::METHOD,
+                            span_to_range(&text, m.span),
+                            span_to_range(&text, m.name_span),
+                            None,
+                        ));
                     }
-                    out.push(DocumentSymbol {
-                        name: s.name.clone(),
-                        detail: Some("struct".to_string()),
-                        kind: SymbolKind::STRUCT,
-                        tags: None,
-                        deprecated: None,
-                        range: span_to_range(&text, s.span),
-                        selection_range: span_to_range(&text, s.name_span),
-                        children: if children.is_empty() { None } else { Some(children) },
-                    });
+                    out.push(new_symbol(
+                        s.name.clone(),
+                        "struct".to_string(),
+                        SymbolKind::STRUCT,
+                        span_to_range(&text, s.span),
+                        span_to_range(&text, s.name_span),
+                        if children.is_empty() { None } else { Some(children) },
+                    ));
                 }
-                ast::Declaration::Variable(v) => out.push(DocumentSymbol {
-                    name: v.name.clone(),
-                    detail: Some(variable_type(v)),
-                    kind: SymbolKind::VARIABLE,
-                    tags: None,
-                    deprecated: None,
-                    range: span_to_range(&text, v.span),
-                    selection_range: span_to_range(&text, v.name_span),
-                    children: None,
-                }),
-                ast::Declaration::Trait(t) => out.push(DocumentSymbol {
-                    name: t.name.clone(),
-                    detail: Some("trait".to_string()),
-                    kind: SymbolKind::INTERFACE,
-                    tags: None,
-                    deprecated: None,
-                    range: span_to_range(&text, t.span),
-                    selection_range: span_to_range(&text, t.name_span),
-                    children: None,
-                }),
-                ast::Declaration::Extend(e) => out.push(DocumentSymbol {
-                    name: e.target.to_string(),
-                    detail: Some("extend".to_string()),
-                    kind: SymbolKind::NAMESPACE,
-                    tags: None,
-                    deprecated: None,
-                    range: span_to_range(&text, e.span),
-                    selection_range: span_to_range(&text, e.target.span),
-                    children: None,
-                }),
-                ast::Declaration::TypeAlias(t) => out.push(DocumentSymbol {
-                    name: t.name.clone(),
-                    detail: Some("type".to_string()),
-                    kind: SymbolKind::STRUCT,
-                    tags: None,
-                    deprecated: None,
-                    range: span_to_range(&text, t.span),
-                    selection_range: span_to_range(&text, t.name_span),
-                    children: None,
-                }),
+                ast::Declaration::Variable(v) => out.push(new_symbol(
+                    v.name.clone(),
+                    variable_type(v),
+                    SymbolKind::VARIABLE,
+                    span_to_range(&text, v.span),
+                    span_to_range(&text, v.name_span),
+                    None,
+                )),
+                ast::Declaration::Trait(t) => out.push(new_symbol(
+                    t.name.clone(),
+                    "trait".to_string(),
+                    SymbolKind::INTERFACE,
+                    span_to_range(&text, t.span),
+                    span_to_range(&text, t.name_span),
+                    None,
+                )),
+                ast::Declaration::Extend(e) => out.push(new_symbol(
+                    e.target.to_string(),
+                    "extend".to_string(),
+                    SymbolKind::NAMESPACE,
+                    span_to_range(&text, e.span),
+                    span_to_range(&text, e.target.span),
+                    None,
+                )),
+                ast::Declaration::TypeAlias(t) => out.push(new_symbol(
+                    t.name.clone(),
+                    "type".to_string(),
+                    SymbolKind::STRUCT,
+                    span_to_range(&text, t.span),
+                    span_to_range(&text, t.name_span),
+                    None,
+                )),
             }
         }
         Some(out)

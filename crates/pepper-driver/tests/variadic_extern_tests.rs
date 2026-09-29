@@ -13,13 +13,6 @@ fn module_for(source: &str) -> SemaModule {
     module
 }
 
-fn compile_jit_with_runtime(source: &str) -> i32 {
-    let mut module = module_for(source);
-    let ctx = inkwell::context::Context::create();
-    let mut generator = CodeGenerator::new(&ctx, "test");
-    generator.jit_execute(&mut module, "test").expect("jit")
-}
-
 #[test]
 fn variadic_extern_parses_and_prints() {
     let ast = pepper_parser::parser::parse_source("t.pep", "extern int printf(char* fmt, ...);").expect("parse");

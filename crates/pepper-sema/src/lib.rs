@@ -12,7 +12,8 @@ pub mod symbols;
 pub mod traits;
 pub mod type_name;
 pub mod visibility;
-pub mod model_tests;
+#[cfg(test)]
+mod model_tests;
 
 pub use builder::build;
 pub use model::Module;
