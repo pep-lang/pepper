@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-37013ce5.js";
+            window.path_to_searchindex_js = "../searchindex-ace2e970.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f54f6b64.js"></script>
+        <script src="../toc-a23cc414.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -292,6 +292,16 @@ parentheses are optional. <a href="iteration.html">Iteration</a> covers the prot
 <code>for</code> and how to make your own types iterable.</p>
 <p>Pepper has no counting <code>for (init; condition; step)</code> loop and no range syntax.
 To count, use a <code>while</code> loop with a counter.</p>
+<h2 id="with"><a class="header" href="#with"><code>with</code></a></h2>
+<p><code>with</code> enters a scope object for the length of a block and binds what it
+hands out. The object cleans up when it is destroyed, on every way out of the
+block:</p>
+<pre><code class="language-pepper">with (var session = Session("grace")) {
+    greet(session.user);
+}
+</code></pre>
+<p><a href="scopes.html">Scoped blocks with <code>with</code></a> covers the protocol and the optional
+<code>else</code> block.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means

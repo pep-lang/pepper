@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-37013ce5.js";
+            window.path_to_searchindex_js = "searchindex-ace2e970.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f54f6b64.js"></script>
+        <script src="toc-a23cc414.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1359,6 +1359,16 @@ parentheses are optional. <a href="#iteration">Iteration</a> covers the protocol
 <code>for</code> and how to make your own types iterable.</p>
 <p>Pepper has no counting <code>for (init; condition; step)</code> loop and no range syntax.
 To count, use a <code>while</code> loop with a counter.</p>
+<h2 id="with"><a class="header" href="#with"><code>with</code></a></h2>
+<p><code>with</code> enters a scope object for the length of a block and binds what it
+hands out. The object cleans up when it is destroyed, on every way out of the
+block:</p>
+<pre><code class="language-pepper">with (var session = Session("grace")) {
+    greet(session.user);
+}
+</code></pre>
+<p><a href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a> covers the protocol and the optional
+<code>else</code> block.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means
@@ -3212,6 +3222,142 @@ loop and fails with the same internal error. Going the other way works: a
 variable declared inside a nested loop’s body may reuse the outer loop
 variable’s name.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="scoped-blocks-with-with"><a class="header" href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a></h1>
+<p>A <code>with</code> block enters a scope object, binds what it hands out, and cleans up
+when the object is destroyed. It plays the role of Python’s <code>with</code> and C#’s
+<code>using</code>, but the cleanup is ordinary destruction: it runs through the same
+reference counting as every other object (see
+<a href="#memory-and-reference-counting">Memory and reference counting</a>).</p>
+<pre><code class="language-pepper">var open_sessions = 0;
+
+# A scope object: enter() hands out what the block works with, and the
+# destructor calls exit() when the last reference goes away.
+struct Session {
+    var user: String;
+
+    construct(this.user = "") {
+        open_sessions += 1;
+    }
+
+    destruct {
+        this.exit();
+    }
+
+    Session enter() {
+        return this;
+    }
+
+    exit() {
+        open_sessions -= 1;
+    }
+}
+
+extend Session with Scoped&lt;Session&gt; {}
+
+# enter() may return a null reference: then the body is skipped and the
+# `else` block runs.
+struct Lookup {
+    var found: Session;
+
+    construct(Session session) {
+        found = session;
+    }
+
+    Session enter() {
+        return found;
+    }
+
+    exit() {}
+}
+
+extend Lookup with Scoped&lt;Session&gt; {}
+
+first_user(): String {
+    with (var session = Session("ada")) {
+        # `return` leaves the block too: the session still closes.
+        return session.user;
+    }
+    return "";
+}
+
+main(): int {
+    with (var session = Session("grace")) {
+        assert(open_sessions == 1, "open inside the block");
+        assert(session.user == "grace", "bound to what enter() returned");
+    }
+    assert(open_sessions == 0, "closed at the end of the block");
+
+    assert(first_user() == "ada", "the value was returned");
+    assert(open_sessions == 0, "closed on return as well");
+
+    var hits = 0;
+    with (var s = Lookup(Session("linus"))) {
+        hits += 1;
+    } else {
+        hits -= 100;
+    }
+    with (var s = Lookup(__null)) {
+        hits -= 100;
+    } else {
+        hits += 1;
+    }
+    assert(hits == 2, "the body ran for a session, the else block for null");
+    return 0;
+}
+</code></pre>
+<h2 id="the-header"><a class="header" href="#the-header">The header</a></h2>
+<pre><code class="language-pepper">with (var name = scope) { ... } else { ... }
+with (Type name = scope) { ... }
+with (scope) { ... }
+</code></pre>
+<ul>
+<li><strong><code>name</code> is bound to <code>scope.enter()</code></strong>, not to <code>scope</code> itself. A <code>Session</code>
+can hand out itself; a weak reference hands out the object it points to.</li>
+<li><strong>Without a binding</strong>, the block still holds the result of <code>enter()</code> until
+it ends. An <code>enter()</code> that returns nothing (declared without a return type)
+has nothing to bind, and binding it is an error.</li>
+<li><strong>The parentheses are optional</strong>, as with <code>if</code>, <code>while</code> and <code>for</code>. The braces
+are required.</li>
+<li><strong><code>name</code> cannot be reassigned</strong> inside the block.</li>
+</ul>
+<h2 id="skipping-the-body"><a class="header" href="#skipping-the-body">Skipping the body</a></h2>
+<p>When <code>enter()</code> returns a struct reference that is null, the body is skipped
+and the optional <code>else</code> block runs instead. <code>else</code> is only allowed when
+<code>enter()</code> returns a struct type, since nothing else can be null.</p>
+<h2 id="the-scopedt-protocol"><a class="header" href="#the-scopedt-protocol">The <code>Scoped&lt;T&gt;</code> protocol</a></h2>
+<p>A type works in a <code>with</code> block when it has the methods of the <code>Scoped&lt;T&gt;</code>
+trait (<code>runtime/scoped.pep</code>, documented in the <a href="#scoped">Scoped</a>
+reference):</p>
+<pre><code class="language-pepper">export trait Scoped&lt;T&gt; {
+    T enter();   # what the header binds; null skips the body
+    exit();      # the cleanup; call it from the destructor
+}
+</code></pre>
+<p>Traits are not checked yet, so the block goes by the methods a type has:
+a type without <code>enter()</code> is a compile error in a <code>with</code> header. Declaring the
+trait (<code>extend Session with Scoped&lt;Session&gt; {}</code>) documents the intent.</p>
+<h2 id="when-exit-runs"><a class="header" href="#when-exit-runs">When <code>exit()</code> runs</a></h2>
+<p>The block keeps two locals: the scope object and the bound value. Both are
+released on every path out of the block (the end of the body, <code>return</code>,
+<code>break</code> and <code>continue</code>), the bound value first. Implementations call <code>exit()</code>
+from their destructor:</p>
+<pre><code class="language-pepper">destruct {
+    this.exit();
+}
+</code></pre>
+<p>so <code>exit()</code> runs when the scope object’s <strong>last</strong> reference is released:</p>
+<ul>
+<li>A scope object created in the header (<code>with (var s = Session("grace"))</code>)
+is released by the block, so <code>exit()</code> runs at the end of the block.</li>
+<li>A scope object that something else also holds (a field, another local) lives
+on after the block, and <code>exit()</code> waits for its last owner. This is the same
+rule as any other object.</li>
+<li>A copy of the bound value that outlives the block (stored in a field,
+returned) keeps that value alive, but not the scope object.</li>
+</ul>
+<p>A <code>panic</code> stops the program without running destructors, so <code>exit()</code> does not
+run then.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="error-handling-with-result"><a class="header" href="#error-handling-with-result">Error handling with Result</a></h1>
 <p>An operation that can fail returns a <code>Result</code>: either <strong>Ok</strong>, holding the value
@@ -6686,6 +6832,78 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
 <ul>
 <li>an iterator over the elements</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/scoped.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="scoped"><a class="header" href="#scoped">Scoped</a></h1>
+<p>The scope protocol behind <code>with (var x = scope) { ... } else { ... }</code>.</p>
+<p>A <code>with</code> block holds <code>scope</code> in a hidden local, binds <code>x</code> to
+<code>scope.enter()</code>, and runs the body. When <code>enter()</code> returns a struct
+reference that is null, the body is skipped and the optional <code>else</code> block
+runs instead. Both locals are released on every path out of the block
+(falling off the end, <code>return</code>, <code>break</code>, <code>continue</code>), the binding first.
+Cleanup is the scope object’s destructor, which calls <code>exit()</code>.</p>
+<p>Source: <code>runtime/scoped.pep</code></p>
+<h2 id="scoped-1"><a class="header" href="#scoped-1">Scoped</a></h2>
+<pre><code class="language-pepper">trait Scoped&lt;T&gt;
+</code></pre>
+<p>Something a <code>with</code> block can enter.</p>
+<p><code>enter()</code> runs once when the block is entered, and its result is what the
+header binds. <code>exit()</code> is the cleanup: implementations call it from their
+destructor (<code>destruct { this.exit(); }</code>), so it runs when the scope
+object’s last reference is released. For a scope object created in the
+<code>with</code> header that is the end of the block; for one that is also held
+elsewhere, it is when that last owner lets go.</p>
+<p>A <code>with</code> block with no binding (<code>with (scope) { ... }</code>) still holds the
+result of <code>enter()</code> until the block ends. An <code>enter()</code> that returns <code>void</code>
+has nothing to bind.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type <code>enter()</code> returns</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var open = 0;
+
+    struct Session {
+        construct() {
+            open = open + 1;
+        }
+
+        destruct {
+            this.exit();
+        }
+
+        Session enter() {
+            return this;
+        }
+
+        exit() {
+            open = open - 1;
+        }
+    }
+
+    extend Session with Scoped&lt;Session&gt; {}
+
+    main(): int {
+        with (var session = Session()) {
+            # open == 1 here
+        }
+        return open;   # 0: the session was destroyed at the end of the block
+    }
+</code></pre>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">T enter()
+</code></pre>
+<p>Enters the scope.</p>
+<p>A null struct reference means there is nothing to use: the <code>with</code>
+body is skipped and its <code>else</code> block runs instead.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value the <code>with</code> header binds</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Leaves the scope. Implementations call it from their destructor.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/result.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="result"><a class="header" href="#result">Result</a></h1>
 <p>Source: <code>runtime/result.pep</code></p>
@@ -6806,7 +7024,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">bool is_ok()
 </code></pre>
@@ -6908,7 +7126,7 @@ through the methods, which keep every access atomic.</p>
 <pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
     var p = Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">T load()
 </code></pre>
@@ -7256,7 +7474,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">bool is_not_found()
 </code></pre>
@@ -7449,7 +7667,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.Size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
@@ -7870,7 +8088,7 @@ sharing read, write and delete access with other openers.</p>
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
@@ -8667,7 +8885,7 @@ junctions included), which is not followed.</p>
 </code></pre>
 <p>Creates an empty entry: empty <code>Path</code> and <code>Name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>
