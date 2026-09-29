@@ -6,8 +6,6 @@
 use pepper_codegen::CodeGenerator;
 use pepper_sema::builder::build;
 use pepper_sema::model::Module as SemaModule;
-use pepper_sema::passes::transform_pass;
-use pepper_sema::struct_body;
 
 fn compile_jit(source: &str) -> i32 {
     compile_jit_mapped(source, |_| None)
@@ -20,21 +18,7 @@ fn compile_jit_mapped(source: &str, map_global: impl Fn(&str) -> Option<usize>) 
     // Struct constructors allocate via `_pep_malloc`, so the runtime prelude
     // must be linked (the support library's on-demand extern declaration is
     // gone).
-    let mut module = SemaModule::default();
-    let (runtime_sources, _libs, _dirs) = pepper_driver::runtime::discover();
-    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
-    for path in runtime_sources {
-        let content = std::fs::read_to_string(&path).expect("read runtime source");
-        let ast = pepper_parser::parser::parse_source(&path.to_string_lossy(), &content)
-            .expect("parse runtime source");
-        module.merge(build(&ast).expect("build"));
-    }
-    let ast = pepper_parser::parser::parse_source("test.pep", source).expect("parse error");
-    pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
-    module.merge(build(&ast).expect("build"));
-    pepper_sema::apply_platform_filters(&mut module).expect("platform");
-    struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module).expect("sema");
+    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     let ee = generator.jit_engine_mapped(&mut module, map_global).expect("jit engine");

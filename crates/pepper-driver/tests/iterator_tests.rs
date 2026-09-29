@@ -6,10 +6,6 @@
 
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
-use pepper_sema::builder::build;
-use pepper_sema::model::Module as SemaModule;
-use pepper_sema::passes::transform_pass;
-use pepper_sema::struct_body;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -24,21 +20,7 @@ fn repo_root() -> PathBuf {
 /// compile error.
 fn try_compile_jit_census(source: &str) -> Result<(i32, i64), String> {
     let _census = CENSUS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut module = SemaModule::default();
-    let (runtime_sources, _libs, _dirs) = pepper_driver::runtime::discover();
-    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
-    for path in runtime_sources {
-        let content = std::fs::read_to_string(&path).expect("read runtime source");
-        let ast = pepper_parser::parser::parse_source(&path.to_string_lossy(), &content)
-            .expect("parse runtime source");
-        module.merge(build(&ast).expect("build"));
-    }
-    let ast = pepper_parser::parser::parse_source("test.pep", source).map_err(|e| e.to_string())?;
-    pepper_driver::compiler::check_with_runtime("test.pep", source).expect("visibility");
-    module.merge(build(&ast).map_err(|d| d.render_in("test.pep", source))?);
-    pepper_sema::apply_platform_filters(&mut module).expect("platform");
-    struct_body::apply(&mut module).expect("sema");
-    transform_pass(&mut module).expect("sema");
+    let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source)?;
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, "test");
     let ee = generator.jit_engine(&mut module)?;

@@ -55,6 +55,15 @@ pub fn check_with_runtime(name: &str, source: &str) -> Result<(), String> {
     load_with_runtime(name, source)?.check()
 }
 
+/// Compile `source` (named `name`) with the discovered runtime as its
+/// prelude, as `compile` does: load, link, check, merge, and run the sema
+/// passes. For test harnesses that JIT the result.
+pub fn compile_with_runtime(name: &str, source: &str) -> Result<Compiled, String> {
+    let mut module = merge(&load_with_runtime(name, source)?)?;
+    run_passes(&mut module)?;
+    Ok(module)
+}
+
 /// Full compile: parse + sema + codegen. Returns the generator for JIT or
 /// emission.
 pub fn compile(
@@ -67,11 +76,17 @@ pub fn compile(
         .ok_or_else(|| "no source files".to_string())?;
 
     let mut module = compile_sources(options, entry_source)?;
-
-    pepper_sema::apply_platform_filters(&mut module).map_err(|d| module.sources.render(&d))?;
-    struct_body::apply(&mut module).map_err(|d| module.sources.render(&d))?;
-    transform_pass(&mut module).map_err(|d| module.sources.render(&d))?;
-    pepper_sema::passes::check_function_types::check_function_types(&module)?;
-
+    run_passes(&mut module)?;
     Ok(module)
+}
+
+/// Platform selection, struct bodies, the transform passes, then the
+/// function-type check, on a merged module; errors are rendered against its
+/// sources.
+fn run_passes(module: &mut SemaModule) -> Result<(), String> {
+    pepper_sema::apply_platform_filters(module).map_err(|d| module.sources.render(&d))?;
+    struct_body::apply(module).map_err(|d| module.sources.render(&d))?;
+    transform_pass(module).map_err(|d| module.sources.render(&d))?;
+    pepper_sema::passes::check_function_types::check_function_types(module)?;
+    Ok(())
 }

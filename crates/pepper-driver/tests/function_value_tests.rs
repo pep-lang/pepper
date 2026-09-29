@@ -4,33 +4,14 @@
 //! signature checks that keep a mismatched function out of a typed slot.
 
 use pepper_codegen::CodeGenerator;
-use pepper_sema::builder::build;
 use pepper_sema::model::Module as SemaModule;
-use pepper_sema::passes::check_function_types::check_function_types;
-use pepper_sema::passes::transform_pass;
-use pepper_sema::struct_body;
 
 /// `_pep_live_allocs()` is a process-wide counter, so leak-census tests must
 /// not run concurrently with each other; serialize on this lock.
 static CENSUS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn sema(source: &str) -> Result<SemaModule, String> {
-    let mut module = SemaModule::default();
-    let (runtime_sources, _libs, _dirs) = pepper_driver::runtime::discover();
-    assert!(!runtime_sources.is_empty(), "runtime prelude not discovered");
-    for path in runtime_sources {
-        let content = std::fs::read_to_string(&path).expect("read runtime source");
-        let ast = pepper_parser::parser::parse_source(&path.to_string_lossy(), &content).expect("parse runtime source");
-        module.merge(build(&ast).expect("build"));
-    }
-    let ast = pepper_parser::parser::parse_source("test.pep", source)?;
-    pepper_driver::compiler::check_with_runtime("test.pep", source)?;
-    module.merge(build(&ast).map_err(|d| d.message)?);
-    pepper_sema::apply_platform_filters(&mut module).map_err(|d| d.message)?;
-    struct_body::apply(&mut module).map_err(|d| d.message)?;
-    transform_pass(&mut module).map_err(|d| d.message)?;
-    check_function_types(&module)?;
-    Ok(module)
+    pepper_driver::compiler::compile_with_runtime("test.pep", source)
 }
 
 /// Compile + JIT `test()` and return (result, net live-allocation delta).
