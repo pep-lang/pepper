@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-04c53d6f.js";
+            window.path_to_searchindex_js = "searchindex-dcb09c66.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -232,12 +232,12 @@ maps and sets, atomics, threads, and file-system access. That is enough to write
 programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>Functions are values: a named function or a closure such as
-<code>(x: int) =&gt; x * 2</code> can be stored, passed and called through a function
-type such as <code>(int) =&gt; int</code> (see
-<a href="language/function-types.html">function types and closures</a>). Methods,
-constructors and generic functions cannot be named as values yet; wrap one
-in a closure instead.</li>
+<li>Functions are values: a named function, a method (<code>p.norm</code>,
+<code>Point.norm</code>), a constructor (<code>Point</code>), a generic function’s
+specialization (<code>larger&lt;int&gt;</code>) or a closure such as <code>(x: int) =&gt; x * 2</code>
+can be stored, passed and called through a function type such as
+<code>(int) =&gt; int</code> (see
+<a href="language/function-types.html">function types and closures</a>).</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, but the compiler does not yet
 check module-scope variables, and there are no mutexes or channels (see

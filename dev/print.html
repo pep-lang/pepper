@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-04c53d6f.js";
+            window.path_to_searchindex_js = "searchindex-dcb09c66.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c54ee6.js"></script>
@@ -230,12 +230,12 @@ maps and sets, atomics, threads, and file-system access. That is enough to write
 programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
-<li>Functions are values: a named function or a closure such as
-<code>(x: int) =&gt; x * 2</code> can be stored, passed and called through a function
-type such as <code>(int) =&gt; int</code> (see
-<a href="#function-types-and-closures">function types and closures</a>). Methods,
-constructors and generic functions cannot be named as values yet; wrap one
-in a closure instead.</li>
+<li>Functions are values: a named function, a method (<code>p.norm</code>,
+<code>Point.norm</code>), a constructor (<code>Point</code>), a generic function’s
+specialization (<code>larger&lt;int&gt;</code>) or a closure such as <code>(x: int) =&gt; x * 2</code>
+can be stored, passed and called through a function type such as
+<code>(int) =&gt; int</code> (see
+<a href="#function-types-and-closures">function types and closures</a>).</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, but the compiler does not yet
 check module-scope variables, and there are no mutexes or channels (see
@@ -1640,8 +1640,8 @@ variable, pass to another function, or return, and a closure such as
 <p>Functions in Pepper are values. You can store a function in a variable, a
 field or an array, pass it to another function, and return it. This lets you
 choose behavior at run time: a sort order, a callback, a step in a pipeline.
-A function value is either a named function or a closure, an anonymous
-function written where it is used.</p>
+A function value is a named function, a method, a constructor, or a closure:
+an anonymous function written where it is used.</p>
 <h2 id="function-types"><a class="header" href="#function-types">Function types</a></h2>
 <p>A function type is written <code>(parameter types) =&gt; return type</code>:</p>
 <div class="table-wrapper">
@@ -1706,6 +1706,89 @@ main(): int {
 <li>A function-typed variable can be reassigned to any function of the same type.</li>
 <li>A parameter of function type, such as <code>f: (int) =&gt; int</code>, lets the caller pass
 in the behavior. Generic functions can take function parameters too.</li>
+</ul>
+<h2 id="methods-constructors-and-generic-functions"><a class="header" href="#methods-constructors-and-generic-functions">Methods, constructors and generic functions</a></h2>
+<p>Methods, constructors and specializations of generic functions are values
+too:</p>
+<pre><code class="language-pepper"># Methods, constructors and generic functions used as values.
+struct Point {
+    int x;
+    int y;
+    construct(this.x = 0, this.y = 0) {}
+
+    norm(): int {
+        return x + y;
+    }
+
+    shifted(dx: int): Point {
+        return Point(x + dx, y);
+    }
+}
+
+larger&lt;T&gt;(a: T, b: T): T {
+    return a &gt; b ? a : b;
+}
+
+combine(f: (int, int) =&gt; int, a: int, b: int): int {
+    return f(a, b);
+}
+
+main(): int {
+    var p = Point(3, 4);
+
+    # A bound method: the method of one object, which it keeps alive.
+    var norm = p.norm;
+    assert(norm() == 7, "bound method");
+
+    # An unbound method takes the object as its first argument.
+    var norm_of: (Point) =&gt; int = Point.norm;
+    assert(norm_of(Point(1, 1)) == 2, "unbound method");
+
+    # A struct's name is its constructor.
+    var make: (int, int) =&gt; Point = Point;
+    assert(make(5, 6).y == 6, "constructor");
+
+    # A generic function with its type arguments names one specialization.
+    assert(combine(larger&lt;int&gt;, 2, 9) == 9, "generic function");
+
+    var steps = Array&lt;(int) =&gt; Point&gt;();
+    steps.append(p.shifted);
+    steps.append(Point(10, 0).shifted);
+    assert(steps[1](5).x == 15, "methods in an array");
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Written</th><th>Type</th><th>Calls</th></tr>
+</thead>
+<tbody>
+<tr><td><code>p.norm</code></td><td><code>() =&gt; int</code></td><td><code>p.norm()</code>, on the object <code>p</code> referred to when the value was made</td></tr>
+<tr><td><code>Point.norm</code></td><td><code>(Point) =&gt; int</code></td><td><code>norm</code> on the object passed as the first argument</td></tr>
+<tr><td><code>Point.origin</code> (a <code>static</code> method)</td><td><code>() =&gt; Point</code></td><td><code>Point.origin()</code></td></tr>
+<tr><td><code>Point</code></td><td><code>(int, int) =&gt; Point</code></td><td>the constructor</td></tr>
+<tr><td><code>Box&lt;int&gt;</code></td><td><code>(int) =&gt; Box&lt;int&gt;</code></td><td>the constructor of <code>Box&lt;int&gt;</code></td></tr>
+<tr><td><code>larger&lt;int&gt;</code></td><td><code>(int, int) =&gt; int</code></td><td>the specialization <code>larger&lt;int&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li><strong>Bound methods.</strong> <code>p.norm</code> keeps a reference to the object, like a closure
+<code>() =&gt; p.norm()</code> that captured <code>p</code>, so the object lives as long as the
+value does. The expression before the <code>.</code> is evaluated once, when the value
+is made. Inside a method, write <code>this.norm</code>; a bare <code>norm</code> is not a value.
+Storing <code>this.norm</code> in a field of <code>this</code> would be a reference cycle, and is
+an error, as for <a href="#this-in-methods">closures</a>.</li>
+<li><strong>Traits and extensions.</strong> A method declared in an
+<a href="#traits-and-extensions">extension</a> works the same way, and so does a
+method of a trait-typed value (<code>shape.area</code>), which calls through the trait.</li>
+<li><strong>Generic functions</strong> need their type arguments: <code>larger&lt;int&gt;</code>, not
+<code>larger</code>.</li>
+<li><strong>A type with a constructor that takes no arguments.</strong> <code>Box&lt;int&gt;</code> on its
+own names the constructor only when the constructor needs at least one
+argument; otherwise it is a call, <code>Box&lt;int&gt;()</code>. The same goes for a generic
+function whose parameters all have defaults.</li>
 </ul>
 <h2 id="storing-and-returning-functions"><a class="header" href="#storing-and-returning-functions">Storing and returning functions</a></h2>
 <p>Function values go wherever other values go: struct fields, arrays,
@@ -1950,18 +2033,20 @@ hides the function inside its scope. Inside a function with a parameter named
 <p>A function value is a reference, like a struct value, and follows the same
 reference-counting rules (see <a href="#memory-and-reference-counting">Memory and reference counting</a>).
 Referring to a named function allocates nothing: every reference to <code>square</code>
-shares one static function object.</p>
+shares one static function object. A method, constructor or generic function
+value allocates one small object, like a closure; a bound method’s object
+holds a reference to its receiver.</p>
 <p>Creating a closure allocates one object holding the captured values, like
 constructing a struct. Copying the closure adds a reference to that object,
 and when the last reference goes, the object releases what it captured.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Generic functions, methods, constructors and <code>extern</code> functions</strong> cannot be
-referenced as values. Naming a generic function without a call reports
-<code>use of undeclared identifier</code>, and naming a method without a call
-(<code>var f = s.get;</code>) reports <code>no member named 'get' in 'S'</code>. To use one of these
-as a value, write a named free function that calls it, or a closure:
-<code>(x: int) =&gt; s.get(x)</code>.</li>
+<li><strong>Generic functions without type arguments and <code>extern</code> functions</strong> cannot
+be referenced as values. <code>larger</code> alone is not a value even where the
+expected type would pick <code>larger&lt;int&gt;</code>. To use an <code>extern</code> function as a
+value, wrap it in a closure: <code>(x: int) =&gt; abs(x)</code>.</li>
+<li><strong>A bare method name inside a method</strong> (<code>var f = norm;</code>) is not a value;
+write <code>this.norm</code>.</li>
 <li><strong>Parameter types from generic calls.</strong> A closure’s parameter types come
 from a slot whose type is known where the closure is written. Passing
 <code>(x) =&gt; x + 1</code> to a generic function whose parameter is <code>(T) =&gt; T</code> does not
