@@ -1150,6 +1150,19 @@ fn an_own_concrete_generic_beside_a_plain_function_elsewhere() {
 }
 
 #[test]
+fn an_uncalled_override_of_a_private_generic_is_blocked() {
+    // main never calls `conv<int>`, but declaring it would still replace
+    // the instantiation lib's `seven` uses (8 instead of 7).
+    let files = [
+        ("lib.pep", "conv<T>(x: T): int { return 0; }\nexport seven(): int { return conv<int>(7) + 7; }"),
+        ("main.pep", "import [seven] from \"lib\";\nconv<int>(x: int): int { return 1; }\ntest(): int { return seven(); }"),
+    ];
+    let err = error("uncalled_private_override", &files);
+    assert!(err.contains("'conv' is private to") && err.contains("lib.pep"), "{}", err);
+    assert_eq!(err.matches("error:").count(), 1, "{}", err);
+}
+
+#[test]
 fn a_blocked_own_override_names_the_other_file() {
     let files = [
         ("lib.pep", "conv<T>(x: T): T { return x; }\nexport seven(): int { return conv<int>(7); }"),

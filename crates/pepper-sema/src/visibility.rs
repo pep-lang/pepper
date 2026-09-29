@@ -254,6 +254,26 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             }
         }
     }
+    // A concrete override (`conv<int>`) of a generic base only another file
+    // declares, privately, would replace that file's own instantiation of
+    // it, whether or not this file ever calls it: the base is out of reach.
+    for (name, entries) in &decls {
+        for d in entries.iter().filter(|d| !d.external && is_override(d.generics.iter().copied())) {
+            let is_base_of_d = |e: &&Decl| is_generic_base(e) && e.generics.len() == d.generics.len();
+            if entries.iter().any(|e| e.file == d.file && is_base_of_d(&e)) {
+                continue;
+            }
+            if let Some(base) = entries.iter().find(|e| e.file != d.file && !e.exported && is_base_of_d(e)) {
+                errors.push(VisibilityError {
+                    file: d.file,
+                    span: d.span,
+                    name: name.to_string(),
+                    declared_in: base.file,
+                    kind: VisibilityErrorKind::Private,
+                });
+            }
+        }
+    }
     // HashMap order is arbitrary; report duplicates in source order.
     errors.sort_by_key(|e| (e.file, e.span.start));
 
@@ -543,14 +563,15 @@ impl<'a> Checker<'a, '_> {
         let Some(entries) = self.decls.get(name) else { return self.member(name, span) };
         if self.imported.get(&span.start).is_some_and(|n| n == name)
             // This file's own declaration counts, unless it is only a concrete
-            // override (`pick<int>`) of a generic another file declares: that
-            // would unlock the other file's name.
+            // override (`pick<int>`) of a generic another file exports: that
+            // would unlock the other file's name. (Overriding another file's
+            // private generic is reported once, at the override.)
             || entries.iter().any(|d| {
                 (d.file == self.file
                     && (!is_override(d.generics.iter().copied())
                         || !entries
                             .iter()
-                            .any(|e| e.file != self.file && is_generic_base(e))))
+                            .any(|e| e.file != self.file && e.exported && is_generic_base(e))))
                     || (d.exported && self.prelude[d.file])
             })
         {
