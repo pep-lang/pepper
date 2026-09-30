@@ -106,6 +106,24 @@ whole count 0.
 
 ### Methods
 
+#### bytes
+
+```pepper
+bytes(): u8[]
+```
+
+Returns a new array holding the String's UTF-8 bytes, without a
+terminating NUL. Runs in O(size()).
+
+**Returns**
+- a new array of `size()` bytes
+
+**Example**
+```pepper
+    var data = "hi".bytes();
+    assert(data.count() == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
+```
+
 #### length
 
 ```pepper
@@ -636,6 +654,80 @@ only). Runs in O(size()).
 ```pepper
     assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
     assert("  indented".trim_end() == "  indented", "leading kept");
+```
+
+#### trim_start
+
+```pepper
+trim_start(): String
+```
+
+Returns a new String without the whitespace at the start: spaces,
+tabs, carriage returns, line feeds, vertical tabs and form feeds
+(ASCII only). Runs in O(size()).
+
+**Returns**
+- a new String with the leading whitespace removed
+
+**Example**
+```pepper
+    assert("  \tcode".trim_start() == "code", "leading whitespace");
+```
+
+#### trim
+
+```pepper
+trim(): String
+```
+
+Returns a new String without the whitespace at either end, as
+`trim_start` and `trim_end` do. Runs in O(size()).
+
+**Returns**
+- a new String with the leading and trailing whitespace removed
+
+**Example**
+```pepper
+    assert(" \t value \r\n".trim() == "value", "both ends");
+```
+
+#### lower
+
+```pepper
+lower(): String
+```
+
+Returns a new String with the ASCII letters `A` to `Z` changed to `a`
+to `z`. Every other character, including non-ASCII letters, is kept
+as it is, so the result is valid UTF-8 of the same size. Runs in
+O(size()).
+
+**Returns**
+- a new String in lowercase
+
+**Example**
+```pepper
+    assert("Content-Type".lower() == "content-type", "ASCII lowered");
+    assert("Ärger".lower() == "Ärger", "non-ASCII kept");
+```
+
+#### upper
+
+```pepper
+upper(): String
+```
+
+Returns a new String with the ASCII letters `a` to `z` changed to `A`
+to `Z`. Every other character, including non-ASCII letters, is kept
+as it is, so the result is valid UTF-8 of the same size. Runs in
+O(size()).
+
+**Returns**
+- a new String in uppercase
+
+**Example**
+```pepper
+    assert("get".upper() == "GET", "ASCII raised");
 ```
 
 #### lines

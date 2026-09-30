@@ -11,7 +11,7 @@ use crate::support;
 
 /// A self-signed certificate (EC P-256, valid until 2126) for `localhost`
 /// and `127.0.0.1`, and its key. For these tests only: the key is public.
-const TEST_CERTIFICATE: &str = r"-----BEGIN CERTIFICATE-----
+pub(crate) const TEST_CERTIFICATE: &str = r"-----BEGIN CERTIFICATE-----
 MIIBmzCCAUGgAwIBAgIURcyG8LECUkGDUQnq4wr2SyTfH8AwCgYIKoZIzj0EAwIw
 FDESMBAGA1UEAwwJbG9jYWxob3N0MCAXDTI2MDkzMDE2MDQwNloYDzIxMjYwOTA2
 MTYwNDA2WjAUMRIwEAYDVQQDDAlsb2NhbGhvc3QwWTATBgcqhkjOPQIBBggqhkjO
@@ -22,7 +22,7 @@ VR0RBBMwEYIJbG9jYWxob3N0hwR/AAABMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZI
 zj0EAwIDSAAwRQIhAPw/RhZDgoHFZkEOEAzOQazJ4l3RoKVRNYS9XyrOkIceAiB3
 IHZxDB0uoD4leOOsxQzN4uNXDZwjhLCJUHySFW9ctA==
 -----END CERTIFICATE-----";
-const TEST_KEY: &str = r"-----BEGIN PRIVATE KEY-----
+pub(crate) const TEST_KEY: &str = r"-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgZ9o1y2mmE2xdq/8M
 DnvBSs61u+Getq5MzQ7gMuKHfZChRANCAAS6V7/9e1PZ6ah6/2Ej6VCR+fwGBGQ3
 3SdVFy0ggLp4p0dlV9k0tvFTyPJdkPr/sZ+5l02208ogHnk9sONf8/PV
@@ -153,10 +153,16 @@ main(): int {
 }
 "##;
 
-/// TLS_PROGRAM with the test certificate and key written to a directory of
-/// this process's own.
+/// TLS_PROGRAM with the test certificate and key.
 fn tls_program() -> String {
-    let dir = std::env::temp_dir().join(format!("pepper_tls_{}", std::process::id()));
+    with_test_certificate("tls", TLS_PROGRAM)
+}
+
+/// `program` with CERT_PATH and KEY_PATH replaced by the paths of the test
+/// certificate and key, written to a directory of this process's own for
+/// the test `name`.
+pub(crate) fn with_test_certificate(name: &str, program: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("pepper_certificate_{}_{}", name, std::process::id()));
     std::fs::create_dir_all(&dir).expect("create the certificate directory");
     let certificate = dir.join("cert.pem");
     let key = dir.join("key.pem");
@@ -164,7 +170,7 @@ fn tls_program() -> String {
     std::fs::write(&key, format!("{TEST_KEY}\n")).expect("write the key");
     // Forward slashes work on every platform and need no escaping.
     let slashes = |p: &std::path::Path| p.to_string_lossy().replace('\\', "/");
-    TLS_PROGRAM.replace("CERT_PATH", &slashes(&certificate)).replace("KEY_PATH", &slashes(&key))
+    program.replace("CERT_PATH", &slashes(&certificate)).replace("KEY_PATH", &slashes(&key))
 }
 
 #[test]

@@ -117,6 +117,107 @@ export struct String {
         return _pep_utf8_length(data, size);
     }
 
+    # A new String decoded from the UTF-8 bytes in `data`, each byte that
+    # does not start a valid sequence becoming U+FFFD. For the http module
+    # until text.Utf8.decode_lossy replaces it.
+    static _from_bytes(data: u8[]): String {
+        var size = data.count();
+        if (size == 0) {
+            return "";
+        }
+        __ptr<u8> source = data._data;
+        # Each byte becomes at most 3 (a replacement character).
+        __ptr<u8> decoded = _pep_malloc(size * 3 + 1);
+        ulong length = 0;
+        ulong written = 0;
+        ulong index = 0;
+        while (index < size) {
+            var run = String._utf8_sequence(source, index, size);
+            if (run == 0) {
+                decoded[written] = 239;
+                decoded[written + 1] = 191;
+                decoded[written + 2] = 189;
+                written = written + 3;
+                index = index + 1;
+            } else {
+                ulong k = 0;
+                while (k < run) {
+                    decoded[written + k] = source[index + k];
+                    k = k + 1;
+                }
+                written = written + run;
+                index = index + run;
+            }
+            length = length + 1;
+        }
+        var result = String(decoded as __ptr<char>, written, length);
+        _pep_free(decoded);
+        return result;
+    }
+
+    # The size of the valid UTF-8 sequence starting at byte `index` of the
+    # `size` bytes at `data`, or 0 when none starts there. (`&&` does not
+    # short-circuit, so each read is guarded by its own `if`.)
+    static _utf8_sequence(data: __ptr<u8>, index: ulong, size: ulong): ulong {
+        var first = data[index];
+        if (first < 128) {
+            return 1;
+        }
+        ulong run = 0;
+        u8 low = 128;
+        u8 high = 191;
+        if (first >= 194 && first <= 223) {
+            run = 2;
+        } else if (first >= 224 && first <= 239) {
+            run = 3;
+            if (first == 224) {
+                low = 160;
+            } else if (first == 237) {
+                high = 159;
+            }
+        } else if (first >= 240 && first <= 244) {
+            run = 4;
+            if (first == 240) {
+                low = 144;
+            } else if (first == 244) {
+                high = 143;
+            }
+        }
+        if (run == 0 || index + run > size) {
+            return 0;
+        }
+        var second = data[index + 1];
+        if (second < low || second > high) {
+            return 0;
+        }
+        ulong k = 2;
+        while (k < run) {
+            var next = data[index + k];
+            if (next < 128 || next > 191) {
+                return 0;
+            }
+            k = k + 1;
+        }
+        return run;
+    }
+
+    ## Returns a new array holding the String's UTF-8 bytes, without a
+    ## terminating NUL. Runs in O(size()).
+    ##
+    ## @returns a new array of `size()` bytes
+    ## @example
+    ##     var data = "hi".bytes();
+    ##     assert(data.count() == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
+    bytes(): u8[] {
+        var result = Array<u8>(_size);
+        ulong index = 0;
+        while (index < _size) {
+            result.append(_data[index] as u8);
+            index = index + 1;
+        }
+        return result;
+    }
+
     ## Returns the number of Unicode code points. O(1).
     ##
     ## @returns the length in code points, not bytes
@@ -557,6 +658,73 @@ export struct String {
             end = end - 1;
         }
         return substr_bytes(0, end);
+    }
+
+    ## Returns a new String without the whitespace at the start: spaces,
+    ## tabs, carriage returns, line feeds, vertical tabs and form feeds
+    ## (ASCII only). Runs in O(size()).
+    ##
+    ## @returns a new String with the leading whitespace removed
+    ## @example
+    ##     assert("  \tcode".trim_start() == "code", "leading whitespace");
+    trim_start(): String {
+        ulong start = 0;
+        while (start < _size && _is_space(_data[start] as byte)) {
+            start = start + 1;
+        }
+        return substr_bytes(start, _size - start);
+    }
+
+    ## Returns a new String without the whitespace at either end, as
+    ## `trim_start` and `trim_end` do. Runs in O(size()).
+    ##
+    ## @returns a new String with the leading and trailing whitespace removed
+    ## @example
+    ##     assert(" \t value \r\n".trim() == "value", "both ends");
+    trim(): String {
+        return trim_start().trim_end();
+    }
+
+    ## Returns a new String with the ASCII letters `A` to `Z` changed to `a`
+    ## to `z`. Every other character, including non-ASCII letters, is kept
+    ## as it is, so the result is valid UTF-8 of the same size. Runs in
+    ## O(size()).
+    ##
+    ## @returns a new String in lowercase
+    ## @example
+    ##     assert("Content-Type".lower() == "content-type", "ASCII lowered");
+    ##     assert("Ärger".lower() == "Ärger", "non-ASCII kept");
+    lower(): String {
+        return _map_case(65, 32);
+    }
+
+    ## Returns a new String with the ASCII letters `a` to `z` changed to `A`
+    ## to `Z`. Every other character, including non-ASCII letters, is kept
+    ## as it is, so the result is valid UTF-8 of the same size. Runs in
+    ## O(size()).
+    ##
+    ## @returns a new String in uppercase
+    ## @example
+    ##     assert("get".upper() == "GET", "ASCII raised");
+    upper(): String {
+        return _map_case(97, 0 - 32);
+    }
+
+    # A copy with the 26 letters from `first` shifted by `shift`.
+    _map_case(first: int, shift: int): String {
+        __ptr<char> copy = _pep_malloc(_size + 1);
+        ulong index = 0;
+        while (index < _size) {
+            int value = (_data[index] as byte) as int;
+            if (value >= first && value < first + 26) {
+                value = value + shift;
+            }
+            copy[index] = value as char;
+            index = index + 1;
+        }
+        var result = String(copy, _size, _length);
+        _pep_free(copy);
+        return result;
     }
 
     # Whether `value` is ASCII whitespace: space, \t, \n, \v, \f or \r.

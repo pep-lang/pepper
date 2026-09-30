@@ -1,7 +1,8 @@
 # Networking
 
 The `io` module has TCP, UDP and Unix domain sockets, IP and socket
-addresses, and host name lookup; the `tls` module encrypts TCP connections.
+addresses, and host name lookup; the `tls` module encrypts TCP connections,
+and the [`http`](http.md) module speaks HTTP over them.
 In a plain program every call blocks the calling thread until it completes,
 like `File`. To serve several connections at once, give each
 one its own [thread](threads.md), or its own [task](tasks.md#sockets): in a

@@ -20,6 +20,11 @@ main(): int {
     assert(lines.count() == 2, "no empty line after the final newline");
     assert(lines[0].trim_end() == "one", "trim_end");
 
+    # trim() drops whitespace at both ends; lower() and upper() change ASCII case.
+    var field = "  Content-Type ".trim();
+    assert(field.lower() == "content-type", "lower");
+    assert(field.upper() == "CONTENT-TYPE", "upper");
+
     # repeat joins copies; StringBuilder appends without recopying the text.
     var out = StringBuilder();
     for (var text in lines) {

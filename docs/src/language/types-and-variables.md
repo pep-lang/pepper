@@ -108,7 +108,9 @@ method.
 generating text, `byte_at` and `substr_bytes` work in bytes (the offsets
 `find` returns), `compare` and `<`, `<=`, `>`, `>=` order strings byte by byte
 (code-point order for UTF-8), `lines()` splits on `"\n"` or `"\r\n"`,
-`trim_end()` drops trailing whitespace, and `repeat(n)` joins `n` copies. A
+`trim()`, `trim_start()` and `trim_end()` drop whitespace, `lower()` and
+`upper()` change the case of ASCII letters, `repeat(n)` joins `n` copies, and
+`bytes()` copies the UTF-8 bytes into an array. A
 `StringBuilder` builds a long String from many pieces without recopying the
 text built so far on every append:
 

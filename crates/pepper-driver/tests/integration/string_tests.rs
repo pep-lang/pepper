@@ -283,7 +283,7 @@ test(): int {
 }
 
 #[test]
-fn trim_end_lines_and_repeat() {
+fn trim_case_lines_and_repeat() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
@@ -301,6 +301,29 @@ test(): int {
     if (!("é".repeat(2).length() == 2)) { return -10; }
     if (!("x".repeat(0) == "")) { return -11; }
     if (!("".repeat(5) == "")) { return -12; }
+    if (!("  \tcode".trim_start() == "code")) { return -13; }
+    if (!(" \t value \r\n".trim() == "value")) { return -14; }
+    if (!("   ".trim() == "")) { return -15; }
+    if (!("Content-Type 1".lower() == "content-type 1")) { return -16; }
+    if (!("get ÄÖ".upper() == "GET ÄÖ")) { return -17; }
+    if (!("Ärger".lower() == "Ärger" && "Ärger".lower().length() == 5)) { return -18; }
+    if (!("".upper() == "")) { return -19; }
+    var data = "hé".bytes();
+    if (!(data.count() == 3 && data[0] == 104 && data[1] == 195 && data[2] == 169)) { return -20; }
+    if (!(String._from_bytes(data) == "hé" && String._from_bytes(data).length() == 2)) { return -21; }
+    data.append(255);
+    data.append(105);
+    if (!(String._from_bytes(data) == "hé\u{FFFD}i" && String._from_bytes(data).length() == 4)) { return -22; }
+    var cut = Array<u8>();
+    cut.append(226);
+    cut.append(130);
+    if (!(String._from_bytes(cut) == "\u{FFFD}\u{FFFD}")) { return -23; }
+    var surrogate = Array<u8>();
+    surrogate.append(237);
+    surrogate.append(160);
+    surrogate.append(128);
+    if (!(String._from_bytes(surrogate).length() == 3)) { return -24; }
+    if (!(String._from_bytes(Array<u8>()) == "")) { return -25; }
     return 0;
 }"#
         ),
