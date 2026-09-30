@@ -111,6 +111,30 @@ fn type_string(ty: &ast::TypeName) -> String {
     ty.to_string()
 }
 
+/// Generic parameters as written, constraints and defaults included:
+/// `<T: Shape & Named = Square>`, or nothing without any.
+fn generics_string(params: &[ast::GenericParam]) -> String {
+    if params.is_empty() {
+        return String::new();
+    }
+    let params: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let mut out = p.name.clone();
+            if !p.bounds.is_empty() {
+                out += ": ";
+                out += &p.bounds.iter().map(type_string).collect::<Vec<_>>().join(" & ");
+            }
+            if let Some(d) = &p.default {
+                out += if p.bounds.is_empty() { "=" } else { " = " };
+                out += &type_string(d);
+            }
+            out
+        })
+        .collect();
+    format!("<{}>", params.join(", "))
+}
+
 fn function_signature(f: &ast::FunctionDecl) -> String {
     let params = f
         .parameters
@@ -118,7 +142,7 @@ fn function_signature(f: &ast::FunctionDecl) -> String {
         .map(|p| format!("{}: {}", p.name, type_string(&p.type_name)))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("{}({}): {}", f.name, params, type_string(&f.return_type))
+    format!("{}{}({}): {}", f.name, generics_string(&f.generic_params), params, type_string(&f.return_type))
 }
 
 fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
@@ -187,31 +211,21 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
             ast::Declaration::Struct(s) => out.push(Symbol {
                 name: s.name.clone(),
                 name_span: s.name_span,
-                ty: format!("{} {}", if s.enumeration.is_some() { "enum" } else { "struct" }, type_string(&ast::TypeName {
-                    name: s.name.clone(),
-                    generic_types: s.generic_params.iter().map(|p| ast::TypeName { name: p.name.clone(), generic_types: vec![], span: Span::none(), labels: vec![] }).collect(),
-                    span: Span::none(),
-                    labels: vec![],
-                })),
+                ty: format!(
+                    "{} {}{}",
+                    if s.enumeration.is_some() { "enum" } else { "struct" },
+                    s.name,
+                    generics_string(&s.generic_params)
+                ),
             }),
             ast::Declaration::Trait(t) => out.push(Symbol {
                 name: t.name.clone(),
                 name_span: t.name_span,
-                ty: "trait".to_string(),
+                ty: format!("trait {}{}", t.name, generics_string(&t.generic_params)),
             }),
             ast::Declaration::Extend(_) => {}
             ast::Declaration::TypeAlias(t) => {
-                let params = t
-                    .generic_params
-                    .iter()
-                    .map(|p| p.name.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let ty = if params.is_empty() {
-                    format!("type {} = {}", t.name, t.target)
-                } else {
-                    format!("type {}<{}> = {}", t.name, params, t.target)
-                };
+                let ty = format!("type {}{} = {}", t.name, generics_string(&t.generic_params), t.target);
                 out.push(Symbol {
                     name: t.name.clone(),
                     name_span: t.name_span,

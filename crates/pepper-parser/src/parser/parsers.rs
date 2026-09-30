@@ -3077,6 +3077,68 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
     Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
 }
 
+/// Optional constraints after a generic parameter: `: Shape & Named` (a
+/// single `&`). Leaves the input after the last one and its whitespace.
+fn constraints(input: &mut &str) -> Result<Vec<TypeName>> {
+    let mut bounds = vec![];
+    if !input.starts_with(':') {
+        return Ok(bounds);
+    }
+    *input = &input[1..];
+    loop {
+        ws(input)?;
+        let Ok(bound) = type_name(input) else { return Err(cut_expecting(input, "a trait name")) };
+        bounds.push(bound);
+        ws(input)?;
+        if input.starts_with('&') && !input[1..].starts_with('&') {
+            *input = &input[1..];
+            continue;
+        }
+        return Ok(bounds);
+    }
+}
+
+/// The target of `extend`: a type, whose parameters may restate the
+/// struct's constraints (`Box<T: Shape>`); the constraints, per argument,
+/// are empty unless one is restated.
+fn extend_target(input: &mut &str) -> Result<(TypeName, Vec<Vec<TypeName>>)> {
+    let before = *input;
+    let mut probe = before;
+    if let Ok(ty) = type_name(&mut probe) {
+        let mut rest = probe;
+        if ws(&mut rest).is_ok() && !rest.starts_with(':') {
+            *input = probe;
+            return Ok((ty, vec![]));
+        }
+    }
+    let start = pos(input);
+    let mut name = identifier(input)?;
+    qualified_tail(input, &mut name);
+    ws(input)?;
+    if !input.starts_with('<') {
+        *input = before;
+        return type_name(input).map(|ty| (ty, vec![]));
+    }
+    *input = &input[1..];
+    let (mut args, mut bounds) = (vec![], vec![]);
+    loop {
+        ws(input)?;
+        args.push(type_name(input)?);
+        ws(input)?;
+        bounds.push(constraints(input)?);
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with('>') {
+            *input = &input[1..];
+            break;
+        }
+        return Err(cut_expecting(input, "'>'"));
+    }
+    Ok((TypeName { name, generic_types: args, span: Span { start, end: pos(input) }, labels: vec![] }, bounds))
+}
+
 fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
     if !input.starts_with('<') { return Err(cut_expecting(input, "'<'")); }
     *input = &input[1..];
@@ -3091,6 +3153,7 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
         let name = identifier(input)?;
         let name_span = Span { start, end: pos(input) };
         ws(input)?;
+        let bounds = constraints(input)?;
         // Optional default: `T=Default` (a single `=`; `==` is an operator).
         let mut default = None;
         if input.starts_with('=') && !input[1..].starts_with('=') {
@@ -3099,7 +3162,7 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
             default = Some(type_name(input)?);
             ws(input)?;
         }
-        params.push(GenericParam { name, name_span, default, is_argument: false });
+        params.push(GenericParam { name, name_span, bounds, default, is_argument: false });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -3752,7 +3815,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     }
     *input = &input[6..];
     ws(input)?;
-    let target = type_name(input)?;
+    let (target, target_bounds) = extend_target(input)?;
     ws(input)?;
 
     let mut traits = vec![];
@@ -3793,7 +3856,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { attributes: attrs, target, traits, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+    Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
 }
 
 fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDecl> {
@@ -4511,7 +4574,7 @@ fn ptr_check_attrs(attrs: &[Attribute]) -> std::result::Result<(), PostParseErro
 }
 
 fn ptr_check_generic_params(ps: &[GenericParam]) -> std::result::Result<(), PostParseError> {
-    ps.iter().filter_map(|p| p.default.as_ref()).try_for_each(ptr_check_type)
+    ps.iter().flat_map(|p| p.bounds.iter().chain(&p.default)).try_for_each(ptr_check_type)
 }
 
 fn ptr_check_var(v: &VariableDecl) -> std::result::Result<(), PostParseError> {
@@ -4556,6 +4619,7 @@ fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PostParseError> {
         Declaration::Extend(e) => {
             ptr_check_attrs(&e.attributes)?;
             ptr_check_type(&e.target)?;
+            e.target_bounds.iter().flatten().try_for_each(ptr_check_type)?;
             e.traits.iter().try_for_each(ptr_check_type)?;
             e.methods.iter().try_for_each(ptr_check_fn)
         }
@@ -5598,6 +5662,28 @@ f() { var r = c.Result<int>.ok(1); }");
                 assert_eq!(t.target.name, "Result");
                 assert_eq!(t.target.generic_types[0].name, "T");
                 assert_eq!(t.target.generic_types[1].name, "E");
+            }
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_generic_param_constraints() {
+        let m = parse("struct Gallery<TTag, T: Shape & Named = Square> {}\nsum<T, I: Iterator<T>>(it: I): int { return 0; }");
+        match &m.declarations[0] {
+            Declaration::Struct(s) => {
+                assert!(s.generic_params[0].bounds.is_empty());
+                let t = &s.generic_params[1];
+                let bounds: Vec<String> = t.bounds.iter().map(|b| b.to_string()).collect();
+                assert_eq!(bounds, ["Shape", "Named"]);
+                assert_eq!(t.default.as_ref().map(|d| d.name.as_str()), Some("Square"));
+                assert_eq!(t.to_string(), "T: Shape & Named=Square");
+            }
+            other => panic!("{:?}", other),
+        }
+        match &m.declarations[1] {
+            Declaration::Function(f) => {
+                assert_eq!(f.generic_params[1].bounds[0].to_string(), "Iterator<T>");
             }
             other => panic!("{:?}", other),
         }

@@ -141,7 +141,7 @@ fn in_type_name(ty: &ast::TypeName, offset: usize) -> Option<&ast::TypeName> {
 }
 
 fn in_generics(params: &[ast::GenericParam], offset: usize) -> Option<&ast::TypeName> {
-    params.iter().filter_map(|p| p.default.as_ref()).find_map(|d| in_type_name(d, offset))
+    params.iter().flat_map(|p| p.bounds.iter().chain(&p.default)).find_map(|t| in_type_name(t, offset))
 }
 
 fn in_declaration(decl: &ast::Declaration, offset: usize) -> Option<&ast::TypeName> {

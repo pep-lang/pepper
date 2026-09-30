@@ -707,3 +707,63 @@ fn guarded_turns_a_panic_into_none() {
     assert_eq!(guarded(|| 1), Some(1));
     assert_eq!(guarded(|| -> i32 { panic!("a bug in one request") }), None);
 }
+
+const CONSTRAINED: &str = r#"trait Shape {
+    area(): int;
+}
+
+struct Circle {
+    area(): int { return 3; }
+}
+
+struct Gallery<T: Shape> {
+    var items = Array<T>();
+}
+
+total<T: Shape>(items: Array<T>): int { return 0; }
+
+wrap<T>(item: T): Gallery<T> { return Gallery<T>(); }
+
+main(): int {
+    return total(Array<Circle>());
+}
+"#;
+
+#[test]
+fn hover_shows_generic_constraints() {
+    let (uri, text, program) = load("constraints_hover", CONSTRAINED, "main.pep");
+    let total = hover(&uri, &text, &program, at(&text, "total(Array", 0, 0));
+    assert!(total.contains("total<T: Shape>(items: Array<T>): int"), "{}", total);
+}
+
+#[test]
+fn an_unconstrained_parameter_offers_to_constrain_it() {
+    let (uri, text, program) = load("constraints_fix", CONSTRAINED, "main.pep");
+    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
+    assert_eq!(error.message, "'T' does not conform to trait 'Shape', required by 'T' in 'Gallery'");
+    let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(14, 26), Position::new(14, 26)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Constrain 'T' to 'Shape'");
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    let [edit] = edits.as_slice() else { panic!("{edits:?}") };
+    // Inserted after `wrap<T`.
+    assert_eq!(edit.range, Range::new(Position::new(14, 6), Position::new(14, 6)));
+    assert_eq!(edit.new_text, ": Shape");
+}
+
+#[test]
+fn a_type_that_does_not_conform_offers_the_extension() {
+    let main = CONSTRAINED.replace("wrap<T>", "wrap<T: Shape>");
+    let (uri, text, program) = load("constraints_extend", &main, "main.pep");
+    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
+    assert_eq!(error.message, "'Circle' does not conform to trait 'Shape', required by 'T' in 'total'");
+    let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(17, 17), Position::new(17, 17)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Declare 'extend Circle with Shape'");
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    let [edit] = edits.as_slice() else { panic!("{edits:?}") };
+    assert_eq!(edit.range, Range::new(Position::new(6, 1), Position::new(6, 1)));
+    assert_eq!(edit.new_text, "\n\nextend Circle with Shape {\n}");
+}

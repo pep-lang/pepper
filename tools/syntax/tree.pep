@@ -31,7 +31,8 @@ export enum NodeKind {
     Struct,
     ## `[attribute]... [export] trait Name [GENERIC_PARAMETERS] MEMBERS`
     Trait,
-    ## `[attribute]... [export] extend TYPE [with TYPE, ...] MEMBERS`
+    ## `[attribute]... [export] extend TYPE [with TYPE, ...] MEMBERS`; the
+    ## target's type arguments may restate constraints (`Box<T: Shape>`).
     Extend,
     ## `[attribute]... [export] type Name [GENERIC_PARAMETERS] = TYPE [;]`
     TypeAlias,
@@ -61,7 +62,7 @@ export enum NodeKind {
     Parameter,
     ## `< GENERIC_PARAMETER, ... >`
     GenericParameters,
-    ## `Name [= TYPE]`
+    ## `Name [: TYPE [& TYPE]...] [= TYPE]`
     GenericParameter,
     ## A type: `name[.name]... [TYPE_ARGUMENTS] [[ ]]... [*]...`, or a function
     ## type `[shared|extern] ( TYPE, ... ) => TYPE`.

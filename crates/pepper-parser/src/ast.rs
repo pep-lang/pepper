@@ -362,13 +362,17 @@ pub struct FunctionDecl {
     pub is_exported: bool,
 }
 
-/// A generic type parameter, optionally with a default (`TError=Error` in
-/// `Result<TValue, TError=Error>`).
+/// A generic type parameter, optionally with constraints and a default
+/// (`TError=Error` in `Result<TValue, TError=Error>`, `T: Shape & Named =
+/// Square`).
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
     /// Span of the name token.
     pub name_span: Span,
+    /// The traits an argument must conform to (`Shape`, `Named` in `T: Shape
+    /// & Named`), in the order written.
+    pub bounds: Vec<TypeName>,
     /// Default type substituted when a use omits this argument.
     pub default: Option<TypeName>,
     /// Set by module linking: the name is a type argument, not a parameter
@@ -463,6 +467,10 @@ pub struct ExtendDecl {
     pub attributes: Vec<Attribute>,
     /// The struct being extended, possibly specialized: `Test<int>`
     pub target: TypeName,
+    /// Constraints restated on the target's parameters (`Shape` in `extend
+    /// Box<T: Shape>`), per argument; empty when none is. They document the
+    /// struct's own constraints, which apply without them.
+    pub target_bounds: Vec<Vec<TypeName>>,
     /// Traits implemented by the extension (after `with`)
     pub traits: Vec<TypeName>,
     pub methods: Vec<FunctionDecl>,
@@ -1074,6 +1082,9 @@ impl Display for VariableDecl {
 impl Display for GenericParam {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)?;
+        if !self.bounds.is_empty() {
+            write!(f, ": {}", join(&self.bounds, " & "))?;
+        }
         if let Some(d) = &self.default {
             write!(f, "={}", d)?;
         }
@@ -1206,7 +1217,18 @@ impl Display for ExtendDecl {
         if self.is_exported {
             write!(f, "export ")?;
         }
-        write!(f, "extend {}", self.target)?;
+        if self.target_bounds.iter().all(|b| b.is_empty()) {
+            write!(f, "extend {}", self.target)?;
+        } else {
+            let args: Vec<String> = self
+                .target
+                .generic_types
+                .iter()
+                .zip(&self.target_bounds)
+                .map(|(a, b)| if b.is_empty() { a.to_string() } else { format!("{}: {}", a, join(b, " & ")) })
+                .collect();
+            write!(f, "extend {}<{}>", self.target.name, args.join(", "))?;
+        }
         if !self.traits.is_empty() {
             write!(f, " with {}", join(&self.traits, ", "))?;
         }

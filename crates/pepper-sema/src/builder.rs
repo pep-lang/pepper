@@ -16,6 +16,87 @@ thread_local! {
     /// The declared return type of the function or closure whose body is
     /// being built, for [`check_literal_labels`] on its `return`s.
     static RETURN_TYPE: std::cell::RefCell<Option<ast::TypeName>> = const { std::cell::RefCell::new(None) };
+    /// The generic types written with arguments so far, for
+    /// `passes::constraints` (see [`TypeUse`]), and their contexts.
+    static TYPE_USES: std::cell::RefCell<(Vec<TypeUse>, Vec<UseContext>)> = const { std::cell::RefCell::new((vec![], vec![])) };
+    /// The context where types are being built: the generic parameters in
+    /// scope, the extended type inside `extend`, and the enclosing
+    /// attributes.
+    static CONTEXT: std::cell::RefCell<UseContext> = std::cell::RefCell::new(UseContext::default());
+    /// The index of `CONTEXT` in the recorded contexts, once a use recorded
+    /// it; cleared whenever it changes.
+    static CONTEXT_INDEX: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Builds with `change` applied to the context, restoring it afterwards.
+fn in_context<T>(change: impl FnOnce(&mut UseContext), build: impl FnOnce() -> T) -> T {
+    let saved = CONTEXT.with(|c| {
+        let mut c = c.borrow_mut();
+        let saved = c.clone();
+        change(&mut c);
+        saved
+    });
+    let index = CONTEXT_INDEX.with(|i| i.take());
+    let built = build();
+    CONTEXT.with(|c| *c.borrow_mut() = saved);
+    CONTEXT_INDEX.with(|i| i.set(index));
+    built
+}
+
+/// Builds code that carries `attributes`, so a use inside it is skipped
+/// when a `[Target(...)]` among them removes it on this platform.
+fn with_attributes<T>(attributes: &[ast::Attribute], build: impl FnOnce() -> T) -> T {
+    if attributes.is_empty() {
+        return build();
+    }
+    in_context(|c| c.conditions.extend(attributes.iter().cloned()), build)
+}
+
+/// Records a use of `ty` whose arguments are at `args`, in the current
+/// context.
+fn push_type_use(ty: TypeName, args: Vec<Loc>) {
+    let context = CONTEXT_INDEX.with(|i| i.get()).unwrap_or_else(|| {
+        let context = CONTEXT.with(|c| c.borrow().clone());
+        let index = TYPE_USES.with(|u| {
+            let mut u = u.borrow_mut();
+            u.1.push(context);
+            u.1.len() - 1
+        });
+        CONTEXT_INDEX.with(|i| i.set(Some(index)));
+        index
+    });
+    TYPE_USES.with(|u| u.borrow_mut().0.push(TypeUse { ty, args, context }));
+}
+
+/// Builds a declaration with `params` in scope, and inside `extend
+/// extension` when that is given, so the type uses it records know them.
+fn in_generic_scope<T>(params: &[ast::GenericParam], extension: Option<&ast::TypeName>, build: impl FnOnce() -> T) -> T {
+    // The declaration records its parameters' own uses, in scope.
+    let recorded = TYPE_USES.with(|u| u.borrow().0.len());
+    let params: Vec<GenericParam> = params.iter().filter(|p| !p.is_argument).map(generic_param_from).collect();
+    let extension = extension.map(type_name_from);
+    TYPE_USES.with(|u| u.borrow_mut().0.truncate(recorded));
+    if params.is_empty() && extension.is_none() {
+        return build();
+    }
+    in_context(
+        |c| {
+            c.scope.extend(params);
+            if extension.is_some() {
+                c.extension = extension;
+            }
+        },
+        build,
+    )
+}
+
+/// Records `t`, a generic type written with arguments, as `ty`.
+fn record_type_use(t: &ast::TypeName, ty: &TypeName) {
+    let named = !t.name.starts_with("__") && !t.name.ends_with("[]") && t.name != "Tuple";
+    if !named || t.generic_types.is_empty() || t.generic_types.iter().any(|a| a.span.is_empty()) {
+        return;
+    }
+    push_type_use(ty.clone(), t.generic_types.iter().map(|a| loc(a.span)).collect());
 }
 
 /// Builds a body with `returns` as the declared return type of its `return`s.
@@ -82,6 +163,7 @@ fn type_name_from(t: &ast::TypeName) -> TypeName {
         check_labels(t);
         let mut ty = TypeName::with_args(&t.name, args);
         ty.labels = t.labels.clone();
+        record_type_use(t, &ty);
         ty
     }
 }
@@ -117,7 +199,10 @@ fn check_labels(t: &ast::TypeName) {
 fn generic_param_from(p: &ast::GenericParam) -> GenericParam {
     GenericParam {
         name: p.name.clone(),
+        loc: loc(p.name_span),
+        bounds: p.bounds.iter().map(|b| Bound { ty: type_name_from(b), loc: loc(b.span) }).collect(),
         default: p.default.as_ref().map(type_name_from),
+        default_loc: p.default.as_ref().map_or(Loc::NONE, |d| loc(d.span)),
         is_argument: p.is_argument,
     }
 }
@@ -449,6 +534,10 @@ fn reject_deprecation(attributes: &[ast::Attribute], what: &str) -> Result<(), D
 }
 
 fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
+    with_attributes(&decl.attributes, || variable_in_context(decl, kind))
+}
+
+fn variable_in_context(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
     check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
     let ty = type_name_from(&decl.type_name);
@@ -476,6 +565,10 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
 }
 
 fn block(block: &ast::Block) -> Result<Block, Diagnostic> {
+    with_attributes(&block.attributes, || block_in_context(block))
+}
+
+fn block_in_context(block: &ast::Block) -> Result<Block, Diagnostic> {
     let mut items = vec![];
     for stmt in &block.statements {
         match stmt {
@@ -1340,7 +1433,20 @@ fn check_implicit_constructor(decl: &ast::StructDecl, ctor: &ast::FunctionDecl) 
 
 /// A function or struct member, with no check on its attributes.
 fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
+    with_attributes(&decl.attributes, || in_generic_scope(&decl.generic_params, None, || member_in_scope(decl, parent)))
+}
+
+fn member_in_scope(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
     check_deprecation(&decl.attributes)?;
+    // A concrete override (`describe<Circle>`) passes its type arguments to
+    // the generic it overrides, whose constraints they must meet.
+    if parent.is_none() && decl.generic_params.iter().any(|p| p.is_argument) {
+        let args = decl.generic_params.iter().map(|p| TypeName::new(&p.name)).collect();
+        push_type_use(TypeName::with_args(&decl.name, args), decl.generic_params.iter().map(|p| loc(p.name_span)).collect());
+    }
+    // The signature before the body, so its type uses come first.
+    let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
+    let ty = type_name_from(&decl.return_type);
     let parameters: Vec<VariableDef> = decl
         .parameters
         .iter()
@@ -1387,8 +1493,8 @@ fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<Functi
         trait_default: None,
         owner: Loc::NONE,
         name: decl.name.clone(),
-        ty: type_name_from(&decl.return_type),
-        generic_params: decl.generic_params.iter().map(generic_param_from).collect(),
+        ty,
+        generic_params,
         parameters,
         body,
         parent,
@@ -1436,6 +1542,12 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
         target: type_name_from(&e.target),
         resolved: None,
         traits: e.traits.iter().map(type_name_from).collect(),
+        restated: e
+            .target_bounds
+            .iter()
+            .enumerate()
+            .flat_map(|(i, bounds)| bounds.iter().map(move |b| (i, Bound { ty: type_name_from(b), loc: loc(b.span) })))
+            .collect(),
         methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
         attributes: e.attributes.clone(),
         loc: loc(e.target.span),
@@ -1928,11 +2040,22 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
     reset_counters();
     let previous = FILE.with(|f| f.replace(file));
     let previous_error = LABEL_ERROR.with(|e| e.take());
+    let previous_uses = TYPE_USES.with(|u| u.take());
+    let previous_context = CONTEXT.with(|c| c.take());
+    let previous_index = CONTEXT_INDEX.with(|i| i.take());
     // Hidden locals are numbered per file, so a file's code (and its build
     // cache unit's bitcode) does not depend on the files built before it.
     let previous_counters = counters();
     set_counters([0; 4]);
     let built = build_module(module);
+    let (uses, contexts) = TYPE_USES.with(|u| u.replace(previous_uses));
+    CONTEXT.with(|c| *c.borrow_mut() = previous_context);
+    CONTEXT_INDEX.with(|i| i.set(previous_index));
+    let built = built.map(|mut m| {
+        m.type_uses = uses;
+        m.use_contexts = contexts;
+        m
+    });
     set_counters(previous_counters);
     let label_error = LABEL_ERROR.with(|e| e.replace(previous_error));
     FILE.with(|f| f.set(previous));
@@ -1946,6 +2069,14 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
     let mut out = Module::default();
     out.imports = module.imports.clone();
     for decl in &module.declarations {
+        with_attributes(decl.attributes(), || declare(decl, &mut out))?;
+    }
+    Ok(out)
+}
+
+/// Builds top-level declaration `decl` into `out`.
+fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> {
+    {
         match decl {
             ast::Declaration::Variable(v) => {
                 // Module-scope variable: an addressable global, not a
@@ -1973,28 +2104,31 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
                     out.functions.push(function_def(f, None)?);
                 }
             }
-            ast::Declaration::Struct(s) if is_reference_enum(s) => out.structs.push(reference_enum_def(s)?),
+            ast::Declaration::Struct(s) if is_reference_enum(s) => {
+                out.structs.push(in_generic_scope(&s.generic_params, None, || reference_enum_def(s))?)
+            }
             ast::Declaration::Struct(s) if s.enumeration.is_some() => {
                 out.enums.push(enum_def(s)?);
                 for m in &s.methods {
                     out.functions.push(enum_method(s, m)?);
                 }
             }
-            ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
-            ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
-            ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),
+            ast::Declaration::Struct(s) => out.structs.push(in_generic_scope(&s.generic_params, None, || struct_def(s))?),
+            ast::Declaration::Trait(t) => out.traits.push(in_generic_scope(&t.generic_params, None, || trait_def(t))?),
+            ast::Declaration::Extend(e) => out.extensions.push(in_generic_scope(&[], Some(&e.target), || extension_def(e))?),
             ast::Declaration::TypeAlias(t) => {
                 check_deprecation(&t.attributes)?;
                 reject_implicit(&t.attributes)?;
-                out.type_aliases.push(TypeAliasDef {
+                let alias = in_generic_scope(&t.generic_params, None, || TypeAliasDef {
                     name: t.name.clone(),
                     generic_params: t.generic_params.iter().map(generic_param_from).collect(),
                     target: type_name_from(&t.target),
                     attributes: t.attributes.clone(),
                     loc: loc(t.name_span),
-                })
+                });
+                out.type_aliases.push(alias)
             }
         }
     }
-    Ok(out)
+    Ok(())
 }

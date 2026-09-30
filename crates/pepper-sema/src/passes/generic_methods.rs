@@ -22,15 +22,17 @@ pub fn has_generic_methods(module: &Module) -> bool {
 pub fn specialize_methods(module: &mut Module) -> bool {
     // Built on the first call naming a generic method: most runs find none.
     let statics = std::cell::OnceCell::new();
-    let mut wanted: Vec<(TypeName, String)> = vec![];
+    // Each call's receiver type and method, and where it is: the method
+    // name and each argument.
+    let mut wanted: Vec<(TypeName, String, Loc, Vec<Loc>)> = vec![];
     {
         let mut visit = |e: &Expression, current: Option<&TypeName>| {
-            if let Expression::MethodCall { this, method, .. } = e {
+            if let Expression::MethodCall { this, method, args, loc } = e {
                 if method.contains('<') {
                     let statics = statics.get_or_init(|| crate::static_type::StructTable::build(module));
                     if let Some(owner) = crate::static_type::of(this, statics, current) {
                         if !owner.contains_auto() {
-                            wanted.push((owner, method.clone()));
+                            wanted.push((owner, method.clone(), *loc, args.iter().map(Expression::loc).collect()));
                         }
                     }
                 }
@@ -56,17 +58,29 @@ pub fn specialize_methods(module: &mut Module) -> bool {
         }
     }
 
+    // A generic method's constraints are checked before it is cloned.
+    let constrained = crate::passes::constraints::has_constraints(module);
+    let conformance = std::cell::OnceCell::new();
     let mut added = false;
-    for (owner, method) in wanted {
+    for (owner, method, loc, args) in wanted {
         let key = owner.to_string();
         let key = key.trim_end_matches('*');
-        let Some(st) = module.structs.iter_mut().find(|s| s.ty.is_spelled(key)) else { continue };
+        let Some(index) = module.structs.iter().position(|s| s.ty.is_spelled(key)) else { continue };
+        let st = &module.structs[index];
         if st.method_members.iter().any(|m| m.name == method) {
             continue;
         }
         let spec = crate::passes::gather_generics::parse_type_string(&method);
         let Some(base) = st.generic_methods.iter().find(|m| m.name == spec.name) else { continue };
-        st.method_members.push(specialize(base, &spec));
+        if constrained {
+            let conformance = conformance.get_or_init(|| crate::passes::constraints::Conformance::of(module));
+            if let Some(error) = conformance.check_call(module, base, &spec, loc, &args) {
+                crate::errors::report(error);
+                return false;
+            }
+        }
+        let specialized = specialize(base, &spec);
+        module.structs[index].method_members.push(specialized);
         added = true;
     }
     added

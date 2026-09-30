@@ -221,6 +221,8 @@ mod tests {
             ("main(): int {\n    x = 1 +;\n}\n", "t.pep:2:12: error: expected expression"),
             ("123\n", "t.pep:1:1: error: expected declaration"),
             ("main(: int {\n}\n", "t.pep:1:6: error: unexpected ':'"),
+            ("f<T: >(x: T) {}\n", "t.pep:1:6: error: expected a trait name"),
+            ("f<T: Shape &>(x: T) {}\n", "t.pep:1:13: error: expected a trait name"),
         ];
         for (src, header) in cases {
             assert_eq!(parse_error_header(src), header, "source {:?}", src);

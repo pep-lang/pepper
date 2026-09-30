@@ -220,12 +220,13 @@ pub(crate) fn concrete_overrides(module: &mut Module) {
         module.functions.iter().any(|other| {
             other.name == function.name
                 && other.generic_params.len() == function.generic_params.len()
-                && other.generic_params.iter().any(|p| !names_type(&p.name))
+                && other.generic_params.iter().any(|p| !p.bounds.is_empty() || !names_type(&p.name))
         })
     };
     let mut rewrites: Vec<(usize, String)> = vec![];
     for (idx, function) in module.functions.iter().enumerate() {
-        if function.generic_params.is_empty() {
+        // A constrained name (`describe<T: Shape>`) is always a parameter.
+        if function.generic_params.is_empty() || function.generic_params.iter().any(|p| !p.bounds.is_empty()) {
             continue;
         }
         let params = || function.generic_params.iter().map(|p| p.name.as_str());

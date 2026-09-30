@@ -559,7 +559,7 @@ pub fn lift_closures(module: &mut Module) {
                 .sub_types
                 .iter()
                 .filter(|t| t.sub_types.is_empty() && !types.contains(&t.name) && !type_name::is_integral_name(&t.name))
-                .map(|t| GenericParam { name: t.name.clone(), default: None, is_argument: false })
+                .map(|t| GenericParam::named(&t.name))
                 .collect();
             let target = module.structs.iter().find(|s| s.ty.name == ext.target.name);
             let mut methods: HashSet<String> = target.map(|s| s.method_members.iter().map(|m| m.name.clone()).collect()).unwrap_or_default();

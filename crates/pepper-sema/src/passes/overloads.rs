@@ -51,7 +51,8 @@ pub fn set_name(member: &str) -> &str {
 fn is_override(function: &FunctionDef) -> bool {
     function.name.contains('<')
         || function.generic_params.iter().any(|p| p.is_argument)
-        || crate::type_name::is_override(function.generic_params.iter().map(|p| p.name.as_str()))
+        || (function.generic_params.iter().all(|p| p.bounds.is_empty())
+            && crate::type_name::is_override(function.generic_params.iter().map(|p| p.name.as_str())))
 }
 
 /// What makes two members the same overload: their parameter types, with
@@ -499,6 +500,9 @@ pub struct Overloads {
     /// exported.
     extension_methods: HashMap<Loc, bool>,
     scopes: ExtensionScopes,
+    /// Present when some generic parameter is constrained: a generic
+    /// member whose arguments do not meet its constraints is not viable.
+    conformance: Option<crate::passes::constraints::Conformance>,
 }
 
 fn ordinal(n: usize) -> String {
@@ -629,8 +633,21 @@ impl Overloads {
         let extension_methods =
             module.extensions.iter().flat_map(|ext| ext.methods.iter().map(|m| (m.loc, ext.is_exported))).collect();
         let scopes = module.extension_scopes.clone();
+        let conformance =
+            crate::passes::constraints::has_constraints(module).then(|| crate::passes::constraints::Conformance::of(module));
         let method_set_names = methods.values().flat_map(|sets| sets.keys().cloned()).collect();
-        Overloads { sets, constructors, methods, method_set_names, implicit, conforms, traits, extension_methods, scopes }
+        Overloads {
+            sets,
+            constructors,
+            methods,
+            method_set_names,
+            implicit,
+            conforms,
+            traits,
+            extension_methods,
+            scopes,
+            conformance,
+        }
     }
 
     /// Whether `name` names an overload set.
@@ -895,6 +912,11 @@ impl Overloads {
                             }
                         }
                     };
+                    if let Some(unmet) = self.conformance.as_ref().and_then(|c| c.unmet(&signature.params, &type_args)) {
+                        let (arg, required) = (crate::passes::constraints::spelled(&unmet.arg), crate::passes::constraints::spelled(&unmet.required));
+                        notes.push(not_viable(format!("'{}' does not conform to '{}'", arg, required)));
+                        continue;
+                    }
                     let map: Vec<(String, TypeName)> =
                         signature.params.iter().map(|p| p.name.clone()).zip(type_args.iter().cloned()).collect();
                     let params = member

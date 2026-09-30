@@ -74,7 +74,10 @@ Some that you will meet quickly:
   (see [implicit conversions](language/structs.md#implicit-conversions)).
 - Free functions, methods, operators, constructors, extension methods and
   trait members can be [overloaded](language/overloading.md).
-- Generic parameters cannot require a trait yet (no `<T: Shape>`).
+- Generic parameters can require traits (`<T: Shape & Named>`), checked
+  wherever the generic is used; the body of a generic is not yet checked
+  against its constraints (see
+  [constraints](language/generics.md#constraints)).
 - Threads can share only thread-safe values, which the compiler checks,
   closure captures included. A channel hands over what it is sent without
   copying it (`send(move(x))`, or `send(copy(x))` to keep `x`), a `Select`

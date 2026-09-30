@@ -271,6 +271,9 @@ macro_rules! scope_walker {
                         let params = self.extend_params(&e.target);
                         self.scopes_mut().push(Scope::Generics(params));
                         self.visit_type_name(&$($m)? e.target);
+                        for bound in (&$($m)? e.target_bounds).into_iter().flatten() {
+                            self.visit_type_name(bound);
+                        }
                         for t in &$($m)? e.traits {
                             self.visit_type_name(t);
                         }
@@ -546,11 +549,14 @@ macro_rules! scope_walker {
                 }
             }
 
-            /// Bind `params`, then walk their defaults, which may mention
-            /// them (`R<T, E=T>`).
+            /// Bind `params`, then walk their constraints and defaults, which
+            /// may mention them (`R<T, E=T>`, `<T, I: Iterator<T>>`).
             fn push_generics(&mut self, params: &$($m)? [GenericParam]) {
                 self.scopes_mut().push(Scope::Generics(params.iter().map(|p| p.name.clone()).collect()));
                 for p in params {
+                    for bound in &$($m)? p.bounds {
+                        self.visit_type_name(bound);
+                    }
                     if let Some(d) = &$($m)? p.default {
                         self.visit_type_name(d);
                     }

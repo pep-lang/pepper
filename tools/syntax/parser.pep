@@ -140,6 +140,9 @@ struct Parser {
     # Whether a type is being read where an expression could also start, in
     # which case `a.b` is a qualified type only when `a` names an import.
     bool _probing;
+    # The next type arguments are an `extend` target's, which may restate
+    # the struct's constraints (`extend Box<T: Shape>`).
+    bool _restating;
     HashSet<String> _qualifiers = HashSet<String>();
     HashSet<String> _reserved = reserved_words();
     HashSet<String> _statement_keywords = statement_keywords();
@@ -449,11 +452,24 @@ struct Parser {
 
     _type_arguments(): Node {
         var node = Node(NodeKind.TypeArguments);
+        bool restating = _restating;
+        _restating = false;
         _take(node);
         while (true) {
             node.add(_type_name());
             if (_failed) {
                 return node;
+            }
+            if (restating and _at(":")) {
+                _take(node);
+                node.add(_type_name());
+                while (!_failed and _at("&")) {
+                    _take(node);
+                    node.add(_type_name());
+                }
+                if (_failed) {
+                    return node;
+                }
             }
             if (_at(",")) {
                 _take(node);
@@ -1522,6 +1538,18 @@ struct Parser {
             if (_failed) {
                 return node;
             }
+            # Constraints: `T: Shape & Named`.
+            if (_at(":")) {
+                _take(parameter);
+                parameter.add(_type_name());
+                while (!_failed and _at("&")) {
+                    _take(parameter);
+                    parameter.add(_type_name());
+                }
+                if (_failed) {
+                    return node;
+                }
+            }
             if (_at("=")) {
                 _take(parameter);
                 parameter.add(_type_name());
@@ -2123,7 +2151,9 @@ struct Parser {
             node.add(item);
         }
         _take(node);
+        _restating = true;
         node.add(_type_name());
+        _restating = false;
         if (_failed) {
             return node;
         }

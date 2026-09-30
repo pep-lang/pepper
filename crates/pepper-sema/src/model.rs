@@ -777,15 +777,67 @@ pub struct VariableDef {
 }
 
 #[derive(Debug, Clone)]
-/// A generic type parameter, optionally with a default (`TError=Error` in
-/// `Result<TValue, TError=Error>`).
+/// A generic type parameter, optionally with constraints and a default
+/// (`TError=Error` in `Result<TValue, TError=Error>`, `T: Shape = Square`).
 pub struct GenericParam {
     pub name: String,
+    /// Location of the declared name; [`Loc::NONE`] when synthesized.
+    pub loc: Loc,
+    /// The traits every type argument must conform to (`T: Shape & Named`),
+    /// checked by `passes::constraints`.
+    pub bounds: Vec<Bound>,
     /// Default type substituted when a use omits this argument.
     pub default: Option<TypeName>,
+    /// Location of the written default; [`Loc::NONE`] without one.
+    pub default_loc: Loc,
     /// A type argument, not a parameter: module linking decided the function
     /// is a concrete override (see `ast::GenericParam::is_argument`).
     pub is_argument: bool,
+}
+
+impl GenericParam {
+    /// A parameter with no constraints and no default.
+    pub fn named(name: &str) -> Self {
+        GenericParam { name: name.to_string(), loc: Loc::NONE, bounds: vec![], default: None, default_loc: Loc::NONE, is_argument: false }
+    }
+}
+
+/// One constraint on a generic parameter: the trait `Shape` in `T: Shape`.
+#[derive(Debug, Clone)]
+pub struct Bound {
+    pub ty: TypeName,
+    /// Location of the written trait.
+    pub loc: Loc,
+}
+
+/// A generic type written with arguments in the source (`Gallery<Circle>`,
+/// `total_area<Circle>(...)`), recorded by the builder so
+/// `passes::constraints` can check each argument against the constraints
+/// of the parameter it fills, at the argument's location.
+#[derive(Debug, Clone)]
+pub struct TypeUse {
+    /// The type as written, arguments included; aliases in the arguments
+    /// are expanded by `resolve_type_aliases`, the head is not.
+    pub ty: TypeName,
+    /// The location of each argument, in order.
+    pub args: Vec<Loc>,
+    /// Where the use is: an index into `Module::use_contexts`, which the
+    /// uses of one declaration share.
+    pub context: usize,
+}
+
+/// What a [`TypeUse`] needs to know about the code around it.
+#[derive(Debug, Clone, Default)]
+pub struct UseContext {
+    /// The generic parameters in scope (the enclosing struct's, trait's,
+    /// function's and method's), innermost last.
+    pub scope: Vec<GenericParam>,
+    /// Inside `extend target`: the extended type, whose parameters are the
+    /// struct's own and so carry its constraints.
+    pub extension: Option<TypeName>,
+    /// The attributes of the enclosing declarations and blocks: a use in
+    /// code `[Target(...)]` removes on this platform is not checked.
+    pub conditions: Vec<ast::Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -942,6 +994,10 @@ pub struct ExtensionDef {
     /// Resolved target struct name (set by ResolveResolvables).
     pub resolved: Option<String>,
     pub traits: Vec<TypeName>,
+    /// Constraints restated on the target's parameters (`extend Box<T:
+    /// Shape>`): the argument's position and the constraint. Documentation
+    /// only; `passes::constraints` checks each is the struct's own.
+    pub restated: Vec<(usize, Bound)>,
     pub methods: Vec<FunctionDef>,
     /// Source attributes (`[Target(OS(Windows))]` etc.) carried from the AST.
     pub attributes: Vec<ast::Attribute>,
@@ -1067,6 +1123,15 @@ pub struct Module {
     /// Type aliases (`type Name = Target;`), expanded away by
     /// `resolve_type_aliases` before any other pass.
     pub type_aliases: Vec<TypeAliasDef>,
+    /// Every generic type written with arguments, for `passes::constraints`
+    /// (see [`TypeUse`]).
+    pub type_uses: Vec<TypeUse>,
+    /// The contexts `type_uses` point into.
+    pub use_contexts: Vec<UseContext>,
+    /// The type aliases that constrain a parameter, which
+    /// `resolve_type_aliases` keeps when it expands the rest away, so their
+    /// uses can still be checked.
+    pub constrained_aliases: Vec<TypeAliasDef>,
     /// Every trait type the program uses as a value type, filled by
     /// `convert_to_traits`; codegen builds their vtables and dispatch.
     pub trait_types: Vec<TraitType>,
@@ -1153,6 +1218,12 @@ impl Module {
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);
+        let offset = self.use_contexts.len();
+        self.use_contexts.extend(other.use_contexts);
+        self.type_uses.extend(other.type_uses.into_iter().map(|mut u| {
+            u.context += offset;
+            u
+        }));
         self.linked |= other.linked;
     }
 }

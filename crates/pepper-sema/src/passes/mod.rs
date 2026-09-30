@@ -11,6 +11,7 @@ pub mod resolve_type_aliases;
 pub mod overloads;
 pub mod convert_string_literals;
 pub mod gather_generics;
+pub mod constraints;
 pub mod check_shared_types;
 pub mod resolve_implicit_types;
 pub mod resolve_resolvables;
@@ -90,6 +91,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Values interpolated outside generic code, before specializing
     // `to_string<T>` for a type it cannot convert fails inside it.
     step!(interpolation::check_interpolations(module));
+    // Generic constraints, before any specialization clones a body.
+    step!(constraints::check_constraints(module));
     step!(specialize_structs(module));
     step!(specialize_functions(module));
     step!(generic_methods::specialize_methods(module));
@@ -109,6 +112,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     for _ in 0..16 {
         let before = (module.structs.len(), module.functions.len());
         step!(gather_generics(module));
+        step!(constraints::check_specializations(module));
         step!(specialize_structs(module));
         step!(specialize_functions(module));
         // A generic method call on a value whose type the round just

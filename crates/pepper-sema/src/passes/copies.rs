@@ -668,7 +668,7 @@ fn request_site(module: &Module, ty: &TypeName) -> Option<Loc> {
 
 /// The end of the declaration of the struct named at `loc` (just past its
 /// closing brace), found by matching braces in its source.
-fn struct_end(module: &Module, loc: Loc) -> Option<usize> {
+pub(crate) fn struct_end(module: &Module, loc: Loc) -> Option<usize> {
     let (_, text) = module.sources.get(loc.file)?;
     let bytes = text.as_bytes();
     let mut i = text[loc.span.start..].find('{')? + loc.span.start;

@@ -883,8 +883,20 @@ export struct Formatter {
         var result = concat();
         for (var child in item.children) {
             if (child.kind == syntax.NodeKind.GenericParameter) {
+                # `T=Error`, but `T: Shape & Named = Square` once constrained.
+                bool constrained = false;
                 for (var part in child.children) {
-                    result.add(_node(part));
+                    if (part.is_token(":")) {
+                        constrained = true;
+                        result.add(_leaf(part));
+                        result.add(text(" "));
+                    } else if (part.is_token("&") or (constrained and part.is_token("="))) {
+                        result.add(text(" "));
+                        result.add(_leaf(part));
+                        result.add(text(" "));
+                    } else {
+                        result.add(_node(part));
+                    }
                 }
             } else {
                 result.add(_leaf(child));
@@ -1166,8 +1178,11 @@ export struct Formatter {
             } else if (child.is_token("=>")) {
                 result.add(text(" ")).add(_leaf(child)).add(text(" "));
             } else if (child.is_token(":")) {
-                # A tuple element's label: `line: int`.
+                # A tuple element's label, `line: int`, or a restated
+                # constraint, `extend Box<T: Shape>`.
                 result.add(_leaf(child)).add(text(" "));
+            } else if (child.is_token("&")) {
+                result.add(text(" ")).add(_leaf(child)).add(text(" "));
             } else if (child.is_token("shared") or child.is_token("extern")) {
                 result.add(_leaf(child)).add(text(" "));
             } else {

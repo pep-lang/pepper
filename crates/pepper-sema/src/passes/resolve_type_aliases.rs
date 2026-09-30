@@ -49,11 +49,7 @@ pub fn resolve_type_aliases(module: &mut Module) {
         subst_function(function, &aliases, &global_values);
     }
     for st in &mut module.structs {
-        for param in &mut st.generic_params {
-            if let Some(default) = &mut param.default {
-                subst(default, &aliases);
-            }
-        }
+        subst_params(&mut st.generic_params, &aliases);
         // Method bodies see the struct's fields as value symbols; field
         // default expressions see globals and the fields themselves.
         let mut struct_values = global_values.scope();
@@ -77,6 +73,7 @@ pub fn resolve_type_aliases(module: &mut Module) {
         subst_function(&mut st.release, &aliases, &struct_values);
     }
     for trait_def in &mut module.traits {
+        subst_params(&mut trait_def.generic_params, &aliases);
         for method in &mut trait_def.methods {
             subst_function(method, &aliases, &global_values);
         }
@@ -85,6 +82,9 @@ pub fn resolve_type_aliases(module: &mut Module) {
         subst(&mut ext.target, &aliases);
         for trait_name in &mut ext.traits {
             subst(trait_name, &aliases);
+        }
+        for (_, bound) in &mut ext.restated {
+            subst(&mut bound.ty, &aliases);
         }
         for method in &mut ext.methods {
             subst_function(method, &aliases, &global_values);
@@ -103,8 +103,44 @@ pub fn resolve_type_aliases(module: &mut Module) {
         subst(spec, &aliases);
     }
 
+    // A use keeps the name it was written with (an alias's constraints
+    // are checked at it); its arguments are expanded.
+    for type_use in &mut module.type_uses {
+        for arg in &mut type_use.ty.sub_types {
+            subst(arg, &aliases);
+        }
+    }
+    for context in &mut module.use_contexts {
+        subst_params(&mut context.scope, &aliases);
+        if let Some(extension) = &mut context.extension {
+            subst(extension, &aliases);
+        }
+    }
+    let mut constrained: Vec<TypeAliasDef> = module
+        .type_aliases
+        .iter()
+        .filter(|a| a.generic_params.iter().any(|p| !p.bounds.is_empty()))
+        .cloned()
+        .collect();
+    for alias in &mut constrained {
+        subst_params(&mut alias.generic_params, &aliases);
+    }
+    module.constrained_aliases = constrained;
+
     // Aliases are expanded away; the model no longer needs them.
     module.type_aliases.clear();
+}
+
+/// Expand the aliases in generic parameters' constraints and defaults.
+fn subst_params(params: &mut [GenericParam], aliases: &HashMap<String, &TypeAliasDef>) {
+    for param in params {
+        for bound in &mut param.bounds {
+            subst(&mut bound.ty, aliases);
+        }
+        if let Some(default) = &mut param.default {
+            subst(default, aliases);
+        }
+    }
 }
 
 /// The value-symbol names visible in a scope: its own, then its enclosing
@@ -128,11 +164,7 @@ impl<'p> Values<'p> {
 
 fn subst_function(function: &mut FunctionDef, aliases: &HashMap<String, &TypeAliasDef>, enclosing: &Values) {
     let mut values = enclosing.scope();
-    for param in &mut function.generic_params {
-        if let Some(default) = &mut param.default {
-            subst(default, aliases);
-        }
-    }
+    subst_params(&mut function.generic_params, aliases);
     subst(&mut function.ty, aliases);
     for parameter in &mut function.parameters {
         subst(&mut parameter.ty, aliases);

@@ -57,6 +57,9 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
     for method in &base.generic_methods {
         let mut m = method.clone();
         substitute(&mut m.ty, &type_map);
+        for bound in m.generic_params.iter_mut().flat_map(|p| &mut p.bounds) {
+            substitute(&mut bound.ty, &type_map);
+        }
         for param in &mut m.parameters {
             substitute(&mut param.ty, &type_map);
             if let Some(default) = &mut param.default {

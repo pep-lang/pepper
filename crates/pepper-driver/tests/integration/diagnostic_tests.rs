@@ -3035,3 +3035,262 @@ fn nested_too_deeply() {
         assert_eq!(lines[1].chars().nth(caret), Some(token), "{error}");
     }
 }
+
+/// Explicit type argument: reported at the argument, with the constraint and the missing extension.
+#[test]
+fn constraint_not_met_by_type_argument() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Gallery<T: Shape> {\n    var items = Array<T>();\n}\nmain(): int {\n    var g = Gallery<Circle>();\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("constraint_not_met_by_type_argument", source),
+        "main.pep:11:21: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'Gallery'\n\
+         \x20  11 |     var g = Gallery<Circle>();\n\
+         \x20     |                     ^~~~~~\n\
+         main.pep:7:19: note: constraint declared here\n\
+         \x20   7 | struct Gallery<T: Shape> {\n\
+         \x20     |                   ^~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Circle with Shape'\n\
+         \x20   4 | struct Circle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+/// Inferred type argument: reported at the call argument that fixed it.
+#[test]
+fn constraint_not_met_by_inferred_argument() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\ntotal<T: Shape>(items: Array<T>): int { return 0; }\nmain(): int {\n    var circles = Array<Circle>();\n    return total(circles);\n}\n";
+    assert_eq!(
+        error_of("constraint_not_met_by_inferred_argument", source),
+        "main.pep:10:18: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'total'\n\
+         \x20  10 |     return total(circles);\n\
+         \x20     |                  ^~~~~~~\n\
+         main.pep:7:10: note: constraint declared here\n\
+         \x20   7 | total<T: Shape>(items: Array<T>): int { return 0; }\n\
+         \x20     |          ^~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Circle with Shape'\n\
+         \x20   4 | struct Circle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+/// A constraint must name a trait.
+#[test]
+fn constraint_names_a_struct() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Point {\n    var x: int;\n}\nf<T: Point>(x: T): int { return 0; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_names_a_struct", source),
+        "main.pep:10:6: error: 'Point' is not a trait; a constraint must name a trait\n\
+         \x20  10 | f<T: Point>(x: T): int { return 0; }\n\
+         \x20     |      ^~~~~\n\
+         main.pep:7:8: note: 'Point' declared here\n\
+         \x20   7 | struct Point {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+/// A default must meet its parameter's constraints.
+#[test]
+fn constraint_not_met_by_default() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Frame<TTag, T: Shape = Circle> {\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_not_met_by_default", source),
+        "main.pep:7:31: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'Frame'\n\
+         \x20   7 | struct Frame<TTag, T: Shape = Circle> {\n\
+         \x20     |                               ^~~~~~\n\
+         main.pep:7:23: note: constraint declared here\n\
+         \x20   7 | struct Frame<TTag, T: Shape = Circle> {\n\
+         \x20     |                       ^~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Circle with Shape'\n\
+         \x20   4 | struct Circle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+/// An unconstrained parameter passed where a constraint applies, with a fix-it that adds it.
+#[test]
+fn constraint_not_met_by_parameter() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Gallery<T: Shape> {\n}\nwrap<T>(x: T): Gallery<T> { return Gallery<T>(); }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_not_met_by_parameter", source),
+        "main.pep:9:24: error: 'T' does not conform to trait 'Shape', required by 'T' in 'Gallery'\n\
+         \x20   9 | wrap<T>(x: T): Gallery<T> { return Gallery<T>(); }\n\
+         \x20     |                        ^\n\
+         \x20     |       : Shape\n\
+         main.pep:7:19: note: constraint declared here\n\
+         \x20   7 | struct Gallery<T: Shape> {\n\
+         \x20     |                   ^~~~~\n\
+         main.pep:9:6: note: add a constraint to 'T': 'T: Shape'\n\
+         \x20   9 | wrap<T>(x: T): Gallery<T> { return Gallery<T>(); }\n\
+         \x20     |      ^"
+    );
+}
+
+/// A concrete override passes its type arguments to the constrained generic.
+#[test]
+fn constraint_not_met_by_override() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Point {\n    var x: int;\n}\ndescribe<T: Shape>(x: T): int { return 1; }\ndescribe<Point>(x: Point): int { return 2; }\nmain(): int { return describe(Circle()); }\n";
+    assert_eq!(
+        error_of("constraint_not_met_by_override", source),
+        "main.pep:12:10: error: 'Point' does not conform to trait 'Shape', required by 'T' in 'describe'\n\
+         \x20  12 | describe<Point>(x: Point): int { return 2; }\n\
+         \x20     |          ^~~~~\n\
+         main.pep:11:13: note: constraint declared here\n\
+         \x20  11 | describe<T: Shape>(x: T): int { return 1; }\n\
+         \x20     |             ^~~~~\n\
+         main.pep:8:8: note: declare it with 'extend Point with Shape'\n\
+         \x20   8 | struct Point {\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+/// An overload whose constraints the arguments do not meet is not viable.
+#[test]
+fn constraint_makes_overload_not_viable() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nf<T: Shape>(x: T): int { return 1; }\nf(x: int): int { return 2; }\nmain(): int { return f(Circle()); }\n";
+    assert_eq!(
+        error_of("constraint_makes_overload_not_viable", source),
+        "main.pep:9:22: error: no matching function for call to 'f'\n\
+         \x20   9 | main(): int { return f(Circle()); }\n\
+         \x20     |                      ^\n\
+         main.pep:7:1: note: candidate function not viable: 'Circle' does not conform to 'Shape'\n\
+         \x20   7 | f<T: Shape>(x: T): int { return 1; }\n\
+         \x20     | ^\n\
+         main.pep:8:1: note: candidate function not viable: no known conversion from 'Circle' to 'int' for 1st argument\n\
+         \x20   8 | f(x: int): int { return 2; }\n\
+         \x20     | ^"
+    );
+}
+
+/// A generic method's constraint, at the call argument.
+#[test]
+fn constraint_on_generic_method() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Canvas {\n    draw<T: Shape>(x: T): int { return 1; }\n}\nmain(): int {\n    var c = Canvas();\n    return c.draw(Circle());\n}\n";
+    assert_eq!(
+        error_of("constraint_on_generic_method", source),
+        "main.pep:12:19: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'draw'\n\
+         \x20  12 |     return c.draw(Circle());\n\
+         \x20     |                   ^~~~~~\n\
+         main.pep:8:13: note: constraint declared here\n\
+         \x20   8 |     draw<T: Shape>(x: T): int { return 1; }\n\
+         \x20     |             ^~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Circle with Shape'\n\
+         \x20   4 | struct Circle {\n\
+         \x20     |        ^~~~~~"
+    );
+}
+
+/// A trait type meets its own constraint only when every member can be called through a value.
+#[test]
+fn constraint_trait_type_member_not_dispatchable() {
+    let source = "trait Cloner {\n    duplicate(): this;\n}\nf<T: Cloner>(items: Array<T>): int { return 0; }\nmain(): int {\n    var items = Array<Cloner>();\n    return f(items);\n}\n";
+    assert_eq!(
+        error_of("constraint_trait_type_member_not_dispatchable", source),
+        "main.pep:7:14: error: 'Cloner' does not conform to trait 'Cloner', required by 'T' in 'f'\n\
+         \x20   7 |     return f(items);\n\
+         \x20     |              ^~~~~\n\
+         main.pep:4:6: note: constraint declared here\n\
+         \x20   4 | f<T: Cloner>(items: Array<T>): int { return 0; }\n\
+         \x20     |      ^~~~~~\n\
+         main.pep:2:5: note: 'duplicate' cannot be called through a value of type 'Cloner'\n\
+         \x20   2 |     duplicate(): this;\n\
+         \x20     |     ^~~~~~~~~"
+    );
+}
+
+/// A constraint naming nothing.
+#[test]
+fn constraint_names_an_unknown_type() {
+    let source = "f<T: Drawable>(x: T): int { return 0; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_names_an_unknown_type", source),
+        "main.pep:1:6: error: unknown type name 'Drawable'\n\
+         \x20   1 | f<T: Drawable>(x: T): int { return 0; }\n\
+         \x20     |      ^~~~~~~~"
+    );
+}
+
+/// An extension may restate its struct's constraints, not add one.
+#[test]
+fn constraint_added_by_extension() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\ntrait Named {\n    name(): String;\n}\nstruct Box<T: Shape> {\n    var item: T;\n}\nextend Box<T: Shape & Named> {\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_added_by_extension", source),
+        "main.pep:13:23: error: 'Named' is not a constraint of 'T' in 'Box'; an extension cannot add one\n\
+         \x20  13 | extend Box<T: Shape & Named> {\n\
+         \x20     |                       ^~~~~\n\
+         main.pep:10:12: note: 'T' declared here\n\
+         \x20  10 | struct Box<T: Shape> {\n\
+         \x20     |            ^"
+    );
+}
+
+/// Only the struct's own parameters restate its constraints.
+#[test]
+fn constraint_restated_on_a_specialization() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nstruct Box<T: Shape> {\n    var item: T;\n}\nextend Box<Circle: Shape> {\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_restated_on_a_specialization", source),
+        "main.pep:10:20: error: only the parameters of 'Box' can restate its constraints\n\
+         \x20  10 | extend Box<Circle: Shape> {\n\
+         \x20     |                    ^~~~~"
+    );
+}
+
+/// A primitive is no trait; with nothing to point at, there is no note.
+#[test]
+fn constraint_names_a_primitive() {
+    let source = "one<T: bool>(x: T): int { return 0; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_names_a_primitive", source),
+        "main.pep:1:8: error: 'bool' is not a trait; a constraint must name a trait\n\
+         \x20   1 | one<T: bool>(x: T): int { return 0; }\n\
+         \x20     |        ^~~~"
+    );
+}
+
+/// A constraint naming another parameter of its list points at it.
+#[test]
+fn constraint_names_a_sibling_parameter() {
+    let source = "f<T, U: T>(u: U): int { return 0; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_names_a_sibling_parameter", source),
+        "main.pep:1:9: error: 'T' is not a trait; a constraint must name a trait\n\
+         \x20   1 | f<T, U: T>(u: U): int { return 0; }\n\
+         \x20     |         ^\n\
+         main.pep:1:3: note: 'T' declared here\n\
+         \x20   1 | f<T, U: T>(u: U): int { return 0; }\n\
+         \x20     |   ^"
+    );
+}
+
+/// A method's constraint naming its struct's parameter is not an unknown type.
+#[test]
+fn constraint_names_an_enclosing_parameter() {
+    let source = "struct Box<T> {\n    var n: int;\n    m<U: T>(u: U): int { return 0; }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("constraint_names_an_enclosing_parameter", source),
+        "main.pep:3:10: error: 'T' is not a trait; a constraint must name a trait\n\
+         \x20   3 |     m<U: T>(u: U): int { return 0; }\n\
+         \x20     |          ^\n\
+         main.pep:1:12: note: 'T' declared here\n\
+         \x20   1 | struct Box<T> {\n\
+         \x20     |            ^"
+    );
+}
+
+/// An inferred call is reported at its own argument, not at a use in code this platform drops.
+#[test]
+fn constraint_inferred_call_beside_platform_code() {
+    let source = "trait Shape {\n    area(): int;\n}\nstruct Epoll {\n    var fd: int;\n    area(): int { return 1; }\n}\n[Target(OS(Windows) && OS(Linux))]\nextend Epoll with Shape {}\ntotal<T: Shape>(x: T): int { return x.area(); }\n[Target(OS(Windows) && OS(Linux))]\nnative(): int { return total<Epoll>(Epoll()); }\nmain(): int { return total(Epoll()); }\n";
+    assert_eq!(
+        error_of("constraint_inferred_call_beside_platform_code", source),
+        "main.pep:13:28: error: 'Epoll' does not conform to trait 'Shape', required by 'T' in 'total'\n\
+         \x20  13 | main(): int { return total(Epoll()); }\n\
+         \x20     |                            ^~~~~\n\
+         main.pep:10:10: note: constraint declared here\n\
+         \x20  10 | total<T: Shape>(x: T): int { return x.area(); }\n\
+         \x20     |          ^~~~~\n\
+         main.pep:4:8: note: declare it with 'extend Epoll with Shape'\n\
+         \x20   4 | struct Epoll {\n\
+         \x20     |        ^~~~~"
+    );
+}

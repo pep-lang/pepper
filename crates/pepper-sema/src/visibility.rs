@@ -219,8 +219,9 @@ struct Decl<'a> {
 /// one module linking marked (`hash<Point>`, see
 /// [`crate::modules::Overrides`]).
 fn is_function_override(f: &FunctionDecl) -> bool {
-    crate::type_name::is_override(f.generic_params.iter().map(|g| g.name.as_str()))
-        || f.generic_params.iter().any(|g| g.is_argument)
+    f.generic_params.iter().all(|g| g.bounds.is_empty())
+        && (crate::type_name::is_override(f.generic_params.iter().map(|g| g.name.as_str()))
+            || f.generic_params.iter().any(|g| g.is_argument))
 }
 
 /// A generic function a concrete override (`pick<int>`) would specialize:

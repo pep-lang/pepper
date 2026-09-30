@@ -38,6 +38,10 @@ same file, another file, or the standard library:
 to every specialization: `Box<int>`, `Box<String>`, and so on. The example
 above does this.
 
+When `Box` constrains its parameter (`struct Box<T: Shape>`), the extension
+keeps the constraint without restating it; `extend Box<T: Shape>` may
+restate it as documentation (see [constraints](generics.md#constraints)).
+
 `extend Box<int>` targets one specialization: its methods exist only on
 `Box<int>`, and calling one on a `Box<String>` is an error
 (`no member named 'doubled' in 'Box<String>'`).
@@ -67,6 +71,9 @@ signatures ending in `;`. Then declare that a type has the trait with
   match (see [Overloading](overloading.md#extensions-and-traits)).
 - The methods in the extension are ordinary methods of the struct, so you
   call them on a `Square` as usual.
+- A generic parameter can require a trait, `total_area<T: Shape>`, so that
+  only types declared to have it are accepted (see
+  [constraints](generics.md#constraints)).
 - The runtime declares traits too. `ToString` (`to_string(): String`) makes
   a type usable in an [interpolated string](interpolation.md).
 
@@ -159,9 +166,6 @@ calling a method on it runs that struct's own method:
 
 What traits do not do yet:
 
-- **Generic parameters cannot require a trait.** There is no syntax yet for
-  saying that `T` must have `Shape`; a [generic function](generics.md#generic-functions)
-  like `total_area<T>` accepts any `T` with an `area()` method.
 - **A trait value cannot convert back** to its struct, or to another trait.
 - **`Atomic<Shape>` is not supported.** A trait value is two pointers wide
   and cannot be swapped atomically.

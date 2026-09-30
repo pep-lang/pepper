@@ -59,8 +59,9 @@ Because each use is compiled for its concrete types, the body may use any
 operator, field, or method that the type arguments provide. `total_area<T>`
 calls `shape.area()`, so it works with any `T` that has an `area()` method
 returning a number, and using it with a type that lacks one is a compile
-error. Pepper does not yet let you state such requirements up front with a
-[trait](traits-and-extensions.md#traits).
+error inside `total_area`. To state the requirement up front, and have the
+compiler report it where the function is used, give `T` a
+[constraint](#constraints).
 
 ## Generic methods
 
@@ -92,6 +93,79 @@ Arguments are matched to parameters in order, so put the parameters that have
 defaults last. The standard library declares `struct Result<TValue, TError=Error>`, so
 `Result<int>` means `Result<int, Error>`. See
 [Error handling with Result](results.md).
+
+## Constraints
+
+A type parameter can require a [trait](traits-and-extensions.md#traits):
+write the trait after a colon, `T: Shape`. Every type argument for `T` must
+then conform to `Shape`. Several constraints are joined with `&`, and a
+constrained parameter can still have a default, written after them:
+
+```pepper
+{{#include ../../examples/generics-constraints.pep}}
+```
+
+Constraints work on generic structs, enums whose cases carry values,
+functions, methods, traits and type aliases. A constraint may name the
+parameters before it in the same list: `sum<T, I: Iterator<T>>(values: I)`.
+
+A type argument conforms to a trait when:
+
+- it is a struct declared to have the trait with
+  `extend Circle with Shape`. For a generic struct, `extend Box<T> with Shape`
+  makes every `Box<X>` conform, and `extend Box<int> with Shape` only
+  `Box<int>`. A generic trait must match exactly: `extend Counter with
+  Iterator<int>` conforms to `Iterator<int>`, not to `Iterator<long>`.
+  Having the right methods is not enough; the extension is what declares it.
+- it is the trait type itself (`Array<Shape>` passed as `Array<T>` with
+  `T: Shape`), as long as every member of the trait can be called through a
+  value of the trait type (see
+  [traits as types](traits-and-extensions.md#traits-as-types)).
+- it is a type parameter constrained by that trait: inside
+  `wrap<T: Shape>`, `Gallery<String, T>` is allowed.
+
+Numbers, `bool`, enums, pointers, tuples and function types conform to no
+trait.
+
+The compiler checks every use: a type argument you write, one it infers from
+a call, a default, and a
+[concrete override](#overriding-a-generic-function-for-one-type). The error
+points at the type argument, or at the call argument the type came from:
+
+```text
+main.pep:11:21: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'Gallery'
+   11 |     var g = Gallery<Circle>();
+      |                     ^~~~~~
+main.pep:7:19: note: constraint declared here
+    7 | struct Gallery<T: Shape> {
+      |                   ^~~~~
+main.pep:4:8: note: declare it with 'extend Circle with Shape'
+    4 | struct Circle {
+      |        ^~~~~~
+```
+
+A type parameter passed on to a constrained one must carry the constraint
+itself: `wrap<T>(item: T): Gallery<String, T>` is an error that suggests
+`T: Shape`. The language server offers both the extension and the constraint
+as quick fixes.
+
+- A constraint must name a trait: `T: Point`, with `Point` a struct, is an
+  error.
+- An extension of a constrained struct keeps its constraints:
+  `extend Gallery<TTag, TShape>` needs no `TShape: Shape` of its own. You
+  may restate them as documentation, `extend Gallery<TTag, TShape: Shape>`,
+  but an extension cannot add a constraint the struct does not have.
+- In an [overload set](overloading.md#generic-members), a generic member
+  whose inferred type arguments do not meet its constraints is not viable,
+  and the error lists why.
+- A constrained name is always a type parameter, never an override's type
+  argument: `describe<Point: Shape>` declares a generic function whose
+  parameter happens to be named `Point`.
+
+> **Note:** For now a constraint is checked where the generic is used, not
+> inside it. The body of `total_area<T: Shape>` is still compiled for each
+> type argument, so it may call methods that `Shape` does not declare, and a
+> mistake there is reported when a use compiles it.
 
 ## Overriding a generic function for one type
 

@@ -318,7 +318,7 @@ impl Overrides {
             for d in named_decls(&files[i].module) {
                 if let Declaration::Function(f) = d
                     && (!exported_only || f.is_exported)
-                    && f.generic_params.iter().any(|p| !names_type(&value_types[i], &p.name))
+                    && f.generic_params.iter().any(|p| !p.bounds.is_empty() || !names_type(&value_types[i], &p.name))
                 {
                     out.entry(f.name.clone()).or_default().insert(f.generic_params.len());
                 }
@@ -368,8 +368,12 @@ impl Overrides {
         bases.get(name).is_some_and(|n| n.contains(&params.len()))
     }
 
-    /// `f`, declared in `file`, is a concrete override.
+    /// `f`, declared in `file`, is a concrete override. A constrained name
+    /// (`describe<T: Shape>`) is always a parameter.
     fn is(&self, f: &FunctionDecl, file: usize) -> bool {
+        if f.generic_params.iter().any(|g| !g.bounds.is_empty()) {
+            return false;
+        }
         let params: Vec<&str> = f.generic_params.iter().map(|g| g.name.as_str()).collect();
         self.is_named(&f.name, &params, file)
     }
