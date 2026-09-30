@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d2086fb8.js";
+            window.path_to_searchindex_js = "../searchindex-a32287b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-adbf0aad.js"></script>
+        <script src="../toc-816bb96a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -402,7 +402,9 @@ reported at the field:</p>
       |         ^~~~~
 note: threads change a shared struct's state through a thread-safe member such as 'Atomic&lt;T&gt;'
 </code></pre>
-<p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves.</p>
+<p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves, and so
+are the synchronization types below: <code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code>,
+<code>Condition&lt;T&gt;</code>, <code>Once</code> and <code>Lazy&lt;T&gt;</code>.</p>
 <h3 id="module-scope-variables"><a class="header" href="#module-scope-variables">Module-scope variables</a></h3>
 <p>Every module-scope variable is implicitly shared, exported or not: any
 function can use it, and any function can run on any thread. So it follows
@@ -437,10 +439,326 @@ main.pep:1:8: note: 'Plain' is not declared [Shared]
 <p>Module-scope variables are initialized before <code>main</code> runs, in the order they
 are declared, and each file’s after those of the files it imports and of the
 runtime. So an initializer may use the variables of the files it imports.</p>
+<h2 id="channels"><a class="header" href="#channels">Channels</a></h2>
+<p>A <code>Channel&lt;T&gt;</code> carries values from threads that send to threads that
+receive, with any number of each, like a Go channel:</p>
+<pre><code class="language-pepper">import async;
+
+# The main thread sends numbers to a pool of workers, and the workers send
+# their squares back on a second channel.
+const jobs = async.Channel&lt;long&gt;(16);    # bounded: send waits while 16 are queued
+const results = async.Channel&lt;long&gt;();   # unbounded: send never waits
+
+square_numbers() {
+    # The loop ends once `jobs` is closed and empty.
+    for (var n in jobs) {
+        results.send(n * n);
+    }
+}
+
+# A `shared` function value is thread-safe, so a channel can carry work.
+const tasks = async.Channel&lt;async.ThreadBody&gt;();
+const ran = Atomic&lt;long&gt;(0);
+
+run_tasks() {
+    for (var task in tasks) {
+        task();
+    }
+}
+
+main(): int {
+    var workers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        workers.append(async.Thread.spawn(square_numbers));
+        i = i + 1;
+    }
+    var n: long = 1;
+    while (n &lt;= 100) {
+        jobs.send(n);
+        n = n + 1;
+    }
+    jobs.close();   # no more work: each worker's loop ends
+    for (var worker in workers) {
+        worker.join();
+    }
+    results.close();
+
+    var total: long = 0;
+    for (var square in results) {
+        total = total + square;
+    }
+    assert(total == 338350, "the sum of the first 100 squares");
+
+    # receive() returns a Result: an error once the channel is closed and
+    # empty. A closed channel refuses new values.
+    assert(results.receive().is_err(), "nothing left");
+    assert(!results.send(1), "closed");
+
+    var runner = async.Thread.spawn(run_tasks);
+    tasks.send(() =&gt; { ran.fetch_add(1); });
+    tasks.send(() =&gt; { ran.fetch_add(10); });
+    tasks.close();
+    runner.join();
+    assert(ran.load() == 11, "the runner ran both tasks");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Channel&lt;T&gt;(capacity)</code> makes a channel that holds at most <code>capacity</code>
+values; <code>send</code> waits while it is full. <code>Channel&lt;T&gt;()</code> (capacity 0) is
+unbounded, and <code>send</code> never waits.</li>
+<li><code>send(value)</code> queues a value and returns <code>true</code>, or returns <code>false</code> if the
+channel is closed. <code>try_send(value)</code> does not wait: it also returns
+<code>false</code> when a bounded channel is full.</li>
+<li><code>receive()</code> waits for the next value and returns a <code>Result&lt;T&gt;</code>: the
+value, or an error once the channel is closed and empty.
+<code>try_receive()</code> returns an error right away when nothing is waiting, and
+<code>receive_for(milliseconds)</code> when the time runs out.</li>
+<li><code>close()</code> ends the stream and wakes every waiting sender and receiver.
+Values already queued are still received. Only <code>close()</code> closes a
+channel: dropping it, or ending the threads that use it, does not.</li>
+<li><code>for (var v in channel)</code> receives until the channel is closed and empty.
+Several threads can loop over one channel; each value goes to one of them.</li>
+<li>Values from one sender arrive in the order they were sent.</li>
+<li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
+threads may change right after.</li>
+</ul>
+<p><code>T</code> must be thread-safe, because the sender and the receiver both hold the
+value: numbers, <code>[Shared]</code> structs, and <code>shared</code> function values such as a
+<code>ThreadBody</code>, which makes a channel a work queue. A <code>Channel&lt;String&gt;</code> is a
+compile error for now (see <a href="#limitations">Limitations</a>):</p>
+<pre><code class="language-text">main.pep:4:17: error: shared struct 'Channel&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    4 |     var lines = async.Channel&lt;String&gt;(8);
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+runtime/async/channel.pep:86:19: note: required by field 'Buffer' declared here
+runtime/string.pep:35:15: note: 'String' is not declared [Shared]
+</code></pre>
+<p>The <a href="../reference/async-channel.html">Channel reference</a> documents every
+method.</p>
+<h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
+<p>A <code>Mutex&lt;T&gt;</code> owns a value that one thread at a time can use. The way to
+reach the value is a <a href="scopes.html"><code>with</code> block</a>:</p>
+<pre><code class="language-pepper">import async;
+
+# Each balance is an Atomic, but moving money changes both, and no thread
+# may see it in neither account. A Mutex makes the pair of updates one step.
+[Shared]
+struct Accounts {
+    const Checking: Atomic&lt;long&gt;;
+    const Savings: Atomic&lt;long&gt;;
+    construct(long checking = 0, long savings = 0) {
+        Checking = Atomic&lt;long&gt;(checking);
+        Savings = Atomic&lt;long&gt;(savings);
+    }
+}
+
+const accounts = async.Mutex&lt;Accounts&gt;(Accounts(1000, 0));
+const bad_totals = Atomic&lt;long&gt;(0);
+
+move_to_savings() {
+    var i = 0;
+    while (i &lt; 1000) {
+        with (var a = accounts.lock()) {
+            a.Checking.fetch_sub(1);
+            a.Savings.fetch_add(1);
+        }   # unlocked here, on every path out of the block
+        i = i + 1;
+    }
+}
+
+audit() {
+    var i = 0;
+    while (i &lt; 1000) {
+        with (var a = accounts.lock()) {
+            if (a.Checking.load() + a.Savings.load() != 1000) {
+                bad_totals.fetch_add(1);
+            }
+        }
+        i = i + 1;
+    }
+}
+
+main(): int {
+    var mover = async.Thread.spawn(move_to_savings);
+    var auditor = async.Thread.spawn(audit);
+    mover.join();
+    auditor.join();
+    assert(bad_totals.load() == 0, "the auditor never saw money missing");
+
+    # try_lock does not wait: the body runs if the lock was free, and the
+    # else block runs if another thread held it.
+    with (var a = accounts.try_lock()) {
+        assert(a.Savings.load() == 1000, "everything was moved");
+    } else {
+        assert(false, "no other thread holds the lock now");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>with (var v = mutex.lock()) { ... }</code> waits until no other thread holds
+the lock, binds the value, and unlocks when the block ends by any path:
+the end of the body, <code>return</code>, <code>break</code> or <code>continue</code>. Everything a thread
+did while it held the lock is visible to the next thread that takes it.</li>
+<li><code>try_lock()</code> does not wait. With <code>with (var v = mutex.try_lock()) { ... } else { ... }</code>, the body runs if the lock was free and the <code>else</code> block runs
+if it was not.</li>
+<li>A Mutex is not re-entrant: calling <code>lock()</code> again on the thread that holds
+it panics instead of deadlocking. <code>is_held()</code> reports whether the calling
+thread holds it.</li>
+<li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
+“poisoned”.</li>
+</ul>
+<p><code>T</code> must be thread-safe, as for a channel. A Mutex is for keeping several
+changes together, such as two <code>Atomic</code> fields of a <code>[Shared]</code> struct that
+must move as a unit, or state behind a raw pointer. For one number,
+<code>Atomic&lt;T&gt;</code> is simpler.</p>
+<p>A <code>Condition&lt;T&gt;</code> lets a thread that holds a Mutex sleep until another thread
+changes the value. Get one with <code>mutex.condition()</code>:</p>
+<pre><code class="language-pepper">import async;
+
+# A baker makes pies and eaters take them. The eaters sleep on a Condition
+# until there is a pie, or until the bakery closes.
+[Shared]
+struct Bakery {
+    const Pies: Atomic&lt;long&gt;;
+    const Closed: Atomic&lt;int&gt;;
+    construct() {
+        Pies = Atomic&lt;long&gt;(0);
+        Closed = Atomic&lt;int&gt;(0);
+    }
+}
+
+const bakery = async.Mutex&lt;Bakery&gt;(Bakery());
+const changed = bakery.condition();
+const eaten = Atomic&lt;long&gt;(0);
+
+eat() {
+    while (true) {
+        with (var b = bakery.lock()) {
+            # Wait in a loop: a wakeup can be spurious, and another eater
+            # may take the pie first.
+            while (b.Pies.load() == 0 &amp;&amp; b.Closed.load() == 0) {
+                changed.wait();   # unlocks, sleeps, locks again
+            }
+            if (b.Pies.load() == 0) {
+                return;   # closed and nothing left; the block unlocks
+            }
+            b.Pies.fetch_sub(1);
+        }
+        eaten.fetch_add(1);
+    }
+}
+
+main(): int {
+    var eaters = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 3) {
+        eaters.append(async.Thread.spawn(eat));
+        i = i + 1;
+    }
+    i = 0;
+    while (i &lt; 50) {
+        with (var b = bakery.lock()) {
+            b.Pies.fetch_add(1);
+            changed.notify_one();
+        }
+        i = i + 1;
+    }
+    with (var b = bakery.lock()) {
+        b.Closed.store(1);
+        changed.notify_all();
+    }
+    for (var eater in eaters) {
+        eater.join();
+    }
+    assert(eaten.load() == 50, "every pie was eaten once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>wait()</code> must run while the calling thread holds the Mutex, normally
+inside its <code>with</code> block. It unlocks, sleeps until notified, and locks again
+before returning. It panics if the thread does not hold the Mutex.</li>
+<li>A thread can wake without a notification (a spurious wakeup), and another
+thread may get to the value first, so always wait in a loop that re-checks
+what it waits for.</li>
+<li><code>wait_for(milliseconds)</code> gives up after that long and returns <code>false</code>.</li>
+<li><code>notify_one()</code> wakes one waiting thread, and <code>notify_all()</code> wakes them all.</li>
+</ul>
+<p>The <a href="../reference/async-mutex.html">Mutex reference</a> documents <code>Mutex</code>,
+<code>MutexGuard</code> and <code>Condition</code>.</p>
+<h2 id="once-and-lazy"><a class="header" href="#once-and-lazy">Once and Lazy</a></h2>
+<p><code>Once</code> runs a function exactly once, however many threads ask, and <code>Lazy&lt;T&gt;</code>
+builds a value the first time a thread asks for it:</p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Settings {
+    const Workers: long;
+    construct(this.Workers = 1) {}
+}
+
+const builds = Atomic&lt;long&gt;(0);
+
+load_settings(): Settings {
+    builds.fetch_add(1);
+    return Settings(async.logical_cpus() as long);
+}
+
+# Built by the first thread that calls get(), not before main runs.
+const settings = async.Lazy&lt;Settings&gt;(load_settings);
+
+# Runs initialize() once, however many threads call it.
+const setup = async.Once();
+const setups = Atomic&lt;long&gt;(0);
+
+initialize() {
+    setups.fetch_add(1);
+}
+
+work() {
+    setup.call(initialize);
+    assert(settings.get().Workers &gt;= 1, "every thread sees the settings");
+}
+
+main(): int {
+    assert(!settings.is_built(), "nothing is built before first use");
+    var workers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        workers.append(async.Thread.spawn(work));
+        i = i + 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    assert(builds.load() == 1, "the settings were built once");
+    assert(setups.load() == 1, "initialize ran once");
+    assert(setup.is_done(), "done");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>once.call(body)</code> runs <code>body</code> if no call has run one yet. Threads that
+call it while the body runs wait for it, and every caller sees what the
+body did. <code>is_done()</code> reports whether it has run.</li>
+<li><code>Lazy&lt;T&gt;(initializer)</code> takes a <code>shared () =&gt; T</code> function. The first
+<code>get()</code> runs it; later calls, from any thread, return the same value.
+<code>is_built()</code> reports whether it has run.</li>
+<li>A <code>Lazy&lt;T&gt;</code> is the usual way to give a module-scope variable a value that
+is expensive to build, or that cannot be built before <code>main</code> runs. Its <code>T</code>
+must be thread-safe, since every thread gets the same value.</li>
+</ul>
+<p>The <a href="../reference/async-once.html">Once reference</a> has the details.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ul>
-<li>There are no mutexes, condition variables or channels yet. Coordinate
-threads with <code>Atomic&lt;T&gt;</code> and <code>join()</code>.</li>
+<li><code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for
+now, so a <code>String</code> or an <code>Array</code> cannot cross threads through them yet.</li>
+<li>There is no reader-writer lock, no <code>select</code> over several channels, and no
+barrier or semaphore. A Mutex is not re-entrant.</li>
+<li>Deadlocks are not detected, except locking a Mutex twice on one thread,
+which panics.</li>
 </ul>
 
                     </main>

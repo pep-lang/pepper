@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d2086fb8.js";
+            window.path_to_searchindex_js = "searchindex-a32287b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-adbf0aad.js"></script>
+        <script src="toc-816bb96a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,7 +230,7 @@ traits (with default methods, and usable as types), function types and
 closures, modules, <code>Result</code>-based error handling, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
-maps and sets, atomics, threads, and file-system access. That is enough to write real
+maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:</p>
 <ul>
@@ -246,7 +246,8 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 There is no function or method overloading yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
-closure captures included; there are no mutexes or channels yet (see
+closure captures included. Channels, mutexes, <code>Once</code> and <code>Lazy</code> carry and
+guard thread-safe values only, so a <code>String</code> cannot cross threads yet (see
 <a href="language/threads.html#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a

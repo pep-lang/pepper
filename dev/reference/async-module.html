@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d2086fb8.js";
+            window.path_to_searchindex_js = "../searchindex-a32287b4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-adbf0aad.js"></script>
+        <script src="../toc-816bb96a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,11 +192,16 @@
 <li><a href="async-thread.html">Thread</a>: starting, naming and joining threads, <code>ThreadId</code> and <code>ThreadBody</code></li>
 <li><a href="async-thread_local.html">ThreadLocal</a>: a variable with a separate value on every thread</li>
 <li><a href="async-cpus.html">Processor counts</a>: <code>logical_cpus()</code> and <code>physical_cpus()</code></li>
+<li><a href="async-channel.html">Channel</a>: <code>Channel&lt;T&gt;</code>, a queue that carries values between threads, and its <code>ChannelIterator&lt;T&gt;</code></li>
+<li><a href="async-mutex.html">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
+<li><a href="async-once.html">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
-<code>Atomic&lt;T&gt;</code>, <code>Thread</code> and <code>ThreadLocal&lt;T&gt;</code>. See the language guide’s
-Threads chapter.</p>
+<code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. The
+synchronization types carry and guard thread-safe values only, so
+<code>Channel&lt;String&gt;</code> is a compile error. See the language guide’s Threads
+chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 
