@@ -1,0 +1,124 @@
+# The test suite against every LLVM major this workspace supports that apt can
+# install, on Linux. This is how a version-specific regression gets caught.
+#
+# It runs before a release, not on every PR: CI tests only the default LLVM, and
+# the matrix was most of the runners' time. Dispatch it on the commit you are
+# about to tag, and tag only once it is green:
+#
+#   gh workflow run llvm-versions.yml --ref main
+#
+# Dispatching it with --ref <branch> tests a PR that touches version-specific
+# code before it merges.
+name: LLVM versions
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: llvm-versions-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # See ci.yml: the target dirs persist across runs, and rustc's incremental
+  # cache mixed objects across branches there.
+  CARGO_INCREMENTAL: 0
+  PEPPER_CACHE_VERIFY: 1
+
+jobs:
+  # Which LLVM versions to test is not a fixed list: it is every major this
+  # workspace supports that apt can actually install, discovered here. Ubuntu
+  # 24.04 currently serves 18, 19 and 20 from its own repositories, and picks up
+  # later ones for free as they are published.
+  llvm-matrix:
+    runs-on: pepper-linux
+    timeout-minutes: 10
+    outputs:
+      majors: ${{ steps.resolve.outputs.majors }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: resolve
+        run: |
+          set -euo pipefail
+
+          # The supported set lives in the setup script, next to the feature
+          # table it mirrors, rather than being duplicated here.
+          supported=$(tr -d '\r' < scripts/setup-llvm.sh \
+                      | sed -nE 's/^SUPPORTED_MAJORS="([^"]+)".*/\1/p' | head -1)
+          [ -n "$supported" ] || { echo "::error::cannot read SUPPORTED_MAJORS"; exit 1; }
+
+          sudo apt-get update -qq
+          majors=''
+          for major in $supported; do
+            # LC_ALL=C: apt translates "Candidate:", and a runner image that
+            # ever sets a non-English locale would silently discover an empty
+            # matrix and fail the job below.
+            candidate=$(LC_ALL=C apt-cache policy "llvm-$major-dev" 2>/dev/null | awk '/Candidate:/ {print $2}')
+            if [ -n "$candidate" ] && [ "$candidate" != "(none)" ]; then
+              echo "llvm-$major-dev $candidate"
+              majors="${majors:+$majors,}\"$major\""
+            fi
+          done
+          [ -n "$majors" ] || { echo "::error::apt has no llvm-<major>-dev for any supported major"; exit 1; }
+
+          echo "majors=[$majors]" >> "$GITHUB_OUTPUT"
+
+  llvm-versions:
+    needs: llvm-matrix
+    strategy:
+      # A version failing is the result being looked for, not a reason to stop
+      # testing the others.
+      fail-fast: false
+      matrix:
+        major: ${{ fromJSON(needs.llvm-matrix.outputs.majors) }}
+    runs-on: pepper-linux
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # apt serves a complete LLVM dev install in seconds (4-8s measured, plus
+      # Polly, which llvm-config names but Debian packages separately), so there
+      # is nothing to cache and no archive to download.
+      - name: Provision LLVM ${{ matrix.major }}
+        shell: bash
+        env:
+          PEPPER_LLVM_MAJOR: ${{ matrix.major }}
+        run: bash scripts/ci-provision-llvm.sh
+
+      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
+      - name: Cache cargo registry
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # Self-hosted runners keep their disk between jobs, but checkout's clean
+      # step deletes target/, so every job rebuilt every dependency from scratch.
+      # Build beside the checkout instead, where the clean cannot reach; cargo
+      # then rebuilds only what changed. One directory per LLVM major keeps the
+      # matrix legs, which build with different features, from invalidating
+      # each other. Deleting it is always safe: the next job just builds from
+      # scratch.
+      - name: Use persistent target dir (self-hosted)
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-llvm${{ matrix.major }}" >> "$GITHUB_ENV"
+
+      # The LLVM version is a cargo feature, so it has to be named here too;
+      # setup-llvm.sh prints this exact command when it provisions a non-default
+      # version.
+      - name: Test against LLVM ${{ matrix.major }}
+        run: |
+          cargo test --workspace --locked --no-default-features \
+            --features llvm${{ matrix.major }}-1

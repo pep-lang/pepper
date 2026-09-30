@@ -1500,12 +1500,16 @@ there.
     **`pepper-windows`** runner: provision LLVM (`ci-provision-llvm.sh`,
     cached), `cargo build --workspace --locked`, `cargo test --workspace
     --locked`, and `pepper-docgen -- check`.
-  - `llvm-matrix` and `llvm-versions` run on self-hosted **`pepper-linux`**
-    and test against every LLVM major that apt offers.
+  - `test-linux` (**`pepper-linux`**) and `test-macos` (**`pepper-macos`**)
+    run the suite against the default LLVM. Drafts run only `test-linux`.
   - `changes` runs first and diffs the PR against its base. When only prose
     changed (`*.md` other than `docs/src/SUMMARY.md` and
     `docs/src/reference/`, or `.agents/`/`.claude/`), every other job is
     skipped, and a skipped `test` counts as passing.
+- **`llvm-versions.yml`**: runs on dispatch only, before a release (`gh
+  workflow run llvm-versions.yml --ref main`). `llvm-matrix` discovers every
+  supported LLVM major apt offers and `llvm-versions` runs the suite against
+  each on **`pepper-linux`**.
 - **`platform-test.yml`**: runs on dispatch only, for any script on
   Linux/macOS/Windows (`gh workflow run platform-test.yml -f platforms=…
   -f script=…`). It has a failure/cancel diagnostics step. Read AGENTS.md's

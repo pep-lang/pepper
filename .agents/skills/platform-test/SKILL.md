@@ -13,10 +13,10 @@ description: >
 # Platform test
 
 CI (`.github/workflows/ci.yml`) gates merges on Windows, and also runs the
-suite on Linux against every LLVM apt serves. macOS is not on that path —
-private-repo macOS minutes bill at ten times the Linux rate — so
-`cfg(target_os = "macos")` branches, Homebrew provisioning and anything else
-macOS-specific stays unverified until you run it there. That is what
+suite on Linux and macOS against the default LLVM. Other LLVM majors run only
+when `.github/workflows/llvm-versions.yml` is dispatched, before a release.
+Anything CI does not reach (another LLVM on a branch, a script, a probe of a
+runner) stays unverified until you run it there. That is what
 `.github/workflows/platform-test.yml` is for: it runs a command you choose on
 the platforms you choose, on demand.
 

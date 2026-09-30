@@ -203,8 +203,15 @@ it — the same count should pass:
 cargo test --workspace --no-default-features --features llvm18-1
 ```
 
-CI runs that matrix on Linux for every LLVM apt offers — 18, 19 and 20 on
-`ubuntu-24.04`. On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
+PR CI tests only the default LLVM. Before tagging a release, run the matrix
+on Linux for every LLVM apt offers (18, 19 and 20 on `ubuntu-24.04`) and tag
+only once it is green:
+
+```bash
+gh workflow run llvm-versions.yml --ref main
+```
+
+On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
 all five pass; CI's `test-macos` job runs the suite there against LLVM 20.
 
 ## Run the compiler
