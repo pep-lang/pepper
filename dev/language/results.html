@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b4cf70b4.js";
+            window.path_to_searchindex_js = "../searchindex-6e862b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-432e2c46.js"></script>
+        <script src="../toc-845c075c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -358,8 +358,8 @@ main(): int {
 }
 </code></pre>
 <p>Pepper does not yet have a shorthand for propagation (such as Rust’s <code>?</code>
-operator) or a <code>match</code> statement, so each fallible call is checked with <code>if</code>
-as shown above.</p>
+operator), and <a href="enums.html#match"><code>match</code></a> does not work on a <code>Result</code> yet, so
+each fallible call is checked with <code>if</code> as shown above.</p>
 <h2 id="results-from-the-io-module"><a class="header" href="#results-from-the-io-module">Results from the io module</a></h2>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type

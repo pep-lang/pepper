@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b4cf70b4.js";
+            window.path_to_searchindex_js = "../searchindex-6e862b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-432e2c46.js"></script>
+        <script src="../toc-845c075c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -292,6 +292,15 @@ block:</p>
 </code></pre>
 <p><a href="scopes.html">Scoped blocks with <code>with</code></a> covers the protocol and the optional
 <code>else</code> block.</p>
+<h2 id="match"><a class="header" href="#match"><code>match</code></a></h2>
+<p><code>match</code> runs the arm for the case an <a href="enums.html">enum</a> value holds, and the
+compiler checks that every case is handled:</p>
+<pre><code class="language-pepper">match (light) {
+    Red, Amber =&gt; { stop(); }
+    Green =&gt; { go(); }
+}
+</code></pre>
+<p><a href="enums.html#match">Enums and <code>match</code></a> covers patterns and the <code>else</code> arm.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b4cf70b4.js";
+            window.path_to_searchindex_js = "../searchindex-6e862b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-432e2c46.js"></script>
+        <script src="../toc-845c075c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -265,10 +265,10 @@ error.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
 <li>There is no <code>T?</code> shorthand yet: write <code>Optional&lt;T&gt;</code>.</li>
-<li>Pepper has no <code>match</code> yet, so an optional is checked with <code>is_some()</code> or
-<code>is_none()</code> and read with <code>value()</code> or <code>value_or</code>. <code>Optional</code> will become an
-enum with <code>None</code> and <code>Some(value)</code> cases once enums with payloads exist; its
-methods stay the same.</li>
+<li>An optional is checked with <code>is_some()</code> or <code>is_none()</code> and read with
+<code>value()</code> or <code>value_or</code>; <code>match</code> does not work on it yet. <code>Optional</code> will
+become an <a href="enums.html">enum</a> with <code>None</code> and <code>Some(value)</code> cases once enum
+cases can carry values; its methods stay the same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>

@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b4cf70b4.js";
+            window.path_to_searchindex_js = "searchindex-6e862b0d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-432e2c46.js"></script>
+        <script src="toc-845c075c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,7 +222,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, generics (with type
+structs with constructors, destructors and methods, enums with <code>match</code>, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
@@ -1473,6 +1473,15 @@ block:</p>
 </code></pre>
 <p><a href="#scoped-blocks-with-with">Scoped blocks with <code>with</code></a> covers the protocol and the optional
 <code>else</code> block.</p>
+<h2 id="match"><a class="header" href="#match"><code>match</code></a></h2>
+<p><code>match</code> runs the arm for the case an <a href="#enums-and-match">enum</a> value holds, and the
+compiler checks that every case is handled:</p>
+<pre><code class="language-pepper">match (light) {
+    Red, Amber =&gt; { stop(); }
+    Green =&gt; { go(); }
+}
+</code></pre>
+<p><a href="#match-1">Enums and <code>match</code></a> covers patterns and the <code>else</code> arm.</p>
 <h2 id="break-and-continue"><a class="header" href="#break-and-continue"><code>break</code> and <code>continue</code></a></h2>
 <p><code>break</code> leaves the innermost loop immediately. <code>continue</code> skips the rest of the
 current iteration and goes on with the next one; in a <code>while</code> loop that means
@@ -3152,6 +3161,156 @@ writes: <code>shelf[i] = value</code>. The second parameter is the value being s
 (<code>counts[i] += 1</code>) reads with the first and writes with the second.
 <a href="#array"><code>Array</code></a> and <a href="#string"><code>String</code></a> are
 indexed this way.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
+<p>An <strong>enum</strong> is a type with a fixed set of named <strong>cases</strong>. A value of the
+enum holds exactly one of them. Use an enum where you would otherwise pass an
+integer code or a string, so the compiler checks that only the listed cases
+flow through, and that a <code>match</code> handles each one.</p>
+<pre><code class="language-pepper"># An enum names a fixed set of cases; a slot of the enum type holds one.
+enum Suit {
+    Clubs,
+    Diamonds,
+    Hearts,
+    Spades,
+}
+
+# A representation sets the stored integer type; a case may give its value.
+enum Status: u8 {
+    Ok,
+    NotFound = 44,
+    Failed,
+}
+
+struct Card {
+    Suit suit;
+    int rank = 1;
+}
+
+main(): int {
+    var card = Card();
+    assert(card.suit == Suit.Clubs, "a slot starts at the case whose value is 0");
+    card.suit = Suit.Hearts;
+    assert(card.suit != Suit.Spades, "cases compare with == and !=");
+
+    # 'as' turns a case into its integer; the reverse is not allowed.
+    assert((Suit.Hearts as int) == 2, "cases number from 0");
+    assert((Status.Failed as int) == 45, "numbering continues after an explicit value");
+    assert(sizeof&lt;Status&gt;() == 1, "Status is stored as a u8");
+    return 0;
+}
+</code></pre>
+<h2 id="declaring-an-enum"><a class="header" href="#declaring-an-enum">Declaring an enum</a></h2>
+<p><code>enum Name { ... }</code> lists the cases, separated by commas; a comma after the
+last case is optional. Case names are <code>PascalCase</code>, like types (see
+<a href="#naming-conventions-1">naming conventions</a>).</p>
+<p>Each case is an integer. The first case is 0 and each case after it is one
+more than the one before. A case can give its own value with <code>= value</code>, and
+numbering continues from there:</p>
+<pre><code class="language-pepper">enum Status: u8 {
+    Ok,             # 0
+    NotFound = 44,  # 44
+    Failed,         # 45
+}
+</code></pre>
+<p>A value must be an integer constant: a literal such as <code>-1</code> or <code>0x20</code>, or a
+character such as <code>'y'</code>. Two cases cannot have the same value.</p>
+<p>The type after the colon is the <strong>representation</strong>, the integer type the
+enum is stored as. It can be any integer type (<code>u8</code>, <code>short</code>, <code>int</code>, <code>long</code>,
+and so on). Without one, the enum is stored as an <code>int</code>. Every case value
+must fit in the representation.</p>
+<p>A case can carry a <a href="#platform-selection"><code>[Target]</code></a> attribute, so a
+platform can have cases that others lack. A dropped case does not renumber
+the others.</p>
+<h2 id="using-enum-values"><a class="header" href="#using-enum-values">Using enum values</a></h2>
+<p><code>Name.Case</code> is a value of the enum type. An enum is a value type, like <code>int</code>:
+it is copied, not reference counted, and it can be stored in locals, fields,
+arrays and module-scope constants, and passed to and returned from functions.</p>
+<ul>
+<li><code>==</code> and <code>!=</code> compare two values of the same enum. No other operator
+applies to an enum.</li>
+<li>An enum does not mix with integers or with other enums: <code>int x = Color.Red</code>
+and <code>Color c = 0</code> are errors, and so is comparing a <code>Color</code> with a <code>Size</code>.</li>
+<li><code>value as int</code> (or any integer type) gives a case’s integer value. The
+reverse, <code>1 as Color</code>, is an error, since the integer may not name a case;
+name the case instead.</li>
+<li>A slot of an enum type that is not given a value (a field, or a local
+declared without one) holds the case whose value is 0, or the first case
+when no case is 0.</li>
+<li><code>sizeof&lt;Name&gt;()</code> is the size of the representation.</li>
+</ul>
+<h2 id="match-1"><a class="header" href="#match-1"><code>match</code></a></h2>
+<p><code>match (value) { ... }</code> runs the arm for the case that <code>value</code> holds:</p>
+<pre><code class="language-pepper"># 'match' runs the arm of the case a value holds, and must handle every case.
+enum Light {
+    Red,
+    Amber,
+    Green,
+}
+
+next(light: Light): Light {
+    match (light) {
+        Red =&gt; { return Light.Green; }
+        Amber =&gt; { return Light.Red; }
+        Green =&gt; { return Light.Amber; }
+    }
+    return light;
+}
+
+may_go(light: Light): bool {
+    match (light) {
+        Green =&gt; { return true; }
+        else =&gt; { return false; }
+    }
+    return false;
+}
+
+wait_seconds(light: Light): int {
+    match (light) {
+        Red, Amber =&gt; { return 30; }
+        Light.Green =&gt; { return 0; }
+    }
+    return 0;
+}
+
+main(): int {
+    var light = Light.Red;
+    var changes = 0;
+    while (!may_go(light)) {
+        light = next(light);
+        changes += 1;
+    }
+    assert(changes == 1, "red turns green");
+    assert(wait_seconds(Light.Amber) == 30, "one arm handles two cases");
+    assert(wait_seconds(light) == 0, "a pattern may name the enum");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each arm is one or more patterns, separated by commas, then <code>=&gt;</code> and a
+block. A pattern is a case name (<code>Red</code>) or the case qualified by its enum
+(<code>Light.Red</code>).</li>
+<li>An <code>else =&gt; { ... }</code> arm, last, handles every case the other arms do not.</li>
+<li>The arms must handle <strong>every case</strong>. A missing case is an error that names
+it, located at <code>match</code>; the language server offers a quick fix that adds an
+empty arm for each missing case. An <code>else</code> that can never run, because the
+other arms handle every case, is a warning.</li>
+<li>Handling a case twice is an error.</li>
+<li><code>match</code> is a statement. <code>break</code>, <code>continue</code> and <code>return</code> inside an arm act
+on the enclosing loop or function, as they would inside an <code>if</code>.</li>
+</ul>
+<p>The value is evaluated once, before any arm runs.</p>
+<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<ul>
+<li>Cases cannot carry values yet (<code>Circle(radius: float)</code>); that is the next
+step, and it is what lets <a href="#optional-values"><code>Optional</code></a> and
+<a href="#error-handling-with-result"><code>Result</code></a> become enums.</li>
+<li>Enums cannot have methods, and cannot be generic, yet.</li>
+<li><code>match</code> works only on enums, and only as a statement: it does not produce
+a value, and cannot match integers, characters or strings yet.</li>
+<li>There is no way to get a case’s name as a string, or to turn an integer
+back into a case, yet.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-and-reference-counting"><a class="header" href="#memory-and-reference-counting">Memory and reference counting</a></h1>
 <p>Pepper frees memory for you, without a garbage collector and without
@@ -4895,8 +5054,8 @@ main(): int {
 }
 </code></pre>
 <p>Pepper does not yet have a shorthand for propagation (such as Rust’s <code>?</code>
-operator) or a <code>match</code> statement, so each fallible call is checked with <code>if</code>
-as shown above.</p>
+operator), and <a href="#match-1"><code>match</code></a> does not work on a <code>Result</code> yet, so
+each fallible call is checked with <code>if</code> as shown above.</p>
 <h2 id="results-from-the-io-module"><a class="header" href="#results-from-the-io-module">Results from the io module</a></h2>
 <p>The <a href="#the-io-module">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
@@ -5018,13 +5177,13 @@ reference to the object, like any other struct slot (see
 <p>An <code>Optional&lt;T&gt;</code> says only that a value is missing. When the caller needs to
 know <em>why</em>, return a <a href="#error-handling-with-result"><code>Result</code></a> instead, whose Err carries an
 error.</p>
-<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
 <ul>
 <li>There is no <code>T?</code> shorthand yet: write <code>Optional&lt;T&gt;</code>.</li>
-<li>Pepper has no <code>match</code> yet, so an optional is checked with <code>is_some()</code> or
-<code>is_none()</code> and read with <code>value()</code> or <code>value_or</code>. <code>Optional</code> will become an
-enum with <code>None</code> and <code>Some(value)</code> cases once enums with payloads exist; its
-methods stay the same.</li>
+<li>An optional is checked with <code>is_some()</code> or <code>is_none()</code> and read with
+<code>value()</code> or <code>value_or</code>; <code>match</code> does not work on it yet. <code>Optional</code> will
+become an <a href="#enums-and-match">enum</a> with <code>None</code> and <code>Some(value)</code> cases once enum
+cases can carry values; its methods stay the same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>
@@ -7666,6 +7825,7 @@ main(): int {
 <p>A type name is <code>PascalCase</code>: each word starts with a capital letter, and there
 are no underscores. Write an acronym as a word, so <code>IoError</code> and <code>HttpClient</code>,
 not <code>IOError</code> or <code>HTTPClient</code>.</p>
+<p>An enum’s cases are <code>PascalCase</code> too (<code>Color.Red</code>, <code>Status.NotFound</code>).</p>
 <p>A generic parameter is either a single capital letter (<code>T</code>, <code>U</code>, <code>K</code>, <code>V</code>) or
 a <code>PascalCase</code> name, which by convention starts with <code>T</code> (<code>TValue</code>,
 <code>TError</code>). Use a single letter when the parameter’s role is obvious, and a
