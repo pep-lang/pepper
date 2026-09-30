@@ -5,7 +5,7 @@
 //! `task_programs_compile_on_other_platforms` pushes them through sema and
 //! codegen with the host simulated as each other platform, so the Windows
 //! Fibers layer, the other architecture's context switch, and each OS's I/O
-//! driver (epoll, kqueue, WSAPoll) produce valid IR on any host.
+//! driver (epoll, kqueue, IOCP) produce valid IR on any host.
 
 use crate::io_tests::{SIMULATED_HOSTS, assert_runs, with_codegen_as};
 use crate::support;
@@ -232,6 +232,7 @@ serve(stream: io.TcpStream) {
 main(): int {
     var before = _pep_live_allocs();
     async.run(() => {
+        print(async.current_backend().name());
         var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
         var address = listener.local_address().value();
         var clients = 40;
@@ -346,7 +347,27 @@ fn tasks_take_turns_and_free_everything() {
 
 #[test]
 fn sockets_park_their_task() {
-    assert_runs("task_sockets", SOCKETS_PROGRAM);
+    let stdout = assert_runs("task_sockets", SOCKETS_PROGRAM);
+    let expected = if cfg!(target_os = "linux") {
+        "Epoll"
+    } else if cfg!(target_os = "macos") {
+        "Kqueue"
+    } else {
+        "Iocp"
+    };
+    assert_eq!(stdout.lines().next(), Some(expected), "the system's best backend runs by default");
+}
+
+/// The same program on the portable poll() backend, the reference the
+/// others are checked against.
+#[test]
+fn sockets_park_their_task_with_poll() {
+    let source = SOCKETS_PROGRAM.replace(
+        "async.run(() => {",
+        "async.run_with(async.RuntimeOptions().backend(async.Backend.Poll), () => {",
+    );
+    let stdout = assert_runs("task_sockets_poll", &source);
+    assert_eq!(stdout.lines().next(), Some("Poll"));
 }
 
 #[test]
@@ -375,7 +396,7 @@ fn tasks_waiting_on_each_other_panic() {
 
 /// Every platform's fiber layer and I/O driver type-check and produce valid
 /// IR: Windows calls the Fibers API, the others define the naked switch and
-/// call epoll, kqueue or WSAPoll.
+/// call epoll, kqueue or AFD poll through IOCP.
 #[test]
 fn task_programs_compile_on_other_platforms() {
     let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| programs().into_iter().map(move |p| (host, p))).collect();
@@ -390,7 +411,7 @@ fn task_programs_compile_on_other_platforms() {
                 _ => "pushq %rbp",
             };
             let driver = match *os {
-                "windows" => "@WSAPoll(",
+                "windows" => "@NtDeviceIoControlFile(",
                 "macos" => "@kevent(",
                 _ => "@epoll_wait(",
             };

@@ -89,9 +89,29 @@ Settings for `run_with`, built by chaining: `RuntimeOptions().stack_size(65536)`
 construct()
 ```
 
-Creates the default options: 256 KiB of stack per task.
+Creates the default options: 256 KiB of stack per task, and the
+system's best I/O backend.
 
 ### Methods
+
+#### backend
+
+```pepper
+backend(kind: Backend): RuntimeOptions
+```
+
+Sets which I/O backend the runtime waits on sockets with. The default,
+`Backend.Automatic`, picks the system's best (or the one the
+`PEPPER_IO_BACKEND` environment variable names).
+
+**Parameters**
+- `kind` — the backend
+
+**Returns**
+- these options
+
+**Note**
+- `run_with` panics if the system does not have the backend
 
 #### stack_size
 
@@ -257,7 +277,7 @@ Runs `body` like `run`, with the given settings.
 - `body` — the first task
 
 **Panics**
-- if called inside a task, or if every remaining task is waiting on another and none can continue
+- if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend `options` asks for
 
 ## yield_now
 
@@ -387,3 +407,18 @@ Returns a time limit for a `with` block: the waits inside it give up
         return 0;
     }
 ```
+
+## current_backend
+
+```pepper
+current_backend(): Backend
+```
+
+Returns the I/O backend the running runtime waits on sockets with (see
+`RuntimeOptions.backend`).
+
+**Returns**
+- the backend; never `Backend.Automatic`
+
+**Panics**
+- outside `run`

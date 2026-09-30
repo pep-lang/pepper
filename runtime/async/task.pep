@@ -34,22 +34,18 @@
 #
 # Sockets: the worker is the thread's `io._IoWaiter` (see io/wait.pep). A
 # socket call that would block parks its task in `_wait_ready` until the
-# driver (driver_epoll.pep, driver_kqueue.pep, driver_windows.pep) reports
-# the socket ready. A socket is registered with the driver (epoll and kqueue
-# edge-triggered; WSAPoll is handed the waiting sockets on each poll) the
-# first time a task waits on it, and `_waits` maps it to the tasks waiting
-# on it. When
-# no task is ready the loop blocks in the driver until the next timer; while
-# tasks run it polls the driver without blocking every `_POLL_INTERVAL`
-# tasks, so waiting sockets are not starved.
+# worker's `_Driver` (driver.pep: epoll, kqueue, IOCP or poll, chosen when
+# `run` starts) reports the socket ready. The driver watches a socket from
+# the first time a task waits on it, and `_waits` maps it to the tasks
+# waiting on it. When no task is ready the loop blocks in the driver until
+# the next timer; while tasks run it polls the driver without blocking every
+# `_POLL_INTERVAL` tasks, so waiting sockets are not starved.
 #
 # A timeout (`Deadline`) sets the task's `_deadline`, and every wait inside
 # it also sets a timer for the deadline.
 
 import io;
-import "driver_epoll";
-import "driver_kqueue";
-import "driver_windows";
+import "driver";
 import "fiber_posix";
 import "fiber_windows";
 import "sys_posix";
@@ -99,10 +95,26 @@ _async_timed_out_error(): TaskError {
 export struct RuntimeOptions {
     # Bytes of stack reserved for each task.
     var _stack_size: ulong;
+    # The I/O backend asked for.
+    var _backend: Backend;
 
-    ## Creates the default options: 256 KiB of stack per task.
+    ## Creates the default options: 256 KiB of stack per task, and the
+    ## system's best I/O backend.
     construct() {
         this._stack_size = 262144;
+        this._backend = Backend.Automatic;
+    }
+
+    ## Sets which I/O backend the runtime waits on sockets with. The default,
+    ## `Backend.Automatic`, picks the system's best (or the one the
+    ## `PEPPER_IO_BACKEND` environment variable names).
+    ##
+    ## @param kind the backend
+    ## @returns these options
+    ## @note `run_with` panics if the system does not have the backend
+    backend(kind: Backend): RuntimeOptions {
+        this._backend = kind;
+        return this;
     }
 
     ## Sets how much stack each task reserves. Only the pages a task touches
@@ -181,9 +193,12 @@ struct _Worker {
     # Fibers whose tasks finished, for the next tasks.
     var _idle: Array<__ptr<void>>;
     var _stack_size: ulong;
-    # The I/O driver's descriptor and its event buffer.
-    var _driver: long;
-    var _events: __ptr<u8>;
+    # The I/O driver and the backend it is.
+    var _driver: _Driver;
+    var _backend: Backend;
+    # Sockets the driver found ready in the last poll, and for what.
+    var _ready_handles: Array<ulong>;
+    var _ready_interests: Array<int>;
     # The tasks waiting on each registered socket.
     var _waits: HashMap<ulong, _SocketWaits>;
     # How many tasks are parked on sockets.
@@ -191,10 +206,13 @@ struct _Worker {
     # Tasks run since the driver was last polled.
     var _since_poll: ulong;
 
-    construct(stack_size: ulong) {
+    construct(stack_size: ulong, backend: Backend) {
         this._scheduler = _async_fiber_thread_context();
-        this._driver = _async_driver_open();
-        this._events = _async_driver_events();
+        var (driver, chosen) = _async_open_driver(backend);
+        this._driver = driver;
+        this._backend = chosen;
+        this._ready_handles = Array<ulong>();
+        this._ready_interests = Array<int>();
         this._waits = HashMap<ulong, _SocketWaits>();
         this._ready = Array<_TaskCore>();
         this._timers = Array<_Timer>();
@@ -321,36 +339,13 @@ struct _Worker {
     # events, and wakes the tasks they let continue.
     _poll(timeout: long) {
         this._since_poll = 0;
-        var count: ulong = 0;
-        if (_async_driver_uses_interest()) {
-            # A driver without registrations (WSAPoll): pass the sockets
-            # tasks wait on, and what for.
-            var handles = Array<ulong>();
-            var interests = Array<int>();
-            for (var entry in this._waits) {
-                var (key, waits) = entry;
-                var interest = 0;
-                if (waits._readers.count() > 0) {
-                    interest = interest | io._IO_READABLE;
-                }
-                if (waits._writers.count() > 0) {
-                    interest = interest | io._IO_WRITABLE;
-                }
-                if (interest != 0) {
-                    handles.append(key);
-                    interests.append(interest);
-                }
-            }
-            count = _async_driver_poll_interest(this._driver, handles, interests, this._events, timeout);
-        } else {
-            count = _async_driver_poll(this._driver, this._events, timeout);
-        }
+        this._driver._poll(this._waits, timeout, this._ready_handles, this._ready_interests);
         var i: ulong = 0;
-        while (i < count) {
-            var key = _async_driver_event_handle(this._events, i) as ulong;
+        while (i < this._ready_handles.count()) {
+            var key = this._ready_handles[i];
             if (this._waits.contains(key)) {
                 var waits = this._waits.get(key);
-                var interest = _async_driver_event_interest(this._events, i);
+                var interest = this._ready_interests[i];
                 if ((interest & io._IO_READABLE) != 0) {
                     this._wake_all(waits._readers);
                 }
@@ -360,6 +355,8 @@ struct _Worker {
             }
             i = i + 1;
         }
+        this._ready_handles.clear();
+        this._ready_interests.clear();
     }
 
     # Wakes every task in `tasks` and empties it.
@@ -457,14 +454,13 @@ struct _Worker {
         }
         this._idle.clear();
         this._waits.clear();
-        _async_driver_close(this._driver);
-        _pep_free(this._events);
+        this._driver._close();
         _async_fiber_release_thread_context(this._scheduler);
     }
 }
 
 # The tasks waiting on one socket.
-struct _SocketWaits {
+export struct _SocketWaits {
     var _readers: Array<_TaskCore>;
     var _writers: Array<_TaskCore>;
 
@@ -502,7 +498,7 @@ extend _Worker with io._IoWaiter {
         }
         var key = handle as ulong;
         if (!this._waits.contains(key)) {
-            if (!_async_driver_register(this._driver, handle)) {
+            if (!this._driver._watch(handle)) {
                 return io._IO_WAIT_UNWATCHED;
             }
             this._waits.insert(key, _SocketWaits());
@@ -511,6 +507,9 @@ extend _Worker with io._IoWaiter {
         var queue = waits._readers;
         if (interest == io._IO_WRITABLE) {
             queue = waits._writers;
+        }
+        if (!this._driver._want(handle, interest)) {
+            return io._IO_WAIT_UNWATCHED;
         }
         queue.append(me);
         this._io_waiting = this._io_waiting + 1;
@@ -527,6 +526,7 @@ extend _Worker with io._IoWaiter {
     }
 
     _forget(handle: io.SocketHandle) {
+        this._driver._forget(handle);
         var key = handle as ulong;
         if (this._waits.contains(key)) {
             var waits = this._waits.get(key);
@@ -735,11 +735,12 @@ export run(body: () => void) {
 ##
 ## @param options the runtime's settings
 ## @param body the first task
-## @panics if called inside a task, or if every remaining task is waiting on
-##   another and none can continue
+## @panics if called inside a task, if every remaining task is waiting on
+##   another and none can continue, or if the system does not have the
+##   backend `options` asks for
 export run_with(options: RuntimeOptions, body: () => void) {
     assert(!_async_on_worker(), "async.run: already inside async.run");
-    var worker = _Worker(options._stack_size);
+    var worker = _Worker(options._stack_size, options._backend);
     __ptr<_Worker> slot = _pep_malloc(8);
     slot[0] = worker;
     _async_fiber_key_set(_async_worker_key, slot);
@@ -893,4 +894,14 @@ extend Deadline with Scoped<Deadline> {}
 ##     }
 export timeout(milliseconds: ulong): Deadline {
     return Deadline(milliseconds);
+}
+
+## Returns the I/O backend the running runtime waits on sockets with (see
+## `RuntimeOptions.backend`).
+##
+## @returns the backend; never `Backend.Automatic`
+## @panics outside `run`
+export current_backend(): Backend {
+    assert(_async_on_worker(), "async.current_backend: not inside async.run");
+    return _async_worker()._backend;
 }

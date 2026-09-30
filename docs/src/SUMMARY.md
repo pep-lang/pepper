@@ -73,6 +73,7 @@
     - [ThreadLocal](reference/async-thread_local.md)
     - [Processor counts](reference/async-cpus.md)
     - [Tasks](reference/async-task.md)
+    - [I/O backends](reference/async-driver.md)
     - [async/channel.pep](reference/async-channel.md)
     - [async/mutex.pep](reference/async-mutex.md)
     - [async/once.pep](reference/async-once.md)

@@ -1,7 +1,4 @@
-# The Linux I/O driver for the task runtime in task.pep: epoll. Every
-# declaration carries [Target(OS(Linux))]; driver_kqueue.pep declares the
-# same `_async_driver_*` functions for macOS, and driver_windows.pep for
-# Windows.
+# The epoll I/O driver (Linux) for the task runtime; see driver.pep.
 #
 # A socket is registered once, edge-triggered, for both reading and writing
 # (EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET), the first time a task waits on
@@ -9,9 +6,13 @@
 # data word is the socket, so an event names the socket it is for.
 #
 # struct epoll_event is { u32 events; u64 data; }: packed to 12 bytes on
-# x86-64, 16 bytes with the data at offset 8 on AArch64.
+# x86-64, 16 bytes with the data at offset 8 on AArch64. The system calls
+# are [Target(OS(Linux))]; elsewhere `_async_epoll_create` fails, so the
+# driver is unavailable.
 
 import io;
+import "driver";
+import "task";
 
 [Target(OS(Linux))]
 extern int epoll_create1(int flags);
@@ -23,101 +24,165 @@ extern int epoll_wait(int epoll, void* events, int capacity, int timeout);
 extern int close(int descriptor);
 
 [Target(OS(Linux) && Arch(x64))]
-const _DRIVER_EVENT_SIZE = 12;
+const _EPOLL_EVENT_SIZE = 12;
 [Target(OS(Linux) && Arch(x64))]
-const _DRIVER_DATA_OFFSET = 4;
+const _EPOLL_DATA_OFFSET = 4;
 [Target(OS(Linux) && Arch(aarch64))]
-const _DRIVER_EVENT_SIZE = 16;
+const _EPOLL_EVENT_SIZE = 16;
 [Target(OS(Linux) && Arch(aarch64))]
-const _DRIVER_DATA_OFFSET = 8;
+const _EPOLL_DATA_OFFSET = 8;
 
 # EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET.
 [Target(OS(Linux))]
-const _DRIVER_INTEREST: uint = 2147491845;
+const _EPOLL_INTEREST: uint = 2147491845;
 # Events that let a reader make progress: EPOLLIN, EPOLLERR, EPOLLHUP,
 # EPOLLRDHUP. A writer: EPOLLOUT, EPOLLERR, EPOLLHUP.
 [Target(OS(Linux))]
-const _DRIVER_READABLE_EVENTS: uint = 8217;
+const _EPOLL_READABLE_EVENTS: uint = 8217;
 [Target(OS(Linux))]
-const _DRIVER_WRITABLE_EVENTS: uint = 28;
+const _EPOLL_WRITABLE_EVENTS: uint = 28;
 
 # The most events one poll returns.
-[Target(OS(Linux))]
-const _DRIVER_CAPACITY = 256;
+const _EPOLL_CAPACITY = 256;
+
+# A worker's epoll instance.
+export struct _EpollDriver {
+    var _epoll: long;
+    # Room for `_EPOLL_CAPACITY` events.
+    var _events: __ptr<u8>;
+
+    construct(epoll: long) {
+        this._epoll = epoll;
+        this._events = _async_epoll_events();
+    }
+
+    # A new driver, or none when the system has no epoll.
+    static open(): _EpollDriver? {
+        var epoll = _async_epoll_create();
+        if (epoll < 0) {
+            return Optional<_EpollDriver>.none();
+        }
+        return Optional<_EpollDriver>.some(_EpollDriver(epoll));
+    }
+}
+
+extend _EpollDriver with _Driver {
+    _watch(handle: io.SocketHandle): bool {
+        return _async_epoll_add(this._epoll, handle);
+    }
+
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+        var count = _async_epoll_wait(this._epoll, this._events, timeout);
+        var i: ulong = 0;
+        while (i < count) {
+            handles.append(_async_epoll_event_handle(this._events, i));
+            interests.append(_async_epoll_event_interest(this._events, i));
+            i = i + 1;
+        }
+    }
+
+    _want(handle: io.SocketHandle, interest: int): bool {
+        return true;
+    }
+
+    _forget(handle: io.SocketHandle) {}
+
+    _close() {
+        _async_epoll_close(this._epoll);
+        _pep_free(this._events);
+    }
+}
 
 # A new epoll instance (close-on-exec), or -1.
 [Target(OS(Linux))]
-export _async_driver_open(): long {
+_async_epoll_create(): long {
     return epoll_create1(524288) as long;  # EPOLL_CLOEXEC
 }
 
 [Target(OS(Linux))]
-export _async_driver_close(driver: long) {
-    close(driver as int);
+_async_epoll_close(epoll: long) {
+    close(epoll as int);
 }
 
-# A buffer for the events one poll returns; free it with _pep_free.
 [Target(OS(Linux))]
-export _async_driver_events(): __ptr<u8> {
-    return _pep_malloc((_DRIVER_CAPACITY * _DRIVER_EVENT_SIZE) as ulong);
+_async_epoll_events(): __ptr<u8> {
+    return _pep_malloc((_EPOLL_CAPACITY * _EPOLL_EVENT_SIZE) as ulong);
 }
 
-# Watches `handle` for both reading and writing from now until it is closed.
-# Fails (false) for a descriptor epoll cannot watch.
+# Watches `handle` for both reading and writing until it is closed; false
+# for a descriptor epoll cannot watch.
 [Target(OS(Linux))]
-export _async_driver_register(driver: long, handle: io.SocketHandle): bool {
+_async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     __ptr<u8> event = _pep_malloc(16);
-    ((event) as __ptr<uint>)[0] = _DRIVER_INTEREST;
-    ((event + _DRIVER_DATA_OFFSET) as __ptr<ulong>)[0] = handle as ulong;
-    var rc = epoll_ctl(driver as int, 1, handle, event);  # EPOLL_CTL_ADD
+    (event as __ptr<uint>)[0] = _EPOLL_INTEREST;
+    ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0] = handle as ulong;
+    var rc = epoll_ctl(epoll as int, 1, handle, event);  # EPOLL_CTL_ADD
     _pep_free(event);
     return rc == 0;
 }
 
-# Waits up to `timeout` milliseconds (forever when negative) for events and
-# returns how many it stored in `events`; 0 on a timeout or a signal.
+# Waits up to `timeout` milliseconds (forever when negative) and returns how
+# many events it stored; 0 on a timeout or a signal.
 [Target(OS(Linux))]
-export _async_driver_poll(driver: long, events: __ptr<u8>, timeout: long): ulong {
-    var count = epoll_wait(driver as int, events, _DRIVER_CAPACITY, timeout as int);
+_async_epoll_wait(epoll: long, events: __ptr<u8>, timeout: long): ulong {
+    var count = epoll_wait(epoll as int, events, _EPOLL_CAPACITY, timeout as int);
     if (count < 0) {
         return 0;
     }
     return count as ulong;
 }
 
-# The socket the `index`th event is for.
 [Target(OS(Linux))]
-export _async_driver_event_handle(events: __ptr<u8>, index: ulong): io.SocketHandle {
-    var event = events + index * (_DRIVER_EVENT_SIZE as ulong);
-    return ((event + _DRIVER_DATA_OFFSET) as __ptr<ulong>)[0] as io.SocketHandle;
+_async_epoll_event_handle(events: __ptr<u8>, index: ulong): ulong {
+    var event = events + index * (_EPOLL_EVENT_SIZE as ulong);
+    return ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0];
 }
 
-# What the `index`th event lets a waiting task do: io._IO_READABLE and
-# io._IO_WRITABLE or'ed together.
 [Target(OS(Linux))]
-export _async_driver_event_interest(events: __ptr<u8>, index: ulong): int {
-    var event = events + index * (_DRIVER_EVENT_SIZE as ulong);
+_async_epoll_event_interest(events: __ptr<u8>, index: ulong): int {
+    var event = events + index * (_EPOLL_EVENT_SIZE as ulong);
     var bits = (event as __ptr<uint>)[0];
     var interest = 0;
-    if ((bits & _DRIVER_READABLE_EVENTS) != 0) {
+    if ((bits & _EPOLL_READABLE_EVENTS) != 0) {
         interest = interest | io._IO_READABLE;
     }
-    if ((bits & _DRIVER_WRITABLE_EVENTS) != 0) {
+    if ((bits & _EPOLL_WRITABLE_EVENTS) != 0) {
         interest = interest | io._IO_WRITABLE;
     }
     return interest;
 }
 
-# Polls use registrations, not a list of waiting sockets (see
-# driver_windows.pep).
-[Target(OS(Linux))]
-export _async_driver_uses_interest(): bool {
+# Elsewhere there is no epoll.
+
+[Target(!OS(Linux))]
+_async_epoll_create(): long {
+    return -1;
+}
+
+[Target(!OS(Linux))]
+_async_epoll_close(epoll: long) {}
+
+[Target(!OS(Linux))]
+_async_epoll_events(): __ptr<u8> {
+    return __null;
+}
+
+[Target(!OS(Linux))]
+_async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     return false;
 }
 
-[Target(OS(Linux))]
-export _async_driver_poll_interest(
-    driver: long, handles: Array<ulong>, interests: Array<int>, events: __ptr<u8>, timeout: long
-): ulong {
+[Target(!OS(Linux))]
+_async_epoll_wait(epoll: long, events: __ptr<u8>, timeout: long): ulong {
+    return 0;
+}
+
+[Target(!OS(Linux))]
+_async_epoll_event_handle(events: __ptr<u8>, index: ulong): ulong {
+    return 0;
+}
+
+[Target(!OS(Linux))]
+_async_epoll_event_interest(events: __ptr<u8>, index: ulong): int {
     return 0;
 }

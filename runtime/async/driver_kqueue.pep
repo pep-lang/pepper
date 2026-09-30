@@ -1,15 +1,17 @@
-# The macOS I/O driver for the task runtime in task.pep: kqueue. Every
-# declaration carries [Target(OS(Mac))]; driver_epoll.pep declares the same
-# `_async_driver_*` functions for Linux, and driver_windows.pep for Windows.
+# The kqueue I/O driver (macOS) for the task runtime; see driver.pep.
 #
 # A socket is registered once, edge-triggered (EV_CLEAR), with a read filter
 # and a write filter, the first time a task waits on it. Closing the socket
 # removes both. An event's ident is the socket.
 #
 # struct kevent is 32 bytes: ident (u64) at 0, filter (i16) at 8, flags
-# (u16) at 10, fflags (u32) at 12, data (i64) at 16, udata at 24.
+# (u16) at 10, fflags (u32) at 12, data (i64) at 16, udata at 24. The system
+# calls are [Target(OS(Mac))]; elsewhere `_async_kqueue_create` fails, so
+# the driver is unavailable.
 
 import io;
+import "driver";
+import "task";
 
 [Target(OS(Mac))]
 extern int kqueue();
@@ -18,114 +20,131 @@ extern int kevent(int queue, void* changes, int change_count, void* events, int 
 [Target(OS(Mac))]
 extern int close(int descriptor);
 
-[Target(OS(Mac))]
-const _DRIVER_EVENT_SIZE = 32;
 # The most events one poll returns.
-[Target(OS(Mac))]
-const _DRIVER_CAPACITY = 256;
+const _KQUEUE_CAPACITY = 256;
 # EVFILT_READ and EVFILT_WRITE.
-[Target(OS(Mac))]
-const _DRIVER_FILTER_READ = -1;
-[Target(OS(Mac))]
-const _DRIVER_FILTER_WRITE = -2;
+const _KQUEUE_FILTER_READ = -1;
+const _KQUEUE_FILTER_WRITE = -2;
 # EV_EOF | EV_ERROR: the peer closed, or the socket failed; wake both sides.
-[Target(OS(Mac))]
-const _DRIVER_END_FLAGS = 49152;
+const _KQUEUE_END_FLAGS = 49152;
+
+# A worker's kqueue.
+export struct _KqueueDriver {
+    var _queue: long;
+    # Room for `_KQUEUE_CAPACITY` events of 32 bytes.
+    var _events: __ptr<u8>;
+
+    construct(queue: long) {
+        this._queue = queue;
+        this._events = _pep_malloc((_KQUEUE_CAPACITY * 32) as ulong);
+    }
+
+    # A new driver, or none when the system has no kqueue.
+    static open(): _KqueueDriver? {
+        var queue = _async_kqueue_create();
+        if (queue < 0) {
+            return Optional<_KqueueDriver>.none();
+        }
+        return Optional<_KqueueDriver>.some(_KqueueDriver(queue));
+    }
+}
+
+extend _KqueueDriver with _Driver {
+    _watch(handle: io.SocketHandle): bool {
+        __ptr<u8> changes = _pep_malloc(64);
+        _async_kqueue_change(changes, 0, handle, _KQUEUE_FILTER_READ);
+        _async_kqueue_change(changes, 1, handle, _KQUEUE_FILTER_WRITE);
+        var added = _async_kqueue_call(this._queue, changes, 2, __null, 0, -1) == 0;
+        _pep_free(changes);
+        return added;
+    }
+
+    _poll(waits: HashMap<ulong, _SocketWaits>, timeout: long, handles: Array<ulong>, interests: Array<int>) {
+        var count = _async_kqueue_call(this._queue, __null, 0, this._events, _KQUEUE_CAPACITY, timeout);
+        var i = 0;
+        while (i < count) {
+            var event = this._events + (i as ulong) * 32;
+            var filter = ((event + 8) as __ptr<i16>)[0] as int;
+            var flags = ((event + 10) as __ptr<u16>)[0] as int;
+            var interest = io._IO_WRITABLE;
+            if ((flags & _KQUEUE_END_FLAGS) != 0) {
+                interest = io._IO_READABLE | io._IO_WRITABLE;
+            } else if (filter == _KQUEUE_FILTER_READ) {
+                interest = io._IO_READABLE;
+            }
+            handles.append((event as __ptr<ulong>)[0]);
+            interests.append(interest);
+            i = i + 1;
+        }
+    }
+
+    _want(handle: io.SocketHandle, interest: int): bool {
+        return true;
+    }
+
+    _forget(handle: io.SocketHandle) {}
+
+    _close() {
+        _async_kqueue_close(this._queue);
+        _pep_free(this._events);
+    }
+}
+
+# Fills the `index`th kevent in `changes`: EV_ADD | EV_CLEAR on `filter`.
+_async_kqueue_change(changes: __ptr<u8>, index: ulong, handle: io.SocketHandle, filter: int) {
+    var change = changes + index * 32;
+    (change as __ptr<ulong>)[0] = handle as ulong;
+    ((change + 8) as __ptr<i16>)[0] = filter as i16;
+    ((change + 10) as __ptr<u16>)[0] = 33;  # EV_ADD | EV_CLEAR
+}
 
 # A new kqueue, or -1.
 [Target(OS(Mac))]
-export _async_driver_open(): long {
+_async_kqueue_create(): long {
     return kqueue() as long;
 }
 
 [Target(OS(Mac))]
-export _async_driver_close(driver: long) {
-    close(driver as int);
+_async_kqueue_close(queue: long) {
+    close(queue as int);
 }
 
-# A buffer for the events one poll returns; free it with _pep_free.
+# kevent(2), waiting up to `timeout` milliseconds (forever when negative):
+# the number of events stored, 0 on a timeout or a signal, or -1 when the
+# changes failed.
 [Target(OS(Mac))]
-export _async_driver_events(): __ptr<u8> {
-    return _pep_malloc((_DRIVER_CAPACITY * _DRIVER_EVENT_SIZE) as ulong);
-}
-
-# Fills the `index`th kevent in `changes`: EV_ADD | EV_CLEAR on `filter`.
-[Target(OS(Mac))]
-export _async_driver_change(changes: __ptr<u8>, index: ulong, handle: io.SocketHandle, filter: int) {
-    var change = changes + index * 32;
-    ((change) as __ptr<ulong>)[0] = handle as ulong;
-    ((change + 8) as __ptr<i16>)[0] = filter as i16;
-    ((change + 10) as __ptr<u16>)[0] = 33;  # EV_ADD | EV_CLEAR
-    ((change + 12) as __ptr<uint>)[0] = 0;
-    ((change + 16) as __ptr<long>)[0] = 0;
-    ((change + 24) as __ptr<ulong>)[0] = 0;
-}
-
-# Watches `handle` for both reading and writing from now until it is closed.
-# Fails (false) for a descriptor kqueue cannot watch.
-[Target(OS(Mac))]
-export _async_driver_register(driver: long, handle: io.SocketHandle): bool {
-    __ptr<u8> changes = _pep_malloc(64);
-    _async_driver_change(changes, 0, handle, _DRIVER_FILTER_READ);
-    _async_driver_change(changes, 1, handle, _DRIVER_FILTER_WRITE);
-    var rc = kevent(driver as int, changes, 2, __null, 0, __null);
-    _pep_free(changes);
-    return rc == 0;
-}
-
-# Waits up to `timeout` milliseconds (forever when negative) for events and
-# returns how many it stored in `events`; 0 on a timeout or a signal.
-[Target(OS(Mac))]
-export _async_driver_poll(driver: long, events: __ptr<u8>, timeout: long): ulong {
+_async_kqueue_call(
+    queue: long, changes: __ptr<u8>, change_count: int, events: __ptr<u8>, capacity: int, timeout: long
+): int {
     var count = 0;
     if (timeout < 0) {
-        count = kevent(driver as int, __null, 0, events, _DRIVER_CAPACITY, __null);
+        count = kevent(queue as int, changes, change_count, events, capacity, __null);
     } else {
         __ptr<long> span = _pep_malloc(16);  # struct timespec
         span[0] = timeout / 1000;
         span[1] = timeout % 1000 * 1000000;
-        count = kevent(driver as int, __null, 0, events, _DRIVER_CAPACITY, span);
+        count = kevent(queue as int, changes, change_count, events, capacity, span);
         _pep_free(span);
     }
-    if (count < 0) {
+    if (count < 0 && change_count == 0) {
         return 0;
     }
-    return count as ulong;
+    return count;
 }
 
-# The socket the `index`th event is for.
-[Target(OS(Mac))]
-export _async_driver_event_handle(events: __ptr<u8>, index: ulong): io.SocketHandle {
-    var event = events + index * 32;
-    return (event as __ptr<ulong>)[0] as io.SocketHandle;
+# Elsewhere there is no kqueue.
+
+[Target(!OS(Mac))]
+_async_kqueue_create(): long {
+    return -1;
 }
 
-# What the `index`th event lets a waiting task do: io._IO_READABLE and
-# io._IO_WRITABLE or'ed together.
-[Target(OS(Mac))]
-export _async_driver_event_interest(events: __ptr<u8>, index: ulong): int {
-    var event = events + index * 32;
-    var filter = ((event + 8) as __ptr<i16>)[0] as int;
-    var flags = ((event + 10) as __ptr<u16>)[0] as int;
-    if ((flags & _DRIVER_END_FLAGS) != 0) {
-        return io._IO_READABLE | io._IO_WRITABLE;
-    }
-    if (filter == _DRIVER_FILTER_READ) {
-        return io._IO_READABLE;
-    }
-    return io._IO_WRITABLE;
-}
+[Target(!OS(Mac))]
+_async_kqueue_close(queue: long) {}
 
-# Polls use registrations, not a list of waiting sockets (see
-# driver_windows.pep).
-[Target(OS(Mac))]
-export _async_driver_uses_interest(): bool {
-    return false;
-}
-
-[Target(OS(Mac))]
-export _async_driver_poll_interest(
-    driver: long, handles: Array<ulong>, interests: Array<int>, events: __ptr<u8>, timeout: long
-): ulong {
-    return 0;
+[Target(!OS(Mac))]
+_async_kqueue_call(
+    queue: long, changes: __ptr<u8>, change_count: int, events: __ptr<u8>, capacity: int, timeout: long
+): int {
+    return -1;
 }

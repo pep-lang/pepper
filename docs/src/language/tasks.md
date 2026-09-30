@@ -60,11 +60,27 @@ the waiting differs:
 
 Outside a task, the same calls block the thread as before.
 
-On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
-and on Windows with WSAPoll.
-When no task is ready to run, it blocks in the driver until a socket is
-ready or the next timer is due; while tasks are running, it also checks the
-sockets every few dozen tasks, so a busy task cannot starve the network.
+When no task is ready to run, the runtime blocks until a socket is ready or
+the next timer is due; while tasks are running, it also checks the sockets
+every few dozen tasks, so a busy task cannot starve the network.
+
+### Backends
+
+How the runtime waits for sockets is its I/O *backend*, an `async.Backend`:
+
+| Backend | Where | How |
+|---|---|---|
+| `Epoll` | Linux | epoll, edge-triggered |
+| `Kqueue` | macOS | kqueue, edge-triggered |
+| `Iocp` | Windows | an I/O completion port, fed by AFD poll requests (as tokio and libuv do) |
+| `Poll` | everywhere | `poll()` (`WSAPoll` on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands |
+
+`Backend.Automatic`, the default, picks the first of the three that the
+system has. `RuntimeOptions().backend(kind)` asks for one (and `run_with`
+panics if the system does not have it), and the `PEPPER_IO_BACKEND`
+environment variable (`epoll`, `kqueue`, `iocp` or `poll`) overrides the
+automatic choice without changing the program, for testing and
+benchmarks. `async.current_backend()` says which one is running.
 
 ## Timeouts
 
@@ -116,10 +132,8 @@ program as a thread would. Stacks are reused for later tasks.
 - A runtime runs on one thread: `spawn_local` is the only way to start a
   task. Tasks that run on several threads at once, and `run_blocking` for
   work that would block the thread, are planned.
-- On Windows, the runtime waits on sockets with WSAPoll, which looks at
-  every waiting socket on each poll; an I/O completion port driver that
-  scales to many connections is next. Files block the thread on every
-  platform. io_uring on Linux comes later.
+- Files block the thread on every platform. io_uring on Linux, and
+  asynchronous files, come later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is
   built on fiber local storage); elsewhere the tasks of a thread share it.
 - `Mutex`, `Channel`, `Condition` and `Thread.sleep` block the thread, and
