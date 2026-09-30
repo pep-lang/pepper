@@ -127,13 +127,17 @@ pub fn with_simulated_host<R>(os: &str, arch: &str, f: impl FnOnce() -> R) -> R 
     f()
 }
 
-fn host_os() -> String {
+/// The OS `Target(...)` predicates evaluate against: the real host's, or
+/// the simulated one inside `with_simulated_host`.
+pub fn host_os() -> String {
     SIMULATED_HOST
         .with(|h| h.borrow().as_ref().map(|(os, _)| os.clone()))
         .unwrap_or_else(|| consts::OS.to_string())
 }
 
-fn host_arch() -> String {
+/// The architecture `Target(...)` predicates evaluate against (see
+/// `host_os`).
+pub fn host_arch() -> String {
     SIMULATED_HOST
         .with(|h| h.borrow().as_ref().map(|(_, arch)| arch.clone()))
         .unwrap_or_else(|| consts::ARCH.to_string())

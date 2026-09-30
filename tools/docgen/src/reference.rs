@@ -37,6 +37,7 @@ const PAGES: &[(&str, &str)] = &[
     ("async/thread.pep", "Thread"),
     ("async/thread_local.pep", "ThreadLocal"),
     ("async/cpus.pep", "Processor counts"),
+    ("async/task.pep", "Tasks"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.

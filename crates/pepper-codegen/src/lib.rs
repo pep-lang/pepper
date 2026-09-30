@@ -3,6 +3,7 @@
 //! LoopGen, OperatorGen) for the Rust sema model.
 
 pub mod address;
+pub mod context;
 pub mod ops;
 pub mod partition;
 pub mod types;
@@ -288,6 +289,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             self.instantiate_extern(ext)?;
         }
+        self.define_context_intrinsics()?;
         for &idx in &functions {
             self.instantiate_function(&module.functions[idx])?;
         }

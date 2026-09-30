@@ -136,7 +136,9 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
 /// initialization, `this.Value = v`), an assignment whose value is a
 /// removed parameter (`r.Value = v`), the value of a `return` that
 /// returns either one (`return this.Value;` in a method whose return type
-/// became `void`), and a call argument that is one. An enum case's value
+/// became `void`), and a call argument that is one (a removed field of
+/// `this` included). A call assigned to a removed field
+/// (`this.Value = body()`) stays as a statement, since it may have effects. An enum case's value
 /// of type `void` goes with its field (see [`erase_void_values`]). Any
 /// other use is left in place, so it is reported as the missing member or
 /// symbol it now is.
@@ -183,7 +185,7 @@ fn erase_void(st: &mut StructDef) {
         let returns_void = is_void(&f.ty);
         if let Some(body) = &mut f.body {
             erase_void_values(body, &void_values, &mut params);
-            erase_void_arguments(body, &params);
+            erase_void_arguments(body, &params, &fields);
             erase_void_block(body, &fields, &params, returns_void);
         }
     };
@@ -256,9 +258,10 @@ fn erase_void_values(block: &mut Block, void_values: &[(String, Vec<usize>)], er
 /// Drop the arguments that are erased values (a removed parameter or
 /// binding, or the default of `void`) from every call in a body: the
 /// parameters they fill were erased too.
-fn erase_void_arguments(block: &mut Block, erased: &[String]) {
+fn erase_void_arguments(block: &mut Block, erased: &[String], fields: &[String]) {
     let is_erased = |e: &Expression| match e {
         Expression::SymbolRef { id, .. } => erased.contains(id),
+        Expression::MemberRef { lhs, name, .. } => matches!(**lhs, Expression::ThisRef) && fields.contains(name),
         Expression::Default(ty) => ty.name == crate::type_name::VOID && ty.sub_types.is_empty(),
         _ => false,
     };
@@ -277,6 +280,18 @@ fn erase_void_block(block: &mut Block, fields: &[String], params: &[String], ret
         }
         _ => false,
     };
+    // A call stored into a removed field still runs: `this.Value = body()`
+    // becomes `body();`.
+    for stmt in &mut block.items {
+        if let Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. }) = stmt
+            && matches!(&**lhs, Expression::MemberRef { .. })
+            && erased(lhs)
+            && matches!(&**rhs, Expression::FunctionCall { .. } | Expression::MethodCall { .. } | Expression::Invoke { .. })
+        {
+            let call = std::mem::replace(&mut **rhs, Expression::PointerLiteral);
+            *stmt = Statement::Expression(call);
+        }
+    }
     block.items.retain(|stmt| match stmt {
         Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. }) => {
             let field_store = matches!(&**lhs, Expression::MemberRef { .. }) && erased(lhs);

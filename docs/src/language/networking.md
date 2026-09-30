@@ -3,8 +3,9 @@
 The `io` module has TCP and UDP sockets, IP and socket addresses, and host
 name lookup. Every call blocks the calling thread until it completes, like
 `File`. To serve several connections at once, give each one its own
-[thread](threads.md). An event loop that runs many connections on a few
-threads is planned (see [Current status](#current-status)).
+[thread](threads.md). [Tasks](tasks.md) exist, but a socket call in a task
+still blocks the whole thread; parking only the task is planned (see
+[Current status](#current-status)).
 
 ## Addresses
 
@@ -107,9 +108,10 @@ program take over the port.
 ## Current status
 
 - Every call blocks its thread. There are no timeouts, no non-blocking mode,
-  and no way to wait on several sockets at once yet. The planned event loop
-  (green threads over epoll, kqueue, IOCP and io_uring) will park the
-  calling task instead of blocking the thread, with no change to this API.
+  and no way to wait on several sockets at once yet. The event loop's next
+  step (drivers over epoll, kqueue, IOCP and io_uring) will park the calling
+  [task](tasks.md) instead of blocking the thread, with no change to this
+  API.
 - Unix domain sockets and TLS are not supported yet.
 - IPv6 scope ids (`fe80::1%eth0`) are not supported.
 
