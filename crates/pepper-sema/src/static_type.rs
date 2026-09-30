@@ -113,6 +113,8 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             }
         }
         Expression::ThisRef => current.cloned(),
+        // A raw literal is the NUL-terminated `char*` global itself.
+        Expression::StringLiteral { is_raw: true, .. } => Some(TypeName::new("char*")),
         Expression::StringLiteral { .. } => Some(TypeName::new("String")),
         Expression::PointerLiteral => Some(TypeName::void_ptr()),
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),

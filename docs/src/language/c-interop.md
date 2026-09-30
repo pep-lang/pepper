@@ -60,7 +60,10 @@ Pepper's [`String`](../reference/string.md) is a reference-counted object, not
 a C string, so a `String` value cannot be passed where C expects `char*`.
 
 - A **string literal** passed to an extern is passed as a NUL-terminated C
-  string, with no allocation: `strlen("hello")` is 5.
+  string, with no allocation: `strlen("hello")` is 5. The same is true
+  wherever a literal flows into a `__ptr<char>`, `__ptr<u8>`, or
+  `__ptr<void>` in Pepper code (a variable, field, argument, or return
+  value), so `String("hello")` copies the literal's five bytes.
 - A **`String` value** is passed with `c_str()`, which returns the String's
   NUL-terminated buffer as a `__ptr<char>`. The pointer belongs to the String:
   it is valid until the String is destroyed or grows (for example with

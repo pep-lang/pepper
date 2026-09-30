@@ -97,6 +97,10 @@ impl Converter {
         current: Option<&TypeName>,
         fallback: Loc,
     ) {
+        if is_c_string_type(expected) {
+            unwrap_string_literal(value);
+            return;
+        }
         let to_trait = traits::is_trait_type(&self.trait_defs, expected);
         if matches!(value, Expression::ToTrait { .. })
             || !(to_trait || self.implicit.contains_key(&expected.to_string()))
@@ -536,6 +540,49 @@ impl Converter {
         if let Some(body) = &mut function.body {
             self.block(body, &returns, current);
         }
+    }
+}
+
+/// A pointer to characters, bytes, or `void`: a slot a string literal fills
+/// with its NUL-terminated bytes rather than a `String`.
+fn is_c_string_type(ty: &TypeName) -> bool {
+    let text = ty.to_string();
+    let pointee = match text.strip_prefix("__ptr<").and_then(|t| t.strip_suffix('>')) {
+        Some(inner) => inner,
+        None => match text.strip_suffix('*') {
+            Some(inner) => inner,
+            None => return false,
+        },
+    };
+    matches!(pointee.trim(), "char" | "i8" | "byte" | "u8" | "void")
+}
+
+/// A string literal flowing into a character pointer is its raw global, as
+/// it is for an `extern`'s argument: `String("hi")`,
+/// `__ptr<char> p = "hi";`. `convert_string_literals` made the literal a
+/// `String(raw, size, length)` call, which would pass the `String` object
+/// itself, and the pointer would read its fields as characters. Each arm of
+/// a ternary unwraps on its own. Anything else, a `String` variable
+/// included, is left for the type checks.
+fn unwrap_string_literal(value: &mut Expression) {
+    match value {
+        Expression::Ternary {
+            true_expr,
+            false_expr,
+            ..
+        } => {
+            unwrap_string_literal(true_expr);
+            unwrap_string_literal(false_expr);
+        }
+        // The synthesized call carries its literal's location; a
+        // `String(...)` the user wrote has its own.
+        Expression::FunctionCall { function, args, loc }
+            if function == "String"
+                && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, loc: literal, .. }) if literal == loc) =>
+        {
+            *value = args.swap_remove(0);
+        }
+        _ => {}
     }
 }
 

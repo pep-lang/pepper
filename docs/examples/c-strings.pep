@@ -9,6 +9,12 @@ main(): int {
     assert(strlen("hello") == 5, "a literal is passed as a C string");
     assert(strcmp("abc", "abc") == 0, "equal C strings compare as 0");
 
+    # So is one stored in a __ptr<char>, or passed to the String
+    # constructor, which copies it.
+    __ptr<char> greeting = "hello";
+    assert(strlen(greeting) == 5, "a literal in a __ptr<char> is a C string");
+    assert(String("hello").size() == 5, "String(literal) copies its bytes");
+
     # A String value goes through c_str().
     var name = "Pepper";
     name += " and C";

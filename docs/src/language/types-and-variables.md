@@ -65,7 +65,8 @@ a one-code-point `String`.
 ### Strings
 
 `String` is a UTF-8 string. A string literal such as `"hello"` is a `String`
-value. `+` joins two strings into a new one, `==` and `!=` compare contents,
+value, except where it is stored or passed as a `__ptr<char>`: there it is the
+literal's NUL-terminated bytes (see [Passing strings](c-interop.md#passing-strings)). `+` joins two strings into a new one, `==` and `!=` compare contents,
 `length()` counts code points, `size()` counts bytes, and `s[i]` gives the code
 point at index `i` as a one-code-point `String`.
 
