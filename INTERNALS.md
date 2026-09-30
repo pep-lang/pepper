@@ -666,10 +666,14 @@ model `Expression` variant, add it to `walk_expression`, `children` and
 `children_mut`.**
 
 `resolve_implicit_types` runs eight times and loops inside each run, so its
-helpers skip work that cannot change anything: `sync_closures` walks only the
-functions that create a closure (a creation's expected type comes from its
-own function), `bind_function_values` types expressions only when some name
-could still bind to an overload, and `traits::used_trait_types` prints and
+helpers skip work that cannot change anything: `sync_closures` learns
+nothing once no closure struct has an `auto` capture, `__call` parameter or
+return type, and otherwise walks only the functions that create a closure (a
+creation's expected type comes from its own function); `bind_function_values`
+types expressions only when some name could still bind to an overload;
+`infer_type_arguments` and `resolve_method_overload` check that a name is a
+generic function, a generic method or a method overload set before typing
+the receiver or the arguments; and `traits::used_trait_types` prints and
 parses only types whose names mention a trait.
 
 `struct_body::apply`'s `resolve_type_aliases` reports a recursive alias

@@ -50,12 +50,12 @@ impl StructTable {
                     .collect(),
                 unary_operators: crate::passes::unary_operators::declared(&st.method_members),
             };
-            structs.insert(name.clone(), info.clone());
             // Also key the generic base (`Array<T>` -> `Array`) so pre-
             // specialization lookups resolve; never clobber a concrete entry.
-            if name != st.ty.name {
-                structs.entry(st.ty.name.clone()).or_insert(info);
+            if name != st.ty.name && !structs.contains_key(&st.ty.name) {
+                structs.insert(st.ty.name.clone(), info.clone());
             }
+            structs.insert(name, info);
         }
         // Traits used as types: what a value of the type can call. The
         // specialized instances first (`Iterator<int>`), then each base for

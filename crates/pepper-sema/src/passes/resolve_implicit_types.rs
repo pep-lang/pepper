@@ -27,6 +27,8 @@ struct Tables {
     function_types: HashMap<String, TypeName>,
     /// Generic methods: struct type string → (method name → declaration).
     generic_methods: HashMap<String, Vec<(String, GenericSignature)>>,
+    /// Every name in `generic_methods`.
+    generic_method_names: HashSet<String>,
     /// Generic free functions: name → declaration.
     generic_functions: HashMap<String, GenericSignature>,
     /// Global variables: name → type (visible from every scope).
@@ -70,7 +72,7 @@ impl Tables {
                 methods.push((ty.to_string(), instance.methods.iter().map(|m| (m.name.clone(), m.ty.clone())).collect()));
             }
         }
-        let generic_methods = module
+        let generic_methods: HashMap<String, Vec<(String, GenericSignature)>> = module
             .structs
             .iter()
             .filter(|st| !st.generic_methods.is_empty())
@@ -98,6 +100,7 @@ impl Tables {
             methods,
             functions,
             function_types: first_wins(crate::passes::function_types::referenceable_functions(module)),
+            generic_method_names: generic_methods.values().flatten().map(|(name, _)| name.clone()).collect(),
             generic_methods,
             generic_functions,
             globals: first_wins(module.globals.iter().map(|v| (v.name.clone(), v.ty.clone()))),
@@ -230,7 +233,8 @@ impl<'t> Scopes<'t> {
         let key = ty.to_string();
         // An overloaded method is declared under its members' names.
         self.method_tables(&key).any(|methods| {
-            methods.iter().any(|(m, _)| m == name || crate::passes::overloads::set_name(m) == name)
+            // `set_name(m) == name` without splitting every member name.
+            methods.iter().any(|(m, _)| m.strip_prefix(name).is_some_and(|rest| rest.is_empty() || crate::passes::overloads::set_name(m) == name))
         })
     }
 
@@ -259,10 +263,10 @@ impl<'t> Scopes<'t> {
             return ty.is_callable().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty));
         }
         let st = current_struct?;
+        let ty = self.field_type(st, name).filter(|t| t.is_callable())?;
         if self.has_method(st, name) {
             return None;
         }
-        let ty = self.field_type(st, name).filter(|t| t.is_callable())?;
         let callee = Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: name.to_string(), loc: Loc::NONE };
         Some((callee, ty))
     }
@@ -835,7 +839,9 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     }
     if let Expression::MethodCall { this, method, args, .. } = e {
         // `x.map(f)` calling a generic method: `x.map<U>(f)`.
-        if method.contains('<') {
+        // Typing the receiver is costly: first rule out a method no struct
+        // declares generic.
+        if method.contains('<') || !scopes.tables.generic_method_names.contains(method.as_str()) {
             return;
         }
         let owner = type_of_expr(this, scopes, current);
@@ -852,6 +858,7 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
         return;
     }
     let Expression::FunctionCall { function, args, .. } = e else { return };
+    let Some(signature) = scopes.tables.generic_functions.get(function.as_str()) else { return };
     if function.contains('<') || scopes.value_callee(function, current).is_some() {
         return;
     }
@@ -860,7 +867,6 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     if current.is_some_and(|st| scopes.has_method(st, function) || scopes.field_type(st, function).is_some()) {
         return;
     }
-    let Some(signature) = scopes.tables.generic_functions.get(function.as_str()) else { return };
     let types = argument_types(args, scopes, current);
     if let Some(type_args) = signature.infer(&types) {
         *function = crate::passes::type_arguments::specialization(function, type_args);
@@ -953,6 +959,11 @@ fn select_method_overload(
 fn resolve_method_overload(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
     let Expression::MethodCall { this, method, args, loc } = e else { return };
     if scopes.overloads.is_empty() {
+        return;
+    }
+    // Typing the receiver is costly: first rule out a name no struct
+    // overloads.
+    if !scopes.overloads.is_any_method_set(method) {
         return;
     }
     let receiver = type_of_expr(this, scopes, current);

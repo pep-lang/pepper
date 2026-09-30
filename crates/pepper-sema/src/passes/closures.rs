@@ -660,9 +660,11 @@ pub fn sync_closures(module: &mut Module) -> bool {
     if !module.structs.iter().any(|s| is_closure_struct(&s.name)) {
         return false;
     }
-    let table = Table::build(module);
     let mut learned: HashMap<String, Learned> = HashMap::new();
-    {
+    // `apply_learned` only fills what is still `auto`: once every closure
+    // is typed, there is nothing to learn (and the table is costly).
+    if module.structs.iter().any(|s| is_closure_struct(&s.name) && has_unknown_types(s)) {
+        let table = Table::build(module);
         let mut visit = |expr: &Expression, expected: Option<&TypeName>, current: Option<&TypeName>| {
             let Expression::MakeClosure { value, closure, .. } = expr else { return };
             let entry = learned.entry(closure.clone()).or_default();
@@ -740,16 +742,33 @@ pub fn sync_closures(module: &mut Module) -> bool {
 }
 
 /// Give the closure struct the types `learned` found for it.
-fn apply_learned(st: &mut StructDef, learned: &Learned) -> bool {
-    let mut changed = false;
-    // Captured values: fields after `__invoke` and `__destroy`, in order,
-    // and the constructor parameters that initialize them.
-    let capture_fields: Vec<usize> = (0..st.field_members.len())
+/// The capture fields of closure struct `st` (after `__invoke` and
+/// `__destroy`, in order).
+fn capture_fields(st: &StructDef) -> Vec<usize> {
+    (0..st.field_members.len())
         .filter(|&i| {
             let name = &st.field_members[i].name;
             !name.starts_with("__") || name == THIS_FIELD
         })
-        .collect();
+        .collect()
+}
+
+/// Whether closure struct `st` has a type [`apply_learned`] could fill: a
+/// capture field, a `__call` parameter or its return type still `auto`.
+fn has_unknown_types(st: &StructDef) -> bool {
+    capture_fields(st).into_iter().any(|i| st.field_members[i].ty.contains_auto())
+        || st
+            .method_members
+            .iter()
+            .find(|m| m.name == CALL_METHOD)
+            .is_some_and(|call| call.ty.is_auto() || call.parameters.iter().any(|p| p.ty.contains_auto()))
+}
+
+fn apply_learned(st: &mut StructDef, learned: &Learned) -> bool {
+    let mut changed = false;
+    // Captured values: fields after `__invoke` and `__destroy`, in order,
+    // and the constructor parameters that initialize them.
+    let capture_fields = capture_fields(st);
     for (k, &i) in capture_fields.iter().enumerate() {
         if !st.field_members[i].ty.contains_auto() {
             continue;

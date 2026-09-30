@@ -488,6 +488,8 @@ pub struct Overloads {
     constructors: HashSet<String>,
     /// Method overload sets: struct type → set name → members.
     methods: HashMap<String, HashMap<String, Vec<Member>>>,
+    /// Every set name in `methods`.
+    method_set_names: HashSet<String>,
     /// Struct type → the parameter type of its `[Implicit]` constructor.
     implicit: HashMap<String, TypeName>,
     /// Struct name → the traits it declares.
@@ -627,7 +629,8 @@ impl Overloads {
         let extension_methods =
             module.extensions.iter().flat_map(|ext| ext.methods.iter().map(|m| (m.loc, ext.is_exported))).collect();
         let scopes = module.extension_scopes.clone();
-        Overloads { sets, constructors, methods, implicit, conforms, traits, extension_methods, scopes }
+        let method_set_names = methods.values().flat_map(|sets| sets.keys().cloned()).collect();
+        Overloads { sets, constructors, methods, method_set_names, implicit, conforms, traits, extension_methods, scopes }
     }
 
     /// Whether `name` names an overload set.
@@ -782,8 +785,8 @@ impl Overloads {
     }
 
     /// Whether some struct has a method overload set named `set`.
-    fn is_any_method_set(&self, set: &str) -> bool {
-        self.methods.values().any(|sets| sets.contains_key(set))
+    pub fn is_any_method_set(&self, set: &str) -> bool {
+        self.method_set_names.contains(set)
     }
 
     /// Whether `set` names a method overload set of `receiver`'s struct.
