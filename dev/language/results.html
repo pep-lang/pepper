@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -279,10 +279,10 @@ result and return early with its error; to change the error’s type on the way,
 build a new error from the old one:</p>
 <pre><code class="language-pepper"># A custom error type: any type can be the second type argument.
 struct ParseError {
-    String Input;
-    int Position;
+    String input;
+    int position;
 
-    construct(this.Input = "", this.Position = 0) {}
+    construct(this.input = "", this.position = 0) {}
 }
 
 digit_value(String c): int {
@@ -332,7 +332,7 @@ check_total(String a, String b, int limit): Result&lt;void&gt; {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.error();
-        return Result&lt;void&gt;.err(Error("bad number '" + e.Input + "'"));
+        return Result&lt;void&gt;.err(Error("bad number '" + e.input + "'"));
     }
     if (sum.value() &gt; limit) {
         return Result&lt;void&gt;.err(Error("total is over the limit"));
@@ -346,8 +346,8 @@ main(): int {
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
-    assert(bad.error().Input == "4x2", "the error names the input");
-    assert(bad.error().Position == 1, "and where it went wrong");
+    assert(bad.error().input == "4x2", "the error names the input");
+    assert(bad.error().position == 1, "and where it went wrong");
 
     assert(check_total("1", "2", 10).is_ok(), "3 is within the limit");
     var over = check_total("10", "20", 10);

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4c468918.js";
+            window.path_to_searchindex_js = "searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-432e2c46.js"></script>
@@ -2141,9 +2141,9 @@ add_one() {
 # A [Shared] struct's fields must be thread-safe: a function field is shared.
 [Shared]
 struct Task {
-    const Weight: long;
-    const Run: shared (long) =&gt; void;
-    construct(this.Weight = 1, this.Run = (n: long) =&gt; {}) {}
+    const weight: long;
+    const run: shared (long) =&gt; void;
+    construct(this.weight = 1, this.run = (n: long) =&gt; {}) {}
 }
 
 # A plain function type takes any function of the same signature.
@@ -2159,7 +2159,7 @@ main(): int {
 
     # A thread body is a shared () =&gt; void. This closure captures a
     # [Shared] struct.
-    var worker = async.Thread.spawn(() =&gt; { task.Run(task.Weight); });
+    var worker = async.Thread.spawn(() =&gt; { task.run(task.weight); });
     var other = async.Thread.spawn(add_one);
     worker.join();
     other.join();
@@ -4284,22 +4284,22 @@ loop runs. They are generic methods (see
 iterable):</p>
 <pre><code class="language-pepper"># An iterator: next() advances, current() returns the element.
 struct Countdown {
-    int Remaining;
-    int Now;
+    int remaining;
+    int now;
 
-    construct(this.Remaining = 0) {}
+    construct(this.remaining = 0) {}
 
     bool next() {
-        if (Remaining == 0) {
+        if (remaining == 0) {
             return false;
         }
-        Now = Remaining;
-        Remaining = Remaining - 1;
+        now = remaining;
+        remaining = remaining - 1;
         return true;
     }
 
     int current() {
-        return Now;
+        return now;
     }
 }
 
@@ -4308,29 +4308,29 @@ extend Countdown with Iterator&lt;int&gt; {}
 
 # An iterable: iterate() hands out a fresh iterator for each loop.
 struct Evens {
-    int Limit;
+    int limit;
 
-    construct(this.Limit = 0) {}
+    construct(this.limit = 0) {}
 
     EvensIterator iterate() {
         var it = EvensIterator();
-        it.Limit = Limit;
-        it.Now = -2;
+        it.limit = limit;
+        it.now = -2;
         return it;
     }
 }
 
 struct EvensIterator {
-    int Limit;
-    int Now;
+    int limit;
+    int now;
 
     bool next() {
-        Now = Now + 2;
-        return Now &lt; Limit;
+        now = now + 2;
+        return now &lt; limit;
     }
 
     int current() {
-        return Now;
+        return now;
     }
 }
 
@@ -4664,10 +4664,10 @@ result and return early with its error; to change the error’s type on the way,
 build a new error from the old one:</p>
 <pre><code class="language-pepper"># A custom error type: any type can be the second type argument.
 struct ParseError {
-    String Input;
-    int Position;
+    String input;
+    int position;
 
-    construct(this.Input = "", this.Position = 0) {}
+    construct(this.input = "", this.position = 0) {}
 }
 
 digit_value(String c): int {
@@ -4717,7 +4717,7 @@ check_total(String a, String b, int limit): Result&lt;void&gt; {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.error();
-        return Result&lt;void&gt;.err(Error("bad number '" + e.Input + "'"));
+        return Result&lt;void&gt;.err(Error("bad number '" + e.input + "'"));
     }
     if (sum.value() &gt; limit) {
         return Result&lt;void&gt;.err(Error("total is over the limit"));
@@ -4731,8 +4731,8 @@ main(): int {
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
-    assert(bad.error().Input == "4x2", "the error names the input");
-    assert(bad.error().Position == 1, "and where it went wrong");
+    assert(bad.error().input == "4x2", "the error names the input");
+    assert(bad.error().position == 1, "and where it went wrong");
 
     assert(check_total("1", "2", 10).is_ok(), "3 is within the limit");
     var over = check_total("10", "20", 10);
@@ -5579,8 +5579,8 @@ type). <code>Atomic&lt;String&gt;</code> is a compile error. See
 # fields are const and thread-safe.
 [Shared]
 struct Config {
-    const Version: int;
-    construct(this.Version = 0) {}
+    const version: int;
+    construct(this.version = 0) {}
 }
 
 # A module-scope Atomic that every function can share.
@@ -5614,17 +5614,17 @@ main(): int {
     # An Atomic can hold a struct reference.
     var first = Config(1);
     var current = Atomic&lt;Config&gt;(first);
-    assert(current.load().Version == 1, "load returns the reference");
+    assert(current.load().version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
     var lookalike = Config(1);
     var second = Config(2);
     assert(!current.compare_exchange(lookalike, second), "a different object");
     assert(current.compare_exchange(first, second), "the same object");
-    assert(current.load().Version == 2, "swapped");
+    assert(current.load().version == 2, "swapped");
 
     var old = current.exchange(first);
-    assert(old.Version == 2, "exchange hands back the old reference");
+    assert(old.version == 2, "exchange hands back the old reference");
     return 0;
 }
 </code></pre>
@@ -5801,9 +5801,9 @@ to one object can be copied and dropped on any thread:</p>
 # thread-safe.
 [Shared]
 struct Settings {
-    const Port: int;
-    const Retries: int;
-    construct(this.Port = 0, this.Retries = 0) {}
+    const port: int;
+    const retries: int;
+    construct(this.port = 0, this.retries = 0) {}
 }
 
 # Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
@@ -5813,7 +5813,7 @@ const seen = Atomic&lt;long&gt;(0);
 
 read_settings() {
     var settings = current.load();
-    seen.fetch_add(settings.Port);
+    seen.fetch_add(settings.port);
 }
 
 main(): int {
@@ -5829,7 +5829,7 @@ main(): int {
     assert(seen.load() == 4 * 8080, "every reader saw the settings");
 
     current.store(Settings(9090, 5));
-    assert(current.load().Port == 9090, "replaced");
+    assert(current.load().port == 9090, "replaced");
     return 0;
 }
 </code></pre>
@@ -6018,11 +6018,11 @@ reach the value is a <a href="#scoped-blocks-with-with"><code>with</code> block<
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const Checking: Atomic&lt;long&gt;;
-    const Savings: Atomic&lt;long&gt;;
+    const checking: Atomic&lt;long&gt;;
+    const savings: Atomic&lt;long&gt;;
     construct(long checking = 0, long savings = 0) {
-        Checking = Atomic&lt;long&gt;(checking);
-        Savings = Atomic&lt;long&gt;(savings);
+        this.checking = Atomic&lt;long&gt;(checking);
+        this.savings = Atomic&lt;long&gt;(savings);
     }
 }
 
@@ -6033,8 +6033,8 @@ move_to_savings() {
     var i = 0;
     while (i &lt; 1000) {
         with (var a = accounts.lock()) {
-            a.Checking.fetch_sub(1);
-            a.Savings.fetch_add(1);
+            a.checking.fetch_sub(1);
+            a.savings.fetch_add(1);
         }   # unlocked here, on every path out of the block
         i = i + 1;
     }
@@ -6044,7 +6044,7 @@ audit() {
     var i = 0;
     while (i &lt; 1000) {
         with (var a = accounts.lock()) {
-            if (a.Checking.load() + a.Savings.load() != 1000) {
+            if (a.checking.load() + a.savings.load() != 1000) {
                 bad_totals.fetch_add(1);
             }
         }
@@ -6062,7 +6062,7 @@ main(): int {
     # try_lock does not wait: the body runs if the lock was free, and the
     # else block runs if another thread held it.
     with (var a = accounts.try_lock()) {
-        assert(a.Savings.load() == 1000, "everything was moved");
+        assert(a.savings.load() == 1000, "everything was moved");
     } else {
         assert(false, "no other thread holds the lock now");
     }
@@ -6094,11 +6094,11 @@ changes the value. Get one with <code>mutex.condition()</code>:</p>
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const Pies: Atomic&lt;long&gt;;
-    const Closed: Atomic&lt;int&gt;;
+    const pies: Atomic&lt;long&gt;;
+    const closed: Atomic&lt;int&gt;;
     construct() {
-        Pies = Atomic&lt;long&gt;(0);
-        Closed = Atomic&lt;int&gt;(0);
+        pies = Atomic&lt;long&gt;(0);
+        closed = Atomic&lt;int&gt;(0);
     }
 }
 
@@ -6111,13 +6111,13 @@ eat() {
         with (var b = bakery.lock()) {
             # Wait in a loop: a wakeup can be spurious, and another eater
             # may take the pie first.
-            while (b.Pies.load() == 0 &amp;&amp; b.Closed.load() == 0) {
+            while (b.pies.load() == 0 &amp;&amp; b.closed.load() == 0) {
                 changed.wait();   # unlocks, sleeps, locks again
             }
-            if (b.Pies.load() == 0) {
+            if (b.pies.load() == 0) {
                 return;   # closed and nothing left; the block unlocks
             }
-            b.Pies.fetch_sub(1);
+            b.pies.fetch_sub(1);
         }
         eaten.fetch_add(1);
     }
@@ -6133,13 +6133,13 @@ main(): int {
     i = 0;
     while (i &lt; 50) {
         with (var b = bakery.lock()) {
-            b.Pies.fetch_add(1);
+            b.pies.fetch_add(1);
             changed.notify_one();
         }
         i = i + 1;
     }
     with (var b = bakery.lock()) {
-        b.Closed.store(1);
+        b.closed.store(1);
         changed.notify_all();
     }
     for (var eater in eaters) {
@@ -6168,8 +6168,8 @@ builds a value the first time a thread asks for it:</p>
 
 [Shared]
 struct Settings {
-    const Workers: long;
-    construct(this.Workers = 1) {}
+    const workers: long;
+    construct(this.workers = 1) {}
 }
 
 const builds = Atomic&lt;long&gt;(0);
@@ -6192,7 +6192,7 @@ initialize() {
 
 work() {
     setup.call(initialize);
-    assert(settings.get().Workers &gt;= 1, "every thread sees the settings");
+    assert(settings.get().workers &gt;= 1, "every thread sees the settings");
 }
 
 main(): int {
@@ -7009,6 +7009,7 @@ the code it replaces:</p>
 <tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 <tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
+<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -8668,9 +8669,7 @@ before an insert of a new key would fill half of it (live entries plus
 removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while <code>count()</code>
 stays small.</p>
-<p>There is no iterator, and entries have no defined order. The lowercase
-fields and the <code>find_slot</code> and <code>grow</code> methods are the table’s internal
-state: they are public but may change, and writing to them breaks the map.</p>
+<p>There is no iterator, and entries have no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>K</code> — the key type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
@@ -8685,38 +8684,6 @@ state: they are public but may change, and writing to them breaks the map.</p>
     assert(ages.remove("alan"), "removed");
     assert(ages.count() == 1, "one entry left");
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="keys"><a class="header" href="#keys">keys</a></h4>
-<pre><code class="language-pepper">Array&lt;K&gt; keys
-</code></pre>
-<p>The key of each slot; only slots whose <code>state</code> is 2 hold a live key,
-the rest hold the default of <code>K</code>. Internal: its count equals
-<code>capacity</code> rather than the entry count, and <code>grow</code> replaces it.</p>
-<h4 id="values"><a class="header" href="#values">values</a></h4>
-<pre><code class="language-pepper">Array&lt;V&gt; values
-</code></pre>
-<p>The value of each slot, parallel to <code>keys</code>; only occupied slots hold a
-live value. Internal: <code>grow</code> replaces it.</p>
-<h4 id="state"><a class="header" href="#state">state</a></h4>
-<pre><code class="language-pepper">Array&lt;int&gt; state
-</code></pre>
-<p>The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-entry that still extends probe sequences), 2 is occupied. Internal.</p>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity
-</code></pre>
-<p>The number of slots in the table: always a power of two and at least
-8. Internal; read it with <code>cap()</code>.</p>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
-<pre><code class="language-pepper">int size
-</code></pre>
-<p>The number of live entries. Internal; read it with <code>count()</code>.</p>
-<h4 id="tombstones"><a class="header" href="#tombstones">tombstones</a></h4>
-<pre><code class="language-pepper">int tombstones
-</code></pre>
-<p>The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or <code>grow</code> or <code>clear</code> resets them.
-Internal.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
@@ -8735,31 +8702,13 @@ three arrays of that many slots.</p>
 <pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
 <h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
-<h4 id="find_slot"><a class="header" href="#find_slot">find_slot</a></h4>
-<pre><code class="language-pepper">long find_slot(K key)
-</code></pre>
-<p>Returns the slot index that holds <code>key</code>, or -1 when <code>key</code> is absent.</p>
-<p>Probes from the key’s hash and stops at the first empty slot.
-Tombstones are skipped, so removed keys do not cut probe sequences
-short. Expected O(1), worst case O(capacity).</p>
-<p>Internal: the index is only valid until the next <code>insert</code>, <code>grow</code>,
-or <code>clear</code>. Use <code>contains</code> or <code>get</code> instead.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>key</code> — the key to look up</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the index of the slot that holds <code>key</code> in <code>keys</code> and <code>values</code>, or -1 when <code>key</code> is absent</li>
-</ul>
 <h4 id="grow-2"><a class="header" href="#grow-2">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
 <p>Doubles the table and reinserts every entry, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the <code>keys</code>, <code>values</code>,
-and <code>state</code> arrays and moves entries to new slots, so it invalidates
-slot indices from <code>find_slot</code>. Reference counts are unchanged overall:
+costs memory. Runs in O(capacity). It replaces the table’s arrays and
+moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.</p>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
 <pre><code class="language-pepper">int count()
@@ -8777,14 +8726,23 @@ each entry is acquired by the new arrays and released by the old ones.</p>
 <ul>
 <li>true when <code>count()</code> is 0</li>
 </ul>
-<h4 id="cap"><a class="header" href="#cap">cap</a></h4>
-<pre><code class="language-pepper">ulong cap()
+<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 The map grows before its entries and tombstones reach half of it. O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the current slot count</li>
+</ul>
+<h4 id="cap"><a class="header" href="#cap">cap</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+</code></pre>
+<p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
+the table.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear-1"><a class="header" href="#clear-1">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -8910,7 +8868,7 @@ destroyed.</p>
 <p>Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
 (members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the <code>find_slot</code>
+members have no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>
 <p><strong>Type parameters</strong></p>
@@ -8925,33 +8883,6 @@ may change, and writing to them breaks the set.</p>
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="keys-1"><a class="header" href="#keys-1">keys</a></h4>
-<pre><code class="language-pepper">Array&lt;K&gt; keys
-</code></pre>
-<p>The element of each slot; only slots whose <code>state</code> is 2 hold a live
-member, the rest hold the default of <code>K</code>. Internal: its count equals
-<code>capacity</code> rather than the member count, and <code>grow</code> replaces it.</p>
-<h4 id="state-1"><a class="header" href="#state-1">state</a></h4>
-<pre><code class="language-pepper">Array&lt;int&gt; state
-</code></pre>
-<p>The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-member that still extends probe sequences), 2 is occupied. Internal.</p>
-<h4 id="capacity-1-1"><a class="header" href="#capacity-1-1">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity
-</code></pre>
-<p>The number of slots in the table: always a power of two and at least
-8. Internal; read it with <code>cap()</code>.</p>
-<h4 id="size-1-1"><a class="header" href="#size-1-1">size</a></h4>
-<pre><code class="language-pepper">int size
-</code></pre>
-<p>The number of members. Internal; read it with <code>count()</code>.</p>
-<h4 id="tombstones-1"><a class="header" href="#tombstones-1">tombstones</a></h4>
-<pre><code class="language-pepper">int tombstones
-</code></pre>
-<p>The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or <code>grow</code> or <code>clear</code> resets them.
-Internal.</p>
 <h3 id="constructor-1-1"><a class="header" href="#constructor-1-1">Constructor</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
@@ -8965,31 +8896,13 @@ The set holds up to half its slot count before the first grow.</p>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
 <h3 id="methods-1-3"><a class="header" href="#methods-1-3">Methods</a></h3>
-<h4 id="find_slot-1"><a class="header" href="#find_slot-1">find_slot</a></h4>
-<pre><code class="language-pepper">long find_slot(K key)
-</code></pre>
-<p>Returns the slot index that holds <code>key</code>, or -1 when <code>key</code> is not a
-member.</p>
-<p>Probes from the key’s hash and stops at the first empty slot,
-skipping tombstones. Expected O(1), worst case O(capacity).</p>
-<p>Internal: the index is only valid until the next <code>insert</code>, <code>grow</code>, or
-<code>clear</code>. Use <code>contains</code> instead.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>key</code> — the element to look up</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the index of the slot that holds <code>key</code> in <code>keys</code>, or -1 when <code>key</code> is not a member</li>
-</ul>
 <h4 id="grow-1-1"><a class="header" href="#grow-1-1">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
 <p>Doubles the table and reinserts every member, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the <code>keys</code> and <code>state</code>
-arrays and moves members to new slots, so it invalidates slot indices
-from <code>find_slot</code>.</p>
+costs memory. Runs in O(capacity). It replaces the table’s arrays and
+moves members to new slots.</p>
 <h4 id="count-1-1"><a class="header" href="#count-1-1">count</a></h4>
 <pre><code class="language-pepper">int count()
 </code></pre>
@@ -9006,14 +8919,23 @@ from <code>find_slot</code>.</p>
 <ul>
 <li>true when <code>count()</code> is 0</li>
 </ul>
-<h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
-<pre><code class="language-pepper">ulong cap()
+<h4 id="capacity-1-1"><a class="header" href="#capacity-1-1">capacity</a></h4>
+<pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the current slot count</li>
+</ul>
+<h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+</code></pre>
+<p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
+the table.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear-1-1"><a class="header" href="#clear-1-1">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -9053,7 +8975,7 @@ O(capacity).</p>
 </code></pre>
 <p>Removes <code>key</code> from the set, releasing the set’s reference to the
 member. Does nothing when <code>key</code> is not a member. The slot becomes a
-tombstone (see <code>tombstones</code>). Expected O(1).</p>
+tombstone (see <code>_tombstones</code>). Expected O(1).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>key</code> — the element to remove</li>
@@ -9120,22 +9042,22 @@ which a <code>for</code> loop drives through the trait.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Countdown {
-        int Remaining;
-        int Now;
+        int remaining;
+        int now;
 
-        new(this.Remaining = 0) {}
+        construct(this.remaining = 0) {}
 
         bool next() {
-            if (Remaining == 0) {
+            if (remaining == 0) {
                 return false;
             }
-            Now = Remaining;
-            Remaining = Remaining - 1;
+            now = remaining;
+            remaining = remaining - 1;
             return true;
         }
 
         int current() {
-            return Now;
+            return now;
         }
     }
 
@@ -9433,15 +9355,15 @@ freely.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Child {
-        Weak&lt;Parent&gt; Owner;
+        Weak&lt;Parent&gt; owner;
 
         construct(Parent owner) {
-            Owner = Weak&lt;Parent&gt;(owner);
+            this.owner = Weak&lt;Parent&gt;(owner);
         }
 
         String owner_name() {
-            with (var parent = Owner) {
-                return parent.Name;
+            with (var parent = this.owner) {
+                return parent.name;
             } else {
                 return "(gone)";
             }
@@ -9493,7 +9415,7 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
     var n = r.error().message.length();   # 4
 </code></pre>
-<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
@@ -10129,7 +10051,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
         }
     }
 </code></pre>
-<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
 <pre><code class="language-pepper">ErrorCode code
 </code></pre>
@@ -10879,8 +10801,8 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
         var bytes = m.value().size;
     }
 </code></pre>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
-<h4 id="size-2"><a class="header" href="#size-2">size</a></h4>
+<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
 <p>The file’s length in bytes.</p>
@@ -11529,7 +11451,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
         i = i + 1;
     }
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
+<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
@@ -11894,7 +11816,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
 <h4 id="id"><a class="header" href="#id">Id</a></h4>
 <pre><code class="language-pepper">const Id: ThreadId
 </code></pre>
@@ -12075,7 +11997,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">Key</a></h4>
 <pre><code class="language-pepper">const Key: ulong
 </code></pre>
@@ -12219,7 +12141,7 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="capacity-2"><a class="header" href="#capacity-2">Capacity</a></h4>
 <pre><code class="language-pepper">const Capacity: ulong
 </code></pre>
@@ -12237,7 +12159,7 @@ threads.</p>
 </code></pre>
 <p>The platform condition variable senders wait on while a bounded
 channel is full.</p>
-<h4 id="state-2"><a class="header" href="#state-2">State</a></h4>
+<h4 id="state"><a class="header" href="#state">State</a></h4>
 <pre><code class="language-pepper">const State: __ptr&lt;ulong&gt;
 </code></pre>
 <p>The head index, the number of queued values, the number of slots in
@@ -12472,7 +12394,7 @@ program, so a Mutex is never left “poisoned”.</p>
         }
     }
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="lock-1"><a class="header" href="#lock-1">Lock</a></h4>
 <pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
 </code></pre>
@@ -12769,8 +12691,8 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
-<h4 id="state-3"><a class="header" href="#state-3">State</a></h4>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="state-1"><a class="header" href="#state-1">State</a></h4>
 <pre><code class="language-pepper">const State: Atomic&lt;int&gt;
 </code></pre>
 <p>0 before any call, 1 while a body runs, 2 once it has finished.</p>

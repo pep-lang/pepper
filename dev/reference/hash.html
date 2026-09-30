@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -257,9 +257,7 @@ before an insert of a new key would fill half of it (live entries plus
 removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while <code>count()</code>
 stays small.</p>
-<p>There is no iterator, and entries have no defined order. The lowercase
-fields and the <code>find_slot</code> and <code>grow</code> methods are the table’s internal
-state: they are public but may change, and writing to them breaks the map.</p>
+<p>There is no iterator, and entries have no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>K</code> — the key type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
@@ -274,38 +272,6 @@ state: they are public but may change, and writing to them breaks the map.</p>
     assert(ages.remove("alan"), "removed");
     assert(ages.count() == 1, "one entry left");
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="keys"><a class="header" href="#keys">keys</a></h4>
-<pre><code class="language-pepper">Array&lt;K&gt; keys
-</code></pre>
-<p>The key of each slot; only slots whose <code>state</code> is 2 hold a live key,
-the rest hold the default of <code>K</code>. Internal: its count equals
-<code>capacity</code> rather than the entry count, and <code>grow</code> replaces it.</p>
-<h4 id="values"><a class="header" href="#values">values</a></h4>
-<pre><code class="language-pepper">Array&lt;V&gt; values
-</code></pre>
-<p>The value of each slot, parallel to <code>keys</code>; only occupied slots hold a
-live value. Internal: <code>grow</code> replaces it.</p>
-<h4 id="state"><a class="header" href="#state">state</a></h4>
-<pre><code class="language-pepper">Array&lt;int&gt; state
-</code></pre>
-<p>The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-entry that still extends probe sequences), 2 is occupied. Internal.</p>
-<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity
-</code></pre>
-<p>The number of slots in the table: always a power of two and at least
-8. Internal; read it with <code>cap()</code>.</p>
-<h4 id="size"><a class="header" href="#size">size</a></h4>
-<pre><code class="language-pepper">int size
-</code></pre>
-<p>The number of live entries. Internal; read it with <code>count()</code>.</p>
-<h4 id="tombstones"><a class="header" href="#tombstones">tombstones</a></h4>
-<pre><code class="language-pepper">int tombstones
-</code></pre>
-<p>The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or <code>grow</code> or <code>clear</code> resets them.
-Internal.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
@@ -324,31 +290,13 @@ three arrays of that many slots.</p>
 <pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="find_slot"><a class="header" href="#find_slot">find_slot</a></h4>
-<pre><code class="language-pepper">long find_slot(K key)
-</code></pre>
-<p>Returns the slot index that holds <code>key</code>, or -1 when <code>key</code> is absent.</p>
-<p>Probes from the key’s hash and stops at the first empty slot.
-Tombstones are skipped, so removed keys do not cut probe sequences
-short. Expected O(1), worst case O(capacity).</p>
-<p>Internal: the index is only valid until the next <code>insert</code>, <code>grow</code>,
-or <code>clear</code>. Use <code>contains</code> or <code>get</code> instead.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>key</code> — the key to look up</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the index of the slot that holds <code>key</code> in <code>keys</code> and <code>values</code>, or -1 when <code>key</code> is absent</li>
-</ul>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
 <p>Doubles the table and reinserts every entry, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the <code>keys</code>, <code>values</code>,
-and <code>state</code> arrays and moves entries to new slots, so it invalidates
-slot indices from <code>find_slot</code>. Reference counts are unchanged overall:
+costs memory. Runs in O(capacity). It replaces the table’s arrays and
+moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.</p>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
 <pre><code class="language-pepper">int count()
@@ -366,14 +314,23 @@ each entry is acquired by the new arrays and released by the old ones.</p>
 <ul>
 <li>true when <code>count()</code> is 0</li>
 </ul>
-<h4 id="cap"><a class="header" href="#cap">cap</a></h4>
-<pre><code class="language-pepper">ulong cap()
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
+<pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 The map grows before its entries and tombstones reach half of it. O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the current slot count</li>
+</ul>
+<h4 id="cap"><a class="header" href="#cap">cap</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+</code></pre>
+<p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
+the table.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -499,7 +456,7 @@ destroyed.</p>
 <p>Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
 (members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the <code>find_slot</code>
+members have no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>
 <p><strong>Type parameters</strong></p>
@@ -514,33 +471,6 @@ may change, and writing to them breaks the set.</p>
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="keys-1"><a class="header" href="#keys-1">keys</a></h4>
-<pre><code class="language-pepper">Array&lt;K&gt; keys
-</code></pre>
-<p>The element of each slot; only slots whose <code>state</code> is 2 hold a live
-member, the rest hold the default of <code>K</code>. Internal: its count equals
-<code>capacity</code> rather than the member count, and <code>grow</code> replaces it.</p>
-<h4 id="state-1"><a class="header" href="#state-1">state</a></h4>
-<pre><code class="language-pepper">Array&lt;int&gt; state
-</code></pre>
-<p>The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-member that still extends probe sequences), 2 is occupied. Internal.</p>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity
-</code></pre>
-<p>The number of slots in the table: always a power of two and at least
-8. Internal; read it with <code>cap()</code>.</p>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
-<pre><code class="language-pepper">int size
-</code></pre>
-<p>The number of members. Internal; read it with <code>count()</code>.</p>
-<h4 id="tombstones-1"><a class="header" href="#tombstones-1">tombstones</a></h4>
-<pre><code class="language-pepper">int tombstones
-</code></pre>
-<p>The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or <code>grow</code> or <code>clear</code> resets them.
-Internal.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
@@ -554,31 +484,13 @@ The set holds up to half its slot count before the first grow.</p>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="find_slot-1"><a class="header" href="#find_slot-1">find_slot</a></h4>
-<pre><code class="language-pepper">long find_slot(K key)
-</code></pre>
-<p>Returns the slot index that holds <code>key</code>, or -1 when <code>key</code> is not a
-member.</p>
-<p>Probes from the key’s hash and stops at the first empty slot,
-skipping tombstones. Expected O(1), worst case O(capacity).</p>
-<p>Internal: the index is only valid until the next <code>insert</code>, <code>grow</code>, or
-<code>clear</code>. Use <code>contains</code> instead.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>key</code> — the element to look up</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the index of the slot that holds <code>key</code> in <code>keys</code>, or -1 when <code>key</code> is not a member</li>
-</ul>
 <h4 id="grow-1"><a class="header" href="#grow-1">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
 <p>Doubles the table and reinserts every member, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the <code>keys</code> and <code>state</code>
-arrays and moves members to new slots, so it invalidates slot indices
-from <code>find_slot</code>.</p>
+costs memory. Runs in O(capacity). It replaces the table’s arrays and
+moves members to new slots.</p>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
 <pre><code class="language-pepper">int count()
 </code></pre>
@@ -595,14 +507,23 @@ from <code>find_slot</code>.</p>
 <ul>
 <li>true when <code>count()</code> is 0</li>
 </ul>
-<h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
-<pre><code class="language-pepper">ulong cap()
+<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the current slot count</li>
+</ul>
+<h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+</code></pre>
+<p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
+the table.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear-1"><a class="header" href="#clear-1">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -642,7 +563,7 @@ O(capacity).</p>
 </code></pre>
 <p>Removes <code>key</code> from the set, releasing the set’s reference to the
 member. Does nothing when <code>key</code> is not a member. The slot becomes a
-tombstone (see <code>tombstones</code>). Expected O(1).</p>
+tombstone (see <code>_tombstones</code>). Expected O(1).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>key</code> — the element to remove</li>

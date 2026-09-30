@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -207,15 +207,15 @@ freely.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Child {
-        Weak&lt;Parent&gt; Owner;
+        Weak&lt;Parent&gt; owner;
 
         construct(Parent owner) {
-            Owner = Weak&lt;Parent&gt;(owner);
+            this.owner = Weak&lt;Parent&gt;(owner);
         }
 
         String owner_name() {
-            with (var parent = Owner) {
-                return parent.Name;
+            with (var parent = this.owner) {
+                return parent.name;
             } else {
                 return "(gone)";
             }

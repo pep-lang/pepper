@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -207,22 +207,22 @@ which a <code>for</code> loop drives through the trait.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Countdown {
-        int Remaining;
-        int Now;
+        int remaining;
+        int now;
 
-        new(this.Remaining = 0) {}
+        construct(this.remaining = 0) {}
 
         bool next() {
-            if (Remaining == 0) {
+            if (remaining == 0) {
                 return false;
             }
-            Now = Remaining;
-            Remaining = Remaining - 1;
+            now = remaining;
+            remaining = remaining - 1;
             return true;
         }
 
         int current() {
-            return Now;
+            return now;
         }
     }
 

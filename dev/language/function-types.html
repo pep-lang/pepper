@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -605,9 +605,9 @@ add_one() {
 # A [Shared] struct's fields must be thread-safe: a function field is shared.
 [Shared]
 struct Task {
-    const Weight: long;
-    const Run: shared (long) =&gt; void;
-    construct(this.Weight = 1, this.Run = (n: long) =&gt; {}) {}
+    const weight: long;
+    const run: shared (long) =&gt; void;
+    construct(this.weight = 1, this.run = (n: long) =&gt; {}) {}
 }
 
 # A plain function type takes any function of the same signature.
@@ -623,7 +623,7 @@ main(): int {
 
     # A thread body is a shared () =&gt; void. This closure captures a
     # [Shared] struct.
-    var worker = async.Thread.spawn(() =&gt; { task.Run(task.Weight); });
+    var worker = async.Thread.spawn(() =&gt; { task.run(task.weight); });
     var other = async.Thread.spawn(add_one);
     worker.join();
     other.join();

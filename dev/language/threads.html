@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c468918.js";
+            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -328,9 +328,9 @@ to one object can be copied and dropped on any thread:</p>
 # thread-safe.
 [Shared]
 struct Settings {
-    const Port: int;
-    const Retries: int;
-    construct(this.Port = 0, this.Retries = 0) {}
+    const port: int;
+    const retries: int;
+    construct(this.port = 0, this.retries = 0) {}
 }
 
 # Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
@@ -340,7 +340,7 @@ const seen = Atomic&lt;long&gt;(0);
 
 read_settings() {
     var settings = current.load();
-    seen.fetch_add(settings.Port);
+    seen.fetch_add(settings.port);
 }
 
 main(): int {
@@ -356,7 +356,7 @@ main(): int {
     assert(seen.load() == 4 * 8080, "every reader saw the settings");
 
     current.store(Settings(9090, 5));
-    assert(current.load().Port == 9090, "replaced");
+    assert(current.load().port == 9090, "replaced");
     return 0;
 }
 </code></pre>
@@ -545,11 +545,11 @@ reach the value is a <a href="scopes.html"><code>with</code> block</a>:</p>
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const Checking: Atomic&lt;long&gt;;
-    const Savings: Atomic&lt;long&gt;;
+    const checking: Atomic&lt;long&gt;;
+    const savings: Atomic&lt;long&gt;;
     construct(long checking = 0, long savings = 0) {
-        Checking = Atomic&lt;long&gt;(checking);
-        Savings = Atomic&lt;long&gt;(savings);
+        this.checking = Atomic&lt;long&gt;(checking);
+        this.savings = Atomic&lt;long&gt;(savings);
     }
 }
 
@@ -560,8 +560,8 @@ move_to_savings() {
     var i = 0;
     while (i &lt; 1000) {
         with (var a = accounts.lock()) {
-            a.Checking.fetch_sub(1);
-            a.Savings.fetch_add(1);
+            a.checking.fetch_sub(1);
+            a.savings.fetch_add(1);
         }   # unlocked here, on every path out of the block
         i = i + 1;
     }
@@ -571,7 +571,7 @@ audit() {
     var i = 0;
     while (i &lt; 1000) {
         with (var a = accounts.lock()) {
-            if (a.Checking.load() + a.Savings.load() != 1000) {
+            if (a.checking.load() + a.savings.load() != 1000) {
                 bad_totals.fetch_add(1);
             }
         }
@@ -589,7 +589,7 @@ main(): int {
     # try_lock does not wait: the body runs if the lock was free, and the
     # else block runs if another thread held it.
     with (var a = accounts.try_lock()) {
-        assert(a.Savings.load() == 1000, "everything was moved");
+        assert(a.savings.load() == 1000, "everything was moved");
     } else {
         assert(false, "no other thread holds the lock now");
     }
@@ -621,11 +621,11 @@ changes the value. Get one with <code>mutex.condition()</code>:</p>
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const Pies: Atomic&lt;long&gt;;
-    const Closed: Atomic&lt;int&gt;;
+    const pies: Atomic&lt;long&gt;;
+    const closed: Atomic&lt;int&gt;;
     construct() {
-        Pies = Atomic&lt;long&gt;(0);
-        Closed = Atomic&lt;int&gt;(0);
+        pies = Atomic&lt;long&gt;(0);
+        closed = Atomic&lt;int&gt;(0);
     }
 }
 
@@ -638,13 +638,13 @@ eat() {
         with (var b = bakery.lock()) {
             # Wait in a loop: a wakeup can be spurious, and another eater
             # may take the pie first.
-            while (b.Pies.load() == 0 &amp;&amp; b.Closed.load() == 0) {
+            while (b.pies.load() == 0 &amp;&amp; b.closed.load() == 0) {
                 changed.wait();   # unlocks, sleeps, locks again
             }
-            if (b.Pies.load() == 0) {
+            if (b.pies.load() == 0) {
                 return;   # closed and nothing left; the block unlocks
             }
-            b.Pies.fetch_sub(1);
+            b.pies.fetch_sub(1);
         }
         eaten.fetch_add(1);
     }
@@ -660,13 +660,13 @@ main(): int {
     i = 0;
     while (i &lt; 50) {
         with (var b = bakery.lock()) {
-            b.Pies.fetch_add(1);
+            b.pies.fetch_add(1);
             changed.notify_one();
         }
         i = i + 1;
     }
     with (var b = bakery.lock()) {
-        b.Closed.store(1);
+        b.closed.store(1);
         changed.notify_all();
     }
     for (var eater in eaters) {
@@ -695,8 +695,8 @@ builds a value the first time a thread asks for it:</p>
 
 [Shared]
 struct Settings {
-    const Workers: long;
-    construct(this.Workers = 1) {}
+    const workers: long;
+    construct(this.workers = 1) {}
 }
 
 const builds = Atomic&lt;long&gt;(0);
@@ -719,7 +719,7 @@ initialize() {
 
 work() {
     setup.call(initialize);
-    assert(settings.get().Workers &gt;= 1, "every thread sees the settings");
+    assert(settings.get().workers &gt;= 1, "every thread sees the settings");
 }
 
 main(): int {
