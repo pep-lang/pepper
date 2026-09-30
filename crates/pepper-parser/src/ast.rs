@@ -1048,7 +1048,7 @@ impl Display for FunctionDecl {
             }
         }
         write!(f, "({})", join(&self.parameters, ", "))?;
-        if !self.is_indexer && self.return_type.name != "auto" {
+        if !self.is_indexer && self.return_type.name != AUTO_TYPE {
             write!(f, ": {}", self.return_type)?;
         }
         if let Some(body) = &self.body {

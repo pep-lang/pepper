@@ -60,14 +60,18 @@ blank_before(node: syntax.Node): bool {
 # Whether a top-level declaration spans several lines (a struct, trait,
 # extension, or a function with a body), so it gets blank lines around it.
 is_big(node: syntax.Node): bool {
-    int kind = node.kind;
-    if (kind == syntax.NODE_STRUCT
-        or kind == syntax.NODE_TRAIT
-        or kind == syntax.NODE_EXTEND
-        or kind == syntax.NODE_ENUM) {
-        return true;
+    match (node.kind) {
+        Struct, Trait, Extend, Enum => {
+            return true;
+        }
+        Function => {
+            return node.child(node.count() - 1).kind == syntax.NodeKind.Block;
+        }
+        else => {
+            return false;
+        }
     }
-    return kind == syntax.NODE_FUNCTION and node.child(node.count() - 1).kind == syntax.NODE_BLOCK;
+    return false;
 }
 
 # Orders two Strings by their bytes: negative, zero or positive.
@@ -92,10 +96,19 @@ export compare_text(a: String, b: String): int {
     return 0;
 }
 
+# Whether `node` is a bare `void`, with no comments to keep, which a
+# function's signature leaves out.
+is_void(node: syntax.Node): bool {
+    return node.kind == syntax.NodeKind.Type
+        and node.count() == 1
+        and node.child(0).is_token("void")
+        and !node.has_comments();
+}
+
 # Whether `item` is an import that sorting may move: not an `export ...
 # from`, whose order decides which of two colliding re-exports is reported.
 is_sortable_import(item: syntax.Node): bool {
-    if (item.kind != syntax.NODE_IMPORT) {
+    if (item.kind != syntax.NodeKind.Import) {
         return false;
     }
     for (var child in item.children) {
@@ -113,7 +126,7 @@ import_key(item: syntax.Node): String {
     while (i > 0) {
         i -= 1;
         var child = item.child(i);
-        if (child.kind != syntax.NODE_TOKEN or child.is_token(";")) {
+        if (child.kind != syntax.NodeKind.Token or child.is_token(";")) {
             continue;
         }
         # The name is the last token that is not an `as` alias.
@@ -122,7 +135,7 @@ import_key(item: syntax.Node): String {
             continue;
         }
         var name = child.leaf;
-        if (name.kind == syntax.TOKEN_STRING) {
+        if (name.kind == syntax.TokenKind.String) {
             return "1" + name.text;
         }
         return "0" + name.text;
@@ -131,7 +144,8 @@ import_key(item: syntax.Node): String {
 }
 
 # Sorts each group of adjacent imports (no blank line or comment between
-# them) in place, by `import_key`. The comments above a group stay above it.
+# them) in place, by `import_key`. The comments above a group, and the
+# blank line after them, stay above it.
 sort_imports(items: syntax.Node[]) {
     ulong start = 0;
     while (start < items.count()) {
@@ -150,7 +164,12 @@ sort_imports(items: syntax.Node[]) {
             var first = items[start].first_token();
             var comments = first.leading_comments;
             int newlines = first.newlines_before;
+            int after_comments = first.newlines_after_comments;
+            # The group's first import may move into the middle: it keeps
+            # none of the spacing that belongs to the group's start.
             first.leading_comments = Array<syntax.Comment>();
+            first.newlines_before = 1;
+            first.newlines_after_comments = 0;
             ulong i = start + 1;
             while (i < end) {
                 ulong j = i;
@@ -163,19 +182,102 @@ sort_imports(items: syntax.Node[]) {
             var new_first = items[start].first_token();
             new_first.leading_comments = comments;
             new_first.newlines_before = newlines;
+            new_first.newlines_after_comments = after_comments;
         }
         start = end;
     }
 }
 
+# The index of the first comment above `token`, from `start` on, that reads
+# `# format: <word>`, or -1.
+directive_index(token: syntax.Token, word: String, start: ulong): long {
+    var directive = "# format: " + word;
+    ulong i = start;
+    while (i < token.leading_comments.count()) {
+        if (token.leading_comments[i].text == directive) {
+            return i as long;
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+# Removes the first `count` comments above `token`. When none are left, the
+# line breaks after them become the token's own.
+drop_comments(token: syntax.Token, count: ulong) {
+    var kept = Array<syntax.Comment>();
+    ulong i = count;
+    while (i < token.leading_comments.count()) {
+        kept.append(token.leading_comments[i]);
+        i += 1;
+    }
+    token.leading_comments = kept;
+    if (kept.empty()) {
+        token.newlines_before = token.newlines_after_comments;
+        token.newlines_after_comments = 0;
+    }
+}
+
+# The offset of the end of the line holding `offset` in `source`, before
+# its line break and any trailing whitespace.
+line_end(source: String, offset: ulong): ulong {
+    var data = source.c_str();
+    ulong end = offset;
+    while (end < source.size() and data[end] != '\n') {
+        end += 1;
+    }
+    while (end > offset and (data[end - 1] == ' ' or data[end - 1] == '\t' or data[end - 1] == '\r')) {
+        end -= 1;
+    }
+    return end;
+}
+
+# `source` from `start` to `end`, with `\r\n` line breaks as `\n`, the form
+# the renderer works in.
+source_text(source: String, start: ulong, end: ulong): String {
+    var data = source.c_str();
+    var result = "";
+    ulong from = start;
+    ulong i = start;
+    while (i < end) {
+        if (data[i] == '\r' and i + 1 < end and data[i + 1] == '\n') {
+            result += String(data + from, i - from);
+            from = i + 1;
+        }
+        i += 1;
+    }
+    result += String(data + from, end - from);
+    return result;
+}
+
+# A `# format: off` region: its text as written, and the index of the first
+# item after it.
+struct Region {
+    Doc layout;
+    ulong next;
+
+    construct(layout: Doc, next: ulong) {
+        this.layout = layout;
+        this.next = next;
+    }
+}
+
 ## Builds the layout of a syntax tree in the standard style.
 export struct Formatter {
+    # The text being formatted, which `# format: off` regions copy.
+    String _source = "";
+
     ## Creates a formatter.
-    construct() {}
+    ##
+    ## @param source the text the tree was parsed from, which
+    ##     `# format: off` regions are copied from
+    construct(source: String = "") {
+        _source = source;
+    }
 
     ## Returns the layout of a whole file.
     ##
-    ## @param module the root of a syntax tree, a `NODE_MODULE`
+    ## @param module the root of a syntax tree, a `NodeKind.Module`
     ## @returns the file's layout, to `render` at `LINE_WIDTH`
     format(module: syntax.Node): Doc {
         var items = Array<syntax.Node>();
@@ -186,12 +288,19 @@ export struct Formatter {
         }
         sort_imports(items);
         var result = concat();
+        var end = module.child(module.count() - 1).leaf;
         ulong index = 0;
+        bool after_region = false;
         while (index < items.count()) {
             var item = items[index];
-            if (index > 0) {
+            if (after_region) {
+                result.add(hardline());
+                if (blank_before(item)) {
+                    result.add(hardline());
+                }
+            } else if (index > 0) {
                 var previous = items[index - 1];
-                if (item.kind == syntax.NODE_EMPTY and item.first_token().newlines_before == 0) {
+                if (item.kind == syntax.NodeKind.Empty and item.first_token().newlines_before == 0) {
                     result.add(_token_doc(item.first_token()));
                     index += 1;
                     continue;
@@ -201,11 +310,18 @@ export struct Formatter {
                     result.add(hardline());
                 }
             }
+            var region = _format_off(items, index, end);
+            if (region) {
+                result.add(region.value().layout);
+                index = region.value().next;
+                after_region = true;
+                continue;
+            }
+            after_region = false;
             result.add(_leading(item.first_token()));
             result.add(_node(item));
             index += 1;
         }
-        var end = module.child(module.count() - 1).leaf;
         ulong c = 0;
         while (c < end.leading_comments.count()) {
             var comment = end.leading_comments[c];
@@ -218,6 +334,76 @@ export struct Formatter {
             result.add(text(comment.text));
             c += 1;
         }
+        return result;
+    }
+
+    # ── format: off ──────────────────────────────────────────────────────────
+
+    # The `# format: off` region that starts above `items[index]`, if one
+    # does: the comments above it are laid out as usual, then everything
+    # from `# format: off` through the matching `# format: on` is copied as
+    # written. Without a `# format: on` among the items, the region ends at
+    # one above `close` or else with the last item. The comments the region
+    # covers are removed from the item after it, which lays out as usual.
+    _format_off(items: syntax.Node[], index: ulong, close: syntax.Token): Region? {
+        var first = items[index].first_token();
+        long off = directive_index(first, "off", 0);
+        if (off < 0) {
+            return Optional<Region>.none();
+        }
+        var start = first.leading_comments[off as ulong].offset;
+        var layout = _leading_part(first, off as ulong);
+        # Find the `# format: on`: above this item after the `off`, above a
+        # later item, or above `close`.
+        ulong next = index;
+        long on = directive_index(first, "on", off as ulong + 1);
+        while (on < 0 and next + 1 < items.count()) {
+            next += 1;
+            on = directive_index(items[next].first_token(), "on", 0);
+        }
+        ulong end = 0;
+        if (on >= 0) {
+            var token = items[next].first_token();
+            end = line_end(_source, token.leading_comments[on as ulong].offset);
+            drop_comments(token, on as ulong + 1);
+        } else {
+            next = items.count();
+            on = directive_index(close, "on", 0);
+            if (on >= 0) {
+                end = line_end(_source, close.leading_comments[on as ulong].offset);
+                drop_comments(close, on as ulong + 1);
+            } else {
+                end = line_end(_source, items[items.count() - 1].last_token().offset);
+            }
+        }
+        layout.add(text(source_text(_source, start, end)));
+        return Optional<Region>.some(Region(layout, next));
+    }
+
+    # The first `count` comments above `token`, each on its own line, with
+    # the blank line after them if the next comment has one. They are removed
+    # from the token.
+    _leading_part(token: syntax.Token, count: ulong): Doc {
+        var result = concat();
+        ulong i = 0;
+        while (i < count) {
+            var comment = token.leading_comments[i];
+            if (i > 0 and comment.newlines_before >= 2) {
+                result.add(hardline());
+            }
+            result.add(text(comment.text));
+            result.add(hardline());
+            i += 1;
+        }
+        if (count > 0 and token.leading_comments[count].newlines_before >= 2) {
+            result.add(hardline());
+        }
+        var kept = Array<syntax.Comment>();
+        while (i < token.leading_comments.count()) {
+            kept.append(token.leading_comments[i]);
+            i += 1;
+        }
+        token.leading_comments = kept;
         return result;
     }
 
@@ -286,80 +472,73 @@ export struct Formatter {
     # ── Dispatch ─────────────────────────────────────────────────────────────
 
     _node(item: syntax.Node): Doc {
-        int kind = item.kind;
-        if (kind == syntax.NODE_TOKEN) {
-            return _leaf(item);
-        }
-        if (kind == syntax.NODE_IMPORT) {
-            return _import_declaration(item);
-        }
-        if (kind == syntax.NODE_EXPORT_ALIAS) {
-            return _export_alias(item);
-        }
-        if (kind == syntax.NODE_STRUCT or kind == syntax.NODE_TRAIT) {
-            return _aggregate(item);
-        }
-        if (kind == syntax.NODE_EXTEND) {
-            return _extension(item);
-        }
-        if (kind == syntax.NODE_ENUM) {
-            return _enum(item);
-        }
-        if (kind == syntax.NODE_ENUM_CASE) {
-            return _enum_case(item);
-        }
-        if (kind == syntax.NODE_MATCH_ARM) {
-            return _match_arm(item);
-        }
-        if (kind == syntax.NODE_PATTERN) {
-            return _pattern(item);
-        }
-        if (kind == syntax.NODE_TYPE_ALIAS) {
-            return _type_alias(item);
-        }
-        if (kind == syntax.NODE_EXTERN_FUNCTION) {
-            return _extern_function(item);
-        }
-        if (kind == syntax.NODE_FUNCTION) {
-            return _function(item);
-        }
-        if (kind == syntax.NODE_CONSTRUCTOR or kind == syntax.NODE_DESTRUCTOR) {
-            return _special_member(item);
-        }
-        if (kind == syntax.NODE_VARIABLE or kind == syntax.NODE_PARAMETER) {
-            return _variable(item, 0, false);
-        }
-        if (kind == syntax.NODE_BLOCK or kind == syntax.NODE_MEMBERS or kind == syntax.NODE_MATCH_ARMS) {
-            return _braced(item);
-        }
-        if (kind == syntax.NODE_IF
-            or kind == syntax.NODE_WHILE
-            or kind == syntax.NODE_FOR
-            or kind == syntax.NODE_WITH
-            or kind == syntax.NODE_MATCH) {
-            return _control(item);
-        }
-        if (kind == syntax.NODE_RETURN
-            or kind == syntax.NODE_JUMP
-            or kind == syntax.NODE_EXPRESSION_STATEMENT
-            or kind == syntax.NODE_DESTRUCTURE
-            or kind == syntax.NODE_EMPTY) {
-            return _simple_statement(item);
-        }
-        if (kind == syntax.NODE_TYPE or kind == syntax.NODE_TYPE_ARGUMENTS) {
-            return _type_name(item);
-        }
-        if (kind == syntax.NODE_GENERIC_PARAMETERS) {
-            return _generic_parameters(item);
-        }
-        if (kind == syntax.NODE_ATTRIBUTE) {
-            return _attribute(item);
-        }
-        if (kind == syntax.NODE_PARAMETERS
-            or kind == syntax.NODE_ARGUMENTS
-            or kind == syntax.NODE_IMPORT_LIST
-            or kind == syntax.NODE_CLOSURE_PARAMETERS) {
-            return _delimited(item, false);
+        match (item.kind) {
+            Token => {
+                return _leaf(item);
+            }
+            Import => {
+                return _import_declaration(item);
+            }
+            ExportAlias => {
+                return _export_alias(item);
+            }
+            Struct, Trait => {
+                return _aggregate(item);
+            }
+            Extend => {
+                return _extension(item);
+            }
+            Enum => {
+                return _enum(item);
+            }
+            EnumCase => {
+                return _enum_case(item);
+            }
+            MatchArm => {
+                return _match_arm(item);
+            }
+            Pattern => {
+                return _pattern(item);
+            }
+            TypeAlias => {
+                return _type_alias(item);
+            }
+            ExternFunction => {
+                return _extern_function(item);
+            }
+            Function => {
+                return _function(item);
+            }
+            Constructor, Destructor => {
+                return _special_member(item);
+            }
+            Variable, Parameter => {
+                return _variable(item, 0, false);
+            }
+            Block, Members, MatchArms => {
+                return _braced(item);
+            }
+            If, While, For, With, Match => {
+                return _control(item);
+            }
+            Return, Jump, ExpressionStatement, Destructure, Empty => {
+                return _simple_statement(item);
+            }
+            Type, TypeArguments => {
+                return _type_name(item);
+            }
+            GenericParameters => {
+                return _generic_parameters(item);
+            }
+            Attribute => {
+                return _attribute(item);
+            }
+            Parameters, Arguments, ImportList, ClosureParameters => {
+                return _delimited(item, false);
+            }
+            else => {
+                return _expression(item);
+            }
         }
         return _expression(item);
     }
@@ -368,7 +547,7 @@ export struct Formatter {
     # declaration, added to `result`. Returns the index of the next child.
     _prefix(item: syntax.Node, result: Doc): ulong {
         ulong i = 0;
-        while (i < item.count() and item.child(i).kind == syntax.NODE_ATTRIBUTE) {
+        while (i < item.count() and item.child(i).kind == syntax.NodeKind.Attribute) {
             result.add(_attribute(item.child(i)));
             result.add(hardline());
             i += 1;
@@ -405,7 +584,7 @@ export struct Formatter {
                 if (!first) {
                     result.add(text(" "));
                 }
-                if (child.kind == syntax.NODE_IMPORT_LIST) {
+                if (child.kind == syntax.NodeKind.ImportList) {
                     result.add(_delimited(child, false));
                 } else {
                     result.add(_leaf(child));
@@ -455,7 +634,7 @@ export struct Formatter {
         i += 2;
         while (i < item.count()) {
             var child = item.child(i);
-            if (child.kind == syntax.NODE_MEMBERS) {
+            if (child.kind == syntax.NodeKind.Members) {
                 result.add(text(" "));
             }
             result.add(_node(child));
@@ -474,7 +653,7 @@ export struct Formatter {
         i += 2;
         while (i < item.count()) {
             var child = item.child(i);
-            if (child.kind == syntax.NODE_GENERIC_PARAMETERS) {
+            if (child.kind == syntax.NodeKind.GenericParameters) {
                 result.add(_generic_parameters(child));
             } else if (child.is_token(":")) {
                 result.add(_leaf(child));
@@ -495,7 +674,7 @@ export struct Formatter {
             var child = item.child(i);
             if (child.is_token("=")) {
                 result.add(text(" ")).add(_leaf(child)).add(text(" "));
-            } else if (child.kind == syntax.NODE_PARAMETERS) {
+            } else if (child.kind == syntax.NodeKind.Parameters) {
                 result.add(_delimited(child, false));
             } else {
                 result.add(_node(child));
@@ -563,7 +742,7 @@ export struct Formatter {
         i += 2;
         while (i < item.count()) {
             var child = item.child(i);
-            if (child.kind == syntax.NODE_GENERIC_PARAMETERS) {
+            if (child.kind == syntax.NodeKind.GenericParameters) {
                 result.add(_generic_parameters(child));
             } else if (child.is_token(";")) {
                 result.add(_leaf(child));
@@ -593,7 +772,8 @@ export struct Formatter {
     }
 
     # A function or method, in the Pepper form `name(x: T): R` wherever the
-    # grammar allows it: C-style `R name(T x)` becomes `name(x: T): R`.
+    # grammar allows it: C-style `R name(T x)` becomes `name(x: T): R`, and
+    # a `void` return type is left out when a body can infer it.
     # Operator methods and indexers keep their return type in front, since
     # the grammar has no other way to write them.
     _function(item: syntax.Node): Doc {
@@ -605,38 +785,40 @@ export struct Formatter {
             i += 1;
         }
         var first = item.child(i);
-        if (first.kind == syntax.NODE_TYPE) {
+        if (first.kind == syntax.NodeKind.Type) {
             # `R name(...)`, `R ==(...)` or `R [](...)`, optionally with
             # `: R2`, which wins. The name may span several tokens.
             ulong j = i + 1;
             var name = concat();
             while (j < item.count()
-                and item.child(j).kind == syntax.NODE_TOKEN
+                and item.child(j).kind == syntax.NodeKind.Token
                 and !item.child(j).is_token(":")
                 and !item.child(j).is_token(";")) {
                 name.add(_leaf(item.child(j)));
                 j += 1;
             }
-            syntax.Node parameters = __null;
-            if (j < item.count() and item.child(j).kind == syntax.NODE_PARAMETERS) {
-                parameters = item.child(j);
+            syntax.Node? parameters;
+            if (j < item.count() and item.child(j).kind == syntax.NodeKind.Parameters) {
+                parameters = Optional<syntax.Node>.some(item.child(j));
                 j += 1;
             }
             bool annotated = j < item.count() and item.child(j).is_token(":");
             if (!annotated or !first.has_comments()) {
                 result.add(_leading(first.first_token()));
                 result.add(name);
-                if (parameters === __null) {
-                    result.add(text("()"));
+                if (parameters) {
+                    result.add(_delimited(parameters.value(), true));
                 } else {
-                    result.add(_delimited(parameters, true));
+                    result.add(text("()"));
                 }
                 if (annotated) {
-                    result.add(_leaf(item.child(j)));
-                    result.add(text(" "));
-                    result.add(_type_name(item.child(j + 1)));
+                    if (!_void_return(item, item.child(j + 1))) {
+                        result.add(_leaf(item.child(j)));
+                        result.add(text(" "));
+                        result.add(_type_name(item.child(j + 1)));
+                    }
                     j += 2;
-                } else {
+                } else if (!_void_return(item, first)) {
                     result.add(text(": "));
                     result.add(_type_name(first));
                 }
@@ -646,7 +828,7 @@ export struct Formatter {
             result.add(_type_name(first));
             result.add(text(" "));
             i += 1;
-            while (i < item.count() and item.child(i).kind == syntax.NODE_TOKEN and !item.child(i).is_token(";")) {
+            while (i < item.count() and item.child(i).kind == syntax.NodeKind.Token and !item.child(i).is_token(";")) {
                 result.add(_leaf(item.child(i)));
                 i += 1;
             }
@@ -658,23 +840,36 @@ export struct Formatter {
         return result;
     }
 
+    # Whether `return_type`, of function `item`, can be left out:
+    # it is `void` and `item` has a body to infer it from. A declaration
+    # without one (a trait method) keeps it.
+    _void_return(item: syntax.Node, return_type: syntax.Node): bool {
+        return is_void(return_type) and item.child(item.count() - 1).kind == syntax.NodeKind.Block;
+    }
+
     # The generic parameters, parameters, return annotation and body of a
     # function, from child `start` on.
     _function_rest(item: syntax.Node, start: ulong, result: Doc) {
         ulong i = start;
         while (i < item.count()) {
             var child = item.child(i);
-            int kind = child.kind;
-            if (kind == syntax.NODE_GENERIC_PARAMETERS) {
+            var kind = child.kind;
+            if (kind == syntax.NodeKind.GenericParameters) {
                 result.add(_generic_parameters(child));
-            } else if (kind == syntax.NODE_PARAMETERS) {
+            } else if (kind == syntax.NodeKind.Parameters) {
                 result.add(_delimited(child, true));
             } else if (child.is_token(":")) {
+                if (i + 1 < item.count() and _void_return(item, item.child(i + 1))) {
+                    # `: void` says nothing: a function whose body returns
+                    # nothing infers `void`.
+                    i += 2;
+                    continue;
+                }
                 result.add(_leaf(child));
                 result.add(text(" "));
-            } else if (kind == syntax.NODE_TYPE) {
+            } else if (kind == syntax.NodeKind.Type) {
                 result.add(_type_name(child));
-            } else if (kind == syntax.NODE_BLOCK) {
+            } else if (kind == syntax.NodeKind.Block) {
                 result.add(text(" "));
                 result.add(_braced(child));
             } else {
@@ -692,7 +887,7 @@ export struct Formatter {
         i += 1;
         while (i < item.count()) {
             var child = item.child(i);
-            if (child.kind == syntax.NODE_PARAMETERS) {
+            if (child.kind == syntax.NodeKind.Parameters) {
                 result.add(_delimited(child, true));
             } else {
                 result.add(text(" "));
@@ -706,7 +901,7 @@ export struct Formatter {
     _generic_parameters(item: syntax.Node): Doc {
         var result = concat();
         for (var child in item.children) {
-            if (child.kind == syntax.NODE_GENERIC_PARAMETER) {
+            if (child.kind == syntax.NodeKind.GenericParameter) {
                 for (var part in child.children) {
                     result.add(_node(part));
                 }
@@ -725,9 +920,9 @@ export struct Formatter {
     _variable(item: syntax.Node, start: ulong, pepper_style: bool): Doc {
         var result = concat();
         ulong i = start;
-        if (item.kind == syntax.NODE_PARAMETER) {
+        if (item.kind == syntax.NodeKind.Parameter) {
             # A parameter's attributes precede it on its line.
-            while (i < item.count() and item.child(i).kind == syntax.NODE_ATTRIBUTE) {
+            while (i < item.count() and item.child(i).kind == syntax.NodeKind.Attribute) {
                 result.add(_attribute(item.child(i)));
                 result.add(text(" "));
                 i += 1;
@@ -742,7 +937,7 @@ export struct Formatter {
             result.add(_leaf(item.child(i + 1)));
             result.add(_leaf(item.child(i + 2)));
             i += 3;
-        } else if (first.kind == syntax.NODE_TYPE) {
+        } else if (first.kind == syntax.NodeKind.Type) {
             var name = item.child(i + 1);
             bool annotated = i + 2 < item.count() and item.child(i + 2).is_token(":");
             if (pepper_style and !annotated) {
@@ -808,11 +1003,11 @@ export struct Formatter {
                     comments = true;
                 }
                 var entry = concat();
-                if (child.kind == syntax.NODE_PARAMETER and pepper_style) {
+                if (child.kind == syntax.NodeKind.Parameter and pepper_style) {
                     entry.add(_variable(child, 0, true));
-                } else if (child.kind == syntax.NODE_IMPORT_SYMBOL) {
+                } else if (child.kind == syntax.NodeKind.ImportSymbol) {
                     entry.add(_import_symbol(child));
-                } else if (child.kind == syntax.NODE_CLOSURE_PARAMETER) {
+                } else if (child.kind == syntax.NodeKind.ClosureParameter) {
                     entry.add(_closure_parameter(child));
                 } else {
                     entry.add(_node(child));
@@ -881,7 +1076,7 @@ export struct Formatter {
     _braced(item: syntax.Node): Doc {
         var result = concat();
         ulong i = 0;
-        while (item.child(i).kind == syntax.NODE_ATTRIBUTE) {
+        while (item.child(i).kind == syntax.NodeKind.Attribute) {
             result.add(_attribute(item.child(i)));
             result.add(hardline());
             i += 1;
@@ -901,7 +1096,7 @@ export struct Formatter {
             and !item.has_comments()
             and items[0].first_token().newlines_before == 0
             and close.leaf.newlines_before == 0
-            and (items[0].kind == syntax.NODE_RETURN or items[0].kind == syntax.NODE_JUMP)) {
+            and (items[0].kind == syntax.NodeKind.Return or items[0].kind == syntax.NodeKind.Jump)) {
             # One trivial statement written on one line stays there.
             var body = concat().add(_leaf(open)).add(indent(concat().add(line()).add(_node(items[0])))).add(line());
             return result.add(group(body.add(_leaf(close))));
@@ -909,17 +1104,29 @@ export struct Formatter {
         result.add(_leaf(open));
         var body = concat();
         ulong index = 0;
+        bool after_region = false;
         while (index < items.count()) {
             var entry = items[index];
-            if (index > 0 and entry.kind == syntax.NODE_EMPTY and entry.first_token().newlines_before == 0) {
+            if (index > 0
+                and !after_region
+                and entry.kind == syntax.NodeKind.Empty
+                and entry.first_token().newlines_before == 0) {
                 body.add(_leaf(entry.child(0)));
                 index += 1;
                 continue;
             }
             body.add(hardline());
-            if (index > 0 and blank_before(entry)) {
+            if ((index > 0 or after_region) and blank_before(entry)) {
                 body.add(hardline());
             }
+            var region = _format_off(items, index, close.leaf);
+            if (region) {
+                body.add(region.value().layout);
+                index = region.value().next;
+                after_region = true;
+                continue;
+            }
+            after_region = false;
             body.add(_leading(entry.first_token()));
             body.add(_node(entry));
             index += 1;
@@ -940,7 +1147,7 @@ export struct Formatter {
             if (i > 0 and !child.is_token(")") and !item.child(i - 1).is_token("(")) {
                 result.add(text(" "));
             }
-            if (child.kind == syntax.NODE_VARIABLE) {
+            if (child.kind == syntax.NodeKind.Variable) {
                 result.add(_variable(child, 0, false));
             } else {
                 result.add(_node(child));
@@ -969,9 +1176,9 @@ export struct Formatter {
     _type_name(item: syntax.Node): Doc {
         var result = concat();
         for (var child in item.children) {
-            if (child.kind == syntax.NODE_TYPE) {
+            if (child.kind == syntax.NodeKind.Type) {
                 result.add(_type_name(child));
-            } else if (child.kind == syntax.NODE_TYPE_ARGUMENTS) {
+            } else if (child.kind == syntax.NodeKind.TypeArguments) {
                 result.add(_type_name(child));
             } else if (child.is_token(",")) {
                 result.add(_leaf(child)).add(text(" "));
@@ -992,86 +1199,93 @@ export struct Formatter {
     # ── Expressions ──────────────────────────────────────────────────────────
 
     _expression(item: syntax.Node): Doc {
-        int kind = item.kind;
-        if (kind == syntax.NODE_TOKEN) {
-            return _leaf(item);
-        }
-        if (kind == syntax.NODE_BINARY) {
-            return _binary(item);
-        }
-        if ((kind == syntax.NODE_CALL or kind == syntax.NODE_MEMBER) and called_members(item) >= 3) {
-            return _member_chain(item);
-        }
-        if (kind == syntax.NODE_CALL) {
-            return concat().add(_expression(item.child(0))).add(_delimited(item.child(1), false));
-        }
-        if (kind == syntax.NODE_TUPLE) {
-            return _delimited(item, false);
-        }
-        if (kind == syntax.NODE_TUPLE_ELEMENT) {
-            # `line: 3`
-            return concat()
-                .add(_leaf(item.child(0)))
-                .add(_leaf(item.child(1)))
-                .add(text(" "))
-                .add(_expression(item.child(2)));
-        }
-        if (kind == syntax.NODE_MEMBER
-            or kind == syntax.NODE_INDEX
-            or kind == syntax.NODE_POSTFIX
-            or kind == syntax.NODE_PARENTHESIZED
-            or kind == syntax.NODE_SIZEOF) {
-            var result = concat();
-            for (var child in item.children) {
-                result.add(_node(child));
+        match (item.kind) {
+            Token => {
+                return _leaf(item);
             }
-            return result;
-        }
-        if (kind == syntax.NODE_PREFIX) {
-            var result = concat().add(_leaf(item.child(0)));
-            var op = item.child(0).leaf.text;
-            var operand = item.child(1);
-            var next = operand.first_token().text;
-            # `- -x` must not print as the `--` operator.
-            if ((op == "-" or op == "+") and (next.starts_with("-") or next.starts_with("+"))) {
-                result.add(text(" "));
+            Binary => {
+                return _binary(item);
             }
-            return result.add(_expression(operand));
-        }
-        if (kind == syntax.NODE_CAST) {
-            var result = concat().add(_expression(item.child(0))).add(text(" ")).add(_leaf(item.child(1)));
-            return result.add(text(" ")).add(_type_name(item.child(2)));
-        }
-        if (kind == syntax.NODE_TERNARY) {
-            var rest = concat().add(text(" ")).add(_leaf(item.child(1))).add(line()).add(_expression(item.child(2)));
-            rest.add(text(" ")).add(_leaf(item.child(3))).add(line()).add(_expression(item.child(4)));
-            return group(concat().add(_expression(item.child(0))).add(indent(rest)));
-        }
-        if (kind == syntax.NODE_TYPE_LITERAL) {
-            return _type_name(item.child(0));
-        }
-        if (kind == syntax.NODE_MATCH) {
-            return _control(item);
-        }
-        if (kind == syntax.NODE_PATTERN) {
-            return _pattern(item);
-        }
-        if (kind == syntax.NODE_CLOSURE) {
-            var result = concat();
-            for (var child in item.children) {
-                if (child.kind == syntax.NODE_CLOSURE_PARAMETERS) {
-                    result.add(_delimited(child, false));
-                } else if (child.is_token(":")) {
-                    result.add(_leaf(child)).add(text(" "));
-                } else if (child.is_token("=>")) {
-                    result.add(text(" ")).add(_leaf(child)).add(text(" "));
-                } else {
-                    result.add(_node(child));
+            Call => {
+                if (called_members(item) >= 3) {
+                    return _member_chain(item);
                 }
+                return concat().add(_expression(item.child(0))).add(_delimited(item.child(1), false));
             }
-            return result;
+            Member => {
+                if (called_members(item) >= 3) {
+                    return _member_chain(item);
+                }
+                return _parts(item);
+            }
+            Tuple => {
+                return _delimited(item, false);
+            }
+            TupleElement => {
+                # `line: 3`
+                return concat()
+                    .add(_leaf(item.child(0)))
+                    .add(_leaf(item.child(1)))
+                    .add(text(" "))
+                    .add(_expression(item.child(2)));
+            }
+            Prefix => {
+                var result = concat().add(_leaf(item.child(0)));
+                var op = item.child(0).leaf.text;
+                var operand = item.child(1);
+                var next = operand.first_token().text;
+                # `- -x` must not print as the `--` operator.
+                if ((op == "-" or op == "+") and (next.starts_with("-") or next.starts_with("+"))) {
+                    result.add(text(" "));
+                }
+                return result.add(_expression(operand));
+            }
+            Cast => {
+                var result = concat().add(_expression(item.child(0))).add(text(" ")).add(_leaf(item.child(1)));
+                return result.add(text(" ")).add(_type_name(item.child(2)));
+            }
+            Ternary => {
+                var rest = concat()
+                    .add(text(" "))
+                    .add(_leaf(item.child(1)))
+                    .add(line())
+                    .add(_expression(item.child(2)));
+                rest.add(text(" ")).add(_leaf(item.child(3))).add(line()).add(_expression(item.child(4)));
+                return group(concat().add(_expression(item.child(0))).add(indent(rest)));
+            }
+            TypeLiteral => {
+                return _type_name(item.child(0));
+            }
+            Match => {
+                return _control(item);
+            }
+            Pattern => {
+                return _pattern(item);
+            }
+            Closure => {
+                var result = concat();
+                for (var child in item.children) {
+                    if (child.kind == syntax.NodeKind.ClosureParameters) {
+                        result.add(_delimited(child, false));
+                    } else if (child.is_token(":")) {
+                        result.add(_leaf(child)).add(text(" "));
+                    } else if (child.is_token("=>")) {
+                        result.add(text(" ")).add(_leaf(child)).add(text(" "));
+                    } else {
+                        result.add(_node(child));
+                    }
+                }
+                return result;
+            }
+            else => {
+                return _parts(item);
+            }
         }
-        # Any other construct: its parts, one after another.
+        return _parts(item);
+    }
+
+    # Any other construct: its parts, one after another.
+    _parts(item: syntax.Node): Doc {
         var result = concat();
         for (var child in item.children) {
             result.add(_node(child));
@@ -1085,7 +1299,9 @@ export struct Formatter {
     _member_chain(item: syntax.Node): Doc {
         var links = Array<syntax.Node>();
         var base = item;
-        while (base.kind == syntax.NODE_CALL or base.kind == syntax.NODE_MEMBER or base.kind == syntax.NODE_INDEX) {
+        while (base.kind == syntax.NodeKind.Call
+            or base.kind == syntax.NodeKind.Member
+            or base.kind == syntax.NodeKind.Index) {
             links.append(base);
             base = base.child(0);
         }
@@ -1094,8 +1310,8 @@ export struct Formatter {
         ulong i = 0;
         while (i < links.count()) {
             var link = links[i];
-            bool called = i + 1 < links.count() and links[i + 1].kind == syntax.NODE_CALL;
-            if (link.kind == syntax.NODE_MEMBER and called) {
+            bool called = i + 1 < links.count() and links[i + 1].kind == syntax.NodeKind.Call;
+            if (link.kind == syntax.NodeKind.Member and called) {
                 rest.add(softline());
             }
             ulong k = 1;
@@ -1121,7 +1337,7 @@ export struct Formatter {
         var operands = Array<syntax.Node>();
         var operators = Array<syntax.Node>();
         var current = item;
-        while (current.kind == syntax.NODE_BINARY and precedence(current.child(1).leaf.text) == level) {
+        while (current.kind == syntax.NodeKind.Binary and precedence(current.child(1).leaf.text) == level) {
             operands.append(current.child(2));
             operators.append(current.child(1));
             current = current.child(0);
@@ -1147,10 +1363,10 @@ export struct Formatter {
 called_members(item: syntax.Node): int {
     int count = 0;
     var current = item;
-    while (current.kind == syntax.NODE_CALL
-        or current.kind == syntax.NODE_MEMBER
-        or current.kind == syntax.NODE_INDEX) {
-        if (current.kind == syntax.NODE_CALL and current.child(0).kind == syntax.NODE_MEMBER) {
+    while (current.kind == syntax.NodeKind.Call
+        or current.kind == syntax.NodeKind.Member
+        or current.kind == syntax.NodeKind.Index) {
+        if (current.kind == syntax.NodeKind.Call and current.child(0).kind == syntax.NodeKind.Member) {
             count += 1;
         }
         current = current.child(0);
@@ -1255,6 +1471,6 @@ export format_source(source: String): Result<String, syntax.SyntaxError> {
     if (first_break > 0 and source.c_str()[(first_break - 1) as ulong] == '\r') {
         newline = "\r\n";
     }
-    var layout = Formatter().format(tree.value());
+    var layout = Formatter(source).format(tree.value());
     return Result<String, syntax.SyntaxError>.ok(align_trailing_comments(render(layout, LINE_WIDTH), newline));
 }

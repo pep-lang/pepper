@@ -46,7 +46,7 @@ is_hex_digit(c: int): bool {
 }
 
 # The punctuation the lexer recognizes, longest first so the first match is
-# the longest. `>` never starts a longer token (see TOKEN_PUNCTUATION).
+# the longest. `>` never starts a longer token (see TokenKind.Punctuation).
 punctuation_table(): String[] {
     var table = Array<String>();
     table.append("===");
@@ -124,7 +124,7 @@ slice(data: __ptr<char>, start: ulong, end: ulong): String {
     return String(data + start, end - start);
 }
 
-## Splits `source` into tokens. The last token is always a `TOKEN_END`
+## Splits `source` into tokens. The last token is always a `TokenKind.End`
 ## that holds the comments after the last real token.
 ##
 ## @param source the text of a Pepper source file
@@ -167,7 +167,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
             if (tokens.count() > 0 and newlines == 0 and tokens.last().trailing_comment.empty()) {
                 tokens.last().trailing_comment = text;
             } else {
-                pending.append(Comment(text, newlines_since_comment));
+                pending.append(Comment(text, newlines_since_comment, start));
                 newlines_since_comment = 0;
             }
             space = true;
@@ -175,14 +175,14 @@ export lex(source: String): Result<Token[], SyntaxError> {
         }
 
         ulong start = i;
-        int kind = TOKEN_PUNCTUATION;
+        var kind = TokenKind.Punctuation;
         if (is_identifier_start(c)) {
-            kind = TOKEN_IDENTIFIER;
+            kind = TokenKind.Identifier;
             while (i < size and is_identifier_part(data[i])) {
                 i += 1;
             }
         } else if (is_digit(c)) {
-            kind = TOKEN_NUMBER;
+            kind = TokenKind.Number;
             if (c == '0' and i + 1 < size and data[i + 1] == 'x') {
                 i += 2;
                 while (i < size and is_hex_digit(data[i])) {
@@ -215,9 +215,9 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 }
             }
         } else if (c == '"' or c == '\'') {
-            kind = TOKEN_STRING;
+            kind = TokenKind.String;
             if (c == '\'') {
-                kind = TOKEN_CHARACTER;
+                kind = TokenKind.Character;
             }
             i += 1;
             bool closed = false;
@@ -267,7 +267,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
         newlines_since_comment = 0;
         space = false;
     }
-    var end = Token(TOKEN_END, "", size);
+    var end = Token(TokenKind.End, "", size);
     end.newlines_before = newlines;
     end.newlines_after_comments = newlines_since_comment;
     end.space_before = space;

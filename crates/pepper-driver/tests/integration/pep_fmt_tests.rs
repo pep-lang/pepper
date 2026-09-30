@@ -65,11 +65,13 @@ fn format(source: &str) -> Result<String, String> {
     }
 }
 
-/// The compiler's AST of `source`, printed, with imports sorted: pep-fmt
-/// sorts imports, and their order has no meaning.
+/// The compiler's AST of `source`, printed, with imports sorted (pep-fmt
+/// sorts imports, and their order has no meaning) and `: void` before a
+/// body dropped (pep-fmt leaves it out, and the body infers it).
 fn ast(name: &str, source: &str) -> String {
     let module = pepper_parser::parser::parse_source(name, source).unwrap_or_else(|e| panic!("{}", e));
     let printed = module.to_string();
+    let printed = printed.replace("): void {", ") {");
     let (mut imports, rest): (Vec<&str>, Vec<&str>) = printed.lines().partition(|l| l.starts_with("import "));
     imports.sort();
     imports.into_iter().chain(rest).collect::<Vec<_>>().join("\n")
@@ -206,6 +208,56 @@ fn pep_fmt_sorts_imports_and_aligns_trailing_comments() {
     assert_formats(
         "import \"zeta\";\nimport \"alpha\"; # a file\nimport io;\n\nconst A = 1; # one\nconst LONGER = 2;   # two\n",
         "import io;\nimport \"alpha\";  # a file\nimport \"zeta\";\n\nconst A = 1;       # one\nconst LONGER = 2;  # two\n",
+    );
+}
+
+#[test]
+fn pep_fmt_keeps_the_blank_line_after_a_file_comment_when_sorting_imports() {
+    assert_formats(
+        "# A file.\n\nimport \"types\";\nimport \"path\";\nimport \"file\";\n\nconst A = 1;\n",
+        "# A file.\n\nimport \"file\";\nimport \"path\";\nimport \"types\";\n\nconst A = 1;\n",
+    );
+}
+
+#[test]
+fn pep_fmt_leaves_out_a_void_return_type() {
+    assert_formats(
+        "void run(int n) { go(n); }\nstop(): void { go(0); }\ntrait T { void tick(); }\n",
+        "run(n: int) {\n    go(n);\n}\n\nstop() {\n    go(0);\n}\n\ntrait T {\n    tick(): void;\n}\n",
+    );
+}
+
+#[test]
+fn pep_fmt_leaves_format_off_regions_as_written() {
+    assert_formats(
+        "# The grid.\n# format: off\nconst GRID = add(1, 0,\n                 0, 1);\n# format: on\nvar  x=1;\n\n\
+         main(): int {\n  var a=1;\n    # format: off\n    var   b   = 2;   # aligned\n    if (a) { f(); }\n    # format: on\n  var c=3;\n  return 0;\n}\n",
+        "# The grid.\n# format: off\nconst GRID = add(1, 0,\n                 0, 1);\n# format: on\nvar x = 1;\n\n\
+         main(): int {\n    var a = 1;\n    # format: off\n    var   b   = 2;   # aligned\n    if (a) { f(); }\n    # format: on\n    var c = 3;\n    return 0;\n}\n",
+    );
+}
+
+#[test]
+fn pep_fmt_runs_format_off_to_the_end_without_format_on() {
+    assert_formats(
+        "main() {\n  f(  1 );\n  # format: off\n  g(  2 );\n  h(  3 );\n}\nvar  y=1;\n",
+        "main() {\n    f(1);\n    # format: off\n  g(  2 );\n  h(  3 );\n}\n\nvar y = 1;\n",
+    );
+}
+
+#[test]
+fn pep_fmt_keeps_crlf_in_format_off_regions() {
+    assert_formats(
+        "var  a=1;\r\n# format: off\r\nvar   b=2;\r\n# format: on\r\nvar  c=3;\r\n",
+        "var a = 1;\r\n# format: off\r\nvar   b=2;\r\n# format: on\r\nvar c = 3;\r\n",
+    );
+}
+
+#[test]
+fn pep_fmt_keeps_parameter_attributes_inline() {
+    assert_formats(
+        "struct Box<T> {\n    send([Move] value: T, [Move] [Sending] other: T) { take(value); }\n}\n",
+        "struct Box<T> {\n    send([Move] value: T, [Move] [Sending] other: T) {\n        take(value);\n    }\n}\n",
     );
 }
 

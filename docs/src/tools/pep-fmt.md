@@ -114,7 +114,9 @@ kept for `extern` functions, which mirror C prototypes; `pep-fmt` rewrites
 it everywhere else, including operator methods (`bool ==(Point other)`
 becomes `==(other: Point): bool`, and `bool !!()` becomes `!!(): bool`),
 indexers (`T [](ulong index)` becomes `[](index: ulong): T`) and constructor
-parameters.
+parameters. A `void` return type is left out when the function has a body
+(`void run()` and `run(): void` both become `run()`); a declaration without
+a body, such as a trait method, keeps it.
 
 **Blank lines.** At most one blank line in a row. Top-level structs,
 traits, extensions and functions with a body are separated by one blank
@@ -137,3 +139,21 @@ them) are sorted: modules first (`import io;`), then files of this module
 **Kept as written:** parentheses around
 conditions (`if x` and `if (x)` are both fine), fields declared either way
 (`int x;` or `var x: int;`), and the file's line endings (`\n` or `\r\n`).
+
+## Turning it off for a section
+
+Code between a `# format: off` comment and a `# format: on` comment is left
+exactly as written, for layouts the style would undo, such as a table of
+numbers:
+
+```pepper
+# format: off
+const IDENTITY = matrix(1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1);
+# format: on
+```
+
+Each comment goes on its own line, between declarations or statements, and
+the pair must be in the same block (or both at the top level). Without a
+`# format: on`, the region runs to the end of the block or file.

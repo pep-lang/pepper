@@ -1154,8 +1154,9 @@ dogfooding of the language.
   source order, and each comment hangs off the token next to it (a comment
   on the same line after a token is its `trailing_comment`, any other is an
   entry in `leading_comments` of the next token). Nodes are uniform (`kind`, `leaf`,
-  `children`), written before Pepper had enums; moving the node kinds to
-  enums is the last phase of the enums proposal.
+  `children`): `kind` is a `NodeKind` (a token's is a `TokenKind`), and
+  the formatter dispatches on it with `match` (`_node`, then `_expression`,
+  whose `else` prints any other node's parts in order).
 - The parser mirrors `parsers.rs` decision for decision; like it, it
   treats line breaks as whitespace except at a declaration missing its `;`
   (`_declaration_boundary`, using the next token's `newlines_before`), and
@@ -1166,12 +1167,13 @@ dogfooding of the language.
   grammar would read those operators.
 - `tools/pep-fmt` turns the tree into a Wadler-style layout document
   (`doc.pep`: text, soft and hard lines, indentation, groups, and a
-  `DOC_CHOICE` of layouts tried in order) and renders it at 120 columns;
-  `format.pep` holds the style; a long binary
+    `DocKind.Choice` of layouts tried in order) and renders it at 120 columns;
+    `format.pep` holds the style; a long binary
   expression breaks before each operator, and `_member_chain` breaks a chain
   of three or more calls before each `.`. Trailing comments are emitted as line
   suffixes marked with byte 0x01, which `align_trailing_comments` aligns and
-  removes.
+  removes. `_format_off` copies a `# format: off` region from the source by
+  the comments' offsets, at the top level and in `_braced` item lists.
 - `pep_fmt_tests.rs` compiles pep-fmt and runs it on every `.pep` file in
   the repository: each must format, be idempotent, and give the same AST
   (the compiler's `Display` of `Module`, imports sorted) before and after.
@@ -1262,7 +1264,7 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    the language guide chapter in `docs/src/language/` (with a tested
    example in `docs/examples/`) and the TextMate grammar in
    `tools/vscode-pepper`.
-6. Mirror the rule in `tools/syntax/parser.pep` (and its node in
+6. Mirror the rule in `tools/syntax/parser.pep` (and its `NodeKind` case in
    `tree.pep`), and print the node in `tools/pep-fmt/format.pep`.
    `pep_fmt_tests.rs` fails until the formatter keeps a file that uses the
    form unchanged in meaning.

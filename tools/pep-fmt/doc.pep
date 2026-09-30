@@ -3,28 +3,31 @@
 ## where a line may break, groups that break together) and `render` chooses
 ## the line breaks that keep lines within a width.
 
-## Text printed as is. It must not contain a line break.
-export const DOC_TEXT = 0;
-## Its parts, one after another.
-export const DOC_CONCAT = 1;
-## A space, or a line break when its group breaks.
-export const DOC_LINE = 2;
-## Nothing, or a line break when its group breaks.
-export const DOC_SOFTLINE = 3;
-## Always a line break; every group around it breaks.
-export const DOC_HARDLINE = 4;
-## Its parts, with lines that break inside them indented one level more.
-export const DOC_INDENT = 5;
-## Its parts, laid out on one line when they fit, else with every line of the
-## group broken.
-export const DOC_GROUP = 6;
-## Text deferred to the end of the current line: a trailing comment.
-export const DOC_LINE_SUFFIX = 7;
-## Nothing, but it breaks every group around it, like a line break would.
-export const DOC_BREAK_PARENT = 8;
-## Alternative layouts of the same content: the first whose every line fits
-## is printed flat; if none fits, the last is printed with its groups broken.
-export const DOC_CHOICE = 9;
+## Which layout node a `Doc` is.
+export enum DocKind {
+    ## Text printed as is. It must not contain a line break.
+    Text,
+    ## Its parts, one after another.
+    Concat,
+    ## A space, or a line break when its group breaks.
+    Line,
+    ## Nothing, or a line break when its group breaks.
+    Softline,
+    ## Always a line break; every group around it breaks.
+    Hardline,
+    ## Its parts, with lines that break inside them indented one level more.
+    Indent,
+    ## Its parts, laid out on one line when they fit, else with every line of the
+    ## group broken.
+    Group,
+    ## Text deferred to the end of the current line: a trailing comment.
+    LineSuffix,
+    ## Nothing, but it breaks every group around it, like a line break would.
+    BreakParent,
+    ## Alternative layouts of the same content: the first whose every line fits
+    ## is printed flat; if none fits, the last is printed with its groups broken.
+    Choice,
+}
 
 ## The number of spaces in one indentation level.
 export const INDENT_WIDTH = 4;
@@ -39,26 +42,29 @@ export comment_mark(): String {
     return "\x01";
 }
 
-const MODE_FLAT = 0;
-const MODE_BREAK = 1;
+# How a group's lines print: as spaces (flat) or as line breaks.
+enum Mode {
+    Flat,
+    Break,
+}
 
 ## A node of a layout description.
 export struct Doc {
-    ## What the node is: one of the `DOC_` constants.
-    int kind;
-    ## The text of a `DOC_TEXT` or `DOC_LINE_SUFFIX`.
+    ## What the node is.
+    DocKind kind;
+    ## The text of a `DocKind.Text` or `DocKind.LineSuffix`.
     String text = "";
-    ## The children of a `DOC_CONCAT`, `DOC_INDENT`, `DOC_GROUP` or the
-    ## options of a `DOC_CHOICE`.
+    ## The children of a `DocKind.Concat`, `DocKind.Indent`, `DocKind.Group` or the
+    ## options of a `DocKind.Choice`.
     Doc[] parts = Array<Doc>();
-    # Whether a hard line break is inside: 0 not computed yet, 1 yes, 2 no.
-    int hard_state;
+    # Whether a hard line break is inside, once `is_hard` has worked it out.
+    bool? _hard;
 
     ## Creates a document node.
     ##
-    ## @param this.kind one of the `DOC_` constants
-    ## @param this.text the text of a `DOC_TEXT` or `DOC_LINE_SUFFIX`
-    construct(this.kind = 1, this.text = "") {}
+    ## @param this.kind what the node is
+    ## @param this.text the text of a `DocKind.Text` or `DocKind.LineSuffix`
+    construct(this.kind = DocKind.Concat, this.text = "") {}
 
     ## Appends `part` to this node's parts.
     ##
@@ -74,84 +80,91 @@ export struct Doc {
     ##
     ## @returns true when the document cannot be printed on one line
     is_hard(): bool {
-        if (hard_state == 0) {
-            hard_state = 2;
-            if (kind == DOC_HARDLINE or kind == DOC_BREAK_PARENT) {
-                hard_state = 1;
-            } else if (kind == DOC_CHOICE) {
-                if (parts.count() > 0 and parts[0].is_hard()) {
-                    hard_state = 1;
-                }
-            } else {
+        if (!_hard) {
+            _hard = Optional<bool>.some(_find_hard());
+        }
+        return _hard.value();
+    }
+
+    # Whether a hard line break is inside, worked out from the parts.
+    _find_hard(): bool {
+        match (kind) {
+            Hardline, BreakParent => {
+                return true;
+            }
+            Choice => {
+                return parts.count() > 0 and parts[0].is_hard();
+            }
+            else => {
                 for (var part in parts) {
                     if (part.is_hard()) {
-                        hard_state = 1;
-                        break;
+                        return true;
                     }
                 }
+                return false;
             }
         }
-        return hard_state == 1;
+        return false;
     }
 }
 
 ## Returns a text document.
 ##
 ## @param value the text, with no line break in it
-## @returns a `DOC_TEXT`
+## @returns a `DocKind.Text`
 export text(value: String): Doc {
-    return Doc(DOC_TEXT, value);
+    return Doc(DocKind.Text, value);
 }
 
 ## Returns an empty sequence to `add` parts to.
 ##
-## @returns a `DOC_CONCAT` with no parts
+## @returns a `DocKind.Concat` with no parts
 export concat(): Doc {
-    return Doc(DOC_CONCAT);
+    return Doc(DocKind.Concat);
 }
 
 ## Returns a space that becomes a line break when its group breaks.
 ##
-## @returns a `DOC_LINE`
+## @returns a `DocKind.Line`
 export line(): Doc {
-    return Doc(DOC_LINE);
+    return Doc(DocKind.Line);
 }
 
 ## Returns nothing that becomes a line break when its group breaks.
 ##
-## @returns a `DOC_SOFTLINE`
+## @returns a `DocKind.Softline`
 export softline(): Doc {
-    return Doc(DOC_SOFTLINE);
+    return Doc(DocKind.Softline);
 }
 
 ## Returns a line break that always breaks.
 ##
-## @returns a `DOC_HARDLINE`
+## @returns a `DocKind.Hardline`
 export hardline(): Doc {
-    return Doc(DOC_HARDLINE);
+    return Doc(DocKind.Hardline);
 }
 
 ## Returns `content` indented one level where its lines break.
 ##
 ## @param content the document to indent
-## @returns a `DOC_INDENT` holding `content`
+## @returns a `DocKind.Indent` holding `content`
 export indent(content: Doc): Doc {
-    return Doc(DOC_INDENT).add(content);
+    return Doc(DocKind.Indent).add(content);
 }
 
 ## Returns `content` as a group that breaks as a whole.
 ##
 ## @param content the document to group
-## @returns a `DOC_GROUP` holding `content`
+## @returns a `DocKind.Group` holding `content`
 export group(content: Doc): Doc {
-    return Doc(DOC_GROUP).add(content);
+    return Doc(DocKind.Group).add(content);
 }
 
 ## Returns an empty choice to `add` layouts to, best first.
 ##
-## @returns a `DOC_CHOICE` with no options
+## @returns a `DocKind.Choice` with no options
 export choice(): Doc {
-    return Doc(DOC_CHOICE);
+    return Doc(DocKind.Choice);
 }
 
 ## Returns a trailing comment, printed at the end of the current line.
@@ -159,16 +172,19 @@ export choice(): Doc {
 ## @param comment the comment text, starting with `#`
 ## @returns the comment as a line suffix that also breaks its groups
 export trailing_comment(comment: String): Doc {
-    return concat().add(Doc(DOC_LINE_SUFFIX, comment_mark() + comment)).add(Doc(DOC_BREAK_PARENT));
+    return concat().add(Doc(DocKind.LineSuffix, comment_mark() + comment)).add(Doc(DocKind.BreakParent));
 }
 
 # A document to print, with the indentation and mode it is printed in.
 struct Frame {
     int indent;
-    int mode;
+    Mode mode;
     Doc item;
+    # Whether this frame is on the rest of the line after the item `fits`
+    # measures, which only matters up to its first line break.
+    bool in_rest;
 
-    construct(this.indent = 0, this.mode = 0, this.item = __null) {}
+    construct(this.indent = 0, this.mode = Mode.Flat, this.item = __null, this.in_rest = false) {}
 }
 
 spaces(count: int): String {
@@ -186,7 +202,7 @@ spaces(count: int): String {
 # frames are printed last to first) up to the next line break.
 fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
     var stack = Array<Frame>();
-    stack.append(Frame(indent, MODE_FLAT, item));
+    stack.append(Frame(indent, Mode.Flat, item));
     ulong rest_index = rest.count();
     int current = column;
     while (true) {
@@ -199,52 +215,51 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
             }
             rest_index -= 1;
             var next = rest[rest_index];
-            stack.append(Frame(next.indent, next.mode, next.item));
-            # Everything after `item` only matters up to its first line break.
-            stack.last().mode = next.mode + 10;
+            stack.append(Frame(next.indent, next.mode, next.item, true));
         }
         var frame = stack.pop();
         var doc = frame.item;
-        bool in_rest = frame.mode >= 10;
-        int mode = frame.mode % 10;
-        int kind = doc.kind;
-        if (kind == DOC_TEXT) {
-            current += doc.text.length() as int;
-        } else if (kind == DOC_CONCAT or kind == DOC_INDENT or kind == DOC_GROUP) {
-            int nested = frame.indent;
-            if (kind == DOC_INDENT) {
-                nested += INDENT_WIDTH;
+        match (doc.kind) {
+            Text => {
+                current += doc.text.length() as int;
             }
-            int nested_mode = frame.mode;
-            if (kind == DOC_GROUP and doc.is_hard()) {
-                nested_mode = MODE_BREAK;
-                if (in_rest) {
-                    nested_mode += 10;
+            Concat, Indent, Group => {
+                int nested = frame.indent;
+                if (doc.kind == DocKind.Indent) {
+                    nested += INDENT_WIDTH;
+                }
+                var nested_mode = frame.mode;
+                if (doc.kind == DocKind.Group and doc.is_hard()) {
+                    nested_mode = Mode.Break;
+                }
+                ulong i = doc.parts.count();
+                while (i > 0) {
+                    i -= 1;
+                    stack.append(Frame(nested, nested_mode, doc.parts[i], frame.in_rest));
                 }
             }
-            ulong i = doc.parts.count();
-            while (i > 0) {
-                i -= 1;
-                stack.append(Frame(nested, nested_mode, doc.parts[i]));
+            Choice => {
+                if (doc.parts.count() > 0) {
+                    stack.append(Frame(frame.indent, frame.mode, doc.parts[0], frame.in_rest));
+                }
             }
-        } else if (kind == DOC_CHOICE) {
-            if (doc.parts.count() > 0) {
-                stack.append(Frame(frame.indent, frame.mode, doc.parts[0]));
+            Line, Softline => {
+                if (frame.mode == Mode.Break) {
+                    if (frame.in_rest) {
+                        return true;
+                    }
+                    current = frame.indent;
+                } else if (doc.kind == DocKind.Line) {
+                    current += 1;
+                }
             }
-        } else if (kind == DOC_LINE or kind == DOC_SOFTLINE) {
-            if (mode == MODE_BREAK) {
-                if (in_rest) {
+            Hardline => {
+                if (frame.in_rest) {
                     return true;
                 }
                 current = frame.indent;
-            } else if (kind == DOC_LINE) {
-                current += 1;
             }
-        } else if (kind == DOC_HARDLINE) {
-            if (in_rest) {
-                return true;
-            }
-            current = frame.indent;
+            LineSuffix, BreakParent => {}
         }
     }
     return true;
@@ -263,56 +278,75 @@ export render(document: Doc, width: int): String {
     var suffix = "";
     int column = 0;
     var stack = Array<Frame>();
-    stack.append(Frame(0, MODE_BREAK, document));
+    stack.append(Frame(0, Mode.Break, document));
     while (!stack.empty()) {
         var frame = stack.pop();
         var doc = frame.item;
-        int kind = doc.kind;
-        if (kind == DOC_TEXT) {
-            current += doc.text;
-            column += doc.text.length() as int;
-        } else if (kind == DOC_CONCAT or kind == DOC_INDENT) {
-            int nested = frame.indent;
-            if (kind == DOC_INDENT) {
-                nested += INDENT_WIDTH;
+        var breaks = false;
+        match (doc.kind) {
+            Text => {
+                current += doc.text;
+                column += doc.text.length() as int;
             }
-            ulong i = doc.parts.count();
-            while (i > 0) {
-                i -= 1;
-                stack.append(Frame(nested, frame.mode, doc.parts[i]));
-            }
-        } else if (kind == DOC_GROUP) {
-            int mode = MODE_FLAT;
-            if (doc.is_hard()) {
-                mode = MODE_BREAK;
-            } else if (frame.mode == MODE_BREAK and !fits(doc, frame.indent, column, width, stack)) {
-                mode = MODE_BREAK;
-            }
-            ulong i = doc.parts.count();
-            while (i > 0) {
-                i -= 1;
-                stack.append(Frame(frame.indent, mode, doc.parts[i]));
-            }
-        } else if (kind == DOC_CHOICE) {
-            ulong count = doc.parts.count();
-            ulong chosen = count - 1;
-            int mode = MODE_BREAK;
-            ulong i = 0;
-            while (i + 1 < count) {
-                if (fits(doc.parts[i], frame.indent, column, width, stack)) {
-                    chosen = i;
-                    mode = MODE_FLAT;
-                    break;
+            Concat, Indent => {
+                int nested = frame.indent;
+                if (doc.kind == DocKind.Indent) {
+                    nested += INDENT_WIDTH;
                 }
-                i += 1;
+                ulong i = doc.parts.count();
+                while (i > 0) {
+                    i -= 1;
+                    stack.append(Frame(nested, frame.mode, doc.parts[i]));
+                }
             }
-            stack.append(Frame(frame.indent, mode, doc.parts[chosen]));
-        } else if (kind == DOC_LINE and frame.mode == MODE_FLAT) {
-            current += " ";
-            column += 1;
-        } else if (kind == DOC_SOFTLINE and frame.mode == MODE_FLAT) {
-            # Nothing.
-        } else if (kind == DOC_LINE or kind == DOC_SOFTLINE or kind == DOC_HARDLINE) {
+            Group => {
+                var mode = Mode.Flat;
+                if (doc.is_hard()) {
+                    mode = Mode.Break;
+                } else if (frame.mode == Mode.Break and !fits(doc, frame.indent, column, width, stack)) {
+                    mode = Mode.Break;
+                }
+                ulong i = doc.parts.count();
+                while (i > 0) {
+                    i -= 1;
+                    stack.append(Frame(frame.indent, mode, doc.parts[i]));
+                }
+            }
+            Choice => {
+                ulong count = doc.parts.count();
+                ulong chosen = count - 1;
+                var mode = Mode.Break;
+                ulong i = 0;
+                while (i + 1 < count) {
+                    if (fits(doc.parts[i], frame.indent, column, width, stack)) {
+                        chosen = i;
+                        mode = Mode.Flat;
+                        break;
+                    }
+                    i += 1;
+                }
+                stack.append(Frame(frame.indent, mode, doc.parts[chosen]));
+            }
+            Line => {
+                if (frame.mode == Mode.Flat) {
+                    current += " ";
+                    column += 1;
+                } else {
+                    breaks = true;
+                }
+            }
+            Softline => {
+                breaks = frame.mode == Mode.Break;
+            }
+            Hardline => {
+                breaks = true;
+            }
+            LineSuffix => {
+                suffix += doc.text;
+            }
+            BreakParent => {}
+        }
+        if (breaks) {
             if (!suffix.empty()) {
                 current += suffix;
                 suffix = "";
@@ -320,8 +354,6 @@ export render(document: Doc, width: int): String {
             lines.append(current);
             current = spaces(frame.indent);
             column = frame.indent;
-        } else if (kind == DOC_LINE_SUFFIX) {
-            suffix += doc.text;
         }
     }
     current += suffix;
