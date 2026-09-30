@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a32287b4.js";
+            window.path_to_searchindex_js = "../searchindex-67fee795.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-816bb96a.js"></script>
@@ -274,7 +274,8 @@ literals (<code>'a'</code> is a syntax error); text is a <code>String</code>, an
 a one-code-point <code>String</code>.</p>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
-value. <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
+value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
+literal’s NUL-terminated bytes (see <a href="c-interop.html#passing-strings">Passing strings</a>). <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
 <code>length()</code> counts code points, <code>size()</code> counts bytes, and <code>s[i]</code> gives the code
 point at index <code>i</code> as a one-code-point <code>String</code>.</p>
 <pre><code class="language-pepper"># String literals are String values.
