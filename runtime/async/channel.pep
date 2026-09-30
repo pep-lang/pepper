@@ -411,8 +411,8 @@ export struct ChannelIterator<T> {
     # The channel it receives from.
     const _source: Channel<T>;
 
-    ## The value the last successful `next()` received.
-    T Current;
+    # The value the last successful `next()` received.
+    T _current;
 
     ## Creates an iterator that receives from `source`. `source.iterate()`
     ## does the same.
@@ -428,10 +428,10 @@ export struct ChannelIterator<T> {
     next(): bool {
         var received = _source.receive();
         if (received.is_err()) {
-            Current = __default<T>();
+            _current = __default<T>();
             return false;
         }
-        Current = received.value();
+        _current = received.value();
         return true;
     }
 
@@ -439,7 +439,7 @@ export struct ChannelIterator<T> {
     ##
     ## @returns the current value
     current(): T {
-        return Current;
+        return _current;
     }
 }
 

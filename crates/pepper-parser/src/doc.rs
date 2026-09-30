@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn private_and_internal_declarations_need_no_docs() {
-        let src = "f(): void {}\nexport _internal(): void {}\n## A box.\n## @typeParam T the item\nexport struct Box<T> {\n    ## The item.\n    T Item;\n    ulong _cache;\n    _helper(): void {}\n}\n";
+        let src = "f(): void {}\nexport _internal(): void {}\n## A box.\n## @typeParam T the item\nexport struct Box<T> {\n    ## The item.\n    T item;\n    ulong _cache;\n    _helper(): void {}\n}\n";
         assert_eq!(errors(src), Vec::<String>::new());
     }
 

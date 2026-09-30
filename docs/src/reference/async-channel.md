@@ -259,16 +259,6 @@ without naming it. It belongs to the thread that runs the loop.
     }
 ```
 
-### Fields
-
-#### Current
-
-```pepper
-T Current
-```
-
-The value the last successful `next()` received.
-
 ### Constructor
 
 #### ChannelIterator()

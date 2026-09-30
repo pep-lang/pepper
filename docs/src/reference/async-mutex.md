@@ -237,10 +237,10 @@ with the confinement rule (see `Mutex`).
 
 ### Fields
 
-#### Locked
+#### locked
 
 ```pepper
-bool Locked
+bool locked
 ```
 
 Whether the guard holds the lock: false once `exit()` has run, and for

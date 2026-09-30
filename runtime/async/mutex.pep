@@ -291,7 +291,7 @@ export struct MutexGuard<T> {
 
     ## Whether the guard holds the lock: false once `exit()` has run, and for
     ## a `try_lock()` that found the lock busy.
-    bool Locked;
+    bool locked;
 
     ## Locks `source` and creates the guard that holds it; the same as
     ## `source.lock()` (or `source.try_lock()` when `wait` is false).
@@ -303,9 +303,9 @@ export struct MutexGuard<T> {
         _source = source;
         if (wait) {
             source._lock();
-            Locked = true;
+            locked = true;
         } else {
-            Locked = source._try_lock();
+            locked = source._try_lock();
         }
     }
 
@@ -319,7 +319,7 @@ export struct MutexGuard<T> {
     ##
     ## @returns the protected value, or the default of `T` (null for a struct) when the guard does not hold the lock
     enter(): T {
-        if (!Locked) {
+        if (!locked) {
             return __default<T>();
         }
         return _source._slot()[0];
@@ -328,8 +328,8 @@ export struct MutexGuard<T> {
     ## Unlocks the Mutex if the guard holds it. The destructor calls it;
     ## calling it again does nothing.
     exit() {
-        if (Locked) {
-            Locked = false;
+        if (locked) {
+            locked = false;
             # With `PEP_CHECK_SYNC` set, check that nothing outside the
             # locked value refers into it (`_pep_check_sync`).
             __census<T>(_source._slot());
