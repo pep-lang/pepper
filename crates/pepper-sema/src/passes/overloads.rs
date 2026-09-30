@@ -781,6 +781,11 @@ impl Overloads {
         Some(members.iter().filter(visible).cloned().collect())
     }
 
+    /// Whether some struct has a method overload set named `set`.
+    fn is_any_method_set(&self, set: &str) -> bool {
+        self.methods.values().any(|sets| sets.contains_key(set))
+    }
+
     /// Whether `set` names a method overload set of `receiver`'s struct.
     pub fn is_method_set(&self, receiver: &TypeName, set: &str) -> bool {
         self.methods.get(&canonical(receiver).to_string()).is_some_and(|sets| sets.contains_key(set))
@@ -1014,6 +1019,19 @@ pub fn bind_function_values(module: &mut Module) -> bool {
         return false;
     }
     let overloads = Overloads::build(module);
+    // Most runs find nothing to bind: look for a candidate before typing
+    // every expression.
+    let mut candidate = false;
+    crate::passes::closures::for_each_expression_mut(module, &mut |e| {
+        candidate |= match e {
+            Expression::SymbolRef { id, ty, .. } => ty.contains_auto() && overloads.is_set(id),
+            Expression::MemberRef { name, .. } => overloads.is_any_method_set(name),
+            _ => false,
+        };
+    });
+    if !candidate {
+        return false;
+    }
     let table = crate::static_type::StructTable::build(module);
     let mut bound: HashMap<(String, Loc), (String, TypeName)> = HashMap::new();
     // Methods (`p.get`, `S.make`) by name and location: the member's name.

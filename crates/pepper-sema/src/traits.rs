@@ -86,7 +86,14 @@ pub fn instance(def: &TraitDef, ty: &TypeName) -> TraitType {
 pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
     let mut found: Vec<TypeName> = vec![];
     let traits = &module.traits;
-    let mut add = |ty: &TypeName| collect(traits, ty, &mut found);
+    if traits.is_empty() {
+        return found;
+    }
+    let mut add = |ty: &TypeName| {
+        if mentions_trait(traits, ty) {
+            collect(traits, ty, &mut found);
+        }
+    };
     for st in &module.structs {
         if st.ty.is_generic() && st.name == st.ty.name {
             continue;
@@ -109,6 +116,13 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
         add(&var.ty);
     }
     found
+}
+
+/// Whether any name in `ty` contains a trait's name: a cheap filter before
+/// [`collect`] prints and re-parses the type (a pointer's stars and a
+/// generic argument can be spelled inside a name, `Array<Shape>*`).
+fn mentions_trait(traits: &[TraitDef], ty: &TypeName) -> bool {
+    traits.iter().any(|t| ty.name.contains(t.name.as_str())) || ty.sub_types.iter().any(|sub| mentions_trait(traits, sub))
 }
 
 fn collect(traits: &[TraitDef], ty: &TypeName, found: &mut Vec<TypeName>) {

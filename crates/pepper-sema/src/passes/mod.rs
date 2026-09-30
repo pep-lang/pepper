@@ -375,6 +375,57 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
     }
 }
 
+/// The direct sub-expressions of `expr` ([`children_mut`] without `&mut`).
+pub fn children(expr: &Expression) -> Vec<&Expression> {
+    match expr {
+        Expression::SymbolRef { .. }
+        | Expression::ThisRef
+        | Expression::BoolLiteral(_)
+        | Expression::IntLiteral(_)
+        | Expression::FloatLiteral(_)
+        | Expression::StringLiteral { .. }
+        | Expression::PointerLiteral
+        | Expression::SizeOf(_)
+        | Expression::IsPod(_)
+        | Expression::Default(_)
+        | Expression::Allocate(_)
+        | Expression::FunctionRef { .. }
+        | Expression::MethodAddress(_)
+        | Expression::CountStep { .. }
+        | Expression::FunctionPointer { .. }
+        | Expression::StaticCase { .. }
+        | Expression::Subject { .. }
+        | Expression::NoMatch
+        | Expression::ClosureLiteral(_) => vec![],
+        Expression::CaseValue(case) => vec![&case.subject],
+        Expression::WithSubject(with) => vec![&with.subject, &with.body],
+        Expression::MemberRef { lhs, .. } => vec![lhs],
+        Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs, rhs],
+        Expression::Unary { operand, .. } => vec![operand],
+        Expression::Cast { expr, .. } => vec![expr],
+        Expression::Ternary { condition, true_expr, false_expr } => vec![condition, true_expr, false_expr],
+        Expression::RefCount(_, arg)
+        | Expression::Address(_, arg)
+        | Expression::Weak(_, _, arg)
+        | Expression::AtomicLoad(_, arg)
+        | Expression::ForIterator(arg)
+        | Expression::WithEntered(arg) => vec![arg],
+        Expression::MatchArm(test) => {
+            let mut children = vec![&test.subject];
+            children.extend(test.patterns.iter().filter_map(|p| p.literal.as_ref()));
+            children
+        }
+        Expression::Destructure { value, .. } | Expression::Move { value, .. } => vec![value],
+        Expression::AtomicStore(_, a, b) | Expression::AtomicFetch(_, _, a, b) => vec![a, b],
+        Expression::AtomicCmpXchg(_, a, b, c) => vec![a, b, c],
+        Expression::FunctionCall { args, .. } => args.iter().collect(),
+        Expression::MethodCall { this, args, .. } => std::iter::once(this.as_ref()).chain(args.iter()).collect(),
+        Expression::Invoke { callee, args } => std::iter::once(callee.as_ref()).chain(args.iter()).collect(),
+        Expression::CallPointer { pointer, args } => std::iter::once(pointer.as_ref()).chain(args.iter()).collect(),
+        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => vec![value],
+    }
+}
+
 /// Apply `f` to every expression inside a function body.
 pub fn walk_function(function: &mut FunctionDef, f: &mut impl FnMut(&mut Expression)) {
     if let Some(body) = &mut function.body {

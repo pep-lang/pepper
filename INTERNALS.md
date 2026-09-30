@@ -610,8 +610,18 @@ several passes run more than once on purpose.
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `walk_expression`, `walk_function`, `walk_global`, and
-`replace_expression`. **When you add a model `Expression` variant, add it to
-`walk_expression`.**
+`replace_expression`; `children` and `children_mut` list a node's direct
+sub-expressions, for a walk that decides per node whether to descend (a
+read-only walk uses `children`, never a clone of the node). **When you add a
+model `Expression` variant, add it to `walk_expression`, `children` and
+`children_mut`.**
+
+`resolve_implicit_types` runs eight times and loops inside each run, so its
+helpers skip work that cannot change anything: `sync_closures` walks only the
+functions that create a closure (a creation's expected type comes from its
+own function), `bind_function_values` types expressions only when some name
+could still bind to an overload, and `traits::used_trait_types` prints and
+parses only types whose names mention a trait.
 
 `struct_body::apply`'s `resolve_type_aliases` reports a recursive alias
 at the alias's name (`type alias 'A' refers to itself`, with a note at each

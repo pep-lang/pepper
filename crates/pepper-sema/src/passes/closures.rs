@@ -941,7 +941,47 @@ impl Table {
 /// Call `visit(creation, expected type, current struct)` for every
 /// `MakeClosure`, with the type of the slot it flows into when known.
 fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
-    sites_in_module(module, table, true, &mut |_, expr, expected, current| visit(expr, expected, current));
+    sites_in_module(module, table, Sites::Closures, &mut |_, expr, expected, current| visit(expr, expected, current));
+}
+
+/// Which functions [`sites_in_module`] walks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Sites {
+    /// Every function, extensions' own copies of their methods included.
+    All,
+    /// Every function but the extensions' own copies.
+    Applied,
+    /// Only functions (and initializers) that create a closure, extension
+    /// copies included: the expected types a creation sees come from its
+    /// own function.
+    Closures,
+}
+
+/// Whether `expr` creates a closure.
+fn creates_closure(expr: &Expression) -> bool {
+    matches!(expr, Expression::MakeClosure { .. }) || crate::passes::children(expr).into_iter().any(creates_closure)
+}
+
+/// Whether `block` creates a closure.
+fn block_creates_closure(block: &Block) -> bool {
+    block.items.iter().any(|stmt| match stmt {
+        Statement::Expression(e) => creates_closure(e),
+        Statement::Block(b) => block_creates_closure(b),
+        Statement::Declaration(Declaration::Variable(var)) => var.default.as_ref().is_some_and(creates_closure),
+        Statement::Declaration(_) | Statement::LoopBreak(_) => false,
+        Statement::Branch(branch) => {
+            creates_closure(&branch.condition)
+                || block_creates_closure(&branch.if_block)
+                || branch.else_block.as_ref().is_some_and(block_creates_closure)
+        }
+        Statement::While(wh) => creates_closure(&wh.condition) || block_creates_closure(&wh.block),
+        Statement::Return(r) => r.expr.as_ref().is_some_and(creates_closure),
+    })
+}
+
+/// Whether `function`'s body or a parameter default creates a closure.
+fn function_creates_closure(function: &FunctionDef) -> bool {
+    function.parameters.iter().any(|p| p.default.as_ref().is_some_and(creates_closure)) || function.body.as_ref().is_some_and(block_creates_closure)
 }
 
 /// Call `visit(expression, expected type, current struct)` for every
@@ -949,7 +989,7 @@ fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(
 /// known (a typed variable, a parameter, a return, an assignment).
 pub(crate) fn for_each_site(module: &Module, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
     let table = Table::build(module);
-    sites_in_module(module, &table, true, &mut |_, expr, expected, current| visit(expr, expected, current));
+    sites_in_module(module, &table, Sites::All, &mut |_, expr, expected, current| visit(expr, expected, current));
 }
 
 /// Every expression site in `module`, with its owner, expected type and
@@ -960,40 +1000,42 @@ pub(crate) fn for_each_applied_site_in(
     visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
     let table = Table::build(module);
-    sites_in_module(module, &table, false, visit);
+    sites_in_module(module, &table, Sites::Applied, visit);
 }
 
 fn sites_in_module(
     module: &Module,
     table: &Table,
-    extensions: bool,
+    sites: Sites,
     visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
+    let walk_expression = |e: &Expression| sites != Sites::Closures || creates_closure(e);
+    let walk_function = |f: &FunctionDef| sites != Sites::Closures || function_creates_closure(f);
     for st in &module.structs {
         let current = Some(&st.ty);
         let owner = Some(st.name.as_str());
         let mut visit = |expr: &Expression, expected: Option<&TypeName>, current: Option<&TypeName>| visit(owner, expr, expected, current);
         for field in &st.field_members {
-            if let Some(default) = &field.default {
+            if let Some(default) = field.default.as_ref().filter(|e| walk_expression(e)) {
                 sites_in_expression(default, Some(&field.ty), table, current, &mut visit);
             }
         }
-        for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]) {
+        for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]).filter(|f| walk_function(f)) {
             sites_in_function(method, table, current, &mut visit);
         }
     }
-    for function in &module.functions {
+    for function in module.functions.iter().filter(|f| walk_function(f)) {
         let owner = Some(function.name.as_str());
         sites_in_function(function, table, None, &mut |expr, expected, current| visit(owner, expr, expected, current));
     }
-    for ext in module.extensions.iter().filter(|_| extensions) {
-        for method in &ext.methods {
+    for ext in module.extensions.iter().filter(|_| sites != Sites::Applied) {
+        for method in ext.methods.iter().filter(|f| walk_function(f)) {
             let owner = Some(ext.target.name.as_str());
             sites_in_function(method, table, Some(&ext.target), &mut |expr, expected, current| visit(owner, expr, expected, current));
         }
     }
     for var in &module.globals {
-        if let Some(default) = &var.default {
+        if let Some(default) = var.default.as_ref().filter(|e| walk_expression(e)) {
             sites_in_expression(default, Some(&var.ty), table, None, &mut |expr, expected, current| visit(None, expr, expected, current));
         }
     }
@@ -1119,10 +1161,8 @@ fn sites_in_expression(
             sites_in_expression(&with.body, expected, table, current, visit);
         }
         _ => {
-            // Other nodes pass no expected type down. `children_mut` needs
-            // `&mut`, so walk a clone (closure sites are few and small).
-            let mut copy = expr.clone();
-            for child in children_mut(&mut copy) {
+            // Other nodes pass no expected type down.
+            for child in crate::passes::children(expr) {
                 sites_in_expression(child, None, table, current, visit);
             }
         }
