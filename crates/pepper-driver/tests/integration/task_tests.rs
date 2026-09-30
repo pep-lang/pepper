@@ -1172,8 +1172,90 @@ main(): int {
 }
 "##;
 
+/// `TaskLocal<T>`: every task has its own value, released when it finishes;
+/// code outside a task has one per thread.
+const LOCALS_PROGRAM: &str = r##"
+import async;
+
+const request_id = async.TaskLocal<long>();
+const names = async.TaskLocal<Array<String>>();
+const released = async.Atomic<long>(0);
+
+struct Noisy {
+    var n: long;
+
+    construct(n: long) {
+        this.n = n;
+    }
+
+    destruct {
+        released.fetch_add(1);
+    }
+}
+
+[Shared]
+struct Counter {
+    const value: async.Atomic<long>;
+
+    construct() {
+        value = async.Atomic<long>(0);
+    }
+}
+
+const counters = async.TaskLocal<Counter>();
+const noisy = async.TaskLocal<Noisy>();
+
+handle(id: long) {
+    assert(!request_id.is_set(), "a new task has no value");
+    request_id.set(id);
+    names.set(Array<String>());
+    async.yield_now();
+    with (var list = names.enter()) {
+        list.append("step");
+        assert(list.count() == 1, "each task has its own list");
+    }
+    noisy.set(Noisy(id));
+    noisy.set(Noisy(id));
+    async.yield_now();
+    assert(request_id.get() == id, "still this task's id after the others ran");
+    counters.set(Counter());
+    counters.get().value.fetch_add(id);
+    assert(counters.get().value.load() == id, "each task has its own counter");
+}
+
+main(): int {
+    async.Thread.current();
+    request_id.set(99);
+    var before = _pep_live_allocs();
+    async.run(() => {
+        assert(!request_id.is_set(), "the first task has no value");
+        var tasks = Array<async.Task<void>>();
+        for (var id in [1, 2, 3, 4, 5, 6, 7, 8]) {
+            tasks.append(async.spawn<void>(() => {
+                handle(id);
+            }));
+        }
+        for (var task in tasks) {
+            task.join();
+        }
+        request_id.set(5);
+        request_id.clear();
+        assert(!request_id.is_set() && request_id.get() == 0, "cleared");
+    });
+    assert(released.load() == 16, "replaced values and every task's values are released");
+    assert(request_id.get() == 99, "outside a task, the thread's value");
+    assert(_pep_live_allocs() == before, "a run frees everything it allocated");
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM), ("select", SELECT_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM), ("select", SELECT_PROGRAM), ("locals", LOCALS_PROGRAM)]
+}
+
+#[test]
+fn task_locals_are_per_task() {
+    assert_runs("task_locals", LOCALS_PROGRAM);
 }
 
 #[test]

@@ -124,6 +124,28 @@ thread:
   wait with an error. `Condition.wait_while` parks like `wait`.
 - Outside a task they block the thread, as before.
 
+## Task-local values
+
+A `TaskLocal<T>` is a variable with a separate value in every task, as a
+[`ThreadLocal<T>`](threads.md#per-thread-values-with-threadlocal) has one
+per thread. Tasks that take turns on one worker share its thread, so only a
+`TaskLocal` can tell them apart:
+
+```pepper
+{{#include ../../examples/tasks-local.pep}}
+```
+
+- `set(value)` stores the calling task's value and `get()` returns it (the
+  default of `T`, zero or null, until the task sets one). `is_set()` and
+  `clear()` work as on a `ThreadLocal`.
+- A task starts with no value, even one started by a task that has one,
+  and its values are released when it finishes.
+- Code outside any task (before `async.run`, or on a plain `Thread`) has
+  one value per thread, like a `ThreadLocal`.
+- For a `T` that is not thread-safe, such as a `String`, reach the value
+  with `with (var value = local.enter()) { ... }`, as for a `ThreadLocal`;
+  `get()` is then a compile error.
+
 ## Sockets
 
 A socket call in a task that would have to wait (for a connection, for data,

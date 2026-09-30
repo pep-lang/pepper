@@ -18,6 +18,7 @@ Like `io`, `async` is a module: bring it in with `import async` (and write
 - [Mutex](async-mutex.md): `Mutex<T>`, the `MutexGuard<T>` a `with` block holds, and `Condition<T>`
 - [Once](async-once.md): `Once`, which runs a function once, and `Lazy<T>`, a value built on first use
 - [Tasks](async-task.md): `run`, `Task<T>`, `spawn`, `spawn_on_each_worker`, `run_blocking`, `sleep`, `yield_now`, `timeout` and cancellation, for many tasks taking turns on a few worker threads and parking on sockets
+- [TaskLocal](async-task_local.md): a variable with a separate value in every task, and its `TaskLocalGuard<T>`
 - [I/O backends](async-driver.md): `Backend`, how a runtime waits for sockets
 
 Only thread-safe values can be shared between threads: numbers, `shared`

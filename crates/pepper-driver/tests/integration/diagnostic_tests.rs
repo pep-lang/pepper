@@ -1217,6 +1217,20 @@ fn thread_local_get_needs_a_thread_safe_value() {
 }
 
 #[test]
+fn task_local_get_needs_a_thread_safe_value() {
+    assert_eq!(
+        error_of(
+            "task_local_get",
+            "import async;\n\nconst scratch = async.TaskLocal<String>();\n\nmain(): int {\n    var s = scratch.get();\n    return 0;\n}\n"
+        ),
+        "main.pep:6:21: error: 'get' is not available on 'TaskLocal<String>', because 'String' is not thread-safe\n\
+         \x20   6 |     var s = scratch.get();\n\
+         \x20     |                     ^~~\n\
+         note: reach this task's value with 'with (var value = scratch.enter())'"
+    );
+}
+
+#[test]
 fn function_pointer_undeclared() {
     assert_eq!(
         error_of("function_pointer_undeclared", "main(): int {\n    var p = __function_pointer(nope);\n    return 0;\n}\n"),

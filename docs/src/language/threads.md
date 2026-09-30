@@ -101,6 +101,9 @@ locked value in a thread-local, and a later `get()` would hand it out after
 the lock was released. The
 [ThreadLocal reference](../reference/async-thread_local.md) has the details.
 
+Tasks that take turns on one worker thread share its `ThreadLocal` values;
+a [`TaskLocal<T>`](tasks.md#task-local-values) gives each task its own.
+
 ## What threads can share
 
 Every struct value is a counted reference (see

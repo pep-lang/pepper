@@ -38,8 +38,9 @@
 //!   a thread-safe type, or a call whose result is fresh or whose linked
 //!   operands are all disconnected (a constructor call, a string literal,
 //!   `copy(x)`); never a named variable;
-//! - `ThreadLocal<T>.get()` for a `T` that is not thread-safe (reach the
-//!   value with `with (var v = local.enter())`), and `Mutex<T>` of a number.
+//! - `ThreadLocal<T>.get()` and `TaskLocal<T>.get()` for a `T` that is not
+//!   thread-safe (reach the value with `with (var v = local.enter())`), and
+//!   `Mutex<T>` of a number.
 //!
 //! **Recorded summaries.** For the build cache (phase 2b), the pass can
 //! summarize every function and hand out the summaries that do not depend
@@ -1946,15 +1947,20 @@ impl Checks<'_, '_> {
         }
     }
 
-    /// `ThreadLocal<T>.get()` for a `T` that is not thread-safe.
+    /// `ThreadLocal<T>.get()` or `TaskLocal<T>.get()` for a `T` that is not
+    /// thread-safe.
     fn thread_local_get(&mut self, this: &Expression, method: &str, loc: Loc) {
         if method != "get" || self.error.is_some() {
             return;
         }
         let Some(ty) = self.walk.ty(this) else { return };
         let Some(value) = ty.sub_types.first() else { return };
-        let is_thread_local = ty.name == "ThreadLocal"
-            && self.program.struct_named(&ty.to_string()).is_some_and(|st| {
+        let owner = match ty.name.as_str() {
+            "ThreadLocal" => "thread",
+            "TaskLocal" => "task",
+            _ => return,
+        };
+        let is_thread_local = self.program.struct_named(&ty.to_string()).is_some_and(|st| {
                 st.method_members.iter().any(|m| m.name == "enter" && self.program.is_isolated(&m.ty))
             });
         if !is_thread_local || unsafe_part_in(value, &self.program.safe).is_none() {
@@ -1967,7 +1973,7 @@ impl Checks<'_, '_> {
                 value.display()
             ))
             .at(loc)
-            .with_note(format!("reach this thread's value with 'with (var value = {}.enter())'", describe(this)), None),
+            .with_note(format!("reach this {owner}'s value with 'with (var value = {}.enter())'", describe(this)), None),
         );
     }
 

@@ -78,6 +78,7 @@
     - [async/mutex.pep](reference/async-mutex.md)
     - [async/once.pep](reference/async-once.md)
     - [async/select.pep](reference/async-select.md)
+    - [async/task_local.pep](reference/async-task_local.md)
   - [copy.pep](reference/copy.md)
     - [io/unix.pep](reference/io-unix.md)
 <!-- reference:end -->

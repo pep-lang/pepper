@@ -210,11 +210,23 @@ struct _TaskCore {
     # The id that marks the task as a `Mutex`'s holder, or 0 until it first
     # takes one (see `_async_holder_id`).
     var _token: ulong;
+    # The task's `TaskLocal` values, released when its body returns.
+    var _locals: Array<_TaskLocalValue>;
 
     construct(id: ulong, body: () => void) {
         this._id = id;
         this._body = body;
         this._joiners = Array<_TaskCore>();
+        this._locals = Array<_TaskLocalValue>();
+    }
+
+    # Releases the task's `TaskLocal` values, newest first. A value's
+    # destructor may store another, which is released in turn.
+    _release_locals() {
+        while (this._locals.count() > 0) {
+            var local = this._locals.pop();
+            local._release();
+        }
     }
 
     # Whether the task was cancelled, here or (for a task from `spawn`) on
@@ -226,6 +238,20 @@ struct _TaskCore {
             }
         }
         return this._cancelled;
+    }
+}
+
+# One task's value of a `TaskLocal` (task_local.pep): the variable's id,
+# the malloc'd slot holding the value, and how to release the slot.
+struct _TaskLocalValue {
+    var _id: ulong;
+    var _slot: __ptr<void>;
+    var _release: () => void;
+
+    construct(id: ulong, slot: __ptr<void>, release: () => void) {
+        this._id = id;
+        this._slot = slot;
+        this._release = release;
     }
 }
 
@@ -852,6 +878,38 @@ export _async_in_task(): bool {
     return _async_on_worker() && _async_worker()._running;
 }
 
+# The running task's slot for the `TaskLocal` numbered `id`, or null when
+# it has no value. Only in a task.
+export _async_task_local_slot(id: ulong): __ptr<void> {
+    for (var local in _async_worker()._current._locals) {
+        if (local._id == id) {
+            return local._slot;
+        }
+    }
+    return __null;
+}
+
+# Records `slot` as the running task's value of the `TaskLocal` numbered
+# `id`; `release` frees it when the task ends. Only in a task.
+export _async_task_local_add(id: ulong, slot: __ptr<void>, release: () => void) {
+    _async_worker()._current._locals.append(_TaskLocalValue(id, slot, release));
+}
+
+# Removes and releases the running task's value of the `TaskLocal`
+# numbered `id`, if it has one. Only in a task.
+export _async_task_local_clear(id: ulong) {
+    var locals = _async_worker()._current._locals;
+    var i: ulong = 0;
+    while (i < locals.count()) {
+        if (locals[i]._id == id) {
+            var local = locals.remove_at(i);
+            local._release();
+            return;
+        }
+        i = i + 1;
+    }
+}
+
 # Gives every task that takes a `Mutex` its own holder id, above any
 # operating-system thread id.
 const _async_task_tokens = Atomic<ulong>((1 as ulong) << 62);
@@ -967,6 +1025,7 @@ _async_run_current() {
     var body = core._body;
     core._body = () => {};
     body();
+    core._release_locals();
     core._finished = true;
     for (var joiner in core._joiners) {
         worker._wake(joiner);
