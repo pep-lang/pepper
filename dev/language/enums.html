@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
+            window.path_to_searchindex_js = "../searchindex-8de87351.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -491,11 +491,98 @@ it, located at <code>match</code>; the language server offers a quick fix that a
 empty arm for each missing case. An <code>else</code> that can never run, because the
 other arms handle every case, is a warning.</li>
 <li>Handling a case twice is an error.</li>
-<li><code>match</code> is a statement. <code>break</code>, <code>continue</code> and <code>return</code> inside an arm act
+<li>In a <code>match</code> statement, <code>break</code>, <code>continue</code> and <code>return</code> inside an arm act
 on the enclosing loop or function, as they would inside an <code>if</code>.</li>
 </ul>
 <p>The value is evaluated once, before any arm runs. A <code>match</code> on a null value
 of an enum whose cases carry values panics with <code>match on a null 'Name'</code>.</p>
+<h2 id="match-expressions-is-and-literal-patterns"><a class="header" href="#match-expressions-is-and-literal-patterns"><code>match</code> expressions, <code>is</code>, and literal patterns</a></h2>
+<pre><code class="language-pepper"># `match` produces a value, `is` tests one case, and a `match` on an
+# integer, character, `bool` or `String` compares with literals.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+enum List {
+    Empty,
+    Cons(head: int, tail: List),
+}
+
+area(s: Shape): int {
+    return match (s) {
+        Circle(r) =&gt; 3 * r * r,
+        Rect(w, h) =&gt; w * h,
+        Point =&gt; 0,
+    };
+}
+
+keyword(word: String): int {
+    return match (word) {
+        "import" =&gt; 1,
+        "export", "extern" =&gt; 2,
+        else =&gt; 0,
+    };
+}
+
+main(): int {
+    var total = area(Shape.Rect(2, 3)) + keyword("extern");
+
+    # `is` binds only in the block of the `if` or `while` it is the
+    # condition of.
+    var s = Shape.Circle(1);
+    if (s is Circle(r)) {
+        total += r;
+    }
+
+    var list = List.Cons(1, List.Cons(2, List.Empty));
+    while (list is Cons(head, tail)) {
+        total += head;
+        list = tail;
+    }
+
+    var point = Shape.Point is Point;
+    if (point &amp;&amp; !(s is Rect)) {
+        total += 100;
+    }
+
+    # A `match` on an integer needs an `else`: literals cannot list every
+    # value.
+    var size = match (total) {
+        0 =&gt; "none",
+        1, 2, 3 =&gt; "few",
+        else =&gt; "many",
+    };
+    assert(size == "many", "total is past three");
+    assert(total == 6 + 2 + 1 + 3 + 100, "every step adds up");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>A <code>match</code> that produces a value</strong> can go wherever a value can: after
+<code>var x =</code>, <code>return</code>, in an argument. Each arm is <code>patterns =&gt; value</code>, and
+arms are separated by commas (one after the last is allowed). It follows
+the rules above: a pattern binds names for its arm’s value, and the arms
+must handle every case unless there is an <code>else</code>. The value has the first
+arm’s type, and every other arm’s value must convert to it. A closure in
+an arm’s value cannot use a name the arm binds; use a <code>match</code> statement
+there.</li>
+<li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case
+(<code>d is Line</code>, <code>!(d is Text)</code>). It takes any one pattern. When it is the
+whole condition of an <code>if</code> or <code>while</code>, its bindings are declared in that
+block only: <code>if (d is Text(t)) { ... }</code> reads <code>t</code> inside the braces, and
+<code>while (list is Cons(head, tail)) { ... }</code> examines <code>list</code> again on every
+iteration. Anywhere else, <code>is</code> cannot bind names. <code>is</code> is a keyword only
+between a value and a pattern, so it stays usable as a name
+(<code>token.is(text)</code>).</li>
+<li><strong>Literal patterns</strong>: a <code>match</code> on an integer, a character, a <code>bool</code> or a
+<code>String</code> compares with literals (<code>1</code>, <code>-1</code>, <code>'a'</code>, <code>true</code>, <code>"import"</code>),
+using <code>==</code>. Literals cannot list every value, so such a <code>match</code> needs an
+<code>else</code> arm, except on a <code>bool</code> that handles both <code>true</code> and <code>false</code>.
+Matching the same literal twice is an error. A match on an enum takes its
+case names, not literals, and a match on <code>int</code> takes literals, not names.</li>
+</ul>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
 <li><a href="optionals.html"><code>Optional</code></a> and <a href="results.html"><code>Result</code></a> are not enums yet,
@@ -504,10 +591,9 @@ so they cannot be matched.</li>
 enum cannot be generic yet. An enum cannot declare operators or indexers
 yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
 <li>Patterns cannot be nested (<code>Some(Text(t))</code>), compare values
-(<code>Text("")</code>), or have guards yet.</li>
-<li><code>match</code> works only on enums, and only as a statement: it does not produce
-a value, and cannot match integers, characters or strings yet. There is no
-<code>is</code> test yet.</li>
+(<code>Text("")</code>), match ranges (<code>1..9</code>), or have guards yet. A literal pattern
+is a literal, not a named constant.</li>
+<li>A <code>match</code> cannot examine floating-point values.</li>
 <li>An enum whose cases carry nothing cannot be extended
 (<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
 conform to a trait either, and a trait value is a reference to an object,
