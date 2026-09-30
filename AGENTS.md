@@ -225,6 +225,28 @@ main.pep:1:1: note: declared here
   `crates/pepper-driver/tests/integration/diagnostic_tests.rs`: the header line, the
   source line, and the caret.
 
+## Names follow the Pepper naming conventions
+
+All Pepper code here (the runtime, `tools/`, `docs/examples/`, `tests/`, and
+Pepper source embedded in Rust tests) follows
+[`docs/src/language/naming.md`](docs/src/language/naming.md):
+
+- Types (structs, traits, type aliases) are `PascalCase`; acronyms are words
+  (`IoError`).
+- Generic parameters are one capital letter (`T`) or `PascalCase` (`TValue`).
+- Data members, methods, free functions, parameters, locals, and module-scope
+  variables are `snake_case`.
+- A private data member or method starts with `_` (`_size`, `_grow`), and so
+  does a runtime helper shared between files but not public (`_pep_malloc`).
+- Spell words out (`iterate`, `index`, not `iter`, `idx`).
+- `extern` declarations keep the C library's name (`GetCurrentThreadId`).
+
+Renaming a public runtime function, method, type, or variable keeps the old
+name working behind `[Deprecated("use 'new_name' instead", "new_name")]` (see
+"Deprecating" below) and migrates the runtime's own uses in the same PR. A
+data member cannot answer to two names, so a renamed public field changes
+outright; say so in the PR.
+
 ## Library code is documented with `##` doc comments
 
 Every public declaration in library code (`runtime/`, and any library added
