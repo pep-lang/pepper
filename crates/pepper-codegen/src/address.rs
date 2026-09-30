@@ -49,9 +49,42 @@ impl<'ctx> Address<'ctx> {
     }
 
     /// Store a value into this address (port of `Address::assign`).
-    pub fn store(&self, builder: &Builder<'ctx>, value: BasicValueEnum<'ctx>) -> Option<()> {
-        builder.build_store(self.ptr, value).ok().map(|_| ())
+    ///
+    /// Fails when the value's LLVM type differs from the slot's: a wider
+    /// value writes past the slot (an 8-byte `ptr` into a 4-byte `i32`
+    /// field overran the object), so the mismatch is a compiler bug to
+    /// report, never a store to emit.
+    pub fn store(&self, builder: &Builder<'ctx>, value: BasicValueEnum<'ctx>) -> Result<(), String> {
+        if let Some(slot_ty) = self.llvm_ty {
+            check_store_type(slot_ty, value, &self.name, &self.ty)?;
+        }
+        builder.build_store(self.ptr, value).map_err(|e| e.to_string())?;
+        Ok(())
     }
+}
+
+/// Checks that `value` has exactly the LLVM type `slot_ty` of the slot it
+/// is about to be stored into, which is named `name` and has Pepper type
+/// `pepper_ty`. Every typed store in codegen goes through this: LLVM
+/// accepts a store of any type through an opaque pointer, so a mismatch
+/// would otherwise silently corrupt the neighboring memory.
+pub fn check_store_type<'ctx>(
+    slot_ty: BasicTypeEnum<'ctx>,
+    value: BasicValueEnum<'ctx>,
+    name: &str,
+    pepper_ty: &str,
+) -> Result<(), String> {
+    let value_ty = value.get_type();
+    if value_ty == slot_ty {
+        return Ok(());
+    }
+    Err(format!(
+        "internal error: storing a value of LLVM type '{}' into '{}' ('{}', LLVM type '{}')",
+        value_ty.print_to_string().to_string(),
+        name,
+        pepper_ty,
+        slot_ty.print_to_string().to_string(),
+    ))
 }
 
 /// Function context for a codegen'd function: entry/return blocks, retval

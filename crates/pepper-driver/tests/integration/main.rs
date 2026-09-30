@@ -54,6 +54,7 @@ mod result_tests;
 mod runtime_docs_tests;
 mod shared_ptr_semantics_tests;
 mod static_call_tests;
+mod store_type_tests;
 mod string_tests;
 mod temp_lifetime_tests;
 mod trait_value_tests;

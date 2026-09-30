@@ -562,8 +562,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 _ => value,
             };
-            addr.store(&self.builder, value)
-                .ok_or_else(|| format!("global store failed: {}", name))?;
+            addr.store(&self.builder, value)?;
             self.flush_deferred_temps()?;
         }
         Ok(())
@@ -1941,6 +1940,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                         &value_name.unwrap_or_else(|| value_type_name(&value)),
                         &retval_ty,
                     );
+                    // The retval slot's LLVM type, as the prologue made it
+                    // (an object return is a pointer; a tuple stays by value).
+                    if let Some(slot_ty) = self.types.get(&retval_ty) {
+                        let slot_ty = match slot_ty {
+                            ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => BasicTypeEnum::PointerType(
+                                self.context.ptr_type(inkwell::AddressSpace::default()),
+                            ),
+                            other => other,
+                        };
+                        address::check_store_type(slot_ty, coerced, "return value", &retval_ty)?;
+                    }
                     self.builder
                         .build_store(retval, coerced)
                         .map_err(|e| e.to_string())?;
@@ -2117,6 +2127,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
                 _ => value,
             };
+            address::check_store_type(ty, value, &var.name, &var.ty.to_string())?;
             self.builder
                 .build_store(alloca, value)
                 .map_err(|e| e.to_string())?;
@@ -3579,14 +3590,20 @@ impl<'ctx> CodeGenerator<'ctx> {
                         // (as in C++'s std::atomic<T>::fetch_add for a
                         // non-arithmetic T). Emit an abort — unreachable at
                         // runtime; the constant return keeps the IR valid.
+                        // It has T's own LLVM type (a null `ptr` for a
+                        // pointer or struct T), since the caller stores it
+                        // into a T-typed slot.
                         let dummy = match self.types.get(&ty_name) {
-                            Some(BasicTypeEnum::StructType(_)) => {
+                            Some(BasicTypeEnum::StructType(_)) | Some(BasicTypeEnum::PointerType(_)) => {
                                 BasicValueEnum::PointerValue(
                                     self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
                                 )
                             }
                             Some(BasicTypeEnum::FloatType(ft)) => {
                                 BasicValueEnum::FloatValue(ft.const_zero())
+                            }
+                            Some(BasicTypeEnum::ArrayType(at)) => {
+                                BasicValueEnum::ArrayValue(at.const_zero())
                             }
                             _ => BasicValueEnum::IntValue(self.context.i64_type().const_zero()),
                         };
@@ -3913,6 +3930,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             if let Some(ty) = value_temp {
                 self.release_temp(&ty, value)?;
             }
+            address::check_store_type(value_ty, value, "element", &self.index_receiver_pointee(this).unwrap_or_default())?;
             self.builder
                 .build_store(gep, value)
                 .map_err(|e| e.to_string())?;
@@ -4867,9 +4885,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if let Some(ty) = rhs_temp {
                     self.release_temp(&ty, rhs_val)?;
                 }
-                lhs_addr
-                    .store(&self.builder, fitted)
-                    .ok_or_else(|| "compound store".to_string())?;
+                lhs_addr.store(&self.builder, fitted)?;
                 return Ok(fitted);
             }
             if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
@@ -4901,9 +4917,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             if let Some(ty) = rhs_temp {
                 self.release_temp(&ty, rhs_val)?;
             }
-            lhs_addr
-                .store(&self.builder, coerced)
-                .ok_or_else(|| "assign store".to_string())?;
+            lhs_addr.store(&self.builder, coerced)?;
             return Ok(coerced);
         }
         if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
@@ -5059,10 +5073,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .position(|(n, _)| n == name)
                     .ok_or_else(|| format!("no member named '{}' in '{}'", name, struct_name))?;
                 let ty_name = desc.fields[idx].1.clone();
-                let field_ty = self
-                    .types
-                    .get(&ty_name)
-                    .ok_or_else(|| format!("unknown field type {}", ty_name))?;
+                // The slot's type comes from the object's layout, not from
+                // the field's Pepper type: a struct-typed field is a `ptr`
+                // slot (a trait-typed one a `[2 x ptr]`), and the store
+                // guard compares against this.
+                let field_ty = match desc.llvm_type.get_field_type_at_index(idx as u32) {
+                    Some(ty) => ty,
+                    None => self
+                        .types
+                        .get(&ty_name)
+                        .ok_or_else(|| format!("unknown field type {}", ty_name))?,
+                };
                 let gep = self
                     .builder
                     .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
@@ -5210,8 +5231,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     }
                     _ => return Err("unsupported inc operand".to_string()),
                 };
-                addr.store(&self.builder, new_val)
-                    .ok_or_else(|| "inc store".to_string())?;
+                addr.store(&self.builder, new_val)?;
                 match op {
                     PreInc | PreDec => Ok(new_val),
                     _ => Ok(old),

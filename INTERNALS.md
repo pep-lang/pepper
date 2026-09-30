@@ -596,6 +596,17 @@ How the language lowers:
   object's ABI size is used only inside the constructor and by
   `Expression::Allocate` (the synthesized copies' allocation: zeroed, both
   head counts 1, an owned rvalue like a constructor result).
+- **Stores are type-checked** (`address.rs`). LLVM accepts a store of any
+  type through an opaque pointer, so a value wider than its slot silently
+  overwrites the next field or the next heap object. `Address::store`, and
+  the raw `build_store`s into a local, the return slot, or an array element,
+  first call `check_store_type`. It fails with `internal error: storing a
+  value of LLVM type 'X' into 'name' ('T', LLVM type 'Y')`, located at the
+  node being generated, whenever the two LLVM types differ. A field's
+  `Address` takes its LLVM type from the object's layout
+  (`get_field_type_at_index`), so a struct-typed field is a `ptr` slot
+  there, not the struct body. A new store into a typed slot goes through
+  the same check.
 - **Types** (`types.rs`): `Types::get(name)` maps primitive aliases (`int`
   and `i32`, `ulong` and `u64`, `char` and `i8`, …) to LLVM types. Any
   `T*` maps to an opaque pointer. Registered structs map to their struct
@@ -1058,7 +1069,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Parser unit | `crates/pepper-parser/src/parser/parsers.rs` (`mod tests`), `parser.rs`, `diagnostic.rs`, `doc.rs` | Helpers `parse`, `parse_expr`, and `parse_type` take the `track_source` guard. `parser.rs` tests pin exact rendered parse errors. |
 | Sema model | `crates/pepper-sema/src/model_tests.rs`, `visibility.rs` tests | `compile()` = parse → `build` → filters → `struct_body::apply` → `transform_pass`, then assertions on the model. |
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
-| Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
+| Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, store types (`store_type_tests.rs`), edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
