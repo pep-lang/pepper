@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c810979d.js";
+            window.path_to_searchindex_js = "searchindex-2ecbe3ca.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -1420,26 +1420,22 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h2 id="leaving-out-a--is-deprecated"><a class="header" href="#leaving-out-a--is-deprecated">Leaving out a <code>;</code> is deprecated</a></h2>
-<p>Semicolons used to be optional. Code that leaves one out still compiles, with
-a warning at the place the <code>;</code> belongs and a fix that adds it. The language
-server offers it as a quick fix, and <a href="#formatting-with-pep-fmt"><code>pep-fmt</code></a> adds
-them all:</p>
-<pre><code class="language-text">main.pep:2:18: warning: omitting ';' is deprecated; end the statement with ';' [deprecated]
+<h2 id="a-missing--is-an-error"><a class="header" href="#a-missing--is-an-error">A missing <code>;</code> is an error</a></h2>
+<p>Leaving out a <code>;</code> is an error, reported right after the statement it should
+end, with a fix that adds it. The language server offers the fix as a quick
+fix:</p>
+<pre><code class="language-text">main.pep:2:18: error: expected ';'
     2 |     var total = 1
       |                  ^
       |                  ;
 </code></pre>
-<p>A later version makes a missing <code>;</code> an error.</p>
-<p>Without its <code>;</code>, a statement runs on for as long as the next line can
-continue it, since line breaks do not end anything. So</p>
+<p>Because line breaks do not end anything, a statement missing its <code>;</code> would
+otherwise run on into the next line whenever that line can continue it:</p>
 <pre><code class="language-pepper">x = y
 -z
 </code></pre>
-<p>is <code>x = y - z</code>, and a line that starts with <code>(</code> calls the expression on the
-line above. The one exception is a declaration: until a missing <code>;</code> becomes
-an error, a declaration without one ends at the end of its line, so
-<code>var x = 1</code> followed by <code>y = 2</code> stays two statements.</p>
+<p>reads as <code>x = y - z;</code> with its <code>;</code> missing, not as two statements. The error
+says where the <code>;</code> belongs when the parse cannot go on.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="control-flow"><a class="header" href="#control-flow">Control flow</a></h1>
 <p>Pepper has the familiar structured control flow of C-family languages: <code>if</code> and
@@ -6156,7 +6152,7 @@ export thrice(n: int): int {
 </tbody>
 </table>
 </div>
-<p>The semicolon after an import is optional.</p>
+<p>An import ends with a semicolon.</p>
 <p>An import binds names only in the file that contains it. The exports of a file
 that this file did not import are not visible to it, even when another file of
 the program imports them. Here <code>geometry/module.pep</code> imports <code>shapes.pep</code>, but
@@ -8027,7 +8023,6 @@ the code it replaces:</p>
 <tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
-<tr><td>A statement or declaration without its <code>;</code></td><td>End it with <code>;</code> (see <a href="#statements-and-semicolons">Statements and semicolons</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -8658,9 +8653,6 @@ var average = 0.0;  # total / count
 <p><strong>Imports</strong> that are next to each other (no blank line or comment between
 them) are sorted: modules first (<code>import io;</code>), then files of this module
 (<code>import "util";</code>), each by name.</p>
-<p><strong>Semicolons</strong> are added where a statement or declaration leaves its <code>;</code>
-out (see <a href="#statements-and-semicolons">Statements and semicolons</a>); none are
-removed.</p>
 <p><strong>Kept as written:</strong> parentheses around
 conditions (<code>if x</code> and <code>if (x)</code> are both fine), fields declared either way
 (<code>int x;</code> or <code>var x: int;</code>), and the file’s line endings (<code>\n</code> or <code>\r\n</code>).</p>

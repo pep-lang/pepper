@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c810979d.js";
+            window.path_to_searchindex_js = "../searchindex-2ecbe3ca.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -230,26 +230,22 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h2 id="leaving-out-a--is-deprecated"><a class="header" href="#leaving-out-a--is-deprecated">Leaving out a <code>;</code> is deprecated</a></h2>
-<p>Semicolons used to be optional. Code that leaves one out still compiles, with
-a warning at the place the <code>;</code> belongs and a fix that adds it. The language
-server offers it as a quick fix, and <a href="../tools/pep-fmt.html"><code>pep-fmt</code></a> adds
-them all:</p>
-<pre><code class="language-text">main.pep:2:18: warning: omitting ';' is deprecated; end the statement with ';' [deprecated]
+<h2 id="a-missing--is-an-error"><a class="header" href="#a-missing--is-an-error">A missing <code>;</code> is an error</a></h2>
+<p>Leaving out a <code>;</code> is an error, reported right after the statement it should
+end, with a fix that adds it. The language server offers the fix as a quick
+fix:</p>
+<pre><code class="language-text">main.pep:2:18: error: expected ';'
     2 |     var total = 1
       |                  ^
       |                  ;
 </code></pre>
-<p>A later version makes a missing <code>;</code> an error.</p>
-<p>Without its <code>;</code>, a statement runs on for as long as the next line can
-continue it, since line breaks do not end anything. So</p>
+<p>Because line breaks do not end anything, a statement missing its <code>;</code> would
+otherwise run on into the next line whenever that line can continue it:</p>
 <pre><code class="language-pepper">x = y
 -z
 </code></pre>
-<p>is <code>x = y - z</code>, and a line that starts with <code>(</code> calls the expression on the
-line above. The one exception is a declaration: until a missing <code>;</code> becomes
-an error, a declaration without one ends at the end of its line, so
-<code>var x = 1</code> followed by <code>y = 2</code> stays two statements.</p>
+<p>reads as <code>x = y - z;</code> with its <code>;</code> missing, not as two statements. The error
+says where the <code>;</code> belongs when the parse cannot go on.</p>
 
                     </main>
 
