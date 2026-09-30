@@ -2737,6 +2737,132 @@ fn interpolation_comment() {
 }
 
 #[test]
+fn format_unexpected_character() {
+    assert_eq!(
+        error_of("format_unexpected_character", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:q}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'\n\
+         \x20   5 |     print($\"{n:q}\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn format_empty_specification() {
+    assert_eq!(
+        error_of("format_empty_specification", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: expected a format specification after ':'\n\
+         \x20   5 |     print($\"{n:}\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn format_zero_and_alignment() {
+    assert_eq!(
+        error_of("format_zero_and_alignment", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:<05}\");\n    return 0;\n}\n"),
+        "main.pep:5:17: error: '0' padding cannot be combined with an alignment\n\
+         \x20   5 |     print($\"{n:<05}\");\n\
+         \x20     |                 ^"
+    );
+}
+
+#[test]
+fn format_width_too_large() {
+    assert_eq!(
+        error_of("format_width_too_large", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print($\"{n:99999999999}\");\n    return 0;\n}\n"),
+        "main.pep:5:16: error: format width is too large\n\
+         \x20   5 |     print($\"{n:99999999999}\");\n\
+         \x20     |                ^~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn format_integer_type() {
+    assert_eq!(
+        error_of("format_integer_type", "struct Foo {}\n\nmain(): int {\n    var name = \"a\";\n    print($\"{name:x}\");\n    return 0;\n}\n"),
+        "main.pep:5:19: error: cannot format a value of type 'String' as an integer\n\
+         \x20   5 |     print($\"{name:x}\");\n\
+         \x20     |                   ^"
+    );
+}
+
+#[test]
+fn format_padding_without_to_string() {
+    assert_eq!(
+        error_of("format_padding_without_to_string", "struct Foo {}\n\nmain(): int {\n    var f = Foo();\n    print($\"{f:>5}\");\n    return 0;\n}\n"),
+        "main.pep:5:13: error: cannot interpolate a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload\n\
+         \x20   5 |     print($\"{f:>5}\");\n\
+         \x20     |             ^~~~~~\n\
+         main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToString' with 'extend Foo with ToString'\n\
+         \x20   1 | struct Foo {}\n\
+         \x20     |        ^~~"
+    );
+}
+
+#[test]
+fn string_format_not_a_literal() {
+    assert_eq!(
+        error_of("string_format_not_a_literal", "struct Foo {}\n\nmain(): int {\n    var name = \"a\";\n    print(String.format(name));\n    return 0;\n}\n"),
+        "main.pep:5:25: error: the format of 'String.format' must be a string literal\n\
+         \x20   5 |     print(String.format(name));\n\
+         \x20     |                         ^~~~"
+    );
+}
+
+#[test]
+fn string_format_index_out_of_range() {
+    assert_eq!(
+        error_of("string_format_index_out_of_range", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(String.format(\"{0} {2}\", n, n));\n    return 0;\n}\n"),
+        "main.pep:5:31: error: argument index 2 is out of range for 2 arguments\n\
+         \x20   5 |     print(String.format(\"{0} {2}\", n, n));\n\
+         \x20     |                               ^"
+    );
+}
+
+#[test]
+fn string_format_unused_argument() {
+    assert_eq!(
+        error_of("string_format_unused_argument", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(String.format(\"{0}\", n, n + 1));\n    return 0;\n}\n"),
+        "main.pep:5:35: error: argument 1 of 'String.format' is not used by its format string\n\
+         \x20   5 |     print(String.format(\"{0}\", n, n + 1));\n\
+         \x20     |                                   ^~~~~"
+    );
+}
+
+#[test]
+fn string_format_missing_index() {
+    assert_eq!(
+        error_of("string_format_missing_index", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(String.format(\"{x}\", n));\n    return 0;\n}\n"),
+        "main.pep:5:27: error: expected an argument index after '{' in format string; write '{{' for a literal '{'\n\
+         \x20   5 |     print(String.format(\"{x}\", n));\n\
+         \x20     |                           ^"
+    );
+}
+
+#[test]
+fn string_format_unclosed_brace() {
+    assert_eq!(
+        error_of("string_format_unclosed_brace", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(String.format(\"{0:x\", n));\n    return 0;\n}\n"),
+        "main.pep:5:30: error: expected '}'\n\
+         \x20   5 |     print(String.format(\"{0:x\", n));\n\
+         \x20     |                              ^\n\
+         main.pep:5:26: note: to match this '{'\n\
+         \x20   5 |     print(String.format(\"{0:x\", n));\n\
+         \x20     |                          ^"
+    );
+}
+
+#[test]
+fn string_format_unmatched_brace() {
+    assert_eq!(
+        error_of("string_format_unmatched_brace", "struct Foo {}\n\nmain(): int {\n    var n = 1;\n    print(String.format(\"{0}}\", n));\n    return 0;\n}\n"),
+        "main.pep:5:29: error: unmatched '}' in format string; write '}}' for a literal '}'\n\
+         \x20   5 |     print(String.format(\"{0}}\", n));\n\
+         \x20     |                             ^"
+    );
+}
+
+#[test]
 fn interpolation_unterminated() {
     assert_eq!(
         error_of("interpolation_unterminated", "main(): int {\n    print($\"a);\n    return 0;\n}\n"),

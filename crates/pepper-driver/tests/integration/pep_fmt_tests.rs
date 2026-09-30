@@ -319,6 +319,16 @@ fn pep_fmt_keeps_interpolated_expressions_as_written() {
 }
 
 #[test]
+fn pep_fmt_keeps_format_specifications_as_written() {
+    // A specification stays inside its string token; String.format is an
+    // ordinary call to the formatter.
+    assert_formats(
+        "main(): int {\n    print($\"{n:>8} {n:08x} {c?a:b:-^5}\"+String.format( \"{1}{0:x}\",a,b ));\n    return 0;\n}\n",
+        "main(): int {\n    print($\"{n:>8} {n:08x} {c?a:b:-^5}\" + String.format(\"{1}{0:x}\", a, b));\n    return 0;\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_spaces_tuples_and_destructuring() {
     assert_formats(
         "pair():(int,(String,long)) {\n    return (1,(\"x\",2));\n}\n\nmain(): int {\n    var (a,b:(String,long))=pair();\n    const (_ ,c)=( b.1 ,a );\n    (a,c)=(c,a);\n    return pair().1.1+b.1;\n}\n",

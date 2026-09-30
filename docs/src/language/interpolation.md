@@ -21,8 +21,8 @@ by the text of its value:
   them, or inside brackets of the expression's own, does not end it.
 - The expression fits on **one line** and holds **no comment**: a line break
   or a `#` inside the braces is an error.
-- There are **no format specifiers**: `{x:5}` is an error. Pad or format the
-  value with a call instead.
+- A **format specification** may follow the expression after a `:`, as in
+  `{n:>8}` or `{n:08x}`: see [below](#format-specifications).
 - **`{{` and `}}`** are a literal `{` and `}`.
 - **Escapes** (`\n`, `\t`, `\"`, ...) work as in any
   [string literal](types-and-variables.md#strings).
@@ -56,6 +56,63 @@ cannot be interpolated. A plain overload such as `to_string(p: Point)` is not
 used either: overloads of a name do not merge across files (see
 [overloading](overloading.md)), so the runtime cannot see yours. Write a
 `to_string<Point>` override or a method instead.
+
+## Format specifications
+
+A `:` after the expression starts a format specification, which pads the
+value's text or writes an integer in another base. Its parts, all optional,
+come in this order:
+
+```text
+{value:[[fill]align][+][0][width][type]}
+```
+
+| Part | Meaning |
+|------|---------|
+| `align` | `<` left, `^` centered (leaning left), `>` right. Without one, integers go to the right and everything else to the left. |
+| `fill` | The character the padding is made of, written before `align`; a space by default. It can be any character but `{`, `}`, `"`, `'` and `#`. |
+| `+` | Writes a `+` before a number that is not negative. |
+| `0` | Pads with zeros after the sign (`-0042`). It cannot be combined with `align`. |
+| `width` | The least number of characters the text takes; longer text is kept whole. |
+| `type` | `d` decimal, `x` and `X` hexadecimal (lower and upper case), `b` binary, `o` octal. |
+
+```pepper
+{{#include ../../examples/interpolation-format.pep}}
+```
+
+- Padding (`fill`, `align` and `width`) works for any value that can be
+  interpolated: it pads the value's `to_string` text, counting characters,
+  not bytes.
+- `+`, `0` and a `type` need an integer (of any size, signed or unsigned).
+  Using one with any other value is an error at that character.
+- A negative number keeps its sign in every base: `{-42:x}` is `-2a`, not
+  the bits of its two's complement.
+- The `:` that starts the specification is the one after the whole
+  expression, so a ternary can be formatted as it is:
+  `{n > 1 ? "many" : "one":>5}`.
+- There is no precision (`.2`) yet, since floating-point numbers have no
+  text conversion.
+
+## Formatting by position: `String.format`
+
+`String.format` takes a string literal whose braces name its other
+arguments by position, `{0}` for the first, each with an optional format
+specification, and returns the text:
+
+```pepper
+{{#include ../../examples/interpolation-string-format.pep}}
+```
+
+- The format must be a **string literal**: the compiler reads it, so an
+  index out of range, an argument no brace names, or a bad specification
+  is an error at compile time. `{{` and `}}` are literal braces, as in an
+  interpolated string.
+- Each argument is **evaluated once**, from left to right, however many
+  braces name it and in whatever order.
+- An index can repeat, to show one value twice or in two forms
+  (`"{0} is {0:x} in hex"`).
+- It is part of the compiler, not a function in the runtime: it cannot be
+  stored in a variable or called through a function value.
 
 ## Errors
 
@@ -98,6 +155,30 @@ An error in the expression itself, such as a name that is not declared
 (`use of undeclared identifier 'x'`), is reported like any other, at the
 token inside the braces.
 
+A format specification's errors are reported at the character in it that
+is wrong:
+
+```text
+main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'
+    5 |     print($"{n:q}");
+      |                ^
+main.pep:5:19: error: cannot format a value of type 'String' as an integer
+    5 |     print($"{name:x}");
+      |                   ^
+```
+
+`String.format` reports an index with no argument at the index, and an
+argument with no index at the argument:
+
+```text
+main.pep:5:31: error: argument index 2 is out of range for 2 arguments
+    5 |     print(String.format("{0} {2}", n, n));
+      |                               ^
+main.pep:5:35: error: argument 1 of 'String.format' is not used by its format string
+    5 |     print(String.format("{0}", n, n + 1));
+      |                                   ^~~~~
+```
+
 Changing a variable inside the braces is reported at the operator:
 
 ```text
@@ -109,7 +190,10 @@ main.pep:3:16: error: an assignment cannot appear in an interpolated string
 ## How it works
 
 The compiler turns `$"({x}, {y + 1})"` into `"(" + to_string(x) + ", " +
-to_string(y + 1) + ")"`, resolving `to_string` in the runtime rather than in
-your file. So a struct's own `to_string()` method can interpolate its fields
-without calling itself, and the result costs what the same `+` expression
-does.
+to_string(y + 1) + ")"`, resolving `to_string` in the runtime rather than
+in your file. So a struct's own `to_string()` method can interpolate its
+fields without calling itself, and the result costs what the same `+`
+expression does. A value with a format specification goes through a
+runtime call that pads or converts its text instead. `String.format` becomes
+the same concatenation, with its arguments bound to hidden names first when
+the braces name them out of order or more than once.

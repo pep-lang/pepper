@@ -55,7 +55,7 @@ traits (with default methods, and usable as types), function types and
 closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum), `Optional` values, iteration (with `map` and
 `filter` adapters),
 `with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a `StringBuilder`,
-`to_string` and a `ToString` trait, and `$"{a + b}"` interpolation), sortable arrays, hash
+`to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
 TCP and UDP sockets, and command-line arguments (`main(args: String[])`). That is enough to write real

@@ -220,6 +220,128 @@ test(): int {
 }
 
 #[test]
+fn format_specifications() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Point {
+    var x: int = 0;
+    construct(this.x = 0) {}
+}
+
+extend Point with ToString {
+    to_string(): String {
+        return $"P{x}";
+    }
+}
+
+test(): int {
+    var n = 255;
+    var negative = -42;
+    var name = "ab";
+    ulong big = 0xFFFFFFFFFFFFFFFF;
+    byte small = 10;
+    if (!($"[{n:>6}][{n:<6}][{n:^7}][{n:6}]" == "[   255][255   ][  255  ][   255]")) { return -1; }
+    if (!($"[{name:6}][{name:>6}][{name:*^6}][{name:1}]" == "[ab    ][    ab][**ab**][ab]")) { return -2; }
+    if (!($"{n:x} {n:X} {n:b} {n:o} {n:d}" == "ff FF 11111111 377 255")) { return -3; }
+    if (!($"{n:08x} {negative:08} {negative:x} {n:+} {negative:+} {0:+}" == "000000ff -0000042 -2a +255 -42 +0")) { return -4; }
+    if (!($"{big:x} {small:b} {-9223372036854775807 - 1:x}" == "ffffffffffffffff 1010 -8000000000000000")) { return -5; }
+    if (!($"[{Point(3):>5}][{true:>6}][{n > 3 ? "yes" : "no":>5}]" == "[   P3][  true][  yes]")) { return -6; }
+    if (!($"[{"é":-^5}][{n:é>5}]" == "[--é--][éé255]")) { return -7; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn string_format() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Point {
+    var x: int = 0;
+    construct(this.x = 0) {}
+}
+
+extend Point with ToString {
+    to_string(): String {
+        return $"P{x}";
+    }
+}
+
+const order = Atomic<int>(0);
+
+# Records the order of the calls in its result's digits.
+next(value: int): int {
+    order.store(order.load() * 10 + value);
+    return value;
+}
+
+test(): int {
+    var n = 255;
+    var name = "ab";
+    if (!(String.format("{0} + {1} = {2:>4}", 2, 3, 2 + 3) == "2 + 3 =    5")) { return -1; }
+    if (!(String.format("{1} {0} {0:x}", n, name) == "ab 255 ff")) { return -2; }
+    if (!(String.format("{0}", Point(1)) == "P1")) { return -3; }
+    if (!(String.format("{0} {0:x}", n) == "255 ff")) { return -4; }
+    if (!(String.format("none {{}}") == "none {}")) { return -5; }
+    if (!(String.format("") == "")) { return -6; }
+    # Each argument is evaluated once, left to right, whatever the order
+    # of the braces.
+    if (!(String.format("{2}{1}{0}{2}", next(1), next(2), next(3)) == "3213")) { return -7; }
+    if (order.load() != 123) { return -8; }
+    if (!($"<{String.format("{0:>3}", n + 1)}>" == "<256>")) { return -9; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn formats_leak_nothing() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Point {
+    var x: int = 0;
+    construct(this.x = 0) {}
+}
+
+extend Point with ToString {
+    to_string(): String {
+        return $"P{x}";
+    }
+}
+
+make(x: int): Point {
+    return Point(x);
+}
+
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var points = Array<Point>();
+        points.append(Point(1));
+        var i = 0;
+        while (i < 10) {
+            var s = $"{make(i):>4} {points[0]:<3} {i:04x} {"a" + "b":^5}";
+            var t = String.format("{1} {0} {1:>5} {0:x}", i, make(i));
+            var u = String.format("{0} {1}", points[0], "x" + "y");
+            i = i + 1;
+        }
+    }
+    if (_pep_live_allocs() != before) { return -1; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
+#[test]
 fn closure_bodies_may_change_their_own_locals() {
     // A closure's body does not run in place, so it is not checked for
     // assignments.

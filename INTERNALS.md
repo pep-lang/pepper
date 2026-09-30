@@ -296,6 +296,27 @@ with no extension, and `module_name()` is the output's stem.
   `string.pep`, so neither a struct's own `to_string()` method (which
   `convert_member_refs` would bind a bare call to) nor a file's own
   `to_string` functions (which hide the runtime's set) capture it.
+  A `:` after the hole's expression starts a format specification
+  (`format_spec` → `FormatSpec`, `[[fill]align][+][0][width][type]`);
+  `interpolation_call` lowers the value to `_pep_format(value, fill, align,
+  width)` (`FORMAT_FUNCTION`, at the braces) when it only pads, or to
+  `_pep_format_integer(value, base, upper, plus, fill, align, width, zero)`
+  (`FORMAT_INTEGER_FUNCTION`, located at the specification's character that
+  needs an integer) otherwise. `check_interpolations` reports a value with
+  no text conversion at the braces, and a non-integer given to
+  `_pep_format_integer` at that character. The text scanning (`{{`, `}}`,
+  a lone `}`, the closing quote) is `interpolation_parts`, shared with
+  `String.format`.
+- **`String.format`** is an intrinsic: `primary_expression` tries
+  `string_format` on `String . format (`. Its first argument must be a
+  string literal, whose braces hold an argument index and an optional
+  specification. An index out of range and an argument no brace names are
+  `error_at`s. When the braces name every argument once, in order, the
+  arguments replace the placeholders and it lowers like an interpolated
+  string; otherwise it lowers to a `match` over a tuple of the arguments
+  whose one arm binds `_pep_format_0`, `_pep_format_1`, ... (a lone
+  argument is paired with `false`), so each is evaluated once, left to
+  right.
 - **Thread-local parser state** lives in `parsers.rs`: `SRC_LEN`, `MAX_POS`
   (the furthest offset any rule reached), `EXPECTATION` (what was expected
   at that furthest failure), `QUALIFIERS` (import qualifiers bound so far,

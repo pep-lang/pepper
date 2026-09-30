@@ -684,10 +684,6 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     Ok(Literal::String(content))
 }
 
-/// The runtime function an interpolated string calls on each value: it
-/// returns the value's text through `to_string` (runtime/string.pep).
-pub const INTERPOLATE_FUNCTION: &str = "_pep_interpolate";
-
 /// The span of the character at byte `at` of the source, which `input`
 /// (a later part of it) holds; empty at a quote, a line break, or the end.
 fn char_span(input: &str, at: usize) -> Span {
@@ -795,40 +791,44 @@ fn find_mutation(e: &Expression) -> Option<(Span, &'static str)> {
     }
 }
 
-/// An interpolated string, `$"sum is {a + b}"`: text with expressions in
-/// braces, and `{{` and `}}` for a literal brace. Lowered here to the
-/// concatenation of its text and `_pep_interpolate(expression)` for each
-/// expression (`"sum is " + _pep_interpolate(a + b)`), so linking,
-/// visibility and sema see ordinary references and calls. The expression
-/// may hold string literals of its own (`{f("x")}`), but nothing that
-/// changes a variable: no assignment, `++` or `--` outside a closure's body
-/// (see [`find_mutation`]). Where it ends is decided by
-/// [`interpolation_end`].
-fn interpolated_string(input: &mut &str) -> Result<Expression> {
-    let start = pos(input);
-    let open = start + 1;
-    *input = &input[2..]; // consume `$"`
+/// `missing terminating '"' character` at the opening quote at `open`.
+fn unclosed_string(open: usize) -> ErrMode<&'static str> {
+    error_at(Span { start: open, end: open + 1 }, "missing terminating '\"' character".to_string())
+}
+
+/// `expected '}'` at `at`, with a note at the `{` at `brace` it would close.
+fn missing_brace(at: Span, brace: usize) -> ErrMode<&'static str> {
+    fail_with(
+        Diagnostic::error("expected '}'")
+            .at(Loc::new(FileId::default(), at))
+            .with_note("to match this '{'", Some(Loc::new(FileId::default(), Span { start: brace, end: brace + 1 }))),
+    )
+}
+
+/// The text of an interpolated or format string, from just after its
+/// opening quote at `open` through its closing quote: each run of text as a
+/// string literal, and each `{...}` as what `hole` makes of it. `what`
+/// names the literal in errors. `{{` and
+/// `}}` are literal braces. `hole` is called just after a `{` with the
+/// `{`'s offset and whether the text so far holds a line break (a brace
+/// error after one more likely means the literal was never closed, which is
+/// reported at its opening quote, as clang does), and consumes through the
+/// `}`.
+fn interpolation_parts(
+    input: &mut &str,
+    open: usize,
+    what: &str,
+    hole: &mut dyn FnMut(&mut &str, usize, bool) -> Result<Expression>,
+) -> Result<Vec<Expression>> {
     let mut parts: Vec<Expression> = vec![];
     let mut text = String::new();
     let mut text_start = pos(input);
-    // The text from the first line break on: a brace error after one more
-    // likely means the literal was never closed, which is reported at its
-    // opening quote, as clang does.
     let mut line_break = false;
-    let unclosed = || error_at(Span { start: open, end: open + 1 }, "missing terminating '\"' character".to_string());
     let flush = |parts: &mut Vec<Expression>, text: &mut String, text_start: usize, end: usize| {
         if !text.is_empty() {
             let value = Literal::String(std::mem::take(text));
             parts.push(Expression::Literal { value, span: Span { start: text_start, end } });
         }
-    };
-    // `expected '}'` at `at`, with a note at the `{` it would close.
-    let missing_brace = |at: Span, brace: usize| {
-        fail_with(
-            Diagnostic::error("expected '}'")
-                .at(Loc::new(FileId::default(), at))
-                .with_note("to match this '{'", Some(Loc::new(FileId::default(), Span { start: brace, end: brace + 1 }))),
-        )
     };
     while let Some(c) = input.chars().next() {
         match c {
@@ -844,77 +844,19 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
             }
             '}' => {
                 if line_break {
-                    return Err(unclosed());
+                    return Err(unclosed_string(open));
                 }
                 let at = pos(input);
                 return Err(error_at(
                     Span { start: at, end: at + 1 },
-                    "unmatched '}' in interpolated string; write '}}' for a literal '}'".to_string(),
+                    format!("unmatched '}}' in {}; write '}}}}' for a literal '}}'", what),
                 ));
             }
             '{' => {
                 flush(&mut parts, &mut text, text_start, pos(input));
                 let brace = pos(input);
                 *input = &input[1..];
-                let end = match interpolation_end(input.as_bytes(), 0) {
-                    Ok(end) => pos(input) + end,
-                    Err(_) if line_break => return Err(unclosed()),
-                    Err(stop) if input.as_bytes().get(stop) == Some(&b'#') => {
-                        let at = pos(input) + stop;
-                        return Err(error_at(
-                            Span { start: at, end: at + 1 },
-                            "a comment cannot appear inside '{}' in an interpolated string".to_string(),
-                        ));
-                    }
-                    Err(stop) => {
-                        // Point at what follows the expression when one
-                        // parses: in `{x b"`, the `b`.
-                        let stop = pos(input) + stop;
-                        let mut rest = *input;
-                        ws(&mut rest)?;
-                        if expression(&mut rest).is_ok() {
-                            ws(&mut rest)?;
-                        }
-                        return Err(missing_brace(char_span(input, pos(rest).min(stop)), brace));
-                    }
-                };
-                ws(input)?;
-                let expression_start = pos(input);
-                let expression_span = char_span(input, expression_start);
-                let no_expression = || {
-                    if line_break {
-                        return unclosed();
-                    }
-                    error_at(
-                        expression_span,
-                        "expected an expression after '{' in interpolated string; write '{{' for a literal '{'".to_string(),
-                    )
-                };
-                if expression_start == end {
-                    return Err(no_expression());
-                }
-                let value = match expression(input) {
-                    Ok(value) => value,
-                    Err(ErrMode::Backtrack(_)) => return Err(no_expression()),
-                    Err(e) => return Err(if line_break { unclosed() } else { e }),
-                };
-                if let Some((at, what)) = find_mutation(&value) {
-                    return Err(error_at(at, format!("{} cannot appear in an interpolated string", what)));
-                }
-                ws(input)?;
-                if pos(input) != end {
-                    if line_break {
-                        return Err(unclosed());
-                    }
-                    return Err(missing_brace(char_span(input, pos(input).min(end)), brace));
-                }
-                *input = &input[1..];
-                let braces = Span { start: brace, end: pos(input) };
-                parts.push(Expression::FunctionCall {
-                    function: Box::new(Expression::SymbolRef { id: INTERPOLATE_FUNCTION.to_string(), span: braces }),
-                    arguments: vec![value],
-                    span: braces,
-                });
+                parts.push(hole(input, brace, line_break)?);
                 text_start = pos(input);
             }
             _ => {
@@ -928,17 +870,22 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
     }
     if !input.starts_with('"') {
         if line_break {
-            return Err(unclosed());
+            return Err(unclosed_string(open));
         }
         expected_with_note(input, "'\"'", Some((open, "to match this '\"'")));
         return Err(cut(input));
     }
     flush(&mut parts, &mut text, text_start, pos(input));
     *input = &input[1..];
-    let span = Span { start, end: pos(input) };
+    Ok(parts)
+}
+
+/// The concatenation of `parts`, covering `span`: an empty string literal
+/// for none.
+fn join_parts(parts: Vec<Expression>, span: Span) -> Expression {
     let mut parts = parts.into_iter();
     let Some(first) = parts.next() else {
-        return Ok(Expression::Literal { value: Literal::String(String::new()), span });
+        return Expression::Literal { value: Literal::String(String::new()), span };
     };
     let mut joined = parts.fold(first, |lhs, rhs| {
         let span = Span { start: lhs.span().start, end: rhs.span().end };
@@ -949,7 +896,393 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
         Expression::Binary { span: whole, .. } | Expression::Literal { span: whole, .. } => *whole = span,
         _ => {}
     }
-    Ok(joined)
+    joined
+}
+
+/// The runtime function an interpolated string calls on a value with no
+/// format specification: it returns the value's text through `to_string`
+/// (runtime/string.pep).
+pub const INTERPOLATE_FUNCTION: &str = "_pep_interpolate";
+/// The runtime function called for a format specification that only pads:
+/// `_pep_format(value, fill, align, width)`.
+pub const FORMAT_FUNCTION: &str = "_pep_format";
+/// The runtime function called for a format specification that needs an
+/// integer (a sign, `0` or a type): `_pep_format_integer(value, base,
+/// upper, plus, fill, align, width, zero)`. Its call is located at the
+/// specification's character that needs the integer.
+pub const FORMAT_INTEGER_FUNCTION: &str = "_pep_format_integer";
+
+/// A format specification, `[[fill]align][+][0][width][type]`, as written
+/// after the `:` in `{value:>8}`.
+#[derive(Debug, Default)]
+struct FormatSpec {
+    fill: Option<char>,
+    /// 1 left (`<`), 2 center (`^`), 3 right (`>`); runtime/string.pep's
+    /// `_ALIGN_*`.
+    align: Option<(i64, Span)>,
+    plus: Option<Span>,
+    zero: Option<Span>,
+    width: Option<i64>,
+    /// `d`, `x`, `X`, `b` or `o`.
+    kind: Option<(char, Span)>,
+}
+
+/// The format specification after a `:`, up to the `}` at byte `end`, which
+/// is left unconsumed.
+fn format_spec(input: &mut &str, end: usize) -> Result<FormatSpec> {
+    let base = pos(input);
+    let text = &input[..end - base];
+    if text.is_empty() {
+        return Err(error_at(char_span(input, base), "expected a format specification after ':'".to_string()));
+    }
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let span_of = |i: usize| {
+        let (offset, c) = chars[i];
+        Span { start: base + offset, end: base + offset + c.len_utf8() }
+    };
+    let align_of = |c: char| match c {
+        '<' => Some(1),
+        '^' => Some(2),
+        '>' => Some(3),
+        _ => None,
+    };
+    let mut spec = FormatSpec::default();
+    let mut i = 0;
+    if let Some(align) = chars.get(1).and_then(|(_, c)| align_of(*c)) {
+        spec.fill = Some(chars[0].1);
+        spec.align = Some((align, span_of(1)));
+        i = 2;
+    } else if let Some(align) = align_of(chars[0].1) {
+        spec.align = Some((align, span_of(0)));
+        i = 1;
+    }
+    if chars.get(i).is_some_and(|(_, c)| *c == '+') {
+        spec.plus = Some(span_of(i));
+        i += 1;
+    }
+    if chars.get(i).is_some_and(|(_, c)| *c == '0') {
+        spec.zero = Some(span_of(i));
+        i += 1;
+    }
+    let digits_start = i;
+    while chars.get(i).is_some_and(|(_, c)| c.is_ascii_digit()) {
+        i += 1;
+    }
+    if i > digits_start {
+        let digits = &text[chars[digits_start].0..chars.get(i).map_or(text.len(), |(offset, _)| *offset)];
+        let span = Span { start: span_of(digits_start).start, end: span_of(i - 1).end };
+        match digits.parse::<u32>() {
+            Ok(width) => spec.width = Some(width as i64),
+            Err(_) => return Err(error_at(span, "format width is too large".to_string())),
+        }
+    }
+    if let Some((_, c @ ('d' | 'x' | 'X' | 'b' | 'o'))) = chars.get(i) {
+        spec.kind = Some((*c, span_of(i)));
+        i += 1;
+    }
+    if let Some((_, c)) = chars.get(i) {
+        return Err(error_at(
+            span_of(i),
+            format!("unexpected '{}' in format specification; expected '[[fill]align][+][0][width][type]'", c),
+        ));
+    }
+    if let (Some(zero), Some(_)) = (spec.zero, spec.align) {
+        return Err(error_at(zero, "'0' padding cannot be combined with an alignment".to_string()));
+    }
+    *input = &input[text.len()..];
+    Ok(spec)
+}
+
+/// The call that converts `value`, in braces at `braces`, to text: through
+/// `spec` when there is one.
+fn interpolation_call(value: Expression, braces: Span, spec: Option<FormatSpec>) -> Expression {
+    let call = |name: &str, span: Span, arguments: Vec<Expression>| Expression::FunctionCall {
+        function: Box::new(Expression::SymbolRef { id: name.to_string(), span }),
+        arguments,
+        span,
+    };
+    let Some(spec) = spec else {
+        return call(INTERPOLATE_FUNCTION, braces, vec![value]);
+    };
+    let literal = |value: Literal| Expression::Literal { value, span: braces };
+    let fill = literal(Literal::String(spec.fill.unwrap_or(' ').to_string()));
+    let align = literal(Literal::Integer(spec.align.map_or(0, |(align, _)| align)));
+    let width = literal(Literal::Integer(spec.width.unwrap_or(0)));
+    // The character that makes the value an integer: its type, else its
+    // sign, else its `0`.
+    let integer = spec.kind.map(|(_, span)| span).or(spec.plus).or(spec.zero);
+    let Some(at) = integer else {
+        return call(FORMAT_FUNCTION, braces, vec![value, fill, align, width]);
+    };
+    let kind = spec.kind.map_or('d', |(kind, _)| kind);
+    let base = match kind {
+        'x' | 'X' => 16,
+        'b' => 2,
+        'o' => 8,
+        _ => 10,
+    };
+    let arguments = vec![
+        value,
+        literal(Literal::Integer(base)),
+        literal(Literal::Bool(kind == 'X')),
+        literal(Literal::Bool(spec.plus.is_some())),
+        fill,
+        align,
+        width,
+        literal(Literal::Bool(spec.zero.is_some())),
+    ];
+    call(FORMAT_INTEGER_FUNCTION, at, arguments)
+}
+
+/// An interpolated string, `$"sum is {a + b}"`: text with expressions in
+/// braces, each optionally followed by a format specification
+/// (`{n:>8}`), and `{{` and `}}` for a literal brace. Lowered here to the
+/// concatenation of its text and `_pep_interpolate(expression)` for each
+/// expression (`"sum is " + _pep_interpolate(a + b)`), or a
+/// [`FORMAT_FUNCTION`]/[`FORMAT_INTEGER_FUNCTION`] call for one with a
+/// specification, so linking, visibility and sema see ordinary references
+/// and calls. The expression may hold string literals of its own
+/// (`{f("x")}`), but nothing that changes a variable: no assignment, `++`
+/// or `--` outside a closure's body (see [`find_mutation`]). Where it ends
+/// is decided by [`interpolation_end`]. A `:` after the whole expression starts the
+/// specification, so `{a ? b : c:>5}` formats the ternary.
+fn interpolated_string(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    let open = start + 1;
+    *input = &input[2..]; // consume `$"`
+    let parts = interpolation_parts(input, open, "interpolated string", &mut |input, brace, line_break| {
+        let unclosed = || unclosed_string(open);
+        let end = match interpolation_end(input.as_bytes(), 0) {
+            Ok(end) => pos(input) + end,
+            Err(_) if line_break => return Err(unclosed()),
+            Err(stop) if input.as_bytes().get(stop) == Some(&b'#') => {
+                let at = pos(input) + stop;
+                return Err(error_at(
+                    Span { start: at, end: at + 1 },
+                    "a comment cannot appear inside '{}' in an interpolated string".to_string(),
+                ));
+            }
+            Err(stop) => {
+                // Point at what follows the expression when one
+                // parses: in `{x b"`, the `b`.
+                let stop = pos(input) + stop;
+                let mut rest = *input;
+                ws(&mut rest)?;
+                if expression(&mut rest).is_ok() {
+                    ws(&mut rest)?;
+                }
+                return Err(missing_brace(char_span(input, pos(rest).min(stop)), brace));
+            }
+        };
+        ws(input)?;
+        let expression_start = pos(input);
+        let expression_span = char_span(input, expression_start);
+        let no_expression = || {
+            if line_break {
+                return unclosed();
+            }
+            error_at(
+                expression_span,
+                "expected an expression after '{' in interpolated string; write '{{' for a literal '{'".to_string(),
+            )
+        };
+        if expression_start == end || input.starts_with(':') {
+            return Err(no_expression());
+        }
+        let value = match expression(input) {
+            Ok(value) => value,
+            Err(ErrMode::Backtrack(_)) => return Err(no_expression()),
+            Err(e) => return Err(if line_break { unclosed() } else { e }),
+        };
+        if let Some((at, what)) = find_mutation(&value) {
+            return Err(error_at(at, format!("{} cannot appear in an interpolated string", what)));
+        }
+        ws(input)?;
+        let mut spec = None;
+        if input.starts_with(':') && pos(input) < end {
+            *input = &input[1..];
+            spec = Some(format_spec(input, end)?);
+        }
+        if pos(input) != end {
+            if line_break {
+                return Err(unclosed());
+            }
+            return Err(missing_brace(char_span(input, pos(input).min(end)), brace));
+        }
+        *input = &input[1..];
+        Ok(interpolation_call(value, Span { start: brace, end: pos(input) }, spec))
+    })?;
+    Ok(join_parts(parts, Span { start, end: pos(input) }))
+}
+
+/// The hidden name `String.format` binds its argument `index` to.
+fn format_argument(index: usize) -> String {
+    format!("_pep_format_{}", index)
+}
+
+/// `String.format("{0} + {1} = {2:>4}", a, b, a + b)`: a format string
+/// literal whose braces name arguments by index, each optionally with a
+/// format specification as in an interpolated string. A compiler
+/// intrinsic, lowered here: when the braces name every argument once, in
+/// order, to the concatenation an interpolated string would make; otherwise
+/// to `match ((a, b, c)) { (_pep_format_0, ...) => ... }`, so each argument
+/// is still evaluated once, left to right. An index out of range and an
+/// argument no brace names are errors.
+fn string_format(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    if !keyword(input, "String") {
+        return Err(bt(input));
+    }
+    ws(input)?;
+    if !input.starts_with('.') {
+        return Err(bt(input));
+    }
+    *input = &input[1..];
+    ws(input)?;
+    let name_start = pos(input);
+    if !keyword(input, "format") {
+        return Err(bt(input));
+    }
+    let name_span = Span { start: name_start, end: pos(input) };
+    ws(input)?;
+    if !input.starts_with('(') {
+        return Err(bt(input));
+    }
+    let paren = pos(input);
+    *input = &input[1..];
+    ws(input)?;
+    if !input.starts_with('"') {
+        let at = pos(input);
+        let mut rest = *input;
+        let end = if expression(&mut rest).is_ok() { pos(rest) } else { char_span(input, at).end };
+        return Err(error_at(
+            Span { start: at, end: end.max(at + usize::from(!input.is_empty())) },
+            "the format of 'String.format' must be a string literal".to_string(),
+        ));
+    }
+    let open = pos(input);
+    *input = &input[1..];
+    let mut holes: Vec<(usize, Span)> = vec![];
+    let parts = interpolation_parts(input, open, "format string", &mut |input, brace, line_break| {
+        let index_start = pos(input);
+        let digits = input.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            if line_break {
+                return Err(unclosed_string(open));
+            }
+            return Err(error_at(
+                char_span(input, index_start),
+                "expected an argument index after '{' in format string; write '{{' for a literal '{'".to_string(),
+            ));
+        }
+        let index = input[..digits].parse::<usize>().unwrap_or(usize::MAX);
+        *input = &input[digits..];
+        let index_span = Span { start: index_start, end: pos(input) };
+        let mut spec = None;
+        if input.starts_with(':') {
+            *input = &input[1..];
+            let spec_end = input.find(['}', '"', '\n']).unwrap_or(input.len());
+            if input[spec_end..].starts_with('}') {
+                spec = Some(format_spec(input, pos(input) + spec_end)?);
+            } else {
+                *input = &input[spec_end..];
+            }
+        }
+        if !input.starts_with('}') {
+            if line_break {
+                return Err(unclosed_string(open));
+            }
+            return Err(missing_brace(char_span(input, pos(input)), brace));
+        }
+        *input = &input[1..];
+        holes.push((index, index_span));
+        let value = Expression::SymbolRef { id: format_argument(index), span: index_span };
+        Ok(interpolation_call(value, Span { start: brace, end: pos(input) }, spec))
+    })?;
+    let mut arguments: Vec<Expression> = vec![];
+    let mut argument_spans: Vec<Span> = vec![];
+    loop {
+        ws(input)?;
+        if input.starts_with(')') {
+            break;
+        }
+        if !input.starts_with(',') {
+            return Err(cut_expecting(input, "',' or ')'"));
+        }
+        *input = &input[1..];
+        ws(input)?;
+        let argument_start = pos(input);
+        arguments.push(expression(input).map_err(|_| cut_expecting(input, "expression"))?);
+        argument_spans.push(Span { start: argument_start, end: pos(input) });
+    }
+    *input = &input[1..];
+    let span = Span { start, end: pos(input) };
+    let count = arguments.len();
+    for (index, at) in &holes {
+        if *index >= count {
+            let noun = if count == 1 { "argument" } else { "arguments" };
+            return Err(error_at(*at, format!("argument index {} is out of range for {} {}", index, count, noun)));
+        }
+    }
+    if let Some(unused) = (0..count).find(|i| !holes.iter().any(|(index, _)| index == i)) {
+        return Err(error_at(
+            argument_spans[unused],
+            format!("argument {} of 'String.format' is not used by its format string", unused),
+        ));
+    }
+    let in_order = holes.iter().enumerate().all(|(i, (index, _))| *index == i) && holes.len() == count;
+    if in_order {
+        // Each part that converts a value names the next argument.
+        let mut arguments = arguments.into_iter();
+        let parts = parts
+            .into_iter()
+            .map(|mut part| {
+                if let Expression::FunctionCall { arguments: values, .. } = &mut part {
+                    values[0] = arguments.next().expect("one argument per brace");
+                }
+                part
+            })
+            .collect();
+        return Ok(join_parts(parts, span));
+    }
+    let name_pattern = |name: String, span: Span| Pattern {
+        literal: None,
+        elements: None,
+        qualifier: None,
+        case: name,
+        case_span: span,
+        bindings: None,
+        span,
+    };
+    let mut elements: Vec<Pattern> =
+        argument_spans.iter().enumerate().map(|(i, at)| name_pattern(format_argument(i), *at)).collect();
+    let tuple_span = Span { start: paren, end: span.end };
+    // A tuple has two elements at least: a single argument is paired with
+    // one that is ignored.
+    if count == 1 {
+        arguments.push(Expression::Literal { value: Literal::Bool(false), span: tuple_span });
+        elements.push(name_pattern("_".to_string(), tuple_span));
+    }
+    let arm = MatchValueArm {
+        patterns: vec![Pattern {
+            literal: None,
+            elements: Some(elements),
+            qualifier: None,
+            case: String::new(),
+            case_span: tuple_span,
+            bindings: None,
+            span: tuple_span,
+        }],
+        value: join_parts(parts, span),
+        span,
+    };
+    Ok(Expression::Match(Box::new(MatchExpression {
+        value: Expression::Tuple { elements: arguments, labels: vec![], span: tuple_span },
+        arms: vec![arm],
+        else_arm: None,
+        keyword_span: name_span,
+        span,
+    })))
 }
 
 /// A character literal: one ASCII character or escape sequence between single
@@ -1145,6 +1478,19 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     if input.starts_with(|c: char| c.is_ascii_digit()) || (input.starts_with('-') && input[1..].starts_with(|c: char| c.is_ascii_digit())) {
         let n = numeric_constant(input)?;
         return Ok(Expression::Literal { value: n, span: Span { start, end: pos(input) } });
+    }
+    // String.format("{0}", x): an intrinsic, lowered like an interpolated
+    // string.
+    if input.starts_with("String") {
+        let mut rest = *input;
+        match string_format(&mut rest) {
+            Ok(e) => {
+                *input = rest;
+                return Ok(e);
+            }
+            Err(ErrMode::Backtrack(_)) => {}
+            Err(e) => return Err(e),
+        }
     }
     // Interpolated string: $"x is {x}"
     if input.starts_with("$\"") {
@@ -4503,6 +4849,37 @@ mod tests {
     }
 
     #[test]
+    fn format_specifications_lower_to_format_calls() {
+        // (source, function, the call's arguments after the value as text)
+        for (source, function, rest) in [
+            ("$\"{n:>8}\"", FORMAT_FUNCTION, "\" \" 3 8"),
+            ("$\"{n:*^5}\"", FORMAT_FUNCTION, "\"*\" 2 5"),
+            ("$\"{n:7}\"", FORMAT_FUNCTION, "\" \" 0 7"),
+            ("$\"{n:08x}\"", FORMAT_INTEGER_FUNCTION, "16 false false \" \" 0 8 true"),
+            ("$\"{n:+X}\"", FORMAT_INTEGER_FUNCTION, "16 true true \" \" 0 0 false"),
+            ("$\"{n:-<4b}\"", FORMAT_INTEGER_FUNCTION, "2 false false \"-\" 1 4 false"),
+            ("$\"{c ? a : b:o}\"", FORMAT_INTEGER_FUNCTION, "8 false false \" \" 0 0 false"),
+        ] {
+            let Expression::FunctionCall { function: name, arguments, span, .. } = parse_expr(source) else {
+                panic!("expected a call for {}", source)
+            };
+            assert!(matches!(*name, Expression::SymbolRef { ref id, .. } if id == function), "{}", source);
+            let shown: Vec<String> = arguments[1..]
+                .iter()
+                .map(|a| match a {
+                    Expression::Literal { value, .. } => value.to_string(),
+                    other => panic!("expected a literal, got {:?}", other),
+                })
+                .collect();
+            assert_eq!(shown.join(" "), rest, "{}", source);
+            // An integer format is located at the character that needs one.
+            if function == FORMAT_INTEGER_FUNCTION {
+                assert_eq!(span.end - span.start, 1, "{}", source);
+            }
+        }
+    }
+
+    #[test]
     fn find_mutation_reports_assignments_outside_closures() {
         for (source, found) in [
             ("a + b", None),
@@ -4519,6 +4896,21 @@ mod tests {
             let got = find_mutation(&e).map(|(span, what)| (span.start, span.end, what));
             assert_eq!(got, found, "{}", source);
         }
+    }
+
+    #[test]
+    fn string_format_lowers_in_order_or_through_a_match() {
+        // Every argument once, in order: a concatenation of the arguments.
+        let Expression::Binary { lhs, .. } = parse_expr("String.format(\"{0}-{1:x}\", a, b)") else { panic!("expected +") };
+        let Expression::Binary { lhs: first, .. } = *lhs else { panic!("expected +") };
+        let Expression::FunctionCall { arguments, .. } = *first else { panic!("expected a call") };
+        assert!(matches!(&arguments[..], [Expression::SymbolRef { id, .. }] if id == "a"));
+        // Reordered or repeated: a match binds each argument once.
+        let Expression::Match(m) = parse_expr("String.format(\"{1}{0}\", a, b)") else { panic!("expected a match") };
+        assert!(matches!(&m.value, Expression::Tuple { elements, .. } if elements.len() == 2));
+        let Expression::Match(m) = parse_expr("String.format(\"{0}{0}\", a)") else { panic!("expected a match") };
+        assert!(matches!(&m.value, Expression::Tuple { elements, .. } if elements.len() == 2));
+        assert!(matches!(parse_expr("String.format(\"x\")"), Expression::Literal { value: Literal::String(ref s), .. } if s == "x"));
     }
 
     #[test]

@@ -23,6 +23,11 @@ extern int memcmp(void* a, void* b, ulong n);
 ## `+=`, or `grow` since the iterator was created, so modifying a String
 ## while a `for` loop iterates it panics.
 ##
+## To build text from values, use an interpolated string
+## (`$"{name}: {count:>4}"`) or `String.format("{0}: {1:>4}", name, count)`,
+## a compiler intrinsic whose braces name its arguments by position (see
+## the String interpolation chapter).
+##
 ## @example
 ##     var s = "héllo";
 ##     assert(s.length() == 5, "5 code points");
@@ -774,13 +779,27 @@ export _pep_interpolate<T>(value: T): String {
 
 # The decimal digits of `magnitude`, after a `-` when `negative`.
 _decimal(magnitude: ulong, negative: bool): String {
-    # 20 digits hold the largest ulong; one more for the sign.
-    var digits = _pep_malloc(21) as __ptr<char>;
-    ulong start = 21;
+    return _digits(magnitude, negative, false, 10, false);
+}
+
+# The digits of `magnitude` in `base` (2 to 16), after a `-` when `negative`
+# or a `+` when `plus` and not negative; `upper` spells the digits above 9
+# `A` to `F`.
+_digits(magnitude: ulong, negative: bool, plus: bool, base: ulong, upper: bool): String {
+    # 64 binary digits hold the largest ulong; one more for the sign.
+    var digits = _pep_malloc(65) as __ptr<char>;
+    ulong start = 65;
     while (true) {
         start = start - 1;
-        digits[start] = ('0' + (magnitude % 10)) as char;
-        magnitude = magnitude / 10;
+        var digit = magnitude % base;
+        if (digit < 10) {
+            digits[start] = ('0' + digit) as char;
+        } else if (upper) {
+            digits[start] = ('A' + digit - 10) as char;
+        } else {
+            digits[start] = ('a' + digit - 10) as char;
+        }
+        magnitude = magnitude / base;
         if (magnitude == 0) {
             break;
         }
@@ -788,10 +807,144 @@ _decimal(magnitude: ulong, negative: bool): String {
     if (negative) {
         start = start - 1;
         digits[start] = '-' as char;
+    } else if (plus) {
+        start = start - 1;
+        digits[start] = '+' as char;
     }
-    var result = String(digits + start, 21 - start, 21 - start);
+    var result = String(digits + start, 65 - start, 65 - start);
     _pep_free(digits);
     return result;
+}
+
+# The alignments a format specification names; `_ALIGN_DEFAULT` is none.
+const _ALIGN_DEFAULT = 0;
+const _ALIGN_LEFT = 1;
+const _ALIGN_CENTER = 2;
+const _ALIGN_RIGHT = 3;
+
+# Pads `text` with `fill` to `width` characters, placing it by `align`
+# (`_ALIGN_LEFT`, `_ALIGN_CENTER` or `_ALIGN_RIGHT`); centered text leans
+# left. With `zero`, pads with `0` after any leading sign instead.
+_pep_pad(text: String, fill: String, align: int, width: ulong, zero: bool): String {
+    var length = text.length();
+    if (length >= width) {
+        return text;
+    }
+    var missing = width - length;
+    if (zero) {
+        var sign = text.starts_with("-") || text.starts_with("+");
+        if (sign) {
+            return text.substr_bytes(0, 1) + "0".repeat(missing) + text.substr_bytes(1, text.size() - 1);
+        }
+        return "0".repeat(missing) + text;
+    }
+    if (align == _ALIGN_LEFT) {
+        return text + fill.repeat(missing);
+    }
+    if (align == _ALIGN_CENTER) {
+        return fill.repeat(missing / 2) + text + fill.repeat(missing - missing / 2);
+    }
+    return fill.repeat(missing) + text;
+}
+
+# Where a value is placed in a width when its format names no alignment:
+# numbers to the right, everything else to the left.
+_pep_default_align(value: long): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: ulong): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: int): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: uint): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: short): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: ushort): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: char): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align(value: byte): int {
+    return _ALIGN_RIGHT;
+}
+
+_pep_default_align<T>(value: T): int {
+    return _ALIGN_LEFT;
+}
+
+# The call an interpolated string makes for `{value:spec}` when the spec
+# names only a fill, an alignment and a width (the parser lowers
+# `$"{x:>5}"` to `_pep_format(x, " ", 3, 5)`): the value's text, padded.
+export _pep_format<T>(value: T, fill: String, align: int, width: ulong): String {
+    var placed = align;
+    if (placed == _ALIGN_DEFAULT) {
+        placed = _pep_default_align(value);
+    }
+    return _pep_pad(to_string(value), fill, placed, width, false);
+}
+
+# The digits of an integer in `base`, for `_pep_format_integer`: one
+# overload per integer type, as for `to_string`.
+_pep_radix(value: long, base: ulong, upper: bool, plus: bool): String {
+    if (value < 0) {
+        return _digits(0 - (value as ulong), true, plus, base, upper);
+    }
+    return _digits(value as ulong, false, plus, base, upper);
+}
+
+_pep_radix(value: ulong, base: ulong, upper: bool, plus: bool): String {
+    return _digits(value, false, plus, base, upper);
+}
+
+_pep_radix(value: int, base: ulong, upper: bool, plus: bool): String {
+    return _pep_radix(value as long, base, upper, plus);
+}
+
+_pep_radix(value: uint, base: ulong, upper: bool, plus: bool): String {
+    return _digits(value as ulong, false, plus, base, upper);
+}
+
+_pep_radix(value: short, base: ulong, upper: bool, plus: bool): String {
+    return _pep_radix(value as long, base, upper, plus);
+}
+
+_pep_radix(value: ushort, base: ulong, upper: bool, plus: bool): String {
+    return _digits(value as ulong, false, plus, base, upper);
+}
+
+_pep_radix(value: char, base: ulong, upper: bool, plus: bool): String {
+    return _pep_radix(value as long, base, upper, plus);
+}
+
+_pep_radix(value: byte, base: ulong, upper: bool, plus: bool): String {
+    return _digits(value as ulong, false, plus, base, upper);
+}
+
+# The call an interpolated string makes for `{value:spec}` when the spec
+# needs an integer: a sign, `0` padding, or a type (`d`, `x`, `X`, `b`,
+# `o`). Sema reports any other value at the spec, so only integer types
+# reach `_pep_radix`. A negative number keeps its `-` in every base.
+export _pep_format_integer<T>(
+    value: T, base: ulong, upper: bool, plus: bool, fill: String, align: int, width: ulong, zero: bool
+): String {
+    var placed = align;
+    if (placed == _ALIGN_DEFAULT) {
+        placed = _ALIGN_RIGHT;
+    }
+    return _pep_pad(_pep_radix(value, base, upper, plus), fill, placed, width, zero);
 }
 
 ## Builds a String from many pieces without copying the text built so far

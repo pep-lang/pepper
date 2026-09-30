@@ -4,12 +4,16 @@
 //! overload, a concrete override `to_string<T>`, or the generic
 //! `to_string<T>`, which calls `value.to_string()`. A type with none of
 //! these would fail inside the runtime's generic body, so this pass reports
-//! it at the `{name}` instead.
+//! it at the `{name}` instead. A value with a format specification goes
+//! through `_pep_format<T>`, which converts it the same way, or through
+//! `_pep_format_integer<T>` when the specification needs an integer (a
+//! sign, `0` or a type such as `x`); any other value is reported at the
+//! character of the specification that needs one.
 
 use crate::model::{Diagnostic, Expression, FunctionDef, Module};
 use crate::passes::overloads::set_name;
 use pepper_parser::namespace::{demangle, demangle_name};
-use pepper_parser::parser::parsers::INTERPOLATE_FUNCTION;
+use pepper_parser::parser::parsers::{FORMAT_FUNCTION, FORMAT_INTEGER_FUNCTION, INTERPOLATE_FUNCTION};
 use std::collections::HashSet;
 
 const TO_STRING: &str = "to_string";
@@ -83,10 +87,23 @@ pub fn check_interpolations(module: &mut Module) {
         crate::passes::walk_function(function, &mut |e| {
             let Expression::FunctionCall { function, loc, .. } = e else { return };
             let Some((base, ty)) = split_generic(function) else { return };
-            if base != INTERPOLATE_FUNCTION || convertible(ty) {
+            let shown = demangle(ty);
+            if base == FORMAT_INTEGER_FUNCTION {
+                if ty != "bool" && TO_STRING_OVERLOADS.contains(&ty) {
+                    return;
+                }
+                errors.push(
+                    Diagnostic::error(format!(
+                        "cannot format a value of type '{}' as an integer",
+                        shown
+                    ))
+                    .at(*loc),
+                );
                 return;
             }
-            let shown = demangle(ty);
+            if (base != INTERPOLATE_FUNCTION && base != FORMAT_FUNCTION) || convertible(ty) {
+                return;
+            }
             let mut error = Diagnostic::error(format!(
                 "cannot interpolate a value of type '{}': it has no 'to_string()' method and no 'to_string' overload",
                 shown

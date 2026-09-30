@@ -30,6 +30,11 @@ A `StringIterator` panics when the String has been changed by `append`,
 `+=`, or `grow` since the iterator was created, so modifying a String
 while a `for` loop iterates it panics.
 
+To build text from values, use an interpolated string
+(`$"{name}: {count:>4}"`) or `String.format("{0}: {1:>4}", name, count)`,
+a compiler intrinsic whose braces name its arguments by position (see
+the String interpolation chapter).
+
 **Example**
 ```pepper
     var s = "héllo";
