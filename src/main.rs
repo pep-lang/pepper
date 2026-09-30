@@ -12,7 +12,18 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    match pepper_driver::run(options) {
+    // Compile on a thread with the stack the driver needs; the main
+    // thread's is fixed by the linker (1 MB on Windows).
+    let result = std::thread::Builder::new()
+        .stack_size(pepper_driver::STACK_SIZE)
+        .spawn(move || pepper_driver::run(options))
+        .expect("start the compiler thread")
+        .join();
+    let Ok(result) = result else {
+        // The panic has already printed.
+        return ExitCode::from(101);
+    };
+    match result {
         Ok(0) => ExitCode::SUCCESS,
         Ok(code) => ExitCode::from(code as u8),
         Err(e) => {

@@ -215,7 +215,7 @@ fn concurrent_builds_share_one_cache() {
             .map(|i| {
                 let (cache, out) = (cache.clone(), dir.join(format!("b{}", i)));
                 std::thread::Builder::new()
-                    .stack_size(8 << 20)
+                    .stack_size(pepper_driver::STACK_SIZE)
                     .spawn_scoped(scope, move || build("threads-basics", &cache, &out))
                     .unwrap()
             })

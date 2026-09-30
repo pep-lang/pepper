@@ -664,3 +664,46 @@ fn hover_and_definition_of_an_overloaded_method_call() {
     let (_, rest) = definition(&uri, &text, &program, at(&text, "add(1)", 0, 1));
     assert!(rest.starts_with("add(x: int)"), "{}", rest);
 }
+
+
+/// Source nested as deeply as the parser allows (`MAX_NESTING`), in each
+/// shape that nests: a `+` chain, parentheses, calls, blocks, `else if`,
+/// unary operators, and method chains.
+fn deepest_programs() -> Vec<(&'static str, String)> {
+    use pepper_parser::parser::MAX_NESTING;
+    let n = MAX_NESTING - 4;
+    let wrap = |body: String| format!("f(x: int): int {{ return x; }}\nexport main(): int {{\n    var x = 1;\n{body}\n    return x;\n}}\n");
+    vec![
+        ("chain", wrap(format!("    x = 1{};", " + x".repeat(n)))),
+        ("parentheses", wrap(format!("    x = {}x{};", "(".repeat(n), ")".repeat(n)))),
+        ("calls", wrap(format!("    x = {}x{};", "f(".repeat(n / 2), ")".repeat(n / 2)))),
+        ("blocks", wrap(format!("{}x = 2;{}", "if (x == 1) {\n".repeat(n), "}\n".repeat(n)))),
+        ("else if", wrap(format!("    if (x == 0) {{ x = 1; }}{}", " else if (x == 2) { x = 3; }".repeat(n / 2)))),
+        ("unary", wrap(format!("    x = {}x;", "- ".repeat(n)))),
+        ("strings", wrap(format!("    var s = \"a\"{};", " + \"a\"".repeat(n)))),
+    ]
+}
+
+/// Every pass the server runs fits in `STACK_SIZE` on the deepest source the
+/// parser accepts; a stack overflow cannot be caught, and ends the server.
+#[test]
+fn deepest_source_fits_the_server_stack() {
+    for (shape, main) in deepest_programs() {
+        std::thread::Builder::new()
+            .stack_size(STACK_SIZE)
+            .spawn(move || {
+                let (_, _, program) = load(&format!("deepest_{}", shape.replace(' ', "_")), &main, "main.pep");
+                assert!(sema_model_of(&program).is_ok(), "{shape}");
+            })
+            .unwrap()
+            .join()
+            .unwrap_or_else(|_| panic!("{shape}"));
+    }
+}
+
+/// A request whose analysis panics answers with nothing; the server lives on.
+#[test]
+fn guarded_turns_a_panic_into_none() {
+    assert_eq!(guarded(|| 1), Some(1));
+    assert_eq!(guarded(|| -> i32 { panic!("a bug in one request") }), None);
+}

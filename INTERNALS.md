@@ -250,6 +250,16 @@ with no extension, and `module_name()` is the output's stem.
   `export [...] from`, which `reexport` recognizes and parses as imports),
   `export` re-exports, then `declaration`. Rules return `ErrMode::Backtrack` (via `bt`) to let an
   alternative try, or `ErrMode::Cut` (via `cut`/`cut_expecting`) to commit.
+- **Nesting limit.** Every stage recurses over the tree, so the parser
+  bounds its depth: past `MAX_NESTING` (256) levels it fails with `code is
+  nested too deeply` at the token that crosses, as clang's
+  `-fbracket-depth` does. `nested` counts a rule that recurses into a child
+  (`expression`, `block`, `type_name`, `else if`, unary and
+  right-associative operators); a loop that wraps the tree so far
+  (`binary_left`, `postfix`, interpolated strings) adds one level per turn
+  above the taller of its operands, which `measured` reports. The driver's
+  and the LSP's `STACK_SIZE` (8 MB) is sized to fit the deepest tree; the
+  CLI compiles on a thread of that size, since Windows' main thread has 1 MB.
 - **Semicolons.** Simple statements and non-block declarations end with
   `;` (`docs/src/language/statements.md`); line breaks are whitespace
   everywhere (`ws`), so an expression runs on across lines for as long as a
@@ -1184,6 +1194,12 @@ diagnostics"). The mechanics:
 
 **`tools/lsp/src/main.rs`** (`pepper-lsp`, stdio, tower-lsp):
 
+- **Crash safety.** `main` serves from a thread with the compiler's 8 MB
+  stack (`STACK_SIZE`, also the async runtime's worker stack), which fits
+  every pass on the deepest tree the parser accepts (`MAX_NESTING`, §2);
+  Windows' 1 MB main thread did not. Every request and `publish_diagnostics`
+  computes under `guarded` (`catch_unwind`), so a panic answers that
+  request with nothing instead of ending the server.
 - Document text lives in `PepperLsp.docs`. On open or change,
   `publish_diagnostics` runs these checks:
   1. `parse_source_diag` on the buffer (precise parse errors).
@@ -1236,8 +1252,10 @@ diagnostics"). The mechanics:
   exercises raw JSON-RPC.
 
 **`tools/vscode-pepper`**: `src/extension.js` launches the server. It runs
-a *shadow copy* of the binary because Windows locks a running exe, polls
-the binary and restarts on change, and registers `pepper.restartServer`.
+a *shadow copy* of the binary because Windows locks a running exe (copied
+under a temporary name, then renamed), polls the binary and restarts on
+change, and registers `pepper.restartServer`. Restarts are serialized,
+retry a failed start, and reuse one output channel.
 The server comes from `pepper.lspPath` or from the bundled
 `server/<platform-arch>/` (`serverPath.js`). Syntax highlighting is
 `syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for four

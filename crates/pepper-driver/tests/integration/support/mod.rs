@@ -23,9 +23,7 @@ pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -
         let workers: Vec<_> = (0..threads)
             .map(|_| {
                 std::thread::Builder::new()
-                    // As much stack as the main thread gets: sema and codegen
-                    // recurse over the program, deeper in unoptimized builds.
-                    .stack_size(8 << 20)
+                    .stack_size(pepper_driver::STACK_SIZE)
                     .spawn_scoped(scope, || {
                         let mut done = vec![];
                         loop {

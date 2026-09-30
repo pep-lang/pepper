@@ -2992,3 +2992,32 @@ fn tuple_match_unreachable_else_warns() {
          \x20     |         ^~~~"
     );
 }
+
+/// Source nested past `MAX_NESTING` fails at the token that crosses the
+/// limit: an opening parenthesis, or the operator of a long chain.
+#[test]
+fn nested_too_deeply() {
+    let n = pepper_parser::parser::MAX_NESTING + 10;
+    for (source, token) in [
+        (format!("main(): int {{\n    return {}0{};\n}}\n", "(".repeat(n), ")".repeat(n)), '('),
+        (format!("main(): int {{\n    return 0{};\n}}\n", " + 1".repeat(n)), '+'),
+    ] {
+        // Parsing up to the limit needs the compiler's stack, not a test thread's.
+        let parse = std::thread::Builder::new().stack_size(pepper_driver::STACK_SIZE);
+        let error = parse
+            .spawn(move || pepper_parser::parser::parse_source_diag(&source).unwrap_err().render_in("main.pep", &source))
+            .unwrap()
+            .join()
+            .unwrap();
+        let lines: Vec<&str> = error.lines().collect();
+        assert!(lines[0].starts_with("main.pep:2:"), "{error}");
+        assert!(
+            lines[0].ends_with(
+                "error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions"
+            ),
+            "{error}"
+        );
+        let caret = lines[2].find('^').unwrap();
+        assert_eq!(lines[1].chars().nth(caret), Some(token), "{error}");
+    }
+}

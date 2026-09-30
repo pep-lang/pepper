@@ -360,3 +360,7 @@ Operators bind in this order, tightest first:
 
 As in C, `&` binds more loosely than `==`, so write `(flags & mask) == mask`
 with the parentheses.
+
+An expression can nest at most 256 levels deep, counting each operator of a
+chain as one level, so a sum of more than about 250 terms is a compile error
+(see [Compiler errors](compiler-errors.md#common-errors)).

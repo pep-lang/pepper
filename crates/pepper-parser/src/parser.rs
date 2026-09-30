@@ -1,5 +1,7 @@
 pub mod parsers;
 
+pub use parsers::MAX_NESTING;
+
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;

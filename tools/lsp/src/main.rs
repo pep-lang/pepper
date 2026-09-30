@@ -1169,10 +1169,17 @@ impl PepperLsp {
         diags
     }
 
-    /// Publish diagnostics for `uri`: parse errors (precise) + sema errors.
+    /// Publish diagnostics for `uri`. A panic computing them leaves the ones
+    /// already published in place.
     async fn publish_diagnostics(&self, uri: &Url) {
+        let Some(Some(diags)) = guarded(|| self.diagnostics(uri)) else { return };
+        self.client.publish_diagnostics(uri.clone(), diags, None).await;
+    }
+
+    /// Diagnostics for `uri`: parse errors (precise) + sema errors.
+    fn diagnostics(&self, uri: &Url) -> Option<Vec<Diagnostic>> {
         let mut diags = vec![];
-        let Some(text) = self.doc(uri) else { return };
+        let text = self.doc(uri)?;
         // A parse error, or one found after parsing (a late import, `T*`
         // outside an extern).
         let parsed = pepper_parser::parser::parse_source_diag(&text);
@@ -1194,7 +1201,7 @@ impl PepperLsp {
             diags.extend(deprecated.iter().map(|w| lsp_diagnostic(w, uri, &names)));
             diags.extend(Self::visibility_diagnostics(&program, uri));
         }
-        self.client.publish_diagnostics(uri.clone(), diags, None).await;
+        Some(diags)
     }
 
     /// Hover at `offset` in document `uri`.
@@ -1645,81 +1652,116 @@ impl LanguageServer for PepperLsp {
         self.client.publish_diagnostics(uri, vec![], None).await;
     }
 
+    // Each request computes under `guarded`: a bug that panics on one
+    // document answers that request with nothing instead of ending the server.
     async fn inlay_hint(&self, params: InlayHintParams) -> LspResult<Option<Vec<InlayHint>>> {
         if !self.conversion_hints.load(Ordering::Relaxed) {
             return Ok(None);
         }
         let uri = params.text_document.uri;
-        let Some(text) = self.doc(&uri) else {
-            return Ok(None);
-        };
-        let Some(sema) = self.program(&uri).ok().and_then(|p| sema_model_of(&p).ok()) else {
-            return Ok(None);
-        };
         let range = params.range;
-        let hints = conversion_hints(&text, &sema)
-            .into_iter()
-            .filter(|h| h.position >= range.start && h.position <= range.end)
-            .collect();
-        Ok(Some(hints))
+        Ok(guarded(|| {
+            let text = self.doc(&uri)?;
+            let sema = self.program(&uri).ok().and_then(|p| sema_model_of(&p).ok())?;
+            let hints = conversion_hints(&text, &sema)
+                .into_iter()
+                .filter(|h| h.position >= range.start && h.position <= range.end)
+                .collect();
+            Some(hints)
+        })
+        .flatten())
     }
 
     async fn hover(&self, params: HoverParams) -> LspResult<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        if let Some(text) = self.doc(&uri) {
-            let offset = line_col_to_byte(&text, pos.line, pos.character);
-            return Ok(self.hover(&uri, offset));
-        }
-        Ok(None)
+        Ok(guarded(|| {
+            let text = self.doc(&uri)?;
+            self.hover(&uri, line_col_to_byte(&text, pos.line, pos.character))
+        })
+        .flatten())
     }
 
     async fn completion(&self, params: CompletionParams) -> LspResult<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
-        if let Some(text) = self.doc(&uri) {
+        Ok(guarded(|| {
+            let text = self.doc(&uri)?;
             let offset = line_col_to_byte(&text, pos.line, pos.character);
-            return Ok(Some(CompletionResponse::Array(self.completion(&uri, offset))));
-        }
-        Ok(None)
+            Some(CompletionResponse::Array(self.completion(&uri, offset)))
+        })
+        .flatten())
     }
 
     async fn goto_definition(&self, params: GotoDefinitionParams) -> LspResult<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        if let Some(text) = self.doc(&uri) {
-            let offset = line_col_to_byte(&text, pos.line, pos.character);
-            return Ok(self.definition(&uri, offset).map(Into::into));
-        }
-        Ok(None)
+        Ok(guarded(|| {
+            let text = self.doc(&uri)?;
+            self.definition(&uri, line_col_to_byte(&text, pos.line, pos.character)).map(Into::into)
+        })
+        .flatten())
     }
 
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
-        let Some(text) = self.doc(&uri) else { return Ok(None) };
-        let program = self.program(&uri).ok();
-        // One semantic analysis serves both kinds of fix: those a
-        // diagnostic carries (a `Copyable` skeleton) and the missing arms of
-        // a `match`.
-        let sema_error = program.as_ref().and_then(|p| sema_model_of(p).err());
-        let diagnostics = fixable_diagnostics(&text, program.as_ref(), sema_error.as_ref());
-        let mut actions = quick_fixes(&uri, &text, &diagnostics, params.range);
-        if let (Some(program), Some(error)) = (&program, &sema_error) {
-            actions.extend(missing_arms_fix(&uri, &text, program, error, params.range));
-        }
-        Ok((!actions.is_empty()).then_some(actions))
+        Ok(guarded(|| {
+            let text = self.doc(&uri)?;
+            let program = self.program(&uri).ok();
+            // One semantic analysis serves both kinds of fix: those a
+            // diagnostic carries (a `Copyable` skeleton) and the missing arms
+            // of a `match`.
+            let sema_error = program.as_ref().and_then(|p| sema_model_of(p).err());
+            let diagnostics = fixable_diagnostics(&text, program.as_ref(), sema_error.as_ref());
+            let mut actions = quick_fixes(&uri, &text, &diagnostics, params.range);
+            if let (Some(program), Some(error)) = (&program, &sema_error) {
+                actions.extend(missing_arms_fix(&uri, &text, program, error, params.range));
+            }
+            (!actions.is_empty()).then_some(actions)
+        })
+        .flatten())
     }
 
     async fn document_symbol(&self, params: DocumentSymbolParams) -> LspResult<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
-        Ok(self.document_symbols(&uri).map(DocumentSymbolResponse::Nested))
+        Ok(guarded(|| self.document_symbols(&uri).map(DocumentSymbolResponse::Nested)).flatten())
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(PepperLsp::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
+/// `f()`, or `None` when it panics. The panic message still reaches stderr,
+/// which the editor shows in the server's output.
+fn guarded<R>(f: impl FnOnce() -> R) -> Option<R> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).ok()
+}
+
+/// Stack for every thread that analyzes a document: as much as the
+/// compiler's sema threads. Parsing and sema recurse over the syntax tree,
+/// which the parser keeps within `MAX_NESTING` levels; Windows' 1 MB main
+/// thread is too small even so, and a stack overflow cannot be caught.
+const STACK_SIZE: usize = 8 << 20;
+
+fn main() {
+    // The main thread's stack is fixed by the linker, so serve from a
+    // thread that has `STACK_SIZE`, as the runtime's workers do.
+    let server = std::thread::Builder::new()
+        .name("pepper-lsp".into())
+        .stack_size(STACK_SIZE)
+        .spawn(|| {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()
+                .expect("start the async runtime");
+            runtime.block_on(async {
+                let stdin = tokio::io::stdin();
+                let stdout = tokio::io::stdout();
+                let (service, socket) = LspService::new(PepperLsp::new);
+                Server::new(stdin, stdout, socket).serve(service).await;
+            });
+        })
+        .expect("start the server thread");
+    // A panic outside `guarded` has already printed; exit as a crash.
+    if server.join().is_err() {
+        std::process::exit(101);
+    }
 }

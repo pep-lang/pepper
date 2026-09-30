@@ -320,6 +320,20 @@ main.pep:1:8: error: cannot find "nope.pep" or the module folder "nope" next to 
       |        ^~~~~~
 ```
 
+**Code nested too deeply.** Parentheses, blocks, calls, and each operator of
+a chain (`a + b + c` is two levels) nest the program one level deeper, and a
+file may nest at most 256 levels. The error points at the token that crosses
+the limit, here the 255th `+` of a long sum:
+
+```text
+main.pep:2:1030: error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions
+    2 |     return 0 + 1 + 1 + ... + 1;
+      |                             ^
+```
+
+Split the expression into steps (`var part = ...;`), or move the inner part
+into a function.
+
 ## Errors while the program runs
 
 Some problems can only be found while the program runs, such as an array index

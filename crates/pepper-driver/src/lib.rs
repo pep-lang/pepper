@@ -18,6 +18,12 @@ use pepper_codegen::CodeGenerator;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 
+/// Stack for every thread that compiles: parsing, sema, and codegen recurse
+/// over the syntax tree, which the parser keeps within
+/// `parser::MAX_NESTING` levels. That fits in 8 MB; Windows gives the main
+/// thread only 1 MB, so `run` belongs on a thread of this size.
+pub const STACK_SIZE: usize = 8 << 20;
+
 /// Whether diagnostics on stderr are colored, like clang: on a terminal,
 /// unless `NO_COLOR` is set.
 pub fn stderr_color() -> bool {
@@ -365,9 +371,7 @@ fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> Result<R, String> +
         let workers: Vec<_> = (0..threads)
             .map(|_| {
                 std::thread::Builder::new()
-                    // As much stack as the main thread: codegen recurses over
-                    // the program.
-                    .stack_size(8 << 20)
+                    .stack_size(STACK_SIZE)
                     .spawn_scoped(scope, || {
                         let mut done = vec![];
                         loop {

@@ -268,7 +268,9 @@ fn snippet(text: &str, span: Span, fix: Option<&Edit>, out: &mut String) {
     let line_end = text[start..].find('\n').map_or(text.len(), |i| start + i);
     let line = text[line_start..line_end].trim_end_matches('\r');
     let line_no = text[..line_start].bytes().filter(|&b| b == b'\n').count() + 1;
-    let end = span.end.clamp(start, line_start + line.len());
+    // A span starting on a CRLF's '\n' lies past the line once its '\r' is
+    // trimmed; the caret then goes at the line's end.
+    let end = span.end.clamp(start, (line_start + line.len()).max(start));
 
     // Expand tabs, tracking the display columns of the span's ends.
     let mut shown = String::new();
@@ -443,6 +445,13 @@ mod tests {
         let text = "main() {\n";
         let d = Diagnostic::error("expected '}'").at(at(0, text.len(), text.len()));
         assert_eq!(d.render_in("t.pep", text), "t.pep:2:1: error: expected '}'\n    2 | \n      | ^");
+    }
+
+    #[test]
+    fn span_on_a_crlf_line_break_points_at_the_line_end() {
+        let text = "var x = 1\r\nvar y = 2;";
+        let d = Diagnostic::error("expected ';'").at(at(0, 10, 11));
+        assert!(d.render_in("t.pep", text).ends_with("    1 | var x = 1\n      |          ^"));
     }
 
     #[test]

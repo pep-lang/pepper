@@ -131,6 +131,8 @@ impl SourceGuard {
         QUALIFIERS.with(|q| q.borrow_mut().clear());
         WARNINGS.with(|w| w.borrow_mut().clear());
         ERROR.with(|e| *e.borrow_mut() = None);
+        NESTING.with(|n| n.set(0));
+        DEEPEST.with(|d| d.set(0));
         SourceGuard(prev)
     }
 }
@@ -151,6 +153,67 @@ pub(crate) fn track_source(len: usize) -> SourceGuard {
 /// the remaining input.
 pub(crate) fn max_pos() -> usize {
     MAX_POS.with(|m| m.get())
+}
+
+// ── Nesting limit ────────────────────────────────────────────────────────────
+//
+// Parsing and every later pass recurse over the tree, so how deeply source
+// nests decides how much stack they need. The parser counts the levels of
+// the tree it builds and rejects source nested past `MAX_NESTING`, as clang
+// does with `-fbracket-depth`, so every pass fits in a known stack. A rule
+// that recurses into a child is one level (`nested`); a loop that wraps the
+// tree so far in a new node (`a + b + c`, `f().g()`) adds a level per turn
+// above the taller of its operands (`measured`).
+
+/// The deepest the tree of a source file may nest: parentheses, blocks,
+/// calls, and each operator of a chain (`a + b + c` is two levels).
+pub const MAX_NESTING: usize = 256;
+
+thread_local! {
+    /// Tree level of the rule being parsed.
+    static NESTING: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Deepest level reached, for the height `measured` reports.
+    static DEEPEST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Record that the tree reaches `level`; past `MAX_NESTING`, fail the parse
+/// at byte offset `at`.
+fn reach(at: usize, level: usize) -> Result<()> {
+    DEEPEST.with(|d| d.set(d.get().max(level)));
+    if level > MAX_NESTING {
+        return Err(error_at(
+            Span { start: at, end: at + 1 },
+            format!("code is nested too deeply: the limit is {MAX_NESTING} levels; split it into smaller expressions or functions"),
+        ));
+    }
+    Ok(())
+}
+
+/// Record that a loop's node, `height` levels tall, reaches past the current
+/// level (see `reach`).
+fn reach_height(at: usize, height: usize) -> Result<()> {
+    reach(at, NESTING.with(|n| n.get()) + height)
+}
+
+/// Run `rule` one tree level deeper.
+fn nested<T>(input: &mut &str, rule: impl FnOnce(&mut &str) -> Result<T>) -> Result<T> {
+    let level = NESTING.with(|n| n.get()) + 1;
+    reach(pos(input), level)?;
+    NESTING.with(|n| n.set(level));
+    let result = rule(input);
+    NESTING.with(|n| n.set(level - 1));
+    result
+}
+
+/// Run `rule` at the current level, returning what it parsed with the height
+/// of the tree it built: the levels below the current one it reached.
+fn measured<T>(input: &mut &str, rule: impl FnOnce(&mut &str) -> Result<T>) -> Result<(T, usize)> {
+    let level = NESTING.with(|n| n.get());
+    let outer = DEEPEST.with(|d| d.replace(level));
+    let result = rule(input);
+    let deepest = DEEPEST.with(|d| d.replace(outer.max(level)));
+    DEEPEST.with(|d| d.set(d.get().max(deepest)));
+    Ok((result?, deepest - level))
 }
 
 // ── Parse-error expectations ─────────────────────────────────────────────────
@@ -361,6 +424,10 @@ fn optional_suffixes(input: &mut &str, mut ty: TypeName) -> Result<TypeName> {
 }
 
 fn type_name(input: &mut &str) -> Result<TypeName> {
+    nested(input, type_name_nested)
+}
+
+fn type_name_nested(input: &mut &str) -> Result<TypeName> {
     if input.starts_with('(') {
         let ty = function_type_name(input)?;
         // `(int, String)?` is an optional tuple; a function type's `?`
@@ -821,6 +888,8 @@ fn interpolation_parts(
     hole: &mut dyn FnMut(&mut &str, usize, bool) -> Result<Expression>,
 ) -> Result<Vec<Expression>> {
     let mut parts: Vec<Expression> = vec![];
+    // Height of the `+` chain the parts fold into (see `binary_left`).
+    let mut height = 0;
     let mut text = String::new();
     let mut text_start = pos(input);
     let mut line_break = false;
@@ -856,7 +925,12 @@ fn interpolation_parts(
                 flush(&mut parts, &mut text, text_start, pos(input));
                 let brace = pos(input);
                 *input = &input[1..];
-                parts.push(hole(input, brace, line_break)?);
+                let at = pos(input);
+                let (part, part_height) = measured(input, |input| hole(input, brace, line_break))?;
+                // The value sits in a call, and the call in the chain.
+                height = height.max(part_height + 1) + 1;
+                reach_height(at, height)?;
+                parts.push(part);
                 text_start = pos(input);
             }
             _ => {
@@ -1686,9 +1760,12 @@ fn tuple_label(input: &mut &str) -> Option<(String, Span)> {
 
 fn atom(input: &mut &str) -> Result<Expression> {
     if input.starts_with('(') {
+        let before = *input;
         match closure_literal(input) {
             Ok(closure) => return Ok(closure),
-            Err(ErrMode::Backtrack(_)) => {}
+            // Not a closure: parse the `(` again as a parenthesized
+            // expression or tuple, from where it started.
+            Err(ErrMode::Backtrack(_)) => *input = before,
             Err(e) => return Err(e),
         }
         let start = pos(input);
@@ -1791,10 +1868,15 @@ fn array_literal(input: &mut &str) -> Result<Expression> {
 }
 
 fn postfix(input: &mut &str) -> Result<Expression> {
-    let mut expr = atom(input)?;
+    let (mut expr, mut height) = measured(input, atom)?;
     loop {
         let before = *input;
         ws(input)?;
+        // Each suffix wraps the expression so far in a new node.
+        if input.starts_with(['.', '[', '(']) || input.starts_with("++") || input.starts_with("--") {
+            height += 1;
+            reach_height(pos(input), height)?;
+        }
         if input.starts_with('.') {
             *input = &input[1..];
             ws(input)?;
@@ -1831,7 +1913,8 @@ fn postfix(input: &mut &str) -> Result<Expression> {
         if input.starts_with('[') {
             *input = &input[1..];
             ws(input)?;
-            let rhs = expression(input)?;
+            let (rhs, rhs_height) = measured(input, expression)?;
+            height = height.max(rhs_height);
             ws(input)?;
             if !input.starts_with(']') { return Err(cut_expecting(input, "']'")); }
             *input = &input[1..];
@@ -1846,7 +1929,9 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             if !input.starts_with(')') {
                 loop {
                     ws(input)?;
-                    args.push(expression(input)?);
+                    let (argument, argument_height) = measured(input, expression)?;
+                    height = height.max(argument_height);
+                    args.push(argument);
                     ws(input)?;
                     if input.starts_with(',') {
                         *input = &input[1..];
@@ -1884,7 +1969,7 @@ fn pow(input: &mut &str) -> Result<Expression> {
         let start = pos(input);
         *input = &input[2..];
         ws(input)?;
-        let rhs = pow(input)?; // right-assoc: rhs is another pow
+        let rhs = nested(input, pow)?; // right-assoc: rhs is another pow
         return Ok(Expression::Binary { lhs: Box::new(base), op: "**".into(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
     *input = before;
@@ -1905,7 +1990,7 @@ fn unary(input: &mut &str) -> Result<Expression> {
         let start = pos(input);
         *input = &input[op.len()..];
         // The operand may itself be unary: `!!x` is `!(!x)`, `-~x` is `-(~x)`.
-        let operand = unary(input)?;
+        let operand = nested(input, unary)?;
         return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     cast(input)
@@ -1936,13 +2021,13 @@ fn prefix_op(input: &mut &str) -> Result<Expression> {
     if input.starts_with("++") {
         let start = pos(input);
         *input = &input[2..];
-        let operand = unary(input)?;
+        let operand = nested(input, unary)?;
         return Ok(Expression::Unary { op: "++".into(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     if input.starts_with("--") {
         let start = pos(input);
         *input = &input[2..];
-        let operand = unary(input)?;
+        let operand = nested(input, unary)?;
         return Ok(Expression::Unary { op: "--".into(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
     unary(input)
@@ -1953,14 +2038,16 @@ fn binary_left(
     operand: impl Fn(&mut &str) -> Result<Expression>,
     try_op: impl Fn(&str) -> Option<&str>,
 ) -> Result<Expression> {
-    let mut lhs = operand(input)?;
+    let (mut lhs, mut height) = measured(input, &operand)?;
     loop {
         let before = *input;
         ws(input)?;
         if let Some(op) = try_op(input) {
             let start = pos(input);
             *input = &input[op.len()..];
-            let rhs = operand(input)?;
+            let (rhs, rhs_height) = measured(input, &operand)?;
+            height = height.max(rhs_height) + 1;
+            reach_height(start, height)?;
             lhs = Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } };
         } else {
             *input = before;
@@ -1981,7 +2068,7 @@ fn binary_right(
     if let Some(op) = try_op(input) {
         let start = pos(input);
         *input = &input[op.len()..];
-        let rhs = binary_right(input, operand, try_op)?;
+        let rhs = nested(input, |input| binary_right(input, operand, try_op))?;
         return Ok(Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
     *input = before;
@@ -2134,7 +2221,7 @@ fn assignment(input: &mut &str) -> Result<Expression> {
 }
 
 pub fn expression(input: &mut &str) -> Result<Expression> {
-    assignment(input)
+    nested(input, assignment)
 }
 
 // ── Attributes ────────────────────────────────────────────────────────────────
@@ -2308,6 +2395,10 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
 }
 
 fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
+    nested(input, |input| block_body(input, attributes))
+}
+
+fn block_body(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
     // Widen the node span to cover any preceding attributes.
     let start = attributes.first().map(|a| a.span.start).unwrap_or(pos(input));
     if !input.starts_with('{') { return Err(cut_expecting(input, "'{'")); }
@@ -2358,7 +2449,7 @@ fn branch(input: &mut &str) -> Result<Branch> {
         ws(input)?;
         // `else if` is an else block holding just the nested branch.
         if input.starts_with("if") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-            let inner = branch(input)?;
+            let inner = nested(input, branch)?;
             let span = inner.span;
             else_block = Some(Block { statements: vec![Statement::Branch(inner)], span, attributes: vec![] });
         } else {
