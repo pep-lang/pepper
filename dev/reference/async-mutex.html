@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1131c58d.js";
+            window.path_to_searchindex_js = "../searchindex-e20dfc5e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -368,8 +368,8 @@ with the confinement rule (see <code>Mutex</code>).</p>
     }   # unlocked here
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="locked"><a class="header" href="#locked">Locked</a></h4>
-<pre><code class="language-pepper">bool Locked
+<h4 id="locked"><a class="header" href="#locked">locked</a></h4>
+<pre><code class="language-pepper">bool locked
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1131c58d.js";
+            window.path_to_searchindex_js = "../searchindex-e20dfc5e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -381,11 +381,6 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="current"><a class="header" href="#current">Current</a></h4>
-<pre><code class="language-pepper">T Current
-</code></pre>
-<p>The value the last successful <code>next()</code> received.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
@@ -405,7 +400,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
