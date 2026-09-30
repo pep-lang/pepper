@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-85c31b04.js";
+            window.path_to_searchindex_js = "../searchindex-38530942.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-cf0312c8.js"></script>
@@ -324,8 +324,9 @@ the closure’s result gives <code>U</code>.</p>
 operator, field, or method that the type arguments provide. <code>total_area&lt;T&gt;</code>
 calls <code>shape.area()</code>, so it works with any <code>T</code> that has an <code>area()</code> method
 returning a number, and using it with a type that lacks one is a compile
-error. Pepper does not yet let you state such requirements up front with a
-<a href="traits-and-extensions.html#traits">trait</a>.</p>
+error inside <code>total_area</code>. To state the requirement up front, and have the
+compiler report it where the function is used, give <code>T</code> a
+<a href="#constraints">constraint</a>.</p>
 <h2 id="generic-methods"><a class="header" href="#generic-methods">Generic methods</a></h2>
 <p>A method can have type parameters of its own, in a struct, a generic struct,
 an extension, or a trait’s default method. They are inferred at each call like
@@ -395,6 +396,131 @@ main(): int {
 defaults last. The standard library declares <code>struct Result&lt;TValue, TError=Error&gt;</code>, so
 <code>Result&lt;int&gt;</code> means <code>Result&lt;int, Error&gt;</code>. See
 <a href="results.html">Error handling with Result</a>.</p>
+<h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>
+<p>A type parameter can require a <a href="traits-and-extensions.html#traits">trait</a>:
+write the trait after a colon, <code>T: Shape</code>. Every type argument for <code>T</code> must
+then conform to <code>Shape</code>. Several constraints are joined with <code>&amp;</code>, and a
+constrained parameter can still have a default, written after them:</p>
+<pre><code class="language-pepper">trait Shape {
+    area(): int;
+}
+
+trait Named {
+    name(): String;
+}
+
+struct Circle {
+    var radius: int = 1;
+    area(): int { return 3 * radius * radius; }
+}
+
+extend Circle with Shape {}
+
+struct Square {
+    var side: int = 2;
+    area(): int { return side * side; }
+    name(): String { return "square"; }
+}
+
+extend Square with Shape {}
+extend Square with Named {}
+
+# Every T must conform to Shape.
+total_area&lt;T: Shape&gt;(shapes: Array&lt;T&gt;): int {
+    var sum = 0;
+    for (var shape in shapes) {
+        sum += shape.area();
+    }
+    return sum;
+}
+
+# Several constraints are joined with `&amp;`.
+label&lt;T: Shape &amp; Named&gt;(item: T): String { return item.name(); }
+
+# A constrained parameter can have a default, which must conform too.
+struct Gallery&lt;TTag, TShape: Shape = Square&gt; {
+    var items = Array&lt;TShape&gt;();
+    add(item: TShape) { items.append(item); }
+    total(): int { return total_area(items); }
+}
+
+main(): int {
+    var circles = Array&lt;Circle&gt;();
+    circles.append(Circle());
+    circles.append(Circle());
+    assert(total_area(circles) == 6, "circles");
+    assert(label(Square()) == "square", "label");
+
+    # Gallery&lt;String&gt; is Gallery&lt;String, Square&gt;.
+    var gallery = Gallery&lt;String&gt;();
+    gallery.add(Square());
+    assert(gallery.total() == 4, "default");
+
+    # A trait type conforms to its own trait.
+    var shapes = Array&lt;Shape&gt;();
+    shapes.append(Circle());
+    shapes.append(Square());
+    assert(total_area(shapes) == 7, "trait values");
+    return 0;
+}
+</code></pre>
+<p>Constraints work on generic structs, enums whose cases carry values,
+functions, methods, traits and type aliases. A constraint may name the
+parameters before it in the same list: <code>sum&lt;T, I: Iterator&lt;T&gt;&gt;(values: I)</code>.</p>
+<p>A type argument conforms to a trait when:</p>
+<ul>
+<li>it is a struct declared to have the trait with
+<code>extend Circle with Shape</code>. For a generic struct, <code>extend Box&lt;T&gt; with Shape</code>
+makes every <code>Box&lt;X&gt;</code> conform, and <code>extend Box&lt;int&gt; with Shape</code> only
+<code>Box&lt;int&gt;</code>. A generic trait must match exactly: <code>extend Counter with Iterator&lt;int&gt;</code> conforms to <code>Iterator&lt;int&gt;</code>, not to <code>Iterator&lt;long&gt;</code>.
+Having the right methods is not enough; the extension is what declares it.</li>
+<li>it is the trait type itself (<code>Array&lt;Shape&gt;</code> passed as <code>Array&lt;T&gt;</code> with
+<code>T: Shape</code>), as long as every member of the trait can be called through a
+value of the trait type (see
+<a href="traits-and-extensions.html#traits-as-types">traits as types</a>).</li>
+<li>it is a type parameter constrained by that trait: inside
+<code>wrap&lt;T: Shape&gt;</code>, <code>Gallery&lt;String, T&gt;</code> is allowed.</li>
+</ul>
+<p>Numbers, <code>bool</code>, enums, pointers, tuples and function types conform to no
+trait.</p>
+<p>The compiler checks every use: a type argument you write, one it infers from
+a call, a default, and a
+<a href="#overriding-a-generic-function-for-one-type">concrete override</a>. The error
+points at the type argument, or at the call argument the type came from:</p>
+<pre><code class="language-text">main.pep:11:21: error: 'Circle' does not conform to trait 'Shape', required by 'T' in 'Gallery'
+   11 |     var g = Gallery&lt;Circle&gt;();
+      |                     ^~~~~~
+main.pep:7:19: note: constraint declared here
+    7 | struct Gallery&lt;T: Shape&gt; {
+      |                   ^~~~~
+main.pep:4:8: note: declare it with 'extend Circle with Shape'
+    4 | struct Circle {
+      |        ^~~~~~
+</code></pre>
+<p>A type parameter passed on to a constrained one must carry the constraint
+itself: <code>wrap&lt;T&gt;(item: T): Gallery&lt;String, T&gt;</code> is an error that suggests
+<code>T: Shape</code>. The language server offers both the extension and the constraint
+as quick fixes.</p>
+<ul>
+<li>A constraint must name a trait: <code>T: Point</code>, with <code>Point</code> a struct, is an
+error.</li>
+<li>An extension of a constrained struct keeps its constraints:
+<code>extend Gallery&lt;TTag, TShape&gt;</code> needs no <code>TShape: Shape</code> of its own. You
+may restate them as documentation, <code>extend Gallery&lt;TTag, TShape: Shape&gt;</code>,
+but an extension cannot add a constraint the struct does not have.</li>
+<li>In an <a href="overloading.html#generic-members">overload set</a>, a generic member
+whose inferred type arguments do not meet its constraints is not viable,
+and the error lists why.</li>
+<li>A constrained name is always a type parameter, never an override’s type
+argument: <code>describe&lt;Point: Shape&gt;</code> declares a generic function whose
+parameter happens to be named <code>Point</code>.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> For now a constraint is checked where the generic is used, not
+inside it. The body of <code>total_area&lt;T: Shape&gt;</code> is still compiled for each
+type argument, so it may call methods that <code>Shape</code> does not declare, and a
+mistake there is reported when a use compiles it.</p>
+</blockquote>
 <h2 id="overriding-a-generic-function-for-one-type"><a class="header" href="#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a></h2>
 <p>You can give a generic function a separate definition for a specific type
 argument. Write the concrete type where the type parameter would go:</p>

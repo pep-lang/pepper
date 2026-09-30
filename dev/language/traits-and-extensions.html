@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-85c31b04.js";
+            window.path_to_searchindex_js = "../searchindex-38530942.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-cf0312c8.js"></script>
@@ -285,6 +285,9 @@ extensions are usable everywhere. See
 <p><code>extend Box&lt;T&gt;</code>, using the struct’s own type parameter name, adds the methods
 to every specialization: <code>Box&lt;int&gt;</code>, <code>Box&lt;String&gt;</code>, and so on. The example
 above does this.</p>
+<p>When <code>Box</code> constrains its parameter (<code>struct Box&lt;T: Shape&gt;</code>), the extension
+keeps the constraint without restating it; <code>extend Box&lt;T: Shape&gt;</code> may
+restate it as documentation (see <a href="generics.html#constraints">constraints</a>).</p>
 <p><code>extend Box&lt;int&gt;</code> targets one specialization: its methods exist only on
 <code>Box&lt;int&gt;</code>, and calling one on a <code>Box&lt;String&gt;</code> is an error
 (<code>no member named 'doubled' in 'Box&lt;String&gt;'</code>).</p>
@@ -349,6 +352,9 @@ types; the type implements each with the method whose parameter types
 match (see <a href="overloading.html#extensions-and-traits">Overloading</a>).</li>
 <li>The methods in the extension are ordinary methods of the struct, so you
 call them on a <code>Square</code> as usual.</li>
+<li>A generic parameter can require a trait, <code>total_area&lt;T: Shape&gt;</code>, so that
+only types declared to have it are accepted (see
+<a href="generics.html#constraints">constraints</a>).</li>
 <li>The runtime declares traits too. <code>ToString</code> (<code>to_string(): String</code>) makes
 a type usable in an <a href="interpolation.html">interpolated string</a>.</li>
 </ul>
@@ -490,9 +496,6 @@ refer to the same object.</p>
 </ul>
 <p>What traits do not do yet:</p>
 <ul>
-<li><strong>Generic parameters cannot require a trait.</strong> There is no syntax yet for
-saying that <code>T</code> must have <code>Shape</code>; a <a href="generics.html#generic-functions">generic function</a>
-like <code>total_area&lt;T&gt;</code> accepts any <code>T</code> with an <code>area()</code> method.</li>
 <li><strong>A trait value cannot convert back</strong> to its struct, or to another trait.</li>
 <li><strong><code>Atomic&lt;Shape&gt;</code> is not supported.</strong> A trait value is two pointers wide
 and cannot be swapped atomically.</li>
