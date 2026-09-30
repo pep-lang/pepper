@@ -515,7 +515,8 @@ time. `TypeName::is_auto` tests for `auto` without building a string.
 
 1. **Instantiation.** Every concrete struct is registered as an opaque type
    first (a field may name a struct declared later). Then:
-   `instantiate_struct` (LLVM struct body) → ABI sizes via
+   `instantiate_struct` (LLVM struct body, in which a struct-typed field is
+   a `ptr` slot, so a struct may hold its own type) → ABI sizes via
    `TargetData::get_abi_size` → `instantiate_methods` → `instantiate_ctor`
    → `instantiate_extern` → `instantiate_function`. Generic bases (`st.name
    == st.ty.name` with generic `ty`, or `is_generic_func`) are skipped;

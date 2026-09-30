@@ -34,12 +34,19 @@ Things to notice:
   when they do not. See
   [Comparing structs](#comparing-structs) for `==`.
 
-A struct can have a field whose type is a struct declared later in the file.
-A struct cannot yet have a field of its own type, or of a struct type whose
-fields lead back to it (such as `Parent` holding a `Child` that holds a
-`Parent`): the compiler rejects both with `GEP index out of range`. Hold such
-references in an `Array` instead, as in the
-[cycles example](memory.md#cycles-leak).
+A struct can have a field whose type is a struct declared later in the file,
+a field of its own type, or fields that lead back to it through other
+structs (a `Team` holding a `Player` that holds the `Team`). A struct-typed
+field holds a reference, so a linked list or a tree is just a struct that
+names itself:
+
+```pepper
+{{#include ../../examples/structs-recursive.pep}}
+```
+
+Objects that refer to each other in a loop keep each other alive, so make
+back pointers such as a child's parent a `Weak<T>` (see
+[Cycles leak](memory.md#cycles-leak)).
 
 ## Constructors
 

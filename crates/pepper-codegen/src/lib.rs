@@ -472,6 +472,14 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .types
                 .get(&field.ty.to_string())
                 .ok_or_else(|| format!("unknown type name '{}' for field '{}'", field.ty, field.name))?;
+            // A struct-typed field holds a reference, so its slot is a
+            // pointer. Laying the struct out inline would make a field of
+            // the struct's own type (or a cycle through other structs) an
+            // infinitely sized body.
+            let ty = match ty {
+                BasicTypeEnum::StructType(_) => self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                other => other,
+            };
             field_types.push(ty);
         }
 

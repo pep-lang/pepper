@@ -1473,3 +1473,81 @@ test(): int {
         7
     );
 }
+
+#[test]
+fn struct_field_of_its_own_type() {
+    // A struct-typed field is a reference slot, so a struct may name itself.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Node {
+    var value: int;
+    var parent: Node;
+    construct(this.value = 0) {}
+}
+test(): int {
+    var root = Node(4);
+    var child = Node(5);
+    child.parent = root;
+    return child.parent.value * 10 + child.value;
+}
+"#
+        ),
+        45
+    );
+}
+
+#[test]
+fn structs_that_refer_to_each_other() {
+    // A cycle through two struct types, the second declared after the first.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct A {
+    var b: B;
+}
+struct B {
+    var a: A;
+    var x: int;
+}
+test(): int {
+    var a = A();
+    a.b = B();
+    a.b.x = 7;
+    a.b.a = a;
+    var x = a.b.a.b.x;
+    a.b.a = __null;
+    return x;
+}
+"#
+        ),
+        7
+    );
+}
+
+#[test]
+fn generic_struct_field_of_its_own_type() {
+    // Releasing the head of a self-referential chain destroys every link.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+const destroyed = Atomic<int>(0);
+struct Link<T> {
+    var value: T;
+    var next: Link<T>;
+    construct(T v) { value = v; }
+    destruct { destroyed.fetch_add(1); }
+}
+test(): int {
+    {
+        var head = Link<int>(1);
+        head.next = Link<int>(2);
+        head.next.next = Link<int>(3);
+    }
+    return destroyed.load();
+}
+"#
+        ),
+        3
+    );
+}
