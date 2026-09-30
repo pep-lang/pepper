@@ -10,8 +10,8 @@ import "internals";
 # between slots would not.
 #
 # Every mutating method (element store, append, insert, remove_at, pop, clear,
-# truncate, swap) bumps Version; an ArrayIterator panics when it sees a
-# Version other than the one it started with, so modifying an Array while a
+# truncate, swap) bumps _version; an ArrayIterator panics when it sees a
+# _version other than the one it started with, so modifying an Array while a
 # `for` loop iterates it is a panic rather than skipped or repeated elements.
 
 ## A growable, contiguous, zero-indexed sequence of `T` values.
@@ -50,19 +50,19 @@ import "internals";
 ##     }
 ## @see ArrayIterator
 export struct Array<T> {
-    ## The element buffer: `Capacity` slots, of which the first `Size` hold
+    ## The element buffer: `_capacity` slots, of which the first `_size` hold
     ## live elements and the rest are zeroed (null for struct `T`). Null while
-    ## `Capacity` is 0. Internal storage; use the methods instead of touching
+    ## `_capacity` is 0. Internal storage; use the methods instead of touching
     ## it directly.
-    __ptr<T> Data;
-    ## The number of live elements; always at most `Capacity`. Read it through `count()`.
-    ulong Size;
-    ## The number of element slots allocated in `Data`; never shrinks. Read it through `capacity()`.
-    ulong Capacity;
+    __ptr<T> _data;
+    ## The number of live elements; always at most `_capacity`. Read it through `count()`.
+    ulong _size;
+    ## The number of element slots allocated in `_data`; never shrinks. Read it through `capacity()`.
+    ulong _capacity;
     ## The modification counter: incremented by every mutating operation so
     ## that an `ArrayIterator` can detect changes made while it runs. Its
     ## value carries no other meaning.
-    ulong Version;
+    ulong _version;
 
     ## Creates an empty Array, optionally preallocating room for `capacity`
     ## elements.
@@ -76,18 +76,18 @@ export struct Array<T> {
     ##     var a = Array<int>(16);   # a.count() == 0, a.capacity() == 16
     construct(ulong capacity = 0) {
         if (capacity > 0) {
-            Data = _pep_malloc(sizeof<T>() * capacity);
-            Capacity = capacity;
+            _data = _pep_malloc(sizeof<T>() * capacity);
+            _capacity = capacity;
         }
     }
 
     destruct {
         ulong __i = 0;
-        while (__i < Size) {
-            Data[__i] = __default<T>();
+        while (__i < _size) {
+            _data[__i] = __default<T>();
             __i = __i + 1;
         }
-        _pep_free(Data);
+        _pep_free(_data);
     }
 
     ## Returns an iterator over the elements in index order; this is what
@@ -105,8 +105,8 @@ export struct Array<T> {
     ##     }
     ArrayIterator<T> iterate() {
         var it = ArrayIterator<T>();
-        it.Source = this;
-        it.Version = Version;
+        it._source = this;
+        it._version = _version;
         return it;
     }
 
@@ -114,7 +114,7 @@ export struct Array<T> {
     ##
     ## @returns the element count; 0 for an empty Array
     ulong count() {
-        return Size;
+        return _size;
     }
 
     ## Returns the number of elements the Array can hold before its buffer
@@ -122,14 +122,14 @@ export struct Array<T> {
     ##
     ## @returns the allocated slot count, which is at least `count()`
     ulong capacity() {
-        return Capacity;
+        return _capacity;
     }
 
     ## Reports whether the Array has no elements.
     ##
     ## @returns true when `count()` is 0
     bool empty() {
-        return Size == 0;
+        return _size == 0;
     }
 
     ## Ensures the buffer has room for at least `capacity` elements,
@@ -146,9 +146,9 @@ export struct Array<T> {
     ##     a.reserve(8);   # a.capacity() >= 8
     ##     a.reserve(2);   # no effect: capacity never shrinks
     void reserve(ulong capacity) {
-        if (capacity > Capacity) {
-            Data = _pep_realloc(Data, sizeof<T>() * Capacity, sizeof<T>() * capacity);
-            Capacity = capacity;
+        if (capacity > _capacity) {
+            _data = _pep_realloc(_data, sizeof<T>() * _capacity, sizeof<T>() * capacity);
+            _capacity = capacity;
         }
     }
 
@@ -158,8 +158,8 @@ export struct Array<T> {
     ## `append` and `insert` call this themselves; callers rarely need it.
     ## Does not change the elements or invalidate iterators.
     void grow() {
-        if (Size >= Capacity) {
-            ulong next = Capacity * 2;
+        if (_size >= _capacity) {
+            ulong next = _capacity * 2;
             if (next < 4) {
                 next = 4;
             }
@@ -178,8 +178,8 @@ export struct Array<T> {
     ## @example
     ##     var first = a[0];
     T [](ulong idx) {
-        assert(idx < Size, "Array index read out of bounds");
-        return Data[idx];
+        assert(idx < _size, "Array index read out of bounds");
+        return _data[idx];
     }
 
     ## Replaces the element at `idx` with `value`; this is the indexer write
@@ -198,10 +198,10 @@ export struct Array<T> {
     ## @example
     ##     a[0] = 42;
     T [](ulong idx, T value) {
-        assert(idx < Size, "Array index write out of bounds");
-        Version = Version + 1;
-        Data[idx] = value;
-        return Data[idx];
+        assert(idx < _size, "Array index write out of bounds");
+        _version = _version + 1;
+        _data[idx] = value;
+        return _data[idx];
     }
 
     ## Adds `item` to the end of the Array.
@@ -216,10 +216,10 @@ export struct Array<T> {
     ##     a.append(1);
     ##     a.append(2);   # a holds [1, 2]
     void append(T item) {
-        Version = Version + 1;
+        _version = _version + 1;
         grow();
-        Data[Size] = item;
-        Size = Size + 1;
+        _data[_size] = item;
+        _size = _size + 1;
     }
 
     ## Inserts `item` at position `idx`, shifting the element there and every
@@ -239,21 +239,21 @@ export struct Array<T> {
     ##     a.append(3);
     ##     a.insert(1, 2);   # a holds [1, 2, 3]
     void insert(ulong idx, T item) {
-        assert(idx <= Size, "Array insert index out of bounds");
-        Version = Version + 1;
+        assert(idx <= _size, "Array insert index out of bounds");
+        _version = _version + 1;
         grow();
         # Backward shift as a raw pointer move: each slot's reference is
         # transferred to its new position without changing its count, exactly
         # as moving `shared_ptr`s between slots would. A per-slot release/
         # acquire store would destroy elements the Array solely owns (their
         # only reference) and churn counts of externally shared ones.
-        ulong cursor = Size;
+        ulong cursor = _size;
         while (cursor > idx) {
-            _pep_move_ref(Data, sizeof<T>(), cursor - 1, cursor);
+            _pep_move_ref(_data, sizeof<T>(), cursor - 1, cursor);
             cursor = cursor - 1;
         }
-        Data[idx] = item;
-        Size = Size + 1;
+        _data[idx] = item;
+        _size = _size + 1;
     }
     ## Removes and returns the element at `idx`, shifting every later element
     ## down by one.
@@ -272,24 +272,24 @@ export struct Array<T> {
     ##     a.append(2);
     ##     var x = a.remove_at(0);   # x == 1; a holds [2]
     T remove_at(ulong idx) {
-        assert(idx < Size, "Array remove index out of bounds");
-        Version = Version + 1;
-        T removed = Data[idx];
+        assert(idx < _size, "Array remove index out of bounds");
+        _version = _version + 1;
+        T removed = _data[idx];
         # The copy above acquired a reference for `removed`; release the
         # slot's own reference now — the forward shift below overwrites this
         # slot, and a shared_ptr move-assign would release its old occupant.
-        Data[idx] = __default<T>();
+        _data[idx] = __default<T>();
         # Forward shift as a raw pointer move: each slot's reference is
         # transferred to its new position without changing its count; the
         # vacated tail is nulled so its reference is released. A per-slot
         # release/acquire store would destroy elements the Array solely owns.
         ulong cursor = idx;
-        while (cursor + 1 < Size) {
-            _pep_move_ref(Data, sizeof<T>(), cursor + 1, cursor);
+        while (cursor + 1 < _size) {
+            _pep_move_ref(_data, sizeof<T>(), cursor + 1, cursor);
             cursor = cursor + 1;
         }
-        Data[Size - 1] = __default<T>();
-        Size = Size - 1;
+        _data[_size - 1] = __default<T>();
+        _size = _size - 1;
         return removed;
     }
 
@@ -299,35 +299,35 @@ export struct Array<T> {
     ## the caller. The capacity is unchanged. Invalidates running iterators.
     ##
     ## @returns the element that was last
-    ## @panics if `Size > 0` does not hold, that is, the Array is empty ("Array pop on empty Array")
+    ## @panics if the Array is empty ("Array pop on empty Array")
     ## @example
     ##     var top = a.pop();
     T pop() {
-        assert(Size > 0, "Array pop on empty Array");
-        Version = Version + 1;
-        T r = Data[Size - 1];
-        Data[Size - 1] = __default<T>();
-        Size = Size - 1;
+        assert(_size > 0, "Array pop on empty Array");
+        _version = _version + 1;
+        T r = _data[_size - 1];
+        _data[_size - 1] = __default<T>();
+        _size = _size - 1;
         return r;
     }
 
     ## Returns the first element without removing it; the same as `a[0]`.
     ##
     ## @returns the element at index 0
-    ## @panics if `Size > 0` does not hold, that is, the Array is empty ("Array first on empty Array")
+    ## @panics if the Array is empty ("Array first on empty Array")
     T first() {
-        assert(Size > 0, "Array first on empty Array");
-        return Data[0];
+        assert(_size > 0, "Array first on empty Array");
+        return _data[0];
     }
 
     ## Returns the last element without removing it; the same as
     ## `a[a.count() - 1]`.
     ##
     ## @returns the element at index `count() - 1`
-    ## @panics if `Size > 0` does not hold, that is, the Array is empty ("Array last on empty Array")
+    ## @panics if the Array is empty ("Array last on empty Array")
     T last() {
-        assert(Size > 0, "Array last on empty Array");
-        return Data[Size - 1];
+        assert(_size > 0, "Array last on empty Array");
+        return _data[_size - 1];
     }
 
     ## Removes every element, leaving the Array empty.
@@ -337,13 +337,13 @@ export struct Array<T> {
     ## reallocate. Always invalidates running iterators, even on an empty
     ## Array.
     void clear() {
-        Version = Version + 1;
+        _version = _version + 1;
         ulong __i = 0;
-        while (__i < Size) {
-            Data[__i] = __default<T>();
+        while (__i < _size) {
+            _data[__i] = __default<T>();
             __i = __i + 1;
         }
-        Size = 0;
+        _size = 0;
     }
 
     ## Shortens the Array to its first `count` elements, removing the rest.
@@ -358,14 +358,14 @@ export struct Array<T> {
     ##     a.truncate(1);   # keeps only a[0]
     ##     a.truncate(5);   # no effect when a has fewer than 5 elements
     void truncate(ulong count) {
-        if (count < Size) {
-            Version = Version + 1;
+        if (count < _size) {
+            _version = _version + 1;
             ulong __i = count;
-            while (__i < Size) {
-                Data[__i] = __default<T>();
+            while (__i < _size) {
+                _data[__i] = __default<T>();
                 __i = __i + 1;
             }
-            Size = count;
+            _size = count;
         }
     }
 
@@ -380,10 +380,10 @@ export struct Array<T> {
     ## @panics if `a < count()` does not hold ("Array swap index out of bounds")
     ## @panics if `b < count()` does not hold ("Array swap index out of bounds")
     void swap(ulong a, ulong b) {
-        assert(a < Size, "Array swap index out of bounds");
-        assert(b < Size, "Array swap index out of bounds");
-        Version = Version + 1;
-        _pep_swap_refs(Data, sizeof<T>(), a, b);
+        assert(a < _size, "Array swap index out of bounds");
+        assert(b < _size, "Array swap index out of bounds");
+        _version = _version + 1;
+        _pep_swap_refs(_data, sizeof<T>(), a, b);
     }
 
     ## Reverses the order of the elements in place.
@@ -395,9 +395,9 @@ export struct Array<T> {
     ## @example
     ##     a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
     void reverse() {
-        if (Size >= 2) {
+        if (_size >= 2) {
             ulong lo = 0;
-            ulong hi = Size - 1;
+            ulong hi = _size - 1;
             while (lo < hi) {
                 swap(lo, hi);
                 lo = lo + 1;
@@ -419,8 +419,8 @@ export struct Array<T> {
     ##     var i = a.find(9);   # -1 if a holds no 9
     long find(T item) {
         ulong idx = 0;
-        while (idx < Size) {
-            if (Data[idx] == item) {
+        while (idx < _size) {
+            if (_data[idx] == item) {
                 return idx;
             }
             idx = idx + 1;
@@ -450,12 +450,12 @@ export struct Array<T> {
     ## @see +=
     void append_all(Array<T> rhs) {
         # Snapshot the bound: with `a += a` (rhs aliases this), appending
-        # grows Size and an unbounded loop would never terminate.
-        ulong n = rhs.Size;
-        reserve(Size + n);
+        # grows _size and an unbounded loop would never terminate.
+        ulong n = rhs._size;
+        reserve(_size + n);
         ulong idx = 0;
         while (idx < n) {
-            append(rhs.Data[idx]);
+            append(rhs._data[idx]);
             idx = idx + 1;
         }
     }
@@ -472,7 +472,7 @@ export struct Array<T> {
     ##     var b = a.clone();
     ##     b.append(7);   # a is unchanged
     Array<T> clone() {
-        Array<T> result = Array<T>(Size);
+        Array<T> result = Array<T>(_size);
         result.append_all(this);
         return result;
     }
@@ -481,17 +481,17 @@ export struct Array<T> {
     ## elements, compared with `==` as `find` does.
     ##
     ## Runs in O(count); stops at the first difference. Two empty Arrays are
-    ## equal. Capacity is not compared.
+    ## equal. `capacity()` is not compared.
     ##
     ## @param rhs the Array to compare with
     ## @returns true when the Arrays are element-wise equal
     bool ==(Array<T> rhs) {
-        if (Size != rhs.Size) {
+        if (_size != rhs._size) {
             return false;
         }
         ulong idx = 0;
-        while (idx < Size) {
-            if (!(Data[idx] == rhs.Data[idx])) {
+        while (idx < _size) {
+            if (!(_data[idx] == rhs._data[idx])) {
                 return false;
             }
             idx = idx + 1;
@@ -558,14 +558,14 @@ export struct Array<T> {
 ## @see Array.iterate
 export struct ArrayIterator<T> {
     ## The Array being iterated; the iterator holds a reference to it for its whole lifetime.
-    Array<T> Source;
-    ## The position of the current element in `Source`. Meaningful only after
-    ## `Started` is set; equals `Source.count()` once iteration has finished.
-    ulong Index;
-    ## The `Source.Version` recorded when iteration began; a mismatch means the Array was modified.
-    ulong Version;
+    Array<T> _source;
+    ## The position of the current element in `_source`. Meaningful only after
+    ## `_started` is set; equals `_source.count()` once iteration has finished.
+    ulong _index;
+    ## The `_source._version` recorded when iteration began; a mismatch means the Array was modified.
+    ulong _version;
     ## Whether `next()` has been called at least once; the first call stays at index 0 instead of advancing.
-    bool Started;
+    bool _started;
 
     ## Advances to the next element.
     ##
@@ -573,30 +573,30 @@ export struct ArrayIterator<T> {
     ## returning false.
     ##
     ## @returns true when there is a current element, false once past the end
-    ## @panics if `Source.Version == Version` does not hold, that is, the Array was modified since the iterator was created ("Array modified during iteration")
+    ## @panics if the Array was modified since the iterator was created ("Array modified during iteration")
     bool next() {
-        assert(Source.Version == Version, "Array modified during iteration");
-        if (Started) {
-            if (Index < Source.Size) {
-                Index = Index + 1;
+        assert(_source._version == _version, "Array modified during iteration");
+        if (_started) {
+            if (_index < _source._size) {
+                _index = _index + 1;
             }
         } else {
-            Started = true;
+            _started = true;
         }
-        return Index < Source.Size;
+        return _index < _source._size;
     }
 
     ## Returns the element the last successful `next()` moved to.
     ##
     ## @returns the current element
-    ## @panics if `Source.Version == Version` does not hold, that is, the Array was modified since the iterator was created ("Array modified during iteration")
-    ## @panics if `Started` does not hold, that is, `next()` was never called ("ArrayIterator.current() before next()")
-    ## @panics if `Index < Source.Size` does not hold, that is, `next()` already returned false ("ArrayIterator.current() past the end")
+    ## @panics if the Array was modified since the iterator was created ("Array modified during iteration")
+    ## @panics if `next()` was never called ("ArrayIterator.current() before next()")
+    ## @panics if `next()` already returned false ("ArrayIterator.current() past the end")
     T current() {
-        assert(Source.Version == Version, "Array modified during iteration");
-        assert(Started, "ArrayIterator.current() before next()");
-        assert(Index < Source.Size, "ArrayIterator.current() past the end");
-        return Source[Index];
+        assert(_source._version == _version, "Array modified during iteration");
+        assert(_started, "ArrayIterator.current() before next()");
+        assert(_index < _source._size, "ArrayIterator.current() past the end");
+        return _source[_index];
     }
 }
 

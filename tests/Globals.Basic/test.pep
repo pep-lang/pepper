@@ -2,8 +2,8 @@
 # Atomic<T>, or a [Shared] struct.
 [Shared]
 struct Label {
-    const Length: ulong;
-    construct(String text) { Length = text.length(); }
+    const length: ulong;
+    construct(String text) { length = text.length(); }
 }
 
 const limit = 7;
@@ -19,7 +19,7 @@ main(): int {
     if (counter.load() != 10) { return -2; }
 
     # Struct globals built by a constructor keep their value.
-    if (name.Length != 6) { return -3; }
+    if (name.length != 6) { return -3; }
 
     return 0;
 }

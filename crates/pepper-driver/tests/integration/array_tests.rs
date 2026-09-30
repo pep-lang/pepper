@@ -992,16 +992,16 @@ fn nested_array_raw_buffer_write() {
             r#"
 test(): int {
     var outer = Array<Array<int>>(4);
-    outer.Size = 4;
+    outer._size = 4;
     var inner = Array<int>(3);
     inner.append(10);
     inner.append(20);
-    outer.Data[0] = inner;
-    if (outer.Data[0].count() != 2) { return -1; }
-    if (outer.Data[0][1] != 20) { return -2; }
+    outer._data[0] = inner;
+    if (outer._data[0].count() != 2) { return -1; }
+    if (outer._data[0][1] != 20) { return -2; }
     var empty = Array<int>();
-    outer.Data[1] = empty;
-    if (!outer.Data[1].empty()) { return -3; }
+    outer._data[1] = empty;
+    if (!outer._data[1].empty()) { return -3; }
     return 0;
 }"#
         ),

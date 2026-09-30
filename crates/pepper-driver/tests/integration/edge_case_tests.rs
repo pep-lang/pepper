@@ -1252,11 +1252,11 @@ fn string_global_init() {
             r#"
 [Shared]
 struct Name {
-    const Length: ulong;
-    construct(String text) { Length = text.length(); }
+    const length: ulong;
+    construct(String text) { length = text.length(); }
 }
 const s = Name("pepper");
-test(): int { return (s.Length as int) - 6; }
+test(): int { return (s.length as int) - 6; }
 "#
         ),
         0
@@ -1448,5 +1448,28 @@ test(): int {
 "#
         ),
         5
+    );
+}
+
+#[test]
+fn constructor_parameter_named_size() {
+    // The constructor's allocation size is a hidden local; a parameter the
+    // user names `size` must not be shadowed by it.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Buffer {
+    var _size: ulong = 0;
+    construct(ulong size = 0) {
+        _size = size;
+    }
+    size(): ulong { return _size; }
+}
+test(): int {
+    return Buffer(7).size() as int;
+}
+"#
+        ),
+        7
     );
 }

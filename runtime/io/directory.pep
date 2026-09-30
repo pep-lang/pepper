@@ -166,14 +166,14 @@ export struct Directory {
     ##
     ##     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
     static IoResult<void> create_all(Path path) {
-        if (path.Value.Size == 0) {
+        if (path.Value.size() == 0) {
             return _io_ok_void();
         }
         if (path.is_dir()) {
             return _io_ok_void();
         }
         var parent = path.parent();
-        if (parent.Value.Size > 0) {
+        if (parent.Value.size() > 0) {
             var p = Directory.create_all(parent);
             if (p.is_err()) {
                 return p;

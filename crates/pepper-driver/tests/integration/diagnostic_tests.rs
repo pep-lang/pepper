@@ -562,7 +562,7 @@ fn shared_generic_argument_not_thread_safe() {
         ),
         "{error}"
     );
-    assert!(error.contains("note: required by field 'Data' declared here"), "{error}");
+    assert!(error.contains("note: required by field '_data' declared here"), "{error}");
     assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
 }
 

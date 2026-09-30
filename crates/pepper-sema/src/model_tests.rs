@@ -80,7 +80,7 @@ fn ctor_body_contains_malloc_and_this() {
     let dumped = format!("{:?}", body);
     assert!(dumped.contains("_pep_malloc"), "ctor should allocate: {}", dumped);
     assert!(dumped.contains("ThisRef"), "ctor should define this: {}", dumped);
-    assert!(dumped.contains("size"), "ctor should have a size var: {}", dumped);
+    assert!(dumped.contains("__alloc_size"), "ctor should have an __alloc_size var: {}", dumped);
     // Ends with `return this`.
     let last = body.items.last().expect("ctor statements");
     assert!(matches!(last, crate::model::Statement::Return(_)));

@@ -39,19 +39,6 @@ thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
     }
 ```
 
-### Fields
-
-#### Data
-
-```pepper
-const Data: __ptr<T>
-```
-
-The heap slot the value lives in: `sizeof<T>()` bytes for a POD `T`,
-or one reference pointer for a struct `T`. Allocated by the
-constructor and never null afterwards. Internal storage; access it only
-through the methods, which keep every access atomic.
-
 ### Constructor
 
 #### Atomic()

@@ -48,7 +48,7 @@ export hash<T>(T value): u64 {
 ## @example
 ##     assert(hash<String>("hello") == hash<String>("hello"), "content hash");
 export hash<String>(String value): u64 {
-    return _pep_hash_bytes(value.Data, value.Size);
+    return _pep_hash_bytes(value.c_str(), value.size());
 }
 
 # ── HashMap<K, V> ───────────────────────────────────────────────────────────
@@ -134,9 +134,9 @@ export struct HashMap<K, V> {
         keys = Array<K>(cap);
         values = Array<V>(cap);
         state = Array<int>(cap);
-        keys.Size = cap;
-        values.Size = cap;
-        state.Size = cap;
+        keys._size = cap;
+        values._size = cap;
+        state._size = cap;
     }
 
     ## Returns the slot index that holds `key`, or -1 when `key` is absent.
@@ -158,9 +158,9 @@ export struct HashMap<K, V> {
         ulong i = 0;
         while (i < capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state.Data[idx];
+            int st = state._data[idx];
             if (st == 2) {
-                if (keys.Data[idx] == key) {
+                if (keys._data[idx] == key) {
                     return idx;
                 }
             } else {
@@ -189,25 +189,25 @@ export struct HashMap<K, V> {
         Array<K> new_keys = Array<K>(new_cap);
         Array<V> new_values = Array<V>(new_cap);
         Array<int> new_state = Array<int>(new_cap);
-        new_keys.Size = new_cap;
-        new_values.Size = new_cap;
-        new_state.Size = new_cap;
+        new_keys._size = new_cap;
+        new_values._size = new_cap;
+        new_state._size = new_cap;
         ulong mask = new_cap - 1;
         ulong i = 0;
         while (i < capacity) {
-            if (state.Data[i] == 2) {
-                K k = keys.Data[i];
-                V v = values.Data[i];
+            if (state._data[i] == 2) {
+                K k = keys._data[i];
+                V v = values._data[i];
                 ulong h = hash<K>(k);
                 ulong start = h & mask;
                 ulong probe = 0;
                 int placed = 0;
                 while (probe < new_cap && placed == 0) {
                     ulong idx = (start + probe * (probe + 1) / 2) & mask;
-                    if (new_state.Data[idx] == 0) {
-                        new_keys.Data[idx] = k;
-                        new_values.Data[idx] = v;
-                        new_state.Data[idx] = 2;
+                    if (new_state._data[idx] == 0) {
+                        new_keys._data[idx] = k;
+                        new_values._data[idx] = v;
+                        new_state._data[idx] = 2;
                         placed = 1;
                     }
                     probe = probe + 1;
@@ -249,11 +249,11 @@ export struct HashMap<K, V> {
     void clear() {
         ulong i = 0;
         while (i < capacity) {
-            if (state.Data[i] == 2) {
-                keys.Data[i] = __default<K>();
-                values.Data[i] = __default<V>();
+            if (state._data[i] == 2) {
+                keys._data[i] = __default<K>();
+                values._data[i] = __default<V>();
             }
-            state.Data[i] = 0;
+            state._data[i] = 0;
             i = i + 1;
         }
         size = 0;
@@ -287,7 +287,7 @@ export struct HashMap<K, V> {
     bool insert(K key, V value) {
         long slot = find_slot(key);
         if (slot >= 0) {
-            values.Data[slot] = value;
+            values._data[slot] = value;
             return false;
         }
         # Grow when occupied + tombstone slots reach half the table so the
@@ -305,11 +305,11 @@ export struct HashMap<K, V> {
         ulong i = 0;
         while (i < capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state.Data[idx];
+            int st = state._data[idx];
             if (st == 0 || st == 1) {
-                keys.Data[idx] = key;
-                values.Data[idx] = value;
-                state.Data[idx] = 2;
+                keys._data[idx] = key;
+                values._data[idx] = value;
+                state._data[idx] = 2;
                 # Claiming a tombstone slot empties it again.
                 if (st == 1) {
                     tombstones = tombstones - 1;
@@ -338,7 +338,7 @@ export struct HashMap<K, V> {
     V get(K key) {
         long slot = find_slot(key);
         if (slot >= 0) {
-            return values.Data[slot];
+            return values._data[slot];
         }
         return __default<V>();
     }
@@ -357,9 +357,9 @@ export struct HashMap<K, V> {
         if (slot < 0) {
             return false;
         }
-        keys.Data[slot] = __default<K>();
-        values.Data[slot] = __default<V>();
-        state.Data[slot] = 1;
+        keys._data[slot] = __default<K>();
+        values._data[slot] = __default<V>();
+        state._data[slot] = 1;
         size = size - 1;
         tombstones = tombstones + 1;
         return true;
@@ -464,8 +464,8 @@ export struct HashSet<K> {
         tombstones = 0;
         keys = Array<K>(cap);
         state = Array<int>(cap);
-        keys.Size = cap;
-        state.Size = cap;
+        keys._size = cap;
+        state._size = cap;
     }
 
     ## Returns the slot index that holds `key`, or -1 when `key` is not a
@@ -487,9 +487,9 @@ export struct HashSet<K> {
         ulong i = 0;
         while (i < capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state.Data[idx];
+            int st = state._data[idx];
             if (st == 2) {
-                if (keys.Data[idx] == key) {
+                if (keys._data[idx] == key) {
                     return idx;
                 }
             } else {
@@ -515,22 +515,22 @@ export struct HashSet<K> {
         ulong new_cap = capacity * 2;
         Array<K> new_keys = Array<K>(new_cap);
         Array<int> new_state = Array<int>(new_cap);
-        new_keys.Size = new_cap;
-        new_state.Size = new_cap;
+        new_keys._size = new_cap;
+        new_state._size = new_cap;
         ulong mask = new_cap - 1;
         ulong i = 0;
         while (i < capacity) {
-            if (state.Data[i] == 2) {
-                K k = keys.Data[i];
+            if (state._data[i] == 2) {
+                K k = keys._data[i];
                 ulong h = hash<K>(k);
                 ulong start = h & mask;
                 ulong probe = 0;
                 int placed = 0;
                 while (probe < new_cap && placed == 0) {
                     ulong idx = (start + probe * (probe + 1) / 2) & mask;
-                    if (new_state.Data[idx] == 0) {
-                        new_keys.Data[idx] = k;
-                        new_state.Data[idx] = 2;
+                    if (new_state._data[idx] == 0) {
+                        new_keys._data[idx] = k;
+                        new_state._data[idx] = 2;
                         placed = 1;
                     }
                     probe = probe + 1;
@@ -571,10 +571,10 @@ export struct HashSet<K> {
     void clear() {
         ulong i = 0;
         while (i < capacity) {
-            if (state.Data[i] == 2) {
-                keys.Data[i] = __default<K>();
+            if (state._data[i] == 2) {
+                keys._data[i] = __default<K>();
             }
-            state.Data[i] = 0;
+            state._data[i] = 0;
             i = i + 1;
         }
         size = 0;
@@ -618,10 +618,10 @@ export struct HashSet<K> {
         ulong i = 0;
         while (i < capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state.Data[idx];
+            int st = state._data[idx];
             if (st == 0 || st == 1) {
-                keys.Data[idx] = key;
-                state.Data[idx] = 2;
+                keys._data[idx] = key;
+                state._data[idx] = 2;
                 # Claiming a tombstone slot empties it again.
                 if (st == 1) {
                     tombstones = tombstones - 1;
@@ -647,8 +647,8 @@ export struct HashSet<K> {
         if (slot < 0) {
             return false;
         }
-        keys.Data[slot] = __default<K>();
-        state.Data[slot] = 1;
+        keys._data[slot] = __default<K>();
+        state._data[slot] = 1;
         size = size - 1;
         tombstones = tombstones + 1;
         return true;
@@ -667,7 +667,7 @@ export struct HashSet<K> {
     K [](K key) {
         long slot = find_slot(key);
         if (slot >= 0) {
-            return keys.Data[slot];
+            return keys._data[slot];
         }
         return __default<K>();
     }

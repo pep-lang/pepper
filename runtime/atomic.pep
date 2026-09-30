@@ -37,7 +37,7 @@ export struct Atomic<T> {
     ## or one reference pointer for a struct `T`. Allocated by the
     ## constructor and never null afterwards. Internal storage; access it only
     ## through the methods, which keep every access atomic.
-    const Data: __ptr<T>;
+    const _data: __ptr<T>;
 
     ## Creates an Atomic holding `value`.
     ##
@@ -51,14 +51,14 @@ export struct Atomic<T> {
         # A struct T occupies its reference pointer in the slot; a POD T
         # occupies sizeof(T) bytes of the value itself.
         ulong sz = __is_pod<T>() ? sizeof<T>() : 8;
-        this.Data = _pep_malloc(sz);
-        __atomic_store<T>(this.Data, value);
+        this._data = _pep_malloc(sz);
+        __atomic_store<T>(this._data, value);
     }
 
     destruct {
         # Storing the zero value releases a struct T's reference in the slot.
-        __atomic_store<T>(this.Data, __default<T>());
-        _pep_free(this.Data);
+        __atomic_store<T>(this._data, __default<T>());
+        _pep_free(this._data);
     }
 
     ## Atomically reads the current value, with acquire ordering.
@@ -68,7 +68,7 @@ export struct Atomic<T> {
     ##
     ## @returns the value currently stored
     T load() {
-        return __atomic_load<T>(this.Data);
+        return __atomic_load<T>(this._data);
     }
 
     ## Atomically replaces the stored value with `v`, with release ordering.
@@ -79,7 +79,7 @@ export struct Atomic<T> {
     ##
     ## @param v the new value
     void store(T v) {
-        __atomic_store<T>(this.Data, v);
+        __atomic_store<T>(this._data, v);
     }
 
     ## Atomically replaces the stored value with `desired` if and only if it
@@ -101,7 +101,7 @@ export struct Atomic<T> {
     ##         cur = counter.load();
     ##     }
     bool compare_exchange(T expected, T desired) {
-        return __atomic_cmpxchg<T>(this.Data, expected, desired);
+        return __atomic_cmpxchg<T>(this._data, expected, desired);
     }
 
     ## Atomically replaces the stored value with `v` and returns the value it
@@ -119,7 +119,7 @@ export struct Atomic<T> {
     T exchange(T v) {
         var old = this.load();
         while (true) {
-            if (__atomic_cmpxchg<T>(this.Data, old, v)) {
+            if (__atomic_cmpxchg<T>(this._data, old, v)) {
                 return old;
             }
             old = this.load();
@@ -154,7 +154,7 @@ export struct Atomic<T> {
     ##     var c = Atomic<long>(10);
     ##     var old = c.fetch_add(5);   # old == 10, c.load() == 15
     T fetch_add(T v) {
-        return __atomic_fetch_add<T>(this.Data, v);
+        return __atomic_fetch_add<T>(this._data, v);
     }
 
     ## Atomically subtracts `v` from the stored value and returns the value
@@ -166,7 +166,7 @@ export struct Atomic<T> {
     ## @param v the amount to subtract
     ## @returns the value stored immediately before the subtraction
     T fetch_sub(T v) {
-        return __atomic_fetch_sub<T>(this.Data, v);
+        return __atomic_fetch_sub<T>(this._data, v);
     }
 
     ## Atomically replaces the stored value with its bitwise AND with `v` and
@@ -179,7 +179,7 @@ export struct Atomic<T> {
     ## @param v the mask to AND with
     ## @returns the value stored immediately before the operation
     T fetch_and(T v) {
-        return __atomic_fetch_and<T>(this.Data, v);
+        return __atomic_fetch_and<T>(this._data, v);
     }
 
     ## Atomically replaces the stored value with its bitwise OR with `v` and
@@ -192,7 +192,7 @@ export struct Atomic<T> {
     ## @param v the bits to OR in
     ## @returns the value stored immediately before the operation
     T fetch_or(T v) {
-        return __atomic_fetch_or<T>(this.Data, v);
+        return __atomic_fetch_or<T>(this._data, v);
     }
 
     ## Atomically replaces the stored value with its bitwise XOR with `v` and
@@ -205,6 +205,6 @@ export struct Atomic<T> {
     ## @param v the bits to XOR with
     ## @returns the value stored immediately before the operation
     T fetch_xor(T v) {
-        return __atomic_fetch_xor<T>(this.Data, v);
+        return __atomic_fetch_xor<T>(this._data, v);
     }
 }

@@ -52,45 +52,6 @@ next step of such a loop panics with "Array modified during iteration".
     }
 ```
 
-### Fields
-
-#### Data
-
-```pepper
-__ptr<T> Data
-```
-
-The element buffer: `Capacity` slots, of which the first `Size` hold
-live elements and the rest are zeroed (null for struct `T`). Null while
-`Capacity` is 0. Internal storage; use the methods instead of touching
-it directly.
-
-#### Size
-
-```pepper
-ulong Size
-```
-
-The number of live elements; always at most `Capacity`. Read it through `count()`.
-
-#### Capacity
-
-```pepper
-ulong Capacity
-```
-
-The number of element slots allocated in `Data`; never shrinks. Read it through `capacity()`.
-
-#### Version
-
-```pepper
-ulong Version
-```
-
-The modification counter: incremented by every mutating operation so
-that an `ArrayIterator` can detect changes made while it runs. Its
-value carries no other meaning.
-
 ### Constructor
 
 #### Array()
@@ -362,7 +323,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.
 - the element that was last
 
 **Panics**
-- if `Size > 0` does not hold, that is, the Array is empty ("Array pop on empty Array")
+- if the Array is empty ("Array pop on empty Array")
 
 **Example**
 ```pepper
@@ -381,7 +342,7 @@ Returns the first element without removing it; the same as `a[0]`.
 - the element at index 0
 
 **Panics**
-- if `Size > 0` does not hold, that is, the Array is empty ("Array first on empty Array")
+- if the Array is empty ("Array first on empty Array")
 
 #### last
 
@@ -396,7 +357,7 @@ Returns the last element without removing it; the same as
 - the element at index `count() - 1`
 
 **Panics**
-- if `Size > 0` does not hold, that is, the Array is empty ("Array last on empty Array")
+- if the Array is empty ("Array last on empty Array")
 
 #### clear
 
@@ -562,7 +523,7 @@ Reports whether both Arrays have the same count and pairwise equal
 elements, compared with `==` as `find` does.
 
 Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. Capacity is not compared.
+equal. `capacity()` is not compared.
 
 **Parameters**
 - `rhs` — the Array to compare with
@@ -661,41 +622,6 @@ the iterator was created (see `Array` for which operations count), its next
     }
 ```
 
-### Fields
-
-#### Source
-
-```pepper
-Array<T> Source
-```
-
-The Array being iterated; the iterator holds a reference to it for its whole lifetime.
-
-#### Index
-
-```pepper
-ulong Index
-```
-
-The position of the current element in `Source`. Meaningful only after
-`Started` is set; equals `Source.count()` once iteration has finished.
-
-#### Version
-
-```pepper
-ulong Version
-```
-
-The `Source.Version` recorded when iteration began; a mismatch means the Array was modified.
-
-#### Started
-
-```pepper
-bool Started
-```
-
-Whether `next()` has been called at least once; the first call stays at index 0 instead of advancing.
-
 ### Methods
 
 #### next
@@ -713,7 +639,7 @@ returning false.
 - true when there is a current element, false once past the end
 
 **Panics**
-- if `Source.Version == Version` does not hold, that is, the Array was modified since the iterator was created ("Array modified during iteration")
+- if the Array was modified since the iterator was created ("Array modified during iteration")
 
 #### current
 
@@ -727,6 +653,6 @@ Returns the element the last successful `next()` moved to.
 - the current element
 
 **Panics**
-- if `Source.Version == Version` does not hold, that is, the Array was modified since the iterator was created ("Array modified during iteration")
-- if `Started` does not hold, that is, `next()` was never called ("ArrayIterator.current() before next()")
-- if `Index < Source.Size` does not hold, that is, `next()` already returned false ("ArrayIterator.current() past the end")
+- if the Array was modified since the iterator was created ("Array modified during iteration")
+- if `next()` was never called ("ArrayIterator.current() before next()")
+- if `next()` already returned false ("ArrayIterator.current() past the end")

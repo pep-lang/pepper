@@ -40,13 +40,13 @@ import "scoped";
 ## @see Scoped
 export struct Weak<T> {
     ## The weak reference itself.
-    __weak<T> Target;
+    __weak<T> _target;
 
     ## Creates a weak reference to `target`'s object.
     ##
     ## @param target the object to point at; a null reference makes a weak reference that is always expired
     construct(T target) {
-        Target = __weak_from<T>(target);
+        _target = __weak_from<T>(target);
     }
 
     ## Reports whether the object has been destroyed.
@@ -56,14 +56,14 @@ export struct Weak<T> {
     ##
     ## @returns true once the object has been destroyed, or if the reference was made from null
     bool expired() {
-        return __weak_expired<T>(Target);
+        return __weak_expired<T>(_target);
     }
 
     ## Upgrades the weak reference for a `with` block.
     ##
     ## @returns a new strong reference to the object, or null once it has been destroyed
     T enter() {
-        return __weak_upgrade<T>(Target);
+        return __weak_upgrade<T>(_target);
     }
 
     ## Leaves the scope. The strong reference `enter()` returned is released

@@ -267,11 +267,12 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         .map(|b| b.items.clone())
         .unwrap_or_default();
 
-    // Create the allocation for `this`; the `size` literal value is filled in
-    // at codegen time.
+    // Create the allocation for `this`; the `__alloc_size` literal value is
+    // filled in at codegen time. The `__` prefix keeps it from shadowing a
+    // constructor parameter the user named `size`.
     let mut items: Vec<Statement> = vec![
         Statement::Declaration(Declaration::Variable(var_def(
-            "size",
+            "__alloc_size",
             TypeName::new("u64"),
             None,
             true,
@@ -282,7 +283,7 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
             Some(Expression::FunctionCall {
                 function: "_pep_malloc".to_string(),
                 args: vec![Expression::SymbolRef {
-                    id: "size".to_string(),
+                    id: "__alloc_size".to_string(),
                     ty: TypeName::auto(),
                     loc: Loc::NONE,
                 }],

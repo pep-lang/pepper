@@ -154,8 +154,8 @@ gets this method.
 struct MapIterator<T, U>
 ```
 
-The iterator `Iterator.map` returns: each element of `Source`, passed
-through `Transform`.
+The iterator `Iterator.map` returns: each element of the source iterator,
+passed through the transform function.
 
 **Type parameters**
 - `T` — the type of the source's elements
@@ -163,32 +163,6 @@ through `Transform`.
 
 **See also**
 - `Iterator.map`
-
-### Fields
-
-#### Source
-
-```pepper
-Iterator<T> Source
-```
-
-The iterator whose elements are transformed.
-
-#### Transform
-
-```pepper
-(T) => U Transform
-```
-
-The function applied to each element.
-
-#### Value
-
-```pepper
-U Value
-```
-
-The current element, `Transform` of the source's current element.
 
 ### Constructor
 
@@ -212,7 +186,7 @@ Makes an iterator over `transform` applied to the elements of `source`.
 bool next()
 ```
 
-Advances to the next element, and applies `Transform` to it.
+Advances to the next element, and applies the transform function to it.
 
 **Returns**
 - true if there is a current element, false when the source is exhausted
@@ -234,32 +208,14 @@ Returns the transformed element the last successful `next()` produced.
 struct FilterIterator<T>
 ```
 
-The iterator `Iterator.filter` returns: the elements of `Source` that
-`Keep` accepts.
+The iterator `Iterator.filter` returns: the elements of the source
+iterator that the test function accepts.
 
 **Type parameters**
 - `T` — the type of the elements
 
 **See also**
 - `Iterator.filter`
-
-### Fields
-
-#### Source
-
-```pepper
-Iterator<T> Source
-```
-
-The iterator whose elements are tested.
-
-#### Keep
-
-```pepper
-(T) => bool Keep
-```
-
-The test an element must pass.
 
 ### Constructor
 
@@ -283,7 +239,7 @@ Makes an iterator over the elements of `source` that `keep` accepts.
 bool next()
 ```
 
-Advances to the next element that `Keep` accepts.
+Advances to the next element that the test function accepts.
 
 **Returns**
 - true if there is a current element, false when the source is exhausted

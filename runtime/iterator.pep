@@ -113,35 +113,35 @@ export trait Iterator<T> {
     }
 }
 
-## The iterator `Iterator.map` returns: each element of `Source`, passed
-## through `Transform`.
+## The iterator `Iterator.map` returns: each element of the source iterator,
+## passed through the transform function.
 ##
 ## @typeParam T the type of the source's elements
 ## @typeParam U the type of the elements produced
 ## @see Iterator.map
 export struct MapIterator<T, U> {
     ## The iterator whose elements are transformed.
-    Iterator<T> Source;
+    Iterator<T> _source;
     ## The function applied to each element.
-    (T) => U Transform;
-    ## The current element, `Transform` of the source's current element.
-    U Value;
+    (T) => U _transform;
+    ## The current element, the transform of the source's current element.
+    U _value;
 
     ## Makes an iterator over `transform` applied to the elements of `source`.
     ##
     ## @param source the iterator to transform
     ## @param transform the function applied to each element
     construct(Iterator<T> source, (T) => U transform) {
-        Source = source;
-        Transform = transform;
+        _source = source;
+        _transform = transform;
     }
 
-    ## Advances to the next element, and applies `Transform` to it.
+    ## Advances to the next element, and applies the transform function to it.
     ##
     ## @returns true if there is a current element, false when the source is exhausted
     bool next() {
-        if (Source.next()) {
-            Value = Transform(Source.current());
+        if (_source.next()) {
+            _value = _transform(_source.current());
             return true;
         }
         return false;
@@ -151,38 +151,38 @@ export struct MapIterator<T, U> {
     ##
     ## @returns the current element
     U current() {
-        return Value;
+        return _value;
     }
 }
 
 extend MapIterator<T, U> with Iterator<U> {}
 
-## The iterator `Iterator.filter` returns: the elements of `Source` that
-## `Keep` accepts.
+## The iterator `Iterator.filter` returns: the elements of the source
+## iterator that the test function accepts.
 ##
 ## @typeParam T the type of the elements
 ## @see Iterator.filter
 export struct FilterIterator<T> {
     ## The iterator whose elements are tested.
-    Iterator<T> Source;
+    Iterator<T> _source;
     ## The test an element must pass.
-    (T) => bool Keep;
+    (T) => bool _keep;
 
     ## Makes an iterator over the elements of `source` that `keep` accepts.
     ##
     ## @param source the iterator to filter
     ## @param keep the test an element must pass
     construct(Iterator<T> source, (T) => bool keep) {
-        Source = source;
-        Keep = keep;
+        _source = source;
+        _keep = keep;
     }
 
-    ## Advances to the next element that `Keep` accepts.
+    ## Advances to the next element that the test function accepts.
     ##
     ## @returns true if there is a current element, false when the source is exhausted
     bool next() {
-        while (Source.next()) {
-            if (Keep(Source.current())) {
+        while (_source.next()) {
+            if (_keep(_source.current())) {
                 return true;
             }
         }
@@ -193,7 +193,7 @@ export struct FilterIterator<T> {
     ##
     ## @returns the current element
     T current() {
-        return Source.current();
+        return _source.current();
     }
 }
 

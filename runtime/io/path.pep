@@ -70,13 +70,13 @@ export _io_slice(s: String, begin: ulong, end: ulong): String {
     if (end <= begin) {
         return String();
     }
-    return _io_string_from(s.Data + begin, end - begin);
+    return _io_string_from(s.c_str() + begin, end - begin);
 }
 
 # End of the prefix plus any root separators: the part no operation strips.
 export _io_path_root_end(s: String): ulong {
-    var p = s.Data as __ptr<u8>;
-    var n = s.Size;
+    var p = s.c_str() as __ptr<u8>;
+    var n = s.size();
     var i = _io_path_prefix_len(p, n);
     while (i < n && _io_path_is_sep(_io_byte(p, n, i))) { i = i + 1; }
     return i;
@@ -84,30 +84,30 @@ export _io_path_root_end(s: String): ulong {
 
 # End of the path with trailing separators removed (never inside the root).
 export _io_path_trimmed_end(s: String): ulong {
-    var p = s.Data as __ptr<u8>;
+    var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
-    var e = s.Size;
-    while (e > root && _io_path_is_sep(_io_byte(p, s.Size, e - 1))) { e = e - 1; }
+    var e = s.size();
+    while (e > root && _io_path_is_sep(_io_byte(p, s.size(), e - 1))) { e = e - 1; }
     return e;
 }
 
 # Start of the last component (== root end when there is no separator).
 export _io_path_name_start(s: String, e: ulong): ulong {
-    var p = s.Data as __ptr<u8>;
+    var p = s.c_str() as __ptr<u8>;
     var root = _io_path_root_end(s);
     var i = e;
-    while (i > root && !_io_path_is_sep(_io_byte(p, s.Size, i - 1))) { i = i - 1; }
+    while (i > root && !_io_path_is_sep(_io_byte(p, s.size(), i - 1))) { i = i - 1; }
     return i;
 }
 
 export _io_is_dot(s: String): bool {
-    var p = s.Data as __ptr<u8>;
-    return s.Size == 1 && _io_byte(p, s.Size, 0) == 46;
+    var p = s.c_str() as __ptr<u8>;
+    return s.size() == 1 && _io_byte(p, s.size(), 0) == 46;
 }
 
 export _io_is_dotdot(s: String): bool {
-    var p = s.Data as __ptr<u8>;
-    return s.Size == 2 && _io_byte(p, s.Size, 0) == 46 && _io_byte(p, s.Size, 1) == 46;
+    var p = s.c_str() as __ptr<u8>;
+    return s.size() == 2 && _io_byte(p, s.size(), 0) == 46 && _io_byte(p, s.size(), 1) == 46;
 }
 
 # The components after the prefix and root, split at separators, with empty
@@ -115,8 +115,8 @@ export _io_is_dotdot(s: String): bool {
 # path starts with one.
 export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
     var parts = Array<String>();
-    var p = s.Data as __ptr<u8>;
-    var n = s.Size;
+    var p = s.c_str() as __ptr<u8>;
+    var n = s.size();
     var i = _io_path_root_end(s);
     var first = true;
     while (i < n) {
@@ -206,7 +206,7 @@ export struct Path {
     ##
     ## @returns true when `Value` is `""`
     bool is_empty() {
-        return Value.Size == 0;
+        return Value.size() == 0;
     }
 
     ## Returns whether the path is absolute, meaning it does not depend on
@@ -220,8 +220,8 @@ export struct Path {
     ##
     ## @returns true when the path is absolute
     bool is_absolute() {
-        var p = Value.Data as __ptr<u8>;
-        var n = Value.Size;
+        var p = Value.c_str() as __ptr<u8>;
+        var n = Value.size();
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         return _io_path_absolute(p, prefix, has_root);
@@ -254,15 +254,15 @@ export struct Path {
     ##     var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
     ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
     Path join(Path other) {
-        if (other.Value.Size == 0) {
+        if (other.Value.size() == 0) {
             return Path(Value.clone());
         }
-        if (Value.Size == 0 || other.is_absolute() || other.has_root_or_prefix()) {
+        if (Value.size() == 0 || other.is_absolute() || other.has_root_or_prefix()) {
             return Path(other.Value.clone());
         }
-        var p = Value.Data as __ptr<u8>;
+        var p = Value.c_str() as __ptr<u8>;
         var s = Value.clone();
-        if (!_io_path_is_sep(_io_byte(p, Value.Size, Value.Size - 1))) {
+        if (!_io_path_is_sep(_io_byte(p, Value.size(), Value.size() - 1))) {
             s.append(_io_path_separator());
         }
         s.append(other.Value);
@@ -292,8 +292,8 @@ export struct Path {
     ##
     ## @returns true when the path has a root separator or a prefix
     bool has_root_or_prefix() {
-        var p = Value.Data as __ptr<u8>;
-        var n = Value.Size;
+        var p = Value.c_str() as __ptr<u8>;
+        var n = Value.size();
         if (_io_path_prefix_len(p, n) > 0) {
             return true;
         }
@@ -326,9 +326,9 @@ export struct Path {
         if (start <= root) {
             return Path(_io_slice(Value, 0, root));
         }
-        var p = Value.Data as __ptr<u8>;
+        var p = Value.c_str() as __ptr<u8>;
         var j = start;
-        while (j > root && _io_path_is_sep(_io_byte(p, Value.Size, j - 1))) { j = j - 1; }
+        while (j > root && _io_path_is_sep(_io_byte(p, Value.size(), j - 1))) { j = j - 1; }
         return Path(_io_slice(Value, 0, j));
     }
 
@@ -363,15 +363,15 @@ export struct Path {
     ## @returns the index of the extension's dot, or `name.Size` when the
     ## name has no extension (including the empty name)
     static ulong dot_index(String name) {
-        var p = name.Data as __ptr<u8>;
-        var i = name.Size;
+        var p = name.c_str() as __ptr<u8>;
+        var i = name.size();
         while (i > 1) {
             i = i - 1;
             if (p[i] == 46) {
                 return i;
             }
         }
-        return name.Size;
+        return name.size();
     }
 
     ## Returns the file name without its extension: everything before the
@@ -394,10 +394,10 @@ export struct Path {
     String extension() {
         var name = file_name();
         var dot = Path.dot_index(name);
-        if (dot >= name.Size) {
+        if (dot >= name.size()) {
             return String();
         }
-        return _io_slice(name, dot + 1, name.Size);
+        return _io_slice(name, dot + 1, name.size());
     }
 
     ## Returns this path with its file name's extension replaced by `ext`,
@@ -416,14 +416,14 @@ export struct Path {
     ##     var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
     Path with_extension(String ext) {
         var name = file_name();
-        if (name.Size == 0) {
+        if (name.size() == 0) {
             return Path(Value.clone());
         }
         var e = _io_path_trimmed_end(Value);
         var start = _io_path_name_start(Value, e);
         var s = _io_slice(Value, 0, start);
         s.append(_io_slice(name, 0, Path.dot_index(name)));
-        if (ext.Size > 0) {
+        if (ext.size() > 0) {
             s.append(".");
             s.append(ext);
         }
@@ -446,8 +446,8 @@ export struct Path {
     ##     var d = io.Path("./a/b").components();            # [".", "a", "b"]
     Array<String> components() {
         var out = Array<String>();
-        var p = Value.Data as __ptr<u8>;
-        var n = Value.Size;
+        var p = Value.c_str() as __ptr<u8>;
+        var n = Value.size();
         var prefix = _io_path_prefix_len(p, n);
         if (prefix > 0) {
             out.append(_io_slice(Value, 0, prefix));
@@ -481,11 +481,11 @@ export struct Path {
     ##     var q = io.Path("a/..").normalize();         # "."
     ## @see canonicalize
     Path normalize() {
-        if (Value.Size == 0) {
+        if (Value.size() == 0) {
             return Path();
         }
-        var p = Value.Data as __ptr<u8>;
-        var n = Value.Size;
+        var p = Value.c_str() as __ptr<u8>;
+        var n = Value.size();
         var prefix = _io_path_prefix_len(p, n);
         var has_root = _io_path_is_sep(_io_byte(p, n, prefix));
         var parts = _io_path_parts(Value, false);
@@ -523,7 +523,7 @@ export struct Path {
             s.append(kept[i]);
             i = i + 1;
         }
-        if (s.Size == 0) {
+        if (s.size() == 0) {
             s = ".";
         }
         return Path(s);

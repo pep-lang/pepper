@@ -7,10 +7,10 @@ extern void memcpy(void* dest, void* src, ulong n);
 ##
 ## Two measures describe a String, and each API says which one it uses:
 ##
-## - **Code points** (Unicode characters): `Length`, `length()`, `empty()`,
+## - **Code points** (Unicode characters): `length()`, `empty()`,
 ##   the indexer `s[i]`, `substr`, and iteration.
-## - **Bytes** of UTF-8: `Size`, `size()`, `find`, `starts_with`, and
-##   `ends_with`. `Size` is the authoritative length, so the data may
+## - **Bytes** of UTF-8: `size()`, `find`, `starts_with`, and
+##   `ends_with`. The byte size is the authoritative length, so the data may
 ##   contain NUL bytes. It is never derived from a terminator.
 ##
 ## A String is a reference type: `var b = a;` shares one object, so
@@ -18,9 +18,9 @@ extern void memcpy(void* dest, void* src, ulong n);
 ## `clone()` or `+` for an independent copy. Equality (`==`) compares
 ## content.
 ##
-## `append`, `+=`, and `grow` increment `Version`. A `StringIterator`
-## panics when it sees a `Version` other than the one it started with, so
-## modifying a String while a `for` loop iterates it panics.
+## A `StringIterator` panics when the String has been changed by `append`,
+## `+=`, or `grow` since the iterator was created, so modifying a String
+## while a `for` loop iterates it panics.
 ##
 ## @example
 ##     var s = "héllo";
@@ -33,66 +33,68 @@ extern void memcpy(void* dest, void* src, ulong n);
 ##         print(c);   # one code point per line
 ##     }
 export struct String {
-    ## The heap buffer: `Size` bytes of UTF-8 followed by a NUL terminator,
+    ## The heap buffer: `_size` bytes of UTF-8 followed by a NUL terminator,
     ## or `__null` for a String built with no data (`String()`). The String
     ## owns it and frees it on destruction. `append` and `grow` may move it.
-    __ptr<char> Data;
+    __ptr<char> _data;
     ## The number of Unicode code points. The constructor and `append` keep
     ## it current; `grow` does not update it.
-    ulong Length;
-    ## The number of bytes of UTF-8 in `Data`, not counting the NUL terminator.
-    ulong Size;
+    ulong _length;
+    ## The number of bytes of UTF-8 in `_data`, not counting the NUL terminator.
+    ulong _size;
     ## A modification counter, incremented by `append` and `grow`. A
     ## `StringIterator` compares it to detect modification during iteration.
     ## `clone()` starts the copy at 0.
-    ulong Version;
+    ulong _version;
 
-    ## Creates a String by copying `Size` bytes of `data` into a new
+    ## Creates a String by copying `size` bytes of `data` into a new
     ## NUL-terminated buffer. With no arguments, it creates an empty String
-    ## whose `Data` is `__null`.
+    ## whose `c_str()` is `__null`.
     ##
-    ## When `data` is not `__null` and `Size` is 0, `data` is treated as a
+    ## When `data` is not `__null` and `size` is 0, `data` is treated as a
     ## NUL-terminated C string:
     ##
-    ## - with `Length` nonzero, `Size` becomes the byte length of its first
-    ##   `Length` code points (0 if the C string is not valid UTF-8);
-    ## - with `Length` 0, `Size` becomes the C string's whole byte length.
+    ## - with `length` nonzero, `size` becomes the byte length of its first
+    ##   `length` code points (0 if the C string is not valid UTF-8);
+    ## - with `length` 0, `size` becomes the C string's whole byte length.
     ##
-    ## When `Length` is 0, it is counted from the bytes. A nonzero `Length` is
-    ## trusted, not checked against the data. Runs in O(Size).
+    ## When `length` is 0, it is counted from the bytes. A nonzero `length` is
+    ## trusted, not checked against the data. Runs in O(size).
     ##
     ## @param data the bytes to copy; `__null` for an empty String (then pass
     ##   no sizes, because they are stored as given)
-    ## @param this.Size the number of bytes to copy from `data`; 0 treats `data` as
+    ## @param size the number of bytes to copy from `data`; 0 treats `data` as
     ##   a NUL-terminated C string
-    ## @param this.Length the number of code points in those bytes
+    ## @param length the number of code points in those bytes
     ## @example
     ##     var empty = String();
     ##     var s = "abc";
     ##     var copy = String(s.c_str(), s.size(), s.length());
-    construct(__ptr<char> data = __null, this.Size = 0, this.Length = 0) {
+    construct(__ptr<char> data = __null, ulong size = 0, ulong length = 0) {
+        _size = size;
+        _length = length;
         if (data) {
-            # Size is the authoritative byte length; inline NULs are legal in
+            # _size is the authoritative byte length; inline NULs are legal in
             # UTF-8 data, so it is never derived from a terminator. A raw
             # `char*` with no size is a C String by contract: measure it once
             # to bound the char-count derivation below.
-            if (Size == 0) {
+            if (_size == 0) {
                 var src = _pep_c_strlen(data);
-                Size = _pep_utf8_size(data, src, Length);
+                _size = _pep_utf8_size(data, src, _length);
             }
             # Callers that know only the bytes (`String(ptr)`,
             # `String(ptr, size)`) leave the character count to be derived.
-            if (Length == 0) {
-                Length = _pep_utf8_length(data, Size);
+            if (_length == 0) {
+                _length = _pep_utf8_length(data, _size);
             }
-            Data = _pep_malloc(Size + 1);
-            memcpy(Data, data, Size);
-            Data[Size] = 0;
+            _data = _pep_malloc(_size + 1);
+            memcpy(_data, data, _size);
+            _data[_size] = 0;
         }
     }
 
     destruct {
-        _pep_free(Data);
+        _pep_free(_data);
     }
 
     ## Returns the number of Unicode code points in the first `size` bytes at
@@ -109,62 +111,62 @@ export struct String {
         return _pep_utf8_length(data, size);
     }
 
-    ## Returns the number of Unicode code points (`Length`). O(1).
+    ## Returns the number of Unicode code points. O(1).
     ##
     ## @returns the length in code points, not bytes
     ## @see size
     ulong length() {
-        return Length;
+        return _length;
     }
 
-    ## Extends the byte buffer to `newSize` bytes and fills the new bytes
-    ## with zeros. Does nothing when `newSize` is not greater than `Size`.
+    ## Extends the byte buffer to `new_size` bytes and fills the new bytes
+    ## with zeros. Does nothing when `new_size` is not greater than `size()`.
     ##
-    ## A low-level primitive for `append`. It sets `Size` but not `Length`,
+    ## A low-level primitive for `append`. It updates `size()` but not `length()`,
     ## so the zero bytes it adds are not counted as code points until the
-    ## caller overwrites them and fixes `Length`. When it grows the buffer,
-    ## it increments `Version` and may reallocate `Data`, which invalidates
-    ## pointers from `c_str()`. Runs in O(newSize).
+    ## caller overwrites them and fixes the length. When it grows the buffer,
+    ## it invalidates running iterators and may reallocate the buffer, which invalidates
+    ## pointers from `c_str()`. Runs in O(new_size).
     ##
-    ## @param newSize the new byte length
-    void grow(ulong newSize) {
-        if (newSize > Size) {
-            Version = Version + 1;
-            Data = _pep_realloc(Data, Size + 1, newSize + 1);
-            Size = newSize;
-            Data[Size] = 0;
+    ## @param new_size the new byte length
+    void grow(ulong new_size) {
+        if (new_size > _size) {
+            _version = _version + 1;
+            _data = _pep_realloc(_data, _size + 1, new_size + 1);
+            _size = new_size;
+            _data[_size] = 0;
         }
     }
 
-    ## Appends the content of `rhs` to this String in place, updating `Size`
-    ## and `Length`.
+    ## Appends the content of `rhs` to this String in place, updating `size()`
+    ## and `length()`.
     ##
-    ## Always increments `Version`, even when `rhs` is empty, so appending
-    ## during iteration panics. It may reallocate `Data`. Every reference to
-    ## this String sees the change. Runs in O(Size + rhs.Size).
+    ## Always invalidates running iterators, even when `rhs` is empty, so
+    ## appending during iteration panics. It may reallocate the buffer. Every reference to
+    ## this String sees the change. Runs in O(size() + rhs.size()).
     ##
     ## @param rhs the String to append; it is not modified
     ## @example
     ##     var s = "TEST";
     ##     s.append("ING");   # s == "TESTING"
     void append(String rhs) {
-        Version = Version + 1;
+        _version = _version + 1;
         # Read rhs before growing: `s.append(s)` makes rhs this String, whose
-        # Size grow() changes and whose Data it may move.
-        ulong oldSize = Size;
-        ulong addSize = rhs.Size;
-        ulong addLength = rhs.Length;
-        grow(Size + addSize);
-        memcpy(Data + oldSize, rhs.Data, addSize);
-        Length += addLength;
-        Data[Size] = 0;
+        # _size grow() changes and whose _data it may move.
+        ulong old_size = _size;
+        ulong add_size = rhs._size;
+        ulong add_length = rhs._length;
+        grow(_size + add_size);
+        memcpy(_data + old_size, rhs._data, add_size);
+        _length += add_length;
+        _data[_size] = 0;
     }
 
     ## Returns the code point at code-point index `idx` as a new
     ## one-code-point String.
     ##
     ## A negative `idx` counts from the end (`s[-1]` is the last code point).
-    ## `Length` is added until the index is non-negative, so any negative
+    ## `length()` is added until the index is non-negative, so any negative
     ## index wraps, and `s[-7]` of a 3-code-point String is `s[2]`. Runs in
     ## O(idx) because it walks the UTF-8 bytes. Use `for (var c in s)` to
     ## visit every code point in O(size).
@@ -179,38 +181,38 @@ export struct String {
     ##     assert(s[-1] == "T", "last");
     String [](int idx) {
         # Normalize a negative index to the end-relative offset *before* the
-        # bounds check: `idx < Length` compares int against ulong, which
+        # bounds check: `idx < _length` compares int against ulong, which
         # promotes to unsigned (a negative idx would wrap to ~2^64).
-        if (Length > 0) {
+        if (_length > 0) {
             while (idx < 0) {
-                idx += Length;
+                idx += _length;
             }
         }
-        assert(idx < Length, "String[] idx must be < length");
-        ulong begin = _pep_utf8_char_offset(Data, Size, idx);
-        return String(Data + begin, 0, 1);
+        assert(idx < _length, "String[] idx must be < length");
+        ulong begin = _pep_utf8_char_offset(_data, _size, idx);
+        return String(_data + begin, 0, 1);
     }
 
     ## Returns whether this String and `rhs` have the same content, compared
-    ## byte by byte. Strings with different `Length` are unequal without
-    ## comparing bytes. Runs in O(Size).
+    ## byte by byte. Strings with different `length()` are unequal without
+    ## comparing bytes. Runs in O(size()).
     ##
     ## @param rhs the String to compare with
     ## @returns true when both hold the same bytes
     bool ==(String rhs) {
-        if (Length != rhs.Length) {
+        if (_length != rhs._length) {
             return false;
         }
-        if (Size == 0) {
+        if (_size == 0) {
             return true;
         }
-        bool eq = _pep_utf8_compare(Data, Size, rhs.Data, rhs.Size, Size);
+        bool eq = _pep_utf8_compare(_data, _size, rhs._data, rhs._size, _size);
         return eq;
     }
 
     ## Appends `rhs` in place, like `append`, and returns this same String,
     ## not a copy. `s += t` modifies the object that every reference to `s`
-    ## shares, and increments `Version`.
+    ## shares, and invalidates running iterators.
     ##
     ## @param rhs the String to append
     ## @returns this String, after appending
@@ -222,13 +224,13 @@ export struct String {
         return this;
     }
 
-    ## Returns the number of bytes of UTF-8 (`Size`), not counting the NUL
+    ## Returns the number of bytes of UTF-8, not counting the NUL
     ## terminator. O(1).
     ##
     ## @returns the length in bytes, not code points
     ## @see length
     ulong size() {
-        return Size;
+        return _size;
     }
 
     ## Returns an iterator over the String's code points, which makes String
@@ -247,19 +249,19 @@ export struct String {
     ##     }
     StringIterator iterate() {
         var it = StringIterator();
-        it.Source = this;
-        it.Version = Version;
+        it._source = this;
+        it._version = _version;
         return it;
     }
 
-    ## Returns whether the String has no code points (`Length` is 0). O(1).
+    ## Returns whether the String has no code points. O(1).
     ##
     ## @returns true when `length()` is 0
     bool empty() {
-        return Length == 0;
+        return _length == 0;
     }
 
-    ## Returns the String's buffer as a NUL-terminated C string (`Data`).
+    ## Returns the String's buffer as a NUL-terminated C string.
     ##
     ## The pointer is owned by the String. It is valid until the String is
     ## destroyed or `append`, `+=`, or `grow` reallocates it. It is `__null`
@@ -268,16 +270,15 @@ export struct String {
     ##
     ## @returns the String's NUL-terminated byte buffer, or `__null`
     __ptr<char> c_str() {
-        return Data;
+        return _data;
     }
 
     ## Returns a new String with the same content and its own buffer, so
-    ## later changes to either String do not affect the other. The copy's
-    ## `Version` starts at 0. Runs in O(Size).
+    ## later changes to either String do not affect the other. Runs in O(size()).
     ##
     ## @returns an independent copy of this String
     String clone() {
-        return String(Data, Size, Length);
+        return String(_data, _size, _length);
     }
 
     ## Returns the **byte offset** of the first occurrence of `needle`, or -1
@@ -287,7 +288,7 @@ export struct String {
     ## `substr`, convert it with `String.length_of(s.c_str(), offset)`.
     ## An empty `needle` is found at 0 unless this String is empty, in which
     ## case the result is -1. The result is also -1 when either String is not
-    ## valid UTF-8. Runs in O(Size * needle.Size).
+    ## valid UTF-8. Runs in O(size() * needle.size()).
     ##
     ## @param needle the text to search for
     ## @returns the byte offset of the first match, or -1 when there is none
@@ -296,12 +297,12 @@ export struct String {
     ##     assert(s.find("STI") == 2, "byte offset");
     ##     assert(s.find("xyz") == -1, "absent");
     long find(String needle) {
-        return _pep_utf8_find(Data, Size, needle.Data, needle.Size);
+        return _pep_utf8_find(_data, _size, needle._data, needle._size);
     }
 
     ## Returns whether `needle` occurs in this String (`find(needle) >= 0`).
     ## Because of that, an empty String contains nothing, not even `""`.
-    ## Runs in O(Size * needle.Size).
+    ## Runs in O(size() * needle.size()).
     ##
     ## @param needle the text to search for
     ## @returns true when `needle` occurs
@@ -310,40 +311,40 @@ export struct String {
     }
 
     ## Returns whether this String begins with the bytes of `prefix`. An
-    ## empty `prefix` always matches. Runs in O(prefix.Size).
+    ## empty `prefix` always matches. Runs in O(prefix.size()).
     ##
     ## @param prefix the text to test for
     ## @returns true when the first `prefix.size()` bytes equal `prefix`
     bool starts_with(String prefix) {
-        if (prefix.Size > Size) {
+        if (prefix._size > _size) {
             return false;
         }
-        if (prefix.Size == 0) {
+        if (prefix._size == 0) {
             return true;
         }
-        return _pep_utf8_compare(Data, Size, prefix.Data, prefix.Size, prefix.Size);
+        return _pep_utf8_compare(_data, _size, prefix._data, prefix._size, prefix._size);
     }
 
     ## Returns whether this String ends with the bytes of `suffix`. An empty
-    ## `suffix` always matches. Runs in O(suffix.Size).
+    ## `suffix` always matches. Runs in O(suffix.size()).
     ##
     ## @param suffix the text to test for
     ## @returns true when the last `suffix.size()` bytes equal `suffix`
     bool ends_with(String suffix) {
-        if (suffix.Size > Size) {
+        if (suffix._size > _size) {
             return false;
         }
-        if (suffix.Size == 0) {
+        if (suffix._size == 0) {
             return true;
         }
-        return _pep_utf8_compare(Data + (Size - suffix.Size), Size, suffix.Data, suffix.Size, suffix.Size);
+        return _pep_utf8_compare(_data + (_size - suffix._size), _size, suffix._data, suffix._size, suffix._size);
     }
 
     ## Returns a new String of up to `count` code points starting at
     ## code-point index `start`. Both arguments count code points, not bytes.
     ##
     ## `count` is clamped to the code points that remain. When `start` is at
-    ## or past `length()`, the result is an empty String. Runs in O(Size).
+    ## or past `length()`, the result is an empty String. Runs in O(size()).
     ##
     ## @param start the code-point index of the first code point to copy
     ## @param count the maximum number of code points to copy
@@ -354,12 +355,12 @@ export struct String {
     ##     assert(s.substr(0, 99) == "TEST", "count is clamped");
     ##     assert(s.substr(4, 5) == "", "start past the end");
     String substr(ulong start, ulong count) {
-        if (start >= Length) {
+        if (start >= _length) {
             return String();
         }
-        ulong begin = _pep_utf8_char_offset(Data, Size, start);
+        ulong begin = _pep_utf8_char_offset(_data, _size, start);
         # Clamp the requested character count to what remains in the String.
-        ulong avail = length_of(Data + begin, Size - begin);
+        ulong avail = length_of(_data + begin, _size - begin);
         if (count > avail) {
             count = avail;
         }
@@ -367,12 +368,12 @@ export struct String {
         if (count == 0) {
             return String();
         }
-        ulong len = _pep_utf8_char_offset(Data + begin, Size - begin, count);
-        return String(Data + begin, len, count);
+        ulong len = _pep_utf8_char_offset(_data + begin, _size - begin, count);
+        return String(_data + begin, len, count);
     }
 
     ## Returns whether this String and `rhs` differ in content, the negation
-    ## of `==`. Runs in O(Size).
+    ## of `==`. Runs in O(size()).
     ##
     ## @param rhs the String to compare with
     ## @returns true when the contents differ
@@ -381,7 +382,7 @@ export struct String {
     }
 
     ## Returns a new String that holds this String followed by `rhs`. Neither
-    ## operand is modified. Runs in O(Size + rhs.Size).
+    ## operand is modified. Runs in O(size() + rhs.size()).
     ##
     ## @param rhs the String to append to the copy
     ## @returns a new concatenated String
@@ -401,10 +402,9 @@ export struct String {
 ## `String.iterate()` and used by `for (var c in s)`.
 ##
 ## Call `next()` to advance, then `current()` for the code point it moved
-## to. The iterator records the String's `Version` when it is created, and
-## both methods panic if the String has been modified since. Create it with
-## `String.iterate()`: a default-constructed `StringIterator()` has a null
-## `Source`.
+## to. Both methods panic if the String has been modified since the
+## iterator was created. Create it with `String.iterate()`: a
+## default-constructed `StringIterator()` has no String to walk.
 ##
 ## @example
 ##     var it = "ab".iterate();
@@ -413,16 +413,16 @@ export struct String {
 ##     }
 export struct StringIterator {
     ## The String being iterated. The iterator holds a reference to it.
-    String Source;
-    ## The byte offset in `Source` of the current code point.
-    ulong Offset;
-    ## The byte offset in `Source` of the code point after the current one,
-    ## or `Source.Size` at the end.
-    ulong NextOffset;
-    ## `Source.Version` when iteration began; a mismatch means modification.
-    ulong Version;
+    String _source;
+    ## The byte offset in `_source` of the current code point.
+    ulong _offset;
+    ## The byte offset in `_source` of the code point after the current one,
+    ## or `_source._size` at the end.
+    ulong _next_offset;
+    ## `_source._version` when iteration began; a mismatch means modification.
+    ulong _version;
     ## Whether `next()` has been called at least once.
-    bool Started;
+    bool _started;
 
     ## Advances to the next code point. Runs in O(1) per code point.
     ##
@@ -431,20 +431,20 @@ export struct StringIterator {
     ## bytes, as one final "code point".
     ##
     ## @returns true when positioned on a code point, false at the end
-    ## @panics if `Source` was modified (its `Version` changed) since the
+    ## @panics if the String was modified since the
     ##   iterator was created
     bool next() {
-        assert(Source.Version == Version, "String modified during iteration");
-        if (Started) {
-            Offset = NextOffset;
+        assert(_source._version == _version, "String modified during iteration");
+        if (_started) {
+            _offset = _next_offset;
         } else {
-            Started = true;
+            _started = true;
         }
-        if (Offset >= Source.Size) {
-            NextOffset = Offset;
+        if (_offset >= _source._size) {
+            _next_offset = _offset;
             return false;
         }
-        NextOffset = Offset + _pep_utf8_char_offset(Source.Data + Offset, Source.Size - Offset, 1);
+        _next_offset = _offset + _pep_utf8_char_offset(_source._data + _offset, _source._size - _offset, 1);
         return true;
     }
 
@@ -452,14 +452,14 @@ export struct StringIterator {
     ## a new one-code-point String.
     ##
     ## @returns a new String that holds the current code point
-    ## @panics if `Source` was modified since the iterator was created
+    ## @panics if the String was modified since the iterator was created
     ## @panics if `next()` has not been called yet
     ## @panics if `next()` has returned false (the iterator is past the end)
     String current() {
-        assert(Source.Version == Version, "String modified during iteration");
-        assert(Started, "StringIterator.current() before next()");
-        assert(Offset < Source.Size, "StringIterator.current() past the end");
-        return String(Source.Data + Offset, NextOffset - Offset, 1);
+        assert(_source._version == _version, "String modified during iteration");
+        assert(_started, "StringIterator.current() before next()");
+        assert(_offset < _source._size, "StringIterator.current() past the end");
+        return String(_source._data + _offset, _next_offset - _offset, 1);
     }
 }
 

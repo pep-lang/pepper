@@ -254,14 +254,14 @@ free_equal(p: __ptr<ulong>): bool {
     return v == 5000000001;
 }
 struct Slots {
-    __ptr<ulong> Data;
-    construct() { Data = _pep_malloc(16); }
+    __ptr<ulong> data;
+    construct() { data = _pep_malloc(16); }
     static read(p: __ptr<ulong>): ulong {
         var v = p[0];
         return v;
     }
     read_field(): ulong {
-        var v = Data[1];
+        var v = data[1];
         return v;
     }
 }
@@ -283,7 +283,7 @@ test(): int {
     __ptr<__ptr<ulong>> pp = _pep_malloc(8);
     pp[0] = p;
     var s = Slots();
-    s.Data[1] = 5000000002;
+    s.data[1] = 5000000002;
     var r = 0;
     if (free_read(p, 1) == 5000000001) { r = r + 1; }
     if (free_equal(p)) { r = r + 10; }

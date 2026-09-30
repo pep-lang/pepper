@@ -94,9 +94,9 @@ s(p: io.Path): String { return p.Value; }
 w(text: String): String {
     var out = text.clone();
     [Target(OS(Windows))] {
-        var p = out.Data as __ptr<u8>;
+        var p = out.c_str() as __ptr<u8>;
         ulong i = 0;
-        while (i < out.Size) {
+        while (i < out.size()) {
             if (p[i] == 47) {
                 p[i] = 92;
             }
@@ -225,9 +225,9 @@ text(f: Path): String {
 
 bytes_of(s: String): u8[] {
     var out = Array<u8>();
-    var p = s.Data as __ptr<u8>;
+    var p = s.c_str() as __ptr<u8>;
     ulong i = 0;
-    while (i < s.Size) {
+    while (i < s.size()) {
         out.append(p[i]);
         i = i + 1;
     }
@@ -298,7 +298,7 @@ files_and_text(base: Path) {
     var cn = OpenOptions().write(true).create_new(true).open(t);
     assert(cn.is_err(), "create_new on existing");
     assert(cn.Error.is_already_exists(), "create_new on existing");
-    assert(cn.Error.Message.Size > 0, "error message");
+    assert(cn.Error.Message.size() > 0, "error message");
     var fresh = base.join("fresh.txt");
     var cn2 = OpenOptions().write(true).create_new(true).open(fresh);
     assert(cn2.is_ok(), "create_new on missing");
@@ -603,7 +603,7 @@ main(): int {
 "##;
 
 const IMPORT_NAMES_PROGRAM: &str =
-    "import [Path as P] from io;\nmain(): int { return P(\"ab\").Value.Size as int - 2; }";
+    "import [Path as P] from io;\nmain(): int { return P(\"ab\").Value.size() as int - 2; }";
 
 #[test]
 fn stdout_is_a_file() {
@@ -621,7 +621,7 @@ fn file_closes_on_last_release() {
 fn io_is_a_module_not_prelude() {
     std::env::set_current_dir(repo_root()).unwrap();
     // Without an import, io is not loaded at all: Path is unknown.
-    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.Value.Size as int; }")
+    let err = build("no_import", "main(): int { var p = Path(\"a\"); return p.Value.size() as int; }")
         .expect_err("Path visible without importing io");
     assert!(err.contains("Path"), "unexpected error: {err}");
     let _ = std::fs::remove_dir_all(source_dir("no_import"));

@@ -47,10 +47,10 @@ import "directory";
 # One UTF-8 byte never yields more than one UTF-16 unit, so Size + 1 units
 # always suffice.
 [Target(OS(Windows))] export _io_win_wide(s: String): __ptr<u16> {
-    var units = s.Size + 1;
+    var units = s.size() + 1;
     var w = _pep_malloc(units * 2) as __ptr<u16>;
-    if (s.Size > 0) {
-        MultiByteToWideChar(65001, 0, s.Data, s.Size as int, w, units as int);   # CP_UTF8
+    if (s.size() > 0) {
+        MultiByteToWideChar(65001, 0, s.c_str(), s.size() as int, w, units as int);   # CP_UTF8
     }
     return w;
 }
@@ -98,7 +98,7 @@ import "directory";
     }
     var s = _io_win_narrow(buf, n);
     _pep_free(buf);
-    if (s.Size == 0) {
+    if (s.size() == 0) {
         return "unknown error";
     }
     return s;
@@ -357,7 +357,7 @@ import "directory";
 
 [Target(OS(Windows))] export _io_sys_list(path: Path): IoResult<DirEntry[]> {
     # An empty path would search `*`, the current directory; POSIX fails.
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<DirEntry[]>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
     var w = _io_win_wide(path.join(Path("*")).Value);
@@ -516,17 +516,17 @@ import "directory";
     }
     var s = _io_win_narrow(buf, n as int);
     _pep_free(buf);
-    var p = s.Data as __ptr<u8>;
-    var size = s.Size;
+    var p = s.c_str() as __ptr<u8>;
+    var size = s.size();
     # "\\?\" is 92 92 63 92; "UNC\" is 85 78 67 92.
     if (_io_byte(p, size, 0) == 92 && _io_byte(p, size, 1) == 92 && _io_byte(p, size, 2) == 63 && _io_byte(p, size, 3) == 92) {
         if (_io_byte(p, size, 4) == 85 && _io_byte(p, size, 5) == 78 && _io_byte(p, size, 6) == 67 && _io_byte(p, size, 7) == 92) {
             var unc = _io_string_from_byte(92);
             unc.append(_io_string_from_byte(92));
-            unc.append(_io_slice(s, 8, s.Size));
+            unc.append(_io_slice(s, 8, s.size()));
             return IoResult<Path>.ok(Path(unc));
         }
-        return IoResult<Path>.ok(Path(_io_slice(s, 4, s.Size)));
+        return IoResult<Path>.ok(Path(_io_slice(s, 4, s.size())));
     }
     return IoResult<Path>.ok(Path(s));
 }
@@ -541,9 +541,9 @@ import "directory";
     var n = GetTempPathW(need, buf) as int;
     var s = _io_win_narrow(buf, n);
     _pep_free(buf);
-    var p = s.Data as __ptr<u8>;
-    var end = s.Size;
+    var p = s.c_str() as __ptr<u8>;
+    var end = s.size();
     var root = _io_path_root_end(s);
-    while (end > root && _io_path_is_sep(_io_byte(p, s.Size, end - 1))) { end = end - 1; }
+    while (end > root && _io_path_is_sep(_io_byte(p, s.size(), end - 1))) { end = end - 1; }
     return Path(_io_slice(s, 0, end));
 }

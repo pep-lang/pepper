@@ -706,7 +706,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// The ctor with its `size` literal patched to the computed struct size
+    /// The ctor with its `__alloc_size` literal patched to the computed struct size
     /// (port of StructGen's `locals()->function(structDesc->constructor())`).
     /// Both the instantiation pass and codegen must use this, so the declared
     /// function and the emitted body agree on the allocation size.
@@ -716,7 +716,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         if let Some(body) = &mut ctor.body {
             for stmt in &mut body.items {
                 if let Statement::Declaration(Declaration::Variable(var)) = stmt {
-                    if var.name == "size" {
+                    if var.name == "__alloc_size" {
                         var.default = Some(Expression::IntLiteral(struct_size));
                         break;
                     }
@@ -1920,7 +1920,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Sema type string of an expression's value, as declared (pointer
     /// The pointer an index expression subscripts: the buffer pointer, or
-    /// the struct reference whose `Data` it indexes. Anything else (`a[0][0]`
+    /// the struct reference whose `_data` it indexes. Anything else (`a[0][0]`
     /// on an `Array<int>`) is an error rather than a crash.
     fn subscripted_pointer(&mut self, lhs: &Expression) -> Result<PointerValue<'ctx>, String> {
         match self.codegen_expr(lhs)? {
@@ -2281,11 +2281,11 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// `int[]`/`int*` → i32); i32 when the receiver's type is unknown.
     /// The exact name resolves first — specializations register under their
     /// full names (`Array<int>`), and a nested index on a struct-reference
-    /// slot (`outer.Data[0][0]`) must stride by pointer, not by the base
+    /// slot (`outer._data[0][0]`) must stride by pointer, not by the base
     /// struct's first field. Unregistered names fall back to their base —
     /// only base struct types are registered for abstract receivers.
     fn index_element_type(&self, receiver: &Expression) -> BasicTypeEnum<'ctx> {
-        // `outer.Data[0][0]` → resolve the element type from the base
+        // `outer._data[0][0]` → resolve the element type from the base
         // receiver's pointee; a nested Index receiver cannot be resolved as
         // a whole by value_sema_type.
         let mut r = receiver;
@@ -2347,10 +2347,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         pointee.split('<').next().filter(|n| !n.is_empty()).map(|s| s.to_string())
     }
-    /// For a nested index on a struct-reference slot (`outer.Data[0][i]`),
+    /// For a nested index on a struct-reference slot (`outer._data[0][i]`),
     /// `slot_ptr` addresses the loaded inner reference; the indexed buffer
-    /// lives in its `Data` field. Returns that buffer pointer and the
-    /// buffer's element name (the pointee of the `__ptr<T>` Data field, or
+    /// lives in its `_data` field. Returns that buffer pointer and the
+    /// buffer's element name (the pointee of the `__ptr<T>` `_data` field, or
     /// the field type itself for non-pointer fields); `None` for plain
     /// (non-nested) receivers, which GEP the raw buffer directly.
     fn nested_index_buffer(
@@ -2386,9 +2386,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .fields
                     .iter()
                     .enumerate()
-                    .find(|(_, (n, _))| n == "Data")
+                    .find(|(_, (n, _))| n == "_data")
                     .map(|(i, (_, t))| {
-                        // The Data field is a raw pointer buffer (`T*` after
+                        // The `_data` field is a raw pointer buffer (`T*` after
                         // the `__ptr<T>` rewrite): its element is the pointee
                         // (`int`, `Array<int>`, …), which drives the GEP
                         // stride and load/store value type. Non-pointer
@@ -2396,12 +2396,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                         let elem_name = t.strip_suffix('*').map(str::to_string).unwrap_or_else(|| t.clone());
                         (i, elem_name)
                     })
-                    .ok_or_else(|| "nested index: no Data field".to_string())?;
+                    .ok_or_else(|| "nested index: no _data field".to_string())?;
                 (desc.llvm_type, idx, name)
             }
             _ => return Err(self.not_subscriptable(lhs)),
         };
-        // `slot_ptr` addresses the inner reference; its `Data` field is the
+        // `slot_ptr` addresses the inner reference; its `_data` field is the
         // raw buffer pointer. GEP the field, then load it to get the buffer.
         let data_addr = self
             .builder
@@ -2449,7 +2449,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // type is a struct (before the pointer stride): `__ptr<T>` and scalar
         // buffers hold raw values, so they need none. `elem_name` and
         // `value_ty` are the same values the caller used for the GEP, so this
-        // stays in lockstep with it for nested stores (`outer.Data[0][i]`).
+        // stays in lockstep with it for nested stores (`outer._data[0][i]`).
         let elem = self.buffer_element_type(elem_name);
         if !matches!(elem, BasicTypeEnum::StructType(_)) && !self.is_trait_name(elem_name) {
             return Ok(());
@@ -2671,8 +2671,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.subscripted_pointer(lhs)?;
-                // A nested index (`outer.Data[0][i]`) GEPs the inner
-                // struct's own `Data` buffer (the slot holds its reference);
+                // A nested index (`outer._data[0][i]`) GEPs the inner
+                // struct's own `_data` buffer (the slot holds its reference);
                 // a plain index GEPs the raw buffer directly. The element and
                 // value types come from the indexed buffer's field type in
                 // both cases.
@@ -3131,7 +3131,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::MethodCall {
                 this, method, args, ..
             } => {
-                // Receiver is a buffer slot (`Data[i]`): GEP the element out
+                // Receiver is a buffer slot (`_data[i]`): GEP the element out
                 // of the raw buffer. Indexer methods are the exception — they
                 // address the pointee's own data (`s[0]` on `String s`), so
                 // they dispatch to the pointee when it declares them.
@@ -3217,7 +3217,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // POD Array index set/get: direct GEP + load/store — but
                     // only when the receiver's struct declares the indexer
                     // and the receiver is not itself a pointer. A pointer
-                    // receiver (raw buffer field like `Data` on
+                    // receiver (raw buffer field like `_data` on
                     // `Array<Array<int>>`) must GEP the slot; dispatching
                     // would call the pointee's indexer on the element's own
                     // data.
@@ -4203,7 +4203,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             );
             // The sema type name can be a pointer (`__ptr<char>` → i32 in
             // coerce) while the address's LLVM pointee is narrower (i8);
-            // narrow to it so `Data[Size] = 0` stores one byte, not four.
+            // narrow to it so `_data[_size] = 0` stores one byte, not four.
             let fit = |v: BasicValueEnum<'ctx>| -> BasicValueEnum<'ctx> {
                 if let (Some(BasicTypeEnum::IntType(target)), BasicValueEnum::IntValue(iv)) =
                     (&lhs_addr.llvm_ty, &v)
@@ -4262,7 +4262,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             if matches!(lhs, Expression::Index { .. } | Expression::ArrayIndex { .. }) {
                 // The element type is resolved from the buffer's pointee
-                // (`Data`), not the index expression itself.
+                // (`_data`), not the index expression itself.
                 self.index_refcount_ops(lhs_addr.ty.as_ref(), lhs_addr.llvm_ty.unwrap(), lhs_addr.ptr, coerced, rhs)?;
             }
             if let Expression::MemberRef { .. } = lhs {
@@ -4440,8 +4440,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // creation ref is released at the end of the full expression.
                 let lhs_temp = self.owned_temp_type(lhs);
                 let slot_ptr = self.subscripted_pointer(lhs)?;
-                // A nested index (`outer.Data[0][i] = v`) stores into the
-                // inner struct's own `Data` buffer, not its reference slot.
+                // A nested index (`outer._data[0][i] = v`) stores into the
+                // inner struct's own `_data` buffer, not its reference slot.
                 let (ptr, elem_name) = match self.nested_index_buffer(lhs, slot_ptr)? {
                     Some((buffer, name)) => (buffer, name),
                     None => (slot_ptr, self.index_receiver_pointee(lhs).unwrap_or_else(|| "i32".to_string())),

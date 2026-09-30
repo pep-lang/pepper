@@ -50,16 +50,6 @@ freely.
     }
 ```
 
-### Fields
-
-#### Target
-
-```pepper
-__weak<T> Target
-```
-
-The weak reference itself.
-
 ### Constructor
 
 #### Weak()

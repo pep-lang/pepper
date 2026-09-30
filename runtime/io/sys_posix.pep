@@ -140,7 +140,7 @@ import "directory";
 # ── File operations ──────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))] export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<FileHandle>.err(_io_posix_empty_path());
     }
     var writes = options.Write || options.Append;
@@ -320,7 +320,7 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<Metadata>.err(_io_posix_empty_path());
     }
     var buf = _pep_malloc(_io_stat_buf_size());
@@ -358,7 +358,7 @@ import "directory";
 [Target(OS(Mac))] export _io_dirent_name_offset(): ulong { return 21; }
 
 [Target(!OS(Windows))] export _io_sys_list(path: Path): IoResult<DirEntry[]> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<DirEntry[]>.err(_io_posix_empty_path());
     }
     var dir = opendir(path.Value.c_str());
@@ -407,21 +407,21 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_mkdir(path: Path): IoResult<void> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(mkdir(path.Value.c_str(), 511));   # 0777, less the umask
 }
 
 [Target(!OS(Windows))] export _io_sys_rmdir(path: Path): IoResult<void> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rmdir(path.Value.c_str()));
 }
 
 [Target(!OS(Windows))] export _io_sys_unlink(path: Path): IoResult<void> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(unlink(path.Value.c_str()));
@@ -433,7 +433,7 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_rename(from: Path, to: Path): IoResult<void> {
-    if (from.Value.Size == 0 || to.Value.Size == 0) {
+    if (from.Value.size() == 0 || to.Value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(rename(from.Value.c_str(), to.Value.c_str()));
@@ -460,14 +460,14 @@ import "directory";
 }
 
 [Target(!OS(Windows))] export _io_sys_chdir(path: Path): IoResult<void> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(chdir(path.Value.c_str()));
 }
 
 [Target(!OS(Windows))] export _io_sys_realpath(path: Path): IoResult<Path> {
-    if (path.Value.Size == 0) {
+    if (path.Value.size() == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
     var buf = _pep_malloc(4096);   # PATH_MAX (Linux 4096, macOS 1024)
@@ -484,12 +484,12 @@ import "directory";
 
 [Target(!OS(Windows))] export _io_sys_temp_dir(): Path {
     var s = _io_string_from_c(getenv("TMPDIR"));
-    if (s.Size == 0) {
+    if (s.size() == 0) {
         return Path("/tmp");
     }
     # macOS's TMPDIR ends in '/'.
-    var p = s.Data as __ptr<u8>;
-    var n = s.Size;
-    while (n > 1 && _io_byte(p, s.Size, n - 1) == 47) { n = n - 1; }
+    var p = s.c_str() as __ptr<u8>;
+    var n = s.size();
+    while (n > 1 && _io_byte(p, s.size(), n - 1) == 47) { n = n - 1; }
     return Path(_io_slice(s, 0, n));
 }

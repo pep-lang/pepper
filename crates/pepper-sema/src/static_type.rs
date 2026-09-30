@@ -127,7 +127,7 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             // generic base entry (also unsubstituted). So both the
             // annotation and the enclosing struct's field table are tried as
             // lhs types; for pointer types the stripped pointee is tried
-            // first, so `keys.Data` in a specialized body hits the exact
+            // first, so `keys._data` in a specialized body hits the exact
             // `Array<String>` entry before the base-name fallback reaches
             // the unsubstituted generic `Array`. The first candidate that
             // names the field wins.

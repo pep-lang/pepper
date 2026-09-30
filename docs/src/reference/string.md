@@ -15,10 +15,10 @@ A mutable, reference-counted string of UTF-8 text. String literals
 
 Two measures describe a String, and each API says which one it uses:
 
-- **Code points** (Unicode characters): `Length`, `length()`, `empty()`,
+- **Code points** (Unicode characters): `length()`, `empty()`,
   the indexer `s[i]`, `substr`, and iteration.
-- **Bytes** of UTF-8: `Size`, `size()`, `find`, `starts_with`, and
-  `ends_with`. `Size` is the authoritative length, so the data may
+- **Bytes** of UTF-8: `size()`, `find`, `starts_with`, and
+  `ends_with`. The byte size is the authoritative length, so the data may
   contain NUL bytes. It is never derived from a terminator.
 
 A String is a reference type: `var b = a;` shares one object, so
@@ -26,9 +26,9 @@ A String is a reference type: `var b = a;` shares one object, so
 `clone()` or `+` for an independent copy. Equality (`==`) compares
 content.
 
-`append`, `+=`, and `grow` increment `Version`. A `StringIterator`
-panics when it sees a `Version` other than the one it started with, so
-modifying a String while a `for` loop iterates it panics.
+A `StringIterator` panics when the String has been changed by `append`,
+`+=`, or `grow` since the iterator was created, so modifying a String
+while a `for` loop iterates it panics.
 
 **Example**
 ```pepper
@@ -43,71 +43,32 @@ modifying a String while a `for` loop iterates it panics.
     }
 ```
 
-### Fields
-
-#### Data
-
-```pepper
-__ptr<char> Data
-```
-
-The heap buffer: `Size` bytes of UTF-8 followed by a NUL terminator,
-or `__null` for a String built with no data (`String()`). The String
-owns it and frees it on destruction. `append` and `grow` may move it.
-
-#### Length
-
-```pepper
-ulong Length
-```
-
-The number of Unicode code points. The constructor and `append` keep
-it current; `grow` does not update it.
-
-#### Size
-
-```pepper
-ulong Size
-```
-
-The number of bytes of UTF-8 in `Data`, not counting the NUL terminator.
-
-#### Version
-
-```pepper
-ulong Version
-```
-
-A modification counter, incremented by `append` and `grow`. A
-`StringIterator` compares it to detect modification during iteration.
-`clone()` starts the copy at 0.
-
 ### Constructor
 
 #### String()
 
 ```pepper
-construct(__ptr<char> data = __null, this.Size = 0, this.Length = 0)
+construct(__ptr<char> data = __null, ulong size = 0, ulong length = 0)
 ```
 
-Creates a String by copying `Size` bytes of `data` into a new
+Creates a String by copying `size` bytes of `data` into a new
 NUL-terminated buffer. With no arguments, it creates an empty String
-whose `Data` is `__null`.
+whose `c_str()` is `__null`.
 
-When `data` is not `__null` and `Size` is 0, `data` is treated as a
+When `data` is not `__null` and `size` is 0, `data` is treated as a
 NUL-terminated C string:
 
-- with `Length` nonzero, `Size` becomes the byte length of its first
-  `Length` code points (0 if the C string is not valid UTF-8);
-- with `Length` 0, `Size` becomes the C string's whole byte length.
+- with `length` nonzero, `size` becomes the byte length of its first
+  `length` code points (0 if the C string is not valid UTF-8);
+- with `length` 0, `size` becomes the C string's whole byte length.
 
-When `Length` is 0, it is counted from the bytes. A nonzero `Length` is
-trusted, not checked against the data. Runs in O(Size).
+When `length` is 0, it is counted from the bytes. A nonzero `length` is
+trusted, not checked against the data. Runs in O(size).
 
 **Parameters**
 - `data` — the bytes to copy; `__null` for an empty String (then pass no sizes, because they are stored as given)
-- `this.Size` — the number of bytes to copy from `data`; 0 treats `data` as a NUL-terminated C string
-- `this.Length` — the number of code points in those bytes
+- `size` — the number of bytes to copy from `data`; 0 treats `data` as a NUL-terminated C string
+- `length` — the number of code points in those bytes
 
 **Example**
 ```pepper
@@ -146,7 +107,7 @@ whole count 0.
 ulong length()
 ```
 
-Returns the number of Unicode code points (`Length`). O(1).
+Returns the number of Unicode code points. O(1).
 
 **Returns**
 - the length in code points, not bytes
@@ -157,20 +118,20 @@ Returns the number of Unicode code points (`Length`). O(1).
 #### grow
 
 ```pepper
-void grow(ulong newSize)
+void grow(ulong new_size)
 ```
 
-Extends the byte buffer to `newSize` bytes and fills the new bytes
-with zeros. Does nothing when `newSize` is not greater than `Size`.
+Extends the byte buffer to `new_size` bytes and fills the new bytes
+with zeros. Does nothing when `new_size` is not greater than `size()`.
 
-A low-level primitive for `append`. It sets `Size` but not `Length`,
+A low-level primitive for `append`. It updates `size()` but not `length()`,
 so the zero bytes it adds are not counted as code points until the
-caller overwrites them and fixes `Length`. When it grows the buffer,
-it increments `Version` and may reallocate `Data`, which invalidates
-pointers from `c_str()`. Runs in O(newSize).
+caller overwrites them and fixes the length. When it grows the buffer,
+it invalidates running iterators and may reallocate the buffer, which invalidates
+pointers from `c_str()`. Runs in O(new_size).
 
 **Parameters**
-- `newSize` — the new byte length
+- `new_size` — the new byte length
 
 #### append
 
@@ -178,12 +139,12 @@ pointers from `c_str()`. Runs in O(newSize).
 void append(String rhs)
 ```
 
-Appends the content of `rhs` to this String in place, updating `Size`
-and `Length`.
+Appends the content of `rhs` to this String in place, updating `size()`
+and `length()`.
 
-Always increments `Version`, even when `rhs` is empty, so appending
-during iteration panics. It may reallocate `Data`. Every reference to
-this String sees the change. Runs in O(Size + rhs.Size).
+Always invalidates running iterators, even when `rhs` is empty, so
+appending during iteration panics. It may reallocate the buffer. Every reference to
+this String sees the change. Runs in O(size() + rhs.size()).
 
 **Parameters**
 - `rhs` — the String to append; it is not modified
@@ -204,7 +165,7 @@ Returns the code point at code-point index `idx` as a new
 one-code-point String.
 
 A negative `idx` counts from the end (`s[-1]` is the last code point).
-`Length` is added until the index is non-negative, so any negative
+`length()` is added until the index is non-negative, so any negative
 index wraps, and `s[-7]` of a 3-code-point String is `s[2]`. Runs in
 O(idx) because it walks the UTF-8 bytes. Use `for (var c in s)` to
 visit every code point in O(size).
@@ -232,8 +193,8 @@ bool ==(String rhs)
 ```
 
 Returns whether this String and `rhs` have the same content, compared
-byte by byte. Strings with different `Length` are unequal without
-comparing bytes. Runs in O(Size).
+byte by byte. Strings with different `length()` are unequal without
+comparing bytes. Runs in O(size()).
 
 **Parameters**
 - `rhs` — the String to compare with
@@ -249,7 +210,7 @@ String +=(String rhs)
 
 Appends `rhs` in place, like `append`, and returns this same String,
 not a copy. `s += t` modifies the object that every reference to `s`
-shares, and increments `Version`.
+shares, and invalidates running iterators.
 
 **Parameters**
 - `rhs` — the String to append
@@ -269,7 +230,7 @@ shares, and increments `Version`.
 ulong size()
 ```
 
-Returns the number of bytes of UTF-8 (`Size`), not counting the NUL
+Returns the number of bytes of UTF-8, not counting the NUL
 terminator. O(1).
 
 **Returns**
@@ -309,7 +270,7 @@ panic.
 bool empty()
 ```
 
-Returns whether the String has no code points (`Length` is 0). O(1).
+Returns whether the String has no code points. O(1).
 
 **Returns**
 - true when `length()` is 0
@@ -320,7 +281,7 @@ Returns whether the String has no code points (`Length` is 0). O(1).
 __ptr<char> c_str()
 ```
 
-Returns the String's buffer as a NUL-terminated C string (`Data`).
+Returns the String's buffer as a NUL-terminated C string.
 
 The pointer is owned by the String. It is valid until the String is
 destroyed or `append`, `+=`, or `grow` reallocates it. It is `__null`
@@ -337,8 +298,7 @@ String clone()
 ```
 
 Returns a new String with the same content and its own buffer, so
-later changes to either String do not affect the other. The copy's
-`Version` starts at 0. Runs in O(Size).
+later changes to either String do not affect the other. Runs in O(size()).
 
 **Returns**
 - an independent copy of this String
@@ -356,7 +316,7 @@ The offset counts bytes, not code points. To use it with `s[i]` or
 `substr`, convert it with `String.length_of(s.c_str(), offset)`.
 An empty `needle` is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(Size * needle.Size).
+valid UTF-8. Runs in O(size() * needle.size()).
 
 **Parameters**
 - `needle` — the text to search for
@@ -379,7 +339,7 @@ bool contains(String needle)
 
 Returns whether `needle` occurs in this String (`find(needle) >= 0`).
 Because of that, an empty String contains nothing, not even `""`.
-Runs in O(Size * needle.Size).
+Runs in O(size() * needle.size()).
 
 **Parameters**
 - `needle` — the text to search for
@@ -394,7 +354,7 @@ bool starts_with(String prefix)
 ```
 
 Returns whether this String begins with the bytes of `prefix`. An
-empty `prefix` always matches. Runs in O(prefix.Size).
+empty `prefix` always matches. Runs in O(prefix.size()).
 
 **Parameters**
 - `prefix` — the text to test for
@@ -409,7 +369,7 @@ bool ends_with(String suffix)
 ```
 
 Returns whether this String ends with the bytes of `suffix`. An empty
-`suffix` always matches. Runs in O(suffix.Size).
+`suffix` always matches. Runs in O(suffix.size()).
 
 **Parameters**
 - `suffix` — the text to test for
@@ -427,7 +387,7 @@ Returns a new String of up to `count` code points starting at
 code-point index `start`. Both arguments count code points, not bytes.
 
 `count` is clamped to the code points that remain. When `start` is at
-or past `length()`, the result is an empty String. Runs in O(Size).
+or past `length()`, the result is an empty String. Runs in O(size()).
 
 **Parameters**
 - `start` — the code-point index of the first code point to copy
@@ -451,7 +411,7 @@ bool !=(String rhs)
 ```
 
 Returns whether this String and `rhs` differ in content, the negation
-of `==`. Runs in O(Size).
+of `==`. Runs in O(size()).
 
 **Parameters**
 - `rhs` — the String to compare with
@@ -466,7 +426,7 @@ String +(String rhs)
 ```
 
 Returns a new String that holds this String followed by `rhs`. Neither
-operand is modified. Runs in O(Size + rhs.Size).
+operand is modified. Runs in O(size() + rhs.size()).
 
 **Parameters**
 - `rhs` — the String to append to the copy
@@ -489,10 +449,9 @@ An `Iterator<String>` over a String's code points, returned by
 `String.iterate()` and used by `for (var c in s)`.
 
 Call `next()` to advance, then `current()` for the code point it moved
-to. The iterator records the String's `Version` when it is created, and
-both methods panic if the String has been modified since. Create it with
-`String.iterate()`: a default-constructed `StringIterator()` has a null
-`Source`.
+to. Both methods panic if the String has been modified since the
+iterator was created. Create it with `String.iterate()`: a
+default-constructed `StringIterator()` has no String to walk.
 
 **Example**
 ```pepper
@@ -501,49 +460,6 @@ both methods panic if the String has been modified since. Create it with
         print(it.current());   # "a", then "b"
     }
 ```
-
-### Fields
-
-#### Source
-
-```pepper
-String Source
-```
-
-The String being iterated. The iterator holds a reference to it.
-
-#### Offset
-
-```pepper
-ulong Offset
-```
-
-The byte offset in `Source` of the current code point.
-
-#### NextOffset
-
-```pepper
-ulong NextOffset
-```
-
-The byte offset in `Source` of the code point after the current one,
-or `Source.Size` at the end.
-
-#### Version
-
-```pepper
-ulong Version
-```
-
-`Source.Version` when iteration began; a mismatch means modification.
-
-#### Started
-
-```pepper
-bool Started
-```
-
-Whether `next()` has been called at least once.
 
 ### Methods
 
@@ -563,7 +479,7 @@ bytes, as one final "code point".
 - true when positioned on a code point, false at the end
 
 **Panics**
-- if `Source` was modified (its `Version` changed) since the iterator was created
+- if the String was modified since the iterator was created
 
 #### current
 
@@ -578,6 +494,6 @@ a new one-code-point String.
 - a new String that holds the current code point
 
 **Panics**
-- if `Source` was modified since the iterator was created
+- if the String was modified since the iterator was created
 - if `next()` has not been called yet
 - if `next()` has returned false (the iterator is past the end)

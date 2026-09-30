@@ -76,17 +76,17 @@ export _pep_free(p: __ptr<void>) {
     }
 }
 
-export _pep_realloc(p: __ptr<void>, prevSize: ulong, newSize: ulong): __ptr<void> {
+export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
     # C realloc preserves contents up to min(prev,new); net-zero on the
     # counter. The extension region is uninitialized — zero it so fresh
-    var np = realloc(p, newSize);
+    var np = realloc(p, new_size);
     if (np != __null) {
         # realloc(null, n) is a fresh allocation; the counter must see it.
-        if (p == __null && newSize > 0) {
+        if (p == __null && new_size > 0) {
             __atomic_fetch_add<long>(_pep_live_allocs_slot, 1);
         }
-        if (newSize > prevSize) {
-            memset(np + prevSize, 0, newSize - prevSize);
+        if (new_size > prev_size) {
+            memset(np + prev_size, 0, new_size - prev_size);
         }
     }
     return np;
@@ -385,21 +385,21 @@ _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     }
     return true;
 }
-export _pep_utf8_find(haystack: __ptr<void>, haystackSize: ulong, needle: __ptr<void>, needleSize: ulong): long {
-    if (haystack == __null || haystackSize == 0) { return -1; }
-    if (needleSize == 0) { return 0; }
+export _pep_utf8_find(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): long {
+    if (haystack == __null || haystack_size == 0) { return -1; }
+    if (needle_size == 0) { return 0; }
     if (needle == __null) { return -1; }
     # Both spans must be valid UTF-8 (the Rust original returns -1 otherwise).
-    if (!_pep_utf8_valid(haystack, haystackSize)) { return -1; }
-    if (!_pep_utf8_valid(needle, needleSize)) { return -1; }
+    if (!_pep_utf8_valid(haystack, haystack_size)) { return -1; }
+    if (!_pep_utf8_valid(needle, needle_size)) { return -1; }
     var i = 0;
-    while (i + needleSize <= haystackSize) {
+    while (i + needle_size <= haystack_size) {
         var j = 0;
-        while (j < needleSize) {
+        while (j < needle_size) {
             if (haystack[i + j] != needle[j]) { break; }
             j = j + 1;
         }
-        if (j == needleSize) { return i; }
+        if (j == needle_size) { return i; }
         i = i + 1;
     }
     return -1;

@@ -339,7 +339,7 @@ export struct File {
         if ((options.Create || options.CreateNew || options.Truncate) && !writes) {
             return IoResult<File>.err(IoError(_io_sys_code_invalid_input(), "create and truncate need write or append"));
         }
-        if (path.Value.Size == 0) {
+        if (path.Value.size() == 0) {
             return IoResult<File>.err(IoError(_io_sys_code_not_found(), "empty path"));
         }
         var h = _io_sys_open(path, options);
@@ -459,10 +459,10 @@ export struct File {
         if (max == 0) {
             return IoResult<ulong>.ok(0);
         }
-        buf.reserve(buf.Size + max);
-        var r = _io_sys_read(Handle, buf.Data + buf.Size, max);
+        buf.reserve(buf._size + max);
+        var r = _io_sys_read(Handle, buf._data + buf._size, max);
         if (r.is_ok()) {
-            buf.Size = buf.Size + r.Value;
+            buf._size = buf._size + r.Value;
         }
         return r;
     }
@@ -504,11 +504,11 @@ export struct File {
             return IoResult<String>.err(r.Error);
         }
         var bytes = r.Value;
-        var p = bytes.Data as __ptr<char>;
-        if (!_io_utf8_valid(p, bytes.Size)) {
+        var p = bytes._data as __ptr<char>;
+        if (!_io_utf8_valid(p, bytes._size)) {
             return IoResult<String>.err(IoError(_io_sys_code_invalid_input(), "stream did not contain valid UTF-8"));
         }
-        return IoResult<String>.ok(_io_string_from(p, bytes.Size));
+        return IoResult<String>.ok(_io_string_from(p, bytes._size));
     }
 
     ## Writes bytes from `data` at the current position (or at the end, in
@@ -528,7 +528,7 @@ export struct File {
         if (c.is_err()) {
             return IoResult<ulong>.err(c.Error);
         }
-        return _io_sys_write(Handle, data.Data, data.Size);
+        return _io_sys_write(Handle, data._data, data._size);
     }
 
     ## Writes all of `data`, repeating the write until every byte is
@@ -546,7 +546,7 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(Handle, data.Data, data.Size);
+        return _io_write_all_raw(Handle, data._data, data._size);
     }
 
     ## Writes all of the UTF-8 bytes of `s`, as `write_all` does. No newline
@@ -565,7 +565,7 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(Handle, s.Data as __ptr<u8>, s.Size);
+        return _io_write_all_raw(Handle, s.c_str() as __ptr<u8>, s.size());
     }
 
     # No SeekFrom enum: one method per origin. Each returns the new offset
