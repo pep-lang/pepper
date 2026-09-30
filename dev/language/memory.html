@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -482,8 +482,9 @@ such a struct’s fields to be <code>const</code> and thread-safe. See
 such as <code>shared () =&gt; void</code> has atomic counts.</p>
 <h2 id="copying-a-value-with-copy"><a class="header" href="#copying-a-value-with-copy">Copying a value with copy</a></h2>
 <p><code>copy(value)</code> makes a copy of a value that shares no object that is not
-thread-safe with the original, so the copy can go to another thread. A
-<a href="threads.html#channels">channel</a> copies every value it is sent this way.</p>
+thread-safe with the original, so the copy can go to another thread: pass
+<code>copy(x)</code> to a <a href="threads.html#channels">channel</a> to send a value you keep
+using.</p>
 <pre><code class="language-pepper">var names = Array&lt;String&gt;();
 names.append("ada");
 var copied = copy(names);
@@ -534,6 +535,47 @@ note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
 handle, so the error says to send its path instead. A plain function value
 cannot be copied, because it may capture anything; declare it <code>shared</code>. A
 trait value cannot be copied yet.</p>
+<h2 id="handing-a-reference-over-with-move"><a class="header" href="#handing-a-reference-over-with-move">Handing a reference over with move</a></h2>
+<p><code>move(x)</code> gives up <code>x</code>’s reference: the call returns the same object, and
+<code>x</code> is left null. Nothing is copied and no count changes. It is how a value
+built in a local variable goes to a <a href="threads.html#channels">channel</a>, a
+<a href="threads.html#mutexes-and-conditions">Mutex</a> or another <code>[Move]</code> parameter,
+which takes a new value, without the cost of <code>copy(x)</code>:</p>
+<pre><code class="language-pepper">var lines = Array&lt;String&gt;();
+lines.append("first");
+var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));   # lines is now null
+</code></pre>
+<p><code>move</code> is an ordinary function from the prelude (<code>runtime/copy.pep</code>), but
+the compiler checks every call:</p>
+<ul>
+<li>
+<p>Only a local variable can be moved (<code>move(h.s)</code> is an error), and only
+when it holds the one reference to a new value: nothing else refers to it
+or to anything it reaches. A parameter can be moved only when it is
+<code>[Move]</code>, since the caller handed its value over.</p>
+<pre><code class="language-text">main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value
+    8 |     names.replace(move(a));
+      |                        ^
+note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
+</code></pre>
+</li>
+<li>
+<p>A moved variable cannot be read again until it is assigned a new value,
+including on the next pass through a loop:</p>
+<pre><code class="language-text">main.pep:8:12: error: 'a' is used after its value was moved
+    8 |     return a.count();
+      |            ^
+main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
+    7 |     names.replace(move(a));
+      |                   ^~~~
+</code></pre>
+</li>
+</ul>
+<p>The runtime also moves values out of raw memory (<code>move(buffer[head])</code>), which
+is a promise the compiler cannot check: only runtime files may do it. The
+parameter of <code>move</code> is marked <code>[MoveSource]</code>, which is also only allowed in
+the runtime, so a hand-off always shows at the call as <code>move(x)</code>; a function
+of your own that takes over its argument uses <code>[Move]</code>.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -546,6 +588,7 @@ trait value cannot be copied yet.</p>
 <tr><td><code>f(a)</code></td><td>The parameter takes a reference for the duration of the call.</td></tr>
 <tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
+<tr><td><code>f(move(a))</code></td><td>No change: <code>a</code>’s reference goes to the call, and <code>a</code> is left null.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
 <tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
 <tr><td><code>var c = copy(a);</code></td><td><code>c</code> refers to new objects; <code>a</code>’s count does not change.</td></tr>

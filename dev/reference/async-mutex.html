@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -238,12 +238,12 @@ program, so a Mutex is never left “poisoned”.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
-<pre><code class="language-pepper">construct([Sending] T value)
+<pre><code class="language-pepper">construct([Move] T value)
 </code></pre>
 <p>Creates an unlocked Mutex that owns <code>value</code>.</p>
-<p><code>value</code> must be a new value, such as a constructor call or <code>copy(x)</code>:
-nothing outside the Mutex may reference it. The Mutex stores a copy of
-it (<code>copy</code>), so the argument’s own references never reach the Mutex.</p>
+<p><code>value</code> must be a new value, such as a constructor call, <code>copy(x)</code> or
+<code>move(x)</code>: nothing outside the Mutex may reference it. The caller hands
+its reference over, so nothing is copied.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
@@ -297,12 +297,12 @@ calling thread already holding the lock counts as busy.</p>
     }
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] T replace([Sending] T value)
+<pre><code class="language-pepper">T replace([Move] T value)
 </code></pre>
 <p>Replaces the whole value and returns the one the Mutex held, which the
 caller then owns outright: nothing else references it any more.</p>
 <p>Waits for the lock like <code>lock()</code>. <code>value</code> must be a new value, as for
-the constructor; the Mutex stores a copy of it.</p>
+the constructor, and is handed over without a copy.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the new value; a new value, which the compiler checks</li>

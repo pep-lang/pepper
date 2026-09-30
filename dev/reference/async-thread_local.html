@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -247,7 +247,7 @@ thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var va
 <li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
 <h4 id="set"><a class="header" href="#set">set</a></h4>
-<pre><code class="language-pepper">void set([Sending] T value)
+<pre><code class="language-pepper">void set([Move] T value)
 </code></pre>
 <p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
 struct <code>T</code>, releasing) the one it held. Other threads’ values are not

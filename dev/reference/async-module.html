@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -199,9 +199,10 @@
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
 <code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. Any
-other value crosses threads as a copy (<code>Channel.send</code> copies what it sends
-with <code>copy</code>) or stays inside a <code>Mutex</code>, whose <code>with</code> blocks the compiler
-keeps apart from the rest of the program. <code>Lazy&lt;T&gt;</code> holds thread-safe
+other value crosses threads only as a new value that nothing else
+references (<code>Channel.send(move(x))</code>, or <code>send(copy(x))</code>), or stays inside
+a <code>Mutex</code>, whose <code>with</code> blocks the compiler keeps apart from the rest of
+the program. <code>Lazy&lt;T&gt;</code> holds thread-safe
 values only. See the language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;

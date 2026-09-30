@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-267e834f.js";
+            window.path_to_searchindex_js = "searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0595f8ea.js"></script>
@@ -249,7 +249,8 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 trait members can be <a href="#overloading-1">overloaded</a>.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
-closure captures included. A channel copies what it is sent, and a
+closure captures included. A channel hands over what it is sent without
+copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), and a
 <code>Mutex</code> holds any struct, with the compiler keeping each locked value apart
 from the rest of the program (see
 <a href="#what-a-lock-body-may-do">threads</a>). A trait value
@@ -4438,8 +4439,9 @@ such a struct’s fields to be <code>const</code> and thread-safe. See
 such as <code>shared () =&gt; void</code> has atomic counts.</p>
 <h2 id="copying-a-value-with-copy"><a class="header" href="#copying-a-value-with-copy">Copying a value with copy</a></h2>
 <p><code>copy(value)</code> makes a copy of a value that shares no object that is not
-thread-safe with the original, so the copy can go to another thread. A
-<a href="#channels">channel</a> copies every value it is sent this way.</p>
+thread-safe with the original, so the copy can go to another thread: pass
+<code>copy(x)</code> to a <a href="#channels">channel</a> to send a value you keep
+using.</p>
 <pre><code class="language-pepper">var names = Array&lt;String&gt;();
 names.append("ada");
 var copied = copy(names);
@@ -4490,6 +4492,47 @@ note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
 handle, so the error says to send its path instead. A plain function value
 cannot be copied, because it may capture anything; declare it <code>shared</code>. A
 trait value cannot be copied yet.</p>
+<h2 id="handing-a-reference-over-with-move"><a class="header" href="#handing-a-reference-over-with-move">Handing a reference over with move</a></h2>
+<p><code>move(x)</code> gives up <code>x</code>’s reference: the call returns the same object, and
+<code>x</code> is left null. Nothing is copied and no count changes. It is how a value
+built in a local variable goes to a <a href="#channels">channel</a>, a
+<a href="#mutexes-and-conditions">Mutex</a> or another <code>[Move]</code> parameter,
+which takes a new value, without the cost of <code>copy(x)</code>:</p>
+<pre><code class="language-pepper">var lines = Array&lt;String&gt;();
+lines.append("first");
+var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));   # lines is now null
+</code></pre>
+<p><code>move</code> is an ordinary function from the prelude (<code>runtime/copy.pep</code>), but
+the compiler checks every call:</p>
+<ul>
+<li>
+<p>Only a local variable can be moved (<code>move(h.s)</code> is an error), and only
+when it holds the one reference to a new value: nothing else refers to it
+or to anything it reaches. A parameter can be moved only when it is
+<code>[Move]</code>, since the caller handed its value over.</p>
+<pre><code class="language-text">main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value
+    8 |     names.replace(move(a));
+      |                        ^
+note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
+</code></pre>
+</li>
+<li>
+<p>A moved variable cannot be read again until it is assigned a new value,
+including on the next pass through a loop:</p>
+<pre><code class="language-text">main.pep:8:12: error: 'a' is used after its value was moved
+    8 |     return a.count();
+      |            ^
+main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
+    7 |     names.replace(move(a));
+      |                   ^~~~
+</code></pre>
+</li>
+</ul>
+<p>The runtime also moves values out of raw memory (<code>move(buffer[head])</code>), which
+is a promise the compiler cannot check: only runtime files may do it. The
+parameter of <code>move</code> is marked <code>[MoveSource]</code>, which is also only allowed in
+the runtime, so a hand-off always shows at the call as <code>move(x)</code>; a function
+of your own that takes over its argument uses <code>[Move]</code>.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -4502,6 +4545,7 @@ trait value cannot be copied yet.</p>
 <tr><td><code>f(a)</code></td><td>The parameter takes a reference for the duration of the call.</td></tr>
 <tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
+<tr><td><code>f(move(a))</code></td><td>No change: <code>a</code>’s reference goes to the call, and <code>a</code> is left null.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
 <tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
 <tr><td><code>var c = copy(a);</code></td><td><code>c</code> refers to new objects; <code>a</code>’s count does not change.</td></tr>
@@ -7021,8 +7065,8 @@ Mutex’s (see <a href="#what-a-lock-body-may-do">What a lock body may do</a>):<
 <li><code>with (var value = local.enter()) { ... }</code> binds this thread’s value; the
 <code>else</code> block runs when the thread has none;</li>
 <li><code>get()</code> is a compile error;</li>
-<li><code>set(value)</code> takes a new value: a constructor call, a string literal, or
-<code>copy(x)</code>.</li>
+<li><code>set(value)</code> takes a new value: a constructor call, a string literal,
+<code>copy(x)</code>, or <code>move(x)</code>.</li>
 </ul>
 <p>Otherwise a function called while a Mutex is locked could keep part of the
 locked value in a thread-local, and a later <code>get()</code> would hand it out after
@@ -7239,15 +7283,19 @@ Several threads can loop over one channel; each value goes to one of them.</li>
 <li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
 threads may change right after.</li>
 </ul>
-<p><code>send</code> <a href="#copying-a-value-with-copy">copies</a> each value with
-<code>copy</code>, so the receiver gets a value that nothing on the sending thread
-references. A <code>String</code>, an <code>Array</code> or a struct of them can be sent, and
-changing the original after <code>send</code> does not change what was sent:</p>
+<p><code>send</code> and <code>try_send</code> take a <strong>new</strong> value, which nothing on the sending
+thread references, and hand it to the receiver without copying it: a
+constructor call, a literal, a call that returns a fresh value,
+<a href="#handing-a-reference-over-with-move"><code>move(x)</code></a> (a variable that
+holds the only reference) or <a href="#copying-a-value-with-copy"><code>copy(x)</code></a>
+(when the sender keeps using <code>x</code>). A <code>String</code>, an <code>Array</code> or a struct of them
+can be sent, and changing the original after sending a copy does not change
+what was sent:</p>
 <pre><code class="language-pepper">import async;
 
 # A plain struct: no destructor and no raw pointer, so `copy` copies it field
-# by field. Its Strings and Array are not thread-safe, but a Channel copies
-# every value it is sent.
+# by field. Its Strings and Array are not thread-safe, but a Channel takes
+# only new values, and a copy is one.
 struct Order {
     String customer;
     Array&lt;String&gt; items;
@@ -7287,31 +7335,37 @@ main(): int {
     a.next = __null;
     pair.next = __null;
 
-    # send() copies, so the order can change after it is sent.
+    # send() takes a new value: send a copy to keep changing the order.
     var worker = async.Thread.spawn(count_letters);
     var order = Order("grace");
     order.items.append("coffee");
-    orders.send(order);
+    orders.send(copy(order));
     order.items.append("biscuits");
+    # Or hand the value itself over with `move`; `last` is null afterwards.
+    var last = Order("hopper");
+    last.items.append("tea");
+    orders.send(move(last));
     orders.close();
     worker.join();
-    assert(letters.load() == 6, "the worker saw only what was sent");
+    assert(letters.load() == 9, "the worker saw only what was sent");
     return 0;
 }
 </code></pre>
-<p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value
-such as a <code>ThreadBody</code>) is not copied but passed by reference, which makes a
-channel of <code>ThreadBody</code> values a work queue. A type that <code>copy</code> cannot copy
-is an error where the <code>Channel</code> is named:</p>
-<pre><code class="language-text">main.pep:9:17: error: cannot copy 'Array&lt;Log&gt;' because it contains 'File', which cannot be copied
-    9 |     var lines = async.Channel&lt;Array&lt;Log&gt;&gt;();
-      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~
-note: 'Array&lt;Log&gt;' copies its values of type 'Log'
-main.pep:5:5: note: 'Log' reaches it through field 'out'
-    5 |     io.File out;
-      |     ^~~~~~~
-runtime/io/file.pep:244:15: note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread
+<p>Sending a variable that something else may still reference is an error, and
+the editor offers both fixes:</p>
+<pre><code class="language-text">main.pep:7:16: error: 'line' is not a new value, but parameter 'value' takes a value that nothing else references
+    7 |     lines.send(line);
+      |                ^~~~
+      |                move(line)
+runtime/async/channel.pep:151:27: note: 'value' is declared [Move] here
+  151 |     bool send([Move] T value) {
+      |                           ^~~~~
+note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'
 </code></pre>
+<p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value
+such as a <code>ThreadBody</code>) passes freely, which makes a channel of <code>ThreadBody</code>
+values a work queue. Since nothing is copied, a channel can carry any type,
+trait values and values that cannot be copied (an <code>io.File</code>) included.</p>
 <p>The <a href="#asyncchannelpep">Channel reference</a> documents every
 method.</p>
 <h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
@@ -7394,12 +7448,39 @@ thread-safe is kept apart from the rest of the program by the compiler; see
 <a href="#what-a-lock-body-may-do">What a lock body may do</a>.</p>
 <ul>
 <li><code>Mutex&lt;T&gt;(value)</code> and <code>replace(value)</code> take a <strong>new</strong> value: a constructor
-call, a string literal, a call that returns a fresh value, or <code>copy(x)</code>,
-never a variable something else still references. The Mutex stores a copy
-of it.</li>
+call, a string literal, a call that returns a fresh value, <code>copy(x)</code>, or
+<code>move(x)</code>, never a variable something else still references. The caller
+hands its reference over, so nothing is copied.</li>
 <li><code>replace(value)</code> swaps the whole value under the lock and returns the old
 one, which the caller then owns outright.</li>
 </ul>
+<p>A value built in a local variable goes in with
+<a href="#handing-a-reference-over-with-move"><code>move</code></a>, which hands over the
+variable’s reference instead of copying the value:</p>
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    # Build the list here, then hand it to the Mutex: `move` gives up
+    # `lines`' reference, so nothing is copied and `lines` is empty after.
+    var lines = Array&lt;String&gt;();
+    lines.append("first");
+    var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));
+
+    var line = "second";
+    with (var list = log.lock()) {
+        # `line` holds the only reference to its String, so it can move in.
+        list.append(move(line));
+    }
+
+    # Swap in a new list; the old one comes back without a copy either.
+    var next = Array&lt;String&gt;();
+    next.append("third");
+    var old = log.replace(move(next));
+    print(old.count());          # 2
+    print(old[1]);               # second
+    return 0;
+}
+</code></pre>
 <p>A <code>Condition&lt;T&gt;</code> lets a thread that holds a Mutex sleep until another thread
 changes the value. Get one with <code>mutex.condition()</code>:</p>
 <pre><code class="language-pepper">import async;
@@ -7551,7 +7632,8 @@ two must never meet:</p>
 <p><strong>Moving in.</strong> A call, constructor or assignment that would link an
 outside value with the locked one is an error. Pass a new value instead:
 <code>copy(line)</code>, a literal, or the result of a call that returns a fresh
-value.</p>
+value. A variable that holds the only reference to its value can hand it
+over with <code>move(line)</code>.</p>
 <pre><code class="language-text">main.pep:8:21: error: 'line' cannot move into the value locked by 'names'
     8 |         list.append(line);
       |                     ^~~~
@@ -7589,10 +7671,10 @@ arguments. A result that shares nothing, such as that of <code>+</code>, <code>s
 The language server shows “Returns a fresh value” when hovering over such a
 function. A call through a function value, a value an <code>extern</code> function
 hands back, and a value read through raw memory that a <code>[Shared]</code> struct
-holds are never fresh: something else may reference them. The runtime marks
-the few functions that hand out such a value that nothing else references
-<code>[ReturnsOwned]</code>, a promise the compiler cannot check and allows only in the
-runtime: a channel’s <code>receive()</code> (the copy <code>send</code> made) and a Mutex’s
+holds are never fresh: something else may reference them. The runtime takes
+the few values it hands out that nothing else references out of raw memory
+with <code>move(p[i])</code>, a promise the compiler cannot check and allows only in the
+runtime: a channel’s <code>receive()</code> (the value <code>send</code> handed over) and a Mutex’s
 <code>replace()</code>.</p>
 <p>A function that returns a <a href="#tuples-and-multiple-return-values">tuple</a> has one such fact per element:
 after <code>var (fresh, same) = split(line);</code>, <code>fresh</code> may move into a locked value
@@ -7605,10 +7687,24 @@ too:</p>
 <li><code>[Isolated]</code> on a struct makes it a guard: it can only be the scope of a
 <code>with</code> header, and the block is checked as above. <code>MutexGuard&lt;T&gt;</code> and
 <code>ThreadLocalGuard&lt;T&gt;</code> are <code>[Isolated]</code>.</li>
-<li><code>[Sending]</code> on a parameter (<code>construct([Sending] T value)</code>) requires a new
+<li><code>[Move]</code> on a parameter (<code>construct([Move] T value)</code>) requires a new
 value for it at every call: a constructor call, a literal, a fresh result,
-<code>copy(x)</code>, or any thread-safe value.</li>
+<code>copy(x)</code>, <code>move(x)</code>, or any thread-safe value. The caller hands its
+reference over, so the function receives it without a count step.</li>
 </ul>
+<h3 id="checking-confinement-at-run-time"><a class="header" href="#checking-confinement-at-run-time">Checking confinement at run time</a></h3>
+<p>Raw memory (<code>__ptr&lt;T&gt;</code>) and <code>extern</code> code are promises the compiler cannot
+check, so a program that uses them can still keep a reference into a locked
+value. Set the environment variable <code>PEP_CHECK_SYNC</code> when running a program
+to check at every unlock that nothing outside the locked value refers into
+it:</p>
+<pre><code class="language-text">$ PEP_CHECK_SYNC=1 ./main
+PEP_CHECK_SYNC: an object in the value locked by a 'Mutex&lt;Box&gt;' is still referenced from outside it
+</code></pre>
+<p>The check copies the locked value to count the references inside it, so it
+costs time and memory in proportion to the value’s size at each unlock; it
+is off unless the variable is set. It checks a <code>Mutex&lt;T&gt;</code> whose <code>T</code> is not
+thread-safe and can be <a href="#copying-a-value-with-copy">copied</a>.</p>
 <h2 id="once-and-lazy"><a class="header" href="#once-and-lazy">Once and Lazy</a></h2>
 <p><code>Once</code> runs a function exactly once, however many threads ask, and <code>Lazy&lt;T&gt;</code>
 builds a value the first time a thread asks for it:</p>
@@ -7678,11 +7774,10 @@ must be thread-safe, since every thread gets the same value.</li>
 <li>A value received from a channel moves into a locked value directly
 (<code>list.append(jobs.receive().value())</code>), but not through a variable
 declared outside the block: such a variable is an outside value, whatever
-it holds, so it needs <code>copy</code>.</li>
-<li><code>Mutex&lt;T&gt;(value)</code> and <code>replace(value)</code> copy the new value; passing it
-without a copy needs a later compiler change.</li>
-<li><code>copy</code> cannot copy a trait value yet, so a <code>Channel</code> of a trait type, or of
-an <code>Array</code> of one, is an error.</li>
+it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the only reference
+(<code>list.append(move(job))</code>).</li>
+<li><code>copy</code> cannot copy a trait value yet, so sending a trait value that the
+sender keeps using is an error; send <code>move(x)</code> or a new value instead.</li>
 <li>There is no reader-writer lock, no <code>select</code> over several channels, and no
 barrier or semaphore. A Mutex is not re-entrant.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
@@ -8654,6 +8749,8 @@ the code it replaces:</p>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
 <tr><td><code>io.File.write_string(String)</code></td><td><code>io.File.write_all(String)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
+<tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
+<tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -15026,9 +15123,10 @@ chose when it was bound to port 0.</p>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
 <code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. Any
-other value crosses threads as a copy (<code>Channel.send</code> copies what it sends
-with <code>copy</code>) or stays inside a <code>Mutex</code>, whose <code>with</code> blocks the compiler
-keeps apart from the rest of the program. <code>Lazy&lt;T&gt;</code> holds thread-safe
+other value crosses threads only as a new value that nothing else
+references (<code>Channel.send(move(x))</code>, or <code>send(copy(x))</code>), or stays inside
+a <code>Mutex</code>, whose <code>with</code> blocks the compiler keeps apart from the rest of
+the program. <code>Lazy&lt;T&gt;</code> holds thread-safe
 values only. See the language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
@@ -15294,7 +15392,7 @@ thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var va
 <li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
 <h4 id="set"><a class="header" href="#set">set</a></h4>
-<pre><code class="language-pepper">void set([Sending] T value)
+<pre><code class="language-pepper">void set([Move] T value)
 </code></pre>
 <p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
 struct <code>T</code>, releasing) the one it held. Other threads’ values are not
@@ -15442,14 +15540,13 @@ is full; <code>Channel&lt;T&gt;(0)</code>, the default, is unbounded and <code>s
 left and then get an error. Only <code>close()</code> closes a channel; dropping it
 or the threads that use it does not. <code>for (var v in channel)</code> receives
 until the channel is closed and empty.</p>
-<p><code>send</code> copies each value with <code>copy</code>, so the receiver gets a value that
-nothing on the sending thread references: a <code>String</code> or an <code>Array</code> can be
-sent, and changing the original afterwards does not affect what was sent.
-A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-value such as a <code>ThreadBody</code>) is not copied but passed by reference. A
-type that <code>copy</code> cannot copy (a struct with a destructor or a raw pointer
-field that does not implement <code>Copyable&lt;T&gt;</code>, a plain function value, a
-trait value) is a compile error where the <code>Channel</code> is named.</p>
+<p><code>send</code> takes a new value, which nothing on the sending thread references,
+and hands it to the receiver without copying it: a constructor call, a
+literal, a call that returns a fresh value, <code>move(x)</code> (a variable that
+holds the only reference) or <code>copy(x)</code> (a copy, when the sender keeps
+using <code>x</code>). Sending a variable that something else still references is a
+compile error. A thread-safe value (a number, a <code>[Shared]</code> struct, a
+<code>shared</code> function value such as a <code>ThreadBody</code>) passes freely.</p>
 <p>A Channel is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads.</p>
 <p><strong>Type parameters</strong></p>
@@ -15497,41 +15594,42 @@ threads.</p>
 </code></pre>
 <h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
-<pre><code class="language-pepper">bool send(T value)
+<pre><code class="language-pepper">bool send([Move] T value)
 </code></pre>
-<p>Queues a copy of <code>value</code>, first waiting while a bounded channel is
-full.</p>
-<p>The copy is made with <code>copy</code> before waiting, so the value can be
-changed or dropped as soon as <code>send</code> returns; a thread-safe value is
-queued itself.</p>
+<p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
+<p><code>value</code> must be a new value: nothing else may reference it. The caller
+hands its reference over and the value itself is queued, with no copy.
+Pass <code>move(x)</code> to send a variable’s value, or <code>copy(x)</code> to keep using
+<code>x</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>value</code> — the value to send</li>
+<li><code>value</code> — the value to send; a new value, which the compiler checks</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the copy is dropped)</li>
+<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var line = "hello";
-    lines.send(line);
+    lines.send(copy(line));
     line.append(" again");   # the receiver still gets "hello"
+    lines.send(move(line));   # line is null now
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
-<pre><code class="language-pepper">bool try_send(T value)
+<pre><code class="language-pepper">bool try_send([Move] T value)
 </code></pre>
-<p>Queues a copy of <code>value</code> only if there is room right now, without
-waiting. The copy is made even when it is not queued.</p>
+<p>Queues <code>value</code> only if there is room right now, without waiting. The
+value is dropped when it is not queued.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>value</code> — the value to send</li>
+<li><code>value</code> — the value to send; a new value, as for <code>send</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
 <h4 id="receive-1"><a class="header" href="#receive-1">receive</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive()
+<pre><code class="language-pepper">Result&lt;T&gt; receive()
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
 <p><strong>Returns</strong></p>
@@ -15545,7 +15643,7 @@ waiting. The copy is made even when it is not queued.</p>
     }
 </code></pre>
 <h4 id="try_receive"><a class="header" href="#try_receive">try_receive</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; try_receive()
+<pre><code class="language-pepper">Result&lt;T&gt; try_receive()
 </code></pre>
 <p>Takes the next value if one is waiting, without waiting.</p>
 <p><strong>Returns</strong></p>
@@ -15553,7 +15651,7 @@ waiting. The copy is made even when it is not queued.</p>
 <li>the value, or an error if none is waiting (see <code>is_closed()</code> to tell an empty channel from a closed one)</li>
 </ul>
 <h4 id="receive_for"><a class="header" href="#receive_for">receive_for</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive_for(ulong milliseconds)
+<pre><code class="language-pepper">Result&lt;T&gt; receive_for(ulong milliseconds)
 </code></pre>
 <p>Like <code>receive()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
 <p><strong>Parameters</strong></p>
@@ -15710,12 +15808,12 @@ program, so a Mutex is never left “poisoned”.</p>
 </code></pre>
 <h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
-<pre><code class="language-pepper">construct([Sending] T value)
+<pre><code class="language-pepper">construct([Move] T value)
 </code></pre>
 <p>Creates an unlocked Mutex that owns <code>value</code>.</p>
-<p><code>value</code> must be a new value, such as a constructor call or <code>copy(x)</code>:
-nothing outside the Mutex may reference it. The Mutex stores a copy of
-it (<code>copy</code>), so the argument’s own references never reach the Mutex.</p>
+<p><code>value</code> must be a new value, such as a constructor call, <code>copy(x)</code> or
+<code>move(x)</code>: nothing outside the Mutex may reference it. The caller hands
+its reference over, so nothing is copied.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
@@ -15769,12 +15867,12 @@ calling thread already holding the lock counts as busy.</p>
     }
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] T replace([Sending] T value)
+<pre><code class="language-pepper">T replace([Move] T value)
 </code></pre>
 <p>Replaces the whole value and returns the one the Mutex held, which the
 caller then owns outright: nothing else references it any more.</p>
 <p>Waits for the lock like <code>lock()</code>. <code>value</code> must be a new value, as for
-the constructor; the Mutex stores a copy of it.</p>
+the constructor, and is handed over without a copy.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the new value; a new value, which the compiler checks</li>
@@ -16152,6 +16250,34 @@ or a trait value is a compile error.</p>
     names.append("ada");
     var copied = copy(names);
     copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<h2 id="move"><a class="header" href="#move">move</a></h2>
+<pre><code class="language-pepper">move&lt;T&gt;([MoveSource] T value): T
+</code></pre>
+<p>Hands over the reference <code>value</code> holds and leaves it null, with no copy
+and no change to any count: the result is the same object.</p>
+<p><code>value</code> must be a local variable (or a <code>[Move]</code> parameter) that holds
+the only reference to its value: nothing else may refer to it or to
+anything it reaches. The compiler checks that, and that the variable is
+not used again until it is assigned a new value. Use it to pass a value
+you built to a parameter that takes a new value, such as <code>Channel.send</code>
+or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the variable to move from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value <code>value</code> held, which nothing else references</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var lines = Array&lt;String&gt;();
+    lines.append("first");
+    var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));   # lines is null now
 </code></pre>
 <h2 id="copyable"><a class="header" href="#copyable">Copyable</a></h2>
 <pre><code class="language-pepper">trait Copyable&lt;T&gt;

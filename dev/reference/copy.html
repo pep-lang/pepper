@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -222,6 +222,34 @@ or a trait value is a compile error.</p>
     names.append("ada");
     var copied = copy(names);
     copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<h2 id="move"><a class="header" href="#move">move</a></h2>
+<pre><code class="language-pepper">move&lt;T&gt;([MoveSource] T value): T
+</code></pre>
+<p>Hands over the reference <code>value</code> holds and leaves it null, with no copy
+and no change to any count: the result is the same object.</p>
+<p><code>value</code> must be a local variable (or a <code>[Move]</code> parameter) that holds
+the only reference to its value: nothing else may refer to it or to
+anything it reaches. The compiler checks that, and that the variable is
+not used again until it is assigned a new value. Use it to pass a value
+you built to a parameter that takes a new value, such as <code>Channel.send</code>
+or <code>Mutex.replace</code>, without the cost of <code>copy</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the variable to move from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value <code>value</code> held, which nothing else references</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var lines = Array&lt;String&gt;();
+    lines.append("first");
+    var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));   # lines is null now
 </code></pre>
 <h2 id="copyable"><a class="header" href="#copyable">Copyable</a></h2>
 <pre><code class="language-pepper">trait Copyable&lt;T&gt;

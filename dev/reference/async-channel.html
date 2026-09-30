@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-267e834f.js";
+            window.path_to_searchindex_js = "../searchindex-eacda77b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -198,14 +198,13 @@ is full; <code>Channel&lt;T&gt;(0)</code>, the default, is unbounded and <code>s
 left and then get an error. Only <code>close()</code> closes a channel; dropping it
 or the threads that use it does not. <code>for (var v in channel)</code> receives
 until the channel is closed and empty.</p>
-<p><code>send</code> copies each value with <code>copy</code>, so the receiver gets a value that
-nothing on the sending thread references: a <code>String</code> or an <code>Array</code> can be
-sent, and changing the original afterwards does not affect what was sent.
-A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-value such as a <code>ThreadBody</code>) is not copied but passed by reference. A
-type that <code>copy</code> cannot copy (a struct with a destructor or a raw pointer
-field that does not implement <code>Copyable&lt;T&gt;</code>, a plain function value, a
-trait value) is a compile error where the <code>Channel</code> is named.</p>
+<p><code>send</code> takes a new value, which nothing on the sending thread references,
+and hands it to the receiver without copying it: a constructor call, a
+literal, a call that returns a fresh value, <code>move(x)</code> (a variable that
+holds the only reference) or <code>copy(x)</code> (a copy, when the sender keeps
+using <code>x</code>). Sending a variable that something else still references is a
+compile error. A thread-safe value (a number, a <code>[Shared]</code> struct, a
+<code>shared</code> function value such as a <code>ThreadBody</code>) passes freely.</p>
 <p>A Channel is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads.</p>
 <p><strong>Type parameters</strong></p>
@@ -253,41 +252,42 @@ threads.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="send"><a class="header" href="#send">send</a></h4>
-<pre><code class="language-pepper">bool send(T value)
+<pre><code class="language-pepper">bool send([Move] T value)
 </code></pre>
-<p>Queues a copy of <code>value</code>, first waiting while a bounded channel is
-full.</p>
-<p>The copy is made with <code>copy</code> before waiting, so the value can be
-changed or dropped as soon as <code>send</code> returns; a thread-safe value is
-queued itself.</p>
+<p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
+<p><code>value</code> must be a new value: nothing else may reference it. The caller
+hands its reference over and the value itself is queued, with no copy.
+Pass <code>move(x)</code> to send a variable’s value, or <code>copy(x)</code> to keep using
+<code>x</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>value</code> — the value to send</li>
+<li><code>value</code> — the value to send; a new value, which the compiler checks</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the copy is dropped)</li>
+<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var line = "hello";
-    lines.send(line);
+    lines.send(copy(line));
     line.append(" again");   # the receiver still gets "hello"
+    lines.send(move(line));   # line is null now
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
-<pre><code class="language-pepper">bool try_send(T value)
+<pre><code class="language-pepper">bool try_send([Move] T value)
 </code></pre>
-<p>Queues a copy of <code>value</code> only if there is room right now, without
-waiting. The copy is made even when it is not queued.</p>
+<p>Queues <code>value</code> only if there is room right now, without waiting. The
+value is dropped when it is not queued.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>value</code> — the value to send</li>
+<li><code>value</code> — the value to send; a new value, as for <code>send</code></li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
 <h4 id="receive"><a class="header" href="#receive">receive</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive()
+<pre><code class="language-pepper">Result&lt;T&gt; receive()
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
 <p><strong>Returns</strong></p>
@@ -301,7 +301,7 @@ waiting. The copy is made even when it is not queued.</p>
     }
 </code></pre>
 <h4 id="try_receive"><a class="header" href="#try_receive">try_receive</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; try_receive()
+<pre><code class="language-pepper">Result&lt;T&gt; try_receive()
 </code></pre>
 <p>Takes the next value if one is waiting, without waiting.</p>
 <p><strong>Returns</strong></p>
@@ -309,7 +309,7 @@ waiting. The copy is made even when it is not queued.</p>
 <li>the value, or an error if none is waiting (see <code>is_closed()</code> to tell an empty channel from a closed one)</li>
 </ul>
 <h4 id="receive_for"><a class="header" href="#receive_for">receive_for</a></h4>
-<pre><code class="language-pepper">[ReturnsOwned] Result&lt;T&gt; receive_for(ulong milliseconds)
+<pre><code class="language-pepper">Result&lt;T&gt; receive_for(ulong milliseconds)
 </code></pre>
 <p>Like <code>receive()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
 <p><strong>Parameters</strong></p>
