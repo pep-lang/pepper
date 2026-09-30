@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-634300b2.js";
+            window.path_to_searchindex_js = "../searchindex-182b2fa3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-24c54ee6.js"></script>
@@ -453,10 +453,9 @@ those types wherever it is called. So each override may be declared in only
 one file (<code>override 'hash&lt;int&gt;' is also declared in b.pep</code>), and overriding
 one the runtime already provides, such as <code>hash&lt;String&gt;</code>, is also an error.
 An override must be for a generic function you can see: overriding another
-file’s private generic function reports that it is private. The exemption
-covers only overrides for primitive types and <code>String</code>: <code>hash&lt;Point&gt;</code> is a
-second generic function whose type parameter is named <code>Point</code>, private to
-its file like any other declaration.</li>
+file’s private generic function reports that it is private. An override
+may be for a struct, such as <code>hash&lt;Point&gt;</code> (see
+<a href="generics.html">Generics</a>).</li>
 <li><strong>Declarations that a <code>[Target(...)]</code> attribute drops</strong> for the platform
 being compiled (see <a href="platform-selection.html">Platform selection</a>) are never
 compiled. This is why the first <code>lib.pep</code> above can declare <code>platform_name</code>
