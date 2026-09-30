@@ -119,6 +119,12 @@ Defaults work the same way for methods and constructors. Pepper has no named
 arguments: to give a later parameter a value, you pass every parameter before
 it.
 
+## Overloading
+
+Functions of one file can share a name when their parameter lists differ,
+and each call picks the best fit for its arguments. See
+[Overloading](overloading.md).
+
 ## Generic functions
 
 A function can take type parameters in angle brackets after its name, such as

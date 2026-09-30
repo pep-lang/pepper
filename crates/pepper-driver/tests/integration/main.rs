@@ -38,6 +38,7 @@ mod loop_scope_tests;
 mod method_inference_tests;
 mod module_tests;
 mod multidim_index_tests;
+mod overload_tests;
 mod nested_array_tests;
 mod nested_hash_tests;
 mod param_default_tests;

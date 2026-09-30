@@ -20,6 +20,9 @@ fn view_of(module: &Module) -> ResolvedModuleView {
             .functions
             .iter()
             .map(|f| (f.name.clone(), f.ty.to_string()))
+            // A call in a generic base naming an overload set resolves in
+            // each specialization (see `overloads`).
+            .chain(module.overload_sets.keys().map(|set| (set.clone(), String::new())))
             .collect(),
         externs: module.externs.iter().map(|e| e.name.clone()).collect(),
         structs: module

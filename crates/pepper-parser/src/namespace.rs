@@ -5,6 +5,10 @@
 //! for `helper` in `io/file.pep`). Exports, externs, and concrete overrides
 //! keep their names.
 //!
+//! Overloads of one name in one file take names of their own too: sema
+//! renames them `name$1`, `name$2`, ... (after the namespace, so a private
+//! set's members are `name@ns$1`); [`OVERLOAD_SEPARATOR`] marks that suffix.
+//!
 //! A mangled name never reaches the user. Diagnostics quote names and types
 //! in single quotes, and [`demangle`] strips namespaces only there, so a path
 //! or a string that happens to hold an `@` is left alone.
@@ -13,6 +17,9 @@ use std::borrow::Cow;
 
 /// Separates a declaration's name from its file's namespace.
 pub const SEPARATOR: char = '@';
+
+/// Separates an overloaded function's name from its member number.
+pub const OVERLOAD_SEPARATOR: char = '$';
 
 /// The name `name`, declared privately in the file whose namespace is
 /// `namespace`, takes in the merged program.
@@ -25,9 +32,10 @@ pub fn is_namespace_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_' || c == '/' || c == '#'
 }
 
-/// A declaration's name as it was written: `helper@io/file` is `helper`.
+/// A declaration's name as it was written: `helper@io/file` and `helper$2`
+/// are `helper`.
 pub fn demangle_name(name: &str) -> &str {
-    name.split_once(SEPARATOR).map_or(name, |(base, _)| base)
+    name.split_once([SEPARATOR, OVERLOAD_SEPARATOR]).map_or(name, |(base, _)| base)
 }
 
 /// The message `text` with every mangled name inside single quotes spelled
@@ -35,7 +43,7 @@ pub fn demangle_name(name: &str) -> &str {
 /// becomes `no member named 'x' in 'Box<Point>'`. An apostrophe inside a
 /// word (`runtime's`) opens no quote.
 pub fn demangle(text: &str) -> Cow<'_, str> {
-    if !text.contains(SEPARATOR) {
+    if !text.contains([SEPARATOR, OVERLOAD_SEPARATOR]) {
         return Cow::Borrowed(text);
     }
     let mut out = String::with_capacity(text.len());
@@ -51,6 +59,12 @@ pub fn demangle(text: &str) -> Cow<'_, str> {
                 rest = &rest[1 + len..];
                 continue;
             }
+        } else if quoted && c == OVERLOAD_SEPARATOR && is_name_char(prev) {
+            let len = member_len(&rest[1..]);
+            if len > 0 {
+                rest = &rest[1 + len..];
+                continue;
+            }
         }
         out.push(c);
         rest = &rest[c.len_utf8()..];
@@ -59,10 +73,11 @@ pub fn demangle(text: &str) -> Cow<'_, str> {
 }
 
 /// `text` with each `@namespace` that follows a name and is one of
-/// `namespaces` removed, anywhere in the text: for editor text built from
-/// declarations (a hover's signature), where names are not quoted.
+/// `namespaces`, and each overload member number (`$2`), removed anywhere in
+/// the text: for editor text built from declarations (a hover's signature),
+/// where names are not quoted.
 pub fn demangle_known<'t>(text: &'t str, namespaces: &[&str]) -> Cow<'t, str> {
-    if !text.contains(SEPARATOR) {
+    if !text.contains([SEPARATOR, OVERLOAD_SEPARATOR]) {
         return Cow::Borrowed(text);
     }
     let mut out = String::with_capacity(text.len());
@@ -75,6 +90,12 @@ pub fn demangle_known<'t>(text: &'t str, namespaces: &[&str]) -> Cow<'t, str> {
                 rest = &rest[1 + len..];
                 continue;
             }
+        } else if c == OVERLOAD_SEPARATOR && is_name_char(prev) {
+            let len = member_len(&rest[1..]);
+            if len > 0 {
+                rest = &rest[1 + len..];
+                continue;
+            }
         }
         out.push(c);
         rest = &rest[c.len_utf8()..];
@@ -84,6 +105,11 @@ pub fn demangle_known<'t>(text: &'t str, namespaces: &[&str]) -> Cow<'t, str> {
 
 fn is_name_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// The byte length of the overload member number at the start of `text`.
+fn member_len(text: &str) -> usize {
+    text.find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len())
 }
 
 /// The byte length of the namespace at the start of `text`.
@@ -105,6 +131,16 @@ mod tests {
         assert_eq!(demangle("cannot find \"nope@x.pep\""), "cannot find \"nope@x.pep\"");
         // An apostrophe inside a word opens no quote.
         assert_eq!(demangle("the runtime's files, like 'f@a'"), "the runtime's files, like 'f'");
+    }
+
+    #[test]
+    fn demangle_strips_overload_member_numbers() {
+        assert_eq!(demangle("too many arguments to 'f$2'"), "too many arguments to 'f'");
+        assert_eq!(demangle("'f@geo/shapes$1' and 'g$10<int>'"), "'f' and 'g<int>'");
+        assert_eq!(demangle("costs $5, not 'x'"), "costs $5, not 'x'");
+        assert_eq!(demangle_name("f@a$3"), "f");
+        assert_eq!(demangle_name("f$3"), "f");
+        assert_eq!(demangle_known("f$2(x: int): int", &[]), "f(x: int): int");
     }
 
     #[test]

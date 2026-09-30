@@ -13,7 +13,7 @@ pub struct Position {
 
 /// A byte-offset range within one source file. `start` is inclusive, `end`
 /// exclusive. Offsets are valid for the source the node was parsed from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

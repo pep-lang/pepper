@@ -1180,6 +1180,23 @@ fn duplicate_override_notes_the_other_declaration() {
 }
 
 #[test]
+fn no_matching_overload_notes_each_candidate() {
+    let main = "f(x: int): int { return 1; }\nf(x: int, y: int): int { return 2; }\nmain(): int {\n    var s = String();\n    return f(s);\n}\n";
+    assert_eq!(
+        error_of("no_matching_overload", main),
+        "main.pep:5:12: error: no matching function for call to 'f'\n\
+         \x20   5 |     return f(s);\n\
+         \x20     |            ^\n\
+         main.pep:1:1: note: candidate function not viable: no known conversion from 'String' to 'int' for 1st argument\n\
+         \x20   1 | f(x: int): int { return 1; }\n\
+         \x20     | ^\n\
+         main.pep:2:1: note: candidate function not viable: requires 2 arguments, but 1 was provided\n\
+         \x20   2 | f(x: int, y: int): int { return 2; }\n\
+         \x20     | ^"
+    );
+}
+
+#[test]
 fn c_function_pointer_from_a_capturing_closure() {
     assert_eq!(
         error_of(
@@ -1192,6 +1209,78 @@ fn c_function_pointer_from_a_capturing_closure() {
          main.pep:3:9: note: pass what the callback needs through the C function's context argument instead\n\
          \x20   3 |     var bias = 1;\n\
          \x20     |         ^~~~"
+    );
+}
+
+#[test]
+fn ambiguous_overload_call() {
+    let main = "f(x: long): int { return 1; }\nf(x: short): int { return 2; }\nmain(): int { return f(1); }\n";
+    assert_eq!(
+        error_of("ambiguous_overload", main),
+        "main.pep:3:22: error: call to 'f' is ambiguous\n\
+         \x20   3 | main(): int { return f(1); }\n\
+         \x20     |                      ^\n\
+         main.pep:1:1: note: candidate function\n\
+         \x20   1 | f(x: long): int { return 1; }\n\
+         \x20     | ^\n\
+         main.pep:2:1: note: candidate function\n\
+         \x20   2 | f(x: short): int { return 2; }\n\
+         \x20     | ^"
+    );
+}
+
+#[test]
+fn overloads_that_cannot_coexist() {
+    let redefinition = error_of("overload_redefinition", "f(x: int): int { return 1; }\nf(y: int): int { return 2; }\nmain(): int { return 0; }\n");
+    assert!(redefinition.starts_with("main.pep:2:1: error: redefinition of 'f'\n"), "{}", redefinition);
+    assert!(redefinition.contains("main.pep:1:1: note: previous definition is here\n"), "{}", redefinition);
+
+    let return_only = error_of("overload_return_only", "f(x: int): int { return 1; }\nf(x: int): long { return 2; }\nmain(): int { return 0; }\n");
+    assert!(
+        return_only.starts_with("main.pep:2:1: error: functions that differ only in their return type cannot be overloaded\n"),
+        "{}",
+        return_only
+    );
+
+    let external = error_of("overload_extern", "extern int abs(int x);\nabs(x: double): double { return x; }\nmain(): int { return 0; }\n");
+    assert_eq!(
+        external,
+        "main.pep:2:1: error: extern 'abs' cannot be overloaded\n\
+         \x20   2 | abs(x: double): double { return x; }\n\
+         \x20     | ^~~\n\
+         main.pep:1:12: note: previous declaration is here\n\
+         \x20   1 | extern int abs(int x);\n\
+         \x20     |            ^~~"
+    );
+}
+
+#[test]
+fn overloaded_function_value_needs_a_type() {
+    let main = "f(x: int): int { return 1; }\nf(x: long): int { return 2; }\nmain(): int {\n    var g = f;\n    return 0;\n}\n";
+    let err = error_of("overload_value_untyped", main);
+    assert!(err.starts_with("main.pep:4:13: error: cannot infer the type of 'g' from overloaded function 'f'\n    4 |     var g = f;\n      |             ^\n"), "{}", err);
+    assert!(err.ends_with("main.pep:4:13: note: declare the type, for example 'var g: (int) => int = f;'\n    4 |     var g = f;\n      |             ^"), "{}", err);
+
+    let main = "f(x: int): int { return 1; }\nf(x: long): int { return 2; }\nmain(): int {\n    var g: (bool) => int = f;\n    return 0;\n}\n";
+    let err = error_of("overload_value_mismatch", main);
+    assert!(
+        err.starts_with("main.pep:4:28: error: address of overloaded function 'f' does not match required type '(bool) => int'\n"),
+        "{}",
+        err
+    );
+}
+
+#[test]
+fn overloads_share_one_visibility() {
+    let files = [("util.pep", "export scale(x: int): int { return x * 2; }\nscale(x: double): double { return x * 3.0; }\n")];
+    assert_eq!(
+        error_of_files("overload_mixed_visibility", "import \"util\";\nmain(): int { return scale(2); }\n", &files),
+        "util.pep:2:1: error: overloads of 'scale' must all be exported or all be private\n\
+         \x20   2 | scale(x: double): double { return x * 3.0; }\n\
+         \x20     | ^~~~~\n\
+         util.pep:1:8: note: other overload declared here\n\
+         \x20   1 | export scale(x: int): int { return x * 2; }\n\
+         \x20     |        ^~~~~"
     );
 }
 

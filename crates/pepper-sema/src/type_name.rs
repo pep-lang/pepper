@@ -233,6 +233,14 @@ impl TypeName {
         !self.sub_types.is_empty()
     }
 
+    /// Whether the type names `name`, itself or nested (`Array<T>` and
+    /// `T*` mention `T`).
+    pub fn mentions(&self, name: &str) -> bool {
+        self.name == name
+            || self.name.trim_end_matches('*') == name
+            || self.sub_types.iter().any(|t| t.mentions(name))
+    }
+
     /// The type, or any type nested in it, is still `auto` (not inferred).
     pub fn contains_auto(&self) -> bool {
         self.name == AUTO || self.sub_types.iter().any(|t| t.contains_auto())

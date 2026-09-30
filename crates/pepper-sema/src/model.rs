@@ -771,6 +771,13 @@ pub struct Module {
     /// where the converted value has a source location, for the language
     /// server's hover and inlay hints.
     pub conversions: Vec<Conversion>,
+    /// Overloaded free functions: each set's name, as calls spell it, and
+    /// its members' names (`scale$1`, `scale$2`) in declaration order.
+    /// Filled by `overloads::name_overloads`.
+    pub overload_sets: std::collections::BTreeMap<String, Vec<String>>,
+    /// Each call or function value that named an overload set: its callee's
+    /// location and the member it resolved to, for the language server.
+    pub call_targets: Vec<(Loc, String)>,
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,

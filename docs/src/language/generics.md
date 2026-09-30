@@ -129,9 +129,12 @@ type parameters (its own, an imported one, or the standard library's);
 otherwise a struct's name is just the name of a type parameter. The generic
 may be spelled by any name the file has for it (`show<Point>` after
 `import [describe as show]`). A type argument must name a struct, not a type
-alias or a trait. Declaring a generic and another function of the same name in one file is an
-error, since it usually means an override whose type argument the file
-cannot see, or of a generic the file's own function of that name hides.
+alias or a trait. A generic and another function of the same name in one
+file are [overloads](overloading.md#generic-members), unless they have the
+same parameters, or the generic's type parameters all name structs the file
+can see without a generic of that name to override: either is an error,
+since it usually means an override whose type argument the file cannot see,
+or of a generic the file's own function of that name hides.
 
 To add methods to a generic struct from outside its declaration, use an
 [extension](traits-and-extensions.md#extending-generic-structs).

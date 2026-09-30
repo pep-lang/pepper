@@ -115,6 +115,22 @@ struct Bindings {
     unresolved_whole_file: bool,
 }
 
+/// A function's parameter types as written, with its generic parameters
+/// named by position: `describe<T>(T)` and `describe<Point>(Point)` have one
+/// shape.
+fn parameter_shape(function: &FunctionDecl) -> Vec<String> {
+    fn spell(ty: &TypeName, generics: &[&str]) -> String {
+        let name = match generics.iter().position(|g| *g == ty.name) {
+            Some(i) => format!("${}", i),
+            None => ty.name.clone(),
+        };
+        let args: Vec<String> = ty.generic_types.iter().map(|t| spell(t, generics)).collect();
+        if args.is_empty() { name } else { format!("{}<{}>", name, args.join(",")) }
+    }
+    let generics: Vec<&str> = function.generic_params.iter().map(|g| g.name.as_str()).collect();
+    function.parameters.iter().map(|p| spell(&p.type_name, &generics)).collect()
+}
+
 /// The names of a file's exported concrete overrides.
 fn exported_overrides<'m>(module: &'m Module, file: usize, overrides: &Overrides) -> impl Iterator<Item = &'m str> {
     named_decls(module).filter_map(move |d| match d {
@@ -460,10 +476,11 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
         .sum::<usize>()
         + 1;
     let mut errors: Vec<ModuleError> = vec![];
-    // A generic and another function of one name in one file merge into
-    // one: the generic is usually a meant override whose type argument the
-    // file cannot see (`describe<Point>` with no `Point` here), or of a
-    // generic the file's own declaration hides.
+    // Two functions of one name in one file overload each other, unless a
+    // generic and another function have the same parameters: the generic
+    // is then usually a meant override whose type argument the file cannot
+    // see (`describe<Point>(Point)` with no `Point` here, beside
+    // `describe<T>(T)`), or of a generic the file's own declaration hides.
     for (i, f) in files.iter().enumerate() {
         let functions: Vec<&FunctionDecl> = named_decls(&f.module)
             .filter_map(|d| match d {
@@ -472,10 +489,14 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             })
             .collect();
         for (k, func) in functions.iter().enumerate() {
-            let earlier = || functions[..k].iter().filter(|g| g.name == func.name);
-            if earlier().next().is_some()
-                && (!func.generic_params.is_empty() || earlier().any(|g| !g.generic_params.is_empty()))
-            {
+            let earlier = || functions[..k].iter().filter(|g| g.name == func.name && parameter_shape(g) == parameter_shape(func));
+            // A generic whose parameters all name structs this file sees
+            // meant to override a generic its own declarations hide.
+            let names_types = !func.generic_params.is_empty()
+                && func.generic_params.iter().all(|p| overrides.value_types[i].contains(&p.name));
+            let clashes = earlier().next().is_some()
+                && (!func.generic_params.is_empty() || earlier().any(|g| !g.generic_params.is_empty()));
+            if clashes || (names_types && functions.iter().any(|g| g.name == func.name && !std::ptr::eq(*g, *func))) {
                 errors.push(ModuleError {
                     unresolved: false,
                     file: i,

@@ -60,8 +60,8 @@ name like a function.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
 - A struct has at most one constructor, and declaring a second is an error
-  (`redefinition of the constructor of 'S'`). Pepper has no constructor
-  overloading: use default arguments, or a [static method](#static-methods)
+  (`redefinition of the constructor of 'S'`). Constructors do not
+  [overload](overloading.md) yet: use default arguments, or a [static method](#static-methods)
   for each alternative way to build the object. Likewise, a struct has at
   most one destructor.
 
@@ -121,6 +121,9 @@ which converts from a `String`, so `dir.join("logs")` and
   `double`, or a struct to a [trait it declares](traits-and-extensions.md#traits-as-types).
   Conversions never chain: if `Tag` converts from `Name` and `Name` from
   `String`, a `String` does not become a `Tag`.
+- **Overloads prefer anything else.** Among [overloads](overloading.md),
+  a member that takes the value as it is, or by any other conversion, beats
+  one that needs an `[Implicit]` constructor.
 - **Each conversion is a constructor call**, so it allocates a new object.
   The VS Code extension shows the call as an inlay hint around the converted
   value, and hovering the value names the constructor.

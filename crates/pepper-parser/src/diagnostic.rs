@@ -50,7 +50,7 @@ use std::fmt::Write;
 pub struct FileId(pub u32);
 
 /// A source location: a byte span in one file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Loc {
     pub file: FileId,
     pub span: Span,

@@ -918,28 +918,58 @@ impl Table {
 /// Call `visit(creation, expected type, current struct)` for every
 /// `MakeClosure`, with the type of the slot it flows into when known.
 fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
+    sites_in_module(module, table, &mut |_, expr, expected, current| visit(expr, expected, current));
+}
+
+/// Call `visit(expression, expected type, current struct)` for every
+/// expression in the module, with the type of the slot it flows into when
+/// known (a typed variable, a parameter, a return, an assignment).
+pub(crate) fn for_each_site(module: &Module, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
+    let table = Table::build(module);
+    sites_in_module(module, &table, &mut |_, expr, expected, current| visit(expr, expected, current));
+}
+
+/// Like [`for_each_site`], also passing the name of the function or struct
+/// the expression is in (`None` for a global's initializer).
+pub(crate) fn for_each_site_in(
+    module: &Module,
+    visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
+) {
+    let table = Table::build(module);
+    sites_in_module(module, &table, visit);
+}
+
+fn sites_in_module(
+    module: &Module,
+    table: &Table,
+    visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
+) {
     for st in &module.structs {
         let current = Some(&st.ty);
+        let owner = Some(st.name.as_str());
+        let mut visit = |expr: &Expression, expected: Option<&TypeName>, current: Option<&TypeName>| visit(owner, expr, expected, current);
         for field in &st.field_members {
             if let Some(default) = &field.default {
-                sites_in_expression(default, Some(&field.ty), table, current, visit);
+                sites_in_expression(default, Some(&field.ty), table, current, &mut visit);
             }
         }
         for method in st.method_members.iter().chain([&st.constructor, &st.destructor]) {
-            sites_in_function(method, table, current, visit);
+            sites_in_function(method, table, current, &mut visit);
         }
     }
     for function in &module.functions {
-        sites_in_function(function, table, None, visit);
+        let owner = Some(function.name.as_str());
+        sites_in_function(function, table, None, &mut |expr, expected, current| visit(owner, expr, expected, current));
     }
     for ext in &module.extensions {
         for method in &ext.methods {
-            sites_in_function(method, table, Some(&ext.target), visit);
+            let owner = Some(ext.target.name.as_str());
+            sites_in_function(method, table, Some(&ext.target), &mut |expr, expected, current| visit(owner, expr, expected, current));
         }
     }
     for var in &module.globals {
         if let Some(default) = &var.default {
-            sites_in_expression(default, Some(&var.ty), table, None, visit);
+            sites_in_expression(default, Some(&var.ty), table, None, &mut |expr, expected, current| visit(None, expr, expected, current));
         }
     }
 }
@@ -1070,7 +1100,7 @@ fn sites_in_expression(
 }
 
 /// Apply `f` to every expression in the module, in place.
-fn for_each_expression_mut(module: &mut Module, f: &mut impl FnMut(&mut Expression)) {
+pub(crate) fn for_each_expression_mut(module: &mut Module, f: &mut impl FnMut(&mut Expression)) {
     for st in &mut module.structs {
         for field in &mut st.field_members {
             if let Some(default) = &mut field.default {

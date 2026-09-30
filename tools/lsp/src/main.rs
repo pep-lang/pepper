@@ -20,7 +20,7 @@ use pepper_parser::ast::{self, Span};
 use pepper_parser::diagnostic::{self as diag, FileId};
 use pepper_parser::parser::parse_source;
 use pepper_parser::namespace::{demangle, demangle_known, demangle_name};
-use pepper_sema::model::{Conversion, Module as SemaModule, StructDef};
+use pepper_sema::model::{Conversion, FunctionDef, Module as SemaModule, StructDef};
 use tower_lsp::jsonrpc::Result as LspResult;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
@@ -564,6 +564,45 @@ struct PepperLsp {
     conversion_hints: AtomicBool,
 }
 
+/// The overload a call or function value in the document resolved to, when
+/// the name at `offset` names an overload set: the chosen member's
+/// declaration and how many other members the set has.
+fn overload_at(sema: &SemaModule, offset: usize) -> Option<(&FunctionDef, usize)> {
+    let (_, callee) = sema
+        .call_targets
+        .iter()
+        .filter(|(loc, _)| loc.file == FileId(0) && loc.span.start <= offset && offset <= loc.span.end)
+        .min_by_key(|(loc, _)| loc.span.end - loc.span.start)?;
+    // A generic member's call names its specialization (`f$2<int>`).
+    let member = callee.split_once('<').map_or(callee.as_str(), |(base, _)| base);
+    let function = sema.functions.iter().find(|f| f.name == member)?;
+    let others = sema.overload_sets.values().find(|m| m.iter().any(|n| n == member)).map_or(0, |m| m.len() - 1);
+    Some((function, others))
+}
+
+/// The hover for an overloaded call's chosen member: its signature, how many
+/// other overloads its set has, and its doc comment.
+fn overload_hover(program: &Program, function: &FunctionDef, others: usize) -> String {
+    let name = demangle_name(&function.name);
+    let more = match others {
+        1 => " (+1 overload)".to_string(),
+        n => format!(" (+{} overloads)", n),
+    };
+    let file = function.loc.file.0 as usize;
+    // The member as its file declares it, parameter names included.
+    let signature = program
+        .files
+        .get(file)
+        .and_then(|f| {
+            f.module.declarations.iter().find_map(|d| match d {
+                ast::Declaration::Function(f) if f.name_span == function.loc.span => Some(function_signature(f)),
+                _ => None,
+            })
+        })
+        .unwrap_or_else(|| function.ty.to_string());
+    with_doc(format!("`{}` — `{}`{}", name, signature, more), declaration_doc_at(program, file, function.loc.span))
+}
+
 /// The implicit conversions of the document (`program.files[0]`), in
 /// source order.
 fn document_conversions(sema: &SemaModule) -> Vec<&Conversion> {
@@ -912,6 +951,12 @@ impl PepperLsp {
         {
             return imported(found);
         }
+        // A name that resolved to one overload of a set shows that member.
+        if let Some(program) = program
+            && let Some((function, others)) = sema.and_then(|m| overload_at(m, offset))
+        {
+            return Some(Hover { contents: md(overload_hover(program, function, others)), range: None });
+        }
         let expr = find_expr(&ast, offset)?;
 
         let Some((body, enclosing_struct)) = body_at(&ast, offset) else {
@@ -1041,6 +1086,16 @@ impl PepperLsp {
                 imports::in_imports(program, &ast, offset).or_else(|| imports::in_type(program, &ast, offset))
         {
             return imported(found);
+        }
+        // A name that resolved to one overload of a set goes to that member.
+        if let Some(program) = program
+            && let Ok(sema) = sema_model_of(program)
+            && let Some((function, _)) = overload_at(&sema, offset)
+        {
+            let file = function.loc.file.0 as usize;
+            let f = program.files.get(file)?;
+            let target_uri = if file == 0 { uri.clone() } else { Url::from_file_path(&f.name).ok()? };
+            return Some(vec![Location::new(target_uri, span_to_range(&f.source, function.loc.span))]);
         }
         let expr = find_expr(&ast, offset)?;
 

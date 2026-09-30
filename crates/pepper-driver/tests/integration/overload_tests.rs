@@ -1,0 +1,299 @@
+//! Overloaded free functions: several functions of one file sharing a name,
+//! each call resolved to the member whose parameters fit its arguments best
+//! (see `pepper_sema::passes::overloads`). Covers the ranking (exact,
+//! promotion, conversion, `[Implicit]` constructor), generic members and the
+//! non-generic tie-breaker, calls in generic code, function values, closure
+//! arguments, and the shared_ptr lifetime of arguments to a resolved call.
+
+use pepper_codegen::CodeGenerator;
+use pepper_sema::model::Module as SemaModule;
+
+fn sema(source: &str) -> Result<SemaModule, String> {
+    pepper_driver::compiler::compile_with_runtime("test.pep", source)
+}
+
+/// Compile + JIT `test()` and return (result, net live-allocation delta).
+fn run(source: &str) -> (i32, i64) {
+    let mut module = sema(source).expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    let ee = generator.jit_engine(&mut module).expect("jit");
+    let live_allocs = unsafe {
+        ee.get_function::<unsafe extern "C" fn() -> i64>("_pep_live_allocs")
+            .expect("_pep_live_allocs")
+    };
+    let before = unsafe { live_allocs.call() };
+    let result = CodeGenerator::jit_call_i32(&ee, "test").expect("entry");
+    let after = unsafe { live_allocs.call() };
+    (result, after - before)
+}
+
+fn value(source: &str) -> i32 {
+    let (result, leaked) = run(source);
+    assert_eq!(leaked, 0, "leaked allocations");
+    result
+}
+
+fn compile_error(source: &str) -> String {
+    match sema(source) {
+        Ok(_) => panic!("expected a compile error for:\n{}", source),
+        Err(e) => e,
+    }
+}
+
+#[test]
+fn calls_pick_the_member_their_argument_types_match() {
+    let source = r#"
+kind(x: int): int { return 1; }
+kind(x: double): int { return 2; }
+kind(x: String): int { return 3; }
+kind(x: bool, y: int): int { return 4; }
+test(): int {
+    var s = String();
+    return kind(7) * 1000 + kind(2.5) * 100 + kind(s) * 10 + kind(true, 1);
+}
+"#;
+    assert_eq!(value(source), 1234);
+}
+
+#[test]
+fn a_member_s_return_type_types_the_call() {
+    let source = r#"
+half(x: int): int { return x / 2; }
+half(x: double): double { return x / 2.0; }
+test(): int {
+    var a = half(9);
+    var b = half(9.0);
+    if (b != 4.5) { return -1; }
+    return a;
+}
+"#;
+    assert_eq!(value(source), 4);
+}
+
+#[test]
+fn exact_beats_promotion_beats_conversion() {
+    let source = r#"
+f(x: long): int { return 1; }
+f(x: double): int { return 2; }
+g(x: int): int { return 1; }
+g(x: bool): int { return 2; }
+test(): int {
+    var small: short = 3;
+    var ratio: float = 0.5;
+    var wide: long = 3;
+    # short -> long widens (promotion); short -> double converts.
+    # float -> double is a promotion; float -> long converts.
+    var n: int = 2;
+    return f(small) * 1000 + f(ratio) * 100 + g(n) * 10 + f(wide);
+}
+"#;
+    assert_eq!(value(source), 1211);
+}
+
+#[test]
+fn the_narrowest_widening_wins() {
+    // `short` widens to both `int` and `long`; `int` is closer.
+    let source = r#"
+g(x: int): int { return 1; }
+g(x: long): int { return 2; }
+h(x: long): int { return 3; }
+h(x: double): int { return 4; }
+test(): int {
+    var small: short = 3;
+    var tiny: u8 = 1;
+    var wide: int = 2;
+    return g(small) * 1000 + g(tiny) * 100 + g(wide) * 10 + h(small);
+}
+"#;
+    assert_eq!(value(source), 1113);
+}
+
+#[test]
+fn widenings_to_one_width_are_ambiguous() {
+    let source = r#"
+g(x: long): int { return 1; }
+g(x: ulong): int { return 2; }
+test(): int { var small: ushort = 3; return g(small); }
+"#;
+    assert!(compile_error(source).contains("error: call to 'g' is ambiguous"));
+}
+
+#[test]
+fn an_integer_literal_promotes_to_any_integer_type_it_fits() {
+    let source = r#"
+f(x: u8): int { return 1; }
+f(x: String): int { return 2; }
+test(): int { return f(200) * 10 + f("x"); }
+"#;
+    assert_eq!(value(source), 12);
+}
+
+#[test]
+fn an_integer_literal_that_fits_two_members_is_ambiguous() {
+    let source = r#"
+f(x: long): int { return 1; }
+f(x: short): int { return 2; }
+test(): int { return f(1); }
+"#;
+    let error = compile_error(source);
+    assert!(error.contains("error: call to 'f' is ambiguous"), "{}", error);
+    assert_eq!(error.matches("note: candidate function").count(), 2, "{}", error);
+}
+
+#[test]
+fn a_string_literal_passes_its_characters_to_a_pointer_member() {
+    let source = r#"
+extern ulong strlen(char* s);
+size(p: __ptr<char>): ulong { return strlen(p) * 10; }
+size(s: String): ulong { return s.size(); }
+test(): int {
+    var text = "hello";
+    return (size("abc") + size(text)) as int;
+}
+"#;
+    assert_eq!(value(source), 35);
+}
+
+#[test]
+fn an_implicit_constructor_ranks_below_an_exact_member() {
+    let source = r#"
+import io;
+open(p: io.Path): int { return 1; }
+open(s: String): int { return 2; }
+show(p: io.Path): int { return 3; }
+show(n: long): int { return 4; }
+test(): int { return open("a") * 100 + show("docs") * 10 + show(5); }
+"#;
+    assert_eq!(value(source), 234);
+}
+
+#[test]
+fn a_non_generic_member_beats_a_generic_one_it_ties() {
+    let source = r#"
+describe<T>(v: T): int { return 1; }
+describe(v: int): int { return 2; }
+test(): int { return describe(7) * 100 + describe(1.5) * 10 + describe<int>(7); }
+"#;
+    assert_eq!(value(source), 211);
+}
+
+#[test]
+fn generic_members_differ_by_arity() {
+    let source = r#"
+pick<T>(a: T): T { return a; }
+pick<T>(a: T, b: T): T { return b; }
+test(): int { return pick(1) * 10 + pick(3, 4); }
+"#;
+    assert_eq!(value(source), 14);
+}
+
+#[test]
+fn calls_in_generic_code_resolve_per_specialization() {
+    let source = r#"
+classify(i: int): int { return 1; }
+classify(s: String): int { return 2; }
+wrap<T>(v: T): int { return classify(v); }
+struct Box<T> {
+    T value;
+    construct(T v) { value = v; }
+    kind(): int { return classify(value); }
+}
+test(): int {
+    var a = Box<int>(3);
+    var b = Box<String>("x");
+    return wrap(3) * 1000 + wrap("s") * 100 + a.kind() * 10 + b.kind();
+}
+"#;
+    assert_eq!(value(source), 1212);
+}
+
+#[test]
+fn nested_and_recursive_calls_resolve() {
+    let source = r#"
+inc(x: int) { return x + 1; }
+inc(x: double) { return x + 0.5; }
+count(n: int): int { if (n == 0) { return 0; } return count(n - 1) + 1; }
+count(s: String): int { return count(s.length() as int); }
+test(): int {
+    var d = inc(inc(1.0));
+    if (d != 2.0) { return -1; }
+    return inc(inc(1)) * 10 + count("hey");
+}
+"#;
+    assert_eq!(value(source), 33);
+}
+
+#[test]
+fn a_function_value_takes_the_member_its_slot_s_type_names() {
+    let source = r#"
+twice(x: int): int { return x * 2; }
+twice(s: String): int { return s.size() as int; }
+apply(f: (int) => int, x: int): int { return f(x); }
+chooser(): (String) => int { return twice; }
+test(): int {
+    var f: (int) => int = twice;
+    var g = chooser();
+    return f(1) * 100 + apply(twice, 3) * 10 + g("abcd");
+}
+"#;
+    assert_eq!(value(source), 264);
+}
+
+#[test]
+fn an_overloaded_argument_picks_the_parameter_that_fits_it() {
+    let source = r#"
+twice(x: int): int { return x * 2; }
+twice(s: String): int { return 0; }
+run(f: (int) => int, x: int): int { return f(x); }
+run(f: (String) => int, s: String): int { return f(s) + 100; }
+test(): int { return run(twice, 21); }
+"#;
+    assert_eq!(value(source), 42);
+}
+
+#[test]
+fn an_untyped_closure_picks_the_member_of_its_arity() {
+    let source = r#"
+run(f: (int) => int): int { return f(1); }
+run(f: (int, int) => int): int { return f(1, 2); }
+test(): int { return run((a) => a + 10) * 10 + run((a, b) => a + b); }
+"#;
+    assert_eq!(value(source), 113);
+}
+
+#[test]
+fn arguments_to_a_resolved_call_follow_the_shared_ptr_rules() {
+    let source = r#"
+struct Item { int n; construct(int v) { n = v; } }
+weigh(i: Item): int { return i.n; }
+weigh(i: Item, extra: int): int { return i.n + extra; }
+test(): int {
+    var kept = Item(4);
+    return weigh(kept) + weigh(Item(5), 1) + weigh(Item(6));
+}
+"#;
+    assert_eq!(value(source), 16);
+}
+
+#[test]
+fn an_override_attaches_to_the_member_it_matches() {
+    let source = r#"
+struct Point { int x; construct(int v) { x = v; } }
+tag<T>(v: T): int { return 1; }
+tag<T>(v: T, w: T): int { return 2; }
+tag<Point>(v: Point): int { return 30; }
+test(): int { var p = Point(1); return tag(p) + tag(p, p) + tag(5); }
+"#;
+    assert_eq!(value(source), 33);
+}
+
+#[test]
+fn a_file_s_private_set_is_its_own() {
+    let source = r#"
+helper(x: int): int { return 1; }
+helper(x: String): int { return 2; }
+test(): int { return helper(1) * 10 + helper("x"); }
+"#;
+    assert_eq!(value(source), 12);
+}

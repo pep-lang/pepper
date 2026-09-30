@@ -202,7 +202,7 @@ pub fn gather_generics(module: &mut Module) {
 /// the user's concrete body wins over the synthesized one. Idempotent —
 /// rewritten functions have empty `generic_params` and are skipped on later
 /// rounds.
-fn concrete_overrides(module: &mut Module) {
+pub(crate) fn concrete_overrides(module: &mut Module) {
     // A struct can be an override's argument too (`describe<Point>` of
     // `describe<T>`), but a struct's name is also a legal generic parameter
     // name: it overrides only when a generic base of the same name and

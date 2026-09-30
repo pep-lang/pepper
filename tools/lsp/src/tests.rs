@@ -357,3 +357,37 @@ fn inlay_hints_wrap_converted_values() {
         (position("who;", 3), ")".to_string()),
     ]);
 }
+
+const OVERLOADED: &str = r#"## Scales a whole number.
+scale(x: int): int { return x * 2; }
+## Scales a fraction.
+scale(x: double): double { return x * 3.0; }
+scale(s: String): int { return 0; }
+
+main(): int {
+    var a = scale(2.5);
+    var f: (int) => int = scale;
+    return scale(4) + f(1);
+}
+"#;
+
+#[test]
+fn hover_on_an_overloaded_call_shows_the_chosen_member() {
+    let (uri, text, program) = load("overloads", OVERLOADED, "main.pep");
+    let fraction = hover(&uri, &text, &program, at(&text, "scale(2.5)", 0, 1));
+    assert!(fraction.starts_with("`scale` — `scale(x: double): double` (+2 overloads)"), "{}", fraction);
+    assert!(fraction.contains("Scales a fraction."), "{}", fraction);
+    let whole = hover(&uri, &text, &program, at(&text, "scale(4)", 0, 0));
+    assert!(whole.contains("scale(x: int): int") && whole.contains("Scales a whole number."), "{}", whole);
+    let value = hover(&uri, &text, &program, at(&text, "int = scale", 0, 7));
+    assert!(value.contains("scale(x: int): int"), "{}", value);
+}
+
+#[test]
+fn definition_of_an_overloaded_call_is_the_chosen_member() {
+    let (uri, text, program) = load("overload_definition", OVERLOADED, "main.pep");
+    let (_, rest) = definition(&uri, &text, &program, at(&text, "scale(2.5)", 0, 2));
+    assert!(rest.starts_with("scale(x: double)"), "{}", rest);
+    let (_, rest) = definition(&uri, &text, &program, at(&text, "scale(4)", 0, 2));
+    assert!(rest.starts_with("scale(x: int)"), "{}", rest);
+}

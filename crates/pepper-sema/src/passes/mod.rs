@@ -7,7 +7,7 @@ use std::mem;
 
 pub mod resolve_literals;
 pub mod resolve_type_aliases;
-pub mod tag_generics;
+pub mod overloads;
 pub mod convert_string_literals;
 pub mod gather_generics;
 pub mod check_shared_types;
@@ -47,7 +47,6 @@ use resolve_operators::resolve_operators;
 use resolve_resolvables::resolve_resolvables;
 use specialize_functions::specialize_functions;
 use specialize_structs::specialize_structs;
-use tag_generics::tag_generics;
 use convert_print_calls::convert_print_calls;
 use function_types::synthesize_function_types;
 use lower_with_blocks::lower_with_blocks;
@@ -71,7 +70,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_bindings::check_bindings(module));
     step!(synthesize_function_types(module));
     step!(resolve_literals(module));
-    step!(tag_generics(module));
+    step!(overloads::name_overloads(module));
     step!(convert_string_literals(module));
     step!(gather_generics(module));
     step!(resolve_implicit_types(module));
@@ -101,7 +100,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         // A generic method call on a value whose type the round just
         // specialized (`c.map(f)` with `c: Box<long>`) is typed, and its type
         // arguments inferred, only now.
-        if generic_methods::has_generic_methods(module) {
+        // Likewise a call to an overloaded function whose arguments the
+        // round just typed (`f(x)` with `x: T`, now `int`).
+        if generic_methods::has_generic_methods(module) || !module.overload_sets.is_empty() {
             step!(resolve_implicit_types(module));
         }
         let methods_added = generic_methods::specialize_methods(module);
@@ -122,6 +123,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(release_field_refs(module));
     step!(resolve_implicit_types(module));
     step!(type_arguments::check_type_arguments(module));
+    step!(overloads::check_overloads(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
     step!(convert_print_calls(module));
     step!(resolve_resolvables(module, true));

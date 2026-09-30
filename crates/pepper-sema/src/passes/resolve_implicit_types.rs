@@ -119,6 +119,14 @@ struct Scopes<'t> {
     /// While walking a function with no declared return type: the types of
     /// its `return <value>` statements.
     returns: Option<Vec<TypeName>>,
+    /// Overloaded free functions, for resolving calls to them.
+    overloads: std::rc::Rc<crate::passes::overloads::Overloads>,
+    /// The generic parameters of the code being walked: a call whose
+    /// arguments mention one is resolved in each specialization instead.
+    unbound: Vec<String>,
+    /// Calls resolved to an overload set's member: the callee's location and
+    /// the member.
+    resolved: std::rc::Rc<std::cell::RefCell<Vec<(Loc, String)>>>,
     /// Walking a generic base (a generic struct's methods, a generic
     /// function): its types still name its type parameters, so calls are
     /// not inferred here; each specialization infers its own.
@@ -134,6 +142,9 @@ impl<'t> Scopes<'t> {
             params: vec![vec![]],
             symbols: vec![vec![]],
             returns: None,
+            overloads: Default::default(),
+            unbound: vec![],
+            resolved: Default::default(),
             generic_base: false,
         }
     }
@@ -375,7 +386,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::StringLiteral { .. } => TypeName::new("String"),
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
-        Expression::FunctionCall { function, .. } => {
+        Expression::FunctionCall { function, args, .. } => {
             // A call through a local, parameter or field of function type.
             if let Some((_, ty)) = scopes.value_callee(function, current_struct) {
                 return ty.function_return().cloned().unwrap_or_else(TypeName::auto);
@@ -391,6 +402,11 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                         return ret.clone();
                     }
                 }
+            }
+            // A call to an overloaded function has the type of the member
+            // its arguments select, once they do.
+            if let Some(ret) = overload_return(function, args, scopes, current_struct) {
+                return ret;
             }
             // A generic function called without type arguments has no type
             // until they are inferred (`infer_type_arguments`).
@@ -502,7 +518,8 @@ pub fn resolve_implicit_types(module: &mut Module) {
     // each other, so they share the loop.
     for _ in 0..8 {
         let synced = crate::passes::closures::sync_closures(module);
-        if !resolve_once(module) && !synced {
+        let bound = crate::passes::overloads::bind_function_values(module);
+        if !resolve_once(module) && !synced && !bound {
             break;
         }
     }
@@ -540,11 +557,16 @@ fn finish_return_inference(function: &mut FunctionDef, scopes: &mut Scopes) -> b
 fn resolve_once(module: &mut Module) -> bool {
     let mut inferred = false;
     let tables = Tables::of(module);
+    let overloads = std::rc::Rc::new(crate::passes::overloads::Overloads::build(module));
+    let resolved: std::rc::Rc<std::cell::RefCell<Vec<(Loc, String)>>> = Default::default();
 
     // Structs first (methods see field types).
     for st in &mut module.structs {
         let current_struct = st.ty.clone();
         let mut scopes = Scopes::new(&tables);
+        scopes.overloads = overloads.clone();
+        scopes.resolved = resolved.clone();
+        scopes.unbound = st.generic_params.iter().map(|p| p.name.clone()).collect();
         // A generic base (`Box` of `Box<T>`), not a specialization.
         scopes.generic_base = st.ty.is_generic() && st.name == st.ty.name;
 
@@ -608,6 +630,9 @@ fn resolve_once(module: &mut Module) -> bool {
         let returns = infers_return(function).then(Vec::new);
         if let Some(body) = &mut function.body {
             let mut scopes = Scopes::new(&tables);
+            scopes.overloads = overloads.clone();
+            scopes.resolved = resolved.clone();
+            scopes.unbound = function.generic_params.iter().map(|p| p.name.clone()).collect();
             scopes.generic_base = function.is_generic_func;
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
@@ -621,6 +646,8 @@ fn resolve_once(module: &mut Module) -> bool {
 
     // Global variables: one shared scope so later globals see earlier ones.
     let mut scopes = Scopes::new(&tables);
+    scopes.overloads = overloads.clone();
+    scopes.resolved = resolved.clone();
     for var in &mut module.globals {
         if var.ty.is_auto() {
             if let Some(default) = &var.default {
@@ -635,6 +662,9 @@ fn resolve_once(module: &mut Module) -> bool {
         }
         scopes.symbols[0].push((var.name.clone(), var.ty.clone()));
     }
+    let resolved = std::mem::take(&mut *resolved.borrow_mut());
+    inferred |= !resolved.is_empty();
+    module.call_targets.extend(resolved);
     inferred
 }
 
@@ -755,6 +785,63 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     }
 }
 
+/// The overload set a call `function(args)` names, unless a local, parameter
+/// or member of the enclosing struct by that name shadows it: its base name
+/// and written type arguments.
+fn overload_call<'f>(function: &'f str, scopes: &Scopes, current: Option<&TypeName>) -> Option<(&'f str, Option<Vec<TypeName>>)> {
+    if scopes.overloads.is_empty() {
+        return None;
+    }
+    let (base, explicit) = crate::passes::overloads::split_type_arguments(function);
+    if !scopes.overloads.is_set(base) || scopes.value_callee(base, current).is_some() {
+        return None;
+    }
+    if current.is_some_and(|st| scopes.has_method(st, base) || scopes.field_type(st, base).is_some()) {
+        return None;
+    }
+    Some((base, explicit))
+}
+
+/// Resolve `function(args)` against its overload set, when it names one and
+/// its arguments decide.
+fn select_overload(
+    function: &str,
+    args: &[Expression],
+    scopes: &Scopes,
+    current: Option<&TypeName>,
+) -> Option<crate::passes::overloads::Choice> {
+    let (base, explicit) = overload_call(function, scopes, current)?;
+    let infos: Vec<crate::passes::overloads::ArgInfo> = args
+        .iter()
+        .map(|arg| crate::passes::overloads::arg_info(arg, &scopes.overloads, Some(type_of_expr(arg, scopes, current))))
+        .collect();
+    // In a generic body, the specializations decide.
+    let mentions_unbound = |t: &TypeName| scopes.unbound.iter().any(|p| t.mentions(p));
+    if infos.iter().any(|i| i.ty.as_ref().is_some_and(mentions_unbound)) {
+        return None;
+    }
+    match scopes.overloads.select(base, explicit.as_deref(), &infos) {
+        crate::passes::overloads::Outcome::Chosen(choice) => Some(choice),
+        _ => None,
+    }
+}
+
+/// The return type of a call to an overloaded function, when its arguments
+/// select a member.
+fn overload_return(function: &str, args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) -> Option<TypeName> {
+    overload_call(function, scopes, current)?;
+    Some(select_overload(function, args, scopes, current).map(|c| c.ret).unwrap_or_else(TypeName::auto))
+}
+
+/// Rewrite a call to an overloaded function to the member its arguments
+/// select (see `overloads`).
+fn resolve_overload(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    let Expression::FunctionCall { function, args, loc } = e else { return };
+    let Some(choice) = select_overload(function, args, scopes, current) else { return };
+    crate::passes::overloads::apply_choice(function, args, &choice);
+    scopes.resolved.borrow_mut().push((*loc, choice.callee));
+}
+
 /// What each argument's type says about a generic call's type arguments.
 fn argument_types(args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) -> Vec<Option<TypeName>> {
     args.iter()
@@ -777,6 +864,7 @@ fn resolve_expression(
 ) {
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
+        resolve_overload(e, scopes, current);
         infer_type_arguments(e, scopes, current);
         // Calls through function values: `f(x)` on a local, parameter,
         // global or field of function type, and `obj.callback(x)`.

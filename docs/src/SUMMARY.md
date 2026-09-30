@@ -13,6 +13,7 @@
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)
 - [Function types and closures](language/function-types.md)
+- [Overloading](language/overloading.md)
 - [Structs](language/structs.md)
 - [Memory and reference counting](language/memory.md)
 - [Generics](language/generics.md)

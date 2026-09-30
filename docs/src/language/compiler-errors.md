@@ -120,6 +120,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | Deprecated | Replacement |
 |------------|-------------|
 | `new(...)` constructor | `construct(...)` |
+| `io.Path.join_str(String)` | `io.Path.join(Path)`, which accepts a `String` |
 
 ## Errors in the editor
 
@@ -177,6 +178,21 @@ main.pep:4:12: error: too few arguments to 'add': expected 2, have 1
 main.pep:3:12: error: too many arguments to 'f': expected at most 2, have 3
     3 |     return f(1, 2, 3) + f();
       |            ^
+```
+
+**A call no overload fits, or that two fit equally well.** Each note is a
+candidate, and says why it does not fit (see [Overloading](overloading.md)):
+
+```text
+main.pep:3:22: error: call to 'f' is ambiguous
+    3 | main(): int { return f(1); }
+      |                      ^
+main.pep:1:1: note: candidate function
+    1 | f(x: long): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function
+    2 | f(x: short): int { return 2; }
+      | ^
 ```
 
 **A syntax error.** The parser says what it expected at the first place the
