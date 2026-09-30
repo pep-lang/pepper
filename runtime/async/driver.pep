@@ -1,22 +1,23 @@
 ## I/O backends: how a task runtime waits for sockets.
 
 # The driver seam. A worker owns one `_Driver`, chosen when `run` starts
-# (`_async_open_driver`): epoll (driver_epoll.pep), kqueue
-# (driver_kqueue.pep), IOCP (driver_iocp.pep), or poll(), the portable
-# reference (driver_poll.pep). Every driver type exists on every OS; the
-# system calls behind one are [Target]ed, with stubs elsewhere that make it
-# unavailable, so the choice can be made at run time.
+# (`_async_open_driver`): epoll (driver_epoll.pep), io_uring
+# (driver_io_uring.pep), kqueue (driver_kqueue.pep), IOCP (driver_iocp.pep),
+# or poll(), the portable reference (driver_poll.pep). Every driver type
+# exists on every OS; the system calls behind one are [Target]ed, with stubs
+# elsewhere that make it unavailable, so the choice can be made at run time.
 #
 # Each driver also has a doorbell (`_Doorbell`): any thread can ring it to
 # end the worker's current or next wait early, so a worker blocked in its
-# driver notices messages from other workers. It is an eventfd (epoll), an
-# EVFILT_USER event (kqueue), a posted completion (IOCP), or a self-pipe
-# (poll on POSIX) or a loopback UDP socket that a second socket sends to
-# (poll on Windows). A ring is remembered until the next wait, so a ring that lands
-# just before the worker blocks still wakes it.
+# driver notices messages from other workers. It is an eventfd (epoll and
+# io_uring), an EVFILT_USER event (kqueue), a posted completion (IOCP), or a
+# self-pipe (poll on POSIX) or a loopback UDP socket that a second socket
+# sends to (poll on Windows). A ring is remembered until the next wait, so a
+# ring that lands just before the worker blocks still wakes it.
 
 import io;
 import "driver_epoll";
+import "driver_io_uring";
 import "driver_iocp";
 import "driver_kqueue";
 import "driver_poll";
@@ -27,10 +28,14 @@ import "task";
 export enum Backend {
     ## The best one the system has: epoll on Linux, kqueue on macOS, IOCP on
     ## Windows. The `PEPPER_IO_BACKEND` environment variable (`epoll`,
-    ## `kqueue`, `iocp` or `poll`) picks another.
+    ## `io_uring`, `kqueue`, `iocp` or `poll`) picks another.
     Automatic,
     ## Linux's epoll, edge-triggered.
     Epoll,
+    ## Linux's io_uring (kernel 5.11 or later), waiting for sockets with
+    ## one-shot poll requests. Not the default: container seccomp profiles
+    ## and hardened kernels often refuse it.
+    IoUring,
     ## The BSD and macOS kqueue, edge-triggered.
     Kqueue,
     ## A Windows I/O completion port, fed readiness by AFD poll requests.
@@ -137,6 +142,11 @@ export _async_open_driver(requested: Backend): (_Driver, Backend) {
         if (epoll.is_some()) {
             return (epoll.value(), backend);
         }
+    } else if (backend == Backend.IoUring) {
+        var io_uring = _IoUringDriver.open();
+        if (io_uring.is_some()) {
+            return (io_uring.value(), backend);
+        }
     } else if (backend == Backend.Kqueue) {
         var kqueue = _KqueueDriver.open();
         if (kqueue.is_some()) {
@@ -182,6 +192,9 @@ _async_backend_from_environment(): Backend {
     if (_async_c_string_is(value, "epoll")) {
         return Backend.Epoll;
     }
+    if (_async_c_string_is(value, "io_uring")) {
+        return Backend.IoUring;
+    }
     if (_async_c_string_is(value, "kqueue")) {
         return Backend.Kqueue;
     }
@@ -191,7 +204,7 @@ _async_backend_from_environment(): Backend {
     if (_async_c_string_is(value, "poll")) {
         return Backend.Poll;
     }
-    panic("async.run: PEPPER_IO_BACKEND must be epoll, kqueue, iocp or poll");
+    panic("async.run: PEPPER_IO_BACKEND must be epoll, io_uring, kqueue, iocp or poll");
     return Backend.Automatic;
 }
 

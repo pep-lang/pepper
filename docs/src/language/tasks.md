@@ -175,16 +175,17 @@ How the runtime waits for sockets is its I/O *backend*, an `async.Backend`:
 | Backend | Where | How |
 |---|---|---|
 | `Epoll` | Linux | epoll, edge-triggered |
+| `IoUring` | Linux 5.11 and later | io_uring, with a one-shot poll request per waiting socket; never picked automatically, since container seccomp profiles and hardened kernels often refuse it |
 | `Kqueue` | macOS | kqueue, edge-triggered |
 | `Iocp` | Windows | an I/O completion port, fed by AFD poll requests (as tokio and libuv do) |
 | `Poll` | everywhere | `poll()` (`WSAPoll` on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands |
 
-`Backend.Automatic`, the default, picks the first of the three that the
-system has. `RuntimeOptions().backend(kind)` asks for one (and `run_with`
-panics if the system does not have it), and the `PEPPER_IO_BACKEND`
-environment variable (`epoll`, `kqueue`, `iocp` or `poll`) overrides the
-automatic choice without changing the program, for testing and
-benchmarks. `async.current_backend()` says which one is running.
+`Backend.Automatic`, the default, picks epoll, kqueue or IOCP, whichever
+the system has. `RuntimeOptions().backend(kind)` asks for one (and
+`run_with` panics if the system does not have it), and the
+`PEPPER_IO_BACKEND` environment variable (`epoll`, `io_uring`, `kqueue`,
+`iocp` or `poll`) overrides the automatic choice without changing the
+program, for testing and benchmarks. `async.current_backend()` says which one is running.
 
 ## Timeouts
 
@@ -232,17 +233,18 @@ the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.
 
 Each worker has its own ready queue, timers and backend. Workers talk
-through a queue of messages each (a spawned task finished, was cancelled,
-or was woken by a `Mutex`, `Condition` or `Channel`) and a *doorbell* that ends a worker's wait in its backend from
-another thread: an eventfd with epoll, a user event with kqueue, a posted
-completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
-a second socket sends to) with `poll()`. `run_blocking`'s pool threads are
-plain threads that report back through the same messages.
+through a queue of messages each (a spawned task finished, was cancelled, or
+was woken by a `Mutex`, `Condition` or `Channel`) and a *doorbell* that ends
+a worker's wait in its backend from another thread: an eventfd with epoll
+and io_uring, a user event with kqueue, a posted completion with IOCP, and a
+pipe (on Windows, a loopback UDP socket that a second socket sends to) with
+`poll()`. `run_blocking`'s pool threads are plain threads that report back
+through the same messages.
 
 ## Current status
 
-- Files block the thread on every platform. io_uring on Linux, and
-  asynchronous files, come later.
+- Files block the thread on every platform; asynchronous files come
+  later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is
   built on fiber local storage); elsewhere the tasks of a thread share it.
 

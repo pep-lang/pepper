@@ -25,7 +25,7 @@ Automatic
 
 The best one the system has: epoll on Linux, kqueue on macOS, IOCP on
 Windows. The `PEPPER_IO_BACKEND` environment variable (`epoll`,
-`kqueue`, `iocp` or `poll`) picks another.
+`io_uring`, `kqueue`, `iocp` or `poll`) picks another.
 
 #### Epoll
 
@@ -34,6 +34,16 @@ Epoll
 ```
 
 Linux's epoll, edge-triggered.
+
+#### IoUring
+
+```pepper
+IoUring
+```
+
+Linux's io_uring (kernel 5.11 or later), waiting for sockets with
+one-shot poll requests. Not the default: container seccomp profiles
+and hardened kernels often refuse it.
 
 #### Kqueue
 

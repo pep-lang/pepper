@@ -982,6 +982,25 @@ fn sockets_park_their_task_with_poll() {
     assert_eq!(stdout.lines().next(), Some("Poll"));
 }
 
+/// The socket, spawn, blocking and sync programs on io_uring (Linux), whose
+/// doorbell is an eventfd with a poll request of its own.
+#[cfg(target_os = "linux")]
+#[test]
+fn sockets_park_their_task_with_io_uring() {
+    let source = SOCKETS_PROGRAM.replace(
+        "async.run(() => {",
+        "async.run_with(async.RuntimeOptions().backend(async.Backend.IoUring), () => {",
+    );
+    let stdout = assert_runs("task_sockets_io_uring", &source);
+    assert_eq!(stdout.lines().next(), Some("IoUring"));
+    let source = SPAWN_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
+    assert_runs("task_spawn_io_uring", &source);
+    let source = BLOCKING_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
+    assert_runs("task_blocking_io_uring", &source);
+    let source = SYNC_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
+    assert_runs("task_sync_io_uring", &source);
+}
+
 #[test]
 fn spawned_tasks_run_on_any_worker() {
     assert_runs("task_spawn", SPAWN_PROGRAM);
