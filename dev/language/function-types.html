@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-497a887a.js";
+            window.path_to_searchindex_js = "../searchindex-d2086fb8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-adbf0aad.js"></script>
@@ -720,8 +720,9 @@ a value. Wrap the call in a closure: <code>(f: (int) =&gt; long) =&gt; b.map(f)<
 write <code>this.norm</code>.</li>
 <li><strong>Closures in trait default methods</strong> cannot use <code>this</code> or the members of
 the struct yet.</li>
-<li><strong>C callbacks.</strong> A closure cannot be passed to a C function that expects a
-function pointer.</li>
+<li><strong>Closures that capture values as C callbacks.</strong> A C function pointer
+(<code>extern (P) =&gt; R</code>) takes a named function or a closure that captures
+nothing; see <a href="c-interop.html#passing-a-pepper-function-to-c">Calling C</a>.</li>
 </ul>
 
                     </main>

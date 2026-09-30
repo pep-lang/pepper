@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-497a887a.js";
+            window.path_to_searchindex_js = "../searchindex-d2086fb8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-adbf0aad.js"></script>
@@ -450,19 +450,19 @@ behaves exactly as it would in C. Keep raw pointers inside small functions or
 structs that own the memory, and give the rest of your program ordinary Pepper
 types.</p>
 <h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
-<p>A Pepper <a href="function-types.html">function value</a> is a Pepper object, not a C
-function pointer. To hand a function to C as a callback, such as the
-comparison function of <code>qsort</code>, take its address with
-<code>__function_pointer(name)</code>. The result is a <code>__ptr&lt;void&gt;</code>:</p>
-<pre><code class="language-pepper">extern void qsort(void* base, ulong count, ulong size, void* compare);
+<p>A Pepper <a href="function-types.html">function value</a> is a reference-counted object,
+not a C function pointer. For C, Pepper has a separate type,
+<code>extern (P...) =&gt; R</code>: the address of a function that C calls with the C
+calling convention. Declare a callback parameter of a C function with it,
+and pass a named function, or a closure that captures nothing:</p>
+<pre><code class="language-pepper"># `extern (P...) =&gt; R` is a C function pointer type: qsort calls `compare`
+# with pointers to two elements.
+extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
 
-# C calls this with pointers to two elements: a C-compatible signature.
-compare_ints(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+ascending(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
     __ptr&lt;int&gt; x = a;
     __ptr&lt;int&gt; y = b;
-    if (x[0] &lt; y[0]) { return -1; }
-    if (x[0] &gt; y[0]) { return 1; }
-    return 0;
+    return x[0] - y[0];
 }
 
 main(): int {
@@ -471,24 +471,75 @@ main(): int {
     numbers[1] = 10;
     numbers[2] = 40;
     numbers[3] = 20;
-    qsort(numbers, 4, sizeof&lt;int&gt;(), __function_pointer(compare_ints));
-    assert(numbers[0] == 10 &amp;&amp; numbers[3] == 40, "sorted");
+
+    # A named function converts to the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), ascending);
+    assert(numbers[0] == 10 &amp;&amp; numbers[3] == 40, "ascending");
+
+    # So does a closure that captures nothing; its parameter types come
+    # from the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), (a, b) =&gt; {
+        __ptr&lt;int&gt; x = a;
+        __ptr&lt;int&gt; y = b;
+        return y[0] - x[0];
+    });
+    assert(numbers[0] == 40 &amp;&amp; numbers[3] == 10, "descending");
+
+    # A C function pointer is a value like a number: store it, call it.
+    var compare: extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int = ascending;
+    assert(compare(numbers, numbers + 1) &gt; 0, "40 sorts after 30");
+
     _pep_free(numbers);
     return 0;
 }
 </code></pre>
 <ul>
-<li>The argument must name a free function, or a static method of the struct
+<li>
+<p><strong>What converts.</strong> A named free function, a static method
+(<code>Order.descending</code>), or a closure literal that captures nothing, whose
+parameter and return types match the C function pointer type exactly. A
+closure literal takes its parameter types from the type, as it does from
+any function type.</p>
+</li>
+<li>
+<p><strong>Nothing captured.</strong> C calls the function with its arguments alone, so a
+closure that captures a value, or a bound method (<code>p.get</code>), cannot
+convert:</p>
+<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
+    4 |     qsort(_pep_malloc(4), 0, 4, (a, b) =&gt; bias);
+      |                                           ^~~~
+main.pep:3:9: note: pass what the callback needs through the C function's context argument instead
+    3 |     var bias = 1;
+      |         ^~~~
+</code></pre>
+<p>Most C APIs that take a callback also take a <code>void*</code> context argument that
+they hand back to it; pass what the callback needs through that.
+A function value held in a variable does not convert either, since it may
+be a closure.</p>
+</li>
+<li>
+<p><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
+and return types must be numbers, <code>bool</code>, pointers, or other C function
+pointer types. A struct is an error:
+<code>C function pointer type 'extern (String) =&gt; int' cannot use 'String'; C passes only numbers, 'bool' and pointers</code>.
+Write pointers as <code>void*</code> in an <code>extern</code> declaration and as <code>__ptr&lt;void&gt;</code>
+elsewhere, as for any pointer.</p>
+</li>
+<li>
+<p><strong>A value like a number.</strong> A C function pointer has no reference count.
+Store it in a variable, field or module-scope <code>const</code>, return it, pass it
+to other threads, or call it: <code>compare(a, b)</code> calls through it with the C
+calling convention. Calling a null one (from C) panics. It converts to
+<code>void*</code> but not to a Pepper function type; wrap it in a closure that calls
+it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
+</li>
+</ul>
+<p><code>__function_pointer(name)</code> also gives a function’s address, as an untyped
+<code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
 whose method uses it. Inside a generic struct the static method is the one
 for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> gives the
-operating system a destructor for its <code>T</code>.</li>
-<li>C calls the function with the C calling convention, so give it
-C-compatible parameter and return types: numbers and <code>__ptr&lt;T&gt;</code>. C knows
-nothing of reference counts, so a struct parameter or return value would
-not be counted correctly.</li>
-<li>A name that is not a function is reported as
-<code>use of undeclared identifier</code>.</li>
-</ul>
+operating system a destructor for its <code>T</code>. Prefer a C function pointer type
+where the signature is known, since the compiler then checks it.</p>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[LinkName("symbol")]</code> binds an extern to a C symbol whose name differs from
 the declared one. Pepper code calls the extern by its declared name, and the
