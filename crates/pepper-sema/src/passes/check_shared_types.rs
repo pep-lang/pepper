@@ -87,6 +87,11 @@ pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<
 /// Where the program names type `spec` (a variable, field or parameter
 /// type, or a constructor call), for errors about a specialization.
 pub(crate) fn use_site(module: &Module, spec: &str) -> Option<Loc> {
+    find_use_site(module, spec).map(|(loc, _)| loc)
+}
+
+/// [`use_site`], with the name of the free function it is in, if any.
+fn find_use_site(module: &Module, spec: &str) -> Option<(Loc, Option<String>)> {
     fn var_loc(var: &VariableDef, spec: &str) -> Option<Loc> {
         let mentions = |ty: &TypeName| -> bool {
             fn walk(ty: &TypeName, spec: &str) -> bool {
@@ -147,7 +152,8 @@ pub(crate) fn use_site(module: &Module, spec: &str) -> Option<Loc> {
         .globals
         .iter()
         .find_map(|g| var_loc(g, spec).or_else(|| g.default.as_ref().and_then(|e| in_expression(e, spec))))
-        .or_else(|| module.functions.iter().find_map(|f| in_function(f, spec)))
+        .map(|loc| (loc, None))
+        .or_else(|| module.functions.iter().find_map(|f| in_function(f, spec).map(|loc| (loc, Some(f.name.clone())))))
         .or_else(|| {
             module.structs.iter().find_map(|st| {
                 st.field_members
@@ -155,7 +161,28 @@ pub(crate) fn use_site(module: &Module, spec: &str) -> Option<Loc> {
                     .find_map(|f| var_loc(f, spec))
                     .or_else(|| st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]).find_map(|m| in_function(m, spec)))
             })
+            .map(|loc| (loc, None))
         })
+}
+
+/// [`use_site`], followed out of generic function specializations to the
+/// code the user wrote: when `spec` is named inside a specialization such as
+/// `spawn<String>`, the site is the call that asked for that specialization
+/// (and so on outwards). Returns that site and, innermost first, each
+/// specialization passed through with where it names the next inner thing.
+pub(crate) fn user_use_site(module: &Module, spec: &str) -> Option<(Loc, Vec<(String, Loc)>)> {
+    let (mut loc, mut function) = find_use_site(module, spec)?;
+    let mut through = Vec::new();
+    while let Some(name) = function {
+        if !name.contains('<') || through.iter().any(|(seen, _)| *seen == name) {
+            break;
+        }
+        let Some((call, caller)) = find_use_site(module, &name) else { break };
+        through.push((name, loc));
+        loc = call;
+        function = caller;
+    }
+    Some((loc, through))
 }
 
 /// A note at `ty`'s declaration saying why it is not thread-safe.
@@ -242,13 +269,27 @@ fn check_shared_structs(module: &Module) -> bool {
                 _ => (format!("field '{}'", field.name), "struct"),
             };
             let diagnostic = if is_specialization {
-                Diagnostic::error(format!(
-                    "shared struct '{}' requires thread-safe type arguments; '{}' is not thread-safe",
-                    st.ty.display(),
+                let (site, through) = user_use_site(module, &st.name).unwrap_or((field_loc, Vec::new()));
+                // Name what the user wrote: the outermost specialization.
+                let asked = match through.last() {
+                    Some((function, _)) => format!("'{}'", function),
+                    None => format!("shared struct '{}'", st.ty.display()),
+                };
+                let mut diagnostic = Diagnostic::error(format!(
+                    "{} requires thread-safe type arguments; '{}' is not thread-safe",
+                    asked,
                     offender.display()
                 ))
-                .at(use_site(module, &st.name).unwrap_or(field_loc))
-                .with_note(format!("required by {} declared here", what), Some(field_loc))
+                .at(site);
+                // Outermost first: the specialization the user asked for,
+                // then what it names, down to the struct.
+                let mut required = st.ty.display();
+                for (function, loc) in &through {
+                    diagnostic = diagnostic
+                        .with_note(format!("'{}' is required here, in '{}'", required, function), Some(*loc));
+                    required = function.clone();
+                }
+                diagnostic.with_note(format!("required by {} declared here", what), Some(field_loc))
             } else {
                 Diagnostic::error(format!(
                     "{} of shared {} '{}' has type '{}', which is not thread-safe",

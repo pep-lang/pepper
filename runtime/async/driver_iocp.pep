@@ -20,6 +20,9 @@
 #     64  1 once the socket was forgotten (closed): the completion is
 #         dropped
 #
+# The doorbell posts a completion with no OVERLAPPED
+# (PostQueuedCompletionStatus), which `_poll` skips.
+#
 # The system calls are [Target(OS(Windows))]; elsewhere
 # `_async_iocp_create` fails, so the driver is unavailable.
 
@@ -35,6 +38,8 @@ extern int GetQueuedCompletionStatusEx(
 );
 [Target(OS(Windows))]
 extern int CloseHandle(void* handle);
+[Target(OS(Windows))]
+extern int PostQueuedCompletionStatus(void* port, uint bytes, ulong key, void* overlapped);
 [Target(OS(Windows))]
 extern int SetFileCompletionNotificationModes(void* file, u8 flags);
 [Target(OS(Windows))]
@@ -200,7 +205,9 @@ extend _IocpDriver with _Driver {
         var i: ulong = 0;
         while (i < count) {
             __ptr<u8> block = ((this._entries + i * 32 + 8) as __ptr<__ptr<u8>>)[0];
-            this._complete(block, handles, interests);
+            if (block != __null) {
+                this._complete(block, handles, interests);
+            }
             i = i + 1;
         }
     }
@@ -215,6 +222,10 @@ extend _IocpDriver with _Driver {
             _async_iocp_block(this._writing.get(key))[8] = 1;
             this._writing.remove(key);
         }
+    }
+
+    _doorbell(): _Doorbell {
+        return _Doorbell(_DOORBELL_IOCP, 0, this._port, __null);
     }
 
     _close() {
@@ -355,6 +366,12 @@ _async_iocp_dequeue(port: __ptr<void>, entries: __ptr<u8>, capacity: int, timeou
     return count;
 }
 
+# Rings the doorbell of the driver whose completion port is `port`.
+[Target(OS(Windows))]
+export _async_iocp_ring(port: __ptr<void>) {
+    PostQueuedCompletionStatus(port, 0, 0, __null);
+}
+
 # Elsewhere there are no completion ports.
 
 [Target(!OS(Windows))]
@@ -364,6 +381,9 @@ _async_iocp_create(): __ptr<void> {
 
 [Target(!OS(Windows))]
 _async_iocp_close_handle(handle: __ptr<void>) {}
+
+[Target(!OS(Windows))]
+export _async_iocp_ring(port: __ptr<void>) {}
 
 [Target(!OS(Windows))]
 _async_iocp_open_afd(port: __ptr<void>): __ptr<void> {

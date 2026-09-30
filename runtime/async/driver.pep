@@ -6,6 +6,14 @@
 # reference (driver_poll.pep). Every driver type exists on every OS; the
 # system calls behind one are [Target]ed, with stubs elsewhere that make it
 # unavailable, so the choice can be made at run time.
+#
+# Each driver also has a doorbell (`_Doorbell`): any thread can ring it to
+# end the worker's current or next wait early, so a worker blocked in its
+# driver notices messages from other workers. It is an eventfd (epoll), an
+# EVFILT_USER event (kqueue), a posted completion (IOCP), or a self-pipe
+# (poll on POSIX) or a loopback UDP socket that a second socket sends to
+# (poll on Windows). A ring is remembered until the next wait, so a ring that lands
+# just before the worker blocks still wakes it.
 
 import io;
 import "driver_epoll";
@@ -54,8 +62,58 @@ export trait _Driver {
     # `handle` is about to be closed.
     _forget(handle: io.SocketHandle);
 
-    # Releases the driver's system resources.
+    # The doorbell that ends this driver's waits early, from any thread.
+    _doorbell(): _Doorbell;
+
+    # Releases the driver's system resources, the doorbell's included.
     _close();
+}
+
+# What a doorbell rings.
+export const _DOORBELL_EVENTFD = 1;
+export const _DOORBELL_KQUEUE = 2;
+export const _DOORBELL_IOCP = 3;
+export const _DOORBELL_POLL = 4;
+
+# Wakes a worker blocked in its driver, from any thread (see the notes at
+# the top of this file). The driver that made it keeps its resources open
+# until every worker has stopped, so a ring never reaches a closed handle.
+[Shared]
+export struct _Doorbell {
+    # One of the `_DOORBELL_*` kinds.
+    const _kind: int;
+    # The eventfd, kqueue or pipe's write end, or the sending UDP socket.
+    const _descriptor: long;
+    # The completion port (IOCP).
+    const _port: __ptr<void>;
+    # The address of the UDP socket a ring sends to (a sockaddr_in).
+    const _address: __ptr<u8>;
+
+    construct(kind: int, descriptor: long, port: __ptr<void>, address: __ptr<u8>) {
+        _kind = kind;
+        _descriptor = descriptor;
+        _port = port;
+        _address = address;
+    }
+
+    # Ends the worker's current wait, or its next one.
+    _ring() {
+        if (_kind == _DOORBELL_EVENTFD) {
+            _async_epoll_ring(_descriptor);
+        } else if (_kind == _DOORBELL_KQUEUE) {
+            _async_kqueue_ring(_descriptor);
+        } else if (_kind == _DOORBELL_IOCP) {
+            _async_iocp_ring(_port);
+        } else {
+            _async_poll_ring(_descriptor, _address);
+        }
+    }
+}
+
+# The data word a driver gives its doorbell's registration, which no socket
+# has.
+export _async_doorbell_key(): ulong {
+    return ~(0 as ulong);
 }
 
 # The driver for `requested`, and the backend it is. Automatic takes

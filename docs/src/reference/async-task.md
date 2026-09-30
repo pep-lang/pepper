@@ -2,14 +2,16 @@
 
 # Tasks
 
-Tasks: functions that run concurrently on one thread, each on its own
-small stack, switching only where they wait.
+Tasks: functions that run concurrently on a few worker threads, each on
+its own small stack, switching only where they wait.
 
-`run(body)` turns the calling thread into a worker and runs `body` as its
-first task. A task starts others with `Task<T>.spawn_local`, and gives
-the thread to the others whenever it waits: `sleep`, `yield_now`, and
-`Task.join`, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
-time without waiting keeps every other task on its worker waiting too.
+`run(body)` turns the calling thread into the first worker, starts the
+others, and runs `body` as the first task. A task starts others with
+`Task<T>.spawn_local` (on its own worker) or `spawn` (on any worker), and
+gives its worker to the other tasks there whenever it waits: `sleep`,
+`yield_now`, and `Task.join`, and whenever a socket call would block.
+Nothing preempts a task, so a task that computes for a long time without
+waiting keeps every other task on its worker waiting too.
 
 A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
@@ -89,10 +91,31 @@ Settings for `run_with`, built by chaining: `RuntimeOptions().stack_size(65536)`
 construct()
 ```
 
-Creates the default options: 256 KiB of stack per task, and the
-system's best I/O backend.
+Creates the default options: one worker per logical CPU, 256 KiB of
+stack per task, and the system's best I/O backend.
 
 ### Methods
+
+#### workers
+
+```pepper
+workers(count: ulong): RuntimeOptions
+```
+
+Sets how many workers (threads that run tasks) the runtime has. The
+thread that calls `run_with` is the first; the rest are new threads.
+Tasks from `spawn_local` run on the worker that started them; tasks
+from `spawn` run on whichever worker is free. The default is
+`logical_cpus()`.
+
+**Parameters**
+- `count` — the number of workers
+
+**Returns**
+- these options
+
+**Panics**
+- if `count` is 0
 
 #### backend
 
@@ -138,7 +161,8 @@ crashes the program, as a thread that overflows its stack does.
 struct Task<T>
 ```
 
-A task started with `spawn_local`, and the value its body returns.
+A task started with `spawn_local` or `spawn`, and the value its body
+returns.
 
 **Type parameters**
 - `T` — the type of the body's result; `void` when there is none
@@ -165,8 +189,8 @@ A task started with `spawn_local`, and the value its body returns.
 construct(core: _TaskCore)
 ```
 
-Wraps the scheduler's record of a task. Only `spawn_local` has one;
-start tasks with `spawn_local`.
+Wraps the scheduler's record of a task. Only `spawn_local` and `spawn`
+have one; start tasks with those.
 
 **Parameters**
 - `core` — the scheduler's record of the task
@@ -236,10 +260,12 @@ Returns whether the task's body has returned.
 run(body: () => void)
 ```
 
-Runs `body` as the first task of a new runtime on the calling thread, and
-returns once `body` has returned and every task it started has finished.
-When `body` returns, the tasks still running are cancelled (see
-`Task.cancel`), and `run` waits for them to finish.
+Runs `body` as the first task of a new runtime, and returns once `body`
+has returned and every task it started has finished. The calling thread
+is the first worker; the runtime starts one more thread per logical CPU
+after it (see `RuntimeOptions.workers`). When `body` returns, the tasks
+still running are cancelled (see `Task.cancel`), on every worker, and
+`run` waits for them to finish.
 
 **Parameters**
 - `body` — the first task
@@ -278,6 +304,58 @@ Runs `body` like `run`, with the given settings.
 
 **Panics**
 - if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend `options` asks for
+
+## spawn
+
+```pepper
+spawn<T>(body: shared () => T): Task<T>
+```
+
+Starts a task that runs `body` on whichever worker is free first, and
+returns it. Unlike `Task<T>.spawn_local`, the task may run on another
+thread, in parallel with the calling task, so the body must be a
+`shared` function (it may capture only thread-safe values) and its result
+crosses threads, so `T` must be thread-safe too: a number, a `[Shared]`
+struct, or a `shared` function type (`spawn<String>` is a compile error).
+
+A task, once started, stays on the worker that started it. Joining and
+cancelling work as for `spawn_local`.
+
+**Type parameters**
+- `T` — the type of the body's result, which must be thread-safe; `void` when there is none
+
+**Parameters**
+- `body` — the task's code
+
+**Returns**
+- the task
+
+**Panics**
+- outside `run`
+
+**Example**
+```pepper
+    import async;
+
+    sum(from: long, to: long): long {
+        var total: long = 0;
+        var i = from;
+        while (i < to) {
+            total = total + i;
+            i = i + 1;
+        }
+        return total;
+    }
+
+    main(): int {
+        async.run(() => {
+            var low = async.spawn<long>(() => { return sum(0, 500000); });
+            var high = async.spawn<long>(() => { return sum(500000, 1000000); });
+            print(low.join().value() + high.join().value());   # 499999500000
+        });
+        return 0;
+    }
+```
 
 ## yield_now
 

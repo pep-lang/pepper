@@ -1,5 +1,6 @@
 ## Threads and concurrency, modeled on Rust's `std::thread` and C++
-## `std::thread`, and tasks: green threads that take turns on one thread.
+## `std::thread`, and tasks: green threads that take turns on a few worker
+## threads.
 ##
 ## Like `io`, `async` is a module: bring it in with `import async` (and write
 ## `async.Thread`, `async.logical_cpus()`) or import names directly with
@@ -11,7 +12,7 @@
 ## - [Channel](async-channel.md): `Channel<T>`, a queue that carries values between threads, and its `ChannelIterator<T>`
 ## - [Mutex](async-mutex.md): `Mutex<T>`, the `MutexGuard<T>` a `with` block holds, and `Condition<T>`
 ## - [Once](async-once.md): `Once`, which runs a function once, and `Lazy<T>`, a value built on first use
-## - [Tasks](async-task.md): `run`, `Task<T>`, `sleep`, `yield_now`, `timeout` and cancellation, for many tasks taking turns on one thread and parking on sockets
+## - [Tasks](async-task.md): `run`, `Task<T>`, `spawn`, `sleep`, `yield_now`, `timeout` and cancellation, for many tasks taking turns on a few worker threads and parking on sockets
 ## - [I/O backends](async-driver.md): `Backend`, how a runtime waits for sockets
 ##
 ## Only thread-safe values can be shared between threads: numbers, `shared`
@@ -60,6 +61,7 @@ import "once";
 import "task";
 import "thread";
 import "thread_local";
+import "workers";
 
 export ThreadId;
 export ThreadBody;
@@ -80,6 +82,7 @@ export TaskError;
 export RuntimeOptions;
 export run;
 export run_with;
+export spawn;
 export yield_now;
 export sleep;
 export is_cancelled;

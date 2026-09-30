@@ -9,6 +9,10 @@
 # x86-64, 16 bytes with the data at offset 8 on AArch64. The system calls
 # are [Target(OS(Linux))]; elsewhere `_async_epoll_create` fails, so the
 # driver is unavailable.
+#
+# The doorbell is an eventfd registered like a socket, with
+# `_async_doorbell_key()` as its data word; a ring writes 1 to it, and the
+# poll that sees it reads it back to 0.
 
 import io;
 import "driver";
@@ -22,6 +26,12 @@ extern int epoll_ctl(int epoll, int operation, int descriptor, void* event);
 extern int epoll_wait(int epoll, void* events, int capacity, int timeout);
 [Target(OS(Linux))]
 extern int close(int descriptor);
+[Target(OS(Linux))]
+extern int eventfd(uint initial, int flags);
+[Target(OS(Linux))]
+extern long read(int fd, void* buf, ulong n);
+[Target(OS(Linux))]
+extern long write(int fd, void* buf, ulong n);
 
 [Target(OS(Linux) && Arch(x64))]
 const _EPOLL_EVENT_SIZE = 12;
@@ -50,9 +60,12 @@ export struct _EpollDriver {
     var _epoll: long;
     # Room for `_EPOLL_CAPACITY` events.
     var _events: __ptr<u8>;
+    # The doorbell's eventfd.
+    var _bell: long;
 
-    construct(epoll: long) {
+    construct(epoll: long, bell: long) {
         this._epoll = epoll;
+        this._bell = bell;
         this._events = _async_epoll_events();
     }
 
@@ -62,7 +75,12 @@ export struct _EpollDriver {
         if (epoll < 0) {
             return Optional<_EpollDriver>.none();
         }
-        return Optional<_EpollDriver>.some(_EpollDriver(epoll));
+        var bell = _async_epoll_create_bell(epoll);
+        if (bell < 0) {
+            _async_epoll_close(epoll);
+            return Optional<_EpollDriver>.none();
+        }
+        return Optional<_EpollDriver>.some(_EpollDriver(epoll, bell));
     }
 }
 
@@ -75,8 +93,13 @@ extend _EpollDriver with _Driver {
         var count = _async_epoll_wait(this._epoll, this._events, timeout);
         var i: ulong = 0;
         while (i < count) {
-            handles.append(_async_epoll_event_handle(this._events, i));
-            interests.append(_async_epoll_event_interest(this._events, i));
+            var handle = _async_epoll_event_handle(this._events, i);
+            if (handle == _async_doorbell_key()) {
+                _async_epoll_drain(this._bell);
+            } else {
+                handles.append(handle);
+                interests.append(_async_epoll_event_interest(this._events, i));
+            }
             i = i + 1;
         }
     }
@@ -87,7 +110,12 @@ extend _EpollDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {}
 
+    _doorbell(): _Doorbell {
+        return _Doorbell(_DOORBELL_EVENTFD, this._bell, __null, __null);
+    }
+
     _close() {
+        _async_epoll_close(this._bell);
         _async_epoll_close(this._epoll);
         _pep_free(this._events);
     }
@@ -119,6 +147,42 @@ _async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     var rc = epoll_ctl(epoll as int, 1, handle, event);  # EPOLL_CTL_ADD
     _pep_free(event);
     return rc == 0;
+}
+
+# A non-blocking eventfd watched by `epoll` under the doorbell key, or -1.
+[Target(OS(Linux))]
+_async_epoll_create_bell(epoll: long): long {
+    var bell = eventfd(0, 526336);  # EFD_NONBLOCK | EFD_CLOEXEC
+    if (bell < 0) {
+        return -1;
+    }
+    __ptr<u8> event = _pep_malloc(16);
+    (event as __ptr<uint>)[0] = _EPOLL_INTEREST;
+    ((event + _EPOLL_DATA_OFFSET) as __ptr<ulong>)[0] = _async_doorbell_key();
+    var rc = epoll_ctl(epoll as int, 1, bell, event);  # EPOLL_CTL_ADD
+    _pep_free(event);
+    if (rc != 0) {
+        close(bell);
+        return -1;
+    }
+    return bell as long;
+}
+
+# Rings the doorbell eventfd `bell`.
+[Target(OS(Linux))]
+export _async_epoll_ring(bell: long) {
+    __ptr<ulong> one = _pep_malloc(8);
+    one[0] = 1;
+    write(bell as int, one, 8);
+    _pep_free(one);
+}
+
+# Resets the doorbell eventfd `bell` to 0.
+[Target(OS(Linux))]
+_async_epoll_drain(bell: long) {
+    __ptr<ulong> value = _pep_malloc(8);
+    read(bell as int, value, 8);
+    _pep_free(value);
 }
 
 # Waits up to `timeout` milliseconds (forever when negative) and returns how
@@ -161,6 +225,17 @@ _async_epoll_create(): long {
 
 [Target(!OS(Linux))]
 _async_epoll_close(epoll: long) {}
+
+[Target(!OS(Linux))]
+_async_epoll_create_bell(epoll: long): long {
+    return -1;
+}
+
+[Target(!OS(Linux))]
+export _async_epoll_ring(bell: long) {}
+
+[Target(!OS(Linux))]
+_async_epoll_drain(bell: long) {}
 
 [Target(!OS(Linux))]
 _async_epoll_events(): __ptr<u8> {

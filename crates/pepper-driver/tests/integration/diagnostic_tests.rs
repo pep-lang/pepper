@@ -597,6 +597,27 @@ fn shared_generic_argument_not_thread_safe() {
     assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
 }
 
+#[test]
+fn shared_generic_argument_through_generic_function() {
+    // A shared struct named inside a generic function: the error points at
+    // the call that asked for the specialization, and a note shows where the
+    // specialization names the struct.
+    let error = error_of(
+        "shared_generic_through_function",
+        "import async;\n\nmain(): int {\n    async.run(() => {\n        var t = async.spawn<String>(() => { return \"x\"; });\n    });\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:5:17: error: 'spawn<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+             \x20   5 |         var t = async.spawn<String>(() => { return \"x\"; });\n\
+             \x20     |                 ^~~~~~~~~~~~~~~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: '_TaskResult<String>' is required here, in 'spawn<String>'"), "{error}");
+    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+}
+
 /// The first semantic error of `source` (as `main.pep`, with the runtime),
 /// as a `Diagnostic`, for checking its fixes.
 fn sema_error_of(source: &str) -> pepper_driver::parser_diagnostic::Diagnostic {

@@ -8,6 +8,9 @@
 # (u16) at 10, fflags (u32) at 12, data (i64) at 16, udata at 24. The system
 # calls are [Target(OS(Mac))]; elsewhere `_async_kqueue_create` fails, so
 # the driver is unavailable.
+#
+# The doorbell is an EVFILT_USER event (ident 0, EV_CLEAR) added when the
+# queue is made; a ring triggers it (NOTE_TRIGGER) from any thread.
 
 import io;
 import "driver";
@@ -25,6 +28,8 @@ const _KQUEUE_CAPACITY = 256;
 # EVFILT_READ and EVFILT_WRITE.
 const _KQUEUE_FILTER_READ = -1;
 const _KQUEUE_FILTER_WRITE = -2;
+# EVFILT_USER, the doorbell's filter.
+const _KQUEUE_FILTER_USER = -10;
 # EV_EOF | EV_ERROR: the peer closed, or the socket failed; wake both sides.
 const _KQUEUE_END_FLAGS = 49152;
 
@@ -43,6 +48,14 @@ export struct _KqueueDriver {
     static open(): _KqueueDriver? {
         var queue = _async_kqueue_create();
         if (queue < 0) {
+            return Optional<_KqueueDriver>.none();
+        }
+        __ptr<u8> bell = _pep_malloc(32);
+        _async_kqueue_change(bell, 0, 0, _KQUEUE_FILTER_USER);
+        var added = _async_kqueue_call(queue, bell, 1, __null, 0, -1) == 0;
+        _pep_free(bell);
+        if (!added) {
+            _async_kqueue_close(queue);
             return Optional<_KqueueDriver>.none();
         }
         return Optional<_KqueueDriver>.some(_KqueueDriver(queue));
@@ -65,6 +78,10 @@ extend _KqueueDriver with _Driver {
         while (i < count) {
             var event = this._events + (i as ulong) * 32;
             var filter = ((event + 8) as __ptr<i16>)[0] as int;
+            if (filter == _KQUEUE_FILTER_USER) {
+                i = i + 1;
+                continue;
+            }
             var flags = ((event + 10) as __ptr<u16>)[0] as int;
             var interest = io._IO_WRITABLE;
             if ((flags & _KQUEUE_END_FLAGS) != 0) {
@@ -84,16 +101,25 @@ extend _KqueueDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {}
 
+    _doorbell(): _Doorbell {
+        return _Doorbell(_DOORBELL_KQUEUE, this._queue, __null, __null);
+    }
+
     _close() {
         _async_kqueue_close(this._queue);
         _pep_free(this._events);
     }
 }
 
-# Fills the `index`th kevent in `changes`: EV_ADD | EV_CLEAR on `filter`.
+# Fills the `index`th kevent in `changes`: EV_ADD | EV_CLEAR on `filter`,
+# with no fflags, data or udata.
 _async_kqueue_change(changes: __ptr<u8>, index: ulong, handle: io.SocketHandle, filter: int) {
     var change = changes + index * 32;
-    (change as __ptr<ulong>)[0] = handle as ulong;
+    __ptr<ulong> words = change;
+    words[1] = 0;
+    words[2] = 0;
+    words[3] = 0;
+    words[0] = handle as ulong;
     ((change + 8) as __ptr<i16>)[0] = filter as i16;
     ((change + 10) as __ptr<u16>)[0] = 33;  # EV_ADD | EV_CLEAR
 }
@@ -132,6 +158,17 @@ _async_kqueue_call(
     return count;
 }
 
+# Triggers the doorbell event of `queue`.
+[Target(OS(Mac))]
+export _async_kqueue_ring(queue: long) {
+    __ptr<u8> change = _pep_malloc(32);
+    _async_kqueue_change(change, 0, 0, _KQUEUE_FILTER_USER);
+    ((change + 10) as __ptr<u16>)[0] = 0;
+    ((change + 12) as __ptr<uint>)[0] = 16777216;  # NOTE_TRIGGER
+    _async_kqueue_call(queue, change, 1, __null, 0, -1);
+    _pep_free(change);
+}
+
 # Elsewhere there is no kqueue.
 
 [Target(!OS(Mac))]
@@ -141,6 +178,9 @@ _async_kqueue_create(): long {
 
 [Target(!OS(Mac))]
 _async_kqueue_close(queue: long) {}
+
+[Target(!OS(Mac))]
+export _async_kqueue_ring(queue: long) {}
 
 [Target(!OS(Mac))]
 _async_kqueue_call(

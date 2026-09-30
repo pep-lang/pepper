@@ -28,6 +28,9 @@ depth(n: int): int {
 }
 
 main(): int {
+    # Runs start worker threads: warm up the lazily allocated state of
+    # threads (the main thread's Thread) first.
+    async.Thread.current();
     var before = _pep_live_allocs();
     var log = Array<String>();
     async.run(() => {
@@ -122,6 +125,9 @@ const CANCEL_PROGRAM: &str = r##"
 import async;
 
 main(): int {
+    # Runs start worker threads: warm up the lazily allocated state of
+    # threads (the main thread's Thread) first.
+    async.Thread.current();
     var before = _pep_live_allocs();
     var events = Array<String>();
     async.run(() => {
@@ -230,6 +236,9 @@ serve(stream: io.TcpStream) {
 }
 
 main(): int {
+    # Runs start worker threads: warm up the lazily allocated state of
+    # threads (the main thread's Thread) first.
+    async.Thread.current();
     var before = _pep_live_allocs();
     async.run(() => {
         print(async.current_backend().name());
@@ -336,8 +345,185 @@ main(): int {
 }
 "##;
 
+/// Tasks from `spawn` on several workers: they run in parallel, return
+/// thread-safe results, nest, are cancelled across workers (asleep or
+/// computing), time out, are cancelled when the runtime stops, and use
+/// sockets on whichever worker they run; and a run frees what it allocated.
+const SPAWN_PROGRAM: &str = r##"
+import async;
+import io;
+
+const running = Atomic<long>(0);
+const overlapped = Atomic<long>(0);
+const total = Atomic<long>(0);
+
+# Waits (without yielding) until another task runs at the same time, for up
+# to two seconds: only another worker can run it meanwhile.
+meet(): long {
+    running.fetch_add(1);
+    var until = async.Thread.current().id();
+    var spins: long = 0;
+    while (running.load() < 2 && spins < 200000000) {
+        spins = spins + 1;
+    }
+    if (running.load() >= 2) {
+        overlapped.fetch_add(1);
+    }
+    return until as long;
+}
+
+sum(from: long, to: long): long {
+    var result: long = 0;
+    var i = from;
+    while (i < to) {
+        result = result + i;
+        i = i + 1;
+    }
+    return result;
+}
+
+# Echoes one connection on the worker this task runs on.
+echo_once(): long {
+    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+    var address = listener.local_address().value();
+    var server = async.Task<long>.spawn_local(() => {
+        var (stream, peer) = listener.accept().value();
+        var buffer = Array<u8>();
+        var got = stream.read(buffer, 64).value();
+        stream.write_all(buffer).value();
+        return got as long;
+    });
+    var client = io.TcpStream.connect(address).value();
+    var message = Array<u8>();
+    message.append(1);
+    message.append(2);
+    message.append(3);
+    client.write_all(message).value();
+    var reply = Array<u8>();
+    var read: ulong = 0;
+    while (read < 3) {
+        read = read + client.read(reply, 64).value();
+    }
+    return server.join().value() + reply.count() as long;
+}
+
+main(): int {
+    # Runs start worker threads: warm up the lazily allocated state of
+    # threads (the main thread's Thread) first.
+    async.Thread.current();
+    var before = _pep_live_allocs();
+
+    async.run_with(async.RuntimeOptions().workers(4), () => {
+        # Two spawned tasks run at the same time on different workers.
+        var a = async.spawn<long>(meet);
+        var b = async.spawn<long>(meet);
+        var thread_a = a.join().value();
+        var thread_b = b.join().value();
+        assert(overlapped.load() == 2, "spawned tasks run in parallel");
+        assert(thread_a != thread_b, "on different workers");
+
+        # Results of several types.
+        var low = async.spawn<long>(() => { return sum(0, 500000); });
+        var high = async.spawn<long>(() => { return sum(500000, 1000000); });
+        assert(low.join().value() + high.join().value() == 499999500000, "long results");
+        var counter = async.spawn<Atomic<long>>(() => { return Atomic<long>(42); });
+        assert(counter.join().value().load() == 42, "a [Shared] result");
+        var nothing = async.spawn<void>(() => { total.fetch_add(1); });
+        assert(nothing.join().is_ok(), "a void task");
+        assert(nothing.is_finished(), "finished");
+
+        # Many tasks, spawned from spawned tasks.
+        var tasks = Array<async.Task<long>>();
+        var i = 0;
+        while (i < 50) {
+            tasks.append(async.spawn<long>(() => {
+                var inner = async.spawn<long>(() => { return 2 as long; });
+                var local = async.Task<long>.spawn_local(() => { return 1 as long; });
+                total.fetch_add(1);
+                return inner.join().value() + local.join().value();
+            }));
+            i = i + 1;
+        }
+        var results: long = 0;
+        for (var task in tasks) {
+            results = results + task.join().value();
+        }
+        assert(results == 150, "nested spawns");
+        assert(total.load() == 51, "every task ran");
+
+        # Cancelling a task that sleeps on another worker wakes it.
+        var sleeper = async.spawn<long>(() => {
+            async.sleep(100000);
+            return 1 as long;
+        });
+        async.sleep(10);
+        sleeper.cancel();
+        assert(sleeper.join().error().is_cancelled(), "a cancelled sleeper");
+
+        # A computing task sees the cancel through is_cancelled(). It yields
+        # now and then, in case it runs on this task's worker.
+        var spinner = async.spawn<long>(() => {
+            var n: long = 0;
+            while (!async.is_cancelled()) {
+                n = n + 1;
+                if (n % 100000 == 0) {
+                    async.yield_now();
+                }
+            }
+            return n;
+        });
+        async.sleep(10);
+        spinner.cancel();
+        assert(spinner.join().error().is_cancelled(), "a cancelled computation");
+
+        # Cancelled before any worker starts it.
+        var early = async.spawn<long>(() => { return async.is_cancelled() ? 1 as long : 0 as long; });
+        early.cancel();
+        assert(early.join().error().is_cancelled(), "cancelled before it started");
+
+        # A timeout around a join.
+        var slow = async.spawn<long>(() => {
+            async.sleep(100000);
+            return 1 as long;
+        });
+        with (var deadline = async.timeout(20)) {
+            assert(slow.join().error().is_timed_out(), "join timed out");
+        }
+
+        # Sockets on whichever worker a task runs on.
+        var echoes = Array<async.Task<long>>();
+        var j = 0;
+        while (j < 8) {
+            echoes.append(async.spawn<long>(echo_once));
+            j = j + 1;
+        }
+        for (var echo in echoes) {
+            assert(echo.join().value() == 6, "echoed on another worker");
+        }
+
+        # Still running when the first task returns: `slow`, cancelled.
+        async.spawn<void>(() => { async.sleep(100000); });
+    });
+
+    # One worker runs spawned tasks too.
+    async.run_with(async.RuntimeOptions().workers(1), () => {
+        var t = async.spawn<long>(() => { return 5 as long; });
+        assert(t.join().value() == 5, "one worker");
+    });
+
+    # The default: one worker per logical CPU.
+    async.run(() => {
+        assert(async.spawn<long>(() => { return 6 as long; }).join().value() == 6, "default workers");
+    });
+
+    assert(_pep_live_allocs() == before, "a run frees everything it allocated");
+    print("ok");
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM)]
 }
 
 #[test]
@@ -371,6 +557,19 @@ fn sockets_park_their_task_with_poll() {
 }
 
 #[test]
+fn spawned_tasks_run_on_any_worker() {
+    assert_runs("task_spawn", SPAWN_PROGRAM);
+}
+
+/// The same on the poll() backend, whose doorbell is a self-pipe (or a
+/// loopback UDP socket on Windows).
+#[test]
+fn spawned_tasks_run_on_any_worker_with_poll() {
+    let source = SPAWN_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
+    assert_runs("task_spawn_poll", &source);
+}
+
+#[test]
 fn tasks_are_cancelled_and_awaited() {
     assert_runs("task_cancel", CANCEL_PROGRAM);
 }
@@ -396,7 +595,7 @@ fn tasks_waiting_on_each_other_panic() {
 
 /// Every platform's fiber layer and I/O driver type-check and produce valid
 /// IR: Windows calls the Fibers API, the others define the naked switch and
-/// call epoll, kqueue or AFD poll through IOCP.
+/// call epoll, kqueue or AFD poll through IOCP, each with its doorbell.
 #[test]
 fn task_programs_compile_on_other_platforms() {
     let cases: Vec<_> = SIMULATED_HOSTS.iter().flat_map(|&host| programs().into_iter().map(move |p| (host, p))).collect();
@@ -415,7 +614,13 @@ fn task_programs_compile_on_other_platforms() {
                 "macos" => "@kevent(",
                 _ => "@epoll_wait(",
             };
-            for expect in [switch, driver] {
+            // The doorbell that wakes a worker from another thread.
+            let doorbell = match *os {
+                "windows" => "@PostQueuedCompletionStatus(",
+                "macos" => "@kevent(",
+                _ => "@eventfd(",
+            };
+            for expect in [switch, driver, doorbell] {
                 if !ir.contains(expect) {
                     return Err(format!("IR does not contain {expect}"));
                 }

@@ -1,12 +1,13 @@
 # Tasks
 
-A task is a function that runs alongside others on the same thread. Each task
-has its own small stack, and tasks take turns: one runs until it waits (for
-a timer, for another task, or by yielding), and then another runs. This is
+A task is a function that runs alongside others. Each task has its own small
+stack, and the tasks on a thread take turns: one runs until it waits (for a
+timer, for another task, or by yielding), and then another runs. A runtime
+has a few such threads, its *workers*, so tasks also run in parallel. This is
 the model of Go's goroutines and of libuv or tokio event loops, without
 `async`/`await`: a function that waits looks like any other function, and
 any function can wait, however deep in the call stack. A socket call that
-has to wait parks only its task, so one thread can serve thousands of
+has to wait parks only its task, so one worker can serve thousands of
 connections.
 
 Tasks live in the `async` module:
@@ -19,18 +20,42 @@ Tasks live in the `async` module:
   returned and every task it started has finished. `run_with(options, body)`
   does the same with settings; `RuntimeOptions().stack_size(bytes)` sets how
   much stack each task reserves (256 KiB by default).
-- `Task<T>.spawn_local(body)` starts a task and returns its `Task<T>`. The
-  new task runs the next time the running task waits. `T` is the body's
-  result type; use `Task<void>` for a body that returns nothing.
+- `Task<T>.spawn_local(body)` starts a task on the running task's worker and
+  returns its `Task<T>`. The new task runs the next time the running task
+  waits. `T` is the body's result type; use `Task<void>` for a body that
+  returns nothing.
 - `task.join()` waits for the task and returns a `Result<T, TaskError>`:
   the body's value, or an error if the task was cancelled.
 - `async.yield_now()` lets every other ready task run first.
 - `task.is_finished()` says whether the body has returned.
 
-Because every task of a `run` stays on the thread that called it, a task may
-use any value the others use, as the closures above share `log`. Nothing
-needs to be thread-safe. For work on several threads at once, use
-[threads](threads.md).
+A task from `spawn_local` stays on the thread of the task that started it,
+so it may use any value that task uses, as the closures above share `log`.
+Nothing needs to be thread-safe.
+
+## Several workers
+
+`run` turns the calling thread into the first worker and starts one more
+thread per logical CPU after it (`RuntimeOptions().workers(count)` sets how
+many workers in all). `async.spawn<T>(body)` starts a task that whichever
+worker is free first runs, in parallel with the others:
+
+```pepper
+{{#include ../../examples/tasks-spawn.pep}}
+```
+
+Because such a task may run on another thread, its body must be a `shared`
+function: it may capture only thread-safe values, as a
+[thread](threads.md)'s body. Its result crosses threads too, so `T` must be
+thread-safe (a number, a `[Shared]` struct, or a `shared` function type);
+`async.spawn<String>` is a compile error. `join`, `cancel` and
+`is_finished` work as for `spawn_local`, from the task that started it.
+
+A task, once started, stays on its worker until it finishes, so the tasks it
+starts with `spawn_local` share values with it safely. An idle worker takes
+the next task that no worker has started yet. A task that computes without
+waiting still holds up the other tasks on its own worker (not the other
+workers), so a long computation should call `yield_now()` now and then.
 
 ## Waiting
 
@@ -58,10 +83,12 @@ the waiting differs:
 {{#include ../../examples/tasks-echo.pep}}
 ```
 
-Outside a task, the same calls block the thread as before.
+Outside a task, the same calls block the thread as before. A socket belongs
+to the worker whose task made it: tasks started with `spawn_local` can share
+it, and each spawned task makes its own.
 
-When no task is ready to run, the runtime blocks until a socket is ready or
-the next timer is due; while tasks are running, it also checks the sockets
+When no task is ready to run, a worker blocks until a socket is ready, the
+next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
 every few dozen tasks, so a busy task cannot starve the network.
 
 ### Backends
@@ -108,7 +135,7 @@ task waiting in `join` returns the same error when it is cancelled itself,
 and a socket call waiting in a cancelled task fails with an `IoError` whose
 `is_cancelled()` is true.
 When the first task of a `run` returns, every task still running is
-cancelled, and `run` waits for each to finish:
+cancelled, on every worker, and `run` waits for each to finish:
 
 ```pepper
 {{#include ../../examples/tasks-cancel.pep}}
@@ -127,11 +154,18 @@ stack is reserved address space with a guard page below it; only the pages
 the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.
 
+Each worker has its own ready queue, timers and backend. Workers talk
+through a queue of messages each (a spawned task finished, or was
+cancelled) and a *doorbell* that ends a worker's wait in its backend from
+another thread: an eventfd with epoll, a user event with kqueue, a posted
+completion with IOCP, and a pipe (a loopback UDP socket on Windows) with
+`poll()`.
+
 ## Current status
 
-- A runtime runs on one thread: `spawn_local` is the only way to start a
-  task. Tasks that run on several threads at once, and `run_blocking` for
-  work that would block the thread, are planned.
+- `run_blocking`, which runs work that would block the thread on a pool of
+  threads while the task waits, is planned, as are listeners that accept on
+  every worker and handing a socket to another worker.
 - Files block the thread on every platform. io_uring on Linux, and
   asynchronous files, come later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is

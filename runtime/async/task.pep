@@ -1,17 +1,20 @@
-## Tasks: functions that run concurrently on one thread, each on its own
-## small stack, switching only where they wait.
+## Tasks: functions that run concurrently on a few worker threads, each on
+## its own small stack, switching only where they wait.
 ##
-## `run(body)` turns the calling thread into a worker and runs `body` as its
-## first task. A task starts others with `Task<T>.spawn_local`, and gives
-## the thread to the others whenever it waits: `sleep`, `yield_now`, and
-## `Task.join`, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
-## time without waiting keeps every other task on its worker waiting too.
+## `run(body)` turns the calling thread into the first worker, starts the
+## others, and runs `body` as the first task. A task starts others with
+## `Task<T>.spawn_local` (on its own worker) or `spawn` (on any worker), and
+## gives its worker to the other tasks there whenever it waits: `sleep`,
+## `yield_now`, and `Task.join`, and whenever a socket call would block.
+## Nothing preempts a task, so a task that computes for a long time without
+## waiting keeps every other task on its worker waiting too.
 ##
 ## A task is a green thread (a fiber): an ordinary function with its own
 ## stack, so code that waits looks the same as code that does not, and a
 ## function called in a task can wait without being marked in any way.
 
-# Implementation notes.
+# Implementation notes. (What the workers of one `run` share is described
+# in workers.pep.)
 #
 # One `_Worker` per thread inside `run`: its ready queue, its timer heap,
 # the task it is running, and a pool of idle fibers. The worker lives in
@@ -45,11 +48,14 @@
 # it also sets a timer for the deadline.
 
 import io;
+import "cpus";
 import "driver";
 import "fiber_posix";
 import "fiber_windows";
 import "sys_posix";
 import "sys_windows";
+import "thread";
+import "workers";
 
 # How many tasks run between two non-blocking polls of the driver.
 const _POLL_INTERVAL = 61;
@@ -97,12 +103,30 @@ export struct RuntimeOptions {
     var _stack_size: ulong;
     # The I/O backend asked for.
     var _backend: Backend;
+    # How many workers, or 0 for one per logical CPU.
+    var _workers: ulong;
 
-    ## Creates the default options: 256 KiB of stack per task, and the
-    ## system's best I/O backend.
+    ## Creates the default options: one worker per logical CPU, 256 KiB of
+    ## stack per task, and the system's best I/O backend.
     construct() {
         this._stack_size = 262144;
         this._backend = Backend.Automatic;
+        this._workers = 0;
+    }
+
+    ## Sets how many workers (threads that run tasks) the runtime has. The
+    ## thread that calls `run_with` is the first; the rest are new threads.
+    ## Tasks from `spawn_local` run on the worker that started them; tasks
+    ## from `spawn` run on whichever worker is free. The default is
+    ## `logical_cpus()`.
+    ##
+    ## @param count the number of workers
+    ## @returns these options
+    ## @panics if `count` is 0
+    workers(count: ulong): RuntimeOptions {
+        assert(count > 0, "RuntimeOptions.workers: 0 workers");
+        this._workers = count;
+        return this;
     }
 
     ## Sets which I/O backend the runtime waits on sockets with. The default,
@@ -153,11 +177,30 @@ struct _TaskCore {
     var _joiners: Array<_TaskCore>;
     # The task's position in the worker's `_tasks`.
     var _index: ulong;
+    # For a task from `spawn`: what the workers share about it. The worker
+    # that runs it has a core for it, and so does the worker that spawned
+    # it: a stand-in (`_proxy`) that never runs, and finishes when the
+    # other worker reports the task finished.
+    var _shared: _SharedTask?;
+    var _proxy: bool;
+    # A stand-in's step when its task finishes: takes the result.
+    var _on_complete: () => void;
 
     construct(id: ulong, body: () => void) {
         this._id = id;
         this._body = body;
         this._joiners = Array<_TaskCore>();
+    }
+
+    # Whether the task was cancelled, here or (for a task from `spawn`) on
+    # another worker.
+    _is_cancelled(): bool {
+        if (!this._cancelled && this._shared.is_some()) {
+            if (this._shared.value()._cancelled.load() != 0) {
+                this._cancelled = true;
+            }
+        }
+        return this._cancelled;
     }
 }
 
@@ -176,6 +219,17 @@ struct _Timer {
 
 # The scheduler state of a thread inside `run`.
 struct _Worker {
+    # Which worker this is (0 for the thread that called `run`), what the
+    # workers share, and this worker's inbox.
+    var _index: ulong;
+    var _runtime: _Runtime;
+    var _inbox: _Inbox;
+    # Stand-ins for tasks spawned here that run elsewhere, and tasks from
+    # `spawn` that run here: the tasks messages can name, by id.
+    var _remote: HashMap<ulong, _TaskCore>;
+    # Set once this worker has seen the runtime stopping and cancelled its
+    # tasks.
+    var _stopping: bool;
     # The thread's own context, which runs the scheduler loop.
     var _scheduler: __ptr<void>;
     # Tasks ready to run, first at `_ready_head`.
@@ -206,11 +260,15 @@ struct _Worker {
     # Tasks run since the driver was last polled.
     var _since_poll: ulong;
 
-    construct(stack_size: ulong, backend: Backend) {
+    construct(runtime: _Runtime, index: ulong, stack_size: ulong, backend: Backend) {
+        this._index = index;
+        this._runtime = runtime;
+        this._remote = HashMap<ulong, _TaskCore>();
         this._scheduler = _async_fiber_thread_context();
         var (driver, chosen) = _async_open_driver(backend);
         this._driver = driver;
         this._backend = chosen;
+        this._inbox = _Inbox(driver._doorbell());
         this._ready_handles = Array<ulong>();
         this._ready_interests = Array<int>();
         this._waits = HashMap<ulong, _SocketWaits>();
@@ -230,6 +288,95 @@ struct _Worker {
         this._tasks.append(core);
         this._ready.append(core);
         return core;
+    }
+
+    # A stand-in for a task spawned here that runs on any worker.
+    _new_proxy(): _TaskCore {
+        var core = _TaskCore(this._next_id, () => {});
+        this._next_id = this._next_id + 1;
+        core._proxy = true;
+        core._finished = false;
+        this._remote.insert(core._id, core);
+        return core;
+    }
+
+    # Takes the next task from `spawn` off the shared queue and makes it
+    # ready here; false if there is none.
+    _take_shared(): bool {
+        var next = this._runtime._queue.try_receive();
+        if (next.is_err()) {
+            return false;
+        }
+        var shared = next.value();
+        var core = this._spawn(() => {
+            shared._body();
+        });
+        core._shared = Optional<_SharedTask>.some(shared);
+        this._remote.insert(core._id, core);
+        shared._runner_id.store(core._id);
+        shared._runner_worker.store(this._index + 1);
+        if (this._stopping) {
+            core._cancelled = true;
+        }
+        return true;
+    }
+
+    # A task from `spawn` that ran here has finished: tells the worker that
+    # spawned it.
+    _finish_shared(core: _TaskCore) {
+        this._remote.remove(core._id);
+        var shared = core._shared.value();
+        this._runtime._inbox(shared._owner)._send(shared._proxy, _MESSAGE_COMPLETE);
+    }
+
+    # Handles the messages other workers sent.
+    _receive() {
+        while (true) {
+            var next = this._inbox._messages.try_receive();
+            if (next.is_err()) {
+                return;
+            }
+            var message = next.value();
+            var id = message / 4;
+            var kind = message % 4;
+            if (this._remote.contains(id)) {
+                var core = this._remote.get(id);
+                if (kind == _MESSAGE_COMPLETE) {
+                    this._remote.remove(id);
+                    var complete = core._on_complete;
+                    core._on_complete = () => {};
+                    complete();
+                    core._finished = true;
+                    this._wake_all(core._joiners);
+                } else {
+                    _async_cancel(this, core);
+                }
+            }
+        }
+    }
+
+    # Cancels every task here, once the runtime is stopping.
+    _stop() {
+        this._stopping = true;
+        for (var core in this._tasks) {
+            _async_cancel(this, core);
+        }
+    }
+
+    # Waits in the driver up to `timeout` milliseconds (forever when
+    # negative), unless something arrived meanwhile (see workers.pep).
+    _sleep(timeout: long) {
+        var wait = timeout;
+        this._inbox._sleeping.store(1);
+        this._inbox._notified.store(0);
+        if (this._inbox._messages.count() > 0 || this._runtime._queue.count() > 0) {
+            wait = 0;
+        }
+        if (!this._stopping && this._runtime._stopping.load() != 0) {
+            wait = 0;
+        }
+        this._poll(wait);
+        this._inbox._sleeping.store(0);
     }
 
     # Puts a parked task back on the ready queue.
@@ -391,6 +538,9 @@ struct _Worker {
             this._idle.append(core._fiber);
             core._fiber = __null;
             this._retire(core);
+            if (core._shared.is_some()) {
+                this._finish_shared(core);
+            }
         }
     }
 
@@ -403,51 +553,60 @@ struct _Worker {
         }
     }
 
-    # Runs tasks until `until` finishes; then cancels the rest and runs them
-    # until they finish too.
-    _run_until(until: _TaskCore) {
-        var cancelled_rest = false;
+    # Runs tasks until the runtime stops (see workers.pep) and none are
+    # left here. On the first worker, `first` is the first task, whose end
+    # stops the runtime.
+    _run(first: _TaskCore?) {
         while (true) {
-            if (until._finished) {
-                if (this._tasks.count() == 0) {
-                    return;
+            if (!this._stopping) {
+                if (first.is_some() && first.value()._finished) {
+                    this._runtime._stop();
                 }
-                if (!cancelled_rest) {
-                    cancelled_rest = true;
-                    for (var core in this._tasks) {
-                        _async_cancel(this, core);
-                    }
+                if (this._runtime._stopping.load() != 0) {
+                    this._stop();
+                }
+            }
+            if (this._stopping && this._tasks.count() == 0 && this._remote.count() == 0) {
+                if (!this._take_shared()) {
+                    return;
                 }
             }
             this._fire_timers();
             if (this._has_ready()) {
                 this._run_one();
                 this._since_poll = this._since_poll + 1;
-                if (this._io_waiting > 0 && this._since_poll >= _POLL_INTERVAL) {
+                if (this._since_poll >= _POLL_INTERVAL) {
+                    this._receive();
+                    this._take_shared();
                     this._poll(0);
                 }
-            } else if (this._timers.count() > 0 || this._io_waiting > 0) {
-                var timeout: long = -1;
-                if (this._timers.count() > 0) {
-                    var now = _async_sys_monotonic_milliseconds();
-                    var deadline = this._timers[0]._deadline;
-                    timeout = 0;
-                    if (deadline > now) {
-                        timeout = (deadline - now) as long;
-                    }
+                continue;
+            }
+            this._receive();
+            if (this._has_ready() || this._take_shared()) {
+                continue;
+            }
+            if (this._stopping && this._tasks.count() == 0 && this._remote.count() == 0) {
+                continue;
+            }
+            # With no tasks here, every timer left is stale.
+            var timeout: long = -1;
+            if (this._timers.count() > 0 && this._tasks.count() > 0) {
+                var now = _async_sys_monotonic_milliseconds();
+                var deadline = this._timers[0]._deadline;
+                timeout = 0;
+                if (deadline > now) {
+                    timeout = (deadline - now) as long;
                 }
-                if (this._io_waiting > 0) {
-                    this._poll(timeout);
-                } else if (timeout > 0) {
-                    _async_sys_sleep(timeout as ulong);
-                }
-            } else {
+            } else if (this._tasks.count() > 0 && this._io_waiting == 0 && this._remote.count() == 0) {
                 panic("async.run: every task is waiting for another task and none can continue");
             }
+            this._sleep(timeout);
         }
     }
 
-    # Frees the fibers, the driver and the thread context.
+    # Frees the fibers, the driver and the thread context. Every worker has
+    # stopped by now (see `_Runtime._leave`).
     _close() {
         for (var fiber in this._idle) {
             _async_fiber_destroy(fiber);
@@ -490,7 +649,7 @@ extend _Worker with io._IoWaiter {
 
     _wait_ready(handle: io.SocketHandle, interest: int): int {
         var me = this._current;
-        if (me._cancelled) {
+        if (me._is_cancelled()) {
             return io._IO_WAIT_CANCELLED;
         }
         if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
@@ -516,7 +675,7 @@ extend _Worker with io._IoWaiter {
         this._park();
         this._io_waiting = this._io_waiting - 1;
         _async_remove_task(queue, me);
-        if (me._cancelled) {
+        if (me._is_cancelled()) {
             return io._IO_WAIT_CANCELLED;
         }
         if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
@@ -602,7 +761,8 @@ _async_scheduler_context(): __ptr<void> {
     return _async_worker()._scheduler;
 }
 
-## A task started with `spawn_local`, and the value its body returns.
+## A task started with `spawn_local` or `spawn`, and the value its body
+## returns.
 ##
 ## @typeParam T the type of the body's result; `void` when there is none
 ## @example
@@ -622,8 +782,8 @@ export struct Task<T> {
     # The body's result, once it has finished.
     var _value: T;
 
-    ## Wraps the scheduler's record of a task. Only `spawn_local` has one;
-    ## start tasks with `spawn_local`.
+    ## Wraps the scheduler's record of a task. Only `spawn_local` and `spawn`
+    ## have one; start tasks with those.
     ##
     ## @param core the scheduler's record of the task
     construct(core: _TaskCore) {
@@ -669,7 +829,7 @@ export struct Task<T> {
             assert(me._id != this._core._id, "Task.join: a task cannot join itself");
             this._core._joiners.append(me);
             while (!this._core._finished) {
-                if (me._cancelled) {
+                if (me._is_cancelled()) {
                     _async_remove_task(this._core._joiners, me);
                     return Result<T, TaskError>.err(TaskError("the waiting task was cancelled"));
                 }
@@ -690,7 +850,18 @@ export struct Task<T> {
     ## `sleep` returns at once, and its `join` calls fail. A task is never
     ## stopped by force; it finishes when its body returns.
     cancel() {
-        if (_async_on_worker()) {
+        if (this._core._proxy) {
+            if (this._core._finished) {
+                this._core._cancelled = true;
+                return;
+            }
+            this._core._cancelled = true;
+            if (_async_on_worker()) {
+                this._core._shared.value()._cancel(_async_worker()._runtime);
+            } else {
+                this._core._shared.value()._cancelled.store(1);
+            }
+        } else if (_async_on_worker()) {
             _async_cancel(_async_worker(), this._core);
         } else {
             this._core._cancelled = true;
@@ -705,10 +876,12 @@ export struct Task<T> {
     }
 }
 
-## Runs `body` as the first task of a new runtime on the calling thread, and
-## returns once `body` has returned and every task it started has finished.
-## When `body` returns, the tasks still running are cancelled (see
-## `Task.cancel`), and `run` waits for them to finish.
+## Runs `body` as the first task of a new runtime, and returns once `body`
+## has returned and every task it started has finished. The calling thread
+## is the first worker; the runtime starts one more thread per logical CPU
+## after it (see `RuntimeOptions.workers`). When `body` returns, the tasks
+## still running are cancelled (see `Task.cancel`), on every worker, and
+## `run` waits for them to finish.
 ##
 ## @param body the first task
 ## @panics if called inside a task, or if every remaining task is waiting on
@@ -740,18 +913,103 @@ export run(body: () => void) {
 ##   backend `options` asks for
 export run_with(options: RuntimeOptions, body: () => void) {
     assert(!_async_on_worker(), "async.run: already inside async.run");
-    var worker = _Worker(options._stack_size, options._backend);
+    var count = options._workers;
+    if (count == 0) {
+        count = logical_cpus();
+    }
+    var runtime = _Runtime(count);
+    var stack_size = options._stack_size;
+    var backend = options._backend;
+    var threads = Array<Thread>();
+    var i: ulong = 1;
+    while (i < count) {
+        var index = i;
+        threads.append(Thread.spawn(() => {
+            _async_worker_main(runtime, index, stack_size, backend, () => {});
+        }, "async worker"));
+        i = i + 1;
+    }
+    _async_worker_main(runtime, 0, stack_size, backend, body);
+    for (var thread in threads) {
+        thread.join();
+    }
+}
+
+# Runs worker `index` of `runtime` on this thread until the runtime stops.
+# The first worker's first task is `body`.
+_async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: Backend, body: () => void) {
+    var worker = _Worker(runtime, index, stack_size, backend);
     __ptr<_Worker> slot = _pep_malloc(8);
     slot[0] = worker;
     _async_fiber_key_set(_async_worker_key, slot);
     io._io_set_waiter(worker);
-    var first = worker._spawn(body);
-    worker._run_until(first);
+    runtime._join(index, worker._inbox);
+    var first = Optional<_TaskCore>.none();
+    if (index == 0) {
+        first = Optional<_TaskCore>.some(worker._spawn(body));
+    }
+    worker._run(first);
+    runtime._leave();
     io._io_clear_waiter();
     _async_fiber_key_set(_async_worker_key, __null);
     slot[0] = __default<_Worker>();
     _pep_free(slot);
     worker._close();
+}
+
+## Starts a task that runs `body` on whichever worker is free first, and
+## returns it. Unlike `Task<T>.spawn_local`, the task may run on another
+## thread, in parallel with the calling task, so the body must be a
+## `shared` function (it may capture only thread-safe values) and its result
+## crosses threads, so `T` must be thread-safe too: a number, a `[Shared]`
+## struct, or a `shared` function type (`spawn<String>` is a compile error).
+##
+## A task, once started, stays on the worker that started it. Joining and
+## cancelling work as for `spawn_local`.
+##
+## @typeParam T the type of the body's result, which must be thread-safe;
+##   `void` when there is none
+## @param body the task's code
+## @returns the task
+## @panics outside `run`
+## @example
+##     import async;
+##
+##     sum(from: long, to: long): long {
+##         var total: long = 0;
+##         var i = from;
+##         while (i < to) {
+##             total = total + i;
+##             i = i + 1;
+##         }
+##         return total;
+##     }
+##
+##     main(): int {
+##         async.run(() => {
+##             var low = async.spawn<long>(() => { return sum(0, 500000); });
+##             var high = async.spawn<long>(() => { return sum(500000, 1000000); });
+##             print(low.join().value() + high.join().value());   # 499999500000
+##         });
+##         return 0;
+##     }
+export spawn<T>(body: shared () => T): Task<T> {
+    assert(_async_on_worker(), "async.spawn: not inside async.run");
+    var worker = _async_worker();
+    var result = _TaskResult<T>();
+    var proxy = worker._new_proxy();
+    var task = Task<T>(proxy);
+    proxy._on_complete = () => {
+        task._run(() => {
+            return result._take();
+        });
+    };
+    var shared = _SharedTask(() => {
+        result._run(body);
+    }, worker._index, proxy._id);
+    proxy._shared = Optional<_SharedTask>.some(shared);
+    worker._runtime._push(shared);
+    return task;
 }
 
 ## Lets every other ready task run before the calling task continues. Does
@@ -784,7 +1042,7 @@ export sleep(milliseconds: ulong) {
         return;
     }
     var me = worker._current;
-    if (me._cancelled) {
+    if (me._is_cancelled()) {
         return;
     }
     var until = _async_sys_monotonic_milliseconds() + milliseconds;
@@ -809,7 +1067,7 @@ export is_cancelled(): bool {
     if (!worker._running) {
         return false;
     }
-    return worker._current._cancelled;
+    return worker._current._is_cancelled();
 }
 
 ## A time limit on the waits inside a `with` block, made by `timeout`.
