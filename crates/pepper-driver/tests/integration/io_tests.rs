@@ -290,7 +290,7 @@ files_and_text(base: Path) {
     # Append.
     var a = OpenOptions().append(true).open(t);
     assert(a.is_ok(), "open for append");
-    assert(a.value().write_string(" again").is_ok(), "append write");
+    assert(a.value().write_all(" again").is_ok(), "append write");
     assert(a.value().close().is_ok(), "close appended");
     assert(text(t) == "hello, wörld again", "appended");
 
@@ -350,7 +350,7 @@ seeking(base: Path) {
     assert(before_start.is_err(), "seek before the start");
     assert(before_start.error().is_invalid_input(), "seek before the start is invalid input");
     assert(f.seek_start(0).is_ok(), "rewind");
-    assert(f.write_string("AB").is_ok(), "overwrite");
+    assert(f.write_all("AB").is_ok(), "overwrite");
     assert(f.sync().is_ok(), "sync");
     assert(text(p) == "AB23456789", "overwritten");
 
@@ -376,12 +376,12 @@ seeking(base: Path) {
     assert(!f.is_open(), "closed");
     assert(f.close().is_ok(), "close again");
     assert(f.read(buf, 1).is_err(), "read after close");
-    assert(f.write_string("x").is_err(), "write after close");
+    assert(f.write_all("x").is_err(), "write after close");
 
     # A file opened only to append can still be synced.
     var ap = OpenOptions().append(true).open(p);
     assert(ap.is_ok(), "open to append");
-    assert(ap.value().write_string("Z").is_ok(), "append");
+    assert(ap.value().write_all("Z").is_ok(), "append");
     assert(ap.value().sync().is_ok(), "sync in append mode");
     assert(ap.value().close().is_ok(), "close append");
     assert(File.read_bytes(p).value().count() == 9, "appended");
@@ -593,10 +593,10 @@ import io;
 main(): int {
     var out = io.File.stdout();
     assert(out.is_open(), "stdout open");
-    assert(out.write_string("io-stdout-ok").is_ok(), "write stdout");
+    assert(out.write_all("io-stdout-ok").is_ok(), "write stdout");
     # Closing a standard stream only forgets it: fd 1 stays usable.
     assert(out.close().is_ok(), "close stdout");
-    assert(io.File.stdout().write_string("|still-open").is_ok(), "stdout again");
+    assert(io.File.stdout().write_all("|still-open").is_ok(), "stdout again");
     assert(io.File.stderr().is_open() && io.File.stdin().is_open(), "stderr, stdin");
     return 0;
 }

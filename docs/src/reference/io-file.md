@@ -175,7 +175,7 @@ Opens `path` with these options. The same as
 **Example**
 ```pepper
     var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    log.write_string("started");
+    log.write_all("started");
 ```
 
 ## Metadata
@@ -330,7 +330,7 @@ kinds apart portably.
 **Example**
 ```pepper
     var f = File.create(Path("out.txt")).value();
-    f.write_string("hello");
+    f.write_all("hello");
     f.close();
     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 ```
@@ -407,7 +407,7 @@ On POSIX a created file gets mode 0666 less the process umask.
 **Example**
 ```pepper
     var f = File.create(Path("report.txt")).value();
-    f.write_string("done");
+    f.write_all("done");
 ```
 
 #### open_with
@@ -493,7 +493,7 @@ File closed: the stream stays usable. Writes are unbuffered.
 **Example**
 ```pepper
     var out = File.stdout();
-    out.write_string("hello");
+    out.write_all("hello");
 ```
 
 #### stderr
@@ -603,7 +603,7 @@ leaves it truncated or partly written.
 - an Ok result once the text is written and the file closed; an error as for `File.create` (such as `is_not_found()` for a missing parent directory), `write_all`, or `close`
 
 **Note**
-- this is the design proposal's `write_to_string`, renamed because `write_string` is the instance method's name and methods do not overload
+- this is the design proposal's `write_to_string`; a static `write` would clash with the instance `write`
 
 **Example**
 ```pepper
@@ -813,14 +813,38 @@ If an error occurs part of `data` may already have been written.
 **Returns**
 - an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress ("failed to write the whole buffer", with code `EIO` on POSIX or `ERROR_WRITE_FAULT` on Windows), or another platform error
 
+#### write_all
+
+```pepper
+write_all(s: String): IoResult<void>
+```
+
+Writes all of the UTF-8 bytes of `s`, as `write_all` does for bytes.
+No newline or terminator is added.
+
+**Parameters**
+- `s` — the text to write
+
+**Returns**
+- an Ok result once every byte is written; an error as for `write_all(u8[])`
+
+**Example**
+```pepper
+    var f = File.create(Path("greeting.txt")).value();
+    var r = f.write_all("hello, world");
+    if (r.is_err()) {
+        return 1;
+    }
+```
+
 #### write_string
 
 ```pepper
-IoResult<void> write_string(String s)
+[Deprecated("use 'write_all' instead", "write_all")] write_string(s: String): IoResult<void>
 ```
 
-Writes all of the UTF-8 bytes of `s`, as `write_all` does. No newline
-or terminator is added.
+Deprecated: use `write_all` instead. Writes all of the UTF-8 bytes of
+`s`, exactly like `write_all(s)`.
 
 **Parameters**
 - `s` — the text to write
@@ -828,14 +852,8 @@ or terminator is added.
 **Returns**
 - an Ok result once every byte is written; an error as for `write_all`
 
-**Example**
-```pepper
-    var f = File.create(Path("greeting.txt")).value();
-    var r = f.write_string("hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
-```
+**See also**
+- `write_all`
 
 #### seek_start
 
@@ -1000,7 +1018,7 @@ stream stays open, and `File.stdout()` and the like still work.
 **Example**
 ```pepper
     var f = File.create(Path("out.bin")).value();
-    f.write_string("data");
+    f.write_all("data");
     if (f.close().is_err()) {
         return 1;
     }

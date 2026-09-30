@@ -251,7 +251,11 @@ A prelude module may redefine an export of the runtime, such as `panic`: it is
 loaded ahead of the runtime and its definition wins. It must declare the name
 itself (`export panic(...)`); re-exporting another function under a runtime
 export's name is an error, since the runtime's own files would keep calling
-their version.
+their version. When the runtime's function is [overloaded](overloading.md),
+the prelude module replaces only the overloads it declares, matched by
+parameter types: an `export assert(condition: bool, message: String)`
+replaces the `String` form, and a string literal message still calls the
+runtime's `__ptr<char>` form.
 
 ## How imported names behave
 

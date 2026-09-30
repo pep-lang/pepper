@@ -1031,12 +1031,13 @@ fn a_forced_import_replaces_a_runtime_export() {
 }
 
 #[test]
-fn a_forced_string_assert_replaces_the_literal_fast_path() {
-    // The runtime's `assert` lowers a literal message to `_pep_assert`; a
-    // replacement with the runtime's own signature must still be called.
+fn a_forced_import_replaces_only_the_overloads_it_declares() {
+    // The replacement takes the runtime's `assert(bool, String)` member; a
+    // `String` message calls it, while the runtime's `__ptr<char>` member
+    // (which a literal message would pick) stays in the set.
     let files = [
         ("quiet/module.pep", "export assert(condition: bool, message: String): void { }"),
-        ("main.pep", "test(): int { assert(false, \"x\"); return 7; }"),
+        ("main.pep", "test(): int { var m = String(\"x\"); assert(false, m); return 7; }"),
     ];
     assert_eq!(run_with("forced_string_assert", &files, &["--import", "quiet"]), 7);
 }

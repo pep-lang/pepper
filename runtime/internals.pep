@@ -14,9 +14,8 @@ extern int fflush(void* stream);
 ## Panics with `message` when `condition` is false; otherwise does nothing.
 ##
 ## The check always runs; there is no release mode that removes it. A
-## string literal message costs nothing when the assertion holds: the
-## compiler passes the literal's constant bytes to the runtime without
-## building a `String`. Any other message is evaluated before the call.
+## string literal message picks the `__ptr<char>` overload instead, which
+## builds no `String`. Any other message is evaluated before the call.
 ##
 ## @param condition the condition that must hold
 ## @param message the text to print on failure; a null `String` prints a
@@ -30,9 +29,25 @@ export assert(condition: bool, message: String): void {
     }
 }
 
+## Checks that `condition` holds; if not, panics with `message`, a
+## NUL-terminated C string. A string literal message picks this overload,
+## so an assertion that holds builds no `String`.
+##
+## @param condition the condition that must hold
+## @param message the text to print on failure, or `__null` for a generic
+##   message
+## @panics if `condition` is false: prints `message` and aborts (see `panic`)
+## @example
+##     assert(count > 0, "count must be positive");
+export assert(condition: bool, message: __ptr<char>): void {
+    if (!condition) {
+        _pep_panic(message);
+    }
+}
+
 # The allocation-free form of `assert` that compiler-generated checks (index
-# bounds, null function and trait values) and string-literal messages lower
-# to: `message` is a NUL-terminated C string, or `__null`.
+# bounds, null function and trait values) lower to: `message` is a
+# NUL-terminated C string, or `__null`.
 export _pep_assert(condition: bool, message: __ptr<char>): void {
     if (!condition) {
         _pep_panic(message);
@@ -115,9 +130,21 @@ export panic(message: String) {
     _pep_panic(message.c_str());
 }
 
+## Writes `message`, a NUL-terminated C string, and a newline to standard
+## output (a generic message when it is `__null`), flushes every C output
+## stream, and aborts, as `panic(String)` does. A string literal message
+## picks this overload, so it allocates nothing.
+##
+## @param message the text to print, or `__null`
+## @panics always
+## @example
+##     panic("unreachable");
+export panic(message: __ptr<char>) {
+    _pep_panic(message);
+}
+
 # `panic` on a NUL-terminated C string (`__null` prints a generic message).
-# String-literal messages and compiler-generated checks lower to this, so a
-# panic never has to allocate.
+# Compiler-generated checks lower to this, so a panic never has to allocate.
 export _pep_panic(message: __ptr<char>) {
     if (message == __null) {
         puts("Assertion failed with no additional information");

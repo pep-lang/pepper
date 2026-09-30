@@ -371,6 +371,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 None => source_type,
             }
         }
+        // `!x` is a `bool`; `-x`, `~x`, `++x` keep their operand's type
+        // until `resolve_operators` turns an overloaded one into a call.
+        Expression::Unary { op: UnaryOp::LogicalNot, .. } => TypeName::bool_(),
+        Expression::Unary { operand, .. } => type_of_expr(operand, scopes, current_struct),
         Expression::Binary { op, lhs, rhs, .. } => {
             // Assignment resolves to the lhs type; comparisons to bool.
             if op.is_assignment() {

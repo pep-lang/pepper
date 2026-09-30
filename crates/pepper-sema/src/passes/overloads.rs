@@ -82,13 +82,15 @@ pub fn name_overloads(module: &mut Module) {
     // Concrete overrides are renamed to what they override (`hash<Point>`)
     // first, so they never join a set.
     crate::passes::gather_generics::concrete_overrides(module);
+    let shared = replace_prelude_members(module);
 
     let mut groups: BTreeMap<(u32, String), Vec<usize>> = BTreeMap::new();
     for (i, function) in module.functions.iter().enumerate() {
         if is_override(function) {
             continue;
         }
-        groups.entry((function.loc.file.0, function.name.clone())).or_default().push(i);
+        let file = shared.get(&function.name).copied().unwrap_or(function.loc.file.0);
+        groups.entry((file, function.name.clone())).or_default().push(i);
     }
 
     for ((file, name), members) in &groups {
@@ -168,6 +170,43 @@ pub fn name_overloads(module: &mut Module) {
         module.overload_sets.insert(name, names);
     }
     attach_overrides(module);
+}
+
+/// Only prelude files (a forced import, then the runtime) may export the
+/// same name, and the first definition wins: a forced import's
+/// `assert(bool, __ptr<char>)` replaces the runtime's member with those
+/// parameters and joins the rest of its set. Removes each replaced member
+/// and returns the names so shared, each with the first file declaring it,
+/// under which its one set is grouped.
+fn replace_prelude_members(module: &mut Module) -> HashMap<String, u32> {
+    let mut files: HashMap<&str, BTreeMap<u32, Vec<usize>>> = HashMap::new();
+    for (i, function) in module.functions.iter().enumerate() {
+        if is_override(function) || function.name.contains(pepper_parser::namespace::SEPARATOR) {
+            continue;
+        }
+        files.entry(function.name.as_str()).or_default().entry(function.loc.file.0).or_default().push(i);
+    }
+    let mut shared = HashMap::new();
+    let mut replaced = HashSet::new();
+    for (name, by_file) in files.iter().filter(|(_, by_file)| by_file.len() > 1) {
+        let mut seen: HashSet<Vec<String>> = HashSet::new();
+        for members in by_file.values() {
+            let keys: Vec<Vec<String>> = members.iter().map(|&i| parameter_key(&module.functions[i])).collect();
+            for (&i, key) in members.iter().zip(&keys) {
+                if seen.contains(key) {
+                    replaced.insert(i);
+                }
+            }
+            seen.extend(keys);
+        }
+        shared.insert(name.to_string(), *by_file.keys().next().unwrap());
+    }
+    let mut index = 0;
+    module.functions.retain(|_| {
+        index += 1;
+        !replaced.contains(&(index - 1))
+    });
+    shared
 }
 
 /// Check that no two constructors of a struct take the same parameters.
@@ -662,7 +701,8 @@ impl Overloads {
             ArgKind::UntypedClosure(arity) => {
                 return (p.is_function_type() && p.function_params().len() == *arity).then_some(0);
             }
-            ArgKind::Null => return Some(if is_numeric(&p_name) { 2 } else { 1 }),
+            // `__null` is exact for a raw pointer, like C++ `nullptr`.
+            ArgKind::Null => return Some(if p_name.ends_with('*') { 0 } else if is_numeric(&p_name) { 2 } else { 1 }),
             // A literal is its `char*` global where a pointer is expected.
             ArgKind::StringLiteral if p_name == "i8*" => return Some(0),
             _ => {}

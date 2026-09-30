@@ -125,6 +125,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `ThreadLocal<T>.get()` for a `T` that is not thread-safe (now an error) | `with (var value = local.enter()) { ... }` |
 | `io.Path.is_dir()` | `io.Path.is_directory()` |
 | `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
+| `io.File.write_string(String)` | `io.File.write_all(String)` |
 | `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
 
 ## Errors in the editor

@@ -16,7 +16,7 @@ import "format";
 main(): int {
     var input = File.stdin().read_string();
     if (input.is_err()) {
-        File.stderr().write_string("pep-fmt: error: cannot read standard input: " + input.error().message + "\n");
+        File.stderr().write_all("pep-fmt: error: cannot read standard input: " + input.error().message + "\n");
         return 1;
     }
     var source = input.value();
@@ -25,12 +25,12 @@ main(): int {
         var error = formatted.error();
         var line = syntax.line_of(source, error.offset);
         var column = syntax.column_of(source, error.offset);
-        File.stderr().write_string(
+        File.stderr().write_all(
             "<stdin>:" + number_text(line) + ":" + number_text(column) + ": error: " + error.message + "\n"
         );
         return 1;
     }
-    File.stdout().write_string(formatted.value());
+    File.stdout().write_all(formatted.value());
     return 0;
 }
 

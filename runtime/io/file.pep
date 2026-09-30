@@ -133,7 +133,7 @@ export struct OpenOptions {
     ## @see File.open_with
     ## @example
     ##     var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    ##     log.write_string("started");
+    ##     log.write_all("started");
     IoResult<File> open(Path path) {
         return File.open_with(path, this);
     }
@@ -237,7 +237,7 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
 ##
 ## @example
 ##     var f = File.create(Path("out.txt")).value();
-##     f.write_string("hello");
+##     f.write_all("hello");
 ##     f.close();
 ##     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 [NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")]
@@ -302,7 +302,7 @@ export struct File {
     ##   is a directory)
     ## @example
     ##     var f = File.create(Path("report.txt")).value();
-    ##     f.write_string("done");
+    ##     f.write_all("done");
     static IoResult<File> create(Path path) {
         return File.open_with(path, OpenOptions().write(true).create(true).truncate(true));
     }
@@ -393,7 +393,7 @@ export struct File {
     ## @returns a File on standard output, named `<stdout>`
     ## @example
     ##     var out = File.stdout();
-    ##     out.write_string("hello");
+    ##     out.write_all("hello");
     static File stdout() {
         return File.std_file(1, "<stdout>");
     }
@@ -550,23 +550,35 @@ export struct File {
         return _io_write_all_raw(_handle, data._data, data._size);
     }
 
-    ## Writes all of the UTF-8 bytes of `s`, as `write_all` does. No newline
-    ## or terminator is added.
+    ## Writes all of the UTF-8 bytes of `s`, as `write_all` does for bytes.
+    ## No newline or terminator is added.
     ##
     ## @param s the text to write
-    ## @returns an Ok result once every byte is written; an error as for `write_all`
+    ## @returns an Ok result once every byte is written; an error as for
+    ##   `write_all(u8[])`
     ## @example
     ##     var f = File.create(Path("greeting.txt")).value();
-    ##     var r = f.write_string("hello, world");
+    ##     var r = f.write_all("hello, world");
     ##     if (r.is_err()) {
     ##         return 1;
     ##     }
-    IoResult<void> write_string(String s) {
+    write_all(s: String): IoResult<void> {
         var c = check_open();
         if (c.is_err()) {
             return c;
         }
         return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size());
+    }
+
+    ## Deprecated: use `write_all` instead. Writes all of the UTF-8 bytes of
+    ## `s`, exactly like `write_all(s)`.
+    ##
+    ## @param s the text to write
+    ## @returns an Ok result once every byte is written; an error as for `write_all`
+    ## @see write_all
+    [Deprecated("use 'write_all' instead", "write_all")]
+    write_string(s: String): IoResult<void> {
+        return write_all(s);
     }
 
     # No SeekFrom enum: one method per origin. Each returns the new offset
@@ -703,7 +715,7 @@ export struct File {
     ##   error when closing an owned handle fails
     ## @example
     ##     var f = File.create(Path("out.bin")).value();
-    ##     f.write_string("data");
+    ##     f.write_all("data");
     ##     if (f.close().is_err()) {
     ##         return 1;
     ##     }
@@ -801,9 +813,8 @@ export struct File {
     ## @returns an Ok result once the text is written and the file closed; an error
     ##   as for `File.create` (such as `is_not_found()` for a missing parent
     ##   directory), `write_all`, or `close`
-    ## @note this is the design proposal's `write_to_string`, renamed because
-    ##   `write_string` is the instance method's name and methods do not
-    ##   overload
+    ## @note this is the design proposal's `write_to_string`; a static
+    ##   `write` would clash with the instance `write`
     ## @example
     ##     var r = File.write_text(Path("hello.txt"), "hello, world");
     ##     if (r.is_err()) {
@@ -815,7 +826,7 @@ export struct File {
             return IoResult<void>.err(f._error);
         }
         var file = f._value;
-        var w = file.write_string(s);
+        var w = file.write_all(s);
         if (w.is_err()) {
             return w;
         }

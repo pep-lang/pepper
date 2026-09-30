@@ -1039,10 +1039,10 @@ fn void_call_used_as_a_value() {
 #[test]
 fn pointer_is_not_a_string() {
     assert_eq!(
-        error_of("pointer_as_string_argument", "main(): int {\n    var p = \"x\".c_str();\n    assert(false, p);\n    return 0;\n}\n"),
-        "main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string\n\
-         \x20   3 |     assert(false, p);\n\
-         \x20     |                   ^"
+        error_of("pointer_as_string_argument", "f(s: String): int { return 0; }\nmain(): int {\n    var p = \"x\".c_str();\n    return f(p);\n}\n"),
+        "main.pep:4:14: error: cannot pass a value of type '__ptr<char>' as argument 1 of 'f', which has type 'String'; use 'String(...)' to copy a C string\n\
+         \x20   4 |     return f(p);\n\
+         \x20     |              ^"
     );
     assert_eq!(
         error_of("pointer_as_string_variable", "main(): int {\n    var p = \"x\".c_str();\n    var s: String = p;\n    return 0;\n}\n"),

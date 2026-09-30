@@ -163,9 +163,10 @@ A `float` or `double` prints with six digits after the decimal point, rounded:
 
 For checks in your programs, the runtime also provides `assert(condition,
 message)`, which stops the program with `message` when `condition` is false, and
-`panic(message)`, which always stops it. Both take the message as a `String`, so
-it can be built at run time (`assert(n > 0, name + " must be positive")`); a
-string literal message costs nothing when the assertion holds. See
+`panic(message)`, which always stops it. Each is
+[overloaded](overloading.md): the message may be a `String`, built at run time
+(`assert(n > 0, name + " must be positive")`), or a C string, which a string
+literal picks, so a literal message builds nothing when the assertion holds. See
 [Built-in functions](../reference/internals.md).
 
 ## Functions as values

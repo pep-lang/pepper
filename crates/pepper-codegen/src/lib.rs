@@ -3979,53 +3979,6 @@ impl<'ctx> CodeGenerator<'ctx> {
         if name == "print" {
             return self.codegen_print(args);
         }
-        // assert(condition, message) and panic(message) take a `String`. A
-        // string-literal message (already rewritten by
-        // convert_string_literals into a `String(raw, size, len)` ctor call)
-        // skips building the String, so hot paths like index bounds checks
-        // never allocate:
-        // - the runtime's own `assert`/`panic` (declared in the same file as
-        //   `_pep_assert`/`_pep_panic`) lower to those, with the literal's
-        //   global pointer;
-        // - a replacement whose message parameter is a raw pointer (a forced
-        //   import may declare `assert(bool, __ptr<char>)`) gets the global
-        //   pointer itself.
-        // Any other message, or a replacement taking a `String`, is an
-        // ordinary call.
-        // TODO: this identifies "the runtime's own" by declaring file only
-        // because forced imports are the one way to replace a runtime
-        // function today. Revisit it when function overrides are
-        // implemented: an override must receive literal messages too.
-        if let Some((raw_name, message_index)) = match (name, args.len()) {
-            ("assert", 2) => Some(("_pep_assert", 1)),
-            ("panic", 1) => Some(("_pep_panic", 0)),
-            _ => None,
-        } {
-            if let Expression::FunctionCall { function, args: inner, .. } = &args[message_index] {
-                let literal = function == "String"
-                    && matches!(inner.first(), Some(Expression::StringLiteral { is_raw: true, .. }));
-                let target = match (self.fn_signatures.get(name), self.fn_signatures.get(raw_name)) {
-                    _ if !literal => None,
-                    (Some((params, _)), _)
-                        if params
-                            .get(message_index)
-                            .is_some_and(|ty| ty.ends_with('*') || ty.starts_with("__ptr<")) =>
-                    {
-                        Some(name)
-                    }
-                    (Some((_, loc)), Some((_, raw_loc))) if loc.file == raw_loc.file => Some(raw_name),
-                    _ => None,
-                };
-                if let Some(target) = target {
-                    let mut lowered = Vec::with_capacity(args.len());
-                    for (i, arg) in args.iter().enumerate() {
-                        let arg = if i == message_index { inner.first().unwrap() } else { arg };
-                        lowered.push(self.codegen_expr(arg)?.into());
-                    }
-                    return self.call_function(target, lowered);
-                }
-            }
-        }
         // release<T>(v): no-op for POD values (nothing to free), dispatches
         // to T.__release for struct references.
         if name == "release" || name.starts_with("release<") {
