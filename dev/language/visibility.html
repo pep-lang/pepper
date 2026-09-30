@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,7 +201,9 @@ You can export every kind of top-level declaration:</p>
 </ul>
 <p>Here is a library file with a mix of exported and private declarations, and a
 program that uses it:</p>
-<pre><code class="language-pepper"># Everything here is private to lib.pep unless it says `export`.
+<pre><code class="language-pepper">import async;
+
+# Everything here is private to lib.pep unless it says `export`.
 
 export struct Point {
     var x: int;
@@ -216,7 +218,7 @@ export trait Describe {
 
 # A module-scope variable is `const` and thread-safe: change it through
 # an Atomic.
-export const points_made = Atomic&lt;int&gt;(0);
+export const points_made = async.Atomic&lt;int&gt;(0);
 
 export origin(): Point {
     return make(0, 0);
@@ -392,7 +394,7 @@ callable from C with C linkage is a separate matter, handled by the <code>[Expor
 attribute described in <a href="c-interop.html">Calling C</a>.</p>
 <h2 id="the-runtimes-exports"><a class="header" href="#the-runtimes-exports">The runtime’s exports</a></h2>
 <p>The runtime’s public surface (<code>String</code>, <code>Array</code>, <code>HashMap</code>, <code>HashSet</code>,
-<code>Atomic</code>, <code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
+<code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
 <a href="../reference/README.html">standard library reference</a>) is exported the same
 way, and is visible in every file without an import. The runtime’s own helpers
 are private, so calling one, such as the integer formatter <code>dec</code>, reports

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -259,8 +259,10 @@ expression. Each of those releases its reference exactly once, when it goes
 away. When the last reference is released, the object is destroyed: its
 destructor runs, and then its fields release their own references, which may
 destroy further objects in turn.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Tracked {
     var name: String;
@@ -345,8 +347,10 @@ inside the method, <code>this</code> refers to the caller’s object.</p>
 directly or through a chain, keep each other’s counts above zero even after
 nothing else refers to them. Their destructors never run and their memory is
 never freed.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Person {
     var name: String;
@@ -396,8 +400,10 @@ closure that captures <code>this</code> in a field of <code>this</code>.</p>
 alive. Use it for back pointers: a child’s parent, a document’s folder, an
 observer’s subject. The owner holds strong references down the tree, and
 everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Folder {
     var name: String;

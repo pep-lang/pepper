@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -346,6 +346,9 @@ function whose parameters all have defaults.</li>
 module-level variables and return values. A type alias gives a long function
 type a short name, and can have type parameters of its own.</p>
 <pre><code class="language-pepper"># Function values in fields, arrays, globals, and return values.
+
+import async;
+
 square(x: int): int { return x * x; }
 negate(x: int): int { return -x; }
 increment(x: int): int { return x + 1; }
@@ -367,7 +370,7 @@ pick(squared: bool): (int) =&gt; int {
 # A module-level function variable. Every module-level variable is const
 # and thread-safe: an Atomic lets it change, and a function type every thread
 # can reach is declared shared.
-const handler = Atomic&lt;shared (int) =&gt; int&gt;(increment);
+const handler = async.Atomic&lt;shared (int) =&gt; int&gt;(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine&lt;T&gt; = (T, T) =&gt; T;
@@ -381,7 +384,7 @@ fold(values: int[], combine: Combine&lt;int&gt;, start: int): int {
 }
 
 # A function that returns nothing has the return type void.
-const events = Atomic&lt;int&gt;(0);
+const events = async.Atomic&lt;int&gt;(0);
 record(n: int) { events.fetch_add(n); }
 
 main(): int {
@@ -592,11 +595,11 @@ or <code>shared (long) =&gt; void</code>, is thread-safe. Its reference counts a
 and its values hold only thread-safe state, so any thread may copy, call and
 drop them. It goes wherever a thread-safe type is required: the body of a
 thread (<code>ThreadBody</code> is <code>shared () =&gt; void</code>), a field of a <code>[Shared]</code> struct,
-a module-scope variable, or <code>Atomic&lt;shared (int) =&gt; int&gt;</code>.</p>
+a module-scope variable, or <code>async.Atomic&lt;shared (int) =&gt; int&gt;</code>.</p>
 <pre><code class="language-pepper"># shared function types: function values that threads can share.
 import async;
 
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 # A named function holds no state, so it is always thread-safe.
 add_one() {
@@ -658,7 +661,7 @@ is reported at the capture, with a note at the captured variable:</p>
 <pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 </code></pre>

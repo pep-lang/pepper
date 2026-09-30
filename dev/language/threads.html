@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,7 +189,7 @@ that claim to be.</p>
 <h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
 <pre><code class="language-pepper">import async;
 
-const finished = Atomic&lt;int&gt;(0);
+const finished = async.Atomic&lt;int&gt;(0);
 
 # A thread body is a function that takes nothing and returns nothing.
 count_to_a_million() {
@@ -245,7 +245,7 @@ thread. It keeps running, and its resources are freed when it finishes.</li>
 </ul>
 <p>The body can be a named function or a <a href="function-types.html">closure</a>. A
 closure passes data to the thread through its captures:</p>
-<pre><code class="language-pepper">var total = Atomic&lt;long&gt;(0);
+<pre><code class="language-pepper">var total = async.Atomic&lt;long&gt;(0);
 var step: long = 5;
 var worker = async.Thread.spawn(() =&gt; { total.fetch_add(step); });
 worker.join();
@@ -257,7 +257,7 @@ capture and reports one that is not thread-safe where the closure uses it:</p>
 <pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 </code></pre>
@@ -277,11 +277,13 @@ hardware.</li>
 </ul>
 <h2 id="per-thread-values-with-threadlocal"><a class="header" href="#per-thread-values-with-threadlocal">Per-thread values with ThreadLocal</a></h2>
 <p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread:</p>
-<pre><code class="language-pepper">import [Thread, ThreadLocal] from async;
+<pre><code class="language-pepper">import async;
+
+import [Thread, ThreadLocal] from async;
 
 # One variable, a separate value on every thread.
 const calls = ThreadLocal&lt;int&gt;();
-const totals = Atomic&lt;long&gt;(0);
+const totals = async.Atomic&lt;long&gt;(0);
 
 record_call() {
     calls.set(calls.get() + 1);
@@ -346,10 +348,10 @@ struct Settings {
     construct(this.port = 0, this.retries = 0) {}
 }
 
-# Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
+# async.Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
 # of them can replace them.
-const current = Atomic&lt;Settings&gt;(Settings(8080, 3));
-const seen = Atomic&lt;long&gt;(0);
+const current = async.Atomic&lt;Settings&gt;(Settings(8080, 3));
+const seen = async.Atomic&lt;long&gt;(0);
 
 read_settings() {
     var settings = current.load();
@@ -403,10 +405,10 @@ note: declare the function type 'shared () =&gt; void' to share it between threa
 <p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
 <code>Atomic&lt;T&gt;</code> is <code>[Shared]</code>, so <code>Atomic&lt;int&gt;</code> and <code>Atomic&lt;Settings&gt;</code> are fine,
 and <code>Atomic&lt;String&gt;</code> is an error that points at the code that names it:</p>
-<pre><code class="language-text">main.pep:2:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    2 |     var a = Atomic&lt;String&gt;();
-      |             ^~~~~~~~~~~~~~
-runtime/atomic.pep:40:17: note: required by field 'Data' declared here
+<pre><code class="language-text">main.pep:3:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    3 |     var a = async.Atomic&lt;String&gt;();
+      |             ^~~~~~~~~~~~~~~~~~~~
+runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
 runtime/string.pep:33:15: note: 'String' is not declared [Shared]
 </code></pre>
 <p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
@@ -414,7 +416,7 @@ reported at the field:</p>
 <pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
     3 |     int Count;
       |         ^~~~~
-note: threads change a shared struct's state through a thread-safe member such as 'Atomic&lt;T&gt;'
+note: threads change a shared struct's state through a thread-safe member such as 'async.Atomic&lt;T&gt;' (after 'import async')
 </code></pre>
 <p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves, and so
 are the synchronization types below: <code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code>,
@@ -432,7 +434,7 @@ value cannot be a module-scope variable; keep it in a local, or in a
 <code>ThreadLocal&lt;T&gt;</code>.</li>
 </ul>
 <pre><code class="language-pepper">const MAX_WORKERS = 8;                  # a number
-const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
+const jobs_done = async.Atomic&lt;long&gt;(0);  # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
 const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared function
@@ -441,7 +443,7 @@ const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared functio
 <pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
     1 | var hits = 0;
       |     ^~~~
-note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic&lt;T&gt;' or 'ThreadLocal&lt;T&gt;'
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic&lt;T&gt;' or 'async.ThreadLocal&lt;T&gt;' (after 'import async')
 </code></pre>
 <pre><code class="language-text">main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
     2 | const origin: Plain = Plain();
@@ -474,7 +476,7 @@ square_numbers() {
 
 # A `shared` function value is thread-safe, so a channel can carry work.
 const tasks = async.Channel&lt;async.ThreadBody&gt;();
-const ran = Atomic&lt;long&gt;(0);
+const ran = async.Atomic&lt;long&gt;(0);
 
 run_tasks() {
     for (var task in tasks) {
@@ -564,7 +566,7 @@ struct Order {
 }
 
 const orders = async.Channel&lt;Order&gt;();
-const letters = Atomic&lt;long&gt;(0);
+const letters = async.Atomic&lt;long&gt;(0);
 
 count_letters() {
     for (var order in orders) {
@@ -727,16 +729,16 @@ reach the value is a <a href="scopes.html"><code>with</code> block</a>:</p>
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const checking: Atomic&lt;long&gt;;
-    const savings: Atomic&lt;long&gt;;
+    const checking: async.Atomic&lt;long&gt;;
+    const savings: async.Atomic&lt;long&gt;;
     construct(long checking = 0, long savings = 0) {
-        this.checking = Atomic&lt;long&gt;(checking);
-        this.savings = Atomic&lt;long&gt;(savings);
+        this.checking = async.Atomic&lt;long&gt;(checking);
+        this.savings = async.Atomic&lt;long&gt;(savings);
     }
 }
 
 const accounts = async.Mutex&lt;Accounts&gt;(Accounts(1000, 0));
-const bad_totals = Atomic&lt;long&gt;(0);
+const bad_totals = async.Atomic&lt;long&gt;(0);
 
 move_to_savings() {
     var i = 0;
@@ -793,7 +795,7 @@ thread holds it.</li>
 </ul>
 <p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
 <code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.
-<code>Mutex&lt;int&gt;</code> is an error (use <code>Atomic&lt;int&gt;</code>). A Mutex of values that are not
+<code>Mutex&lt;int&gt;</code> is an error (use <code>async.Atomic&lt;int&gt;</code>). A Mutex of values that are not
 thread-safe is kept apart from the rest of the program by the compiler; see
 <a href="#what-a-lock-body-may-do">What a lock body may do</a>.</p>
 <ul>
@@ -839,17 +841,17 @@ changes the value. Get one with <code>mutex.condition()</code>:</p>
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const pies: Atomic&lt;long&gt;;
-    const closed: Atomic&lt;int&gt;;
+    const pies: async.Atomic&lt;long&gt;;
+    const closed: async.Atomic&lt;int&gt;;
     construct() {
-        pies = Atomic&lt;long&gt;(0);
-        closed = Atomic&lt;int&gt;(0);
+        pies = async.Atomic&lt;long&gt;(0);
+        closed = async.Atomic&lt;int&gt;(0);
     }
 }
 
 const bakery = async.Mutex&lt;Bakery&gt;(Bakery());
 const changed = bakery.condition();
-const eaten = Atomic&lt;long&gt;(0);
+const eaten = async.Atomic&lt;long&gt;(0);
 
 eat() {
     while (true) {
@@ -912,7 +914,7 @@ wakeup, and returns with the Mutex still locked. <code>wait_while_for(millisecon
 # A worker takes jobs from a queue, sleeping while it is empty.
 const jobs = async.Mutex&lt;Array&lt;long&gt;&gt;(Array&lt;long&gt;());
 const changed = jobs.condition();
-const done = Atomic&lt;long&gt;(0);
+const done = async.Atomic&lt;long&gt;(0);
 
 work() {
     var taken = 0;
@@ -1123,7 +1125,7 @@ struct Settings {
     construct(this.workers = 1) {}
 }
 
-const builds = Atomic&lt;long&gt;(0);
+const builds = async.Atomic&lt;long&gt;(0);
 
 load_settings(): Settings {
     builds.fetch_add(1);
@@ -1135,7 +1137,7 @@ const settings = async.Lazy&lt;Settings&gt;(load_settings);
 
 # Runs initialize() once, however many threads call it.
 const setup = async.Once();
-const setups = Atomic&lt;long&gt;(0);
+const setups = async.Atomic&lt;long&gt;(0);
 
 initialize() {
     setups.fetch_add(1);

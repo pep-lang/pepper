@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -202,6 +202,8 @@ parameter’s type before its name:</p>
 consistently. The first form is the one used throughout this book.</p>
 <pre><code class="language-pepper"># Declaring and calling functions.
 
+import async;
+
 # Parameters are written 'name: Type'; the return type follows the ')'.
 area(width: int, height: int): int {
     return width * height;
@@ -215,7 +217,7 @@ int perimeter(int width, int height) {
 # A function that returns nothing leaves out the return type
 # (or writes ': void', or 'void' in front).
 # A module-scope counter: const, and changed through an Atomic.
-const log_count = Atomic&lt;int&gt;(0);
+const log_count = async.Atomic&lt;int&gt;(0);
 log(message: String) {
     log_count.fetch_add(1);
     print("log: " + message);

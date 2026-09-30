@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,14 +184,19 @@
                         <h1 id="atomics"><a class="header" href="#atomics">Atomics</a></h1>
 <p>An <strong>atomic</strong> value can be read and updated by several threads at once without
 a data race: every operation on it happens as one indivisible step. Pepper
-provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>std::atomic&lt;T&gt;</code>.</p>
+provides this through <code>async.Atomic&lt;T&gt;</code>, the equivalent of C++
+<code>std::atomic&lt;T&gt;</code>.</p>
 <p>Threads themselves, and the rules for what they can share, are in
 <a href="threads.html">Threads and shared data</a>.</p>
 <h2 id="atomict"><a class="header" href="#atomict">Atomic&lt;T&gt;</a></h2>
-<p><code>Atomic&lt;T&gt;</code> is part of the runtime, so you can use it without an import. The
-<a href="../reference/atomic.html">Atomic reference</a> documents every method.</p>
-<pre><code class="language-pepper">main(): int {
-    var a = Atomic&lt;int&gt;(41);
+<p><code>Atomic&lt;T&gt;</code> belongs to the <a href="threads.html"><code>async</code> module</a>, with the other
+types threads share: <code>import async</code> and write <code>async.Atomic&lt;T&gt;</code>, or bring
+the name in with <code>import [Atomic] from async</code>. The
+<a href="../reference/async-atomic.html">Atomic reference</a> documents every method.</p>
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    var a = async.Atomic&lt;int&gt;(41);
     assert(a.load() == 41, "the initial value");
 
     a.store(1);
@@ -203,7 +208,7 @@ provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>
     assert(a.fetch_sub(2) == 6, "fetch_sub returns the old value");
     assert(a.load() == 4, "6 - 2");
 
-    var flags = Atomic&lt;uint&gt;(12);          # 0b1100
+    var flags = async.Atomic&lt;uint&gt;(12);          # 0b1100
     flags.fetch_and(10);                   # 0b1000
     assert(flags.load() == 8, "fetch_and");
     flags.fetch_or(1);                     # 0b1001
@@ -262,7 +267,9 @@ type). <code>Atomic&lt;String&gt;</code> is a compile error. See
 <a href="threads.html#what-threads-can-share">What threads can share</a>.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
-<pre><code class="language-pepper"># An Atomic can only hold a thread-safe struct: one declared [Shared], whose
+<pre><code class="language-pepper">import async;
+
+# An Atomic can only hold a thread-safe struct: one declared [Shared], whose
 # fields are const and thread-safe.
 [Shared]
 struct Config {
@@ -271,14 +278,14 @@ struct Config {
 }
 
 # A module-scope Atomic that every function can share.
-const next_id = Atomic&lt;long&gt;(0);
+const next_id = async.Atomic&lt;long&gt;(0);
 
 new_id(): long {
     return next_id.fetch_add(1) + 1;
 }
 
 # The compare-and-swap retry loop: build any read-modify-write update.
-double_it(Atomic&lt;int&gt; value) {
+double_it(async.Atomic&lt;int&gt; value) {
     var current = value.load();
     while (!value.compare_exchange(current, current * 2)) {
         current = value.load();
@@ -289,7 +296,7 @@ main(): int {
     assert(new_id() == 1, "first id");
     assert(new_id() == 2, "second id");
 
-    var n = Atomic&lt;int&gt;(21);
+    var n = async.Atomic&lt;int&gt;(21);
     double_it(n);
     assert(n.load() == 42, "doubled");
 
@@ -300,7 +307,7 @@ main(): int {
 
     # An Atomic can hold a struct reference.
     var first = Config(1);
-    var current = Atomic&lt;Config&gt;(first);
+    var current = async.Atomic&lt;Config&gt;(first);
     assert(current.load().version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.

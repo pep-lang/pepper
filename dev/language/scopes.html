@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,8 +187,10 @@ when the object is destroyed. It plays the role of Python’s <code>with</code> 
 <code>using</code>, but the cleanup is ordinary destruction: it runs through the same
 reference counting as every other object (see
 <a href="memory.html">Memory and reference counting</a>).</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const open_sessions = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const open_sessions = async.Atomic&lt;int&gt;(0);
 
 # A scope object: enter() hands out what the block works with, and the
 # destructor calls exit() when the last reference goes away.

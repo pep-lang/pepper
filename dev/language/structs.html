@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -469,8 +469,10 @@ main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', 
 reference to it goes away. Declare it with <code>destruct</code> and a body, with no
 parentheses. Use it to release something the object holds that Pepper does not
 manage for you, such as a file handle from C.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const closed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const closed = async.Atomic&lt;int&gt;(0);
 
 struct Connection {
     var name: String;

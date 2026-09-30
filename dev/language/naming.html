@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -285,7 +285,7 @@ functions, parameters, local variables, and module-scope variables.</p>
 whose value is fixed, such as a number, string, or character. Its name is
 <code>SCREAMING_CASE</code>, uppercase words joined by underscores (<code>MAX_REQUESTS</code>,
 <code>LINE_WIDTH</code>). A module-scope <code>const</code> that holds an object, such as
-<code>const request_count = Atomic&lt;int&gt;(0);</code>, is a variable and stays
+<code>const request_count = async.Atomic&lt;int&gt;(0);</code>, is a variable and stays
 <code>snake_case</code>.</p>
 <p>Spell words out. A name is read far more often than it is typed, so prefer
 <code>iterate</code>, <code>index</code>, and <code>directory</code> to <code>iter</code>, <code>idx</code>, and <code>dir</code>. Keep an

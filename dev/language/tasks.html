@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -281,7 +281,7 @@ the calling task until it returns, so the worker keeps running its other
 tasks meanwhile:</p>
 <pre><code class="language-pepper">import async;
 
-const ticks = Atomic&lt;int&gt;(0);
+const ticks = async.Atomic&lt;int&gt;(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
@@ -499,9 +499,10 @@ on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
 connection goes to one of the waiting workers, and the stream it returns
 belongs to that worker:</p>
 <pre><code class="language-pepper">import async;
+
 import io;
 
-const served = Atomic&lt;int&gt;(0);
+const served = async.Atomic&lt;int&gt;(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(4), () =&gt; {

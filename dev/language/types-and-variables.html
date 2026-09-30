@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "../searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae7a611c.js"></script>
+        <script src="../toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -428,7 +428,7 @@ and <code>int[][]</code> for <code>Array&lt;Array&lt;int&gt;&gt;</code>. See <a 
 <a href="../reference/hash.html">HashMap and HashSet</a>.</li>
 <li><code>Result&lt;TValue, TError&gt;</code> and <code>Error</code> describe operations that can
 fail. See <a href="results.html">Error handling with Result</a>.</li>
-<li><code>Atomic&lt;T&gt;</code> is a value that threads can update safely. See
+<li><code>async.Atomic&lt;T&gt;</code> is a value that threads can update safely. See
 <a href="atomics.html">Atomics</a> and <a href="threads.html">Threads and shared data</a>.</li>
 </ul>
 <h3 id="raw-pointers-and-__null"><a class="header" href="#raw-pointers-and-__null">Raw pointers and <code>__null</code></a></h3>
@@ -452,14 +452,16 @@ runtime use them for their own names, such as <code>__ptr</code> and <code>__nul
 <p>Declare a variable with <code>var</code> and let Pepper infer its type from the initial
 value, or write the type yourself. Prefer <code>var</code> whenever the type is obvious from
 the value.</p>
-<pre><code class="language-pepper"># Declaring variables: inferred, explicitly typed, constant, and module-level.
+<pre><code class="language-pepper">import async;
+
+# Declaring variables: inferred, explicitly typed, constant, and module-level.
 
 # Module-level variables (globals) live for the whole program. Any thread
 # can reach them, so they are const and of a thread-safe type: a number, or
 # an Atomic for state that changes.
 const MAX_REQUESTS = 10;
-const request_count = Atomic&lt;int&gt;(0);
-const total_bytes = Atomic&lt;long&gt;(0);
+const request_count = async.Atomic&lt;int&gt;(0);
+const total_bytes = async.Atomic&lt;long&gt;(0);
 
 record(bytes: int) {
     request_count.fetch_add(1);
@@ -540,7 +542,7 @@ number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or
 <a href="threads.html#module-scope-variables">Module-scope variables</a>). A global that
 changes is an <code>Atomic&lt;T&gt;</code>:</p>
 <pre><code class="language-pepper">const MAX_RETRIES = 3;
-const requests = Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
+const requests = async.Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
 </code></pre>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>

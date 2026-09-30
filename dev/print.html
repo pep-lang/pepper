@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf018f2d.js";
+            window.path_to_searchindex_js = "searchindex-e7bab917.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ae7a611c.js"></script>
+        <script src="toc-ed0801d1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,7 +192,7 @@ exact token you need to change.</li>
 no ownership annotations to learn. Structs hold data, methods and
 extensions add behavior, and traits describe what a type can do.</li>
 <li><strong>Concurrent safety.</strong> Shared data should be safe to use from more than one
-thread. Only thread-safe values can be shared: numbers, <code>Atomic&lt;T&gt;</code>, and
+thread. Only thread-safe values can be shared: numbers, <code>async.Atomic&lt;T&gt;</code>, and
 structs declared <code>[Shared]</code>, whose fields the compiler checks.</li>
 </ul>
 <p>Here is a complete Pepper program:</p>
@@ -1111,7 +1111,7 @@ and <code>int[][]</code> for <code>Array&lt;Array&lt;int&gt;&gt;</code>. See <a 
 <a href="#hashmap-and-hashset">HashMap and HashSet</a>.</li>
 <li><code>Result&lt;TValue, TError&gt;</code> and <code>Error</code> describe operations that can
 fail. See <a href="#error-handling-with-result">Error handling with Result</a>.</li>
-<li><code>Atomic&lt;T&gt;</code> is a value that threads can update safely. See
+<li><code>async.Atomic&lt;T&gt;</code> is a value that threads can update safely. See
 <a href="#atomics">Atomics</a> and <a href="#threads-and-shared-data">Threads and shared data</a>.</li>
 </ul>
 <h3 id="raw-pointers-and-__null"><a class="header" href="#raw-pointers-and-__null">Raw pointers and <code>__null</code></a></h3>
@@ -1135,14 +1135,16 @@ runtime use them for their own names, such as <code>__ptr</code> and <code>__nul
 <p>Declare a variable with <code>var</code> and let Pepper infer its type from the initial
 value, or write the type yourself. Prefer <code>var</code> whenever the type is obvious from
 the value.</p>
-<pre><code class="language-pepper"># Declaring variables: inferred, explicitly typed, constant, and module-level.
+<pre><code class="language-pepper">import async;
+
+# Declaring variables: inferred, explicitly typed, constant, and module-level.
 
 # Module-level variables (globals) live for the whole program. Any thread
 # can reach them, so they are const and of a thread-safe type: a number, or
 # an Atomic for state that changes.
 const MAX_REQUESTS = 10;
-const request_count = Atomic&lt;int&gt;(0);
-const total_bytes = Atomic&lt;long&gt;(0);
+const request_count = async.Atomic&lt;int&gt;(0);
+const total_bytes = async.Atomic&lt;long&gt;(0);
 
 record(bytes: int) {
     request_count.fetch_add(1);
@@ -1223,7 +1225,7 @@ number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or
 <a href="#module-scope-variables">Module-scope variables</a>). A global that
 changes is an <code>Atomic&lt;T&gt;</code>:</p>
 <pre><code class="language-pepper">const MAX_RETRIES = 3;
-const requests = Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
+const requests = async.Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
 </code></pre>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>
@@ -1949,6 +1951,8 @@ parameter’s type before its name:</p>
 consistently. The first form is the one used throughout this book.</p>
 <pre><code class="language-pepper"># Declaring and calling functions.
 
+import async;
+
 # Parameters are written 'name: Type'; the return type follows the ')'.
 area(width: int, height: int): int {
     return width * height;
@@ -1962,7 +1966,7 @@ int perimeter(int width, int height) {
 # A function that returns nothing leaves out the return type
 # (or writes ': void', or 'void' in front).
 # A module-scope counter: const, and changed through an Atomic.
-const log_count = Atomic&lt;int&gt;(0);
+const log_count = async.Atomic&lt;int&gt;(0);
 log(message: String) {
     log_count.fetch_add(1);
     print("log: " + message);
@@ -2740,6 +2744,9 @@ function whose parameters all have defaults.</li>
 module-level variables and return values. A type alias gives a long function
 type a short name, and can have type parameters of its own.</p>
 <pre><code class="language-pepper"># Function values in fields, arrays, globals, and return values.
+
+import async;
+
 square(x: int): int { return x * x; }
 negate(x: int): int { return -x; }
 increment(x: int): int { return x + 1; }
@@ -2761,7 +2768,7 @@ pick(squared: bool): (int) =&gt; int {
 # A module-level function variable. Every module-level variable is const
 # and thread-safe: an Atomic lets it change, and a function type every thread
 # can reach is declared shared.
-const handler = Atomic&lt;shared (int) =&gt; int&gt;(increment);
+const handler = async.Atomic&lt;shared (int) =&gt; int&gt;(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine&lt;T&gt; = (T, T) =&gt; T;
@@ -2775,7 +2782,7 @@ fold(values: int[], combine: Combine&lt;int&gt;, start: int): int {
 }
 
 # A function that returns nothing has the return type void.
-const events = Atomic&lt;int&gt;(0);
+const events = async.Atomic&lt;int&gt;(0);
 record(n: int) { events.fetch_add(n); }
 
 main(): int {
@@ -2986,11 +2993,11 @@ or <code>shared (long) =&gt; void</code>, is thread-safe. Its reference counts a
 and its values hold only thread-safe state, so any thread may copy, call and
 drop them. It goes wherever a thread-safe type is required: the body of a
 thread (<code>ThreadBody</code> is <code>shared () =&gt; void</code>), a field of a <code>[Shared]</code> struct,
-a module-scope variable, or <code>Atomic&lt;shared (int) =&gt; int&gt;</code>.</p>
+a module-scope variable, or <code>async.Atomic&lt;shared (int) =&gt; int&gt;</code>.</p>
 <pre><code class="language-pepper"># shared function types: function values that threads can share.
 import async;
 
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 # A named function holds no state, so it is always thread-safe.
 add_one() {
@@ -3052,7 +3059,7 @@ is reported at the capture, with a note at the captured variable:</p>
 <pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 </code></pre>
@@ -3810,8 +3817,10 @@ main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', 
 reference to it goes away. Declare it with <code>destruct</code> and a body, with no
 parentheses. Use it to release something the object holds that Pepper does not
 manage for you, such as a file handle from C.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const closed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const closed = async.Atomic&lt;int&gt;(0);
 
 struct Connection {
     var name: String;
@@ -4657,8 +4666,10 @@ expression. Each of those releases its reference exactly once, when it goes
 away. When the last reference is released, the object is destroyed: its
 destructor runs, and then its fields release their own references, which may
 destroy further objects in turn.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Tracked {
     var name: String;
@@ -4743,8 +4754,10 @@ inside the method, <code>this</code> refers to the caller’s object.</p>
 directly or through a chain, keep each other’s counts above zero even after
 nothing else refers to them. Their destructors never run and their memory is
 never freed.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Person {
     var name: String;
@@ -4794,8 +4807,10 @@ closure that captures <code>this</code> in a field of <code>this</code>.</p>
 alive. Use it for back pointers: a child’s parent, a document’s folder, an
 observer’s subject. The owner holds strong references down the tree, and
 everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Folder {
     var name: String;
@@ -6118,8 +6133,10 @@ when the object is destroyed. It plays the role of Python’s <code>with</code> 
 <code>using</code>, but the cleanup is ordinary destruction: it runs through the same
 reference counting as every other object (see
 <a href="#memory-and-reference-counting">Memory and reference counting</a>).</p>
-<pre><code class="language-pepper"># A module-scope counter: const, and changed through an Atomic.
-const open_sessions = Atomic&lt;int&gt;(0);
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const open_sessions = async.Atomic&lt;int&gt;(0);
 
 # A scope object: enter() hands out what the block works with, and the
 # destructor calls exit() when the last reference goes away.
@@ -6624,7 +6641,9 @@ You can export every kind of top-level declaration:</p>
 </ul>
 <p>Here is a library file with a mix of exported and private declarations, and a
 program that uses it:</p>
-<pre><code class="language-pepper"># Everything here is private to lib.pep unless it says `export`.
+<pre><code class="language-pepper">import async;
+
+# Everything here is private to lib.pep unless it says `export`.
 
 export struct Point {
     var x: int;
@@ -6639,7 +6658,7 @@ export trait Describe {
 
 # A module-scope variable is `const` and thread-safe: change it through
 # an Atomic.
-export const points_made = Atomic&lt;int&gt;(0);
+export const points_made = async.Atomic&lt;int&gt;(0);
 
 export origin(): Point {
     return make(0, 0);
@@ -6815,7 +6834,7 @@ callable from C with C linkage is a separate matter, handled by the <code>[Expor
 attribute described in <a href="#calling-c">Calling C</a>.</p>
 <h2 id="the-runtimes-exports"><a class="header" href="#the-runtimes-exports">The runtime’s exports</a></h2>
 <p>The runtime’s public surface (<code>String</code>, <code>Array</code>, <code>HashMap</code>, <code>HashSet</code>,
-<code>Atomic</code>, <code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
+<code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
 <a href="reference/README.html">standard library reference</a>) is exported the same
 way, and is visible in every file without an import. The runtime’s own helpers
 are private, so calling one, such as the integer formatter <code>dec</code>, reports
@@ -7227,14 +7246,19 @@ elsewhere (see <a href="#platform-selection">Platform selection</a>):</p>
 <h1 id="atomics"><a class="header" href="#atomics">Atomics</a></h1>
 <p>An <strong>atomic</strong> value can be read and updated by several threads at once without
 a data race: every operation on it happens as one indivisible step. Pepper
-provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>std::atomic&lt;T&gt;</code>.</p>
+provides this through <code>async.Atomic&lt;T&gt;</code>, the equivalent of C++
+<code>std::atomic&lt;T&gt;</code>.</p>
 <p>Threads themselves, and the rules for what they can share, are in
 <a href="#threads-and-shared-data">Threads and shared data</a>.</p>
 <h2 id="atomict"><a class="header" href="#atomict">Atomic&lt;T&gt;</a></h2>
-<p><code>Atomic&lt;T&gt;</code> is part of the runtime, so you can use it without an import. The
+<p><code>Atomic&lt;T&gt;</code> belongs to the <a href="#threads-and-shared-data"><code>async</code> module</a>, with the other
+types threads share: <code>import async</code> and write <code>async.Atomic&lt;T&gt;</code>, or bring
+the name in with <code>import [Atomic] from async</code>. The
 <a href="#atomic">Atomic reference</a> documents every method.</p>
-<pre><code class="language-pepper">main(): int {
-    var a = Atomic&lt;int&gt;(41);
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    var a = async.Atomic&lt;int&gt;(41);
     assert(a.load() == 41, "the initial value");
 
     a.store(1);
@@ -7246,7 +7270,7 @@ provides this through <code>Atomic&lt;T&gt;</code>, the equivalent of C++ <code>
     assert(a.fetch_sub(2) == 6, "fetch_sub returns the old value");
     assert(a.load() == 4, "6 - 2");
 
-    var flags = Atomic&lt;uint&gt;(12);          # 0b1100
+    var flags = async.Atomic&lt;uint&gt;(12);          # 0b1100
     flags.fetch_and(10);                   # 0b1000
     assert(flags.load() == 8, "fetch_and");
     flags.fetch_or(1);                     # 0b1001
@@ -7305,7 +7329,9 @@ type). <code>Atomic&lt;String&gt;</code> is a compile error. See
 <a href="#what-threads-can-share">What threads can share</a>.</li>
 </ul>
 <h2 id="common-patterns"><a class="header" href="#common-patterns">Common patterns</a></h2>
-<pre><code class="language-pepper"># An Atomic can only hold a thread-safe struct: one declared [Shared], whose
+<pre><code class="language-pepper">import async;
+
+# An Atomic can only hold a thread-safe struct: one declared [Shared], whose
 # fields are const and thread-safe.
 [Shared]
 struct Config {
@@ -7314,14 +7340,14 @@ struct Config {
 }
 
 # A module-scope Atomic that every function can share.
-const next_id = Atomic&lt;long&gt;(0);
+const next_id = async.Atomic&lt;long&gt;(0);
 
 new_id(): long {
     return next_id.fetch_add(1) + 1;
 }
 
 # The compare-and-swap retry loop: build any read-modify-write update.
-double_it(Atomic&lt;int&gt; value) {
+double_it(async.Atomic&lt;int&gt; value) {
     var current = value.load();
     while (!value.compare_exchange(current, current * 2)) {
         current = value.load();
@@ -7332,7 +7358,7 @@ main(): int {
     assert(new_id() == 1, "first id");
     assert(new_id() == 2, "second id");
 
-    var n = Atomic&lt;int&gt;(21);
+    var n = async.Atomic&lt;int&gt;(21);
     double_it(n);
     assert(n.load() == 42, "doubled");
 
@@ -7343,7 +7369,7 @@ main(): int {
 
     # An Atomic can hold a struct reference.
     var first = Config(1);
-    var current = Atomic&lt;Config&gt;(first);
+    var current = async.Atomic&lt;Config&gt;(first);
     assert(current.load().version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
@@ -7392,7 +7418,7 @@ that claim to be.</p>
 <h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
 <pre><code class="language-pepper">import async;
 
-const finished = Atomic&lt;int&gt;(0);
+const finished = async.Atomic&lt;int&gt;(0);
 
 # A thread body is a function that takes nothing and returns nothing.
 count_to_a_million() {
@@ -7448,7 +7474,7 @@ thread. It keeps running, and its resources are freed when it finishes.</li>
 </ul>
 <p>The body can be a named function or a <a href="#function-types-and-closures">closure</a>. A
 closure passes data to the thread through its captures:</p>
-<pre><code class="language-pepper">var total = Atomic&lt;long&gt;(0);
+<pre><code class="language-pepper">var total = async.Atomic&lt;long&gt;(0);
 var step: long = 5;
 var worker = async.Thread.spawn(() =&gt; { total.fetch_add(step); });
 worker.join();
@@ -7460,7 +7486,7 @@ capture and reports one that is not thread-safe where the closure uses it:</p>
 <pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 </code></pre>
@@ -7480,11 +7506,13 @@ hardware.</li>
 </ul>
 <h2 id="per-thread-values-with-threadlocal"><a class="header" href="#per-thread-values-with-threadlocal">Per-thread values with ThreadLocal</a></h2>
 <p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread:</p>
-<pre><code class="language-pepper">import [Thread, ThreadLocal] from async;
+<pre><code class="language-pepper">import async;
+
+import [Thread, ThreadLocal] from async;
 
 # One variable, a separate value on every thread.
 const calls = ThreadLocal&lt;int&gt;();
-const totals = Atomic&lt;long&gt;(0);
+const totals = async.Atomic&lt;long&gt;(0);
 
 record_call() {
     calls.set(calls.get() + 1);
@@ -7549,10 +7577,10 @@ struct Settings {
     construct(this.port = 0, this.retries = 0) {}
 }
 
-# Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
+# async.Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
 # of them can replace them.
-const current = Atomic&lt;Settings&gt;(Settings(8080, 3));
-const seen = Atomic&lt;long&gt;(0);
+const current = async.Atomic&lt;Settings&gt;(Settings(8080, 3));
+const seen = async.Atomic&lt;long&gt;(0);
 
 read_settings() {
     var settings = current.load();
@@ -7606,10 +7634,10 @@ note: declare the function type 'shared () =&gt; void' to share it between threa
 <p>A generic <code>[Shared]</code> struct is checked for each set of type arguments.
 <code>Atomic&lt;T&gt;</code> is <code>[Shared]</code>, so <code>Atomic&lt;int&gt;</code> and <code>Atomic&lt;Settings&gt;</code> are fine,
 and <code>Atomic&lt;String&gt;</code> is an error that points at the code that names it:</p>
-<pre><code class="language-text">main.pep:2:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    2 |     var a = Atomic&lt;String&gt;();
-      |             ^~~~~~~~~~~~~~
-runtime/atomic.pep:40:17: note: required by field 'Data' declared here
+<pre><code class="language-text">main.pep:3:13: error: shared struct 'Atomic&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    3 |     var a = async.Atomic&lt;String&gt;();
+      |             ^~~~~~~~~~~~~~~~~~~~
+runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
 runtime/string.pep:33:15: note: 'String' is not declared [Shared]
 </code></pre>
 <p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
@@ -7617,7 +7645,7 @@ reported at the field:</p>
 <pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
     3 |     int Count;
       |         ^~~~~
-note: threads change a shared struct's state through a thread-safe member such as 'Atomic&lt;T&gt;'
+note: threads change a shared struct's state through a thread-safe member such as 'async.Atomic&lt;T&gt;' (after 'import async')
 </code></pre>
 <p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves, and so
 are the synchronization types below: <code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code>,
@@ -7635,7 +7663,7 @@ value cannot be a module-scope variable; keep it in a local, or in a
 <code>ThreadLocal&lt;T&gt;</code>.</li>
 </ul>
 <pre><code class="language-pepper">const MAX_WORKERS = 8;                  # a number
-const jobs_done = Atomic&lt;long&gt;(0);      # changed with fetch_add
+const jobs_done = async.Atomic&lt;long&gt;(0);  # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
 const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared function
@@ -7644,7 +7672,7 @@ const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared functio
 <pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
     1 | var hits = 0;
       |     ^~~~
-note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic&lt;T&gt;' or 'ThreadLocal&lt;T&gt;'
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic&lt;T&gt;' or 'async.ThreadLocal&lt;T&gt;' (after 'import async')
 </code></pre>
 <pre><code class="language-text">main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
     2 | const origin: Plain = Plain();
@@ -7677,7 +7705,7 @@ square_numbers() {
 
 # A `shared` function value is thread-safe, so a channel can carry work.
 const tasks = async.Channel&lt;async.ThreadBody&gt;();
-const ran = Atomic&lt;long&gt;(0);
+const ran = async.Atomic&lt;long&gt;(0);
 
 run_tasks() {
     for (var task in tasks) {
@@ -7767,7 +7795,7 @@ struct Order {
 }
 
 const orders = async.Channel&lt;Order&gt;();
-const letters = Atomic&lt;long&gt;(0);
+const letters = async.Atomic&lt;long&gt;(0);
 
 count_letters() {
     for (var order in orders) {
@@ -7930,16 +7958,16 @@ reach the value is a <a href="#scoped-blocks-with-with"><code>with</code> block<
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const checking: Atomic&lt;long&gt;;
-    const savings: Atomic&lt;long&gt;;
+    const checking: async.Atomic&lt;long&gt;;
+    const savings: async.Atomic&lt;long&gt;;
     construct(long checking = 0, long savings = 0) {
-        this.checking = Atomic&lt;long&gt;(checking);
-        this.savings = Atomic&lt;long&gt;(savings);
+        this.checking = async.Atomic&lt;long&gt;(checking);
+        this.savings = async.Atomic&lt;long&gt;(savings);
     }
 }
 
 const accounts = async.Mutex&lt;Accounts&gt;(Accounts(1000, 0));
-const bad_totals = Atomic&lt;long&gt;(0);
+const bad_totals = async.Atomic&lt;long&gt;(0);
 
 move_to_savings() {
     var i = 0;
@@ -7996,7 +8024,7 @@ thread holds it.</li>
 </ul>
 <p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
 <code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.
-<code>Mutex&lt;int&gt;</code> is an error (use <code>Atomic&lt;int&gt;</code>). A Mutex of values that are not
+<code>Mutex&lt;int&gt;</code> is an error (use <code>async.Atomic&lt;int&gt;</code>). A Mutex of values that are not
 thread-safe is kept apart from the rest of the program by the compiler; see
 <a href="#what-a-lock-body-may-do">What a lock body may do</a>.</p>
 <ul>
@@ -8042,17 +8070,17 @@ changes the value. Get one with <code>mutex.condition()</code>:</p>
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const pies: Atomic&lt;long&gt;;
-    const closed: Atomic&lt;int&gt;;
+    const pies: async.Atomic&lt;long&gt;;
+    const closed: async.Atomic&lt;int&gt;;
     construct() {
-        pies = Atomic&lt;long&gt;(0);
-        closed = Atomic&lt;int&gt;(0);
+        pies = async.Atomic&lt;long&gt;(0);
+        closed = async.Atomic&lt;int&gt;(0);
     }
 }
 
 const bakery = async.Mutex&lt;Bakery&gt;(Bakery());
 const changed = bakery.condition();
-const eaten = Atomic&lt;long&gt;(0);
+const eaten = async.Atomic&lt;long&gt;(0);
 
 eat() {
     while (true) {
@@ -8115,7 +8143,7 @@ wakeup, and returns with the Mutex still locked. <code>wait_while_for(millisecon
 # A worker takes jobs from a queue, sleeping while it is empty.
 const jobs = async.Mutex&lt;Array&lt;long&gt;&gt;(Array&lt;long&gt;());
 const changed = jobs.condition();
-const done = Atomic&lt;long&gt;(0);
+const done = async.Atomic&lt;long&gt;(0);
 
 work() {
     var taken = 0;
@@ -8326,7 +8354,7 @@ struct Settings {
     construct(this.workers = 1) {}
 }
 
-const builds = Atomic&lt;long&gt;(0);
+const builds = async.Atomic&lt;long&gt;(0);
 
 load_settings(): Settings {
     builds.fetch_add(1);
@@ -8338,7 +8366,7 @@ const settings = async.Lazy&lt;Settings&gt;(load_settings);
 
 # Runs initialize() once, however many threads call it.
 const setup = async.Once();
-const setups = Atomic&lt;long&gt;(0);
+const setups = async.Atomic&lt;long&gt;(0);
 
 initialize() {
     setups.fetch_add(1);
@@ -8498,7 +8526,7 @@ the calling task until it returns, so the worker keeps running its other
 tasks meanwhile:</p>
 <pre><code class="language-pepper">import async;
 
-const ticks = Atomic&lt;int&gt;(0);
+const ticks = async.Atomic&lt;int&gt;(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
@@ -8716,9 +8744,10 @@ on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
 connection goes to one of the waiting workers, and the stream it returns
 belongs to that worker:</p>
 <pre><code class="language-pepper">import async;
+
 import io;
 
-const served = Atomic&lt;int&gt;(0);
+const served = async.Atomic&lt;int&gt;(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
@@ -9887,6 +9916,7 @@ the code it replaces:</p>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
 <tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
 <tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
+<tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -10001,7 +10031,7 @@ main.pep:6:8: note: declare it with 'extend Circle with Shape'
 <pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic&lt;T&gt;' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 </code></pre>
@@ -10407,7 +10437,7 @@ functions, parameters, local variables, and module-scope variables.</p>
 whose value is fixed, such as a number, string, or character. Its name is
 <code>SCREAMING_CASE</code>, uppercase words joined by underscores (<code>MAX_REQUESTS</code>,
 <code>LINE_WIDTH</code>). A module-scope <code>const</code> that holds an object, such as
-<code>const request_count = Atomic&lt;int&gt;(0);</code>, is a variable and stays
+<code>const request_count = async.Atomic&lt;int&gt;(0);</code>, is a variable and stays
 <code>snake_case</code>.</p>
 <p>Spell words out. A name is read far more often than it is typed, so prefer
 <code>iterate</code>, <code>index</code>, and <code>directory</code> to <code>iter</code>, <code>idx</code>, and <code>dir</code>. Keep an
@@ -13465,214 +13495,6 @@ is used.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var n = Optional&lt;int&gt;.none().value_or(-1);   # -1
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/atomic.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
-<p>Source: <code>runtime/atomic.pep</code></p>
-<h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
-<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
-</code></pre>
-<p>A value of type <code>T</code> that threads can read and update without data races,
-like C++ <code>std::atomic&lt;T&gt;</code>.</p>
-<p><code>T</code> may be a numeric type, a pointer, or a struct type. For a struct <code>T</code>
-the Atomic holds a counted reference and every operation follows
-<code>std::shared_ptr</code> rules: <code>store</code> and a successful <code>compare_exchange</code> acquire
-the new reference and release the one they replace, and <code>load</code> hands the
-caller its own reference. Memory ordering: <code>load</code> is an acquire,
-<code>store</code> a release, and <code>compare_exchange</code> and the <code>fetch_*</code> operations are
-acquire-release.</p>
-<p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
-be used from several threads at once: pass the Atomic around (or keep it
-in a <code>const</code> global) to share the value between threads. A struct <code>T</code> must be
-thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is a compile error.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type of the stored value</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    main(): int {
-        var counter = Atomic&lt;long&gt;(0);
-        var before = counter.fetch_add(5);   # before == 0
-        if (counter.load() != 5) { return 1; }
-        return 0;
-    }
-</code></pre>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
-<h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
-<pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
-</code></pre>
-<p>Creates an Atomic holding <code>value</code>.</p>
-<p>For a struct <code>T</code> the Atomic acquires a reference to <code>value</code>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — the initial value; defaults to zero for a POD <code>T</code> and null for a struct <code>T</code></li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
-    var p = Atomic&lt;Point&gt;();   # holds null until a store
-</code></pre>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
-<h4 id="load"><a class="header" href="#load">load</a></h4>
-<pre><code class="language-pepper">load(): T
-</code></pre>
-<p>Atomically reads the current value, with acquire ordering.</p>
-<p>For a struct <code>T</code> the returned reference is acquired for the caller, so
-it stays valid even if another thread stores a new value afterwards.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value currently stored</li>
-</ul>
-<h4 id="store"><a class="header" href="#store">store</a></h4>
-<pre><code class="language-pepper">store(v: T)
-</code></pre>
-<p>Atomically replaces the stored value with <code>v</code>, with release ordering.</p>
-<p>For a struct <code>T</code> this is a <code>shared_ptr</code> assignment: the slot acquires
-<code>v</code> and releases its previous occupant, and the swap is a single atomic
-exchange, so concurrent stores never leak or double-release.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the new value</li>
-</ul>
-<h4 id="compare_exchange"><a class="header" href="#compare_exchange">compare_exchange</a></h4>
-<pre><code class="language-pepper">compare_exchange(expected: T, desired: T): bool
-</code></pre>
-<p>Atomically replaces the stored value with <code>desired</code> if and only if it
-currently equals <code>expected</code> (a compare-and-swap).</p>
-<p>Equality is bitwise: a struct <code>T</code> compares references (the same object,
-not equal contents), and a floating-point <code>T</code> compares bit patterns, so
-<code>0.0</code> and <code>-0.0</code> differ. Unlike C++ <code>compare_exchange_strong</code>,
-<code>expected</code> is not updated on failure; call <code>load()</code> to retry. On success
-a struct slot acquires <code>desired</code> and releases the old occupant; on
-failure no reference count changes.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>expected</code> — the value the slot must hold for the exchange to happen</li>
-<li><code>desired</code> — the value to store when it does</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true if the slot held <code>expected</code> and now holds <code>desired</code>, false if it was left unchanged</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var cur = counter.load();
-    while (!counter.compare_exchange(cur, cur + 1)) {
-        cur = counter.load();
-    }
-</code></pre>
-<h4 id="exchange"><a class="header" href="#exchange">exchange</a></h4>
-<pre><code class="language-pepper">exchange(v: T): T
-</code></pre>
-<p>Atomically replaces the stored value with <code>v</code> and returns the value it
-replaced.</p>
-<p>Implemented as a <code>compare_exchange</code> retry loop, so under heavy
-contention it may retry several times. For a struct <code>T</code> the slot
-acquires <code>v</code>, and the caller owns the returned reference.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the new value</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the exchange</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var e = Atomic&lt;int&gt;(1);
-    var old = e.exchange(2);   # old == 1, e.load() == 2
-</code></pre>
-<h4 id="is_lock_free"><a class="header" href="#is_lock_free">is_lock_free</a></h4>
-<pre><code class="language-pepper">is_lock_free(): bool
-</code></pre>
-<p>Reports whether this Atomic’s slot fits a native atomic instruction,
-so its operations never need a lock or an atomic library call.</p>
-<p>True for every POD <code>T</code> of 8 bytes or less and for every struct <code>T</code>
-(whose slot is one pointer). The answer depends only on <code>T</code>, never on
-the stored value.</p>
-<p><strong>Returns</strong></p>
-<ul>
-<li>true when the operations are lock-free</li>
-</ul>
-<h4 id="fetch_add"><a class="header" href="#fetch_add">fetch_add</a></h4>
-<pre><code class="language-pepper">fetch_add(v: T): T
-</code></pre>
-<p>Atomically adds <code>v</code> to the stored value and returns the value before
-the addition, like <code>std::atomic&lt;T&gt;::fetch_add</code>.</p>
-<p>Integer <code>T</code> only. Overflow wraps around. For a non-integer <code>T</code> (a
-floating-point or struct type) the call compiles but aborts the
-program when it runs.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the amount to add</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the addition</li>
-</ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var c = Atomic&lt;long&gt;(10);
-    var old = c.fetch_add(5);   # old == 10, c.load() == 15
-</code></pre>
-<h4 id="fetch_sub"><a class="header" href="#fetch_sub">fetch_sub</a></h4>
-<pre><code class="language-pepper">fetch_sub(v: T): T
-</code></pre>
-<p>Atomically subtracts <code>v</code> from the stored value and returns the value
-before the subtraction, like <code>std::atomic&lt;T&gt;::fetch_sub</code>.</p>
-<p>Integer <code>T</code> only. Overflow wraps around. For a non-integer <code>T</code> the call
-compiles but aborts the program when it runs.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the amount to subtract</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the subtraction</li>
-</ul>
-<h4 id="fetch_and"><a class="header" href="#fetch_and">fetch_and</a></h4>
-<pre><code class="language-pepper">fetch_and(v: T): T
-</code></pre>
-<p>Atomically replaces the stored value with its bitwise AND with <code>v</code> and
-returns the value before the operation, like
-<code>std::atomic&lt;T&gt;::fetch_and</code>.</p>
-<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
-the program when it runs.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the mask to AND with</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the operation</li>
-</ul>
-<h4 id="fetch_or"><a class="header" href="#fetch_or">fetch_or</a></h4>
-<pre><code class="language-pepper">fetch_or(v: T): T
-</code></pre>
-<p>Atomically replaces the stored value with its bitwise OR with <code>v</code> and
-returns the value before the operation, like
-<code>std::atomic&lt;T&gt;::fetch_or</code>.</p>
-<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
-the program when it runs.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the bits to OR in</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the operation</li>
-</ul>
-<h4 id="fetch_xor"><a class="header" href="#fetch_xor">fetch_xor</a></h4>
-<pre><code class="language-pepper">fetch_xor(v: T): T
-</code></pre>
-<p>Atomically replaces the stored value with its bitwise XOR with <code>v</code> and
-returns the value before the operation, like
-<code>std::atomic&lt;T&gt;::fetch_xor</code>.</p>
-<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
-the program when it runs.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>v</code> — the bits to XOR with</li>
-</ul>
-<p><strong>Returns</strong></p>
-<ul>
-<li>the value stored immediately before the operation</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-io-module"><a class="header" href="#the-io-module">The io module</a></h1>
 <p>Files, directories, paths, and sockets, modeled on Rust’s <code>std::fs</code>,
@@ -13867,7 +13689,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(code: ErrorCode = 0, message: String = "")
 </code></pre>
@@ -13892,7 +13714,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">is_not_found(): bool
 </code></pre>
@@ -14105,7 +13927,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
@@ -14148,7 +13970,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -14544,13 +14366,13 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.value();
 </code></pre>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">read(v: bool): OpenOptions
 </code></pre>
@@ -15364,13 +15186,13 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
@@ -15626,7 +15448,7 @@ that maps it are different values.</p>
     print(a.is_v4());         # true
     print(b.to_string());     # 2001:db8::1
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -15730,7 +15552,7 @@ accepted.</p>
 <pre><code class="language-pepper">    var r = IpAddress.parse("10.0.0.300");
     print(r.is_err());   # true: 300 is out of range
 </code></pre>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
 <pre><code class="language-pepper">is_v4(): bool
 </code></pre>
@@ -16001,7 +15823,7 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
         stream.write_string("hello " + peer.to_string());
     }
 </code></pre>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -16020,7 +15842,7 @@ fails. Use <code>TcpListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
 </ul>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -16558,6 +16380,7 @@ threads.</p>
 <code>async.Thread</code>, <code>async.logical_cpus()</code>) or import names directly with
 <code>import [Thread, ThreadLocal] from async</code>.</p>
 <ul>
+<li><a href="#atomic">Atomic</a>: <code>Atomic&lt;T&gt;</code>, a value threads read and update without a lock</li>
 <li><a href="#thread">Thread</a>: starting, naming and joining threads, <code>ThreadId</code> and <code>ThreadBody</code></li>
 <li><a href="#threadlocal">ThreadLocal</a>: a variable with a separate value on every thread, and its <code>ThreadLocalGuard&lt;T&gt;</code></li>
 <li><a href="#processor-counts-1">Processor counts</a>: <code>logical_cpus()</code> and <code>physical_cpus()</code></li>
@@ -16578,7 +16401,7 @@ values only. See the language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 
-    const hits = Atomic&lt;long&gt;(0);
+    const hits = async.Atomic&lt;long&gt;(0);
 
     work() {
         hits.fetch_add(1);
@@ -16600,6 +16423,214 @@ values only. See the language guide’s Threads chapter.</p>
     }
 </code></pre>
 <p>Source: <code>runtime/async/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/atomic.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="atomic"><a class="header" href="#atomic">Atomic</a></h1>
+<p>Source: <code>runtime/async/atomic.pep</code></p>
+<h2 id="atomic-1"><a class="header" href="#atomic-1">Atomic</a></h2>
+<pre><code class="language-pepper">[Shared] struct Atomic&lt;T&gt;
+</code></pre>
+<p>A value of type <code>T</code> that threads can read and update without data races,
+like C++ <code>std::atomic&lt;T&gt;</code>.</p>
+<p><code>T</code> may be a numeric type, a pointer, or a struct type. For a struct <code>T</code>
+the Atomic holds a counted reference and every operation follows
+<code>std::shared_ptr</code> rules: <code>store</code> and a successful <code>compare_exchange</code> acquire
+the new reference and release the one they replace, and <code>load</code> hands the
+caller its own reference. Memory ordering: <code>load</code> is an acquire,
+<code>store</code> a release, and <code>compare_exchange</code> and the <code>fetch_*</code> operations are
+acquire-release.</p>
+<p><code>Atomic</code> is a <code>[Shared]</code> struct, so copies of it share one slot and may
+be used from several threads at once: pass the Atomic around (or keep it
+in a <code>const</code> global) to share the value between threads. A struct <code>T</code> must be
+thread-safe (itself <code>[Shared]</code>); <code>async.Atomic&lt;String&gt;</code> is a compile error.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the stored value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    main(): int {
+        var counter = async.Atomic&lt;long&gt;(0);
+        var before = counter.fetch_add(5);   # before == 0
+        if (counter.load() != 5) { return 1; }
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
+<pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
+</code></pre>
+<p>Creates an Atomic holding <code>value</code>.</p>
+<p>For a struct <code>T</code> the Atomic acquires a reference to <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the initial value; defaults to zero for a POD <code>T</code> and null for a struct <code>T</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var a = async.Atomic&lt;int&gt;(41);
+    var p = async.Atomic&lt;Point&gt;();   # holds null until a store
+</code></pre>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h4 id="load"><a class="header" href="#load">load</a></h4>
+<pre><code class="language-pepper">load(): T
+</code></pre>
+<p>Atomically reads the current value, with acquire ordering.</p>
+<p>For a struct <code>T</code> the returned reference is acquired for the caller, so
+it stays valid even if another thread stores a new value afterwards.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value currently stored</li>
+</ul>
+<h4 id="store"><a class="header" href="#store">store</a></h4>
+<pre><code class="language-pepper">store(v: T)
+</code></pre>
+<p>Atomically replaces the stored value with <code>v</code>, with release ordering.</p>
+<p>For a struct <code>T</code> this is a <code>shared_ptr</code> assignment: the slot acquires
+<code>v</code> and releases its previous occupant, and the swap is a single atomic
+exchange, so concurrent stores never leak or double-release.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the new value</li>
+</ul>
+<h4 id="compare_exchange"><a class="header" href="#compare_exchange">compare_exchange</a></h4>
+<pre><code class="language-pepper">compare_exchange(expected: T, desired: T): bool
+</code></pre>
+<p>Atomically replaces the stored value with <code>desired</code> if and only if it
+currently equals <code>expected</code> (a compare-and-swap).</p>
+<p>Equality is bitwise: a struct <code>T</code> compares references (the same object,
+not equal contents), and a floating-point <code>T</code> compares bit patterns, so
+<code>0.0</code> and <code>-0.0</code> differ. Unlike C++ <code>compare_exchange_strong</code>,
+<code>expected</code> is not updated on failure; call <code>load()</code> to retry. On success
+a struct slot acquires <code>desired</code> and releases the old occupant; on
+failure no reference count changes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>expected</code> — the value the slot must hold for the exchange to happen</li>
+<li><code>desired</code> — the value to store when it does</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if the slot held <code>expected</code> and now holds <code>desired</code>, false if it was left unchanged</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var cur = counter.load();
+    while (!counter.compare_exchange(cur, cur + 1)) {
+        cur = counter.load();
+    }
+</code></pre>
+<h4 id="exchange"><a class="header" href="#exchange">exchange</a></h4>
+<pre><code class="language-pepper">exchange(v: T): T
+</code></pre>
+<p>Atomically replaces the stored value with <code>v</code> and returns the value it
+replaced.</p>
+<p>Implemented as a <code>compare_exchange</code> retry loop, so under heavy
+contention it may retry several times. For a struct <code>T</code> the slot
+acquires <code>v</code>, and the caller owns the returned reference.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the new value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the exchange</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var e = async.Atomic&lt;int&gt;(1);
+    var old = e.exchange(2);   # old == 1, e.load() == 2
+</code></pre>
+<h4 id="is_lock_free"><a class="header" href="#is_lock_free">is_lock_free</a></h4>
+<pre><code class="language-pepper">is_lock_free(): bool
+</code></pre>
+<p>Reports whether this Atomic’s slot fits a native atomic instruction,
+so its operations never need a lock or an atomic library call.</p>
+<p>True for every POD <code>T</code> of 8 bytes or less and for every struct <code>T</code>
+(whose slot is one pointer). The answer depends only on <code>T</code>, never on
+the stored value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the operations are lock-free</li>
+</ul>
+<h4 id="fetch_add"><a class="header" href="#fetch_add">fetch_add</a></h4>
+<pre><code class="language-pepper">fetch_add(v: T): T
+</code></pre>
+<p>Atomically adds <code>v</code> to the stored value and returns the value before
+the addition, like <code>std::atomic&lt;T&gt;::fetch_add</code>.</p>
+<p>Integer <code>T</code> only. Overflow wraps around. For a non-integer <code>T</code> (a
+floating-point or struct type) the call compiles but aborts the
+program when it runs.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the amount to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the addition</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var c = async.Atomic&lt;long&gt;(10);
+    var old = c.fetch_add(5);   # old == 10, c.load() == 15
+</code></pre>
+<h4 id="fetch_sub"><a class="header" href="#fetch_sub">fetch_sub</a></h4>
+<pre><code class="language-pepper">fetch_sub(v: T): T
+</code></pre>
+<p>Atomically subtracts <code>v</code> from the stored value and returns the value
+before the subtraction, like <code>std::atomic&lt;T&gt;::fetch_sub</code>.</p>
+<p>Integer <code>T</code> only. Overflow wraps around. For a non-integer <code>T</code> the call
+compiles but aborts the program when it runs.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the amount to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the subtraction</li>
+</ul>
+<h4 id="fetch_and"><a class="header" href="#fetch_and">fetch_and</a></h4>
+<pre><code class="language-pepper">fetch_and(v: T): T
+</code></pre>
+<p>Atomically replaces the stored value with its bitwise AND with <code>v</code> and
+returns the value before the operation, like
+<code>std::atomic&lt;T&gt;::fetch_and</code>.</p>
+<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
+the program when it runs.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the mask to AND with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the operation</li>
+</ul>
+<h4 id="fetch_or"><a class="header" href="#fetch_or">fetch_or</a></h4>
+<pre><code class="language-pepper">fetch_or(v: T): T
+</code></pre>
+<p>Atomically replaces the stored value with its bitwise OR with <code>v</code> and
+returns the value before the operation, like
+<code>std::atomic&lt;T&gt;::fetch_or</code>.</p>
+<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
+the program when it runs.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the bits to OR in</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the operation</li>
+</ul>
+<h4 id="fetch_xor"><a class="header" href="#fetch_xor">fetch_xor</a></h4>
+<pre><code class="language-pepper">fetch_xor(v: T): T
+</code></pre>
+<p>Atomically replaces the stored value with its bitwise XOR with <code>v</code> and
+returns the value before the operation, like
+<code>std::atomic&lt;T&gt;::fetch_xor</code>.</p>
+<p>Integer <code>T</code> only. For a non-integer <code>T</code> the call compiles but aborts
+the program when it runs.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the bits to XOR with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value stored immediately before the operation</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/thread.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="thread"><a class="header" href="#thread">Thread</a></h1>
 <p>Threads: starting, naming, identifying and joining operating-system
