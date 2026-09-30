@@ -1604,3 +1604,37 @@ test(): int {
         3
     );
 }
+
+#[test]
+fn index_through_a_with_binding_from_a_generic_method() {
+    // The binding's type is the scope's generic parameter until the scope's
+    // struct is specialized; `list[0]` must still reach the Array indexer.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Box<T> {
+    T items;
+    construct(this.items = __default<T>()) {}
+    T enter() { return items; }
+    exit() {}
+}
+struct Holder<T> {
+    T items;
+    construct(this.items = __default<T>()) {}
+    Box<T> open() { return Box<T>(items); }
+}
+test(): int {
+    var a = Array<String>();
+    a.append("line");
+    var h = Holder<Array<String>>(a);
+    with (var list = h.open()) {
+        var x = list[0];
+        if (x != "line") { return 1; }
+    }
+    return 0;
+}
+"#
+        ),
+        0
+    );
+}

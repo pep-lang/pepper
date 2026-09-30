@@ -73,10 +73,11 @@ Some that you will meet quickly:
   trait members can be [overloaded](language/overloading.md).
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, which the compiler checks,
-  closure captures included. A channel copies what it is sent with `copy`,
-  so a `String` or an `Array` crosses threads that way; mutexes and `Lazy`
-  hold thread-safe values only, and a trait value cannot be copied yet (see
-  [threads](language/threads.md#limitations)).
+  closure captures included. A channel copies what it is sent, and a
+  `Mutex` holds any struct, with the compiler keeping each locked value apart
+  from the rest of the program (see
+  [threads](language/threads.md#what-a-lock-body-may-do)). A trait value
+  cannot be copied yet.
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a
   [weak reference](language/memory.md#weak-references) on one side.

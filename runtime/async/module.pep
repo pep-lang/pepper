@@ -6,7 +6,7 @@
 ## `import [Thread, ThreadLocal] from async`.
 ##
 ## - [Thread](async-thread.md): starting, naming and joining threads, `ThreadId` and `ThreadBody`
-## - [ThreadLocal](async-thread_local.md): a variable with a separate value on every thread
+## - [ThreadLocal](async-thread_local.md): a variable with a separate value on every thread, and its `ThreadLocalGuard<T>`
 ## - [Processor counts](async-cpus.md): `logical_cpus()` and `physical_cpus()`
 ## - [Channel](async-channel.md): `Channel<T>`, a queue that carries values between threads, and its `ChannelIterator<T>`
 ## - [Mutex](async-mutex.md): `Mutex<T>`, the `MutexGuard<T>` a `with` block holds, and `Condition<T>`
@@ -15,9 +15,10 @@
 ## Only thread-safe values can be shared between threads: numbers, `shared`
 ## function values (such as a thread's body), and `[Shared]` structs such as
 ## `Atomic<T>`, `Thread`, `ThreadLocal<T>`, `Channel<T>` and `Mutex<T>`. Any
-## other value crosses threads as a copy: `Channel.send` copies what it sends
-## with `copy`. `Mutex<T>` and `Lazy<T>` hold thread-safe values only. See the
-## language guide's Threads chapter.
+## other value crosses threads as a copy (`Channel.send` copies what it sends
+## with `copy`) or stays inside a `Mutex`, whose `with` blocks the compiler
+## keeps apart from the rest of the program. `Lazy<T>` holds thread-safe
+## values only. See the language guide's Threads chapter.
 ##
 ## @example
 ##     import async;
@@ -59,6 +60,7 @@ export ThreadId;
 export ThreadBody;
 export Thread;
 export ThreadLocal;
+export ThreadLocalGuard;
 export logical_cpus;
 export physical_cpus;
 export Mutex;

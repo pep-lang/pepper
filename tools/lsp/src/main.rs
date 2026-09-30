@@ -1281,7 +1281,17 @@ impl PepperLsp {
                         })
                     })
                     .unwrap_or_else(|| "unknown".to_string());
-                Some(Hover { contents: md(with_doc(format!("`{}` — `{}`", id, rendered), global_doc(id))), range: None })
+                let mut head = format!("`{}` — `{}`", id, rendered);
+                // A function whose result shares nothing with its inputs
+                // may cross a lock or go to a `[Sending]` parameter.
+                if !locals.iter().chain(&struct_members).any(|s| s.name == *id)
+                    && sema.and_then(|m| pepper_sema::passes::check_confinement::returns_fresh(m, id)) == Some(true)
+                {
+                    head.push_str("
+
+Returns a fresh value: it shares nothing with the arguments.");
+                }
+                Some(Hover { contents: md(with_doc(head, global_doc(id))), range: None })
             }
             ast::Expression::MemberAccess { lhs, name, .. } => {
                 let rendered = if is_this(expr) {

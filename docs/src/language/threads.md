@@ -85,7 +85,19 @@ The [Thread reference](../reference/async-thread.md) documents every method.
 - When a thread exits, its value is released.
 
 A `ThreadLocal` is usually a module-scope variable. Its `T` does not need to
-be thread-safe, because each value stays on the thread that stored it. The
+be thread-safe, because each value stays on the thread that stored it. For a
+`T` that is not thread-safe, such as a `String`, the value is reached like a
+Mutex's (see [What a lock body may do](#what-a-lock-body-may-do)):
+
+- `with (var value = local.enter()) { ... }` binds this thread's value; the
+  `else` block runs when the thread has none;
+- `get()` is a compile error;
+- `set(value)` takes a new value: a constructor call, a string literal, or
+  `copy(x)`.
+
+Otherwise a function called while a Mutex is locked could keep part of the
+locked value in a thread-local, and a later `get()` would hand it out after
+the lock was released. The
 [ThreadLocal reference](../reference/async-thread_local.md) has the details.
 
 ## What threads can share
@@ -274,10 +286,18 @@ reach the value is a [`with` block](scopes.md):
 - A `panic` while a Mutex is held ends the program, so a Mutex is never left
   "poisoned".
 
-`T` must be thread-safe for now (see [Limitations](#limitations)). A Mutex is for keeping several
-changes together, such as two `Atomic` fields of a `[Shared]` struct that
-must move as a unit, or state behind a raw pointer. For one number,
-`Atomic<T>` is simpler.
+`T` is a struct type: a struct of your own, an `Array<String>`, or a
+`[Shared]` struct whose `Atomic` fields must change as a unit.
+`Mutex<int>` is an error (use `Atomic<int>`). A Mutex of values that are not
+thread-safe is kept apart from the rest of the program by the compiler; see
+[What a lock body may do](#what-a-lock-body-may-do).
+
+- `Mutex<T>(value)` and `replace(value)` take a **new** value: a constructor
+  call, a string literal, a call that returns a fresh value, or `copy(x)`,
+  never a variable something else still references. The Mutex stores a copy
+  of it.
+- `replace(value)` swaps the whole value under the lock and returns the old
+  one, which the caller then owns outright.
 
 A `Condition<T>` lets a thread that holds a Mutex sleep until another thread
 changes the value. Get one with `mutex.condition()`:
@@ -297,6 +317,83 @@ changes the value. Get one with `mutex.condition()`:
 
 The [Mutex reference](../reference/async-mutex.md) documents `Mutex`,
 `MutexGuard` and `Condition`.
+
+## What a lock body may do
+
+A value that is not thread-safe counts its references plainly, so no thread
+may hold a reference into a Mutex's value while the Mutex is unlocked. The
+compiler checks each `with` block over a lock so that none can:
+
+```pepper
+{{#include ../../examples/threads-lock-body.pep}}
+```
+
+Inside the block, every value that is not thread-safe is either **part of
+the locked value** (the binding, its fields and elements, and what calls on
+them return), from **outside** (a parameter, `this`, or a variable declared
+before the block), or **new**. A new value may join either side; the other
+two must never meet:
+
+- **Moving in.** A call, constructor or assignment that would link an
+  outside value with the locked one is an error. Pass a new value instead:
+  `copy(line)`, a literal, or the result of a call that returns a fresh
+  value.
+
+  ```text
+  main.pep:8:21: error: 'line' cannot move into the value locked by 'names'
+      8 |         list.append(line);
+        |                     ^~~~
+  main.pep:7:28: note: locked here
+      7 |     with (var list = names.lock()) {
+        |                            ^~~~
+  note: 'String' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy(line)'
+  ```
+
+- **Moving out.** Storing part of the locked value outside the block, or
+  returning it from the block, is an error; take a copy
+  (`copy(list[0])`, or `list[0].copy()`, which returns a fresh value).
+
+  ```text
+  main.pep:8:17: error: 'list[0]' is part of the value locked by 'names' and cannot outlive the lock
+      8 |         first = list[0];
+        |                 ^~~~~~~
+  ```
+
+- **Closures.** A closure written in the block cannot capture part of the
+  locked value, since a function value could carry it out.
+- **Two locks.** Values locked by two nested blocks stay apart as well.
+- **Numbers pass freely**, as do every thread-safe value and every new one.
+
+Which calls link which values comes from what the called function does: the
+compiler works out, for every function, whether it keeps an argument (as
+`append` keeps its element) and whether its result shares anything with its
+arguments. A result that shares nothing, such as that of `+`, `substr`,
+`copy()` or a constructor, is **fresh**, and may cross in either direction.
+The language server shows "Returns a fresh value" when hovering over such a
+function. A call through a function value, a value an `extern` function
+hands back, and a value read through raw memory that a `[Shared]` struct
+holds are never fresh: something else may reference them. The runtime marks
+the few functions that hand out such a value that nothing else references
+`[ReturnsOwned]`, a promise the compiler cannot check and allows only in the
+runtime: a channel's `receive()` (the copy `send` made) and a Mutex's
+`replace()`.
+
+A function that returns a [tuple](tuples.md) has one such fact per element:
+after `var (fresh, same) = split(line);`, `fresh` may move into a locked value
+while `same`, which `split` returned from its argument, may not.
+
+The guard a `lock()` returns can only be the scope of a `with` header: storing
+it in a variable or field is an error, so no lock outlives its block.
+
+Two attributes carry these rules, and code outside the runtime may use them
+too:
+
+- `[Isolated]` on a struct makes it a guard: it can only be the scope of a
+  `with` header, and the block is checked as above. `MutexGuard<T>` and
+  `ThreadLocalGuard<T>` are `[Isolated]`.
+- `[Sending]` on a parameter (`construct([Sending] T value)`) requires a new
+  value for it at every call: a constructor call, a literal, a fresh result,
+  `copy(x)`, or any thread-safe value.
 
 ## Once and Lazy
 
@@ -321,9 +418,13 @@ The [Once reference](../reference/async-once.md) has the details.
 
 ## Limitations
 
-- `Mutex<T>` and `Lazy<T>` hold only thread-safe values for now, so a
-  `String` or an `Array` crosses threads only through a `Channel`, which
-  copies it.
+- `Lazy<T>` holds only thread-safe values.
+- A value received from a channel moves into a locked value directly
+  (`list.append(jobs.receive().value())`), but not through a variable
+  declared outside the block: such a variable is an outside value, whatever
+  it holds, so it needs `copy`.
+- `Mutex<T>(value)` and `replace(value)` copy the new value; passing it
+  without a copy needs a later compiler change.
 - `copy` cannot copy a trait value yet, so a `Channel` of a trait type, or of
   an `Array` of one, is an error.
 - There is no reader-writer lock, no `select` over several channels, and no

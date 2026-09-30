@@ -1417,7 +1417,24 @@ struct Parser {
     }
 
     _parameter(): Node {
+        # Attributes on a parameter (`[Sending] value: T`).
+        var attributes = _attributes();
+        if (_failed) {
+            var failed = Node(NODE_PARAMETER);
+            for (var attribute in attributes) {
+                failed.add(attribute);
+            }
+            return failed;
+        }
+        var node = _parameter_body(attributes);
+        return node;
+    }
+
+    _parameter_body(attributes: Node[]): Node {
         var node = Node(NODE_PARAMETER);
+        for (var attribute in attributes) {
+            node.add(attribute);
+        }
         if (_at_word("this")) {
             _take(node);
             _expect(node, ".");
@@ -1436,7 +1453,7 @@ struct Parser {
             return node;
         }
         if (_at_word("var") or _at_word("const")) {
-            var variable = _variable_declaration(Array<Node>());
+            var variable = _variable_declaration(attributes);
             variable.kind = NODE_PARAMETER;
             return variable;
         }
@@ -1452,6 +1469,9 @@ struct Parser {
             }
             _restore(position);
             node = Node(NODE_PARAMETER);
+            for (var attribute in attributes) {
+                node.add(attribute);
+            }
         }
         # `Type name`
         node.add(_type_name());

@@ -749,6 +749,234 @@ fn string_clone_is_deprecated() {
     );
 }
 
+/// The start of every confinement test: a Mutex of a struct that is not
+/// thread-safe.
+const LOCKED_NAMES: &str = "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\n";
+
+fn confinement_error(test: &str, body: &str) -> String {
+    error_of(test, &format!("{LOCKED_NAMES}{body}"))
+}
+
+#[test]
+fn a_value_cannot_move_into_a_locked_value() {
+    assert_eq!(
+        confinement_error(
+            "confine_into",
+            "main(): int {\n    var line = \"x\";\n    with (var list = names.lock()) {\n        list.append(line);\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:8:21: error: 'line' cannot move into the value locked by 'names'\n\
+         \x20   8 |         list.append(line);\n\
+         \x20     |                     ^~~~\n\
+         main.pep:7:28: note: locked here\n\
+         \x20   7 |     with (var list = names.lock()) {\n\
+         \x20     |                            ^~~~\n\
+         note: 'String' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy(line)'"
+    );
+}
+
+#[test]
+fn part_of_a_locked_value_cannot_outlive_the_lock() {
+    assert_eq!(
+        confinement_error(
+            "confine_out",
+            "main(): int {\n    var first = \"\";\n    with (var list = names.lock()) {\n        first = list[0];\n    }\n    return 0;\n}\n"
+        ),
+        "main.pep:8:17: error: 'list[0]' is part of the value locked by 'names' and cannot outlive the lock\n\
+         \x20   8 |         first = list[0];\n\
+         \x20     |                 ^~~~~~~\n\
+         main.pep:7:28: note: locked here\n\
+         \x20   7 |     with (var list = names.lock()) {\n\
+         \x20     |                            ^~~~\n\
+         note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(list[0])'"
+    );
+}
+
+#[test]
+fn part_of_a_locked_value_cannot_be_returned() {
+    let error = confinement_error(
+        "confine_return",
+        "take(): String {\n    with (var list = names.lock()) {\n        return list[0];\n    }\n    return \"\";\n}\n\nmain(): int {\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:7:16: error: 'list[0]' is part of the value locked by 'names' and cannot be returned from the block\n\
+             \x20   7 |         return list[0];\n\
+             \x20     |                ^~~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: return 'copy(list[0])' instead"), "{error}");
+}
+
+#[test]
+fn a_closure_cannot_capture_a_locked_value() {
+    let error = confinement_error(
+        "confine_closure",
+        "main(): int {\n    with (var list = names.lock()) {\n        var f = () => list.count();\n    }\n    return 0;\n}\n",
+    );
+    assert!(error.starts_with("main.pep:7:17: error: closure captures 'list', which is part of the value locked by 'names'\n"), "{error}");
+}
+
+#[test]
+fn two_locked_values_stay_apart() {
+    let error = confinement_error(
+        "confine_two",
+        "const other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var a = names.lock()) {\n        with (var b = other.lock()) {\n            b.append(a[0]);\n        }\n    }\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with("main.pep:10:22: error: 'a[0]' is part of the value locked by 'names' and cannot move into the value locked by 'other'\n"),
+        "{error}"
+    );
+}
+
+#[test]
+fn new_values_and_copies_cross_a_lock() {
+    // A literal, a fresh result, a thread-safe value, a copy, and a call
+    // that does not keep its argument all compile.
+    let dir = std::env::temp_dir().join("pepper_diagnostic_confine_fine");
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.pep");
+    std::fs::write(
+        &main,
+        format!(
+            "{LOCKED_NAMES}first(): String {{\n    with (var list = names.lock()) {{\n        return list[0].copy();\n    }}\n    return \"\";\n}}\n\n\
+             main(): int {{\n    var line = \"x\";\n    with (var list = names.lock()) {{\n        list.append(\"worker\");\n        list.append(line + \"!\");\n        list.append(copy(line));\n        var n = list.count();\n        var found = list.contains(line);\n    }}\n    return 0;\n}}\n"
+        ),
+    )
+    .unwrap();
+    std::env::set_current_dir(repo_root()).unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", main.to_str().unwrap()]);
+    pepper_driver::compiler::compile(&options, "main").unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn each_tuple_element_has_its_own_fresh_bit() {
+    // `split` builds its first element and returns its argument as the
+    // second: only the first is new.
+    let source = |element: &str| {
+        format!(
+            "split(s: String): (String, String) {{
+    return (s + \"!\", s);
+}}
+
+             main(): int {{
+    var line = \"x\";
+    with (var list = names.lock()) {{
+        var (fresh, same) = split(line);
+        list.append({element});
+    }}
+    return 0;
+}}
+"
+        )
+    };
+    let error = confinement_error("tuple_same", &source("same"));
+    assert!(error.starts_with("main.pep:13:21: error: 'same' cannot move into the value locked by 'names'
+"), "{error}");
+    let dir = std::env::temp_dir().join("pepper_diagnostic_tuple_fresh");
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.pep");
+    std::fs::write(&main, format!("{LOCKED_NAMES}{}", source("fresh"))).unwrap();
+    std::env::set_current_dir(repo_root()).unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", main.to_str().unwrap()]);
+    pepper_driver::compiler::compile(&options, "main").unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn raw_memory_behind_a_shared_struct_is_not_fresh() {
+    // A reference read through a `[Shared]` struct's raw field may be
+    // referenced elsewhere; a channel's `receive` is `[ReturnsOwned]`.
+    let program = |taken: &str| {
+        format!(
+            "const jobs = async.Channel<String>();\n\n[Shared]\nstruct Box {{\n    const _slot: __ptr<void>;\n    construct() {{\n        _slot = _pep_malloc(8);\n    }}\n    String take() {{\n        __ptr<String> typed = _slot;\n        return typed[0];\n    }}\n}}\n\n\
+             main(): int {{\n    var b = Box();\n    with (var list = names.lock()) {{\n        list.append({taken});\n    }}\n    return 0;\n}}\n"
+        )
+    };
+    let error = confinement_error("raw_shared_read", &program("b.take()"));
+    assert!(error.starts_with("main.pep:22:23: error: 'b.take()' cannot move into the value locked by 'names'\n"), "{error}");
+    let dir = std::env::temp_dir().join("pepper_diagnostic_returns_owned_receive");
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.pep");
+    std::fs::write(&main, format!("{LOCKED_NAMES}{}", program("jobs.receive().value()"))).unwrap();
+    std::env::set_current_dir(repo_root()).unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", main.to_str().unwrap()]);
+    pepper_driver::compiler::compile(&options, "main").unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn returns_owned_is_only_for_the_runtime() {
+    assert_eq!(
+        error_of("returns_owned_user", "[ReturnsOwned]\nmake(): String {\n    return \"x\";\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:1: error: '[ReturnsOwned]' is only allowed in the runtime\n\
+         \x20   1 | [ReturnsOwned]\n\
+         \x20     | ^~~~~~~~~~~~~~\n\
+         note: it promises the result shares nothing with any other value, which the compiler cannot check"
+    );
+}
+
+#[test]
+fn a_guard_is_only_a_with_scope() {
+    assert_eq!(
+        confinement_error("guard_variable", "main(): int {\n    var g = names.lock();\n    return 0;\n}\n"),
+        "main.pep:6:19: error: 'MutexGuard<Array<String>>' can only be the scope of a 'with' block\n\
+         \x20   6 |     var g = names.lock();\n\
+         \x20     |                   ^~~~\n\
+         note: a guard unlocks when its block ends; write 'with (var value = ...) { ... }'"
+    );
+    let field = confinement_error("guard_field", "struct Holder {\n    async.MutexGuard<Array<String>> guard;\n}\n\nmain(): int {\n    return 0;\n}\n");
+    assert!(field.starts_with("main.pep:6:5: error: 'MutexGuard<Array<String>>' can only be the scope of a 'with' block\n"), "{field}");
+}
+
+#[test]
+fn a_mutex_cannot_protect_a_number() {
+    assert_eq!(
+        error_of("mutex_int", "import async;\n\nmain(): int {\n    var m = async.Mutex<int>(0);\n    return 0;\n}\n"),
+        "main.pep:4:13: error: 'Mutex<int>' cannot protect a number: its 'with' binding is a copy that the block cannot store back\n\
+         \x20   4 |     var m = async.Mutex<int>(0);\n\
+         \x20     |             ^~~~~~~~~~~~~~~~\n\
+         note: use 'Atomic<int>' for a number that threads share"
+    );
+}
+
+#[test]
+fn a_sending_parameter_takes_a_new_value() {
+    let error = error_of(
+        "sending_named",
+        "import async;\n\nmain(): int {\n    var list = Array<String>();\n    var m = async.Mutex<Array<String>>(list);\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:5:40: error: 'list' is not a new value, but parameter 'value' takes a value that nothing else references\n\
+             \x20   5 |     var m = async.Mutex<Array<String>>(list);\n\
+             \x20     |                                        ^~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: 'value' is declared [Sending] here"), "{error}");
+    assert!(error.ends_with("note: pass a new value, such as 'copy(list)'"), "{error}");
+    // A call that returns one of its inputs is not new; the note points at
+    // the return that shares it.
+    let blamed = error_of(
+        "sending_blamed",
+        "import async;\n\nsame(a: Array<String>): Array<String> {\n    return a;\n}\n\nmain(): int {\n    var list = Array<String>();\n    var m = async.Mutex<Array<String>>(same(list));\n    return 0;\n}\n",
+    );
+    assert!(blamed.contains("main.pep:4:12: note: 'same(list)' does not return a new value: this return shares its inputs"), "{blamed}");
+}
+
+#[test]
+fn thread_local_get_needs_a_thread_safe_value() {
+    assert_eq!(
+        error_of(
+            "thread_local_get",
+            "import async;\n\nconst scratch = async.ThreadLocal<String>();\n\nmain(): int {\n    var s = scratch.get();\n    return 0;\n}\n"
+        ),
+        "main.pep:6:21: error: 'get' is not available on 'ThreadLocal<String>', because 'String' is not thread-safe\n\
+         \x20   6 |     var s = scratch.get();\n\
+         \x20     |                     ^~~\n\
+         note: reach this thread's value with 'with (var value = scratch.enter())'"
+    );
+}
+
 #[test]
 fn function_pointer_undeclared() {
     assert_eq!(

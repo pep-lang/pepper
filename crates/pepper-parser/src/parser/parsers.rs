@@ -2119,13 +2119,21 @@ fn function_parameters(input: &mut &str) -> Result<Vec<VariableDecl>> {
             *input = &input[1..];
             break;
         }
+        // Attributes on a parameter (`[Sending] value: T`).
+        let parameter_attributes = if input.starts_with('[') { attributes(input)? } else { vec![] };
+        ws(input)?;
         // C++ param grammar (Parser.cpp:1094-1140): `name: Type [= expr]`,
         // or `this.<field> [= expr]` constructor params.
-        if input.starts_with("this") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
-            params.push(constructor_parameter(input)?);
+        let mut parameter = if input.starts_with("this") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+            constructor_parameter(input)?
         } else {
-            params.push(typed_parameter(input)?);
+            typed_parameter(input)?
+        };
+        if !parameter_attributes.is_empty() {
+            parameter.span.start = parameter_attributes[0].span.start;
+            parameter.attributes = parameter_attributes;
         }
+        params.push(parameter);
         ws(input)?;
         if input.starts_with(',') {
             *input = &input[1..];
@@ -2966,7 +2974,15 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             loop {
                 ws(input)?;
                 if input.starts_with(')') { break; }
-                parameters.push(constructor_parameter(input)?);
+                // Attributes on a parameter (`[Sending] T value`).
+                let parameter_attributes = if input.starts_with('[') { attributes(input)? } else { vec![] };
+                ws(input)?;
+                let mut parameter = constructor_parameter(input)?;
+                if !parameter_attributes.is_empty() {
+                    parameter.span.start = parameter_attributes[0].span.start;
+                    parameter.attributes = parameter_attributes;
+                }
+                parameters.push(parameter);
                 ws(input)?;
                 if input.starts_with(',') {
                     *input = &input[1..];
@@ -3876,6 +3892,19 @@ mod tests {
         assert_eq!(c.body.statements.len(), 1);
         let empty = closure("() => {}");
         assert!(empty.parameters.is_empty());
+    }
+
+    #[test]
+    fn parameters_carry_attributes() {
+        let source = "struct S {\n    construct([Sending] T value, int n = 0) {}\n    put([Sending] item: T) {}\n}";
+        let module = parse(source);
+        let Declaration::Struct(s) = &module.declarations[0] else { panic!("expected a struct") };
+        let ctor = &s.constructors[0];
+        assert_eq!(ctor.parameters[0].attributes.len(), 1);
+        assert_eq!(ctor.parameters[0].span.start, source.find("[Sending] T").unwrap());
+        assert!(ctor.parameters[1].attributes.is_empty());
+        assert_eq!(s.methods[0].parameters[0].attributes.len(), 1);
+        assert_eq!(s.methods[0].parameters[0].name, "item");
     }
 
     #[test]

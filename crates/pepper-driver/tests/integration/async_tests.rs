@@ -178,7 +178,11 @@ main(): int {
     tracker.set(Tracker(1));
     tracker.set(Tracker(2));
     assert(released.load() == 5, "set releases the value it replaces");
-    assert(tracker.get().value == 2, "get returns the latest value");
+    with (var latest = tracker.enter()) {
+        assert(latest.value == 2, "enter returns the latest value");
+    } else {
+        assert(false, "this thread set a value");
+    }
     tracker.clear();
     assert(released.load() == 6, "clear releases the value");
     assert(!tracker.is_set(), "cleared");
@@ -1043,6 +1047,101 @@ fn channels_copy_values_that_are_not_thread_safe() {
     assert_runs("channel_copy", CHANNEL_COPY_PROGRAM);
 }
 
+/// `Mutex<T>` for a `T` that is not thread-safe (sync phase 3): threads
+/// append Strings to a locked Array and the count is exact; values leave
+/// only as copies or fresh results; `replace` hands back the whole value;
+/// `ThreadLocal<String>` is reached through `with`; nothing leaks.
+const MUTEX_CONFINED_PROGRAM: &str = r#"
+import async;
+
+struct Log {
+    Array<String> lines;
+    int dropped;
+    construct() {
+        lines = Array<String>();
+    }
+}
+
+const log = async.Mutex<Log>(Log());
+const scratch = async.ThreadLocal<String>();
+
+write_lines() {
+    var i = 0;
+    while (i < 500) {
+        with (var l = log.lock()) {
+            l.lines.append("line");
+            if (l.lines.count() % 100 == 0) {
+                l.dropped = l.dropped + 1;
+            }
+        }
+        i = i + 1;
+    }
+    scratch.set("mine");
+    with (var mine = scratch.enter()) {
+        mine.append("!");
+        assert(mine == "mine!", "each thread's own value");
+    } else {
+        assert(false, "set gave this thread a value");
+    }
+}
+
+# A fresh result may leave the block; the locked String itself may not.
+first_line(): String {
+    with (var l = log.lock()) {
+        return l.lines[0].copy();
+    }
+    return "";
+}
+
+count_lines(): ulong {
+    with (var l = log.lock()) {
+        return l.lines.count();
+    }
+    return 0;
+}
+
+swap_out() {
+    var old = log.replace(Log());
+    assert(old.lines.count() == 2001, "replace returns the whole old value");
+}
+
+main(): int {
+    # Warm up the main thread's lazily made Thread (join() asks for it).
+    async.Thread.current();
+    var workers = Array<async.Thread>();
+    var i = 0;
+    while (i < 4) {
+        workers.append(async.Thread.spawn(write_lines));
+        i = i + 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    workers.clear();
+    assert(count_lines() == 2000, "every locked append counted");
+    with (var l = log.lock()) {
+        assert(l.dropped == 20, "numbers change under the lock");
+    }
+    var first = first_line();
+    first.append(" (copy)");
+    with (var l = log.lock()) {
+        assert(l.lines[0] == "line", "the copy is independent");
+        # A copy may move into the locked value.
+        l.lines.append(copy(first));
+    }
+    var before = _pep_live_allocs();
+    swap_out();
+    assert(_pep_live_allocs() < before, "the old value is freed with its last reference");
+    assert(count_lines() == 0, "the new value is in place");
+    return 0;
+}
+"#;
+
+#[test]
+fn mutex_of_values_that_are_not_thread_safe() {
+    assert_runs("mutex_confined", MUTEX_CONFINED_PROGRAM);
+}
+
 #[test]
 fn mutex_locks() {
     assert_runs("mutex", MUTEX_PROGRAM);
@@ -1093,6 +1192,7 @@ fn all_programs() -> Vec<(&'static str, &'static str)> {
         ("once", ONCE_PROGRAM),
         ("channel", CHANNEL_PROGRAM),
         ("channel_copy", CHANNEL_COPY_PROGRAM),
+        ("mutex_confined", MUTEX_CONFINED_PROGRAM),
     ]
 }
 
@@ -1126,7 +1226,7 @@ fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), Stri
             return Err(format!("IR does not reference {expect}"));
         }
         // The sync programs also reach that platform's locks and timed waits.
-        if ["mutex", "condition", "once", "channel", "channel_copy"].contains(&name) {
+        if ["mutex", "condition", "once", "channel", "channel_copy", "mutex_confined"].contains(&name) {
             let expect: &[&str] = match os {
                 "windows" => &["@AcquireSRWLockExclusive(", "@SleepConditionVariableSRW("],
                 "macos" => &["@pthread_mutex_lock(", "@pthread_cond_timedwait_relative_np("],

@@ -20,6 +20,9 @@
 # slot under the lock the same way. Every count step on a copy happens on
 # the sender before it unlocks or on the receiver after it locks. A
 # thread-safe value is not copied (`copy` returns it); its counts are atomic.
+# The receiving methods are `[ReturnsOwned]`: what they hand out, read from
+# the buffer, is the copy `send` made, which nothing else references (the
+# compiler cannot follow raw memory to see that).
 #
 # Senders wait on `_not_full` (bounded channels only) and receivers on
 # `_not_empty`; `close` wakes both.
@@ -186,6 +189,7 @@ export struct Channel<T> {
     ##     if (job.is_ok()) {
     ##         run(job.value());
     ##     }
+    [ReturnsOwned]
     Result<T> receive() {
         _async_sys_mutex_lock(_lock);
         while (_state[1] == 0 && _state[3] == 0) {
@@ -199,6 +203,7 @@ export struct Channel<T> {
     ## Takes the next value if one is waiting, without waiting.
     ##
     ## @returns the value, or an error if none is waiting (see `is_closed()` to tell an empty channel from a closed one)
+    [ReturnsOwned]
     Result<T> try_receive() {
         _async_sys_mutex_lock(_lock);
         var received = this._pop();
@@ -210,6 +215,7 @@ export struct Channel<T> {
     ##
     ## @param milliseconds the longest time to wait
     ## @returns the value, or an error if the time ran out or once the channel is closed and empty
+    [ReturnsOwned]
     Result<T> receive_for(ulong milliseconds) {
         var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
         _async_sys_mutex_lock(_lock);

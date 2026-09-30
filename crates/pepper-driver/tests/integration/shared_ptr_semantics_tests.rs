@@ -864,3 +864,42 @@ test(): int {
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "copying a graph must net zero once both are dropped");
 }
+
+#[test]
+fn census_confined_mutex() {
+    // A Mutex of a struct that is not thread-safe: every exit from a lock's
+    // body, `replace`, and dropping the Mutex net zero.
+    let (code, delta) = compile_jit_census(
+        r#"
+import async;
+
+int count(async.Mutex<Array<String>> m) {
+    with (var list = m.lock()) {
+        var extra = "local";
+        return list.count() as int;
+    }
+    return -1;
+}
+
+test(): int {
+    var m = async.Mutex<Array<String>>(Array<String>());
+    var i = 0;
+    while (i < 5) {
+        i = i + 1;
+        with (var list = m.lock()) {
+            list.append("line");
+            var tmp = list[0].copy();
+            if (i == 2) { continue; }
+            if (i == 4) { break; }
+        }
+    }
+    if (count(m) != 4) { return 1; }
+    var old = m.replace(Array<String>());
+    if (old.count() != 4) { return 2; }
+    if (count(m) != 0) { return 3; }
+    return 0;
+}"#,
+    );
+    assert_eq!(code, 0);
+    assert_eq!(delta, 0, "locking, replace and dropping a confined Mutex must net zero");
+}

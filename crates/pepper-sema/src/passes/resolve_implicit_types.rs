@@ -517,7 +517,19 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                     return ty.clone();
                 }
             }
-            pointee(&type_of_expr(lhs, scopes, current_struct)).unwrap_or_else(TypeName::auto)
+            let lhs_type = type_of_expr(lhs, scopes, current_struct);
+            if let Some(element) = pointee(&lhs_type) {
+                return element;
+            }
+            // A struct receiver whose `[]` operator `resolve_operators` has
+            // not lowered yet (its type was not known then): the indexer's
+            // return type.
+            for methods in scopes.method_tables(&lhs_type.to_string()) {
+                if let Some((_, ret)) = methods.iter().find(|(m, _)| m == "__index_get") {
+                    return ret.clone();
+                }
+            }
+            TypeName::auto()
         }
         // `x as T` resolves to the cast target.
         Expression::Cast { ty, .. } => ty.clone(),

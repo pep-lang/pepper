@@ -288,7 +288,9 @@ test(): int {
     Shape u = !flag ? Square(2) : Rect(3, 3);
     if (t.area() + u.area() != 13) { return 1; }
     global_shape.set(Square(5));
-    if (global_shape.get().area() != 25) { return 2; }
+    with (var shape = global_shape.enter()) {
+        if (shape.area() != 25) { return 2; }
+    }
     global_shape.clear();
     var m = HashMap<String, Shape>();
     m["a"] = Square(3);

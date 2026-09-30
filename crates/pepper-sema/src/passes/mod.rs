@@ -37,6 +37,7 @@ pub mod convert_to_traits;
 pub mod shared_functions;
 pub mod tuples;
 pub mod copies;
+pub mod check_confinement;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -152,6 +153,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(convert_to_traits::convert_to_traits(module));
     step!(check_function_types::check_function_types(module));
     step!(check_shared_types::check_shared_types(module));
+    // What `with` blocks over `[Isolated]` guards may do, `[Sending]`
+    // arguments, and the guards' own rules, once every type is final.
+    step!(check_confinement::check_confinement(module));
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
     // `match` arms need the final type of the value matched.

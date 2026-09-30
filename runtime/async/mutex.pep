@@ -3,11 +3,19 @@
 ## lets a thread holding a Mutex sleep until another thread changes its value.
 
 # A Mutex is `[Shared]`: its fields are const, and the value lives in a raw
-# heap slot (`const Value: __ptr<T>`). A `[Shared]` struct's pointer field
-# must point at a thread-safe type, so `check_shared_types` accepts only a
-# thread-safe `T` (`Mutex<String>` is a compile error), exactly as for
-# `Atomic<T>`. A later phase lifts that by keeping the compiler from letting
-# references into the value escape the `with` block.
+# heap slot (`const _value: __ptr<void>`, viewed as a `T` slot), so any `T`
+# passes `check_shared_types`. A `T` that is not thread-safe counts its
+# references plainly, so no two threads may touch its counts at once:
+#
+# - the value is reached only in a `with` block over `lock()`: `enter()`
+#   takes its reference under the lock, and the binding is released before
+#   the guard unlocks (see `lower_with_blocks`);
+# - `MutexGuard` is `[Isolated]`, so `passes/check_confinement.rs` keeps the
+#   block from letting a reference into the value outlive the lock, or a
+#   reference from outside into it;
+# - the constructor and `replace` take `[Sending]` values and store a copy,
+#   made before locking and dropped by this thread under the lock, so no
+#   reference the caller still holds reaches the Mutex.
 #
 # `_owner` holds the operating-system id of the thread holding the lock (0
 # when unlocked), so a second `lock()` on that thread panics instead of
@@ -28,18 +36,21 @@ import "sys_windows";
 ## (falling off the end, `return`, `break`, `continue`). Everything a thread
 ## did while holding the lock is visible to the next thread that takes it.
 ##
-## `T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-## type); `Mutex<String>` is a compile error. Use a Mutex to keep several
-## updates together: a `[Shared]` struct whose `Atomic` fields must change as
-## a unit, or state behind a raw pointer. For a single number, `Atomic<T>` is
-## simpler and faster.
+## `T` is a struct type, such as `Array<String>` or a struct of your own. Inside
+## the `with` block the compiler keeps the locked value and the rest of the
+## program apart: a value that is not thread-safe (a `String`, an `Array`)
+## cannot move from one to the other, and no part of the locked value can be
+## returned from the block or stored outside it. Pass `copy(x)` to move a
+## value either way; new values (a constructor call, a string literal, a call
+## the compiler infers returns a fresh value) and thread-safe values such as
+## numbers pass freely. `Mutex<int>` is a compile error: use `Atomic<int>`.
 ##
 ## A Mutex is `[Shared]`: keep it in a module-scope variable or pass it to
 ## threads. It is not re-entrant: locking it again on the thread that holds
 ## it panics instead of deadlocking. A panic while it is held ends the
 ## program, so a Mutex is never left "poisoned".
 ##
-## @typeParam T the protected value's type, which must be thread-safe
+## @typeParam T the protected value's type, a struct type
 ## @example
 ##     import async;
 ##
@@ -70,7 +81,7 @@ export struct Mutex<T> {
 
     # A heap slot holding the value: `sizeof<T>()` bytes, one reference for
     # a struct `T`. Read and written only while the lock is held.
-    const _value: __ptr<T>;
+    const _value: __ptr<void>;
 
     # The operating-system id of the thread holding the lock, or 0 when the
     # Mutex is unlocked.
@@ -78,21 +89,24 @@ export struct Mutex<T> {
 
     ## Creates an unlocked Mutex that owns `value`.
     ##
-    ## For a struct `T` the Mutex acquires a reference to `value`, and
-    ## releases it when the Mutex is destroyed.
+    ## `value` must be a new value, such as a constructor call or `copy(x)`:
+    ## nothing outside the Mutex may reference it. The Mutex stores a copy of
+    ## it (`copy`), so the argument's own references never reach the Mutex.
     ##
-    ## @param value the value to protect
+    ## @param value the value to protect; a new value, which the compiler checks
     ## @panics if the operating system cannot create a mutex
-    construct(T value) {
+    ## @example
+    ##     const names = async.Mutex<Array<String>>(Array<String>());
+    construct([Sending] T value) {
         _lock = _async_sys_mutex_create();
         _value = _pep_malloc(sizeof<T>());
-        _value[0] = value;
         _owner = Atomic<ulong>(0);
+        this._slot()[0] = copy<T>(value);
     }
 
     destruct {
         # No guard is alive (each holds a reference), so the lock is free.
-        _value[0] = __default<T>();
+        this._slot()[0] = __default<T>();
         _pep_free(_value);
         _async_sys_mutex_destroy(_lock);
     }
@@ -132,6 +146,31 @@ export struct Mutex<T> {
         return MutexGuard<T>(this, false);
     }
 
+    ## Replaces the whole value and returns the one the Mutex held, which the
+    ## caller then owns outright: nothing else references it any more.
+    ##
+    ## Waits for the lock like `lock()`. `value` must be a new value, as for
+    ## the constructor; the Mutex stores a copy of it.
+    ##
+    ## @param value the new value; a new value, which the compiler checks
+    ## @returns the value the Mutex held
+    ## @panics if the calling thread already holds the lock
+    ## @example
+    ##     var done = pending.replace(Array<Job>());   # take every job at once
+    [ReturnsOwned]
+    T replace([Sending] T value) {
+        var copied = copy<T>(value);
+        this._lock();
+        __ptr<T> slot = this._slot();
+        T old = slot[0];
+        slot[0] = copied;
+        # Drop this thread's references to the new value under the lock: the
+        # slot holds the only one.
+        copied = __default<T>();
+        this._unlock();
+        return old;
+    }
+
     ## Reports whether the calling thread holds the lock.
     ##
     ## @returns true between a `lock()` (or a successful `try_lock()`) on this thread and the guard's destruction
@@ -150,6 +189,12 @@ export struct Mutex<T> {
     ##     const not_empty = queue.condition();
     Condition<T> condition() {
         return Condition<T>(this);
+    }
+
+    # The value's slot, as a `T` slot.
+    __ptr<T> _slot() {
+        __ptr<void> raw = _value;
+        return raw;
     }
 
     # Waits for the lock and records the caller as its holder.
@@ -186,11 +231,16 @@ export struct Mutex<T> {
 ## held by mistake. A guard belongs to the thread that locked it; do not pass
 ## it to another thread.
 ##
+## A guard is `[Isolated]`: it can only be the scope of a `with` header, so
+## the lock cannot be kept past the block, and the compiler checks the block
+## with the confinement rule (see `Mutex`).
+##
 ## @typeParam T the protected value's type
 ## @example
 ##     with (var totals = stats.lock()) {
 ##         totals.requests.fetch_add(1);
 ##     }   # unlocked here
+[Isolated]
 export struct MutexGuard<T> {
     # The Mutex this guard locks.
     const _source: Mutex<T>;
@@ -228,7 +278,7 @@ export struct MutexGuard<T> {
         if (!Locked) {
             return __default<T>();
         }
-        return _source._value[0];
+        return _source._slot()[0];
     }
 
     ## Unlocks the Mutex if the guard holds it. The destructor calls it;

@@ -725,7 +725,14 @@ export struct Formatter {
     _variable(item: syntax.Node, start: ulong, pepper_style: bool): Doc {
         var result = concat();
         ulong i = start;
-        if (start == 0) {
+        if (item.kind == syntax.NODE_PARAMETER) {
+            # A parameter's attributes precede it on its line.
+            while (i < item.count() and item.child(i).kind == syntax.NODE_ATTRIBUTE) {
+                result.add(_attribute(item.child(i)));
+                result.add(text(" "));
+                i += 1;
+            }
+        } else if (start == 0) {
             i = _prefix(item, result);
         }
         var first = item.child(i);

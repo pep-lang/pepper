@@ -122,6 +122,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `new(...)` constructor | `construct(...)` |
 | `io.Path.join_str(String)` | `io.Path.join(Path)`, which accepts a `String` |
 | `String.clone()` | `String.copy()` |
+| `ThreadLocal<T>.get()` for a `T` that is not thread-safe (now an error) | `with (var value = local.enter()) { ... }` |
 | `io.Path.is_dir()` | `io.Path.is_directory()` |
 | `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
 | `HashMap.cap()`, `HashSet.cap()` | `capacity()` |

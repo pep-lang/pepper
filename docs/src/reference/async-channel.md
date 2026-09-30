@@ -132,7 +132,7 @@ waiting. The copy is made even when it is not queued.
 #### receive
 
 ```pepper
-Result<T> receive()
+[ReturnsOwned] Result<T> receive()
 ```
 
 Takes the next value, waiting until one arrives.
@@ -151,7 +151,7 @@ Takes the next value, waiting until one arrives.
 #### try_receive
 
 ```pepper
-Result<T> try_receive()
+[ReturnsOwned] Result<T> try_receive()
 ```
 
 Takes the next value if one is waiting, without waiting.
@@ -162,7 +162,7 @@ Takes the next value if one is waiting, without waiting.
 #### receive_for
 
 ```pepper
-Result<T> receive_for(ulong milliseconds)
+[ReturnsOwned] Result<T> receive_for(ulong milliseconds)
 ```
 
 Like `receive()`, but gives up after about `milliseconds` milliseconds.

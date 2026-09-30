@@ -370,6 +370,37 @@ extend Handle with Copyable<Handle> {
     Handle copy(Copies copies) {"), "{}", edit.new_text);
 }
 
+const FRESH: &str = r#"make(name: String): Array<String> {
+    var list = Array<String>();
+    list.append(name + "!");
+    return list;
+}
+
+same(list: Array<String>): Array<String> {
+    return list;
+}
+
+main(): int {
+    var a = make("x");
+    var b = same(a);
+    return 0;
+}
+"#;
+
+#[test]
+fn hover_says_when_a_function_returns_a_fresh_value() {
+    let (uri, text, program) = load("fresh", FRESH, "main.pep");
+    let hover_text = |needle: &str| {
+        let offset = text.find(needle).unwrap();
+        match PepperLsp::hover_at(&uri, &text, Some(&program), offset).map(|h| h.contents) {
+            Some(HoverContents::Markup(m)) => m.value,
+            other => panic!("{other:?}"),
+        }
+    };
+    assert!(hover_text("make(\"x\")").contains("Returns a fresh value"), "{}", hover_text("make(\"x\")"));
+    assert!(!hover_text("same(a)").contains("Returns a fresh value"), "{}", hover_text("same(a)"));
+}
+
 const CONVERTED: &str = r#"struct Name {
     var text: String;
     [Implicit]

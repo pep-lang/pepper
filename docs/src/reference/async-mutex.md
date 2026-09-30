@@ -23,11 +23,14 @@ the lock, binds the value, and unlocks when the block ends by any path
 (falling off the end, `return`, `break`, `continue`). Everything a thread
 did while holding the lock is visible to the next thread that takes it.
 
-`T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-type); `Mutex<String>` is a compile error. Use a Mutex to keep several
-updates together: a `[Shared]` struct whose `Atomic` fields must change as
-a unit, or state behind a raw pointer. For a single number, `Atomic<T>` is
-simpler and faster.
+`T` is a struct type, such as `Array<String>` or a struct of your own. Inside
+the `with` block the compiler keeps the locked value and the rest of the
+program apart: a value that is not thread-safe (a `String`, an `Array`)
+cannot move from one to the other, and no part of the locked value can be
+returned from the block or stored outside it. Pass `copy(x)` to move a
+value either way; new values (a constructor call, a string literal, a call
+the compiler infers returns a fresh value) and thread-safe values such as
+numbers pass freely. `Mutex<int>` is a compile error: use `Atomic<int>`.
 
 A Mutex is `[Shared]`: keep it in a module-scope variable or pass it to
 threads. It is not re-entrant: locking it again on the thread that holds
@@ -35,7 +38,7 @@ it panics instead of deadlocking. A panic while it is held ends the
 program, so a Mutex is never left "poisoned".
 
 **Type parameters**
-- `T` — the protected value's type, which must be thread-safe
+- `T` — the protected value's type, a struct type
 
 **Example**
 ```pepper
@@ -67,19 +70,25 @@ program, so a Mutex is never left "poisoned".
 #### Mutex()
 
 ```pepper
-construct(T value)
+construct([Sending] T value)
 ```
 
 Creates an unlocked Mutex that owns `value`.
 
-For a struct `T` the Mutex acquires a reference to `value`, and
-releases it when the Mutex is destroyed.
+`value` must be a new value, such as a constructor call or `copy(x)`:
+nothing outside the Mutex may reference it. The Mutex stores a copy of
+it (`copy`), so the argument's own references never reach the Mutex.
 
 **Parameters**
-- `value` — the value to protect
+- `value` — the value to protect; a new value, which the compiler checks
 
 **Panics**
 - if the operating system cannot create a mutex
+
+**Example**
+```pepper
+    const names = async.Mutex<Array<String>>(Array<String>());
+```
 
 ### Methods
 
@@ -134,6 +143,32 @@ calling thread already holding the lock counts as busy.
     }
 ```
 
+#### replace
+
+```pepper
+[ReturnsOwned] T replace([Sending] T value)
+```
+
+Replaces the whole value and returns the one the Mutex held, which the
+caller then owns outright: nothing else references it any more.
+
+Waits for the lock like `lock()`. `value` must be a new value, as for
+the constructor; the Mutex stores a copy of it.
+
+**Parameters**
+- `value` — the new value; a new value, which the compiler checks
+
+**Returns**
+- the value the Mutex held
+
+**Panics**
+- if the calling thread already holds the lock
+
+**Example**
+```pepper
+    var done = pending.replace(Array<Job>());   # take every job at once
+```
+
 #### is_held
 
 ```pepper
@@ -168,7 +203,7 @@ waits or notifies must use the same Condition.
 ## MutexGuard
 
 ```pepper
-struct MutexGuard<T>
+[Isolated] struct MutexGuard<T>
 ```
 
 The lock on a `Mutex<T>` that a `with` block holds: `enter()` returns the
@@ -178,6 +213,10 @@ Get one from `Mutex.lock()` or `Mutex.try_lock()` in a `with` header. The
 block releases the guard on every path out, so the lock cannot be left
 held by mistake. A guard belongs to the thread that locked it; do not pass
 it to another thread.
+
+A guard is `[Isolated]`: it can only be the scope of a `with` header, so
+the lock cannot be kept past the block, and the compiler checks the block
+with the confinement rule (see `Mutex`).
 
 **Type parameters**
 - `T` — the protected value's type

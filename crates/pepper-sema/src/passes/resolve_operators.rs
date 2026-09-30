@@ -159,10 +159,13 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
                     args: vec![rhs],
                     loc: *loc,
                 };
-            } else if info.is_none() && static_type::of(lhs, table, current).is_some() {
-                // POD receiver with a known type: Array indexing (element
-                // type resolved at codegen). Unknown receivers are left
-                // alone — codegen handles `Index` like `ArrayIndex`.
+            } else if info.is_none() && static_type::of(lhs, table, current).is_some_and(|t| t.is_pointer()) {
+                // A raw pointer receiver: Array indexing (element type
+                // resolved at codegen). Any other receiver is left alone
+                // for a later run: a `with` binding can still be typed as
+                // its scope's generic parameter (`T`) here, and becomes the
+                // struct whose indexer applies once specialization is done.
+                // Codegen handles a remaining `Index` like `ArrayIndex`.
                 let lhs = (**lhs).clone();
                 let rhs = (**rhs).clone();
                 *expr = Expression::ArrayIndex {
