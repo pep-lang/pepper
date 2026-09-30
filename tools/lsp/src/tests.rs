@@ -34,7 +34,9 @@ export struct Box<T> { var value: T; }
 /// Write `GEOMETRY` plus `main` (as `main.pep`) under a fresh directory for
 /// `test`, and load the program rooted at `root` (a path in the tree).
 fn load(test: &str, main: &str, root: &str) -> (Url, String, Program) {
-    let dir = std::env::temp_dir().join(format!("pepper_lsp_{}", test));
+    // The process id keeps concurrent test runs on one machine (CI jobs
+    // for several LLVM versions) from deleting each other's files.
+    let dir = std::env::temp_dir().join(format!("pepper_lsp_{}_{}", test, std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     for (path, text) in GEOMETRY.iter().chain(&[("main.pep", main)]) {
         let path = dir.join(path);
