@@ -235,7 +235,7 @@ Pepper source embedded in Rust tests) follows
   (`IoError`).
 - Generic parameters are one capital letter (`T`) or `PascalCase` (`TValue`).
 - Data members, methods, free functions, parameters, locals, and module-scope
-  variables are `snake_case`.
+  variables are `snake_case`, `const` ones included (no `SCREAMING_CASE`).
 - A private data member or method starts with `_` (`_size`, `_grow`), and so
   does a runtime helper shared between files but not public (`_pep_malloc`).
 - Spell words out (`iterate`, `index`, not `iter`, `idx`).

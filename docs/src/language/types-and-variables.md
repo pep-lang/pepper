@@ -199,19 +199,19 @@ arithmetic produces under C's rules (see [Arithmetic follows C](#arithmetic-foll
 `const` declares a name that you do not intend to change:
 
 ```pepper
-const LIMIT = 3;
-const RATIO: double = 0.5;
+const limit = 3;
+const ratio: double = 0.5;
 ```
 
 Assigning to a `const`, with `=`, a compound assignment, `++` or `--`, is an
 error:
 
 ```text
-main.pep:5:5: error: cannot assign to const variable 'LIMIT'
-    5 |     LIMIT = 4;
+main.pep:5:5: error: cannot assign to const variable 'limit'
+    5 |     limit = 4;
       |     ^~~~~
-main.pep:1:7: note: 'LIMIT' declared const here
-    1 | const LIMIT = 3;
+main.pep:1:7: note: 'limit' declared const here
+    1 | const limit = 3;
       |       ^~~~~
 ```
 

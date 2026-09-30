@@ -11,8 +11,8 @@ contribute should too.
 | Generic parameters | one capital letter, or `PascalCase` | `T`, `K`, `V`, `TValue`, `TError` |
 | Data members (fields) | `snake_case` | `unit_name`, `is_file` |
 | Methods and free functions | `snake_case` | `append`, `remove_at`, `read_to_string` |
-| Parameters and local variables | `snake_case` | `capacity`, `best_so_far` |
-| Module-scope variables | `snake_case` | `max_requests` |
+| Parameters and local variables, `const` included | `snake_case` | `capacity`, `best_so_far` |
+| Module-scope variables and constants | `snake_case` | `max_requests`, `line_width` |
 | Private data members and methods | `_` then `snake_case` | `_readings`, `_is_empty` |
 
 ```pepper
@@ -38,6 +38,8 @@ apart.
 Everything else a program names is `snake_case`: lowercase words joined by
 underscores. That covers a struct's data members, its methods, free
 functions, parameters, local variables, and module-scope variables.
+A `const` is no exception: write `const line_width = 120;`, not
+`LINE_WIDTH`. Pepper has no `SCREAMING_CASE`.
 
 Spell words out. A name is read far more often than it is typed, so prefer
 `iterate`, `index`, and `directory` to `iter`, `idx`, and `dir`. Keep an

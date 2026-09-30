@@ -444,13 +444,13 @@ fn shared_struct_field_not_thread_safe() {
     assert_eq!(
         error_of(
             "shared_not_thread_safe",
-            "struct Plain { int X; }\n[Shared]\nstruct Config {\n    const Inner: Plain;\n}\nmain(): int { return 0; }\n"
+            "struct Plain { int x; }\n[Shared]\nstruct Config {\n    const inner: Plain;\n}\nmain(): int { return 0; }\n"
         ),
-        "main.pep:4:18: error: field 'Inner' of shared struct 'Config' has type 'Plain', which is not thread-safe\n\
-         \x20   4 |     const Inner: Plain;\n\
+        "main.pep:4:18: error: field 'inner' of shared struct 'Config' has type 'Plain', which is not thread-safe\n\
+         \x20   4 |     const inner: Plain;\n\
          \x20     |                  ^~~~~\n\
          main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
-         \x20   1 | struct Plain { int X; }\n\
+         \x20   1 | struct Plain { int x; }\n\
          \x20     |        ^~~~~"
     );
 }
@@ -1088,10 +1088,10 @@ fn plain_function_type_in_shared_places() {
     assert_eq!(
         error_of(
             "plain_function_shared_field",
-            "[Shared]\nstruct H {\n    const F: () => void;\n    construct(this.F = () => {}) {}\n}\nmain(): int { return 0; }\n"
+            "[Shared]\nstruct H {\n    const f: () => void;\n    construct(this.f = () => {}) {}\n}\nmain(): int { return 0; }\n"
         ),
-        "main.pep:3:14: error: field 'F' of shared struct 'H' has type '() => void', which is not thread-safe\n\
-         \x20   3 |     const F: () => void;\n\
+        "main.pep:3:14: error: field 'f' of shared struct 'H' has type '() => void', which is not thread-safe\n\
+         \x20   3 |     const f: () => void;\n\
          \x20     |              ^~~~~~~~~~\n\
          note: declare the function type 'shared () => void' to share it between threads"
     );

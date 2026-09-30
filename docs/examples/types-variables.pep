@@ -32,7 +32,7 @@ main(): int {
     assert(hits == 0, "numbers start at zero");
 
     # 'const' declares a name that should not be reassigned.
-    const LIMIT = 3;
+    const limit = 3;
 
     record(100);
     record(250);
@@ -43,6 +43,6 @@ main(): int {
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 && scale == 1.5, "floating point");
     assert(ready && name == "Pepper", "bool and String");
-    assert(offset > 4000000000 && LIMIT == 3, "long and const");
+    assert(offset > 4000000000 && limit == 3, "long and const");
     return 0;
 }

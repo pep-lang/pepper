@@ -948,7 +948,7 @@ dogfooding of the language.
   grammar would read those operators.
 - `tools/pep-fmt` turns the tree into a Wadler-style layout document
   (`doc.pep`: text, soft and hard lines, indentation, groups, and a
-  `DOC_CHOICE` of layouts tried in order) and renders it at 120 columns;
+  `doc_choice` of layouts tried in order) and renders it at 120 columns;
   `format.pep` holds the style. Trailing comments are emitted as line
   suffixes marked with byte 0x01, which `align_trailing_comments` aligns and
   removes.

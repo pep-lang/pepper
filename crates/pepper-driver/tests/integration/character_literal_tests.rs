@@ -63,13 +63,13 @@ test(): int {
 #[test]
 fn compares_with_raw_bytes() {
     assert_cases(
-        r#"const QUOTE = '"';
+        r#"const quote = '"';
 is_lower(c: int): bool { return c >= 'a' and c <= 'z'; }
 test(): int {
     var s = "a\"Z";
     var p = s.c_str();
     if (p[0] != 'a') { return 1; }
-    if (p[1] != QUOTE) { return 2; }
+    if (p[1] != quote) { return 2; }
     if (!is_lower(p[0]) or is_lower(p[2])) { return 3; }
     var bytes = Array<byte>();
     bytes.append('x');
