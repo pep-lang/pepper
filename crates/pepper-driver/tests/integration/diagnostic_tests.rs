@@ -1068,6 +1068,77 @@ fn a_moved_variable_may_move_into_a_locked_value() {
     );
 }
 
+const WAIT_WHILE_HEADER: &str = "import async;\n\nconst jobs = async.Mutex<Array<String>>(Array<String>());\nconst ready = jobs.condition();\n\n";
+
+#[test]
+fn a_locked_predicate_cannot_keep_the_value() {
+    assert_eq!(
+        error_of(
+            "locked_keep",
+            &format!(
+                "{WAIT_WHILE_HEADER}main(): int {{\n    var saved = Array<String>();\n    with (var list = jobs.lock()) {{\n        ready.wait_while((queue: Array<String>): bool => {{\n            saved.append(queue[0]);\n            return queue.count() == 0;\n        }});\n    }}\n    return 0;\n}}\n"
+            )
+        ),
+        "main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock\n\
+         \x20  10 |             saved.append(queue[0]);\n\
+         \x20     |                          ^~~~~~~~\n\
+         main.pep:9:27: note: locked here\n\
+         \x20   9 |         ready.wait_while((queue: Array<String>): bool => {\n\
+         \x20     |                           ^~~~~\n\
+         note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(queue[0])'"
+    );
+}
+
+#[test]
+fn a_locked_predicate_cannot_bring_a_value_in() {
+    assert_eq!(
+        error_of(
+            "locked_bring",
+            &format!(
+                "{WAIT_WHILE_HEADER}main(): int {{\n    var extra = \"x\";\n    with (var list = jobs.lock()) {{\n        ready.wait_while((queue: Array<String>): bool => {{\n            queue.append(extra);\n            return false;\n        }});\n    }}\n    return 0;\n}}\n"
+            )
+        ),
+        "main.pep:10:26: error: 'extra' cannot move into the value locked by 'queue'\n\
+         \x20  10 |             queue.append(extra);\n\
+         \x20     |                          ^~~~~\n\
+         main.pep:9:27: note: locked here\n\
+         \x20   9 |         ready.wait_while((queue: Array<String>): bool => {\n\
+         \x20     |                           ^~~~~\n\
+         note: 'String' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy(extra)'"
+    );
+}
+
+#[test]
+fn a_locked_parameter_takes_a_closure() {
+    let error = error_of(
+        "locked_named",
+        &format!(
+            "{WAIT_WHILE_HEADER}empty(queue: Array<String>): bool {{\n    return queue.count() == 0;\n}}\n\nmain(): int {{\n    with (var list = jobs.lock()) {{\n        ready.wait_while(empty);\n    }}\n    return 0;\n}}\n"
+        ),
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:12:26: error: parameter 'predicate' takes a closure written at the call, because it is called with a locked value\n\
+             \x20  12 |         ready.wait_while(empty);\n\
+             \x20     |                          ^~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: 'predicate' is declared [Locked] here"), "{error}");
+    assert!(error.ends_with("note: write the function here, as a closure, so the compiler can check that it keeps the value to itself"), "{error}");
+}
+
+#[test]
+fn locked_is_only_for_the_runtime() {
+    assert_eq!(
+        error_of("locked_user", "check([Locked] predicate: (int) => bool): bool {\n    return predicate(1);\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:7: error: '[Locked]' is only allowed in the runtime\n\
+         \x20   1 | check([Locked] predicate: (int) => bool): bool {\n\
+         \x20     |       ^~~~~~~~\n\
+         note: a function that reads a locked value runs inside a 'with' block"
+    );
+}
+
 #[test]
 fn a_move_parameter_takes_a_new_value() {
     let error = error_of(

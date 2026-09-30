@@ -102,6 +102,10 @@ export struct Mutex<T> {
     # unlocked.
     const _owner: Atomic<ulong>;
 
+    # How many holders sleep in `Condition.wait`, each keeping its `with`
+    # binding: references to the value that a `PEP_CHECK_SYNC` census allows.
+    const _waiting: Atomic<ulong>;
+
     # The tasks waiting for the lock.
     const _waiters: _SyncQueue;
 
@@ -119,6 +123,7 @@ export struct Mutex<T> {
         _lock = _async_sys_mutex_create();
         _value = _pep_malloc(sizeof<T>());
         _owner = Atomic<ulong>(0);
+        _waiting = Atomic<ulong>(0);
         _waiters = _SyncQueue();
         this._slot()[0] = move(value);
     }
@@ -332,7 +337,7 @@ export struct MutexGuard<T> {
             locked = false;
             # With `PEP_CHECK_SYNC` set, check that nothing outside the
             # locked value refers into it (`_pep_check_sync`).
-            __census<T>(_source._slot());
+            __census<T>(_source._slot(), _source._waiting.load());
             _source._unlock();
         }
     }
@@ -431,13 +436,15 @@ export struct Condition<T> {
         if (_mutex._owner.load() != me) {
             panic("Condition.wait: the caller does not hold the Mutex");
         }
+        _mutex._waiting.fetch_add(1);
         if (_async_in_task()) {
             this._wait_task(me, 0);
-            return;
+        } else {
+            _mutex._owner.store(0);
+            _async_sys_condition_wait(_handle, _mutex._lock);
+            _mutex._owner.store(me);
         }
-        _mutex._owner.store(0);
-        _async_sys_condition_wait(_handle, _mutex._lock);
-        _mutex._owner.store(me);
+        _mutex._waiting.fetch_sub(1);
     }
 
     ## Like `wait()`, but gives up after about `milliseconds` milliseconds.
@@ -451,13 +458,70 @@ export struct Condition<T> {
         if (_mutex._owner.load() != me) {
             panic("Condition.wait_for: the caller does not hold the Mutex");
         }
+        _mutex._waiting.fetch_add(1);
+        var woken = false;
         if (_async_in_task()) {
-            return this._wait_task(me, _async_sys_monotonic_milliseconds() + milliseconds);
+            woken = this._wait_task(me, _async_sys_monotonic_milliseconds() + milliseconds);
+        } else {
+            _mutex._owner.store(0);
+            woken = _async_sys_condition_wait_for(_handle, _mutex._lock, milliseconds);
+            _mutex._owner.store(me);
         }
-        _mutex._owner.store(0);
-        var woken = _async_sys_condition_wait_for(_handle, _mutex._lock, milliseconds);
-        _mutex._owner.store(me);
+        _mutex._waiting.fetch_sub(1);
         return woken;
+    }
+
+    ## Waits while `predicate` holds for the Mutex's value: calls it with the
+    ## value, and while it returns true, waits as `wait()` does and asks
+    ## again. Returns once it returns false, with the Mutex still locked.
+    ##
+    ## Wakeups without a notification are handled here: the predicate is
+    ## asked again after every wake.
+    ##
+    ## `predicate` is written at the call, as a closure: the compiler checks
+    ## its body as it checks a `with` block's, with its parameter as the
+    ## locked value, so it cannot keep any part of the value or bring in a
+    ## value from outside.
+    ##
+    ## @param predicate called with the locked value; true to keep waiting
+    ## @panics if the caller does not hold the Mutex
+    ## @example
+    ##     with (var queue = jobs.lock()) {
+    ##         not_empty.wait_while((queue: Array<Job>): bool => queue.count() == 0);
+    ##         var job = queue.remove_at(0);
+    ##     }
+    wait_while([Locked] predicate: (T) => bool) {
+        this._check_holder("Condition.wait_while");
+        while (predicate(_mutex._slot()[0])) {
+            this.wait();
+        }
+    }
+
+    ## Like `wait_while()`, but gives up after about `milliseconds`
+    ## milliseconds. The Mutex is locked when it returns either way.
+    ##
+    ## @param milliseconds the longest time to wait
+    ## @param predicate called with the locked value; true to keep waiting
+    ## @returns true once `predicate` returned false, false if the time ran out first
+    ## @panics if the caller does not hold the Mutex
+    wait_while_for(milliseconds: ulong, [Locked] predicate: (T) => bool): bool {
+        this._check_holder("Condition.wait_while_for");
+        var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
+        while (predicate(_mutex._slot()[0])) {
+            var now = _async_sys_monotonic_milliseconds();
+            if (now >= deadline) {
+                return false;
+            }
+            this.wait_for(deadline - now);
+        }
+        return true;
+    }
+
+    # Panics unless the caller holds the Mutex: the predicate reads its value.
+    _check_holder(what: String) {
+        if (_mutex._owner.load() != _async_holder_id()) {
+            panic($"{what}: the caller does not hold the Mutex");
+        }
     }
 
     ## Wakes one thread or task waiting on this condition, if any. The caller does

@@ -406,6 +406,57 @@ The Mutex is locked again before it returns either way.
 **Panics**
 - if the calling thread does not hold the Mutex
 
+#### wait_while
+
+```pepper
+wait_while([Locked] predicate: (T) => bool)
+```
+
+Waits while `predicate` holds for the Mutex's value: calls it with the
+value, and while it returns true, waits as `wait()` does and asks
+again. Returns once it returns false, with the Mutex still locked.
+
+Wakeups without a notification are handled here: the predicate is
+asked again after every wake.
+
+`predicate` is written at the call, as a closure: the compiler checks
+its body as it checks a `with` block's, with its parameter as the
+locked value, so it cannot keep any part of the value or bring in a
+value from outside.
+
+**Parameters**
+- `predicate` — called with the locked value; true to keep waiting
+
+**Panics**
+- if the caller does not hold the Mutex
+
+**Example**
+```pepper
+    with (var queue = jobs.lock()) {
+        not_empty.wait_while((queue: Array<Job>): bool => queue.count() == 0);
+        var job = queue.remove_at(0);
+    }
+```
+
+#### wait_while_for
+
+```pepper
+wait_while_for(milliseconds: ulong, [Locked] predicate: (T) => bool): bool
+```
+
+Like `wait_while()`, but gives up after about `milliseconds`
+milliseconds. The Mutex is locked when it returns either way.
+
+**Parameters**
+- `milliseconds` — the longest time to wait
+- `predicate` — called with the locked value; true to keep waiting
+
+**Returns**
+- true once `predicate` returned false, false if the time ran out first
+
+**Panics**
+- if the caller does not hold the Mutex
+
 #### notify_one
 
 ```pepper

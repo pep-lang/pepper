@@ -1195,6 +1195,211 @@ fn check_sync_catches_a_reference_kept_in_raw_memory() {
     );
 }
 
+/// `Select<E>` across threads: channels of different types matched on an
+/// enum, fairness, `try_wait`, timeouts, all channels closed, and a stress
+/// run where every value must arrive (a lost wakeup would hang it, so every
+/// wait has a generous timeout that fails the test instead).
+const SELECT_PROGRAM: &str = r#"
+import async;
+
+enum Event {
+    Word(text: String),
+    Number(value: long),
+    Stop,
+}
+
+const words = async.Channel<String>();
+const numbers = async.Channel<long>();
+const quit = async.Channel<bool>();
+const STREAMS = 4;
+const PER_STREAM = 2000;
+
+produce() {
+    words.send("ab");
+    numbers.send(2);
+    words.send("cde");
+    numbers.send(3);
+    words.close();
+    numbers.close();
+}
+
+stream(channel: async.Channel<long>) {
+    var i: long = 0;
+    while (i < PER_STREAM) {
+        channel.send(i);
+        if (i % 97 == 0) {
+            async.Thread.sleep(0);
+        }
+        i = i + 1;
+    }
+    channel.close();
+}
+
+typed() {
+    var select = async.Select<Event>();
+    select.receive(words, (text: String): Event => Event.Word(text));
+    select.receive(numbers, (value: long): Event => Event.Number(value));
+    select.receive(quit, (stop: bool): Event => Event.Stop);
+    var thread = async.Thread.spawn(produce);
+    var letters = 0;
+    var total: long = 0;
+    var events = 0;
+    quit.close();
+    var running = true;
+    while (running) {
+        match (select.wait_for(5000)) {
+            Ok(event) => {
+                events = events + 1;
+                match (event) {
+                    Word(text) => { letters = letters + text.length() as int; }
+                    Number(value) => { total = total + value; }
+                    Stop => { assert(false, "quit only closes"); }
+                }
+            }
+            Err(error) => {
+                assert(error.message == "every channel is closed", error.message);
+                running = false;
+            }
+        }
+    }
+    thread.join();
+    assert(events == 4 && letters == 5 && total == 5, "every value arrived once");
+}
+
+fair() {
+    var a = async.Channel<long>();
+    var b = async.Channel<long>();
+    var i: long = 0;
+    while (i < 3) {
+        a.send(i);
+        b.send(10 + i);
+        i = i + 1;
+    }
+    var select = async.Select<long>();
+    select.receive(a, (n: long): long => n);
+    select.receive(b, (n: long): long => n);
+    var order = Array<long>();
+    var k = 0;
+    while (k < 6) {
+        order.append(select.try_wait().value());
+        k = k + 1;
+    }
+    assert(order[0] == 0 && order[1] == 10 && order[2] == 1 && order[3] == 11, "turns alternate");
+    assert(order[4] == 2 && order[5] == 12, "and keep alternating");
+    assert(select.try_wait().error().message == "no value is waiting", "nothing left");
+}
+
+timeouts() {
+    var empty = async.Channel<long>();
+    var select = async.Select<long>();
+    select.receive(empty, (n: long): long => n);
+    var result = select.wait_for(30);
+    assert(result.is_err(), "nothing arrived");
+    assert(result.error().message == "the time ran out", result.error().message);
+    empty.close();
+    assert(select.wait().error().message == "every channel is closed", "closed");
+    var none = async.Select<long>();
+    assert(none.wait().error().message == "the select has no channels", "no channels");
+}
+
+stress() {
+    var select = async.Select<long>();
+    var threads = Array<async.Thread>();
+    var i = 0;
+    while (i < STREAMS) {
+        var channel = async.Channel<long>();
+        select.receive(channel, (n: long): long => n);
+        threads.append(async.Thread.spawn(() => { stream(channel); }));
+        i = i + 1;
+    }
+    var received: long = 0;
+    var sum: long = 0;
+    var running = true;
+    while (running) {
+        match (select.wait_for(10000)) {
+            Ok(n) => {
+                received = received + 1;
+                sum = sum + n;
+            }
+            Err(error) => {
+                assert(error.message == "every channel is closed", error.message);
+                running = false;
+            }
+        }
+    }
+    for (var thread in threads) {
+        thread.join();
+    }
+    assert(received == STREAMS * PER_STREAM, "no value was lost");
+    assert(sum == STREAMS * (PER_STREAM * (PER_STREAM - 1) / 2), "each arrived once");
+}
+
+main(): int {
+    async.Thread.current();
+    var before = _pep_live_allocs();
+    typed();
+    fair();
+    timeouts();
+    before = _pep_live_allocs();
+    fair();
+    timeouts();
+    assert(_pep_live_allocs() == before, "a select frees everything it allocated");
+    stress();
+    return 0;
+}
+"#;
+
+#[test]
+fn select_waits_on_several_channels() {
+    assert_runs("select", SELECT_PROGRAM);
+}
+
+/// `Condition.wait_while` and `wait_while_for` across threads.
+const WAIT_WHILE_PROGRAM: &str = r#"
+import async;
+
+const jobs = async.Mutex<Array<String>>(Array<String>());
+const ready = jobs.condition();
+const COUNT = 200;
+
+produce() {
+    var i = 0;
+    while (i < COUNT) {
+        with (var list = jobs.lock()) {
+            list.append("job");
+            ready.notify_all();
+        }
+        i = i + 1;
+    }
+}
+
+main(): int {
+    var thread = async.Thread.spawn(produce);
+    var taken = 0;
+    while (taken < COUNT) {
+        with (var list = jobs.lock()) {
+            ready.wait_while((queue: Array<String>): bool => queue.count() == 0);
+            assert(list.count() > 0, "the predicate held when it returned");
+            list.remove_at(0);
+            taken = taken + 1;
+        }
+    }
+    thread.join();
+    with (var list = jobs.lock()) {
+        assert(!ready.wait_while_for(20, (queue: Array<String>): bool => queue.count() == 0), "the time ran out");
+        list.append("late");
+        assert(ready.wait_while_for(20, (queue: Array<String>): bool => queue.count() == 0), "already true");
+    }
+    return 0;
+}
+"#;
+
+#[test]
+fn condition_waits_while_a_predicate_holds() {
+    assert_runs("wait_while", WAIT_WHILE_PROGRAM);
+    assert_runs_with("wait_while_check_sync", WAIT_WHILE_PROGRAM, &[("PEP_CHECK_SYNC", "1")]);
+}
+
 #[test]
 fn mutex_locks() {
     assert_runs("mutex", MUTEX_PROGRAM);

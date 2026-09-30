@@ -119,6 +119,9 @@ thread:
   channel ends). A task waiting for a `Mutex` still gets the lock, and
   `Condition.wait` still waits for a notification, since the caller's loop
   would only wait again; `wait_for` returns when its own time runs out.
+- A [`Select`](threads.md#waiting-on-several-channels-with-select) parks
+  its task on every channel at once, and a cancel or `timeout` ends its
+  wait with an error. `Condition.wait_while` parks like `wait`.
 - Outside a task they block the thread, as before.
 
 ## Sockets

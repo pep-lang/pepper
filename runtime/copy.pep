@@ -258,7 +258,7 @@ struct DeferredFix {
     construct(this.run = (copies: Copies) => {}) {}
 }
 
-# What `__census<T>(slot)` lowers to in `MutexGuard.exit` for a `T` that can
+# What `__census<T>(slot, waiting)` lowers to in `MutexGuard.exit` for a `T` that can
 # be copied (passes/copies.rs; for any other `T` it lowers to nothing). With
 # `PEP_CHECK_SYNC` set (`_PEP_CHECK_SYNC_ON`), it copies the value in `slot`
 # with a census that counts, for each original object, the references the copy passes through:
@@ -267,7 +267,7 @@ struct DeferredFix {
 # may have, so an object whose strong count (the `u32` every struct object
 # starts with) is higher is still referenced from outside it: a hole in the
 # confinement checks, or a promise raw memory or extern code broke.
-export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>) {
+export _pep_check_sync<T>(slot: __ptr<T>, waiting: ulong, locked: __ptr<char>) {
     if (!_PEP_CHECK_SYNC_ON) {
         return;
     }
@@ -275,6 +275,12 @@ export _pep_check_sync<T>(slot: __ptr<T>, locked: __ptr<char>) {
     copies._edges = HashMap<ulong, ulong>();
     copies.copy<T>(slot[0]);
     copies._finish();
+    # Each holder sleeping in `Condition.wait` keeps its `with` binding, one
+    # more reference to the root.
+    var root = copies._address<T>(slot[0]);
+    if (waiting != 0 && copies._edges.contains(root)) {
+        copies._edges[root] = copies._edges.get(root) + waiting;
+    }
     for (var (address, edges) in copies._edges) {
         copies._cell[0] = address;
         __ptr<void> raw = copies._cell;

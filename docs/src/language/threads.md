@@ -274,6 +274,36 @@ trait values and values that cannot be copied (an `io.File`) included.
 The [Channel reference](../reference/async-channel.md) documents every
 method.
 
+### Waiting on several channels with Select
+
+A `Select<E>` waits on several channels at once and takes the first value
+any of them receives, like Go's `select`. Each channel is added with a
+function that turns its values into an `E`, usually a case of an
+[enum](enums.md) of your own that carries the value, so the channels may
+carry different types and a `match` handles the result:
+
+```pepper
+{{#include ../../examples/threads-select.pep}}
+```
+
+- `receive(channel, wrap)` adds a channel. `wrap` runs on the waiting
+  thread, with the value received.
+- `wait()` waits until a channel has a value and returns it as an `E`, in a
+  `Result<E>`. `wait_for(milliseconds)` gives up after that long, and
+  `try_wait()` does not wait at all.
+- The value is taken under that channel's own lock, so no other receiver
+  can take it between "ready" and "take".
+- When several channels have values, each wait starts just after the
+  channel that fired last, so one busy channel cannot starve the others.
+- A channel that is closed and empty is skipped. Once every channel is,
+  `wait()` returns an error (`every channel is closed`). A timeout's error
+  is `the time ran out`.
+- A `Select` belongs to the thread (or [task](tasks.md)) that made it; it
+  is not `[Shared]`. In a task, waiting parks the task, and a cancel or the
+  task's `timeout` ends the wait.
+
+The [Select reference](../reference/async-select.md) documents every method.
+
 ## Mutexes and conditions
 
 A `Mutex<T>` owns a value that one thread at a time can use. The way to
@@ -332,6 +362,31 @@ changes the value. Get one with `mutex.condition()`:
   what it waits for.
 - `wait_for(milliseconds)` gives up after that long and returns `false`.
 - `notify_one()` wakes one waiting thread, and `notify_all()` wakes them all.
+
+`wait_while(predicate)` writes that loop for you: it waits while
+`predicate` returns true for the locked value, asking again after every
+wakeup, and returns with the Mutex still locked. `wait_while_for(milliseconds,
+predicate)` gives up after that long and returns `false`:
+
+```pepper
+{{#include ../../examples/threads-wait-while.pep}}
+```
+
+The predicate is given the locked value as its parameter, since a closure
+cannot capture part of a locked value. It must be a closure written at the
+call, and the compiler checks its body as it checks a lock body (see
+[What a lock body may do](#what-a-lock-body-may-do)): it cannot keep any
+part of the value, or bring in a value from outside.
+
+```text
+main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock
+   10 |             saved.append(queue[0]);
+      |                          ^~~~~~~~
+main.pep:9:27: note: locked here
+    9 |         ready.wait_while((queue: Array<String>): bool => {
+      |                           ^~~~~
+note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(queue[0])'
+```
 
 The [Mutex reference](../reference/async-mutex.md) documents `Mutex`,
 `MutexGuard` and `Condition`.
@@ -464,7 +519,11 @@ The [Once reference](../reference/async-once.md) has the details.
   (`list.append(move(job))`).
 - `copy` cannot copy a trait value yet, so sending a trait value that the
   sender keeps using is an error; send `move(x)` or a new value instead.
-- There is no reader-writer lock, no `select` over several channels, and no
-  barrier or semaphore. A Mutex is not re-entrant.
+- There is no reader-writer lock, and no barrier or semaphore. A Mutex is
+  not re-entrant.
+- A `Select` only receives: it cannot wait to send to a full channel. The
+  value `wait()` returns is not a new value for a lock body, since `wrap`
+  is a function value the compiler cannot follow; `copy` it to move it into
+  a locked value.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,
   which panics.

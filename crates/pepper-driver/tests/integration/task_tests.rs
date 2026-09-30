@@ -1064,8 +1064,116 @@ main(): int {
 }
 "##;
 
+/// `Select<E>` and `Condition.wait_while` in tasks: a select parks its task
+/// on several channels at once while other tasks on the same worker keep
+/// running and feed it, values from a thread wake it too, a select's
+/// timeout, and a `wait_while` whose producer is another task.
+const SELECT_PROGRAM: &str = r##"
+import async;
+
+enum Event {
+    Number(value: long),
+    Word(text: String),
+}
+
+const numbers = async.Channel<long>();
+const words = async.Channel<String>();
+const jobs = async.Mutex<Array<long>>(Array<long>());
+const ready = jobs.condition();
+const COUNT = 50;
+
+from_thread() {
+    var i = 0;
+    while (i < COUNT) {
+        words.send("w");
+        i = i + 1;
+    }
+    words.close();
+}
+
+main(): int {
+    async.Thread.current();
+    async.run(() => {
+        var select = async.Select<Event>();
+        select.receive(numbers, (value: long): Event => Event.Number(value));
+        select.receive(words, (text: String): Event => Event.Word(text));
+        # A channel closed from the start is never joined: the select still
+        # sleeps (not spins) while the others are empty, so the feeder on
+        # this worker gets to run.
+        var closed_early = async.Channel<long>();
+        closed_early.close();
+        select.receive(closed_early, (value: long): Event => Event.Number(value));
+
+        # A task on this worker feeds one channel; a thread feeds the other.
+        var feeder = async.Task<void>.spawn_local(() => {
+            var n: long = 0;
+            while (n < COUNT) {
+                numbers.send(n);
+                async.yield_now();
+                n = n + 1;
+            }
+            numbers.close();
+        });
+        var thread = async.Thread.spawn(from_thread);
+        var sum: long = 0;
+        var letters = 0;
+        var running = true;
+        while (running) {
+            match (select.wait_for(10000)) {
+                Ok(event) => {
+                    match (event) {
+                        Number(value) => { sum = sum + value; }
+                        Word(text) => { letters = letters + text.length() as int; }
+                    }
+                }
+                Err(error) => {
+                    assert(error.message == "every channel is closed", error.message);
+                    running = false;
+                }
+            }
+        }
+        feeder.join();
+        thread.join();
+        assert(sum == COUNT * (COUNT - 1) / 2, "every number arrived once");
+        assert(letters == COUNT, "every word arrived once");
+
+        # A select's own timeout ends a task's wait.
+        var quiet = async.Channel<long>();
+        var waiting = async.Select<long>();
+        waiting.receive(quiet, (n: long): long => n);
+        var timed = waiting.wait_for(20);
+        assert(timed.is_err(), "nothing arrives on a quiet channel");
+        assert(timed.error().message == "the time ran out", timed.error().message);
+
+        # wait_while parks the task while another task fills the queue.
+        var producer = async.Task<void>.spawn_local(() => {
+            var i: long = 0;
+            while (i < 5) {
+                async.sleep(1);
+                with (var list = jobs.lock()) {
+                    list.append(i);
+                    ready.notify_all();
+                }
+                i = i + 1;
+            }
+        });
+        var taken: long = 0;
+        while (taken < 5) {
+            with (var list = jobs.lock()) {
+                ready.wait_while((queue: Array<long>): bool => queue.count() == 0);
+                taken = taken + list.count() as long;
+                list.clear();
+            }
+        }
+        producer.join();
+    });
+    print("ok");
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM), ("select", SELECT_PROGRAM)]
 }
 
 #[test]
@@ -1178,6 +1286,11 @@ fn files_park_their_task_with_io_uring() {
 #[test]
 fn growing_a_pinned_array_panics() {
     assert_panics("task_pinned", &scratch(PINNED_PROGRAM, "pinned"), "Array: the buffer is in use by an I/O operation");
+}
+
+#[test]
+fn select_and_wait_while_park_tasks() {
+    assert_runs("task_select", SELECT_PROGRAM);
 }
 
 #[test]

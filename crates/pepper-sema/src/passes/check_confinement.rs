@@ -70,6 +70,12 @@ pub const MOVE_ATTRIBUTE: &str = "Move";
 /// `move(x)`.
 pub const MOVE_SOURCE_ATTRIBUTE: &str = "MoveSource";
 
+/// A function-value parameter that is called with a locked value
+/// (`Condition.wait_while`'s predicate): the argument must be a closure
+/// written at the call, whose body is checked as a `with` block's is, with
+/// its parameters as the locked value. Only runtime files may declare one.
+pub const LOCKED_ATTRIBUTE: &str = "Locked";
+
 /// Whether a parameter with these attributes takes over the caller's
 /// reference instead of acquiring one: `[Move]` and `[MoveSource]`.
 pub fn takes_over(attributes: &[pepper_parser::ast::Attribute]) -> bool {
@@ -402,12 +408,15 @@ struct Walk<'p, 'a> {
     dependent: bool,
     /// The operand slots of `[Move]` parameters (summaries).
     sending: Vec<usize>,
+    /// Walking a `[Locked]` closure's body: its parameters are the locked
+    /// value.
+    locked_parameters: bool,
     error: Option<Diagnostic>,
 }
 
 impl<'p, 'a> Walk<'p, 'a> {
     fn new(program: &'p Program<'a>, mode: Mode, current: Option<TypeName>) -> Self {
-        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], dependent: false, sending: vec![], error: None }
+        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], dependent: false, sending: vec![], locked_parameters: false, error: None }
     }
 
     fn region(&mut self, part: Part) -> usize {
@@ -638,6 +647,12 @@ impl<'p, 'a> Walk<'p, 'a> {
                 && takes_over(&function.parameters[slot - first_parameter].attributes);
             let region = if !self.program.has_region(&ty) {
                 None
+            } else if self.locked_parameters && slot >= first_parameter {
+                let parameter = &function.parameters[slot - first_parameter];
+                let index = self.locks.len();
+                self.locks.push(Lock { name: parameter.name.clone(), loc: parameter.loc });
+                self.open.push(index);
+                Some(self.region(Part::Locked(index)))
             } else if sending {
                 let region = self.fresh();
                 if self.mode == Mode::Summarize {
@@ -1490,22 +1505,47 @@ fn roots(module: &Module) -> Vec<String> {
             sending.insert(f.name.clone());
         }
     }
+    // The functions with a `[Locked]` parameter: the closures passed to
+    // them are checked like `with` blocks, so their bodies are roots too.
+    let mut locked: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for st in &module.structs {
+        for m in &st.method_members {
+            if m.parameters.iter().any(|p| has_attribute(&p.attributes, LOCKED_ATTRIBUTE)) {
+                locked.insert(m.name.clone());
+            }
+        }
+    }
+    for f in &module.functions {
+        if f.parameters.iter().any(|p| has_attribute(&p.attributes, LOCKED_ATTRIBUTE)) {
+            locked.insert(f.name.clone());
+        }
+    }
     let mut out = vec![];
     for (_, key, function) in bodies(module) {
         let Some(body) = &function.body else { continue };
         let mut body = body.clone();
         let mut found = false;
+        let mut closures: Vec<String> = vec![];
         crate::passes::walk_block(&mut body, &mut |e: &mut Expression| match e {
             Expression::SymbolRef { id, .. } if id.starts_with("__with_scope_") => found = true,
             Expression::Move { .. } => found = true,
-            Expression::FunctionCall { function, .. } | Expression::MethodCall { method: function, .. } if sending.contains(function.as_str()) => {
-                found = true
+            Expression::FunctionCall { function, args, .. } | Expression::MethodCall { method: function, args, .. } => {
+                if sending.contains(function.as_str()) {
+                    found = true;
+                }
+                if locked.contains(function.as_str()) {
+                    closures.extend(args.iter().filter_map(|a| match a {
+                        Expression::MakeClosure { closure, .. } => Some(method_key(closure, crate::passes::closures::CALL_METHOD)),
+                        _ => None,
+                    }));
+                }
             }
             _ => {}
         });
         if found {
             out.push(key);
         }
+        out.extend(closures);
     }
     out
 }
@@ -1556,7 +1596,9 @@ fn triggers(program: &Program) -> std::collections::HashSet<String> {
             names.insert(st.name.clone());
         }
         for m in &st.method_members {
-            if program.is_isolated(&m.ty) || m.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
+            if program.is_isolated(&m.ty)
+                || m.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE) || has_attribute(&p.attributes, LOCKED_ATTRIBUTE))
+            {
                 names.insert(m.name.clone());
             }
         }
@@ -1568,7 +1610,9 @@ fn triggers(program: &Program) -> std::collections::HashSet<String> {
         }
     }
     for f in &program.module.functions {
-        if program.is_isolated(&f.ty) || f.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE)) {
+        if program.is_isolated(&f.ty)
+            || f.parameters.iter().any(|p| has_attribute(&p.attributes, MOVE_ATTRIBUTE) || has_attribute(&p.attributes, LOCKED_ATTRIBUTE))
+        {
             names.insert(f.name.clone());
         }
     }
@@ -1679,6 +1723,17 @@ fn check_parameter_attributes(program: &Program) -> bool {
             if name == MOVE_ATTRIBUTE {
                 continue;
             }
+            if name == LOCKED_ATTRIBUTE {
+                if program.is_runtime_file(function.loc.file) {
+                    continue;
+                }
+                crate::errors::report(
+                    Diagnostic::error(format!("'[{LOCKED_ATTRIBUTE}]' is only allowed in the runtime"))
+                        .at(at)
+                        .with_note("a function that reads a locked value runs inside a 'with' block", None),
+                );
+                return true;
+            }
             if name != MOVE_SOURCE_ATTRIBUTE {
                 let mut error = Diagnostic::error(format!("unknown parameter attribute '{}'", attribute_text(program, at)))
                     .at(at)
@@ -1780,6 +1835,18 @@ fn check_function(program: &Program, owner: &Option<TypeName>, function: &Functi
     checks.error
 }
 
+/// Checks the body of closure struct `closure` (its `__call`) as a `with`
+/// block's: its parameters are a locked value, and what it captures is
+/// outside, so the two must not meet.
+fn check_locked_closure(program: &Program, closure: &str) -> Option<Diagnostic> {
+    let st = program.struct_named(closure)?;
+    let call = st.method_members.iter().find(|m| m.name == crate::passes::closures::CALL_METHOD)?;
+    let mut walk = Walk::new(program, Mode::Check, Some(st.ty.clone()));
+    walk.locked_parameters = true;
+    walk.function(call, false);
+    walk.error
+}
+
 /// The checks that look at single expressions: guard use, `[Move]`
 /// arguments and `ThreadLocal.get`.
 struct Checks<'p, 'a> {
@@ -1866,10 +1933,12 @@ impl Checks<'_, '_> {
                 self.thread_local_get(this, method, *loc);
                 let (callee, _) = self.walk.resolve_method(this, method);
                 self.sending(&callee, args);
+                self.locked(&callee, args);
             }
             Expression::FunctionCall { function, args, .. } => {
                 let callee = self.walk.resolve_function(function);
                 self.sending(&callee, args);
+                self.locked(&callee, args);
             }
             _ => {}
         }
@@ -1901,6 +1970,31 @@ impl Checks<'_, '_> {
             .at(loc)
             .with_note(format!("reach this thread's value with 'with (var value = {}.enter())'", describe(this)), None),
         );
+    }
+
+    /// Each argument to a `[Locked]` parameter must be a closure written at
+    /// the call, whose body keeps the locked value it is given apart from
+    /// everything else (`check_locked_closure`).
+    fn locked(&mut self, callee: &Callee, args: &[Expression]) {
+        let Callee::Known(_, function) = callee else { return };
+        for (parameter, arg) in function.parameters.iter().zip(args) {
+            if self.error.is_some() || !has_attribute(&parameter.attributes, LOCKED_ATTRIBUTE) {
+                continue;
+            }
+            let Expression::MakeClosure { closure, .. } = arg else {
+                self.error = Some(
+                    Diagnostic::error(format!(
+                        "parameter '{}' takes a closure written at the call, because it is called with a locked value",
+                        parameter.name
+                    ))
+                    .at(arg.loc())
+                    .with_note(format!("'{}' is declared [{LOCKED_ATTRIBUTE}] here", parameter.name), parameter.loc.known())
+                    .with_note("write the function here, as a closure, so the compiler can check that it keeps the value to itself", None),
+                );
+                continue;
+            };
+            self.error = check_locked_closure(self.program, closure);
+        }
     }
 
     /// Each argument to a `[Move]` parameter must be disconnected.

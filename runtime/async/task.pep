@@ -924,8 +924,13 @@ export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong,
 }
 
 # Wakes the task `waiter` stands for: directly when it waits on the calling
-# thread's worker, otherwise through that worker's inbox.
+# thread's worker, otherwise through that worker's inbox. A plain thread's
+# waiter (in a `Select`) is signalled through its `_ThreadWake`.
 export _async_sync_wake(waiter: _SyncWaiter) {
+    if (waiter._thread !== __null) {
+        waiter._thread._signal();
+        return;
+    }
     if (_async_on_worker()) {
         var worker = _async_worker();
         if (worker._inbox._id == waiter._inbox._id) {

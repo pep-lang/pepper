@@ -32,8 +32,8 @@
 //! `__copy<X>` that nothing asks for; one that cannot copy lowers to a call
 //! of `_pep_copy_failed<X>`, which panics.
 //!
-//! `__census<T>(slot)` (in `MutexGuard.exit`) lowers here too: to
-//! `_pep_check_sync<T>(slot, "Mutex<T>")`, which copies the locked value to
+//! `__census<T>(slot, waiting)` (in `MutexGuard.exit`) lowers here too: to
+//! `_pep_check_sync<T>(slot, waiting, "Mutex<T>")`, which copies the locked value to
 //! count the references inside it when `PEP_CHECK_SYNC` is set, for a `T`
 //! that can be copied; to nothing for any other `T`.
 
@@ -513,16 +513,16 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
     added || censuses_added || lowered.iter().any(|(_, l)| matches!(l, Lowering::Fail(_)))
 }
 
-/// The `T` of a `__census<T>(slot)` call.
+/// The `T` of a `__census<T>(slot, waiting)` call.
 fn census_intrinsic(expr: &Expression) -> Option<TypeName> {
     let Expression::FunctionCall { function, args, .. } = expr else { return None };
-    if args.len() != 1 || function.split('<').next() != Some(CENSUS_INTRINSIC) {
+    if args.len() != 2 || function.split('<').next() != Some(CENSUS_INTRINSIC) {
         return None;
     }
     parse_type_string(function).sub_types.into_iter().next()
 }
 
-/// Lower every concrete `__census<T>(slot)`: to a `_pep_check_sync<T>` call
+/// Lower every concrete `__census<T>(slot, waiting)`: to a `_pep_check_sync<T>` call
 /// when a `T` can be copied, and to the slot alone (which does nothing) when
 /// `T` is thread-safe, so nothing outside can share it, or cannot be copied.
 /// Returns whether it added a call to specialize.
@@ -550,12 +550,13 @@ fn lower_censuses(module: &mut Module, safe: &ThreadSafeStructs) -> bool {
             let Some(ty) = census_intrinsic(e) else { return };
             let Some((_, can)) = checked.iter().find(|(t, _)| *t == ty) else { return };
             let Expression::FunctionCall { args, loc, .. } = e else { return };
+            let waiting = args.pop().unwrap();
             let slot = args.pop().unwrap();
             let loc = *loc;
             *e = if *can {
                 added = true;
                 let locked = Expression::StringLiteral { value: format!("Mutex<{}>", ty.display()), is_raw: true, loc: Loc::NONE };
-                Expression::FunctionCall { function: format!("{CENSUS_FUNCTION}<{ty}>"), args: vec![slot, locked], loc }
+                Expression::FunctionCall { function: format!("{CENSUS_FUNCTION}<{ty}>"), args: vec![slot, waiting, locked], loc }
             } else {
                 slot
             };

@@ -17,6 +17,12 @@
 # `_MESSAGE_WAKE` in the worker's inbox. The task re-checks what it waits
 # for after every wake, as a condition-variable waiter does.
 #
+# A plain thread normally waits on the platform condition instead, but a
+# `Select` must sleep on several channels at once, so it joins each one's
+# `_SyncQueue` with a waiter that carries a `_ThreadWake`: `_async_sync_wake`
+# signals that instead of a worker's inbox, and the thread sleeps in
+# `_async_thread_park`.
+#
 # `_size` lets `_wake_one` and `_wake_all` return without locking when no
 # task waits. That read is only safe when the waiter's `_push` and the
 # waker's change are ordered by some other lock (a Channel's, or the
@@ -35,14 +41,17 @@ export const _WAITER_ABANDONED = 2;
 # Gives every waiter its own id.
 const _async_waiter_ids = Atomic<ulong>(1);
 
-# One task waiting on a sync object.
+# One task, or one plain thread in a `Select`, waiting on sync objects.
 [Shared]
 export struct _SyncWaiter {
     # Unique among waiters, for `_SyncQueue._remove`.
     const _id: ulong;
-    # The inbox of the task's worker, and the task's id there.
+    # The inbox of the task's worker, and the task's id there (null and 0
+    # for a thread).
     const _inbox: _Inbox;
     const _task: ulong;
+    # What a thread sleeps on (null for a task).
+    const _thread: _ThreadWake;
     # `_WAITER_WAITING`, `_WAITER_WOKEN` or `_WAITER_ABANDONED`.
     const _state: Atomic<int>;
 
@@ -50,8 +59,70 @@ export struct _SyncWaiter {
         _id = _async_waiter_ids.fetch_add(1);
         _inbox = inbox;
         _task = task;
+        _thread = __default<_ThreadWake>();
         _state = Atomic<int>(_WAITER_WAITING);
     }
+
+    construct(thread: _ThreadWake) {
+        _id = _async_waiter_ids.fetch_add(1);
+        _inbox = __default<_Inbox>();
+        _task = 0;
+        _thread = thread;
+        _state = Atomic<int>(_WAITER_WAITING);
+    }
+}
+
+# What a plain thread waiting in a `Select` sleeps on: a platform lock and
+# condition variable. A waker sets the waiter's state first and signals
+# under the lock, and the thread checks the state under it, so no wake is
+# missed.
+[Shared]
+export struct _ThreadWake {
+    const _lock: __ptr<void>;
+    const _condition: __ptr<void>;
+
+    construct() {
+        _lock = _async_sys_mutex_create();
+        _condition = _async_sys_condition_create();
+    }
+
+    destruct {
+        _async_sys_condition_destroy(_condition);
+        _async_sys_mutex_destroy(_lock);
+    }
+
+    # Wakes the thread.
+    _signal() {
+        _async_sys_mutex_lock(_lock);
+        _async_sys_condition_notify_all(_condition);
+        _async_sys_mutex_unlock(_lock);
+    }
+}
+
+# Sleeps the calling thread (outside a task) until `waiter`, made with a
+# `_ThreadWake`, is woken, or until `deadline` (monotonic milliseconds, 0
+# for none) passes; returns `_SYNC_WOKEN` or `_SYNC_TIMED_OUT`. A wait that
+# times out abandons the waiter; the caller takes it out of its queues.
+export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): int {
+    var wake = waiter._thread;
+    var result = _SYNC_WOKEN;
+    _async_sys_mutex_lock(wake._lock);
+    while (waiter._state.load() == _WAITER_WAITING) {
+        if (deadline == 0) {
+            _async_sys_condition_wait(wake._condition, wake._lock);
+            continue;
+        }
+        var now = _async_sys_monotonic_milliseconds();
+        if (now >= deadline) {
+            if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED)) {
+                result = _SYNC_TIMED_OUT;
+            }
+            break;
+        }
+        _async_sys_condition_wait_for(wake._condition, wake._lock, deadline - now);
+    }
+    _async_sys_mutex_unlock(wake._lock);
+    return result;
 }
 
 # The tasks waiting on one sync object, first come first woken. The ring

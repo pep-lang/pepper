@@ -77,6 +77,7 @@
     - [async/channel.pep](reference/async-channel.md)
     - [async/mutex.pep](reference/async-mutex.md)
     - [async/once.pep](reference/async-once.md)
+    - [async/select.pep](reference/async-select.md)
   - [copy.pep](reference/copy.md)
 <!-- reference:end -->
 

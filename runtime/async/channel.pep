@@ -28,6 +28,12 @@
 # keeps running other tasks: whatever notifies a condition also wakes one
 # task from the matching queue. A task adds its waiter under `_lock`, and a
 # waker wakes under it, so no wake is missed.
+#
+# A `Select` (select.pep) waits on several channels through the same
+# queues: `_select_join` adds its one waiter to `_receivers` unless a value
+# is already there or the channel is closed, and `_select_take` takes a
+# value the way `try_receive` does, telling an empty channel from a closed
+# one.
 
 import "sync_wait";
 import "sys_posix";
@@ -356,6 +362,47 @@ export struct Channel<T> {
         return received;
     }
 
+    # For `Select`: takes the value at the head if there is one, and
+    # otherwise reports whether the channel is closed.
+    _select_take(): _Polled<T> {
+        _async_sys_mutex_lock(_lock);
+        if (_state[1] != 0) {
+            var received = this._pop();
+            _async_sys_mutex_unlock(_lock);
+            return _Polled<T>.Ready(received.value());
+        }
+        var closed = _state[3] != 0;
+        _async_sys_mutex_unlock(_lock);
+        if (closed) {
+            return _Polled<T>.Closed;
+        }
+        return _Polled<T>.Empty;
+    }
+
+    # For `Select`: adds `waiter` to `_receivers` and returns
+    # `_SELECT_EMPTY`. Returns `_SELECT_READY` without adding it when a
+    # value is waiting (the select should look again instead of sleeping),
+    # and `_SELECT_CLOSED` when the channel is closed and empty (nothing
+    # will ever wake it).
+    _select_join(waiter: _SyncWaiter): int {
+        _async_sys_mutex_lock(_lock);
+        var found = _SELECT_EMPTY;
+        if (_state[1] != 0) {
+            found = _SELECT_READY;
+        } else if (_state[3] != 0) {
+            found = _SELECT_CLOSED;
+        } else {
+            _receivers._push(waiter);
+        }
+        _async_sys_mutex_unlock(_lock);
+        return found;
+    }
+
+    # For `Select`: takes `waiter` out of `_receivers`, if it is there.
+    _select_leave(waiter: _SyncWaiter) {
+        _receivers._remove(waiter);
+    }
+
     # Parks the running task in `queue` until a waker wakes it, `deadline`
     # passes (0 for none), or the task is cancelled or its `timeout` expires;
     # returns which (see `_async_sync_park`). The caller holds the lock,
@@ -393,6 +440,20 @@ export struct Channel<T> {
         _state[0] = 0;
         _state[2] = 2 * slots;
     }
+}
+
+# What `Channel._select_join` found (and, in select.pep, what a case's
+# last `_take` found).
+export const _SELECT_READY = 0;
+export const _SELECT_EMPTY = 1;
+export const _SELECT_CLOSED = 2;
+
+# What `Channel._select_take` found: a value, nothing yet, or a closed and
+# empty channel.
+export enum _Polled<T> {
+    Ready(value: T),
+    Empty,
+    Closed,
 }
 
 ## Receives from a `Channel<T>` in a `for` loop: `next()` waits for the next
