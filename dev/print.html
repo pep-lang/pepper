@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c0196b7d.js";
+            window.path_to_searchindex_js = "searchindex-b5fbabc7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-432e2c46.js"></script>
@@ -2545,12 +2545,65 @@ parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the c
 when they do not. See
 <a href="#comparing-structs">Comparing structs</a> for <code>==</code>.</li>
 </ul>
-<p>A struct can have a field whose type is a struct declared later in the file.
-A struct cannot yet have a field of its own type, or of a struct type whose
-fields lead back to it (such as <code>Parent</code> holding a <code>Child</code> that holds a
-<code>Parent</code>): the compiler rejects both with <code>GEP index out of range</code>. Hold such
-references in an <code>Array</code> instead, as in the
-<a href="#cycles-leak">cycles example</a>.</p>
+<p>A struct can have a field whose type is a struct declared later in the file,
+a field of its own type, or fields that lead back to it through other
+structs (a <code>Team</code> holding a <code>Player</code> that holds the <code>Team</code>). A struct-typed
+field holds a reference, so a linked list or a tree is just a struct that
+names itself:</p>
+<pre><code class="language-pepper"># A field can hold the struct's own type: each Link points at the next one.
+struct Link {
+    var value: int;
+    var next: Link;
+
+    construct(this.value = 0) {}
+}
+
+# Two structs can refer to each other, in either declaration order.
+struct Team {
+    var name: String;
+    var lead: Player;
+
+    construct(this.name = "") {}
+}
+
+struct Player {
+    var name: String;
+    # A weak back pointer: the team owns its lead, so the player's link
+    # back to the team must not keep the team alive (see the memory chapter).
+    var team: Weak&lt;Team&gt;;
+
+    construct(this.name = "") {}
+}
+
+sum(first: Link): int {
+    var total = 0;
+    var link: Link = first;
+    while (link !== __null) {
+        total = total + link.value;
+        link = link.next;
+    }
+    return total;
+}
+
+main(): int {
+    var list = Link(1);
+    list.next = Link(2);
+    list.next.next = Link(3);
+    assert(sum(list) == 6, "the list holds 1, 2 and 3");
+    assert(list.next.next.next === __null, "the last link has no next");
+
+    var team = Team("Owls");
+    team.lead = Player("Ada");
+    team.lead.team = Weak&lt;Team&gt;(team);
+    with (var t = team.lead.team) {
+        assert(t.name == "Owls", "the player reaches its team");
+    }
+    return 0;
+}
+</code></pre>
+<p>Objects that refer to each other in a loop keep each other alive, so make
+back pointers such as a child’s parent a <code>Weak&lt;T&gt;</code> (see
+<a href="#cycles-leak">Cycles leak</a>).</p>
 <h2 id="constructors"><a class="header" href="#constructors">Constructors</a></h2>
 <p>A constructor sets up a new object. Declare it with <code>construct</code>, followed by
 its parameters and a body. Callers create the object by calling the struct’s
