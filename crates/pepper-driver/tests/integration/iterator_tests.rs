@@ -44,7 +44,7 @@ fn assert_runs_clean(source: &str) {
 /// Compile and link to a real executable, run it, and return (success, stdout).
 fn run_binary(name: &str, source: &str) -> (bool, String) {
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_{name}_test"));
+    let dir = std::env::temp_dir().join(format!("pepper_iterator_{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });

@@ -13,7 +13,7 @@ use pepper_codegen::CodeGenerator;
 use std::path::PathBuf;
 use std::process::Command;
 
-mod support;
+use crate::support;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()

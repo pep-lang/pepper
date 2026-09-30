@@ -19,7 +19,7 @@ Useful variants:
 
 ```bash
 cargo test -p pepper-codegen                   # one crate
-cargo test --workspace --test compile_tests    # one integration test binary
+cargo test --workspace --test integration compile_tests::  # one driver test module
 cargo test --workspace int_add                 # filter by test name (substring)
 cargo test --workspace -- --ignored            # run #[ignore]d tests
 cargo test --workspace -- --nocapture          # show println!/eprintln! output
@@ -40,7 +40,7 @@ no count is kept here: a run is good when every `test result:` line says
 | `pepper-sema` | model tests in `src/model_tests.rs` (parse + build + transform → resolved model) and visibility tests in `src/visibility.rs` |
 | `pepper-codegen` | `src/target.rs`: the host's own triple resolves to a target machine. It runs alone in its binary because inkwell's execution-engine constructors register the host backend as a side effect, which a JIT test running first could mask. `tests/codegen_tests.rs`: codegen + JIT, asserting the value `test()` returns |
 | `pepper-files` | runtime discovery (`src/runtime.rs`) |
-| `pepper-driver` | one integration test binary per feature in `tests/*_tests.rs`: most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` runs every corpus fixture (see below) |
+| `pepper-driver` | one integration test binary, `tests/integration/main.rs`, with a module per feature in `tests/integration/*_tests.rs` (add new ones there, not as new `tests/*.rs` binaries): most JIT a `test()` function and assert its value; some link and run a binary. `diagnostic_tests.rs` asserts rendered compiler errors (header, source line, caret). `audit_fixes_tests.rs` holds regression tests for bugs found by the docs audit. `corpus_tests.rs` runs every corpus fixture (see below) |
 | `tools/lsp` | language server tests in `src/tests.rs` |
 | root `pepper` | `tests/parser_corpus.rs`: every `tests/**/*.pep` file must parse into a well-formed module |
 | `xtask` | unit tests in `src/main.rs` for the setup scripts' flag handling and generated cargo config |
@@ -50,7 +50,7 @@ no count is kept here: a run is good when every `test result:` line says
 ## Corpus behavior
 
 - `tests/parser_corpus.rs` treats the corpus as the executable spec for the parser: every file must parse with at least one declaration. Adding a `.pep` file extends it automatically.
-- `crates/pepper-driver/tests/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. Every fixture must exit 0; a new `tests/<Name>/test.pep` joins the run automatically.
+- `crates/pepper-driver/tests/integration/corpus_tests.rs` compiles and runs each `tests/<Name>/test.pep`. Every fixture must exit 0; a new `tests/<Name>/test.pep` joins the run automatically.
 
 ## Diagnosing failures
 

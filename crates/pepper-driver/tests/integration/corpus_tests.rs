@@ -6,7 +6,7 @@ use pepper_sema::passes::transform_pass;
 use pepper_sema::struct_body;
 use std::path::{Path, PathBuf};
 
-mod support;
+use crate::support;
 
 fn tests_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

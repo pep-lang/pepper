@@ -222,7 +222,7 @@ main.pep:1:1: note: declared here
   return `String`s rendered with `module.sources` (or `Program`). Nothing
   below that formats `file:line:col` by hand.
 - **Test the rendered output** for a new error in
-  `crates/pepper-driver/tests/diagnostic_tests.rs`: the header line, the
+  `crates/pepper-driver/tests/integration/diagnostic_tests.rs`: the header line, the
   source line, and the caret.
 
 ## Library code is documented with `##` doc comments
@@ -273,7 +273,7 @@ T remove_at(ulong index) { ... }
   only inside the signature). Every use outside a deprecated declaration
   then warns, in every program, so migrate the runtime's own uses in the
   same PR.
-- **Enforced**: `crates/pepper-driver/tests/runtime_docs_tests.rs` runs
+- **Enforced**: `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` runs
   `pepper_parser::doc::check_documented` over every `.pep` file under
   `runtime/` and fails with a clang-style error for each public declaration
   without a comment, description, or required tag, and for tags naming a

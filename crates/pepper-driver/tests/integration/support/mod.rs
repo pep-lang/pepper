@@ -1,5 +1,5 @@
-//! Helpers shared by the integration tests. Each test file that needs one
-//! declares `mod support;`.
+//! Helpers shared by the integration tests. A module that needs one
+//! declares `use crate::support;`.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 

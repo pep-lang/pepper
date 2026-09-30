@@ -31,7 +31,7 @@ mdBook's include syntax, so the text on the page is the file that was tested:
 ```
 ````
 
-`crates/pepper-driver/tests/docs_examples_tests.rs` compiles and runs every
+`crates/pepper-driver/tests/integration/docs_examples_tests.rs` compiles and runs every
 example; each must return 0 from `main` and uses `assert` to check what it
 shows. Short fragments that are not whole programs can stay inline in the
 chapter.

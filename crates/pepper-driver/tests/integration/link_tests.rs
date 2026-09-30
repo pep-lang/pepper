@@ -68,7 +68,7 @@ fn build_binary(name: &str, source: &str) -> Result<PathBuf, String> {
     let root = repo_root();
     std::env::set_current_dir(&root).unwrap();
 
-    let dir = std::env::temp_dir().join(format!("pepper_{name}_test"));
+    let dir = std::env::temp_dir().join(format!("pepper_link_{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });

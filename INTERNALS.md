@@ -634,7 +634,7 @@ Debugging aids: set `PEP_TRACE` to make `_pep_trace_ptr` and
 `_pep_trace_int` (internal runtime helpers, not part of the language's API)
 print every constructor, acquire, release, and destructor with the new count. `_pep_live_allocs()` counts live
 allocations (an atomic counter, since threads allocate concurrently);
-leak-census tests (`crates/pepper-driver/tests/shared_ptr_semantics_tests.rs`)
+leak-census tests (`crates/pepper-driver/tests/integration/shared_ptr_semantics_tests.rs`)
 read it through the JIT. The counter lives in a runtime global, and every
 JIT engine has its own copy of the runtime, so each test counts only its own
 program's allocations and census tests run in parallel with no lock.
@@ -732,7 +732,7 @@ diagnostics"). The mechanics:
   book's C chapter).
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
-  `crates/pepper-driver/tests/runtime_docs_tests.rs` enforces it. The
+  `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` enforces it. The
   reference pages in `docs/src/reference/` and the reference part of
   `docs/src/SUMMARY.md` are **generated** by
   `cargo run -p pepper-docgen -- reference`. CI fails if they are stale
@@ -810,19 +810,19 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Parser unit | `crates/pepper-parser/src/parser/parsers.rs` (`mod tests`), `parser.rs`, `diagnostic.rs`, `doc.rs` | Helpers `parse`, `parse_expr`, and `parse_type` take the `track_source` guard. `parser.rs` tests pin exact rendered parse errors. |
 | Sema model | `crates/pepper-sema/src/model_tests.rs`, `visibility.rs` tests | `compile()` = parse → `build` → filters → `struct_body::apply` → `transform_pass`, then assertions on the model. |
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
-| Driver integration | `crates/pepper-driver/tests/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
-| Diagnostics | `crates/pepper-driver/tests/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
+| Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `compile_tests.rs::full_pipeline_link_and_spawn` and `link_tests.rs` link real executables. |
+| Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/**/*.pep` | `tests/parser_corpus.rs` requires every file to parse. `corpus_tests.rs::corpus_files_respect_visibility` checks every `tests/*/test.pep` (runs), and `corpus_files_compile_and_run` compiles, links, and runs each fixture with `-I tests`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
-| Runtime docs | `crates/pepper-driver/tests/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
-| Docs examples | `crates/pepper-driver/tests/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
+| Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
+| Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 
 To run a subset:
 
 ```bash
-cargo test --workspace --test module_tests            # one integration binary
+cargo test --workspace --test integration module_tests::  # one driver module
 cargo test --workspace utf8                           # name substring
 cargo test -p pepper-parser                           # one crate
 cargo test --workspace --no-default-features --features llvm19-1
@@ -830,14 +830,21 @@ cargo test --workspace --no-default-features --features llvm19-1
 
 Harness gotchas: runtime discovery and several harnesses `chdir` to the
 repository root (a process-wide change; every test sets the same
-directory). Temp directories are named after the test, so give new tests
+directory). Temp directories are named after the module and test, so give new tests
 unique names.
+
+The driver's integration tests are modules of one test binary
+(`tests/integration/main.rs`): add a new file there as a module, not as a
+new `tests/*.rs` binary. Each binary statically links LLVM, so every extra
+one costs a link, and on macOS Gatekeeper scans each freshly linked
+executable on its first run (about 2s apiece on the CI runner, where it was
+most of the `test-macos` job).
 
 Keep the suite parallel. Cargo runs test binaries one after another, so a
 test that loops over many programs (every example, fixture, or simulated
 host) is wall-clock time for the whole suite: spread the loop with
-`support::parallel_map` (`crates/pepper-driver/tests/support/mod.rs`,
-`mod support;` in the test file), giving each item its own temp directory.
+`support::parallel_map` (`crates/pepper-driver/tests/integration/support/mod.rs`,
+`use crate::support;` in the test module), giving each item its own temp directory.
 The compiler keeps its state in thread-locals (the simulated host included),
 so programs compile independently on separate threads; do not add a global
 lock. `RUST_TEST_THREADS=1` makes both the harness and `parallel_map`
@@ -892,7 +899,7 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
 Follow AGENTS.md ("Compiler errors are clang-style diagnostics"): report at
 the exact token and use clang wording. Use the mechanism of the layer the
 error belongs to (section 6). If the node has no `Loc`, add one. Add a
-rendered-output test in `crates/pepper-driver/tests/diagnostic_tests.rs`.
+rendered-output test in `crates/pepper-driver/tests/integration/diagnostic_tests.rs`.
 
 ### Add a runtime API
 
@@ -900,13 +907,13 @@ rendered-output test in `crates/pepper-driver/tests/diagnostic_tests.rs`.
    file, which joins the prelude automatically). Mark it `export`. Put
    internals under `_pep_`/`_io_`.
 2. Document it with `##` doc comments per AGENTS.md. Run
-   `cargo test --workspace --test runtime_docs_tests`.
+   `cargo test --workspace --test integration runtime_docs_tests::`.
 3. For the `io` module, add it to the implementing file and re-export it
    from `runtime/io/module.pep`.
 4. Regenerate the reference: `cargo run -p pepper-docgen -- reference`.
    Commit the changed `docs/src/reference/*.md` and `docs/src/SUMMARY.md`.
 5. Test it with `compile_with_runtime` + JIT in the matching
-   `crates/pepper-driver/tests/*_tests.rs`. For behavior the docs show, add a
+   `crates/pepper-driver/tests/integration/*_tests.rs`. For behavior the docs show, add a
    `docs/examples/` program.
 
 ### Add an attribute
