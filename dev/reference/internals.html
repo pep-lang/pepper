@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
+            window.path_to_searchindex_js = "../searchindex-56caf54f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -189,13 +189,30 @@
 </code></pre>
 <p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
 <p>The check always runs; there is no release mode that removes it. A
-string literal message costs nothing when the assertion holds: the
-compiler passes the literal’s constant bytes to the runtime without
-building a <code>String</code>. Any other message is evaluated before the call.</p>
+string literal message picks the <code>__ptr&lt;char&gt;</code> overload instead, which
+builds no <code>String</code>. Any other message is evaluated before the call.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
+</code></pre>
+<h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;): void
+</code></pre>
+<p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
+NUL-terminated C string. A string literal message picks this overload,
+so an assertion that holds builds no <code>String</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must hold</li>
+<li><code>message</code> — the text to print on failure, or <code>__null</code> for a generic message</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -216,6 +233,24 @@ ends abnormally (SIGABRT on POSIX).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>always</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    panic("unreachable");
+</code></pre>
+<h2 id="panic-1"><a class="header" href="#panic-1">panic</a></h2>
+<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;)
+</code></pre>
+<p>Writes <code>message</code>, a NUL-terminated C string, and a newline to standard
+output (a generic message when it is <code>__null</code>), flushes every C output
+stream, and aborts, as <code>panic(String)</code> does. A string literal message
+picks this overload, so it allocates nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the text to print, or <code>__null</code></li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>

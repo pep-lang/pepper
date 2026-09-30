@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
+            window.path_to_searchindex_js = "../searchindex-56caf54f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -478,7 +478,11 @@ that resolves to neither is an error:</p>
 loaded ahead of the runtime and its definition wins. It must declare the name
 itself (<code>export panic(...)</code>); re-exporting another function under a runtime
 export’s name is an error, since the runtime’s own files would keep calling
-their version.</p>
+their version. When the runtime’s function is <a href="overloading.html">overloaded</a>,
+the prelude module replaces only the overloads it declares, matched by
+parameter types: an <code>export assert(condition: bool, message: String)</code>
+replaces the <code>String</code> form, and a string literal message still calls the
+runtime’s <code>__ptr&lt;char&gt;</code> form.</p>
 <h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
 <ul>
 <li><strong>Qualified names work wherever a name does</strong>: in expressions

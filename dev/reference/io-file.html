@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-58a7d0ce.js";
+            window.path_to_searchindex_js = "../searchindex-56caf54f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -329,7 +329,7 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    log.write_string("started");
+    log.write_all("started");
 </code></pre>
 <h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
 <pre><code class="language-pepper">struct Metadata
@@ -425,7 +425,7 @@ predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, �
 kinds apart portably.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("out.txt")).value();
-    f.write_string("hello");
+    f.write_all("hello");
     f.close();
     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
@@ -481,7 +481,7 @@ truncating it to 0 bytes if it exists.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("report.txt")).value();
-    f.write_string("done");
+    f.write_all("done");
 </code></pre>
 <h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;File&gt; open_with(Path path, OpenOptions options)
@@ -551,7 +551,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var out = File.stdout();
-    out.write_string("hello");
+    out.write_all("hello");
 </code></pre>
 <h4 id="stderr"><a class="header" href="#stderr">stderr</a></h4>
 <pre><code class="language-pepper">static File stderr()
@@ -642,7 +642,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Note</strong></p>
 <ul>
-<li>this is the design proposal’s <code>write_to_string</code>, renamed because <code>write_string</code> is the instance method’s name and methods do not overload</li>
+<li>this is the design proposal’s <code>write_to_string</code>; a static <code>write</code> would clash with the instance <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.write_text(Path("hello.txt"), "hello, world");
@@ -811,11 +811,31 @@ written. Advances the position by <code>data.count()</code>.</p>
 <ul>
 <li>an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
 </ul>
-<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">IoResult&lt;void&gt; write_string(String s)
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(s: String): IoResult&lt;void&gt;
 </code></pre>
-<p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does. No newline
-or terminator is added.</p>
+<p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does for bytes.
+No newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error as for <code>write_all(u8[])</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
+    var r = f.write_all("hello, world");
+    if (r.is_err()) {
+        return 1;
+    }
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(s: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Writes all of the UTF-8 bytes of
+<code>s</code>, exactly like <code>write_all(s)</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>s</code> — the text to write</li>
@@ -824,13 +844,10 @@ or terminator is added.</p>
 <ul>
 <li>an Ok result once every byte is written; an error as for <code>write_all</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
-    var r = f.write_string("hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
-</code></pre>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
+</ul>
 <h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Offset&gt; seek_start(Offset pos)
 </code></pre>
@@ -968,7 +985,7 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("out.bin")).value();
-    f.write_string("data");
+    f.write_all("data");
     if (f.close().is_err()) {
         return 1;
     }

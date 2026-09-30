@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-58a7d0ce.js";
+            window.path_to_searchindex_js = "searchindex-56caf54f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -1818,9 +1818,10 @@ main(): int {
 <p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
 <code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
-<code>panic(message)</code>, which always stops it. Both take the message as a <code>String</code>, so
-it can be built at run time (<code>assert(n &gt; 0, name + " must be positive")</code>); a
-string literal message costs nothing when the assertion holds. See
+<code>panic(message)</code>, which always stops it. Each is
+<a href="#overloading-1">overloaded</a>: the message may be a <code>String</code>, built at run time
+(<code>assert(n &gt; 0, name + " must be positive")</code>), or a C string, which a string
+literal picks, so a literal message builds nothing when the assertion holds. See
 <a href="#built-in-functions">Built-in functions</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
@@ -6413,7 +6414,11 @@ that resolves to neither is an error:</p>
 loaded ahead of the runtime and its definition wins. It must declare the name
 itself (<code>export panic(...)</code>); re-exporting another function under a runtime
 export’s name is an error, since the runtime’s own files would keep calling
-their version.</p>
+their version. When the runtime’s function is <a href="#overloading-1">overloaded</a>,
+the prelude module replaces only the overloads it declares, matched by
+parameter types: an <code>export assert(condition: bool, message: String)</code>
+replaces the <code>String</code> form, and a string literal message still calls the
+runtime’s <code>__ptr&lt;char&gt;</code> form.</p>
 <h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
 <ul>
 <li><strong>Qualified names work wherever a name does</strong>: in expressions
@@ -8203,6 +8208,7 @@ the code it replaces:</p>
 <tr><td><code>ThreadLocal&lt;T&gt;.get()</code> for a <code>T</code> that is not thread-safe (now an error)</td><td><code>with (var value = local.enter()) { ... }</code></td></tr>
 <tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
+<tr><td><code>io.File.write_string(String)</code></td><td><code>io.File.write_all(String)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
 </tbody>
 </table>
@@ -8855,13 +8861,30 @@ of the page to read the reference for another release.</p>
 </code></pre>
 <p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
 <p>The check always runs; there is no release mode that removes it. A
-string literal message costs nothing when the assertion holds: the
-compiler passes the literal’s constant bytes to the runtime without
-building a <code>String</code>. Any other message is evaluated before the call.</p>
+string literal message picks the <code>__ptr&lt;char&gt;</code> overload instead, which
+builds no <code>String</code>. Any other message is evaluated before the call.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is false: prints <code>message</code> and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
+</code></pre>
+<h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;): void
+</code></pre>
+<p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
+NUL-terminated C string. A string literal message picks this overload,
+so an assertion that holds builds no <code>String</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must hold</li>
+<li><code>message</code> — the text to print on failure, or <code>__null</code> for a generic message</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -8882,6 +8905,24 @@ ends abnormally (SIGABRT on POSIX).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>always</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    panic("unreachable");
+</code></pre>
+<h2 id="panic-1"><a class="header" href="#panic-1">panic</a></h2>
+<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;)
+</code></pre>
+<p>Writes <code>message</code>, a NUL-terminated C string, and a newline to standard
+output (a generic message when it is <code>__null</code>), flushes every C output
+stream, and aborts, as <code>panic(String)</code> does. A string literal message
+picks this overload, so it allocates nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the text to print, or <code>__null</code></li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -12238,7 +12279,7 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    log.write_string("started");
+    log.write_all("started");
 </code></pre>
 <h2 id="metadata-1"><a class="header" href="#metadata-1">Metadata</a></h2>
 <pre><code class="language-pepper">struct Metadata
@@ -12334,7 +12375,7 @@ predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, �
 kinds apart portably.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("out.txt")).value();
-    f.write_string("hello");
+    f.write_all("hello");
     f.close();
     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
@@ -12390,7 +12431,7 @@ truncating it to 0 bytes if it exists.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("report.txt")).value();
-    f.write_string("done");
+    f.write_all("done");
 </code></pre>
 <h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;File&gt; open_with(Path path, OpenOptions options)
@@ -12460,7 +12501,7 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var out = File.stdout();
-    out.write_string("hello");
+    out.write_all("hello");
 </code></pre>
 <h4 id="stderr"><a class="header" href="#stderr">stderr</a></h4>
 <pre><code class="language-pepper">static File stderr()
@@ -12551,7 +12592,7 @@ leaves it truncated or partly written.</p>
 </ul>
 <p><strong>Note</strong></p>
 <ul>
-<li>this is the design proposal’s <code>write_to_string</code>, renamed because <code>write_string</code> is the instance method’s name and methods do not overload</li>
+<li>this is the design proposal’s <code>write_to_string</code>; a static <code>write</code> would clash with the instance <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = File.write_text(Path("hello.txt"), "hello, world");
@@ -12720,11 +12761,31 @@ written. Advances the position by <code>data.count()</code>.</p>
 <ul>
 <li>an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
 </ul>
-<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
-<pre><code class="language-pepper">IoResult&lt;void&gt; write_string(String s)
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(s: String): IoResult&lt;void&gt;
 </code></pre>
-<p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does. No newline
-or terminator is added.</p>
+<p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does for bytes.
+No newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error as for <code>write_all(u8[])</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
+    var r = f.write_all("hello, world");
+    if (r.is_err()) {
+        return 1;
+    }
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(s: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Writes all of the UTF-8 bytes of
+<code>s</code>, exactly like <code>write_all(s)</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>s</code> — the text to write</li>
@@ -12733,13 +12794,10 @@ or terminator is added.</p>
 <ul>
 <li>an Ok result once every byte is written; an error as for <code>write_all</code></li>
 </ul>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
-    var r = f.write_string("hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
-</code></pre>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
+</ul>
 <h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Offset&gt; seek_start(Offset pos)
 </code></pre>
@@ -12877,7 +12935,7 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var f = File.create(Path("out.bin")).value();
-    f.write_string("data");
+    f.write_all("data");
     if (f.close().is_err()) {
         return 1;
     }
