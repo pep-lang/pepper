@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d077180a.js";
+            window.path_to_searchindex_js = "../searchindex-3cfbdd55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e51e852e.js"></script>
+        <script src="../toc-ae7a611c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -500,6 +500,50 @@ The Mutex is locked again before it returns either way.</p>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the calling thread does not hold the Mutex</li>
+</ul>
+<h4 id="wait_while"><a class="header" href="#wait_while">wait_while</a></h4>
+<pre><code class="language-pepper">wait_while([Locked] predicate: (T) =&gt; bool)
+</code></pre>
+<p>Waits while <code>predicate</code> holds for the Mutex’s value: calls it with the
+value, and while it returns true, waits as <code>wait()</code> does and asks
+again. Returns once it returns false, with the Mutex still locked.</p>
+<p>Wakeups without a notification are handled here: the predicate is
+asked again after every wake.</p>
+<p><code>predicate</code> is written at the call, as a closure: the compiler checks
+its body as it checks a <code>with</code> block’s, with its parameter as the
+locked value, so it cannot keep any part of the value or bring in a
+value from outside.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    with (var queue = jobs.lock()) {
+        not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count() == 0);
+        var job = queue.remove_at(0);
+    }
+</code></pre>
+<h4 id="wait_while_for"><a class="header" href="#wait_while_for">wait_while_for</a></h4>
+<pre><code class="language-pepper">wait_while_for(milliseconds: ulong, [Locked] predicate: (T) =&gt; bool): bool
+</code></pre>
+<p>Like <code>wait_while()</code>, but gives up after about <code>milliseconds</code>
+milliseconds. The Mutex is locked when it returns either way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to wait</li>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once <code>predicate</code> returned false, false if the time ran out first</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
 </ul>
 <h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
 <pre><code class="language-pepper">notify_one()

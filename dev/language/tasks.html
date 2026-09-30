@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d077180a.js";
+            window.path_to_searchindex_js = "../searchindex-3cfbdd55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e51e852e.js"></script>
+        <script src="../toc-ae7a611c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -412,6 +412,9 @@ returns false and <code>receive</code> returns an error (and a <code>for</code> 
 channel ends). A task waiting for a <code>Mutex</code> still gets the lock, and
 <code>Condition.wait</code> still waits for a notification, since the caller’s loop
 would only wait again; <code>wait_for</code> returns when its own time runs out.</li>
+<li>A <a href="threads.html#waiting-on-several-channels-with-select"><code>Select</code></a> parks
+its task on every channel at once, and a cancel or <code>timeout</code> ends its
+wait with an error. <code>Condition.wait_while</code> parks like <code>wait</code>.</li>
 <li>Outside a task they block the thread, as before.</li>
 </ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>

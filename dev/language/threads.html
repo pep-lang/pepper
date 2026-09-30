@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d077180a.js";
+            window.path_to_searchindex_js = "../searchindex-3cfbdd55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e51e852e.js"></script>
+        <script src="../toc-ae7a611c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -625,6 +625,99 @@ values a work queue. Since nothing is copied, a channel can carry any type,
 trait values and values that cannot be copied (an <code>io.File</code>) included.</p>
 <p>The <a href="../reference/async-channel.html">Channel reference</a> documents every
 method.</p>
+<h3 id="waiting-on-several-channels-with-select"><a class="header" href="#waiting-on-several-channels-with-select">Waiting on several channels with Select</a></h3>
+<p>A <code>Select&lt;E&gt;</code> waits on several channels at once and takes the first value
+any of them receives, like Go’s <code>select</code>. Each channel is added with a
+function that turns its values into an <code>E</code>, usually a case of an
+<a href="enums.html">enum</a> of your own that carries the value, so the channels may
+carry different types and a <code>match</code> handles the result:</p>
+<pre><code class="language-pepper">import async;
+
+# Every value the select can return: one case per channel.
+enum Event {
+    Line(text: String),
+    Reading(value: long),
+    Stop,
+}
+
+const lines = async.Channel&lt;String&gt;();
+const readings = async.Channel&lt;long&gt;();
+const stop = async.Channel&lt;bool&gt;();
+
+read_lines() {
+    lines.send("first");
+    lines.send("second");
+    lines.close();
+}
+
+read_sensor() {
+    var i: long = 1;
+    while (i &lt;= 3) {
+        readings.send(i * 10);
+        i = i + 1;
+    }
+    readings.close();
+}
+
+main(): int {
+    var select = async.Select&lt;Event&gt;();
+    select.receive(lines, (text: String): Event =&gt; Event.Line(text));
+    select.receive(readings, (value: long): Event =&gt; Event.Reading(value));
+    select.receive(stop, (unused: bool): Event =&gt; Event.Stop);
+
+    var threads = [async.Thread.spawn(read_lines), async.Thread.spawn(read_sensor)];
+    var text = 0;
+    var total: long = 0;
+    var running = true;
+    while (running) {
+        match (select.wait()) {
+            Ok(event) =&gt; {
+                match (event) {
+                    Line(line) =&gt; {
+                        text = text + 1;
+                    }
+                    Reading(value) =&gt; {
+                        total = total + value;
+                    }
+                    Stop =&gt; {
+                        running = false;
+                    }
+                }
+            }
+            Err(error) =&gt; {
+                # Every channel is closed and empty (`stop` included, below).
+                running = false;
+            }
+        }
+        if (text == 2 &amp;&amp; total == 60) {
+            stop.close();
+        }
+    }
+    for (var thread in threads) {
+        thread.join();
+    }
+    assert(text == 2 &amp;&amp; total == 60, "every value arrived once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>receive(channel, wrap)</code> adds a channel. <code>wrap</code> runs on the waiting
+thread, with the value received.</li>
+<li><code>wait()</code> waits until a channel has a value and returns it as an <code>E</code>, in a
+<code>Result&lt;E&gt;</code>. <code>wait_for(milliseconds)</code> gives up after that long, and
+<code>try_wait()</code> does not wait at all.</li>
+<li>The value is taken under that channel’s own lock, so no other receiver
+can take it between “ready” and “take”.</li>
+<li>When several channels have values, each wait starts just after the
+channel that fired last, so one busy channel cannot starve the others.</li>
+<li>A channel that is closed and empty is skipped. Once every channel is,
+<code>wait()</code> returns an error (<code>every channel is closed</code>). A timeout’s error
+is <code>the time ran out</code>.</li>
+<li>A <code>Select</code> belongs to the thread (or <a href="tasks.html">task</a>) that made it; it
+is not <code>[Shared]</code>. In a task, waiting parks the task, and a cancel or the
+task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>The <a href="../reference/async-select.html">Select reference</a> documents every method.</p>
 <h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
 <p>A <code>Mutex&lt;T&gt;</code> owns a value that one thread at a time can use. The way to
 reach the value is a <a href="scopes.html"><code>with</code> block</a>:</p>
@@ -811,6 +904,63 @@ what it waits for.</li>
 <li><code>wait_for(milliseconds)</code> gives up after that long and returns <code>false</code>.</li>
 <li><code>notify_one()</code> wakes one waiting thread, and <code>notify_all()</code> wakes them all.</li>
 </ul>
+<p><code>wait_while(predicate)</code> writes that loop for you: it waits while
+<code>predicate</code> returns true for the locked value, asking again after every
+wakeup, and returns with the Mutex still locked. <code>wait_while_for(milliseconds, predicate)</code> gives up after that long and returns <code>false</code>:</p>
+<pre><code class="language-pepper">import async;
+
+# A worker takes jobs from a queue, sleeping while it is empty.
+const jobs = async.Mutex&lt;Array&lt;long&gt;&gt;(Array&lt;long&gt;());
+const changed = jobs.condition();
+const done = Atomic&lt;long&gt;(0);
+
+work() {
+    var taken = 0;
+    while (taken &lt; 5) {
+        with (var queue = jobs.lock()) {
+            # Waits while the predicate holds; spurious wakeups are handled.
+            # The predicate is given the locked value: it cannot capture it.
+            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+            done.fetch_add(queue.remove_at(0));
+            taken = taken + 1;
+        }
+    }
+}
+
+main(): int {
+    var worker = async.Thread.spawn(work);
+    var i: long = 1;
+    while (i &lt;= 5) {
+        with (var queue = jobs.lock()) {
+            queue.append(i);
+            changed.notify_all();
+        }
+        i = i + 1;
+    }
+    worker.join();
+    assert(done.load() == 15, "every job was taken once");
+
+    with (var queue = jobs.lock()) {
+        # Gives up after 10 milliseconds: nothing is queued.
+        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+        assert(!ready, "the time ran out");
+    }
+    return 0;
+}
+</code></pre>
+<p>The predicate is given the locked value as its parameter, since a closure
+cannot capture part of a locked value. It must be a closure written at the
+call, and the compiler checks its body as it checks a lock body (see
+<a href="#what-a-lock-body-may-do">What a lock body may do</a>): it cannot keep any
+part of the value, or bring in a value from outside.</p>
+<pre><code class="language-text">main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock
+   10 |             saved.append(queue[0]);
+      |                          ^~~~~~~~
+main.pep:9:27: note: locked here
+    9 |         ready.wait_while((queue: Array&lt;String&gt;): bool =&gt; {
+      |                           ^~~~~
+note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(queue[0])'
+</code></pre>
 <p>The <a href="../reference/async-mutex.html">Mutex reference</a> documents <code>Mutex</code>,
 <code>MutexGuard</code> and <code>Condition</code>.</p>
 <h2 id="what-a-lock-body-may-do"><a class="header" href="#what-a-lock-body-may-do">What a lock body may do</a></h2>
@@ -1035,8 +1185,12 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 (<code>list.append(move(job))</code>).</li>
 <li><code>copy</code> cannot copy a trait value yet, so sending a trait value that the
 sender keeps using is an error; send <code>move(x)</code> or a new value instead.</li>
-<li>There is no reader-writer lock, no <code>select</code> over several channels, and no
-barrier or semaphore. A Mutex is not re-entrant.</li>
+<li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
+not re-entrant.</li>
+<li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The
+value <code>wait()</code> returns is not a new value for a lock body, since <code>wrap</code>
+is a function value the compiler cannot follow; <code>copy</code> it to move it into
+a locked value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d077180a.js";
+            window.path_to_searchindex_js = "searchindex-3cfbdd55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e51e852e.js"></script>
+        <script src="toc-ae7a611c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -253,9 +253,10 @@ trait members can be <a href="language/overloading.html">overloaded</a>.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
-copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), and a
-<code>Mutex</code> holds any struct, with the compiler keeping each locked value apart
-from the rest of the program (see
+copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
+waits on several channels at once, and a <code>Mutex</code> holds any struct, with
+the compiler keeping each locked value apart from the rest of the program
+(see
 <a href="language/threads.html#what-a-lock-body-may-do">threads</a>). A trait value
 cannot be copied yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that

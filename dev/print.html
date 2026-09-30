@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d077180a.js";
+            window.path_to_searchindex_js = "searchindex-3cfbdd55.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e51e852e.js"></script>
+        <script src="toc-ae7a611c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -251,9 +251,10 @@ trait members can be <a href="#overloading-1">overloaded</a>.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
-copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), and a
-<code>Mutex</code> holds any struct, with the compiler keeping each locked value apart
-from the rest of the program (see
+copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
+waits on several channels at once, and a <code>Mutex</code> holds any struct, with
+the compiler keeping each locked value apart from the rest of the program
+(see
 <a href="#what-a-lock-body-may-do">threads</a>). A trait value
 cannot be copied yet.</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
@@ -7711,6 +7712,99 @@ values a work queue. Since nothing is copied, a channel can carry any type,
 trait values and values that cannot be copied (an <code>io.File</code>) included.</p>
 <p>The <a href="#asyncchannelpep">Channel reference</a> documents every
 method.</p>
+<h3 id="waiting-on-several-channels-with-select"><a class="header" href="#waiting-on-several-channels-with-select">Waiting on several channels with Select</a></h3>
+<p>A <code>Select&lt;E&gt;</code> waits on several channels at once and takes the first value
+any of them receives, like Go’s <code>select</code>. Each channel is added with a
+function that turns its values into an <code>E</code>, usually a case of an
+<a href="#enums-and-match">enum</a> of your own that carries the value, so the channels may
+carry different types and a <code>match</code> handles the result:</p>
+<pre><code class="language-pepper">import async;
+
+# Every value the select can return: one case per channel.
+enum Event {
+    Line(text: String),
+    Reading(value: long),
+    Stop,
+}
+
+const lines = async.Channel&lt;String&gt;();
+const readings = async.Channel&lt;long&gt;();
+const stop = async.Channel&lt;bool&gt;();
+
+read_lines() {
+    lines.send("first");
+    lines.send("second");
+    lines.close();
+}
+
+read_sensor() {
+    var i: long = 1;
+    while (i &lt;= 3) {
+        readings.send(i * 10);
+        i = i + 1;
+    }
+    readings.close();
+}
+
+main(): int {
+    var select = async.Select&lt;Event&gt;();
+    select.receive(lines, (text: String): Event =&gt; Event.Line(text));
+    select.receive(readings, (value: long): Event =&gt; Event.Reading(value));
+    select.receive(stop, (unused: bool): Event =&gt; Event.Stop);
+
+    var threads = [async.Thread.spawn(read_lines), async.Thread.spawn(read_sensor)];
+    var text = 0;
+    var total: long = 0;
+    var running = true;
+    while (running) {
+        match (select.wait()) {
+            Ok(event) =&gt; {
+                match (event) {
+                    Line(line) =&gt; {
+                        text = text + 1;
+                    }
+                    Reading(value) =&gt; {
+                        total = total + value;
+                    }
+                    Stop =&gt; {
+                        running = false;
+                    }
+                }
+            }
+            Err(error) =&gt; {
+                # Every channel is closed and empty (`stop` included, below).
+                running = false;
+            }
+        }
+        if (text == 2 &amp;&amp; total == 60) {
+            stop.close();
+        }
+    }
+    for (var thread in threads) {
+        thread.join();
+    }
+    assert(text == 2 &amp;&amp; total == 60, "every value arrived once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>receive(channel, wrap)</code> adds a channel. <code>wrap</code> runs on the waiting
+thread, with the value received.</li>
+<li><code>wait()</code> waits until a channel has a value and returns it as an <code>E</code>, in a
+<code>Result&lt;E&gt;</code>. <code>wait_for(milliseconds)</code> gives up after that long, and
+<code>try_wait()</code> does not wait at all.</li>
+<li>The value is taken under that channel’s own lock, so no other receiver
+can take it between “ready” and “take”.</li>
+<li>When several channels have values, each wait starts just after the
+channel that fired last, so one busy channel cannot starve the others.</li>
+<li>A channel that is closed and empty is skipped. Once every channel is,
+<code>wait()</code> returns an error (<code>every channel is closed</code>). A timeout’s error
+is <code>the time ran out</code>.</li>
+<li>A <code>Select</code> belongs to the thread (or <a href="#tasks">task</a>) that made it; it
+is not <code>[Shared]</code>. In a task, waiting parks the task, and a cancel or the
+task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>The <a href="#asyncselectpep">Select reference</a> documents every method.</p>
 <h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
 <p>A <code>Mutex&lt;T&gt;</code> owns a value that one thread at a time can use. The way to
 reach the value is a <a href="#scoped-blocks-with-with"><code>with</code> block</a>:</p>
@@ -7897,6 +7991,63 @@ what it waits for.</li>
 <li><code>wait_for(milliseconds)</code> gives up after that long and returns <code>false</code>.</li>
 <li><code>notify_one()</code> wakes one waiting thread, and <code>notify_all()</code> wakes them all.</li>
 </ul>
+<p><code>wait_while(predicate)</code> writes that loop for you: it waits while
+<code>predicate</code> returns true for the locked value, asking again after every
+wakeup, and returns with the Mutex still locked. <code>wait_while_for(milliseconds, predicate)</code> gives up after that long and returns <code>false</code>:</p>
+<pre><code class="language-pepper">import async;
+
+# A worker takes jobs from a queue, sleeping while it is empty.
+const jobs = async.Mutex&lt;Array&lt;long&gt;&gt;(Array&lt;long&gt;());
+const changed = jobs.condition();
+const done = Atomic&lt;long&gt;(0);
+
+work() {
+    var taken = 0;
+    while (taken &lt; 5) {
+        with (var queue = jobs.lock()) {
+            # Waits while the predicate holds; spurious wakeups are handled.
+            # The predicate is given the locked value: it cannot capture it.
+            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+            done.fetch_add(queue.remove_at(0));
+            taken = taken + 1;
+        }
+    }
+}
+
+main(): int {
+    var worker = async.Thread.spawn(work);
+    var i: long = 1;
+    while (i &lt;= 5) {
+        with (var queue = jobs.lock()) {
+            queue.append(i);
+            changed.notify_all();
+        }
+        i = i + 1;
+    }
+    worker.join();
+    assert(done.load() == 15, "every job was taken once");
+
+    with (var queue = jobs.lock()) {
+        # Gives up after 10 milliseconds: nothing is queued.
+        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count() == 0);
+        assert(!ready, "the time ran out");
+    }
+    return 0;
+}
+</code></pre>
+<p>The predicate is given the locked value as its parameter, since a closure
+cannot capture part of a locked value. It must be a closure written at the
+call, and the compiler checks its body as it checks a lock body (see
+<a href="#what-a-lock-body-may-do">What a lock body may do</a>): it cannot keep any
+part of the value, or bring in a value from outside.</p>
+<pre><code class="language-text">main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock
+   10 |             saved.append(queue[0]);
+      |                          ^~~~~~~~
+main.pep:9:27: note: locked here
+    9 |         ready.wait_while((queue: Array&lt;String&gt;): bool =&gt; {
+      |                           ^~~~~
+note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(queue[0])'
+</code></pre>
 <p>The <a href="#asyncmutexpep">Mutex reference</a> documents <code>Mutex</code>,
 <code>MutexGuard</code> and <code>Condition</code>.</p>
 <h2 id="what-a-lock-body-may-do"><a class="header" href="#what-a-lock-body-may-do">What a lock body may do</a></h2>
@@ -8121,8 +8272,12 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 (<code>list.append(move(job))</code>).</li>
 <li><code>copy</code> cannot copy a trait value yet, so sending a trait value that the
 sender keeps using is an error; send <code>move(x)</code> or a new value instead.</li>
-<li>There is no reader-writer lock, no <code>select</code> over several channels, and no
-barrier or semaphore. A Mutex is not re-entrant.</li>
+<li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
+not re-entrant.</li>
+<li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The
+value <code>wait()</code> returns is not a new value for a lock body, since <code>wrap</code>
+is a function value the compiler cannot follow; <code>copy</code> it to move it into
+a locked value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>
@@ -8358,6 +8513,9 @@ returns false and <code>receive</code> returns an error (and a <code>for</code> 
 channel ends). A task waiting for a <code>Mutex</code> still gets the lock, and
 <code>Condition.wait</code> still waits for a notification, since the caller’s loop
 would only wait again; <code>wait_for</code> returns when its own time runs out.</li>
+<li>A <a href="#waiting-on-several-channels-with-select"><code>Select</code></a> parks
+its task on every channel at once, and a cancel or <code>timeout</code> ends its
+wait with an error. <code>Condition.wait_while</code> parks like <code>wait</code>.</li>
 <li>Outside a task they block the thread, as before.</li>
 </ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
@@ -17796,6 +17954,50 @@ The Mutex is locked again before it returns either way.</p>
 <ul>
 <li>if the calling thread does not hold the Mutex</li>
 </ul>
+<h4 id="wait_while"><a class="header" href="#wait_while">wait_while</a></h4>
+<pre><code class="language-pepper">wait_while([Locked] predicate: (T) =&gt; bool)
+</code></pre>
+<p>Waits while <code>predicate</code> holds for the Mutex’s value: calls it with the
+value, and while it returns true, waits as <code>wait()</code> does and asks
+again. Returns once it returns false, with the Mutex still locked.</p>
+<p>Wakeups without a notification are handled here: the predicate is
+asked again after every wake.</p>
+<p><code>predicate</code> is written at the call, as a closure: the compiler checks
+its body as it checks a <code>with</code> block’s, with its parameter as the
+locked value, so it cannot keep any part of the value or bring in a
+value from outside.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    with (var queue = jobs.lock()) {
+        not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count() == 0);
+        var job = queue.remove_at(0);
+    }
+</code></pre>
+<h4 id="wait_while_for"><a class="header" href="#wait_while_for">wait_while_for</a></h4>
+<pre><code class="language-pepper">wait_while_for(milliseconds: ulong, [Locked] predicate: (T) =&gt; bool): bool
+</code></pre>
+<p>Like <code>wait_while()</code>, but gives up after about <code>milliseconds</code>
+milliseconds. The Mutex is locked when it returns either way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to wait</li>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once <code>predicate</code> returned false, false if the time ran out first</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
+</ul>
 <h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
 <pre><code class="language-pepper">notify_one()
 </code></pre>
@@ -17943,6 +18145,114 @@ Nothing runs yet.</p>
 <ul>
 <li>true once a <code>get()</code> has finished running the initializer</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/select.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="asyncselectpep"><a class="header" href="#asyncselectpep">async/select.pep</a></h1>
+<p>Waiting on several channels at once: <code>Select&lt;E&gt;</code> takes the first value
+any of them receives and turns it into a case of your own enum, which a
+<code>match</code> then handles.</p>
+<p>Source: <code>runtime/async/select.pep</code></p>
+<h2 id="select"><a class="header" href="#select">Select</a></h2>
+<pre><code class="language-pepper">struct Select&lt;E&gt;
+</code></pre>
+<p>Waits on several channels at once and takes the first value any of them
+receives, like Go’s <code>select</code>.</p>
+<p>Each channel is added with <code>receive(channel, wrap)</code>, where <code>wrap</code> turns
+one of its values into an <code>E</code>, usually a case of an enum of your own that
+carries it. <code>wait()</code> then returns the next value from whichever channel
+has one, as an <code>E</code>, for a <code>match</code> to handle. The channels may carry
+different types.</p>
+<ul>
+<li>The value is taken under the channel’s own lock, so no other receiver
+can take it between “ready” and “take”.</li>
+<li>When several channels have values, each wait starts after the channel
+that fired last, so a busy channel cannot starve the others.</li>
+<li>A channel that is closed and empty is skipped. Once every channel is,
+<code>wait()</code> returns an error.</li>
+<li>In a task (see <code>run</code>), waiting parks the task and its worker runs other
+tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>A Select is not <code>[Shared]</code>: use it from the thread (or task) that made it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the type every channel’s values are turned into</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    enum Event {
+        Job(job: Job),
+        Tick(count: long),
+        Stop,
+    }
+
+    var select = async.Select&lt;Event&gt;();
+    select.receive(jobs, (job: Job): Event =&gt; Event.Job(job));
+    select.receive(ticks, (count: long): Event =&gt; Event.Tick(count));
+    select.receive(quit, (stop: bool): Event =&gt; Event.Stop);
+    var running = true;
+    while (running) {
+        match (select.wait()) {
+            Ok(event) =&gt; {
+                match (event) {
+                    Job(job) =&gt; { run(job); }
+                    Tick(count) =&gt; { report(count); }
+                    Stop =&gt; { running = false; }
+                }
+            }
+            Err(error) =&gt; { running = false; }   # every channel closed
+        }
+    }
+</code></pre>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h4 id="select-1"><a class="header" href="#select-1">Select()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a select with no channels yet.</p>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
+<pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
+</code></pre>
+<p>Adds <code>channel</code>: its values, turned into an <code>E</code> by <code>wrap</code>, are among
+those <code>wait()</code> returns.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the channel’s values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>channel</code> — the channel to receive from</li>
+<li><code>wrap</code> — turns a value received from <code>channel</code> into an <code>E</code>; it runs on the waiting thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    select.receive(lines, (line: String): Event =&gt; Event.Line(line));
+</code></pre>
+<h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
+<pre><code class="language-pepper">wait(): Result&lt;E&gt;
+</code></pre>
+<p>Takes the next value any of the channels receives, waiting until one
+arrives.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, turned into an <code>E</code>; or an error once every channel is closed and empty, when the select has no channels, or when the task’s wait was cancelled or timed out</li>
+</ul>
+<h4 id="wait_for-1"><a class="header" href="#wait_for-1">wait_for</a></h4>
+<pre><code class="language-pepper">wait_for(milliseconds: ulong): Result&lt;E&gt;
+</code></pre>
+<p>Like <code>wait()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to wait</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, turned into an <code>E</code>; or an error if the time ran out, once every channel is closed and empty, or when the task’s wait was cancelled</li>
+</ul>
+<h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
+<pre><code class="language-pepper">try_wait(): Result&lt;E&gt;
+</code></pre>
+<p>Takes a value if any channel has one waiting, without waiting.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, turned into an <code>E</code>; or an error if none is waiting, or once every channel is closed and empty</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/copy.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="copypep"><a class="header" href="#copypep">copy.pep</a></h1>
 <p>Deep copies: <code>copy(value)</code> makes a copy that shares no object that is
@@ -18054,7 +18364,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -18078,7 +18388,7 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
