@@ -35,6 +35,8 @@ names and the pass order come from that implementation.
 | `tools/lsp` | `pepper-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pepper-lsp`. |
 | `tools/docgen` | `pepper-docgen`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
+| `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; `runtime/io/` is an importable module. |
 | `tests/` | `.pep` corpus: standalone files plus one `tests/<Feature.Case>/test.pep` per folder, and `tests/parser_corpus.rs` (the root package's only test). |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
@@ -837,6 +839,36 @@ targets and publishes it as a `vsix-v*` release on `main`.
 release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `code --install-extension` from the current branch.
 
+**`tools/syntax` and `tools/pep-fmt`** are Pepper programs, built with
+`pepper -I tools tools/pep-fmt/main.pep`. They are the project's largest
+dogfooding of the language.
+
+- `tools/syntax` (a module: `module.pep` re-exports the rest) is a lexer
+  (`lexer.pep`, `token.pep`) and a recursive-descent parser (`parser.pep`)
+  that builds a *lossless* tree (`tree.pep`): every token is a leaf, in
+  source order, and each comment hangs off the token next to it (a comment
+  on the same line after a token is its `trailing_comment`, any other is an
+  entry in `leading_comments` of the next token). Nodes are uniform (`kind`, `leaf`,
+  `children`), since Pepper has no enums or sum types yet.
+- The parser mirrors `parsers.rs` decision for decision, including every
+  place the compiler's grammar checks for a raw line break
+  (`input.starts_with('\n')`) before or after calling `ws()`. The parser
+  tracks that with `Skipped` (set by `skip()`, the `ws()` equivalent) and
+  the token's `NewlineRightAfter`. `>` is always its own token; the parser
+  joins adjacent ones into `>>`, `>=` and `>>=` where the compiler's
+  grammar would read those operators.
+- `tools/pep-fmt` turns the tree into a Wadler-style layout document
+  (`doc.pep`: text, soft and hard lines, indentation, groups, and a
+  `DOC_CHOICE` of layouts tried in order) and renders it at 120 columns;
+  `format.pep` holds the style. Trailing comments are emitted as line
+  suffixes marked with byte 0x01, which `align_trailing_comments` aligns and
+  removes.
+- `pep_fmt_tests.rs` compiles pep-fmt and runs it on every `.pep` file in
+  the repository: each must format, be idempotent, and give the same AST
+  (the compiler's `Display` of `Module`, imports sorted) before and after.
+  So a grammar change to `parsers.rs` that `tools/syntax` does not mirror
+  fails there. The tool's own sources must be pep-fmt formatted.
+
 ---
 
 ## 9. Tests
@@ -920,6 +952,10 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    the language guide chapter in `docs/src/language/` (with a tested
    example in `docs/examples/`) and the TextMate grammar in
    `tools/vscode-pepper`.
+6. Mirror the rule in `tools/syntax/parser.pep` (and its node in
+   `tree.pep`), and print the node in `tools/pep-fmt/format.pep`.
+   `pep_fmt_tests.rs` fails until the formatter keeps a file that uses the
+   form unchanged in meaning.
 
 ### Add a sema pass
 

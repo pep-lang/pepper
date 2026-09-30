@@ -55,7 +55,8 @@ closures, modules, `Result`-based error handling, iteration (with `map` and
 `filter` adapters),
 `with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
-programs, but expect gaps.
+programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, is
+itself written in Pepper.
 Some that you will meet quickly:
 
 - Functions are values: a named function, a method (`p.norm`,

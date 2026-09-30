@@ -42,6 +42,7 @@ mod overload_tests;
 mod nested_array_tests;
 mod nested_hash_tests;
 mod param_default_tests;
+mod pep_fmt_tests;
 mod platform_tests;
 mod ptr_syntax_tests;
 mod result_tests;

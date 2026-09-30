@@ -34,6 +34,10 @@
 - [Documentation comments](language/doc-comments.md)
 - [Naming conventions](language/naming.md)
 
+# Tools
+
+- [Formatting with pep-fmt](tools/pep-fmt.md)
+
 # Standard library reference
 
 - [Overview](reference/README.md)

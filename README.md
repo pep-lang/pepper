@@ -251,6 +251,24 @@ Sample programs live in `tests/`: standalone files such as `hello.pep` and
 `tests/` is part of the parser's corpus test, so adding one extends the suite
 automatically.
 
+## Format Pepper code with pep-fmt
+
+`pep-fmt` formats Pepper source in the one standard style, like `gofmt`. It
+is written in Pepper (`tools/pep-fmt`), on top of a Pepper syntax library
+(`tools/syntax`) that other tools can reuse. Build it with the compiler, with
+`tools/` on the import path, then pipe a file through it:
+
+```bash
+cargo run --release -- -I tools tools/pep-fmt/main.pep -o pep-fmt    # pep-fmt.exe on Windows
+./pep-fmt < file.pep > formatted.pep
+```
+
+It reads standard input and writes standard output (there are no
+command-line arguments yet). On a syntax error it prints a clang-style
+`<stdin>:line:column: error: ...` to standard error, writes nothing to
+standard output, and exits with 1. The style it applies is described in the
+book's [Formatting with pep-fmt](docs/src/tools/pep-fmt.md) chapter.
+
 ## VS Code extension from any branch
 
 The released extension comes from the `vsix-v*` GitHub release, which the VSIX

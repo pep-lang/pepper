@@ -1,7 +1,8 @@
 //! The documentation standard for library code (see AGENTS.md): every public
-//! declaration in `runtime/` carries a `##` doc comment that
-//! describes it and tags each parameter, generic parameter, and returned
-//! value. New runtime files are covered automatically.
+//! declaration in `runtime/` and in the Pepper libraries under `tools/`
+//! (`tools/syntax`) carries a `##` doc comment that describes it and tags
+//! each parameter, generic parameter, and returned value. New files in those
+//! folders are covered automatically.
 
 use std::path::{Path, PathBuf};
 
@@ -21,6 +22,7 @@ fn every_public_runtime_declaration_is_documented() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = vec![];
     runtime_files(&root.join("runtime"), &mut files);
+    runtime_files(&root.join("tools").join("syntax"), &mut files);
     files.sort();
     assert!(!files.is_empty());
     let mut report = String::new();

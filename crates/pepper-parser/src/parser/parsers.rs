@@ -2040,8 +2040,8 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
 }
 
 /// A function with an already-parsed name: `name (params) [: TypeName] { body }`.
-fn named_function(input: &mut &str, name: String, name_span: Span, attributes: &[Attribute]) -> Result<FunctionDecl> {
-    let start = pos(input);
+/// `start` is where the declaration began (its `static`, or its name).
+fn named_function(input: &mut &str, name: String, name_span: Span, start: usize, attributes: &[Attribute]) -> Result<FunctionDecl> {
     // Widen the node span to cover any preceding attributes.
     let decl_start = attributes.first().map(|a| a.span.start).unwrap_or(start);
     ws(input)?;
@@ -2153,7 +2153,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
     };
     if input.starts_with('(') || generic_method {
         // `name[<params>](params) [: type] { body }`
-        let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end }, attributes)?;
+        let mut f = named_function(input, name, Span { start: name_span_start, end: name_span_end }, start, attributes)?;
         f.is_static = is_static;
         return Ok(f);
     }
@@ -3192,6 +3192,17 @@ mod tests {
         assert_eq!(c.body.statements.len(), 1);
         let empty = closure("() => {}");
         assert!(empty.parameters.is_empty());
+    }
+
+    #[test]
+    fn named_method_span_starts_at_its_declaration() {
+        // The span covers `static` and the name, so a `##` doc comment
+        // directly above the method is found.
+        let source = "struct S {\n    ## Doc.\n    static make(): S { return S(); }\n    size(): int { return 0; }\n}";
+        let module = parse(source);
+        let Declaration::Struct(s) = &module.declarations[0] else { panic!("expected a struct") };
+        assert_eq!(s.methods[0].span.start, source.find("static").unwrap());
+        assert_eq!(s.methods[1].span.start, source.find("size").unwrap());
     }
 
     #[test]
