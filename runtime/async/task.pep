@@ -5,9 +5,10 @@
 ## others, and runs `body` as the first task. A task starts others with
 ## `Task<T>.spawn_local` (on its own worker) or `spawn` (on any worker), and
 ## gives its worker to the other tasks there whenever it waits: `sleep`,
-## `yield_now`, and `Task.join`, and whenever a socket call would block.
-## Nothing preempts a task, so a task that computes for a long time without
-## waiting keeps every other task on its worker waiting too.
+## `yield_now`, and `Task.join`, whenever a socket call would block, and
+## whenever it waits on a `Mutex`, `Condition` or `Channel`. Nothing
+## preempts a task, so a task that computes for a long time without waiting
+## keeps every other task on its worker waiting too.
 ##
 ## A task is a green thread (a fiber): an ordinary function with its own
 ## stack, so code that waits looks the same as code that does not, and a
@@ -29,11 +30,12 @@
 # that returns, so every reference a task's frame held is released before
 # the fiber switches away for the last time.
 #
-# A task is parked (`_parked`) while it waits on a timer, a join, or a
-# socket. Waking puts a parked task back on the ready queue once, however
-# many things try to wake it; a woken task re-checks what it waited for. A
-# timer carries the sequence number of the wait that set it, so a timer that
-# outlives its wait (the task was woken some other way) wakes nothing.
+# A task is parked (`_parked`) while it waits on a timer, a join, a
+# socket, or a sync object (sync_wait.pep). Waking puts a parked task back
+# on the ready queue once, however many things try to wake it; a woken task
+# re-checks what it waited for. A timer carries the sequence number of the
+# wait that set it, so a timer that outlives its wait (the task was woken
+# some other way) wakes nothing.
 #
 # Sockets: the worker is the thread's `io._IoWaiter` (see io/wait.pep). A
 # socket call that would block parks its task in `_wait_ready` until the
@@ -52,6 +54,7 @@ import "cpus";
 import "driver";
 import "fiber_posix";
 import "fiber_windows";
+import "sync_wait";
 import "sys_posix";
 import "sys_windows";
 import "thread";
@@ -203,6 +206,9 @@ struct _TaskCore {
     var _proxy: bool;
     # A stand-in's step when its task finishes: takes the result.
     var _on_complete: () => void;
+    # The id that marks the task as a `Mutex`'s holder, or 0 until it first
+    # takes one (see `_async_holder_id`).
+    var _token: ulong;
 
     construct(id: ulong, body: () => void) {
         this._id = id;
@@ -275,6 +281,9 @@ struct _Worker {
     var _waits: HashMap<ulong, _SocketWaits>;
     # How many tasks are parked on sockets.
     var _io_waiting: ulong;
+    # Tasks parked on a `Mutex`, `Condition` or `Channel`, by id (see
+    # sync_wait.pep).
+    var _sync_waits: HashMap<ulong, _TaskCore>;
     # Tasks run since the driver was last polled.
     var _since_poll: ulong;
     # The `run_blocking` threads this worker started, joined when the
@@ -293,6 +302,7 @@ struct _Worker {
         this._ready_handles = Array<ulong>();
         this._ready_interests = Array<int>();
         this._waits = HashMap<ulong, _SocketWaits>();
+        this._sync_waits = HashMap<ulong, _TaskCore>();
         this._ready = Array<_TaskCore>();
         this._timers = Array<_Timer>();
         this._tasks = Array<_TaskCore>();
@@ -377,7 +387,11 @@ struct _Worker {
             var message = next.value();
             var id = message / 4;
             var kind = message % 4;
-            if (this._remote.contains(id)) {
+            if (kind == _MESSAGE_WAKE) {
+                if (this._sync_waits.contains(id)) {
+                    this._wake(this._sync_waits.get(id));
+                }
+            } else if (this._remote.contains(id)) {
                 var core = this._remote.get(id);
                 if (kind == _MESSAGE_COMPLETE) {
                     this._remote.remove(id);
@@ -648,7 +662,10 @@ struct _Worker {
                 if (deadline > now) {
                     timeout = (deadline - now) as long;
                 }
-            } else if (this._tasks.count() > 0 && this._io_waiting == 0 && this._remote.count() == 0) {
+            } else if (this._tasks.count() > 0
+                && this._io_waiting == 0
+                && this._remote.count() == 0
+                && this._sync_waits.count() == 0) {
                 panic("async.run: every task is waiting for another task and none can continue");
             }
             this._sleep(timeout);
@@ -768,6 +785,98 @@ export _async_worker(): _Worker {
     __ptr<_Worker> slot = _async_fiber_key_get(_async_worker_key);
     assert(slot != __null, "async: not inside async.run");
     return slot[0];
+}
+
+# Whether the calling code runs in a task (on a worker inside `run`).
+export _async_in_task(): bool {
+    return _async_on_worker() && _async_worker()._running;
+}
+
+# Gives every task that takes a `Mutex` its own holder id, above any
+# operating-system thread id.
+const _async_task_tokens = Atomic<ulong>((1 as ulong) << 62);
+
+# The id that marks the caller as a `Mutex`'s holder: the running task's
+# own, or the thread's outside a task, since tasks on one worker share its
+# thread.
+export _async_holder_id(): ulong {
+    if (!_async_in_task()) {
+        return _async_sys_os_thread();
+    }
+    var me = _async_worker()._current;
+    if (me._token == 0) {
+        me._token = _async_task_tokens.fetch_add(1);
+    }
+    return me._token;
+}
+
+# A waiter for the running task to add to a `_SyncQueue`, or none outside a
+# task.
+export _async_sync_waiter(): _SyncWaiter? {
+    if (!_async_in_task()) {
+        return Optional<_SyncWaiter>.none();
+    }
+    var worker = _async_worker();
+    return Optional<_SyncWaiter>.some(_SyncWaiter(worker._inbox, worker._current._id));
+}
+
+# What `_async_sync_park` reports.
+export const _SYNC_WOKEN = 0;
+export const _SYNC_CANCELLED = 1;
+export const _SYNC_TIMED_OUT = 2;
+
+# Parks the running task until `waiter`, already in `queue`, is woken, or
+# until `deadline` (monotonic milliseconds, 0 for none) passes. When
+# `interruptible`, a cancel or the task's `timeout` also ends the wait.
+#
+# A wait that ends without a wake abandons the waiter and takes it out of
+# `queue`, and the result says why; a waker that got there first wins, and
+# the result is `_SYNC_WOKEN`.
+export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong, interruptible: bool): int {
+    var worker = _async_worker();
+    var me = worker._current;
+    var saved = me._deadline;
+    var until = deadline;
+    if (interruptible && saved != 0 && (until == 0 || saved < until)) {
+        until = saved;
+    }
+    me._deadline = until;
+    worker._sync_waits.insert(me._id, me);
+    var result = _SYNC_WOKEN;
+    while (waiter._state.load() == _WAITER_WAITING) {
+        var reason = _SYNC_WOKEN;
+        if (interruptible && me._is_cancelled()) {
+            reason = _SYNC_CANCELLED;
+        } else if (until != 0 && _async_sys_monotonic_milliseconds() >= until) {
+            reason = _SYNC_TIMED_OUT;
+        }
+        if (reason != _SYNC_WOKEN) {
+            if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED)) {
+                queue._remove(waiter);
+                result = reason;
+            }
+            break;
+        }
+        worker._park();
+    }
+    worker._sync_waits.remove(me._id);
+    me._deadline = saved;
+    return result;
+}
+
+# Wakes the task `waiter` stands for: directly when it waits on the calling
+# thread's worker, otherwise through that worker's inbox.
+export _async_sync_wake(waiter: _SyncWaiter) {
+    if (_async_on_worker()) {
+        var worker = _async_worker();
+        if (worker._inbox._id == waiter._inbox._id) {
+            if (worker._sync_waits.contains(waiter._task)) {
+                worker._wake(worker._sync_waits.get(waiter._task));
+            }
+            return;
+        }
+    }
+    waiter._inbox._send(waiter._task, _MESSAGE_WAKE);
 }
 
 # Marks `core` cancelled and wakes it if it waits.
@@ -1223,6 +1332,11 @@ export yield_now() {
 ##
 ## @param milliseconds how long to wait
 export sleep(milliseconds: ulong) {
+    _async_task_sleep(milliseconds);
+}
+
+# `sleep`, which `Thread.sleep` also calls in a task.
+export _async_task_sleep(milliseconds: ulong) {
     if (!_async_on_worker()) {
         _async_sys_sleep(milliseconds);
         return;

@@ -9,9 +9,10 @@ its own small stack, switching only where they wait.
 others, and runs `body` as the first task. A task starts others with
 `Task<T>.spawn_local` (on its own worker) or `spawn` (on any worker), and
 gives its worker to the other tasks there whenever it waits: `sleep`,
-`yield_now`, and `Task.join`, and whenever a socket call would block.
-Nothing preempts a task, so a task that computes for a long time without
-waiting keeps every other task on its worker waiting too.
+`yield_now`, and `Task.join`, whenever a socket call would block, and
+whenever it waits on a `Mutex`, `Condition` or `Channel`. Nothing
+preempts a task, so a task that computes for a long time without waiting
+keeps every other task on its worker waiting too.
 
 A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a

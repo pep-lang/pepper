@@ -1202,12 +1202,12 @@ fn mutex_locks() {
 
 #[test]
 fn mutex_relock_panics() {
-    assert_panics("mutex_relock", MUTEX_RELOCK_PROGRAM, "Mutex.lock: the calling thread already holds this Mutex");
+    assert_panics("mutex_relock", MUTEX_RELOCK_PROGRAM, "Mutex.lock: the caller already holds this Mutex");
 }
 
 #[test]
 fn condition_wait_requires_the_lock() {
-    assert_panics("condition_unheld", CONDITION_UNHELD_PROGRAM, "Condition.wait: the calling thread does not hold the Mutex");
+    assert_panics("condition_unheld", CONDITION_UNHELD_PROGRAM, "Condition.wait: the caller does not hold the Mutex");
 }
 
 #[test]

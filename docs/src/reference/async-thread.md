@@ -157,7 +157,10 @@ static sleep(milliseconds: ulong)
 
 Pauses the calling thread for at least `milliseconds` milliseconds.
 
-The operating system may sleep longer, but never shorter.
+The operating system may sleep longer, but never shorter. In a task
+(see `run`), it is `async.sleep`: the task waits and its worker thread
+runs other tasks, and a cancel or the task's `timeout` ends the wait
+early.
 
 **Parameters**
 - `milliseconds` — how long to sleep; 0 returns right away

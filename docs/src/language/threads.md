@@ -25,7 +25,8 @@ that claim to be.
   `HashMap` key.
 - `is_finished()` reports whether the body has returned. `is_joinable()`
   reports whether `join()` may be called.
-- `Thread.sleep(milliseconds)` pauses the calling thread.
+- `Thread.sleep(milliseconds)` pauses the calling thread (in a task, only
+  the task: see [Tasks](tasks.md#waiting)).
 - Dropping every reference to a `Thread` without joining it **detaches** the
   thread. It keeps running, and its resources are freed when it finishes.
 - A `panic` or failed `assert` on any thread ends the whole program.
@@ -211,7 +212,9 @@ runtime. So an initializer may use the variables of the files it imports.
 ## Channels
 
 A `Channel<T>` carries values from threads that send to threads that
-receive, with any number of each, like a Go channel:
+receive, with any number of each, like a Go channel. (In a
+[task](tasks.md#mutexes-channels-and-conditions), a wait parks only the
+task, and so do the waits of `Mutex` and `Condition` below.)
 
 ```pepper
 {{#include ../../examples/threads-channel.pep}}
@@ -321,9 +324,9 @@ changes the value. Get one with `mutex.condition()`:
 {{#include ../../examples/threads-condition.pep}}
 ```
 
-- `wait()` must run while the calling thread holds the Mutex, normally
+- `wait()` must run while the caller holds the Mutex, normally
   inside its `with` block. It unlocks, sleeps until notified, and locks again
-  before returning. It panics if the thread does not hold the Mutex.
+  before returning. It panics if the caller does not hold the Mutex.
 - A thread can wake without a notification (a spurious wakeup), and another
   thread may get to the value first, so always wait in a loop that re-checks
   what it waits for.

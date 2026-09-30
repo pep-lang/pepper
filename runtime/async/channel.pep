@@ -23,10 +23,16 @@
 # returns is a new value, which may move into a locked value.
 #
 # Senders wait on `_not_full` (bounded channels only) and receivers on
-# `_not_empty`; `close` wakes both.
+# `_not_empty`; `close` wakes both. A task on a worker waits in
+# `_senders` or `_receivers` instead (see sync_wait.pep), so its worker
+# keeps running other tasks: whatever notifies a condition also wakes one
+# task from the matching queue. A task adds its waiter under `_lock`, and a
+# waker wakes under it, so no wake is missed.
 
+import "sync_wait";
 import "sys_posix";
 import "sys_windows";
+import "task";
 
 ## A queue that carries values from threads that send to threads that
 ## receive, like Go channels or Rust's `mpsc`, with any number of each.
@@ -96,6 +102,10 @@ export struct Channel<T> {
     # under `_lock`.
     const _buffer: __ptr<__ptr<void>>;
 
+    # The tasks waiting to receive, and to send to a full bounded channel.
+    const _receivers: _SyncQueue;
+    const _senders: _SyncQueue;
+
     ## Creates an open, empty channel.
     ##
     ## @param capacity how many values may wait before `send` blocks; 0 (the default) for no limit
@@ -113,6 +123,8 @@ export struct Channel<T> {
         _state[2] = slots;
         _buffer = _pep_malloc(sizeof<__ptr<void>>());
         _buffer[0] = _pep_malloc(slots * sizeof<T>());
+        _receivers = _SyncQueue();
+        _senders = _SyncQueue();
     }
 
     destruct {
@@ -141,8 +153,11 @@ export struct Channel<T> {
     ## Pass `move(x)` to send a variable's value, or `copy(x)` to keep using
     ## `x`.
     ##
+    ## In a task (see `run`), waiting parks the task and its worker runs
+    ## other tasks; a cancel or the task's `timeout` ends the wait.
+    ##
     ## @param value the value to send; a new value, which the compiler checks
-    ## @returns true if the value was queued, false if the channel is closed (the value is dropped)
+    ## @returns true if the value was queued, false if the channel is closed or the task's wait was cancelled or timed out (the value is dropped)
     ## @example
     ##     var line = "hello";
     ##     lines.send(copy(line));
@@ -150,8 +165,14 @@ export struct Channel<T> {
     ##     lines.send(move(line));   # line is null now
     send([Move] value: T): bool {
         _async_sys_mutex_lock(_lock);
+        var in_task = _async_in_task();
         while (_capacity > 0 && _state[1] == _capacity && _state[3] == 0) {
-            _async_sys_condition_wait(_not_full, _lock);
+            if (!in_task) {
+                _async_sys_condition_wait(_not_full, _lock);
+            } else if (this._park_task(_senders, 0) != _SYNC_WOKEN) {
+                _async_sys_mutex_unlock(_lock);
+                return false;
+            }
         }
         var queued = this._push(move(value));
         _async_sys_mutex_unlock(_lock);
@@ -175,7 +196,10 @@ export struct Channel<T> {
 
     ## Takes the next value, waiting until one arrives.
     ##
-    ## @returns the value, or an error once the channel is closed and empty
+    ## In a task (see `run`), waiting parks the task and its worker runs
+    ## other tasks; a cancel or the task's `timeout` ends the wait.
+    ##
+    ## @returns the value, or an error once the channel is closed and empty, or when the task's wait was cancelled or timed out
     ## @example
     ##     var job = jobs.receive();
     ##     if (job.is_ok()) {
@@ -183,8 +207,20 @@ export struct Channel<T> {
     ##     }
     receive(): Result<T> {
         _async_sys_mutex_lock(_lock);
+        var in_task = _async_in_task();
         while (_state[1] == 0 && _state[3] == 0) {
-            _async_sys_condition_wait(_not_empty, _lock);
+            if (!in_task) {
+                _async_sys_condition_wait(_not_empty, _lock);
+                continue;
+            }
+            var woken = this._park_task(_receivers, 0);
+            if (woken == _SYNC_CANCELLED) {
+                _async_sys_mutex_unlock(_lock);
+                return Result<T>.err(Error("the task was cancelled"));
+            }
+            if (woken == _SYNC_TIMED_OUT) {
+                break;
+            }
         }
         var received = this._pop();
         _async_sys_mutex_unlock(_lock);
@@ -204,11 +240,23 @@ export struct Channel<T> {
     ## Like `receive()`, but gives up after about `milliseconds` milliseconds.
     ##
     ## @param milliseconds the longest time to wait
-    ## @returns the value, or an error if the time ran out or once the channel is closed and empty
+    ## @returns the value, or an error if the time ran out, once the channel is closed and empty, or when the task's wait was cancelled
     receive_for(milliseconds: ulong): Result<T> {
         var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
         _async_sys_mutex_lock(_lock);
+        var in_task = _async_in_task();
         while (_state[1] == 0 && _state[3] == 0) {
+            if (in_task) {
+                var woken = this._park_task(_receivers, deadline);
+                if (woken == _SYNC_CANCELLED) {
+                    _async_sys_mutex_unlock(_lock);
+                    return Result<T>.err(Error("the task was cancelled"));
+                }
+                if (woken == _SYNC_TIMED_OUT) {
+                    break;
+                }
+                continue;
+            }
             var now = _async_sys_monotonic_milliseconds();
             if (now >= deadline) {
                 break;
@@ -230,6 +278,8 @@ export struct Channel<T> {
         _state[3] = 1;
         _async_sys_condition_notify_all(_not_empty);
         _async_sys_condition_notify_all(_not_full);
+        _receivers._wake_all();
+        _senders._wake_all();
         _async_sys_mutex_unlock(_lock);
     }
 
@@ -283,6 +333,7 @@ export struct Channel<T> {
         buffer[(_state[0] + _state[1]) % _state[2]] = move(value);
         _state[1] = _state[1] + 1;
         _async_sys_condition_notify_one(_not_empty);
+        _receivers._wake_one();
         return true;
     }
 
@@ -301,7 +352,21 @@ export struct Channel<T> {
         _state[0] = (head + 1) % _state[2];
         _state[1] = _state[1] - 1;
         _async_sys_condition_notify_one(_not_full);
+        _senders._wake_one();
         return received;
+    }
+
+    # Parks the running task in `queue` until a waker wakes it, `deadline`
+    # passes (0 for none), or the task is cancelled or its `timeout` expires;
+    # returns which (see `_async_sync_park`). The caller holds the lock,
+    # which is released while the task waits and held again on return.
+    _park_task(queue: _SyncQueue, deadline: ulong): int {
+        var waiter = _async_sync_waiter().value();
+        queue._push(waiter);
+        _async_sys_mutex_unlock(_lock);
+        var woken = _async_sync_park(queue, waiter, deadline, true);
+        _async_sys_mutex_lock(_lock);
+        return woken;
     }
 
     # The ring buffer, as `T` slots.

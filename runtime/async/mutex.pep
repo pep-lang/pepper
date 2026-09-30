@@ -17,14 +17,23 @@
 #   its one reference over (it keeps none), and `replace` moves it into the
 #   slot under the lock, so no count step on the value happens outside it.
 #
-# `_owner` holds the operating-system id of the thread holding the lock (0
-# when unlocked), so a second `lock()` on that thread panics instead of
-# deadlocking, and `Condition.wait` can check that its caller holds the lock.
-# Only the holder writes it while it holds the lock, so a thread reading its
-# own id there knows it holds the lock.
+# `_owner` holds the holder's id (`_async_holder_id`: the operating-system
+# id of the thread, or a task's own id, since tasks on one worker share its
+# thread; 0 when unlocked), so a second `lock()` by the holder panics
+# instead of deadlocking, and `Condition.wait` can check that its caller
+# holds the lock. Only the holder writes it while it holds the lock, so a
+# caller reading its own id there knows it holds the lock.
+#
+# A task on a worker never blocks its thread on the platform lock: it tries
+# it, and when it is busy parks in `_waiters` (see sync_wait.pep), trying
+# again after each wake; every unlock wakes one waiting task. The platform
+# lock is still what excludes, and a task locks and unlocks it on the one
+# thread it runs on. `Condition` does the same with its own `_waiters`.
 
+import "sync_wait";
 import "sys_posix";
 import "sys_windows";
+import "task";
 import "thread";
 
 ## A value that one thread at a time can use, like Rust's `Mutex<T>` or a C++
@@ -49,6 +58,12 @@ import "thread";
 ## threads. It is not re-entrant: locking it again on the thread that holds
 ## it panics instead of deadlocking. A panic while it is held ends the
 ## program, so a Mutex is never left "poisoned".
+##
+## In a task (see `run`), waiting for the lock parks the task, not its worker
+## thread, so the other tasks there keep running, including one that holds
+## the lock. Each task counts as its own holder, and a task may hold the
+## lock across a wait of its own (a `sleep`, a socket call). A cancel does
+## not end the wait for the lock.
 ##
 ## @typeParam T the protected value's type, a struct type
 ## @example
@@ -83,9 +98,12 @@ export struct Mutex<T> {
     # a struct `T`. Read and written only while the lock is held.
     const _value: __ptr<void>;
 
-    # The operating-system id of the thread holding the lock, or 0 when the
-    # Mutex is unlocked.
+    # The holder's id (see `_async_holder_id`), or 0 when the Mutex is
+    # unlocked.
     const _owner: Atomic<ulong>;
+
+    # The tasks waiting for the lock.
+    const _waiters: _SyncQueue;
 
     ## Creates an unlocked Mutex that owns `value`.
     ##
@@ -101,6 +119,7 @@ export struct Mutex<T> {
         _lock = _async_sys_mutex_create();
         _value = _pep_malloc(sizeof<T>());
         _owner = Atomic<ulong>(0);
+        _waiters = _SyncQueue();
         this._slot()[0] = move(value);
     }
 
@@ -168,11 +187,12 @@ export struct Mutex<T> {
         return move(old);
     }
 
-    ## Reports whether the calling thread holds the lock.
+    ## Reports whether the caller holds the lock: the calling task, in a task,
+    ## or else the calling thread.
     ##
-    ## @returns true between a `lock()` (or a successful `try_lock()`) on this thread and the guard's destruction
+    ## @returns true between a `lock()` (or a successful `try_lock()`) by the caller and the guard's destruction
     is_held(): bool {
-        return _owner.load() == _async_sys_os_thread();
+        return _owner.load() == _async_holder_id();
     }
 
     ## Returns a new condition variable that waits on this Mutex.
@@ -196,17 +216,41 @@ export struct Mutex<T> {
 
     # Waits for the lock and records the caller as its holder.
     _lock() {
-        var me = _async_sys_os_thread();
+        var me = _async_holder_id();
         if (_owner.load() == me) {
-            panic("Mutex.lock: the calling thread already holds this Mutex");
+            panic("Mutex.lock: the caller already holds this Mutex");
         }
-        _async_sys_mutex_lock(_lock);
+        this._lock_platform();
         _owner.store(me);
+    }
+
+    # Waits for the platform lock: blocking the thread, or in a task,
+    # parking the task.
+    _lock_platform() {
+        if (!_async_in_task()) {
+            _async_sys_mutex_lock(_lock);
+            return;
+        }
+        while (!_async_sys_mutex_try_lock(_lock)) {
+            var waiter = _async_sync_waiter().value();
+            _waiters._push(waiter);
+            # An unlock between the first try and the push found no waiter,
+            # so try again before parking.
+            if (_async_sys_mutex_try_lock(_lock)) {
+                # Not needed now; a wake it got is covered by this holder's
+                # own unlock.
+                if (waiter._state.compare_exchange(_WAITER_WAITING, _WAITER_ABANDONED)) {
+                    _waiters._remove(waiter);
+                }
+                return;
+            }
+            _async_sync_park(_waiters, waiter, 0, false);
+        }
     }
 
     # Takes the lock if it is free; true if the caller now holds it.
     _try_lock(): bool {
-        var me = _async_sys_os_thread();
+        var me = _async_holder_id();
         if (_owner.load() == me || !_async_sys_mutex_try_lock(_lock)) {
             return false;
         }
@@ -217,6 +261,9 @@ export struct Mutex<T> {
     _unlock() {
         _owner.store(0);
         _async_sys_mutex_unlock(_lock);
+        # Always look: nothing orders a task's push with this unlock but the
+        # queue's own lock (see sync_wait.pep).
+        _waiters._wake_one_locked();
     }
 }
 
@@ -307,6 +354,10 @@ extend MutexGuard<T> with Scoped<T> {}
 ##
 ## A Condition is `[Shared]`, like its Mutex.
 ##
+## In a task (see `run`), `wait()` parks the task, not its worker thread. A
+## cancel does not end it, since the caller's loop would only wait again;
+## `wait_for()` still returns when its time runs out.
+##
 ## @typeParam T the Mutex's value type
 ## @example
 ##     import async;
@@ -344,6 +395,9 @@ export struct Condition<T> {
     # `pthread_cond_t`, or a Windows `CONDITION_VARIABLE`.
     const _handle: __ptr<void>;
 
+    # The tasks waiting on this condition.
+    const _waiters: _SyncQueue;
+
     ## Creates a condition variable that waits on `mutex`. `mutex.condition()`
     ## does the same.
     ##
@@ -352,6 +406,7 @@ export struct Condition<T> {
     construct(mutex: Mutex<T>) {
         _mutex = mutex;
         _handle = _async_sys_condition_create();
+        _waiters = _SyncQueue();
     }
 
     destruct {
@@ -372,9 +427,13 @@ export struct Condition<T> {
     ##         }
     ##     }
     wait() {
-        var me = _async_sys_os_thread();
+        var me = _async_holder_id();
         if (_mutex._owner.load() != me) {
-            panic("Condition.wait: the calling thread does not hold the Mutex");
+            panic("Condition.wait: the caller does not hold the Mutex");
+        }
+        if (_async_in_task()) {
+            this._wait_task(me, 0);
+            return;
         }
         _mutex._owner.store(0);
         _async_sys_condition_wait(_handle, _mutex._lock);
@@ -388,9 +447,12 @@ export struct Condition<T> {
     ## @returns true if the thread was woken (by a notification or spuriously), false if the time ran out
     ## @panics if the calling thread does not hold the Mutex
     wait_for(milliseconds: ulong): bool {
-        var me = _async_sys_os_thread();
+        var me = _async_holder_id();
         if (_mutex._owner.load() != me) {
-            panic("Condition.wait_for: the calling thread does not hold the Mutex");
+            panic("Condition.wait_for: the caller does not hold the Mutex");
+        }
+        if (_async_in_task()) {
+            return this._wait_task(me, _async_sys_monotonic_milliseconds() + milliseconds);
         }
         _mutex._owner.store(0);
         var woken = _async_sys_condition_wait_for(_handle, _mutex._lock, milliseconds);
@@ -398,16 +460,31 @@ export struct Condition<T> {
         return woken;
     }
 
-    ## Wakes one thread waiting on this condition, if any. The caller does
+    ## Wakes one thread or task waiting on this condition, if any. The caller does
     ## not need to hold the Mutex, but usually does, having just changed the
     ## value.
     notify_one() {
         _async_sys_condition_notify_one(_handle);
+        _waiters._wake_one();
     }
 
-    ## Wakes every thread waiting on this condition. Each locks the Mutex in
+    ## Wakes every thread and task waiting on this condition. Each locks the Mutex in
     ## turn before its `wait()` returns.
     notify_all() {
         _async_sys_condition_notify_all(_handle);
+        _waiters._wake_all();
+    }
+
+    # `wait` in a task: joins `_waiters` while still holding the Mutex (so a
+    # notifier holding it cannot miss the task), unlocks, parks until woken
+    # or `deadline` (0 for none) passes, and locks again. True if woken.
+    _wait_task(me: ulong, deadline: ulong): bool {
+        var waiter = _async_sync_waiter().value();
+        _waiters._push(waiter);
+        _mutex._unlock();
+        var woken = _async_sync_park(_waiters, waiter, deadline, false);
+        _mutex._lock_platform();
+        _mutex._owner.store(me);
+        return woken == _SYNC_WOKEN;
     }
 }

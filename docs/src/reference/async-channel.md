@@ -100,11 +100,14 @@ hands its reference over and the value itself is queued, with no copy.
 Pass `move(x)` to send a variable's value, or `copy(x)` to keep using
 `x`.
 
+In a task (see `run`), waiting parks the task and its worker runs
+other tasks; a cancel or the task's `timeout` ends the wait.
+
 **Parameters**
 - `value` — the value to send; a new value, which the compiler checks
 
 **Returns**
-- true if the value was queued, false if the channel is closed (the value is dropped)
+- true if the value was queued, false if the channel is closed or the task's wait was cancelled or timed out (the value is dropped)
 
 **Example**
 ```pepper
@@ -137,8 +140,11 @@ receive(): Result<T>
 
 Takes the next value, waiting until one arrives.
 
+In a task (see `run`), waiting parks the task and its worker runs
+other tasks; a cancel or the task's `timeout` ends the wait.
+
 **Returns**
-- the value, or an error once the channel is closed and empty
+- the value, or an error once the channel is closed and empty, or when the task's wait was cancelled or timed out
 
 **Example**
 ```pepper
@@ -171,7 +177,7 @@ Like `receive()`, but gives up after about `milliseconds` milliseconds.
 - `milliseconds` — the longest time to wait
 
 **Returns**
-- the value, or an error if the time ran out or once the channel is closed and empty
+- the value, or an error if the time ran out, once the channel is closed and empty, or when the task's wait was cancelled
 
 #### close
 

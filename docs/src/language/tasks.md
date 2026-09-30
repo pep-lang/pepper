@@ -96,6 +96,31 @@ Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 `yield_now()` now and then.
 
+`Thread.sleep` in a task is `async.sleep`.
+
+## Mutexes, channels and conditions
+
+The [synchronization types](threads.md) work in tasks too. When a task
+has to wait for a `Mutex`, for a value from a `Channel` or for room in a
+bounded one, or in `Condition.wait`, it parks and its worker runs other
+tasks, just as it does for a socket. The task that holds the lock or will
+send the value can be on the same worker, on another worker, or a plain
+thread:
+
+```pepper
+{{#include ../../examples/tasks-sync.pep}}
+```
+
+- Each task counts as its own holder of a `Mutex`, so two tasks on one
+  worker exclude each other, and a task may hold a lock across its own
+  waits (a `sleep`, a socket call, another lock).
+- A cancel, or a `timeout` around the call, ends a channel wait: `send`
+  returns false and `receive` returns an error (and a `for` loop over the
+  channel ends). A task waiting for a `Mutex` still gets the lock, and
+  `Condition.wait` still waits for a notification, since the caller's loop
+  would only wait again; `wait_for` returns when its own time runs out.
+- Outside a task they block the thread, as before.
+
 ## Sockets
 
 A socket call in a task that would have to wait (for a connection, for data,
@@ -207,8 +232,8 @@ the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.
 
 Each worker has its own ready queue, timers and backend. Workers talk
-through a queue of messages each (a spawned task finished, or was
-cancelled) and a *doorbell* that ends a worker's wait in its backend from
+through a queue of messages each (a spawned task finished, was cancelled,
+or was woken by a `Mutex`, `Condition` or `Channel`) and a *doorbell* that ends a worker's wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
 completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
 a second socket sends to) with `poll()`. `run_blocking`'s pool threads are
@@ -220,7 +245,5 @@ plain threads that report back through the same messages.
   asynchronous files, come later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is
   built on fiber local storage); elsewhere the tasks of a thread share it.
-- `Mutex`, `Channel`, `Condition` and `Thread.sleep` block the thread, and
-  every task on it, when called in a task. Use `async.sleep` in tasks.
 
 The [reference page](../reference/async-task.md) documents every function.

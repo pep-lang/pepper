@@ -14,6 +14,7 @@
 
 import "sys_posix";
 import "sys_windows";
+import "task";
 import "thread_local";
 
 extern void memcpy(void* dest, void* src, ulong n);
@@ -191,13 +192,21 @@ export struct Thread {
 
     ## Pauses the calling thread for at least `milliseconds` milliseconds.
     ##
-    ## The operating system may sleep longer, but never shorter.
+    ## The operating system may sleep longer, but never shorter. In a task
+    ## (see `run`), it is `async.sleep`: the task waits and its worker thread
+    ## runs other tasks, and a cancel or the task's `timeout` ends the wait
+    ## early.
     ##
     ## @param milliseconds how long to sleep; 0 returns right away
     static sleep(milliseconds: ulong) {
-        if (milliseconds > 0) {
-            _async_sys_sleep(milliseconds);
+        if (milliseconds == 0) {
+            return;
         }
+        if (_async_in_task()) {
+            _async_task_sleep(milliseconds);
+            return;
+        }
+        _async_sys_sleep(milliseconds);
     }
 
     ## Returns the thread's id, which no other thread in the program has.

@@ -37,6 +37,12 @@ threads. It is not re-entrant: locking it again on the thread that holds
 it panics instead of deadlocking. A panic while it is held ends the
 program, so a Mutex is never left "poisoned".
 
+In a task (see `run`), waiting for the lock parks the task, not its worker
+thread, so the other tasks there keep running, including one that holds
+the lock. Each task counts as its own holder, and a task may hold the
+lock across a wait of its own (a `sleep`, a socket call). A cancel does
+not end the wait for the lock.
+
 **Type parameters**
 - `T` — the protected value's type, a struct type
 
@@ -175,10 +181,11 @@ the constructor, and is handed over without a copy.
 is_held(): bool
 ```
 
-Reports whether the calling thread holds the lock.
+Reports whether the caller holds the lock: the calling task, in a task,
+or else the calling thread.
 
 **Returns**
-- true between a `lock()` (or a successful `try_lock()`) on this thread and the guard's destruction
+- true between a `lock()` (or a successful `try_lock()`) by the caller and the guard's destruction
 
 #### condition
 
@@ -301,6 +308,10 @@ usually while it still holds the lock.
 
 A Condition is `[Shared]`, like its Mutex.
 
+In a task (see `run`), `wait()` parks the task, not its worker thread. A
+cancel does not end it, since the caller's loop would only wait again;
+`wait_for()` still returns when its time runs out.
+
 **Type parameters**
 - `T` — the Mutex's value type
 
@@ -401,7 +412,7 @@ The Mutex is locked again before it returns either way.
 notify_one()
 ```
 
-Wakes one thread waiting on this condition, if any. The caller does
+Wakes one thread or task waiting on this condition, if any. The caller does
 not need to hold the Mutex, but usually does, having just changed the
 value.
 
@@ -411,5 +422,5 @@ value.
 notify_all()
 ```
 
-Wakes every thread waiting on this condition. Each locks the Mutex in
+Wakes every thread and task waiting on this condition. Each locks the Mutex in
 turn before its `wait()` returns.

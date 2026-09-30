@@ -717,8 +717,239 @@ main(): int {
 }
 "##;
 
+/// Mutex, Condition, Channel and Thread.sleep in tasks: a task that waits on
+/// one parks and its worker runs other tasks, on one worker and across
+/// several, with plain threads taking part; cancels and time limits end
+/// channel waits; nothing leaks.
+const SYNC_PROGRAM: &str = r##"
+import async;
+
+struct Tally {
+    var count: long;
+    var order: Array<long>;
+    construct() {
+        this.order = Array<long>();
+    }
+}
+
+const tally = async.Mutex<Tally>(Tally());
+const changed = tally.condition();
+const ticks = Atomic<long>(0);
+const pings = async.Channel<long>();
+const pongs = async.Channel<long>();
+const slots = async.Channel<long>(1);
+const results = async.Channel<long>();
+const inbox = async.Channel<long>();
+
+# Adds one to the tally, parking while holding the lock so that others
+# must wait for it.
+add_slowly(who: long) {
+    with (var t = tally.lock()) {
+        var seen = t.count;
+        async.sleep(1);
+        t.count = seen + 1;
+        t.order.append(who);
+    }
+}
+
+# Counts ticks until told to stop, proving the worker stays free.
+tick_until(stop: Atomic<int>) {
+    while (stop.load() == 0) {
+        ticks.fetch_add(1);
+        async.yield_now();
+    }
+}
+
+one_worker() {
+    var stop = Atomic<int>(0);
+    var ticker = async.Task<void>.spawn_local(() => { tick_until(stop); });
+
+    # A task holding the lock across a sleep; another waits for it.
+    var first = async.Task<void>.spawn_local(() => { add_slowly(1); });
+    var second = async.Task<void>.spawn_local(() => { add_slowly(2); });
+    first.join();
+    second.join();
+    with (var t = tally.lock()) {
+        assert(t.count == 2, "no increment was lost");
+        assert(t.order[0] == 1 && t.order[1] == 2, "the waiter ran after the holder");
+        assert(tally.is_held(), "the task holds the lock");
+    }
+    assert(!tally.is_held(), "released after the block");
+
+    # Ping-pong between two tasks on one worker.
+    var ponger = async.Task<long>.spawn_local(() => {
+        var sum: long = 0;
+        for (var n in pings) {
+            sum = sum + n;
+            pongs.send(n + 1);
+        }
+        return sum;
+    });
+    var i: long = 0;
+    while (i < 100) {
+        pings.send(i);
+        assert(pongs.receive().value() == i + 1, "pong answers ping");
+        i = i + 1;
+    }
+    pings.close();
+    assert(ponger.join().value() == 4950, "every ping arrived");
+
+    # A bounded channel parks a sender while it is full.
+    var producer = async.Task<void>.spawn_local(() => {
+        var n: long = 0;
+        while (n < 20) {
+            assert(slots.send(n), "sent");
+            n = n + 1;
+        }
+        slots.close();
+    });
+    var expected: long = 0;
+    for (var n in slots) {
+        assert(n == expected, "values arrive in order");
+        expected = expected + 1;
+    }
+    assert(expected == 20, "all values received");
+    producer.join();
+
+    # A Condition wakes a task parked in wait().
+    var waiter = async.Task<long>.spawn_local(() => {
+        with (var t = tally.lock()) {
+            while (t.count < 3) {
+                changed.wait();
+            }
+            return t.count;
+        }
+        return 0 as long;
+    });
+    async.sleep(5);
+    with (var t = tally.lock()) {
+        t.count = 3;
+        changed.notify_one();
+    }
+    assert(waiter.join().value() == 3, "the waiter saw the change");
+
+    # wait_for gives up in time; the lock is held again after.
+    with (var t = tally.lock()) {
+        assert(!changed.wait_for(5), "nobody notified");
+        assert(tally.is_held(), "locked again");
+    }
+
+    # Cancels and time limits end channel waits.
+    var receiver = async.Task<bool>.spawn_local(() => {
+        return inbox.receive().is_err();
+    });
+    async.yield_now();
+    receiver.cancel();
+    assert(receiver.join().is_err(), "the cancelled receiver finished");
+    assert(inbox.receive_for(5).is_err(), "receive_for timed out");
+    with (var deadline = async.timeout(5)) {
+        assert(inbox.receive().is_err(), "the task's timeout ends receive");
+    }
+
+    # Thread.sleep in a task lets others run.
+    var before = ticks.load();
+    async.Thread.sleep(10);
+    assert(ticks.load() > before, "the worker ticked during Thread.sleep");
+
+    stop.store(1);
+    ticker.join();
+}
+
+many_workers() {
+    # Tasks on every worker and a plain thread contend for one lock.
+    with (var t = tally.lock()) {
+        t.count = 0;
+        t.order.clear();
+    }
+    var tasks = Array<async.Task<void>>();
+    var i: long = 0;
+    while (i < 16) {
+        var who = i;
+        tasks.append(async.spawn<void>(() => { add_slowly(who); }));
+        i = i + 1;
+    }
+    var thread = async.Thread.spawn(() => {
+        var n = 0;
+        while (n < 8) {
+            add_slowly(100);
+            n = n + 1;
+        }
+    });
+    for (var task in tasks) {
+        task.join();
+    }
+    thread.join();
+    with (var t = tally.lock()) {
+        assert(t.count == 24, "no increment was lost across workers");
+    }
+
+    # Producers on other workers and a thread feed a task parked in receive.
+    var producers = Array<async.Task<void>>();
+    i = 0;
+    while (i < 8) {
+        producers.append(async.spawn<void>(() => {
+            var n: long = 0;
+            while (n < 50) {
+                results.send(1);
+                async.yield_now();
+                n = n + 1;
+            }
+        }));
+        i = i + 1;
+    }
+    var feeder = async.Thread.spawn(() => {
+        var n = 0;
+        while (n < 100) {
+            results.send(1);
+            n = n + 1;
+        }
+    });
+    var total: long = 0;
+    while (total < 500) {
+        total = total + results.receive().value();
+    }
+    for (var p in producers) {
+        p.join();
+    }
+    feeder.join();
+    assert(results.try_receive().is_err(), "nothing extra arrived");
+
+    # A task waits on a Condition that a thread signals.
+    var waiter = async.spawn<long>(() => {
+        with (var t = tally.lock()) {
+            while (t.count < 1000) {
+                changed.wait();
+            }
+            return t.count;
+        }
+        return 0 as long;
+    });
+    async.sleep(5);
+    var signaller = async.Thread.spawn(() => {
+        with (var t = tally.lock()) {
+            t.count = 1000;
+            changed.notify_all();
+        }
+    });
+    assert(waiter.join().value() == 1000, "the thread's notify reached the task");
+    signaller.join();
+}
+
+main(): int {
+    async.Thread.current();
+    var before = _pep_live_allocs();
+    async.run_with(async.RuntimeOptions().workers(1), one_worker);
+    async.run_with(async.RuntimeOptions().workers(4), many_workers);
+    # Drop the order's grown buffer.
+    tally.replace(Tally());
+    assert(_pep_live_allocs() == before, "a run frees everything it allocated");
+    print("ok");
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM)]
 }
 
 #[test]
@@ -773,6 +1004,17 @@ fn blocking_calls_and_shared_sockets() {
 fn blocking_calls_and_shared_sockets_with_poll() {
     let source = BLOCKING_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
     assert_runs("task_blocking_poll", &source);
+}
+
+#[test]
+fn sync_objects_park_tasks() {
+    assert_runs("task_sync", SYNC_PROGRAM);
+}
+
+#[test]
+fn sync_objects_park_tasks_with_poll() {
+    let source = SYNC_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
+    assert_runs("task_sync_poll", &source);
 }
 
 #[test]

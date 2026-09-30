@@ -10,7 +10,8 @@
 #   tasks from `spawn` that no worker has started yet, and the stop flag.
 # - `_Inbox`, one per worker: messages from other workers (a
 #   `Channel<ulong>` of `id * 4 + kind`: a task spawned here finished
-#   elsewhere, or a task running here was cancelled elsewhere), tasks from
+#   elsewhere, a task running here was cancelled elsewhere, or a task
+#   parked here on a sync object was woken elsewhere), tasks from
 #   `spawn_on_each_worker` that must run on this worker, and the worker's
 #   doorbell, which ends its wait in the driver.
 # - `_SharedTask`, one per `spawn`: the body, where to report when it
@@ -53,10 +54,19 @@ import "task";
 # What a message tells a worker about one of its tasks.
 export const _MESSAGE_COMPLETE: ulong = 0;
 export const _MESSAGE_CANCEL: ulong = 1;
+# A task parked on a `Mutex`, `Condition` or `Channel` here was woken (see
+# sync_wait.pep).
+export const _MESSAGE_WAKE: ulong = 2;
+
+# Gives every inbox its own id.
+const _async_inbox_ids = Atomic<ulong>(1);
 
 # Messages to one worker, and its doorbell.
 [Shared]
 export struct _Inbox {
+    # Unique among inboxes, so a waker can tell whether a task waits on its
+    # own worker.
+    const _id: ulong;
     # `id * 4 + kind` (a `_MESSAGE_*` kind) for each message.
     const _messages: Channel<ulong>;
     # Spawned tasks that must run on this worker.
@@ -68,6 +78,7 @@ export struct _Inbox {
     const _doorbell: _Doorbell;
 
     construct(doorbell: _Doorbell) {
+        _id = _async_inbox_ids.fetch_add(1);
         _messages = Channel<ulong>();
         _pinned = Channel<_SharedTask>();
         _notified = Atomic<int>(0);
