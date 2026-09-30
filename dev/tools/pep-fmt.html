@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-35605b05.js";
+            window.path_to_searchindex_js = "../searchindex-d8154ca3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -266,7 +266,9 @@ kept for <code>extern</code> functions, which mirror C prototypes; <code>pep-fmt
 it everywhere else, including operator methods (<code>bool ==(Point other)</code>
 becomes <code>==(other: Point): bool</code>, and <code>bool !!()</code> becomes <code>!!(): bool</code>),
 indexers (<code>T [](ulong index)</code> becomes <code>[](index: ulong): T</code>) and constructor
-parameters.</p>
+parameters. A <code>void</code> return type is left out when the function has a body
+(<code>void run()</code> and <code>run(): void</code> both become <code>run()</code>); a declaration without
+a body, such as a trait method, keeps it.</p>
 <p><strong>Blank lines.</strong> At most one blank line in a row. Top-level structs,
 traits, extensions and functions with a body are separated by one blank
 line.</p>
@@ -283,6 +285,19 @@ them) are sorted: modules first (<code>import io;</code>), then files of this mo
 <p><strong>Kept as written:</strong> parentheses around
 conditions (<code>if x</code> and <code>if (x)</code> are both fine), fields declared either way
 (<code>int x;</code> or <code>var x: int;</code>), and the file’s line endings (<code>\n</code> or <code>\r\n</code>).</p>
+<h2 id="turning-it-off-for-a-section"><a class="header" href="#turning-it-off-for-a-section">Turning it off for a section</a></h2>
+<p>Code between a <code># format: off</code> comment and a <code># format: on</code> comment is left
+exactly as written, for layouts the style would undo, such as a table of
+numbers:</p>
+<pre><code class="language-pepper"># format: off
+const IDENTITY = matrix(1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1);
+# format: on
+</code></pre>
+<p>Each comment goes on its own line, between declarations or statements, and
+the pair must be in the same block (or both at the top level). Without a
+<code># format: on</code>, the region runs to the end of the block or file.</p>
 
                     </main>
 
