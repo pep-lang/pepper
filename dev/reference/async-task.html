@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f5841309.js";
+            window.path_to_searchindex_js = "../searchindex-219f8346.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b64c440f.js"></script>
+        <script src="../toc-e51e852e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -238,8 +238,27 @@ finished. The task itself carries on.</p>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates the default options: 256 KiB of stack per task.</p>
+<p>Creates the default options: 256 KiB of stack per task, and the
+system’s best I/O backend.</p>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="backend"><a class="header" href="#backend">backend</a></h4>
+<pre><code class="language-pepper">backend(kind: Backend): RuntimeOptions
+</code></pre>
+<p>Sets which I/O backend the runtime waits on sockets with. The default,
+<code>Backend.Automatic</code>, picks the system’s best (or the one the
+<code>PEPPER_IO_BACKEND</code> environment variable names).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>kind</code> — the backend</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>these options</li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li><code>run_with</code> panics if the system does not have the backend</li>
+</ul>
 <h4 id="stack_size"><a class="header" href="#stack_size">stack_size</a></h4>
 <pre><code class="language-pepper">stack_size(bytes: ulong): RuntimeOptions
 </code></pre>
@@ -376,7 +395,7 @@ When <code>body</code> returns, the tasks still running are cancelled (see
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if called inside a task, or if every remaining task is waiting on another and none can continue</li>
+<li>if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend <code>options</code> asks for</li>
 </ul>
 <h2 id="yield_now"><a class="header" href="#yield_now">yield_now</a></h2>
 <pre><code class="language-pepper">yield_now()
@@ -474,6 +493,19 @@ it.</p>
         return 0;
     }
 </code></pre>
+<h2 id="current_backend"><a class="header" href="#current_backend">current_backend</a></h2>
+<pre><code class="language-pepper">current_backend(): Backend
+</code></pre>
+<p>Returns the I/O backend the running runtime waits on sockets with (see
+<code>RuntimeOptions.backend</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the backend; never <code>Backend.Automatic</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>run</code></li>
+</ul>
 
                     </main>
 
@@ -483,7 +515,7 @@ it.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/async-channel.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/async-driver.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -497,7 +529,7 @@ it.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/async-channel.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/async-driver.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

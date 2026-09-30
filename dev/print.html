@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f5841309.js";
+            window.path_to_searchindex_js = "searchindex-219f8346.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b64c440f.js"></script>
+        <script src="toc-e51e852e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -8176,11 +8176,30 @@ main(): int {
 }
 </code></pre>
 <p>Outside a task, the same calls block the thread as before.</p>
-<p>On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
-and on Windows with WSAPoll.
-When no task is ready to run, it blocks in the driver until a socket is
-ready or the next timer is due; while tasks are running, it also checks the
-sockets every few dozen tasks, so a busy task cannot starve the network.</p>
+<p>When no task is ready to run, the runtime blocks until a socket is ready or
+the next timer is due; while tasks are running, it also checks the sockets
+every few dozen tasks, so a busy task cannot starve the network.</p>
+<h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
+<p>How the runtime waits for sockets is its I/O <em>backend</em>, an <code>async.Backend</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Where</th><th>How</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
+<tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
+<tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
+<tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Backend.Automatic</code>, the default, picks the first of the three that the
+system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and <code>run_with</code>
+panics if the system does not have it), and the <code>PEPPER_IO_BACKEND</code>
+environment variable (<code>epoll</code>, <code>kqueue</code>, <code>iocp</code> or <code>poll</code>) overrides the
+automatic choice without changing the program, for testing and
+benchmarks. <code>async.current_backend()</code> says which one is running.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>
@@ -8269,10 +8288,8 @@ program as a thread would. Stacks are reused for later tasks.</p>
 <li>A runtime runs on one thread: <code>spawn_local</code> is the only way to start a
 task. Tasks that run on several threads at once, and <code>run_blocking</code> for
 work that would block the thread, are planned.</li>
-<li>On Windows, the runtime waits on sockets with WSAPoll, which looks at
-every waiting socket on each poll; an I/O completion port driver that
-scales to many connections is next. Files block the thread on every
-platform. io_uring on Linux comes later.</li>
+<li>Files block the thread on every platform. io_uring on Linux, and
+asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 <li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
@@ -15762,6 +15779,7 @@ chose when it was bound to port 0.</p>
 <li><a href="#asyncmutexpep">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="#asynconcepep">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
 <li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on one thread and parking on sockets</li>
+<li><a href="#io-backends">I/O backends</a>: <code>Backend</code>, how a runtime waits for sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
@@ -16223,8 +16241,27 @@ finished. The task itself carries on.</p>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
-<p>Creates the default options: 256 KiB of stack per task.</p>
+<p>Creates the default options: 256 KiB of stack per task, and the
+system’s best I/O backend.</p>
 <h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h4 id="backend"><a class="header" href="#backend">backend</a></h4>
+<pre><code class="language-pepper">backend(kind: Backend): RuntimeOptions
+</code></pre>
+<p>Sets which I/O backend the runtime waits on sockets with. The default,
+<code>Backend.Automatic</code>, picks the system’s best (or the one the
+<code>PEPPER_IO_BACKEND</code> environment variable names).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>kind</code> — the backend</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>these options</li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li><code>run_with</code> panics if the system does not have the backend</li>
+</ul>
 <h4 id="stack_size"><a class="header" href="#stack_size">stack_size</a></h4>
 <pre><code class="language-pepper">stack_size(bytes: ulong): RuntimeOptions
 </code></pre>
@@ -16361,7 +16398,7 @@ When <code>body</code> returns, the tasks still running are cancelled (see
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if called inside a task, or if every remaining task is waiting on another and none can continue</li>
+<li>if called inside a task, if every remaining task is waiting on another and none can continue, or if the system does not have the backend <code>options</code> asks for</li>
 </ul>
 <h2 id="yield_now"><a class="header" href="#yield_now">yield_now</a></h2>
 <pre><code class="language-pepper">yield_now()
@@ -16459,6 +16496,53 @@ it.</p>
         return 0;
     }
 </code></pre>
+<h2 id="current_backend"><a class="header" href="#current_backend">current_backend</a></h2>
+<pre><code class="language-pepper">current_backend(): Backend
+</code></pre>
+<p>Returns the I/O backend the running runtime waits on sockets with (see
+<code>RuntimeOptions.backend</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the backend; never <code>Backend.Automatic</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>run</code></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/driver.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="io-backends"><a class="header" href="#io-backends">I/O backends</a></h1>
+<p>I/O backends: how a task runtime waits for sockets.</p>
+<p>Source: <code>runtime/async/driver.pep</code></p>
+<h2 id="backend-1"><a class="header" href="#backend-1">Backend</a></h2>
+<pre><code class="language-pepper">enum Backend
+</code></pre>
+<p>The I/O backend a runtime waits on sockets with (see
+<code>RuntimeOptions.backend</code>).</p>
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="automatic"><a class="header" href="#automatic">Automatic</a></h4>
+<pre><code class="language-pepper">Automatic
+</code></pre>
+<p>The best one the system has: epoll on Linux, kqueue on macOS, IOCP on
+Windows. The <code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>,
+<code>kqueue</code>, <code>iocp</code> or <code>poll</code>) picks another.</p>
+<h4 id="epoll"><a class="header" href="#epoll">Epoll</a></h4>
+<pre><code class="language-pepper">Epoll
+</code></pre>
+<p>Linux’s epoll, edge-triggered.</p>
+<h4 id="kqueue"><a class="header" href="#kqueue">Kqueue</a></h4>
+<pre><code class="language-pepper">Kqueue
+</code></pre>
+<p>The BSD and macOS kqueue, edge-triggered.</p>
+<h4 id="iocp"><a class="header" href="#iocp">Iocp</a></h4>
+<pre><code class="language-pepper">Iocp
+</code></pre>
+<p>A Windows I/O completion port, fed readiness by AFD poll requests.</p>
+<h4 id="poll"><a class="header" href="#poll">Poll</a></h4>
+<pre><code class="language-pepper">Poll
+</code></pre>
+<p><code>poll()</code> (<code>WSAPoll</code> on Windows): available everywhere, but each wait
+passes every waiting socket to the system, so it suits few
+connections. The reference the others are tested against.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads

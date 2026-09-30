@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f5841309.js";
+            window.path_to_searchindex_js = "../searchindex-219f8346.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b64c440f.js"></script>
+        <script src="../toc-e51e852e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -324,11 +324,30 @@ main(): int {
 }
 </code></pre>
 <p>Outside a task, the same calls block the thread as before.</p>
-<p>On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
-and on Windows with WSAPoll.
-When no task is ready to run, it blocks in the driver until a socket is
-ready or the next timer is due; while tasks are running, it also checks the
-sockets every few dozen tasks, so a busy task cannot starve the network.</p>
+<p>When no task is ready to run, the runtime blocks until a socket is ready or
+the next timer is due; while tasks are running, it also checks the sockets
+every few dozen tasks, so a busy task cannot starve the network.</p>
+<h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
+<p>How the runtime waits for sockets is its I/O <em>backend</em>, an <code>async.Backend</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Where</th><th>How</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
+<tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
+<tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
+<tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Backend.Automatic</code>, the default, picks the first of the three that the
+system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and <code>run_with</code>
+panics if the system does not have it), and the <code>PEPPER_IO_BACKEND</code>
+environment variable (<code>epoll</code>, <code>kqueue</code>, <code>iocp</code> or <code>poll</code>) overrides the
+automatic choice without changing the program, for testing and
+benchmarks. <code>async.current_backend()</code> says which one is running.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>
@@ -417,10 +436,8 @@ program as a thread would. Stacks are reused for later tasks.</p>
 <li>A runtime runs on one thread: <code>spawn_local</code> is the only way to start a
 task. Tasks that run on several threads at once, and <code>run_blocking</code> for
 work that would block the thread, are planned.</li>
-<li>On Windows, the runtime waits on sockets with WSAPoll, which looks at
-every waiting socket on each poll; an I/O completion port driver that
-scales to many connections is next. Files block the thread on every
-platform. io_uring on Linux comes later.</li>
+<li>Files block the thread on every platform. io_uring on Linux, and
+asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 <li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
