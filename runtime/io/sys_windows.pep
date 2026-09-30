@@ -91,7 +91,7 @@ import "directory";
     var n = FormatMessageW(4608, __null, code, 0, buf, 512, __null) as int;
     while (n > 0) {
         var c = buf[n - 1];
-        if (c != 10 && c != 13 && c != 32 && c != 46) {
+        if (c != '\n' && c != '\r' && c != ' ' && c != '.') {
             break;
         }
         n = n - 1;
@@ -519,8 +519,8 @@ import "directory";
     var p = s.c_str() as __ptr<u8>;
     var size = s.size();
     # "\\?\" is 92 92 63 92; "UNC\" is 85 78 67 92.
-    if (_io_byte(p, size, 0) == 92 && _io_byte(p, size, 1) == 92 && _io_byte(p, size, 2) == 63 && _io_byte(p, size, 3) == 92) {
-        if (_io_byte(p, size, 4) == 85 && _io_byte(p, size, 5) == 78 && _io_byte(p, size, 6) == 67 && _io_byte(p, size, 7) == 92) {
+    if (_io_byte(p, size, 0) == '\\' && _io_byte(p, size, 1) == '\\' && _io_byte(p, size, 2) == '?' && _io_byte(p, size, 3) == '\\') {
+        if (_io_byte(p, size, 4) == 'U' && _io_byte(p, size, 5) == 'N' && _io_byte(p, size, 6) == 'C' && _io_byte(p, size, 7) == '\\') {
             var unc = _io_string_from_byte(92);
             unc.append(_io_string_from_byte(92));
             unc.append(_io_slice(s, 8, s.size()));

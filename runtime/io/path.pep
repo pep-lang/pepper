@@ -16,10 +16,10 @@ import "sys_windows";
 # ── Path syntax per platform (pure; no C calls) ─────────────────────────────
 
 [Target(!OS(Windows))] export _io_path_is_sep(b: int): bool {
-    return b == 47;   # '/'
+    return b == '/';
 }
 [Target(OS(Windows))] export _io_path_is_sep(b: int): bool {
-    return b == 47 || b == 92;   # '/' or '\'
+    return b == '/' || b == '\\';
 }
 
 [Target(!OS(Windows))] export _io_path_separator(): String {
@@ -35,9 +35,9 @@ import "sys_windows";
     return 0;
 }
 [Target(OS(Windows))] export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
-    if (_io_byte(p, n, 1) == 58) {   # ':'
+    if (_io_byte(p, n, 1) == ':') {
         var c = _io_byte(p, n, 0) | 32;   # ASCII lower case
-        if (c >= 97 && c <= 122) {
+        if (c >= 'a' && c <= 'z') {
             return 2;
         }
     }
@@ -102,12 +102,12 @@ export _io_path_name_start(s: String, e: ulong): ulong {
 
 export _io_is_dot(s: String): bool {
     var p = s.c_str() as __ptr<u8>;
-    return s.size() == 1 && _io_byte(p, s.size(), 0) == 46;
+    return s.size() == 1 && _io_byte(p, s.size(), 0) == '.';
 }
 
 export _io_is_dotdot(s: String): bool {
     var p = s.c_str() as __ptr<u8>;
-    return s.size() == 2 && _io_byte(p, s.size(), 0) == 46 && _io_byte(p, s.size(), 1) == 46;
+    return s.size() == 2 && _io_byte(p, s.size(), 0) == '.' && _io_byte(p, s.size(), 1) == '.';
 }
 
 # The components after the prefix and root, split at separators, with empty
@@ -367,7 +367,7 @@ export struct Path {
         var i = name.size();
         while (i > 1) {
             i = i - 1;
-            if (p[i] == 46) {
+            if (p[i] == '.') {
                 return i;
             }
         }

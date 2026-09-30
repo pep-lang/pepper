@@ -135,7 +135,7 @@ hex(v: ulong): __ptr<char> {
     var i = 0;
     while (i < 16) {
         var d = (v >> ((15 - i) * 4)) & 0xF;
-        buf[i] = (d < 10 ? (48 + d) : (55 + d));
+        buf[i] = (d < 10 ? ('0' + d) : ('A' - 10 + d));
         i = i + 1;
     }
     buf[16] = 0;
@@ -149,11 +149,11 @@ dec(v: long): __ptr<char> {
     if (v < 0) { neg = 1; v = -v; }
     if (v == 0) { buf[n] = 48; n = n + 1; }
     while (v > 0) {
-        buf[n] = (48 + (v % 10));
+        buf[n] = ('0' + (v % 10));
         n = n + 1;
         v = v / 10;
     }
-    if (neg == 1) { buf[n] = 45; n = n + 1; }
+    if (neg == 1) { buf[n] = '-'; n = n + 1; }
     # Digits were produced least-significant first: reverse in place by
     # swapping pairs (copying buf[n-1-i] over buf[i] for every i mirrors the
     # second half onto the first instead).
@@ -177,7 +177,7 @@ floatstr(v: double): __ptr<char> {
         return buf;
     }
     if (v < 0.0) {
-        buf[n] = 45;   # '-'
+        buf[n] = '-';
         n = n + 1;
         v = -v;
     }
@@ -196,12 +196,12 @@ floatstr(v: double): __ptr<char> {
     var i = 0;
     while (s[i] != 0) { buf[n] = s[i]; n = n + 1; i = i + 1; }
     _pep_free(s);
-    buf[n] = 46;   # '.'
+    buf[n] = '.';
     n = n + 1;
     # Least-significant digit first, filling the six places from the right.
     var k = 5;
     while (k >= 0) {
-        buf[n + k] = (48 + (digits % 10));
+        buf[n + k] = ('0' + (digits % 10));
         digits = digits / 10;
         k = k - 1;
     }
@@ -222,8 +222,8 @@ _pep_trace_prefix(buf: __ptr<char>, name: __ptr<char>): ulong {
         memcpy(buf, name, nl);
         n = nl;
     }
-    buf[n] = 58;   # ':'
-    buf[n + 1] = 32;   # ' '
+    buf[n] = ':';
+    buf[n + 1] = ' ';
     return n + 2;
 }
 

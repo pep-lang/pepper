@@ -272,7 +272,7 @@ import io;
     }
     while (value > 0) {
         var digit: __ptr<char> = _pep_malloc(2);
-        digit[0] = (48 + value % 10);
+        digit[0] = ('0' + value % 10);
         digits = String(digit, 1, 1) + digits;
         _pep_free(digit);
         value = value / 10;

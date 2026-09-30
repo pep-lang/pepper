@@ -490,6 +490,6 @@ import "directory";
     # macOS's TMPDIR ends in '/'.
     var p = s.c_str() as __ptr<u8>;
     var n = s.size();
-    while (n > 1 && _io_byte(p, s.size(), n - 1) == 47) { n = n - 1; }
+    while (n > 1 && _io_byte(p, s.size(), n - 1) == '/') { n = n - 1; }
     return Path(_io_slice(s, 0, n));
 }
