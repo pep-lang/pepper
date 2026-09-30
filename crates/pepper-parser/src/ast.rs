@@ -567,6 +567,12 @@ impl ImportedSymbol {
 ///   (`math.sqrt`, `m.sqrt`).
 /// - `import "helpers"`: the file's exports, unqualified. With `as h`, qualified.
 /// - `import [sqrt, pow as power] from math`: the named exports, unqualified.
+///
+/// A re-export of a source (`export * from "shapes"`, `export [area as
+/// surface_area] from geometry`) is an `Import` with `reexport` set: it is
+/// resolved like an import, but binds no name in its own file; it publishes
+/// the source's exports (all of them for `*`, else the listed ones) to the
+/// file's importers.
 #[derive(Debug, Clone)]
 pub struct Import {
     /// The module name, or the file path as written without `.pep`.
@@ -580,6 +586,9 @@ pub struct Import {
     pub is_local: bool,
     /// `import [...] from source`: the symbols named in the list.
     pub symbols: Option<Vec<ImportedSymbol>>,
+    /// `export * from source` (`symbols` is `None`) or `export [...] from
+    /// source`: a re-export that binds nothing here.
+    pub reexport: bool,
     /// Attributes before `import`: `[Target(OS(Linux))] import linux;`.
     pub attributes: Vec<Attribute>,
     /// The whole import, from its first attribute when it has any.
@@ -617,7 +626,7 @@ impl Import {
     /// The qualifier this import binds (`m` in `m.sqrt`), if any: the alias,
     /// or a bare module import's own name.
     pub fn qualifier(&self) -> Option<&str> {
-        if self.symbols.is_some() {
+        if self.symbols.is_some() || self.reexport {
             return None;
         }
         match &self.alias {
@@ -1039,9 +1048,11 @@ impl Display for Import {
         for a in &self.attributes {
             write!(f, "{} ", a)?;
         }
-        write!(f, "import ")?;
-        if let Some(symbols) = &self.symbols {
-            write!(f, "[{}] from ", join(symbols, ", "))?;
+        write!(f, "{} ", if self.reexport { "export" } else { "import" })?;
+        match &self.symbols {
+            Some(symbols) => write!(f, "[{}] from ", join(symbols, ", "))?,
+            None if self.reexport => write!(f, "* from ")?,
+            None => {}
         }
         if self.is_local {
             write!(f, "\"{}\"", self.name)?;

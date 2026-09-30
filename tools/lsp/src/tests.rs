@@ -28,6 +28,8 @@ export Box;
 export struct Box<T> { var value: T; }
 "#,
     ),
+    ("deps/solids/module.pep", "export * from \"cube\";\nexport [volume as size] from \"cube\";\n"),
+    ("deps/solids/cube.pep", "export volume(s: int): int { return s * s * s; }\nexport edge(s: int): int { return s; }\n"),
     ("util.pep", "export twice(x: int): int { return x * 2; }\nstruct Tally { var n: int; }\n## Counts; ask jane@corp.com.\nexport tally(): Tally { return Tally(); }\n"),
 ];
 
@@ -166,6 +168,23 @@ fn reexport_leads_to_the_reexported_declaration() {
     let (file, rest) = definition(&uri, &text, &program, at(&text, "export area", 0, 7));
     assert_eq!(file, "geometry/shapes.pep");
     assert!(rest.starts_with("area(w"), "{}", rest);
+}
+
+#[test]
+fn export_from_leads_to_the_source_and_its_declarations() {
+    let main = "import solids;\ntest(): int {\n    var e = solids.edge(2);\n    return e + solids.size(1);\n}\n";
+    let (uri, text, program) = load("export_from_use", main, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "edge", 0, 0));
+    assert_eq!(file, "solids/cube.pep");
+    assert!(rest.starts_with("edge(s"), "{}", rest);
+    assert!(definition(&uri, &text, &program, at(&text, "size", 0, 0)).1.starts_with("volume(s"));
+
+    let (uri, text, program) = load("export_from_lines", "", "deps/solids/module.pep");
+    // The source of `export * from`, and an entry of `export [...] from`.
+    assert_eq!(definition(&uri, &text, &program, at(&text, "\"cube\"", 0, 2)).0, "solids/cube.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "volume", 0, 0));
+    assert_eq!(file, "solids/cube.pep");
+    assert!(rest.starts_with("volume(s"), "{}", rest);
 }
 
 #[test]

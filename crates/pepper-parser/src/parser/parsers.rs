@@ -2762,15 +2762,48 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 fn import(input: &mut &str) -> Result<Import> {
+    source_import(input, false)
+}
+
+/// `export * from source` / `export [a, b as c] from source`: a re-export of
+/// another file's or module's exports. Backtracks unless `*` or `[` follows
+/// `export`.
+fn reexport(input: &mut &str) -> Result<Import> {
+    let mut probe = *input;
+    ws(&mut probe)?;
+    if !keyword(&mut probe, "export") {
+        return Err(bt(input));
+    }
+    ws(&mut probe)?;
+    if !probe.starts_with('*') && !probe.starts_with('[') {
+        return Err(bt(input));
+    }
+    source_import(input, true)
+}
+
+/// An import, or with `reexport` an `export ... from` re-export, which
+/// requires `*` or a symbol list and takes no alias.
+fn source_import(input: &mut &str, reexport: bool) -> Result<Import> {
     let start = pos(input);
     ws(input)?;
-    if !keyword(input, "import") {
+    if !keyword(input, if reexport { "export" } else { "import" }) {
         return Err(bt(input));
     }
     ws(input)?;
 
+    // `export * from source`
+    let star = reexport && input.starts_with('*');
+    if star {
+        *input = &input[1..];
+        ws(input)?;
+        if !keyword(input, "from") {
+            return Err(cut_expecting(input, "'from'"));
+        }
+        ws(input)?;
+    }
+
     // `import [a, b as c] from source`
-    let symbols = if input.starts_with('[') {
+    let symbols = if !star && input.starts_with('[') {
         *input = &input[1..];
         let mut symbols = vec![];
         loop {
@@ -2825,8 +2858,9 @@ fn import(input: &mut &str) -> Result<Import> {
     let before_alias = *input;
     ws(input)?;
     let alias = if keyword(input, "as") {
-        // An alias names a qualifier, which a symbol list does not bind.
-        if symbols.is_some() {
+        // An alias names a qualifier, which a symbol list or a re-export
+        // does not bind.
+        if symbols.is_some() || reexport {
             return Err(cut(input));
         }
         ws(input)?;
@@ -2838,7 +2872,7 @@ fn import(input: &mut &str) -> Result<Import> {
         None
     };
 
-    Ok(Import { name, name_span, alias, is_local, symbols, attributes: vec![], span: Span { start, end } })
+    Ok(Import { name, name_span, alias, is_local, symbols, reexport, attributes: vec![], span: Span { start, end } })
 }
 
 /// `export symbol as name` / `export symbol` / `export m.symbol as name`:
@@ -2916,6 +2950,17 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
             continue;
         }
         if keyword(&mut { *input }, "export") {
+            match reexport(input) {
+                Ok(mut imp) => {
+                    with_attributes(&mut imp.span, &mut imp.attributes, attrs);
+                    ws(input)?;
+                    if input.starts_with(';') { *input = &input[1..]; }
+                    imports.push(imp);
+                    continue;
+                }
+                Err(ErrMode::Cut(e)) => return Err(ErrMode::Cut(e)),
+                Err(_) => {}
+            }
             match export_alias(input) {
                 Ok(mut exp) => {
                     with_attributes(&mut exp.span, &mut exp.attributes, attrs);

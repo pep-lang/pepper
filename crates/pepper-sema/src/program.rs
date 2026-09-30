@@ -284,7 +284,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
                     continue;
                 }
                 Err(message) => {
-                    errors.push(ModuleError { unresolved: false, file, span: imp.span, message });
+                    errors.push(ModuleError { note: None, unresolved: false, file, span: imp.span, message });
                     targets.push(None);
                     continue;
                 }
@@ -311,7 +311,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
                                 imp.describe()
                             ),
                         };
-                        errors.push(ModuleError { unresolved: false, file, span: imp.name_span, message });
+                        errors.push(ModuleError { note: None, unresolved: false, file, span: imp.name_span, message });
                         targets.push(None);
                         continue;
                     }
@@ -350,7 +350,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
                     };
                     // Only a module search depends on `-I`, which an editor
                     // may not know; a missing file is missing everywhere.
-                    errors.push(ModuleError { unresolved: !imp.is_local, file, span: imp.name_span, message });
+                    errors.push(ModuleError { note: None, unresolved: !imp.is_local, file, span: imp.name_span, message });
                     targets.push(None);
                 }
             }
@@ -377,7 +377,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
         // the import says why rather than every use of it.
         for ((imp, target), folder) in file.module.imports.iter().zip(&targets).zip(&file.folder_imports) {
             if let Some(why) = target.as_ref().and_then(|k| failed.get(k)) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: imp.name_span,

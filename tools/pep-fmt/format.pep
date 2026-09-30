@@ -89,6 +89,20 @@ compare_text(a: String, b: String): int {
     return 0;
 }
 
+# Whether `item` is an import that sorting may move: not an `export ...
+# from`, whose order decides which of two colliding re-exports is reported.
+is_sortable_import(item: syntax.Node): bool {
+    if (item.kind != syntax.NODE_IMPORT) {
+        return false;
+    }
+    for (var child in item.children) {
+        if (child.is_token("export")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 # The sort key of an import: modules (`import io`) before files of this
 # module (`import "util"`), each by name.
 import_key(item: syntax.Node): String {
@@ -118,13 +132,13 @@ import_key(item: syntax.Node): String {
 sort_imports(items: syntax.Node[]) {
     ulong start = 0;
     while (start < items.count()) {
-        if (items[start].kind != syntax.NODE_IMPORT) {
+        if (!is_sortable_import(items[start])) {
             start += 1;
             continue;
         }
         ulong end = start + 1;
         while (end < items.count() and
-            items[end].kind == syntax.NODE_IMPORT and
+            is_sortable_import(items[end]) and
             !blank_before(items[end]) and
             items[end].first_token().leading_comments.count() == 0) {
             end += 1;
@@ -358,20 +372,29 @@ export struct Formatter {
 
     _import_declaration(item: syntax.Node): Doc {
         var result = concat();
+        # `prefix` takes the `export` of an `export ... from`, with its space.
         ulong i = _prefix(item, result);
-        result.add(_leaf(item.child(i)));
-        i += 1;
+        bool first = true;
+        if (item.child(i).is_token("import")) {
+            result.add(_leaf(item.child(i)));
+            first = false;
+            i += 1;
+        }
         while (i < item.count()) {
             var child = item.child(i);
             if (child.is_token(";")) {
                 result.add(_leaf(child));
-            } else if (child.kind == syntax.NODE_IMPORT_LIST) {
-                result.add(text(" "));
-                result.add(_delimited(child, false));
             } else {
-                result.add(text(" "));
-                result.add(_leaf(child));
+                if (!first) {
+                    result.add(text(" "));
+                }
+                if (child.kind == syntax.NODE_IMPORT_LIST) {
+                    result.add(_delimited(child, false));
+                } else {
+                    result.add(_leaf(child));
+                }
             }
+            first = false;
             i += 1;
         }
         return result;

@@ -58,7 +58,8 @@ deps/geometry/shapes.pep:3:8: note: declared here
 
 ## Imports come first
 
-Every import comes before all of a file's declarations and re-exports:
+Every import, and every `export ... from`, comes before all of a file's declarations
+and `export name` re-exports:
 
 ```pepper
 main(): int { return 0; }
@@ -130,6 +131,49 @@ main.pep:2:22: error: 'area' is not exported by 'geometry' (deps/geometry/module
     2 | main(): int { return geometry.area(1, 2); }
       |                      ^~~~~~~~~~~~~
 ```
+
+### Re-exporting a whole file or module
+
+A `module.pep` that only passes on its files' exports would repeat every name.
+`export ... from` passes them on in one line, in the same shapes as the
+`import ... from` forms:
+
+| Form | What importers get |
+|---|---|
+| `export * from "rect";` | Every export of `rect.pep`, each under its own name. |
+| `export * from geometry;` | Every export of the module `geometry`. |
+| `export [perimeter as outline, Side] from "measure";` | Only the listed exports, each under its own name or the one after `as`. |
+
+```pepper
+{{#include ../../examples/modules-reexports/shapes/module.pep}}
+```
+
+```pepper
+{{#include ../../examples/modules-reexports/main.pep}}
+```
+
+- **It re-exports; it doesn't import.** `export * from "rect";` makes no name
+  visible in the file that contains it. A file that also uses those names
+  imports them as usual, with `import "rect";`.
+- **Only exports travel.** Private declarations stay behind, and extensions
+  stay visible only as they always are.
+- **Collisions are errors.** If two re-exports, or a re-export and one of the
+  file's own exports, publish one name for different declarations, the
+  compiler reports it at the `export ... from` that adds the second one. List the names you want instead, or
+  rename one with `as`:
+
+  ```text
+  shapes/module.pep:2:1: error: 'area' is exported twice by module 'shapes'
+      2 | export * from "measure";
+        | ^~~~~~~~~~~~~~~~~~~~~~~
+  shapes/module.pep:1:1: note: also exported here
+      1 | export * from "rect";
+        | ^~~~~~~~~~~~~~~~~~~~
+  ```
+
+- Like imports, `export ... from` lines come before every declaration and
+  take attributes such as `[Target(...)]`. A deprecated declaration stays
+  deprecated through every re-export.
 
 ### A module's files stay inside it
 
@@ -247,4 +291,5 @@ elsewhere (see [Platform selection](platform-selection.md)):
 ```pepper
 [Target(OS(Linux))] import linux;
 [Target(OS(Linux))] export linux_open as open;
+[Target(OS(Windows))] export * from "windows";
 ```

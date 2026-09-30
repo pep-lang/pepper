@@ -190,9 +190,10 @@ pub fn check_uses(files: &[ProgramFile], scopes: &[FileScope]) -> Vec<Diagnostic
         for decl in file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             walker.walk_declaration(decl);
         }
-        // `import [name] from m` names the declaration too.
+        // `import [name] from m` names the declaration too; `export [name]
+        // from m` only passes it on.
         let named = scopes.get(i).map(|s| &s.named);
-        for imp in file.module.imports.iter().filter(|imp| keep(&imp.attributes).unwrap_or(true)) {
+        for imp in file.module.imports.iter().filter(|imp| !imp.reexport && keep(&imp.attributes).unwrap_or(true)) {
             for symbol in imp.symbols.iter().flatten() {
                 if let Some(name) = named.and_then(|n| n.get(&symbol.span.start)) {
                     walker.report(name, symbol.name_span);

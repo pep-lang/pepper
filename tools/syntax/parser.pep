@@ -1849,13 +1849,26 @@ struct Parser {
         return variable;
     }
 
+    # `import ...`, or `export * from ...` / `export [...] from ...`, which
+    # has the same shape but requires `*` or a list and takes no alias.
     _import_declaration(prefix: Node[]): Node {
         var node = Node(NODE_IMPORT);
         for (var item in prefix) {
             node.add(item);
         }
+        bool reexport = _at_word("export");
         _take(node);
         _skip();
+        if (reexport and _at("*")) {
+            _take(node);
+            _skip();
+            if (!_at_word("from")) {
+                _fail("expected 'from'");
+                return node;
+            }
+            _take(node);
+            _skip();
+        }
         bool list = _at("[");
         if (list) {
             var symbols = Node(NODE_IMPORT_LIST);
@@ -1912,7 +1925,7 @@ struct Parser {
         ulong position = _position;
         bool skipped = _skipped;
         _skip();
-        if (_at_word("as")) {
+        if (!reexport and _at_word("as")) {
             _take(node);
             _skip();
             var alias = _peek();
@@ -1923,11 +1936,16 @@ struct Parser {
             _qualifiers.insert(alias.text);
         } else {
             _restore(position, skipped);
-            if (!list and name.kind != TOKEN_STRING) {
+            if (!list and !reexport and name.kind != TOKEN_STRING) {
                 _qualifiers.insert(name.text);
             }
         }
         return node;
+    }
+
+    # Whether `export` is followed by `*` or `[`: an `export ... from`.
+    _at_export_from(): bool {
+        return _at_word("export") and (_peek_at(1).is("*") or _peek_at(1).is("["));
     }
 
     # `export name[.name] [as alias];`, a re-export. Fails (so the caller
@@ -1982,7 +2000,7 @@ struct Parser {
                 return node;
             }
             _skip();
-            if (_at_word("import")) {
+            if (_at_word("import") or _at_export_from()) {
                 var item = _import_declaration(prefix);
                 if (_failed) {
                     return node;

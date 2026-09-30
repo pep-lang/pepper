@@ -13,7 +13,8 @@ import "token";
 export const NODE_TOKEN = 0;
 ## A whole file: its items, then the end token.
 export const NODE_MODULE = 1;
-## `[attribute]... import [list from] name [as alias] [;]`
+## `[attribute]... import [list from] name [as alias] [;]`, or a re-export
+## `[attribute]... export (* | list) from name [;]`.
 export const NODE_IMPORT = 2;
 ## `[ symbol, ... ]` in an import: `IMPORT_SYMBOL`s separated by `,`.
 export const NODE_IMPORT_LIST = 3;

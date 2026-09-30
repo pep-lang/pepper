@@ -155,6 +155,23 @@ fn unresolved_import() {
 }
 
 #[test]
+fn export_star_collision() {
+    let others = [
+        ("a.pep", "export area(): int { return 1; }\n"),
+        ("b.pep", "export size(): int { return 2; }\nexport size as area;\n"),
+    ];
+    assert_eq!(
+        error_of_files("export_star_collision", "export * from \"a\";\nexport * from \"b\";\nmain(): int { return 0; }\n", &others),
+        "main.pep:2:1: error: 'area' is exported twice by \"main.pep\"\n\
+         \x20   2 | export * from \"b\";\n\
+         \x20     | ^~~~~~~~~~~~~~~~~\n\
+         main.pep:1:1: note: also exported here\n\
+         \x20   1 | export * from \"a\";\n\
+         \x20     | ^~~~~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
 fn malformed_platform_attribute() {
     let e = error_of("platform", "f() {}\n[Target(Os)]\ng() {}\nmain(): int { return 0; }\n");
     assert!(e.starts_with("main.pep:2:1: error: bare symbol `Os` is not a predicate"), "{}", e);

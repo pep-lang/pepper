@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pepper_parser::ast::{Declaration, FunctionDecl, Module, VariableDecl};
+use pepper_parser::ast::{Declaration, FunctionDecl, Import, Module, VariableDecl};
 use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_doc, is_public_member, member_name};
 
 /// Page titles for the runtime files, in the order the reference lists them.
@@ -76,7 +76,7 @@ pub fn generate(runtime_dir: &Path) -> Result<Vec<Page>, String> {
         let source = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
         let module = pepper_parser::parser::parse_source(&format!("runtime/{}", file), &source)?;
         let title = PAGES.iter().find(|(p, _)| *p == file).map_or_else(|| file.clone(), |(_, t)| t.to_string());
-        let body = page_body(&module, &source);
+        let body = format!("{}{}", reexports(&module, &file), page_body(&module, &source));
         let intro = file_doc(&source);
         if body.is_empty() && intro.is_none() {
             continue;
@@ -192,6 +192,43 @@ fn members(out: &mut String, source: &str, owner: &str, fields: &[VariableDecl],
     }
 }
 
+/// The page of the file or module an `export ... from` names, relative to
+/// the runtime file `file`: `io-types.md` for `"types"` in `io/module.pep`,
+/// `async-module.md` for the module `async`.
+fn source_page(file: &str, import: &Import) -> String {
+    if !import.is_local {
+        return format!("{}-module.md", import.name);
+    }
+    let dir = file.rsplit_once('/').map_or(String::new(), |(d, _)| format!("{}/", d));
+    format!("{}{}.md", dir, import.stem()).replace('/', "-")
+}
+
+/// A "Re-exports" section listing the file's `export * from` and `export
+/// [...] from` lines, each linking to the page of the file or module that
+/// declares the names. Empty without any.
+fn reexports(module: &Module, file: &str) -> String {
+    let mut out = String::new();
+    for import in module.imports.iter().filter(|i| i.reexport) {
+        let source = if import.is_local { format!("`{}.pep`", import.stem()) } else { format!("the `{}` module", import.name) };
+        let link = format!("[{}]({})", source, source_page(file, import));
+        match &import.symbols {
+            None => out.push_str(&format!("- Everything {} exports.
+", link)),
+            Some(symbols) => {
+                for s in symbols {
+                    let named = match &s.alias {
+                        Some(alias) => format!("`{}` (as `{}`)", s.name, alias),
+                        None => format!("`{}`", s.name),
+                    };
+                    out.push_str(&format!("- {} from {}.
+", named, link));
+                }
+            }
+        }
+    }
+    if out.is_empty() { out } else { format!("\n## Re-exports\n\n{}", out) }
+}
+
 fn page_body(module: &Module, source: &str) -> String {
     let mut out = String::new();
     for decl in &module.declarations {
@@ -289,4 +326,23 @@ pub fn write(docs_dir: &Path, pages: &[Page]) -> Result<Vec<PathBuf>, String> {
     let summary = std::fs::read_to_string(&summary_path).map_err(|e| format!("cannot read {}: {}", summary_path.display(), e))?;
     put(summary_path, &update_summary(&summary, pages)?, &mut changed)?;
     Ok(changed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn re_exports_link_to_their_sources() {
+        let source = "export * from \"types\";\nexport [Path, join as combine] from \"path\";\nexport * from async;\n";
+        let module = pepper_parser::parser::parse_source("runtime/io/module.pep", source).unwrap();
+        assert_eq!(
+            reexports(&module, "io/module.pep"),
+            "\n## Re-exports\n\n\
+             - Everything [`types.pep`](io-types.md) exports.\n\
+             - `Path` from [`path.pep`](io-path.md).\n\
+             - `join` (as `combine`) from [`path.pep`](io-path.md).\n\
+             - Everything [the `async` module](async-module.md) exports.\n"
+        );
+    }
 }

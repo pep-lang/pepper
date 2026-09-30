@@ -181,6 +181,14 @@ fn pep_fmt_sorts_imports_and_aligns_trailing_comments() {
 }
 
 #[test]
+fn pep_fmt_spaces_export_from_and_keeps_its_order() {
+    assert_formats(
+        "import \"b\";\nimport \"a\";\nexport   *   from \"zeta\";\n[Target(OS(Linux))] export  [ x as y,z ]  from   \"alpha\";\nexport * from io;\n",
+        "import \"a\";\nimport \"b\";\nexport * from \"zeta\";\n[Target(OS(Linux))]\nexport [x as y, z] from \"alpha\";\nexport * from io;\n",
+    );
+}
+
+#[test]
 fn pep_fmt_keeps_comments_blank_lines_and_line_endings() {
     assert_formats(
         "# header\n\n\n\n## Doc.\nf(): int {\n    # before\n\n\n    return 0;\n    # after\n}\n# end\n",

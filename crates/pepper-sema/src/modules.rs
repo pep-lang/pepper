@@ -87,13 +87,21 @@ pub struct ModuleError {
     /// An import that names no module or file on the search paths. Fatal to
     /// a compile; an editor, which cannot see `-I`, may show it as a warning.
     pub unresolved: bool,
+    /// A second place in the same file that explains the error, with its
+    /// message ("also exported here").
+    pub note: Option<(Span, String)>,
 }
 
 impl ModuleError {
     /// The error as a diagnostic, located in `files[self.file]` of the
     /// program it came from.
     pub fn to_diagnostic(&self) -> Diagnostic {
-        Diagnostic::error(self.message.clone()).at(Loc::new(FileId(self.file as u32), self.span))
+        let file = FileId(self.file as u32);
+        let diagnostic = Diagnostic::error(self.message.clone()).at(Loc::new(file, self.span));
+        match &self.note {
+            Some((span, message)) => diagnostic.with_note(message.clone(), Some(Loc::new(file, *span))),
+            None => diagnostic,
+        }
     }
 }
 
@@ -222,6 +230,20 @@ fn visible_names(files: &[ProgramFile], own: &[Names], exported: &[Names], shado
             let imports = files[i].module.imports.iter().zip(&files[i].imports);
             for (imp, target) in imports.filter(|(imp, _)| keep(&imp.attributes).unwrap_or(true)) {
                 let Some(t) = *target else { continue };
+                // `export ... from` publishes names and binds none here.
+                if imp.reexport {
+                    let published: Vec<(String, HashSet<usize>)> = match &imp.symbols {
+                        Some(symbols) => symbols
+                            .iter()
+                            .filter_map(|s| exports[t].get(&s.name).map(|v| (s.local_name().to_string(), v.clone())))
+                            .collect(),
+                        None => exports[t].iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+                    };
+                    for (k, v) in published {
+                        changed |= add_names(&mut exports[i], &k, &v);
+                    }
+                    continue;
+                }
                 if imp.symbols.is_none()
                     && let Some(q) = imp.qualifier()
                 {
@@ -451,10 +473,18 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     // concrete overrides, which take the name of the generic they override
     // (`export choose<int>` after `import [pick as choose]` exports `pick`).
     let override_counts: Vec<usize> = files.iter().enumerate().map(|(i, f)| exported_overrides(&f.module, i, &overrides).count()).collect();
-    let reexporting: Vec<usize> =
-        (0..n).filter(|&i| !files[i].module.exports.is_empty() || override_counts[i] > 0).collect();
-    let is_reexporting: Vec<bool> =
-        (0..n).map(|i| !files[i].module.exports.is_empty() || override_counts[i] > 0).collect();
+    // `export ... from` lines count once per name they may publish: a
+    // whole-file one once per export of any file.
+    let reexport_counts: Vec<usize> = files
+        .iter()
+        .map(|f| {
+            f.module.imports.iter().filter(|imp| imp.reexport).map(|imp| imp.symbols.as_ref().map_or(1, |s| s.len())).sum()
+        })
+        .collect();
+    let is_reexporting: Vec<bool> = (0..n)
+        .map(|i| !files[i].module.exports.is_empty() || override_counts[i] > 0 || reexport_counts[i] > 0)
+        .collect();
+    let reexporting: Vec<usize> = (0..n).filter(|&i| is_reexporting[i]).collect();
     let mut exports = direct.clone();
     let prelude_reexports = reexporting.iter().any(|&i| files[i].prelude);
     let mut prelude = prelude_exports(files, &exports);
@@ -472,8 +502,9 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
     // however the chain bounces between files.
     let max_rounds: usize = reexporting
         .iter()
-        .map(|&i| files[i].module.exports.len() + override_counts[i])
+        .map(|&i| files[i].module.exports.len() + override_counts[i] + reexport_counts[i])
         .sum::<usize>()
+        * if reexport_counts.iter().any(|&c| c > 0) { direct.iter().map(|d| d.len()).sum::<usize>().max(1) } else { 1 }
         + 1;
     let mut errors: Vec<ModuleError> = vec![];
     // Two functions of one name in one file overload each other, unless a
@@ -497,7 +528,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             let clashes = earlier().next().is_some()
                 && (!func.generic_params.is_empty() || earlier().any(|g| !g.generic_params.is_empty()));
             if clashes || (names_types && functions.iter().any(|g| g.name == func.name && !std::ptr::eq(*g, *func))) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: func.name_span,
@@ -542,7 +573,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
                 for ea in &files[*i].module.exports {
                     let name = ea.exported_name();
                     if table.get(name) != exports[*i].get(name) {
-                        errors.push(ModuleError {
+                        errors.push(ModuleError { note: None,
                             unresolved: false,
                             file: *i,
                             span: ea.span,
@@ -582,7 +613,7 @@ pub fn link(files: &mut [ProgramFile]) -> (Vec<FileScope>, Vec<ModuleError>) {
             let name = ea.exported_name();
             let renamed = exports[i].get(name).is_some_and(|c| c != name);
             if renamed && (0..n).any(|j| j != i && files[j].prelude && direct[j].contains_key(name)) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: ea.span,
@@ -715,7 +746,7 @@ fn visible_extensions(files: &[ProgramFile]) -> Vec<HashSet<usize>> {
         .map(|f| {
             let mut out = everywhere.clone();
             let kept = f.module.imports.iter().zip(&f.imports).zip(&f.folder_imports);
-            for ((imp, target), folder) in kept.filter(|((imp, _), _)| keep(&imp.attributes).unwrap_or(true)) {
+            for ((imp, target), folder) in kept.filter(|((imp, _), _)| !imp.reexport && keep(&imp.attributes).unwrap_or(true)) {
                 let Some(t) = *target else { continue };
                 out.insert(t);
                 if (!imp.is_local || *folder) && let Some(root) = &files[t].module_root {
@@ -777,12 +808,62 @@ fn resolve_reexports(
             out.insert(c.clone(), c);
         }
     }
+    // Where each name `out` publishes came from, for "also exported here".
+    let mut origins: HashMap<String, Span> = named_decls(&files[i].module)
+        .filter(|d| d.is_exported())
+        .map(|d| (d.name().to_string(), d.name_span()))
+        .collect();
+    let mut publish = |out: &mut HashMap<String, String>, name: &str, canonical: &str, span: Span, errors: &mut Vec<ModuleError>| {
+        match out.get(name) {
+            Some(existing) if existing != canonical => errors.push(ModuleError {
+                note: origins.get(name).map(|&at| (at, "also exported here".to_string())),
+                unresolved: false,
+                file: i,
+                span,
+                message: format!("'{}' is exported twice by {}", name, describe_file(&files[i])),
+            }),
+            Some(_) => {}
+            None => {
+                out.insert(name.to_string(), canonical.to_string());
+                origins.insert(name.to_string(), span);
+            }
+        }
+    };
+    // `export * from source` and `export [...] from source`, in order. The
+    // loader reported the ones that did not resolve.
+    let reexports = files[i].module.imports.iter().zip(&files[i].imports).zip(&files[i].folder_imports);
+    for ((imp, target), folder) in reexports.filter(|((imp, _), _)| imp.reexport) {
+        let (Ok(true), Some(t)) = (keep(&imp.attributes), *target) else { continue };
+        match &imp.symbols {
+            None => {
+                let mut names: Vec<(&String, &String)> = exports[t].iter().collect();
+                names.sort();
+                for (name, canonical) in names {
+                    publish(&mut out, name, canonical, imp.span, errors);
+                }
+            }
+            Some(symbols) => {
+                for s in symbols {
+                    match exports[t].get(&s.name) {
+                        Some(canonical) => publish(&mut out, s.local_name(), canonical, s.span, errors),
+                        None => errors.push(ModuleError {
+                            note: None,
+                            unresolved: false,
+                            file: i,
+                            span: s.name_span,
+                            message: format!("'{}' is not exported by {}", s.name, imp.describe_as(*folder)),
+                        }),
+                    }
+                }
+            }
+        }
+    }
     for ea in &files[i].module.exports {
         match keep(&ea.attributes) {
             Ok(true) => {}
             Ok(false) => continue,
             Err(message) => {
-                errors.push(ModuleError { unresolved: false, file: i, span: ea.span, message });
+                errors.push(ModuleError { note: None, unresolved: false, file: i, span: ea.span, message });
                 continue;
             }
         }
@@ -794,7 +875,7 @@ fn resolve_reexports(
             Ok(canonical) => {
                 let name = ea.exported_name().to_string();
                 match out.get(&name) {
-                    Some(existing) if *existing != canonical => errors.push(ModuleError {
+                    Some(existing) if *existing != canonical => errors.push(ModuleError { note: None,
                         unresolved: false,
                         file: i,
                         span: ea.span,
@@ -806,10 +887,21 @@ fn resolve_reexports(
                 }
             }
             Err(_) if bindings.unresolved_whole_file && !ea.symbol.contains('.') => {}
-            Err(message) => errors.push(ModuleError { unresolved: false, file: i, span: ea.symbol_span, message }),
+            Err(message) => errors.push(ModuleError { note: None, unresolved: false, file: i, span: ea.symbol_span, message }),
         }
     }
     out
+}
+
+/// How diagnostics name the file whose exports are meant: `module
+/// 'geometry'` for a module's `module.pep`, else `"shapes.pep"`.
+fn describe_file(file: &ProgramFile) -> String {
+    let path = std::path::Path::new(&file.name);
+    let stem = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    match &file.module_root {
+        Some(root) if path.file_name().is_some_and(|n| n == "module.pep") => format!("module '{}'", stem(root)),
+        _ => format!("\"{}\"", stem(path)),
+    }
 }
 
 /// Give the named declaration `decl` the name `name`.
@@ -906,7 +998,12 @@ fn bind_imports(
     let mut b = Bindings::default();
     // An import platform selection drops binds nothing, and is no error.
     let kept = || {
-        files[i].module.imports.iter().zip(&files[i].imports).filter(|(imp, _)| keep(&imp.attributes).unwrap_or(true))
+        files[i]
+            .module
+            .imports
+            .iter()
+            .zip(&files[i].imports)
+            .filter(|(imp, _)| !imp.reexport && keep(&imp.attributes).unwrap_or(true))
     };
     // Whether each import resolved to a module folder, for diagnostics.
     let folder: HashMap<usize, bool> =
@@ -929,14 +1026,14 @@ fn bind_imports(
     for (imp, target) in imports().filter(|(imp, _)| imp.symbols.is_none()) {
         if let Some(q) = imp.qualifier() {
             if own.contains_key(q) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: imp.span,
                     message: format!("'{}' is imported but also declared in this file", q),
                 });
             } else if b.qualified.get(q).is_some_and(|&t| t != target) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: imp.span,
@@ -970,7 +1067,7 @@ fn bind_imports(
         let Some(symbols) = &imp.symbols else { continue };
         for s in symbols {
             let Some(c) = exports[target].get(&s.name) else {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: s.name_span,
@@ -980,7 +1077,7 @@ fn bind_imports(
             };
             let local = s.local_name();
             if own.contains_key(local) {
-                errors.push(ModuleError {
+                errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: s.span,
@@ -989,7 +1086,7 @@ fn bind_imports(
                 continue;
             }
             match explicit.get(local) {
-                Some(existing) if existing != c => errors.push(ModuleError {
+                Some(existing) if existing != c => errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
                     span: s.span,
@@ -1009,7 +1106,7 @@ fn bind_imports(
         if let Some(q) = imp.qualifier()
             && b.unqualified.contains_key(q)
         {
-            errors.push(ModuleError {
+            errors.push(ModuleError { note: None,
                 unresolved: false,
                 file: i,
                 span: imp.span,
@@ -1121,7 +1218,7 @@ impl Rewriter<'_, '_> {
     /// generic construction (`q.f<int>()`), which sema never binds to a method.
     fn qualified(&mut self, target: usize, q: &str, name: &str, span: Span, value: bool) -> Option<String> {
         let Some(c) = self.exports[target].get(name).cloned() else {
-            self.errors.push(ModuleError {
+            self.errors.push(ModuleError { note: None,
                 unresolved: false,
                 file: self.file,
                 span,
@@ -1150,7 +1247,7 @@ impl Rewriter<'_, '_> {
             // name (`hash`) is not an import.
             Resolution::Declared(c, source) => self.denote(name, c, span, value, source == Source::Import),
             Resolution::Ambiguous => {
-                self.errors.push(ModuleError { unresolved: false, file: self.file, span, message: ambiguous(name) });
+                self.errors.push(ModuleError { note: None, unresolved: false, file: self.file, span, message: ambiguous(name) });
                 None
             }
             Resolution::Unknown => None,
@@ -1170,7 +1267,7 @@ impl Rewriter<'_, '_> {
     /// `area2()` in a method).
     fn denote(&mut self, spelled: &str, c: String, span: Span, value: bool, imported: bool) -> Option<String> {
         if value && imported && !self.is_local(&c) && self.is_any_extension_method(&c) {
-            self.errors.push(ModuleError {
+            self.errors.push(ModuleError { note: None,
                 unresolved: false,
                 file: self.file,
                 span,
@@ -1182,7 +1279,7 @@ impl Rewriter<'_, '_> {
             return None;
         }
         if spelled != c && self.is_hidden(&c, value) {
-            self.errors.push(ModuleError {
+            self.errors.push(ModuleError { note: None,
                 unresolved: false,
                 file: self.file,
                 span,
@@ -1284,7 +1381,7 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
                 Some(_) => format!("'{}' is not a struct; an override's type argument must name a struct", p.name),
                 None => format!("unknown type name '{}'", p.name),
             };
-            self.errors.push(ModuleError { unresolved: false, file: self.file, span: p.name_span, message });
+            self.errors.push(ModuleError { note: None, unresolved: false, file: self.file, span: p.name_span, message });
         }
         true
     }
@@ -1323,7 +1420,7 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
                 Some(target) => self.qualified(target, q, name, ty.span, false),
                 None if self.bindings.unresolved.contains(q) => None,
                 None => {
-                    self.errors.push(ModuleError {
+                    self.errors.push(ModuleError { note: None,
                         unresolved: false,
                         file: self.file,
                         span: ty.span,

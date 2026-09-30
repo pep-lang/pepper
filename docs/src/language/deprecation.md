@@ -74,8 +74,8 @@ These do not warn:
 - a use inside a declaration that is deprecated too, including the methods of
   a deprecated struct and closures written inside a deprecated function, so
   old code can keep calling old code without noise
-- a re-export, `export name as other`, which passes the name on without using
-  it
+- a re-export, `export name as other` or `export [name] from source`, which
+  passes the name on without using it
 
 ## Mistakes in the attribute
 

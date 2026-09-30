@@ -238,8 +238,9 @@ with no extension, and `module_name()` is the output's stem.
 - **Grammar** (`parser/parsers.rs`): hand-written winnow combinators over
   `&mut &str`. The precedence ladder is documented at the top of the file
   (`assignment → ternary → … → postfix → atom`, with `cast` for `as`).
-  `parse_module` is the top-level loop: imports, `export` re-exports, then
-  `declaration`. Rules return `ErrMode::Backtrack` (via `bt`) to let an
+  `parse_module` is the top-level loop: imports (with `export * from` and
+  `export [...] from`, which `reexport` recognizes and parses as imports),
+  `export` re-exports, then `declaration`. Rules return `ErrMode::Backtrack` (via `bt`) to let an
   alternative try, or `ErrMode::Cut` (via `cut`/`cut_expecting`) to commit.
 - **Generic method calls.** In postfix position, `.name<types>(` is a call
   with type arguments only when `<` follows the name and `(` follows `>`
@@ -272,7 +273,13 @@ with no extension, and `module_name()` is the output's stem.
   there is one, otherwise the expectation recorded at the furthest offset
   (`expected ')'`), or `unexpected 'x'` when none was recorded. `token_at`
   sizes the caret.
-- **AST** (`ast.rs`): `Module { imports, exports, declarations }`.
+- **AST** (`ast.rs`): `Module { imports, exports, declarations }`. An
+  `export * from source` or `export [...] from source` is an `Import` with
+  `reexport` set (`symbols` is `None` for `*`): the loader resolves it like
+  an import, but linking binds no name from it; `resolve_reexports` adds the
+  source's exports (all of them, or the listed ones) to the file's, and
+  reports a name published twice for different declarations at the
+  `export ... from` that adds the second, with a note at the first.
   `Declaration` is `Variable | Function | Struct | Trait | Extend |
   TypeAlias`. The file also defines `Statement`, `Expression`, `TypeName {
   name, generic_types, span }`, `Attribute { body: Expression, span }`,
@@ -846,7 +853,7 @@ release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `pepper -I tools tools/pep-fmt/main.pep`. They are the project's largest
 dogfooding of the language.
 
-- `tools/syntax` (a module: `module.pep` re-exports the rest) is a lexer
+- `tools/syntax` (a module: `module.pep` is four `export * from` lines) is a lexer
   (`lexer.pep`, `token.pep`) and a recursive-descent parser (`parser.pep`)
   that builds a *lossless* tree (`tree.pep`): every token is a leaf, in
   source order, and each comment hangs off the token next to it (a comment

@@ -1933,3 +1933,218 @@ fn a_files_own_function_hides_the_imported_generic_it_would_override() {
         assert!(err.contains("redefinition of generic 'describe'"), "{}\n{}", own, err);
     }
 }
+
+/// A module whose `module.pep` only re-exports its files.
+const SHAPES: &[(&str, &str)] = &[
+    ("shapes/module.pep", "export * from \"rect\";\nexport [perimeter as outline, Side] from \"measure\";\n"),
+    (
+        "shapes/rect.pep",
+        "export struct Rect { var w: int; var h: int; }\nexport area(r: Rect): int { return r.w * r.h + helper(); }\nhelper(): int { return 0; }\n",
+    ),
+    (
+        "shapes/measure.pep",
+        "import \"rect\";\nexport perimeter(r: Rect): int { return 2 * (r.w + r.h); }\nexport struct Side { var n: int; }\nexport hidden(): int { return 7; }\n",
+    ),
+];
+
+fn with_shapes<'a>(main: &'a str) -> Vec<(&'a str, &'a str)> {
+    let mut files: Vec<(&str, &str)> = SHAPES.to_vec();
+    files.push(("main.pep", main));
+    files
+}
+
+#[test]
+fn export_star_from_a_file_re_exports_all_its_exports() {
+    let main = r#"
+import shapes;
+test(): int {
+    var r = shapes.Rect();
+    r.w = 3;
+    r.h = 4;
+    return shapes.area(r);
+}
+"#;
+    assert_eq!(run("export_star_file", &with_shapes(main)), 12);
+}
+
+#[test]
+fn export_list_from_a_file_re_exports_the_listed_names() {
+    let main = r#"
+import [Rect, outline, Side] from shapes;
+test(): int {
+    var r = Rect();
+    r.w = 3;
+    r.h = 4;
+    var s = Side();
+    s.n = 1;
+    return outline(r) + s.n;
+}
+"#;
+    assert_eq!(run("export_list_file", &with_shapes(main)), 15);
+}
+
+#[test]
+fn export_list_publishes_only_the_listed_names_under_their_new_names() {
+    let err = error("export_list_unlisted", &with_shapes("import shapes;\ntest(): int { return shapes.hidden(); }"));
+    assert!(err.contains("'hidden' is not exported by 'shapes'"), "{}", err);
+    let err = error(
+        "export_list_renamed",
+        &with_shapes("import shapes;\ntest(): int { var r = shapes.Rect(); return shapes.perimeter(r); }"),
+    );
+    assert!(err.contains("'perimeter' is not exported by 'shapes'"), "{}", err);
+}
+
+#[test]
+fn export_star_does_not_publish_private_names() {
+    let err = error("export_star_private", &with_shapes("import shapes;\ntest(): int { return shapes.helper(); }"));
+    assert!(err.contains("'helper' is not exported by 'shapes'"), "{}", err);
+}
+
+#[test]
+fn export_star_from_a_module_makes_a_facade() {
+    let mut files = with_shapes(
+        r#"
+import kit;
+test(): int {
+    var r = kit.Rect();
+    r.w = 2;
+    r.h = 5;
+    return kit.area(r) + kit.twice(1);
+}
+"#,
+    );
+    files.push(("kit/module.pep", "export * from shapes;\nexport * from \"extra\";\n"));
+    files.push(("kit/extra.pep", "export twice(x: int): int { return x * 2; }\n"));
+    assert_eq!(run("export_star_module", &files), 12);
+}
+
+#[test]
+fn export_from_binds_no_name_in_its_own_file() {
+    let files = [
+        ("lib/module.pep", "export * from \"impl\";\nexport g(): int { return f(); }\n"),
+        ("lib/impl.pep", "export f(): int { return 1; }\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.g(); }"),
+    ];
+    let err = error("export_from_binds_nothing", &files);
+    assert!(err.contains("'f'"), "{}", err);
+}
+
+#[test]
+fn export_from_and_import_of_the_same_file_work_together() {
+    let files = [
+        ("lib/module.pep", "import \"impl\";\nexport * from \"impl\";\nexport g(): int { return f() + 1; }\n"),
+        ("lib/impl.pep", "export f(): int { return 1; }\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.f() * 10 + lib.g(); }"),
+    ];
+    assert_eq!(run("export_from_and_import", &files), 12);
+}
+
+#[test]
+fn export_star_chains_through_files() {
+    let files = [
+        ("lib/module.pep", "export * from \"a\";\n"),
+        ("lib/a.pep", "export * from \"b\";\n"),
+        ("lib/b.pep", "export f(): int { return 5; }\n"),
+        ("main.pep", "import [f] from lib;\ntest(): int { return f(); }"),
+    ];
+    assert_eq!(run("export_star_chain", &files), 5);
+}
+
+#[test]
+fn a_file_import_sees_what_the_file_re_exports() {
+    let files = [
+        ("./pkg/module.pep", "export * from \"inner\";\n"),
+        ("./pkg/inner.pep", "export f(): int { return 4; }\n"),
+        ("main.pep", "import \"pkg\";\ntest(): int { return f(); }"),
+    ];
+    assert_eq!(run("export_star_local_folder", &files), 4);
+}
+
+#[test]
+fn export_star_collisions_are_reported_at_the_later_export() {
+    let files = [
+        ("lib/module.pep", "export * from \"a\";\nexport * from \"b\";\n"),
+        // Top-level names are unique program-wide, so two exports collide
+        // only through a renaming re-export.
+        ("lib/a.pep", "export area(): int { return 1; }\n"),
+        ("lib/b.pep", "export size(): int { return 2; }\nexport size as area;\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.area(); }"),
+    ];
+    let err = error("export_star_collision", &files);
+    assert!(err.contains("module.pep:2:1: error: 'area' is exported twice by module 'lib'"), "{}", err);
+    assert!(err.contains("module.pep:1:1: note: also exported here"), "{}", err);
+}
+
+#[test]
+fn export_star_colliding_with_an_own_export_is_reported() {
+    let files = [
+        ("lib/module.pep", "export * from \"a\";\nexport area(): int { return 2; }\n"),
+        ("lib/a.pep", "export size(): int { return 1; }\nexport size as area;\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.area(); }"),
+    ];
+    let err = error("export_star_own_collision", &files);
+    assert!(err.contains("module.pep:1:1: error: 'area' is exported twice by module 'lib'"), "{}", err);
+    assert!(err.contains("module.pep:2:8: note: also exported here"), "{}", err);
+}
+
+#[test]
+fn export_star_of_one_declaration_twice_is_no_collision() {
+    let files = [
+        ("lib/module.pep", "export * from \"a\";\nexport * from \"b\";\n"),
+        ("lib/a.pep", "export f(): int { return 3; }\n"),
+        ("lib/b.pep", "export * from \"a\";\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.f(); }"),
+    ];
+    assert_eq!(run("export_star_same_declaration", &files), 3);
+}
+
+#[test]
+fn export_list_of_a_missing_name_is_reported() {
+    let files = [
+        ("lib/module.pep", "export [nope] from \"a\";\n"),
+        ("lib/a.pep", "export f(): int { return 1; }\n"),
+        ("main.pep", "import lib;\ntest(): int { return 0; }"),
+    ];
+    let err = error("export_list_missing", &files);
+    assert!(err.contains("'nope' is not exported by \"a.pep\""), "{}", err);
+}
+
+#[test]
+fn export_from_an_unknown_file_is_reported_at_the_source() {
+    let files = [("lib/module.pep", "export * from \"missing\";\n"), ("main.pep", "import lib;\ntest(): int { return 0; }")];
+    let err = error("export_from_missing", &files);
+    assert!(err.contains("cannot find \"missing.pep\""), "{}", err);
+}
+
+#[test]
+fn export_from_takes_platform_attributes() {
+    let files = [
+        (
+            "lib/module.pep",
+            "[Target(OS(Linux))]\nexport * from \"linux\";\n[Target(OS(Windows))]\nexport * from \"windows\";\n[Target(OS(MacOS))]\nexport * from \"mac\";\n",
+        ),
+        ("lib/linux.pep", "export os_id(): int { return 1; }\n"),
+        ("lib/windows.pep", "export os_id(): int { return 2; }\n"),
+        ("lib/mac.pep", "export os_id(): int { return 3; }\n"),
+        ("main.pep", "import lib;\ntest(): int { return lib.os_id(); }"),
+    ];
+    let expected = if cfg!(target_os = "linux") {
+        1
+    } else if cfg!(target_os = "windows") {
+        2
+    } else {
+        3
+    };
+    assert_eq!(run("export_from_platform", &files), expected);
+}
+
+#[test]
+fn export_from_must_come_before_declarations() {
+    let files = [
+        ("lib/module.pep", "export f(): int { return 1; }\nexport * from \"a\";\n"),
+        ("lib/a.pep", "export g(): int { return 1; }\n"),
+        ("main.pep", "import lib;\ntest(): int { return 0; }"),
+    ];
+    let err = error("export_from_order", &files);
+    assert!(err.contains("imports must come before all declarations"), "{}", err);
+}
