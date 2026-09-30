@@ -1120,7 +1120,10 @@ compiles the code but cannot run it. Run it for real with the
 
 Every job in every workflow runs on a self-hosted runner, never a
 GitHub-hosted one: **`pepper-windows`** and **`pepper-linux`** (x64), and
-**`pepper-macos`** (arm64). A new job picks one of those labels.
+**`pepper-macos`** (arm64). A new job picks one of those labels. `ci.yml` jobs build into a
+target dir beside the checkout that persists across runs of every PR, with
+`CARGO_INCREMENTAL=0`: rustc's incremental cache mixed objects across branches
+there.
 
 - **`ci.yml`** (push to `main`, PRs):
   - `test` is the required check. It runs on the self-hosted

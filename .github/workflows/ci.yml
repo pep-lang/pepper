@@ -47,6 +47,14 @@ env:
   # The build is warning-free; warnings are not made errors (a new rustc or
   # dependency release can add one), but a new one should be fixed, not left.
   RUST_BACKTRACE: 1
+  # The self-hosted jobs build into a target dir that persists across runs of
+  # every PR (see "Use persistent target dir"). Cargo's per-crate fingerprints
+  # handle that, but rustc's incremental cache does not: switching between PR
+  # branches, and runs cancelled mid-build by a newer push, left object files
+  # referencing symbols from another branch (LNK1120 on #148, naming a function
+  # that exists only in #140). Dependencies are still reused; only the
+  # workspace crates rebuild in full, which is seconds.
+  CARGO_INCREMENTAL: 0
 
 jobs:
   test:
