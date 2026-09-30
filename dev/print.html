@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56caf54f.js";
+            window.path_to_searchindex_js = "searchindex-eae996f7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -222,7 +222,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, enums with <code>match</code>, tuples
+structs with constructors, destructors and methods, enums (with cases that carry values) and <code>match</code>, tuples
 and multiple return values, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
@@ -3649,6 +3649,14 @@ indexed this way.</p>
 enum holds exactly one of them. Use an enum where you would otherwise pass an
 integer code or a string, so the compiler checks that only the listed cases
 flow through, and that a <code>match</code> handles each one.</p>
+<p>There are two kinds:</p>
+<ul>
+<li>In an enum whose cases carry nothing (<code>Red</code>, <code>Green</code>), each case is an
+integer. Such an enum is a value type, like <code>int</code>.</li>
+<li>When a case carries values (<code>Circle(radius: int)</code>), the enum is a
+reference type, like a struct. See
+<a href="#cases-that-carry-values">Cases that carry values</a>.</li>
+</ul>
 <pre><code class="language-pepper"># An enum names a fixed set of cases; a slot of the enum type holds one.
 enum Suit {
     Clubs,
@@ -3705,7 +3713,8 @@ must fit in the representation.</p>
 platform can have cases that others lack. A dropped case does not renumber
 the others.</p>
 <h2 id="using-enum-values"><a class="header" href="#using-enum-values">Using enum values</a></h2>
-<p><code>Name.Case</code> is a value of the enum type. An enum is a value type, like <code>int</code>:
+<p>This section is about enums whose cases carry nothing.</p>
+<p><code>Name.Case</code> is a value of the enum type. Such an enum is a value type, like <code>int</code>:
 it is copied, not reference counted, and it can be stored in locals, fields,
 arrays and module-scope constants, and passed to and returned from functions.</p>
 <ul>
@@ -3723,6 +3732,91 @@ when no case is 0.</li>
 <li>An enum works wherever an integer does: as a <code>HashMap</code> key or <code>HashSet</code>
 element, in an <code>Atomic&lt;Name&gt;</code>, and in an <code>extern</code> function’s signature,
 where C sees the representation (an <code>int</code> unless the enum names another).</li>
+</ul>
+<h2 id="cases-that-carry-values"><a class="header" href="#cases-that-carry-values">Cases that carry values</a></h2>
+<p>A case can carry values, declared like parameters: <code>Circle(radius: int)</code>.
+An enum with such a case is a <strong>reference type</strong>: each value is an object,
+reference counted like a <a href="#structs-1">struct</a>.</p>
+<pre><code class="language-pepper"># Cases that carry values: each case is a constructor, and a `match`
+# pattern binds the values of the case it matches.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Square(side: int),
+    Point,
+
+    area(): int {
+        match (this) {
+            Circle(r) =&gt; { return 3 * r * r; }
+            Rect(w, h) =&gt; { return w * h; }
+            Square(s) =&gt; { return s * s; }
+            Point =&gt; { return 0; }
+        }
+        return 0;
+    }
+}
+
+# A generic enum can name itself: a list is empty, or a value and the rest.
+enum List&lt;T&gt; {
+    Empty,
+    Cons(head: T, tail: List&lt;T&gt;),
+}
+
+length(list: List&lt;String&gt;): int {
+    match (list) {
+        Empty =&gt; { return 0; }
+        # `_` skips a value.
+        Cons(_, tail) =&gt; { return 1 + length(tail); }
+    }
+    return 0;
+}
+
+main(): int {
+    var shapes = Array&lt;Shape&gt;();
+    shapes.append(Shape.Circle(2));
+    shapes.append(Shape.Rect(3, 4));
+    shapes.append(Shape.Point);
+    var total = 0;
+    for (var s in shapes) {
+        total += s.area();
+    }
+    assert(total == 24, "12 + 12 + 0");
+
+    # Several patterns in one arm bind the same names.
+    var side = 0;
+    match (Shape.Square(5)) {
+        Rect(w, _), Square(w) =&gt; { side = w; }
+        else =&gt; {}
+    }
+    assert(side == 5, "a square's side");
+
+    var names = List&lt;String&gt;.Cons("a", List&lt;String&gt;.Cons("b", List&lt;String&gt;.Empty));
+    assert(length(names) == 2, "two names");
+    assert(names.name() == "Cons", "name() spells the case");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Name.Case(values...)</code> makes a new value, like a constructor call, and
+<code>Name.Case</code> alone is a case that carries nothing. An enum’s values are
+made only by its cases: <code>Shape(...)</code> is an error.</li>
+<li>A case that carries values must be given them: <code>Shape.Circle</code> without
+<code>(radius)</code> is an error.</li>
+<li>The values are fixed once made. There is no way to change them, so a value
+can be shared freely. To change one, make a new value.</li>
+<li>Each case that carries nothing is a single object that every use shares.
+It is never freed and costs no allocation, however often it is used.</li>
+<li>A slot of the enum type that is not given a value holds null, as a struct
+slot does. <code>===</code> and <code>!==</code> compare identity.</li>
+<li>An enum can have type parameters (<code>enum List&lt;T&gt;</code>), and its cases can hold
+the enum itself, directly or through other types, so lists and trees are
+enums.</li>
+<li>The enum can be <code>[Shared]</code> when every value its cases carry is
+thread-safe (see <a href="#threads-and-shared-data">Threads</a>). It can conform to a trait with
+<code>extend Name with Trait</code>, like a struct, and its methods can come from an
+<code>extend</code> block too.</li>
+<li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no
+representation type (<code>: u8</code>), since its values are not integers.</li>
 </ul>
 <h2 id="methods-1"><a class="header" href="#methods-1">Methods</a></h2>
 <p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
@@ -3777,10 +3871,12 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p><code>this</code> is passed by value, like an <code>int</code>: a method cannot change the value it
-was called on. Return a new case instead, as <code>next()</code> does.</p>
+<p>For an enum whose cases carry nothing, <code>this</code> is passed by value, like an
+<code>int</code>: a method cannot change the value it was called on. Return a new case
+instead, as <code>next()</code> does. For an enum whose cases carry values, <code>this</code> is
+the object, as in a struct’s method; its values still cannot change.</p>
 <h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
-<p>Every enum has two methods without declaring them, and cannot declare
+<p>Every enum has these methods without declaring them, and cannot declare
 methods of the same names:</p>
 <div class="table-wrapper">
 <table>
@@ -3788,8 +3884,8 @@ methods of the same names:</p>
 <tr><th>Method</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>value.name()</code></td><td>Returns the case’s name as written (<code>"Red"</code>), a <code>String</code>.</td></tr>
-<tr><td><code>Name.from_value(n)</code></td><td>Returns a <code>Result&lt;Name&gt;</code>: Ok with the case whose value is <code>n</code>, or an Err when no case has it. <code>n</code> has the enum’s representation type.</td></tr>
+<tr><td><code>value.name()</code></td><td>Returns the case’s name as written (<code>"Red"</code>), a <code>String</code>. Every enum has it.</td></tr>
+<tr><td><code>Name.from_value(n)</code></td><td>Returns a <code>Result&lt;Name&gt;</code>: Ok with the case whose value is <code>n</code>, or an Err when no case has it. <code>n</code> has the enum’s representation type. Only enums whose cases carry nothing have it.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3846,6 +3942,12 @@ main(): int {
 <li>Each arm is one or more patterns, separated by commas, then <code>=&gt;</code> and a
 block. A pattern is a case name (<code>Red</code>) or the case qualified by its enum
 (<code>Light.Red</code>).</li>
+<li>A pattern for a case that carries values can <strong>bind</strong> them:
+<code>Rect(w, h)</code> declares <code>w</code> and <code>h</code> in its arm, holding the case’s values in
+order. The bindings are <code>const</code>. <code>_</code> skips a value. A pattern binds all of
+its case’s values or, written without parentheses (<code>Rect</code>), none.</li>
+<li>Patterns that share an arm must bind the same names, with the same types
+(<code>Rect(w, _), Square(w)</code>).</li>
 <li>An <code>else =&gt; { ... }</code> arm, last, handles every case the other arms do not.</li>
 <li>The arms must handle <strong>every case</strong>. A missing case is an error that names
 it, located at <code>match</code>; the language server offers a quick fix that adds an
@@ -3855,19 +3957,24 @@ other arms handle every case, is a warning.</li>
 <li><code>match</code> is a statement. <code>break</code>, <code>continue</code> and <code>return</code> inside an arm act
 on the enclosing loop or function, as they would inside an <code>if</code>.</li>
 </ul>
-<p>The value is evaluated once, before any arm runs.</p>
+<p>The value is evaluated once, before any arm runs. A <code>match</code> on a null value
+of an enum whose cases carry values panics with <code>match on a null 'Name'</code>.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>Cases cannot carry values yet (<code>Circle(radius: float)</code>); that is the next
-step, and it is what lets <a href="#optional-values"><code>Optional</code></a> and
-<a href="#error-handling-with-result"><code>Result</code></a> become enums.</li>
-<li>Enums cannot be generic yet, and neither can their methods. An enum
-cannot declare operators or indexers yet; <code>==</code> and <code>!=</code> are built in.</li>
+<li><a href="#optional-values"><code>Optional</code></a> and <a href="#error-handling-with-result"><code>Result</code></a> are not enums yet,
+so they cannot be matched.</li>
+<li>An enum whose cases carry nothing cannot be generic. The methods of any
+enum cannot be generic yet. An enum cannot declare operators or indexers
+yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
+<li>Patterns cannot be nested (<code>Some(Text(t))</code>), compare values
+(<code>Text("")</code>), or have guards yet.</li>
 <li><code>match</code> works only on enums, and only as a statement: it does not produce
-a value, and cannot match integers, characters or strings yet.</li>
-<li>An enum cannot be extended (<code>extend Color { ... }</code>); declare its methods
-inside it. So it cannot conform to a trait either, and a trait value is a
-reference to an object, which an enum value is not.</li>
+a value, and cannot match integers, characters or strings yet. There is no
+<code>is</code> test yet.</li>
+<li>An enum whose cases carry nothing cannot be extended
+(<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
+conform to a trait either, and a trait value is a reference to an object,
+which such an enum’s value is not.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-and-reference-counting"><a class="header" href="#memory-and-reference-counting">Memory and reference counting</a></h1>
@@ -5829,8 +5936,8 @@ error.</p>
 <li>An optional is checked as a condition (or with <code>is_some()</code> or
 <code>is_none()</code>) and read with <code>value()</code> or <code>value_or</code>; <code>match</code> does not work
 on it yet. <code>Optional</code> will become an <a href="#enums-and-match">enum</a> with <code>None</code> and
-<code>Some(value)</code> cases once enum cases can carry values; its methods stay the
-same.</li>
+<code>Some(value)</code> cases, as enum cases can now carry values; its methods stay
+the same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-56caf54f.js";
+            window.path_to_searchindex_js = "../searchindex-eae996f7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -293,8 +293,8 @@ error.</p>
 <li>An optional is checked as a condition (or with <code>is_some()</code> or
 <code>is_none()</code>) and read with <code>value()</code> or <code>value_or</code>; <code>match</code> does not work
 on it yet. <code>Optional</code> will become an <a href="enums.html">enum</a> with <code>None</code> and
-<code>Some(value)</code> cases once enum cases can carry values; its methods stay the
-same.</li>
+<code>Some(value)</code> cases, as enum cases can now carry values; its methods stay
+the same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>
