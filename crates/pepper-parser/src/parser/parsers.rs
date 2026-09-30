@@ -218,6 +218,9 @@ pub(crate) fn skip_trivia(source: &str, offset: usize) -> usize {
 
 // ── Keywords ──────────────────────────────────────────────────────────────────
 
+/// The runtime type `T?` stands for (`runtime/optional.pep`).
+const OPTIONAL_TYPE: &str = "Optional";
+
 const RESERVED: &[&str] = &[
     "import", "struct", "var", "const",
     "if", "else", "while", "for", "return", "extern",
@@ -337,6 +340,22 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         break;
     }
 
+    // Optional suffix: `T?` is `Optional<T>` (`int[]?` is an optional array).
+    loop {
+        let mut probe: &str = input;
+        ws(&mut probe)?;
+        if !probe.starts_with('?') {
+            break;
+        }
+        if EXPRESSION_PROBE.with(|p| p.get()) && !optional_suffix_in_probe(&probe[1..]) {
+            break;
+        }
+        *input = &probe[1..];
+        end = pos(input);
+        let start = ty.span.start;
+        ty = TypeName { name: OPTIONAL_TYPE.to_string(), generic_types: vec![ty], span: Span { start, end } };
+    }
+
     // pointer suffix: one or more `*` (e.g. char*, void**). Parsed in every
     // type position so a misplaced `T*` gets a targeted error; it is legal only
     // in extern declarations (see `check_pointer_syntax`).
@@ -353,6 +372,33 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
 
     ty.span.end = end;
     Ok(ty)
+}
+
+/// Whether the `?` just before `after` makes an optional type while an
+/// expression is being probed for one (a C-style declaration such as
+/// `Node? x;`, a type literal such as `Array<int?>()`), where `a ? b : c` may
+/// be a ternary instead. It is a type when it closes or separates type
+/// arguments (`?>`, `?,`), or when a name follows that ends the declaration
+/// (`Node? x;`, `Node? x = y`, `Node? x` at the end of the line); a ternary's
+/// first branch is followed by `:` instead.
+fn optional_suffix_in_probe(after: &str) -> bool {
+    let mut rest: &str = after;
+    skip_inline_ws(&mut rest);
+    if rest.starts_with('>') || rest.starts_with(',') {
+        return true;
+    }
+    // A name, scanned by hand: `identifier` would record how far the parse got.
+    if !rest.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+        return false;
+    }
+    rest = rest.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    skip_inline_ws(&mut rest);
+    rest.is_empty()
+        || rest.starts_with(';')
+        || rest.starts_with('\n')
+        || rest.starts_with('}')
+        || rest.starts_with('#')
+        || (rest.starts_with('=') && !rest.starts_with("=="))
 }
 
 /// Function type `(P1, P2) => R`, lowered to `__function<R, P1, P2>` so
@@ -3963,6 +4009,34 @@ mod tests {
         let ty = type_name(&mut input).unwrap();
         assert_eq!(ty.name, "int");
         assert!(ty.generic_types.is_empty());
+    }
+
+    #[test]
+    fn test_type_name_optional() {
+        let _guard = track_source(16);
+        for (text, expected) in [
+            ("int?", "Optional<int>"),
+            ("Array<int?>", "Array<Optional<int>>"),
+            ("int[]?", "Optional<int[]>"),
+            ("int??", "Optional<Optional<int>>"),
+        ] {
+            let mut input = text;
+            let ty = type_name(&mut input).unwrap();
+            assert_eq!(ty.to_string(), expected, "{text}");
+            assert!(input.is_empty(), "{text}: left {input:?}");
+            assert_eq!(ty.span.end - ty.span.start, text.len(), "{text}: span");
+        }
+    }
+
+    #[test]
+    fn test_optional_declarations_and_ternaries() {
+        let m = parse(
+            "struct S {\n    Token? leaf;\n}\nf(x: int?): String? {\n    Node? a = x;\n    Node? b;\n    var c: Array<int?> = Array<int?>();\n    c ? d : e;\n    var g = h ? i : j;\n    return k < l ? m : n;\n}\n",
+        );
+        let text = format!("{:?}", m);
+        // leaf, x, the result, a, b, and c's type and its literal.
+        assert_eq!(text.matches("\"Optional\"").count(), 7, "optional types: {text}");
+        assert_eq!(text.matches("Ternary").count(), 3, "ternaries: {text}");
     }
 
     #[test]

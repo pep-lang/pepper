@@ -13,7 +13,8 @@ find_adult(people: Array<Person>): Optional<Person> {
     return Optional<Person>.none();
 }
 
-index_of(text: String, wanted: String): Optional<ulong> {
+# `ulong?` is shorthand for `Optional<ulong>`.
+index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
     while (i < text.length()) {
         if (text[i] == wanted) { return Optional<ulong>.some(i); }
@@ -42,5 +43,9 @@ main(): int {
     # Optional<T>() is None, like Optional<T>.none().
     var nothing = Optional<int>();
     assert(nothing.is_none(), "Optional() is None");
+
+    # An optional slot that is not given a value starts as None.
+    var later: String?;
+    assert(later.is_none(), "unassigned optionals are None");
     return 0;
 }

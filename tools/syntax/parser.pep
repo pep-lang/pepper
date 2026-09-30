@@ -331,12 +331,20 @@ struct Parser {
         return node;
     }
 
-    # `[]` array suffixes, then `*` pointer suffixes.
+    # `[]` array suffixes, `?` optional suffixes, then `*` pointer suffixes.
     _type_suffixes(node: Node) {
         while (true) {
             _skip();
             if (_at("[") and _peek_at(1).is("]")) {
                 _take(node);
+                _take(node);
+                continue;
+            }
+            break;
+        }
+        while (true) {
+            _skip();
+            if (_at("?") and (!_probing or _optional_suffix_in_probe())) {
                 _take(node);
                 continue;
             }
@@ -350,6 +358,28 @@ struct Parser {
             }
             break;
         }
+    }
+
+    # Whether the `?` at the current token makes an optional type while
+    # probing, where `a ? b : c` may be a ternary instead: the compiler's
+    # `optional_suffix_in_probe`. It does when it closes or separates type
+    # arguments, or when a name follows that ends the declaration
+    # (`Node? x;`, `Node? x = y`, `Node? x` at the end of the line).
+    _optional_suffix_in_probe(): bool {
+        var next = _peek_at(1);
+        if (next.is(">") or next.is(",")) {
+            return true;
+        }
+        if (next.kind != token_identifier or _reserved.contains(next.text)) {
+            return false;
+        }
+        var after = _peek_at(2);
+        return after.kind == token_end or
+            after.newlines_before > 0 or
+            !next.trailing_comment.empty() or
+            after.is(";") or
+            after.is("}") or
+            after.is("=");
     }
 
     # `( TYPE, ... ) => TYPE`, added to `node`.

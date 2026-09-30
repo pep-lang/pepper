@@ -1,6 +1,7 @@
 # Optional values
 
-A value that may be missing has the type `Optional<T>`: either **Some**,
+A value that may be missing has the type `Optional<T>`, written `T?` for
+short: either **Some**,
 holding a `T`, or **None**, holding nothing. It plays the role of Rust's
 `Option<T>` and Swift's `Optional`. Use it instead of a null reference or a
 sentinel such as `-1` or `""`: the type tells the caller that the value can be
@@ -11,6 +12,29 @@ absent, and reading it goes through a method that checks.
 
 ```pepper
 {{#include ../../examples/optionals-basics.pep}}
+```
+
+## The `T?` shorthand
+
+`T?` means `Optional<T>` wherever a type is written: `x: int?`,
+`find(key: String): Node?`, `Array<Node?>`, a field `Token? leaf;`. The `?`
+applies to everything before it, so `int[]?` is an optional array, and
+`Array<int?>` is an array of optional values.
+
+A C-style declaration inside a function body, such as `Node? n = m;`, is read
+as a declaration only when a name follows the `?` and then `=`, `;` or the end
+of the line; `a ? b : c` stays a conditional expression.
+
+## Optional slots start as None
+
+A variable or field of an optional type that is not given a value starts as
+None, not null:
+
+```pepper
+struct Node {
+    Token? leaf;   # None until assigned
+}
+var count: int?;   # None
 ```
 
 ## Creating and checking optionals
@@ -40,7 +64,6 @@ error.
 
 ## Current limits
 
-- There is no `T?` shorthand yet: write `Optional<T>`.
 - An optional is checked with `is_some()` or `is_none()` and read with
   `value()` or `value_or`; `match` does not work on it yet. `Optional` will
   become an [enum](enums.md) with `None` and `Some(value)` cases once enum

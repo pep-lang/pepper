@@ -14,12 +14,15 @@ import "internals";
 ## `value()`, which checks, or `value_or()`, which cannot fail. It works for
 ## every type, including those that have no null, such as `int`.
 ##
+## `T?` is shorthand for `Optional<T>`, and a variable or field of an
+## optional type that is not given a value starts as None.
+##
 ## Build one with the static `some` or `none` functions, or `Optional<T>()`
 ## for None, and test it with `is_some()` or `is_none()`.
 ##
 ## @typeParam T the type of the value a Some optional holds
 ## @example
-##     find_even(values: Array<int>): Optional<int> {
+##     find_even(values: Array<int>): int? {
 ##         for (var v in values) {
 ##             if (v % 2 == 0) { return Optional<int>.some(v); }
 ##         }

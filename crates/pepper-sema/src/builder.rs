@@ -251,10 +251,17 @@ fn reject_deprecation(attributes: &[ast::Attribute], what: &str) -> Result<(), D
 fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
     check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
+    let ty = type_name_from(&decl.type_name);
+    let mut default = decl.default_value.as_ref().map(expression).transpose()?;
+    // An optional slot (`Token? leaf;`, `var n: int?;`) starts as None, not
+    // null: it gets the default `Optional<T>()`.
+    if default.is_none() && kind != Kind::Param && ty.name == "Optional" && ty.sub_types.len() == 1 {
+        default = Some(Expression::FunctionCall { function: ty.to_string(), args: vec![], loc: loc(decl.type_name.span) });
+    }
     Ok(VariableDef {
         name: decl.name.clone(),
-        ty: type_name_from(&decl.type_name),
-        default: decl.default_value.as_ref().map(expression).transpose()?,
+        ty,
+        default,
         hidden: false,
         kind,
         attributes: decl.attributes.clone(),

@@ -137,6 +137,8 @@ main.pep:2:13: error: unknown escape sequence '\q'
   nothing.
 - `Array<T>` is a growable array of `T`; `int[]` is shorthand for `Array<int>`,
   and `int[][]` for `Array<Array<int>>`. See [`Array`](../reference/array.md).
+- `Optional<T>` is a value that may be missing; `int?` is shorthand for
+  `Optional<int>`. See [Optional values](optionals.md).
 - `HashMap<K, V>` and `HashSet<K>` are hash tables. See
   [HashMap and HashSet](../reference/hash.md).
 - `Result<TValue, TError>` and `Error` describe operations that can

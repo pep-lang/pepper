@@ -299,6 +299,10 @@ with no extension, and `module_name()` is the output's stem.
   like an extern's (`void*`). `starts_extern_function_type` keeps
   `extern (` at the start of a declaration or struct member a variable or
   field rather than an extern function.
+  A `?` suffix wraps the type as `Optional<T>` (after any `[]`). While an
+  expression is probed for a type (`EXPRESSION_PROBE`), `?` counts only where
+  `optional_suffix_in_probe` rules out a ternary: before `>`/`,`, or before a
+  name that ends a declaration. `tools/syntax/parser.pep` mirrors the rule.
 
 ### 2.4 Building the sema model (`crates/pepper-sema/src/builder.rs`, `model.rs`)
 
@@ -306,6 +310,8 @@ with no extension, and `module_name()` is the output's stem.
   `loc(span)` stamps every `Loc` with the file being built. `build` uses
   `FileId(0)`; unit tests call it.
 - `type_name_from` lowers `T[]` to `Array<T>`.
+- `variable_def` gives a variable or field of type `Optional<T>` with no
+  initializer the default `Optional<T>()`, so it starts as None, not null.
 - Lowering highlights:
   - A `for (var x in e)` loop becomes a block holding a hidden
     `__for_iterator_N` local (initialized with `Expression::ForIterator(e)`)

@@ -5,7 +5,6 @@
 
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
-use std::path::PathBuf;
 use std::process::Command;
 
 /// Compile and JIT `test()`; assert it left no allocation behind and return
@@ -22,10 +21,6 @@ fn run(source: &str) -> i32 {
     let after = unsafe { live_allocs.call() };
     assert_eq!(after - before, 0, "allocations leaked or double-released");
     result
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()
 }
 
 #[test]
@@ -129,8 +124,6 @@ test(): int {
 
 #[test]
 fn value_of_none_panics() {
-    // chdir so runtime discovery resolves like the CLI.
-    std::env::set_current_dir(repo_root()).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_optional_none_panics_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -151,4 +144,70 @@ fn value_of_none_panics() {
     assert!(!output.status.success(), "expected a panic; stdout: {stdout:?}");
     assert!(stdout.contains("Optional.value on a None value"), "stdout: {stdout:?}");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn question_mark_shorthand() {
+    assert_eq!(
+        run(r#"
+struct Token {
+    String text;
+    construct(String text) { this.text = text; }
+}
+first_even(values: Array<int>): int? {
+    for (var v in values) {
+        if (v % 2 == 0) { return Optional<int>.some(v); }
+    }
+    return Optional<int>.none();
+}
+text_of(t: Token?): String {
+    return t.value_or(Token("none")).text;
+}
+test(): int {
+    var values = Array<int>();
+    values.append(3);
+    if (first_even(values).is_some()) { return -1; }
+    values.append(8);
+    if (first_even(values).value() != 8) { return -2; }
+    if (text_of(Optional<Token>.none()) != "none") { return -3; }
+    Token? t = Optional<Token>.some(Token("x"));
+    if (text_of(t) != "x") { return -4; }
+    var all = Array<int?>();
+    all.append(Optional<int>.none());
+    if (!all[0].is_none()) { return -5; }
+    var x = 3;
+    var y = x > 2 ? 10 : 20;
+    if (y != 10) { return -6; }
+    return 0;
+}"#),
+        0
+    );
+}
+
+#[test]
+fn optional_slots_start_as_none() {
+    assert_eq!(
+        run(r#"
+struct Token {
+    construct() {}
+}
+struct Node {
+    Token? leaf;
+    Optional<int> count;
+    construct() {}
+}
+test(): int {
+    var n = Node();
+    if (!n.leaf.is_none()) { return -1; }
+    if (!n.count.is_none()) { return -2; }
+    var local: int?;
+    if (!local.is_none()) { return -3; }
+    Token? c_style;
+    if (!c_style.is_none()) { return -4; }
+    n.leaf = Optional<Token>.some(Token());
+    if (!n.leaf.is_some()) { return -5; }
+    return 0;
+}"#),
+        0
+    );
 }

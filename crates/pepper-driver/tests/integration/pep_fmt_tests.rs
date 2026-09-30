@@ -214,3 +214,11 @@ fn pep_fmt_keeps_character_literals_as_written() {
     let error = format("main(): int {\n    var c = 'a;\n}\n").unwrap_err();
     assert_eq!(error, "<stdin>:2:13: error: missing terminating ' character\n");
 }
+
+#[test]
+fn pep_fmt_reads_optional_types_and_keeps_ternaries() {
+    assert_formats(
+        "struct S {\n    Token?  leaf;\n}\nf(x:int?):Array<int?> {\n    Node? a=x;\n    c ? d : e;\n    var g=h?i:j;\n    return k;\n}\n",
+        "struct S {\n    Token? leaf;\n}\n\nf(x: int?): Array<int?> {\n    Node? a = x;\n    c ? d : e;\n    var g = h ? i : j;\n    return k;\n}\n",
+    );
+}
