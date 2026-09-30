@@ -114,6 +114,9 @@ pub fn gather_generics(module: &mut Module) {
     }
 
     for ext in &mut module.extensions {
+        // `extend Box<T>` extends the generic base: `Maybe<T>(...)` in its
+        // methods is unbound here, like the same call in the struct's body.
+        let params = extension_params(&module.structs, ext);
         let mut gather = |expr: &mut Expression| {
             if let Expression::FunctionCall { function, .. } = expr {
                 // Do not record specializations for intrinsics.
@@ -121,7 +124,10 @@ pub fn gather_generics(module: &mut Module) {
                     return;
                 }
                 if function.find('<').is_some() && function.ends_with('>') {
-                    functions.insert(function.clone());
+                    let ty = parse_type_string(function);
+                    if !contains_param(&ty, &params) {
+                        functions.insert(function.clone());
+                    }
                 }
             }
         };
@@ -260,6 +266,18 @@ fn contains_param(ty: &TypeName, params: &[TypeName]) -> bool {
 /// Generic parameter names as bare TypeNames (for `contains_param`).
 fn param_names(params: &[crate::model::GenericParam]) -> Vec<TypeName> {
     params.iter().map(|p| TypeName::new(&p.name)).collect()
+}
+
+/// The generic parameters an extension's methods can name: the target
+/// struct's own, when the extension names the generic base (`extend Box` or
+/// `extend Box<T>`, the rule `resolve_resolvables` uses). `extend Box<int>`
+/// names one specialization and has none.
+fn extension_params(structs: &[crate::model::StructDef], ext: &crate::model::ExtensionDef) -> Vec<TypeName> {
+    let Some(base) = structs.iter().find(|st| st.name == ext.target.name) else { return vec![] };
+    let extends_base = ext.target.sub_types.is_empty()
+        || (base.generic_params.len() == ext.target.sub_types.len()
+            && base.generic_params.iter().zip(&ext.target.sub_types).all(|(p, a)| a.sub_types.is_empty() && a.name == p.name));
+    if extends_base { param_names(&base.generic_params) } else { vec![] }
 }
 
 /// Parse `Name<a, b>` back into a TypeName (specs are carried as TypeNames).

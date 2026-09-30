@@ -24,13 +24,9 @@ import "task";
 
 # One channel of a `Select`, whatever its value type: taking a value (as an
 # `E`), and joining and leaving its wait queue (`_join` returns what
-# `Channel._select_join` found). (`_take` reports what it
-# found through `_status` rather than returning a `_Polled<E>`: a generic
-# trait's method cannot name another generic type over its own parameter
-# yet.)
+# `Channel._select_join` found).
 export trait _SelectCase<E> {
-    _take(): E;
-    _status(): int;
+    _take(): _Polled<E>;
     _join(waiter: _SyncWaiter): int;
     _leave(waiter: _SyncWaiter);
 }
@@ -39,38 +35,28 @@ export trait _SelectCase<E> {
 export struct _ReceiveCase<T, E> {
     const _channel: Channel<T>;
     const _wrap: (T) => E;
-    # What the last `_take` found: `_SELECT_READY`, `_SELECT_EMPTY` or
-    # `_SELECT_CLOSED`.
-    var _found: int;
 
     construct(channel: Channel<T>, wrap: (T) => E) {
         _channel = channel;
         _wrap = wrap;
-        _found = _SELECT_EMPTY;
     }
 }
 
 extend _ReceiveCase<T, E> with _SelectCase<E> {
-    # The value the channel had, turned into an `E`; the default of `E` when
-    # it had none (see `_status`).
-    _take(): E {
+    # The value the channel had, turned into an `E`.
+    _take(): _Polled<E> {
         match (_channel._select_take()) {
             Ready(value) => {
-                _found = _SELECT_READY;
-                return _wrap(value);
+                return _Polled<E>.Ready(_wrap(value));
             }
             Empty => {
-                _found = _SELECT_EMPTY;
+                return _Polled<E>.Empty;
             }
             Closed => {
-                _found = _SELECT_CLOSED;
+                return _Polled<E>.Closed;
             }
         }
-        return __default<E>();
-    }
-
-    _status(): int {
-        return _found;
+        return _Polled<E>.Empty;
     }
 
     _join(waiter: _SyncWaiter): int {
@@ -197,14 +183,15 @@ export struct Select<E> {
         while (i < count) {
             var index = (_next + i) % count;
             var entry: _SelectCase<E> = _cases[index];
-            var event: E = entry._take();
-            var found = entry._status();
-            if (found == _SELECT_READY) {
-                _next = (index + 1) % count;
-                return _Polled<E>.Ready(event);
-            }
-            if (found == _SELECT_CLOSED) {
-                closed = closed + 1;
+            match (entry._take()) {
+                Ready(event) => {
+                    _next = (index + 1) % count;
+                    return _Polled<E>.Ready(event);
+                }
+                Empty => {}
+                Closed => {
+                    closed = closed + 1;
+                }
             }
             i = i + 1;
         }

@@ -599,3 +599,67 @@ test(): int {
     assert_eq!(result, 2022);
     assert_eq!(leaked, 0);
 }
+
+#[test]
+fn a_generic_extension_names_another_generic_type_over_its_parameter() {
+    // `Maybe<E>` in a generic trait's signature and in the generic
+    // extension's body is unbound until `Constant<int>` specializes it.
+    let (result, leaked) = run(r#"
+enum Maybe<T> {
+    Some(value: T),
+    Nothing,
+}
+trait Source<E> {
+    take(): Maybe<E>;
+}
+struct Constant<E> {
+    const _value: E;
+    construct(value: E) { _value = value; }
+}
+extend Constant<E> with Source<E> {
+    take(): Maybe<E> { return Maybe<E>.Some(_value); }
+}
+unwrap(m: Maybe<int>): int {
+    match (m) {
+        Some(v) => { return v; }
+        Nothing => { return -1; }
+    }
+}
+test(): int {
+    Source<int> s = Constant<int>(4);
+    var m = s.take();
+    return unwrap(m) + unwrap(Constant<int>(30).take());
+}
+"#);
+    assert_eq!(result, 34);
+    assert_eq!(leaked, 0);
+}
+
+#[test]
+fn a_trait_value_call_infers_a_struct_result() {
+    // `var b = s.take()` takes the trait instance's return type, with the
+    // trait's type arguments substituted.
+    let (result, leaked) = run(r#"
+struct Box<T> {
+    var value: T;
+    construct(value: T) { this.value = value; }
+}
+trait Source<E> {
+    take(): Box<E>;
+}
+struct Counter {
+    var n: int;
+    construct() { n = 7; }
+}
+extend Counter with Source<int> {
+    take(): Box<int> { return Box<int>(n); }
+}
+test(): int {
+    Source<int> s = Counter();
+    var b = s.take();
+    return b.value;
+}
+"#);
+    assert_eq!(result, 7);
+    assert_eq!(leaked, 0);
+}

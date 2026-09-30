@@ -57,11 +57,19 @@ impl Tables {
     fn of(module: &Module) -> Self {
         let structs: Vec<(String, Vec<VariableDef>)> =
             module.structs.iter().map(|st| (st.ty.to_string(), st.field_members.clone())).collect();
-        let methods: Vec<(String, Vec<(String, TypeName)>)> = module
+        let mut methods: Vec<(String, Vec<(String, TypeName)>)> = module
             .structs
             .iter()
             .map(|st| (st.ty.to_string(), st.method_members.iter().map(|m| (m.name.clone(), m.ty.clone())).collect()))
             .collect();
+        // Trait types used as values (`Source<int>`): what `var x = s.take()`
+        // returns, with the trait's type arguments substituted.
+        for ty in crate::traits::used_trait_types(module) {
+            if let Some(def) = crate::traits::trait_def(&module.traits, &ty) {
+                let instance = crate::traits::instance(def, &ty);
+                methods.push((ty.to_string(), instance.methods.iter().map(|m| (m.name.clone(), m.ty.clone())).collect()));
+            }
+        }
         let generic_methods = module
             .structs
             .iter()
