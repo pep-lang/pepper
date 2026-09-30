@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182b2fa3.js";
+            window.path_to_searchindex_js = "../searchindex-71c7b27a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-24c54ee6.js"></script>
+        <script src="../toc-adbf0aad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -259,13 +259,26 @@ with an error.</p>
 <p>On a terminal, errors are colored like clang’s. Set the <code>NO_COLOR</code> environment
 variable to turn colors off. Output that goes to a file or a pipe is never
 colored.</p>
-<p>Warnings do not stop the build. Besides the linker’s own warnings, which the
-compiler passes through (see <a href="linking.html">Linking</a>), the only warnings today
-are deprecations.</p>
+<p>Warnings do not stop the build, and the compiler prints them whether or not
+it also finds an error. Besides the linker’s own warnings, which the compiler
+passes through (see <a href="linking.html">Linking</a>), the only warnings today are
+deprecations.</p>
 <h2 id="deprecations"><a class="header" href="#deprecations">Deprecations</a></h2>
-<p>Syntax on its way out keeps compiling for a while, with a warning that names
-its replacement and shows the fix under the code it replaces. The language
-server offers the same fix as a quick fix.</p>
+<p>A use of a declaration marked <code>[Deprecated("message")]</code> warns at the name,
+with the message and a note at the declaration. When the attribute names a
+replacement, the warning shows the rename under the code, and the language
+server offers it as a quick fix. See <a href="deprecation.html">Deprecation</a>.</p>
+<pre><code class="language-text">main.pep:9:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]
+    9 |     var b = a.clone();
+      |               ^~~~~
+      |               copy
+main.pep:4:5: note: 'clone' declared here
+    4 |     clone(): Counter { return this.copy(); }
+      |     ^~~~~
+</code></pre>
+<p>Syntax of the language itself that is on its way out keeps compiling for a
+while too, with a warning that names its replacement and shows the fix under
+the code it replaces:</p>
 <pre><code class="language-text">main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]
     3 |     new(this.x = 1) {}
       |     ^~~
@@ -412,7 +425,7 @@ resulting program has undefined behavior.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../language/doc-comments.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/deprecation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -426,7 +439,7 @@ resulting program has undefined behavior.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../language/doc-comments.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/deprecation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-182b2fa3.js";
+            window.path_to_searchindex_js = "searchindex-71c7b27a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-24c54ee6.js"></script>
+        <script src="toc-adbf0aad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -6096,13 +6096,26 @@ with an error.</p>
 <p>On a terminal, errors are colored like clang’s. Set the <code>NO_COLOR</code> environment
 variable to turn colors off. Output that goes to a file or a pipe is never
 colored.</p>
-<p>Warnings do not stop the build. Besides the linker’s own warnings, which the
-compiler passes through (see <a href="#linking">Linking</a>), the only warnings today
-are deprecations.</p>
+<p>Warnings do not stop the build, and the compiler prints them whether or not
+it also finds an error. Besides the linker’s own warnings, which the compiler
+passes through (see <a href="#linking">Linking</a>), the only warnings today are
+deprecations.</p>
 <h2 id="deprecations"><a class="header" href="#deprecations">Deprecations</a></h2>
-<p>Syntax on its way out keeps compiling for a while, with a warning that names
-its replacement and shows the fix under the code it replaces. The language
-server offers the same fix as a quick fix.</p>
+<p>A use of a declaration marked <code>[Deprecated("message")]</code> warns at the name,
+with the message and a note at the declaration. When the attribute names a
+replacement, the warning shows the rename under the code, and the language
+server offers it as a quick fix. See <a href="#deprecation">Deprecation</a>.</p>
+<pre><code class="language-text">main.pep:9:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]
+    9 |     var b = a.clone();
+      |               ^~~~~
+      |               copy
+main.pep:4:5: note: 'clone' declared here
+    4 |     clone(): Counter { return this.copy(); }
+      |     ^~~~~
+</code></pre>
+<p>Syntax of the language itself that is on its way out keeps compiling for a
+while too, with a warning that names its replacement and shows the fix under
+the code it replaces:</p>
 <pre><code class="language-text">main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]
     3 |     new(this.x = 1) {}
       |     ^~~
@@ -6240,6 +6253,113 @@ status instead of returning from <code>main</code>). See <a href="#built-in-func
 <p>The type check does not compare the type arguments of generic structs yet, so
 <code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
 resulting program has undefined behavior.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="deprecation"><a class="header" href="#deprecation">Deprecation</a></h1>
+<p>When an API is on its way out, mark it <code>[Deprecated("message")]</code>. Code that
+uses it still compiles, but every use gets a warning that shows your message,
+the same way clang reports <code>[[deprecated]]</code>. That gives the code that depends
+on the API time to move before you remove it.</p>
+<pre><code class="language-pepper">struct Temperature {
+    int celsius;
+
+    # A method on its way out: it still works, but every call warns.
+    [Deprecated("use 'fahrenheit' instead", "fahrenheit")]
+    to_f(): int { return fahrenheit(); }
+
+    fahrenheit(): int { return celsius * 9 / 5 + 32; }
+}
+
+# The second argument names the replacement: the warning carries a fix that
+# renames the call.
+[Deprecated("use 'boiling' instead", "boiling")]
+boiling_point(): Temperature { return boiling(); }
+
+boiling(): Temperature {
+    var t = Temperature();
+    t.celsius = 100;
+    return t;
+}
+
+main(): int {
+    # Both calls warn, and both still work.
+    var old = boiling_point();
+    assert(old.to_f() == 212, "the old API still works");
+
+    var t = boiling();
+    assert(t.fahrenheit() == 212, "100 C is 212 F");
+    return 0;
+}
+</code></pre>
+<p>Compiling this prints a warning at each use of a deprecated name, with a note
+at its declaration. The second of the two is:</p>
+<pre><code class="language-text">main.pep:25:16: warning: 'to_f' is deprecated: use 'fahrenheit' instead [deprecated]
+   25 |     assert(old.to_f() == 212, "the old API still works");
+      |                ^~~~
+      |                fahrenheit
+main.pep:6:5: note: 'to_f' declared here
+    6 |     to_f(): int { return fahrenheit(); }
+      |     ^~~~
+</code></pre>
+<p>Warnings never stop the build. The program above compiles and runs.</p>
+<h2 id="the-replacement"><a class="header" href="#the-replacement">The replacement</a></h2>
+<p>The attribute takes an optional second argument: the name that replaces the
+deprecated one.</p>
+<pre><code class="language-pepper">[Deprecated("use 'copy' instead", "copy")]
+clone(): Counter { ... }
+</code></pre>
+<p>With a replacement, the warning comes with a fix that renames the use. The
+compiler shows the new name under the old one, as in the warning above, and
+the language server offers the rename as a quick fix. The fix only renames,
+so give a replacement only when the new declaration can be used the same way.
+Otherwise leave it out and explain the change in the message.</p>
+<p>An empty message is allowed. The warning then says only <code>'name' is deprecated</code>.</p>
+<h2 id="what-it-applies-to-1"><a class="header" href="#what-it-applies-to-1">What it applies to</a></h2>
+<p>Put <code>[Deprecated(...)]</code> before any declaration other code refers to by name:</p>
+<ul>
+<li>a function or an <code>extern</code></li>
+<li>a struct, a trait, or a type alias</li>
+<li>a module-scope variable</li>
+<li>a field, a method, or a constructor of a struct</li>
+<li>a method in a trait or in an extension (put it on each method, not on the
+<code>extend</code> block)</li>
+</ul>
+<p>A doc comment goes above the attribute, as it does for any attribute.</p>
+<h2 id="which-uses-warn"><a class="header" href="#which-uses-warn">Which uses warn</a></h2>
+<p>Every use of the declaration warns, at the name you wrote:</p>
+<ul>
+<li>a call, a reference to a function or variable, or a construction <code>S()</code>
+(a deprecated constructor is reported at the struct’s name)</li>
+<li>a type name, anywhere a type is written</li>
+<li>a member access <code>x.name</code>, a method call <code>x.name()</code>, a static call
+<code>S.name()</code>, and a bare field or method name inside the struct’s own methods</li>
+<li>an entry in an import list, <code>import [name] from m</code>, and a qualified use
+<code>m.name</code>, where the warning points at <code>name</code></li>
+</ul>
+<p>These do not warn:</p>
+<ul>
+<li>the declaration itself</li>
+<li>a use inside a declaration that is deprecated too, including the methods of
+a deprecated struct and closures written inside a deprecated function, so
+old code can keep calling old code without noise</li>
+<li>a re-export, <code>export name as other</code>, which passes the name on without using
+it</li>
+</ul>
+<h2 id="mistakes-in-the-attribute"><a class="header" href="#mistakes-in-the-attribute">Mistakes in the attribute</a></h2>
+<p>A malformed attribute is an error at the attribute:</p>
+<pre><code class="language-text">main.pep:1:1: error: 'Deprecated' expects a message string: [Deprecated("message")]
+    1 | [Deprecated]
+      | ^~~~~~~~~~~~
+</code></pre>
+<p>The other errors are <code>'Deprecated' expects the replacement as a string</code>, <code>the replacement 'a b' is not a name</code>, <code>too many arguments to 'Deprecated': expected at most 2, have 3</code>, <code>duplicate 'Deprecated' attribute</code>, and
+<code>'Deprecated' cannot be applied to</code> an extension or a destructor.</p>
+<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<ul>
+<li>The compiler does not report uses it writes for you: the <code>next()</code> and
+<code>current()</code> calls of a <code>for</code> loop, the <code>enter()</code> call of a <code>with</code> block,
+and a call to an operator overload such as <code>a + b</code>.</li>
+<li>The language server shows the warnings for the file you are editing. It
+does not show them for other files the program imports.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="documentation-comments"><a class="header" href="#documentation-comments">Documentation comments</a></h1>
 <p>Comments explain code to the people who read it. Pepper has one comment
