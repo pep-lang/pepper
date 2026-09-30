@@ -44,19 +44,19 @@ import "sys_windows";
 ##     }
 [Shared]
 export struct ThreadLocal<T> {
-    ## The operating-system thread-local key.
-    const Key: ulong;
+    # The operating-system thread-local key.
+    const _key: ulong;
 
     ## Creates a thread-local variable. No thread has a value yet.
     ##
     ## @panics if the operating system has no thread-local keys left
     construct() {
-        Key = _async_sys_key_create(__function_pointer(_release_slot));
+        _key = _async_sys_key_create(__function_pointer(_release_slot));
     }
 
     destruct {
         this.clear();
-        _async_sys_key_delete(Key);
+        _async_sys_key_delete(_key);
     }
 
     # Releases the value in `slot` and frees it: the key's destructor, which
@@ -73,7 +73,7 @@ export struct ThreadLocal<T> {
     ##
     ## @returns the value this thread last stored, or the default of `T` (zero or null) if it has not stored one
     T get() {
-        __ptr<T> slot = _async_sys_key_get(Key);
+        __ptr<T> slot = _async_sys_key_get(_key);
         if (slot == __null) {
             return __default<T>();
         }
@@ -86,13 +86,13 @@ export struct ThreadLocal<T> {
     ##
     ## @param value the new value for this thread
     void set(T value) {
-        __ptr<T> slot = _async_sys_key_get(Key);
+        __ptr<T> slot = _async_sys_key_get(_key);
         if (slot == __null) {
             # sizeof<T>() is the size of a stored T: one pointer for a
             # struct, two for a trait value (object and vtable), the value
             # itself for a number.
             slot = _pep_malloc(sizeof<T>());
-            _async_sys_key_set(Key, slot);
+            _async_sys_key_set(_key, slot);
         }
         slot[0] = value;
     }
@@ -102,15 +102,15 @@ export struct ThreadLocal<T> {
     ##
     ## @returns true if this thread has a value
     bool is_set() {
-        return _async_sys_key_get(Key) != __null;
+        return _async_sys_key_get(_key) != __null;
     }
 
     ## Removes the calling thread's value, releasing it for a struct `T`.
     ## `get()` returns the default of `T` afterwards.
     void clear() {
-        var slot = _async_sys_key_get(Key);
+        var slot = _async_sys_key_get(_key);
         if (slot != __null) {
-            _async_sys_key_set(Key, __null);
+            _async_sys_key_set(_key, __null);
             ThreadLocal<T>._release_slot(slot);
         }
     }

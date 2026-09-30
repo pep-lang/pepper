@@ -445,9 +445,9 @@ fn closure_capturing_this_stored_in_a_field() {
 #[test]
 fn shared_struct_field_not_const() {
     assert_eq!(
-        error_of("shared_not_const", "[Shared]\nstruct Counter {\n    int Count;\n}\nmain(): int { return 0; }\n"),
-        "main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'\n\
-         \x20   3 |     int Count;\n\
+        error_of("shared_not_const", "[Shared]\nstruct Counter {\n    int count;\n}\nmain(): int { return 0; }\n"),
+        "main.pep:3:9: error: field 'count' of shared struct 'Counter' must be 'const'\n\
+         \x20   3 |     int count;\n\
          \x20     |         ^~~~~\n\
          note: threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'"
     );

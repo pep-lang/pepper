@@ -2,15 +2,15 @@
 ## that receive, and `ChannelIterator<T>` receives in a `for` loop.
 
 # A Channel is `[Shared]`, so its fields are const. Its changing state lives
-# in raw heap blocks that are read and written only under `Lock`:
+# in raw heap blocks that are read and written only under `_lock`:
 #
-# - `State`: four `ulong`s: the head index, the number of queued values, the
+# - `_state`: four `ulong`s: the head index, the number of queued values, the
 #   number of slots in the buffer, and 1 once closed.
-# - `Buffer`: one pointer to the ring buffer of `T` slots (one reference each
+# - `_buffer`: one pointer to the ring buffer of `T` slots (one reference each
 #   for a struct `T`). An unbounded channel replaces the buffer with one
 #   twice the size when it fills.
 #
-# `Buffer` is a `__ptr<__ptr<void>>`, so `check_shared_types` accepts any
+# `_buffer` is a `__ptr<__ptr<void>>`, so `check_shared_types` accepts any
 # `T`; the methods view the buffer as `T` slots. A value that is not
 # thread-safe counts its references plainly, so no two threads may ever
 # touch its counts. `send` therefore copies the value with `copy` first, on
@@ -21,8 +21,8 @@
 # the sender before it unlocks or on the receiver after it locks. A
 # thread-safe value is not copied (`copy` returns it); its counts are atomic.
 #
-# Senders wait on `NotFull` (bounded channels only) and receivers on
-# `NotEmpty`; `close` wakes both.
+# Senders wait on `_not_full` (bounded channels only) and receivers on
+# `_not_empty`; `close` wakes both.
 
 import "sys_posix";
 import "sys_windows";
@@ -75,26 +75,26 @@ import "sys_windows";
 ##     }
 [Shared]
 export struct Channel<T> {
-    ## The most values that may wait before `send` blocks, or 0 for no limit.
-    const Capacity: ulong;
+    # The most values that may wait before `send` blocks, or 0 for no limit.
+    const _capacity: ulong;
 
-    ## The platform mutex that guards `State` and `Buffer`.
-    const Lock: __ptr<void>;
+    # The platform mutex that guards `_state` and `_buffer`.
+    const _lock: __ptr<void>;
 
-    ## The platform condition variable receivers wait on.
-    const NotEmpty: __ptr<void>;
+    # The platform condition variable receivers wait on.
+    const _not_empty: __ptr<void>;
 
-    ## The platform condition variable senders wait on while a bounded
-    ## channel is full.
-    const NotFull: __ptr<void>;
+    # The platform condition variable senders wait on while a bounded
+    # channel is full.
+    const _not_full: __ptr<void>;
 
-    ## The head index, the number of queued values, the number of slots in
-    ## the buffer, and 1 once closed. Read and written only under `Lock`.
-    const State: __ptr<ulong>;
+    # The head index, the number of queued values, the number of slots in
+    # the buffer, and 1 once closed. Read and written only under `_lock`.
+    const _state: __ptr<ulong>;
 
-    ## Holds the ring buffer of values (`T` slots). Read and written only
-    ## under `Lock`.
-    const Buffer: __ptr<__ptr<void>>;
+    # Holds the ring buffer of values (`T` slots). Read and written only
+    # under `_lock`.
+    const _buffer: __ptr<__ptr<void>>;
 
     ## Creates an open, empty channel.
     ##
@@ -104,34 +104,34 @@ export struct Channel<T> {
     ##     var bounded = async.Channel<long>(16);
     ##     var unbounded = async.Channel<long>();
     construct(ulong capacity = 0) {
-        Capacity = capacity;
-        Lock = _async_sys_mutex_create();
-        NotEmpty = _async_sys_condition_create();
-        NotFull = _async_sys_condition_create();
-        State = _pep_malloc(4 * sizeof<ulong>());
+        _capacity = capacity;
+        _lock = _async_sys_mutex_create();
+        _not_empty = _async_sys_condition_create();
+        _not_full = _async_sys_condition_create();
+        _state = _pep_malloc(4 * sizeof<ulong>());
         var slots = capacity > 0 ? capacity : 16;
-        State[2] = slots;
-        Buffer = _pep_malloc(sizeof<__ptr<void>>());
-        Buffer[0] = _pep_malloc(slots * sizeof<T>());
+        _state[2] = slots;
+        _buffer = _pep_malloc(sizeof<__ptr<void>>());
+        _buffer[0] = _pep_malloc(slots * sizeof<T>());
     }
 
     destruct {
         # Release the values still queued, under the lock the senders stored
         # them under.
-        _async_sys_mutex_lock(Lock);
+        _async_sys_mutex_lock(_lock);
         __ptr<T> buffer = this._slots();
         var i: ulong = 0;
-        while (i < State[1]) {
-            buffer[(State[0] + i) % State[2]] = __default<T>();
+        while (i < _state[1]) {
+            buffer[(_state[0] + i) % _state[2]] = __default<T>();
             i = i + 1;
         }
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         _pep_free(buffer);
-        _pep_free(Buffer);
-        _pep_free(State);
-        _async_sys_condition_destroy(NotFull);
-        _async_sys_condition_destroy(NotEmpty);
-        _async_sys_mutex_destroy(Lock);
+        _pep_free(_buffer);
+        _pep_free(_state);
+        _async_sys_condition_destroy(_not_full);
+        _async_sys_condition_destroy(_not_empty);
+        _async_sys_mutex_destroy(_lock);
     }
 
     ## Queues a copy of `value`, first waiting while a bounded channel is
@@ -149,15 +149,15 @@ export struct Channel<T> {
     ##     line.append(" again");   # the receiver still gets "hello"
     bool send(T value) {
         var copied = copy<T>(value);
-        _async_sys_mutex_lock(Lock);
-        while (Capacity > 0 && State[1] == Capacity && State[3] == 0) {
-            _async_sys_condition_wait(NotFull, Lock);
+        _async_sys_mutex_lock(_lock);
+        while (_capacity > 0 && _state[1] == _capacity && _state[3] == 0) {
+            _async_sys_condition_wait(_not_full, _lock);
         }
         var queued = this._push(copied);
         # Drop this thread's reference before unlocking: the slot now holds
         # the only one.
         copied = __default<T>();
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return queued;
     }
 
@@ -168,13 +168,13 @@ export struct Channel<T> {
     ## @returns true if the value was queued, false if the channel is full or closed
     bool try_send(T value) {
         var copied = copy<T>(value);
-        _async_sys_mutex_lock(Lock);
+        _async_sys_mutex_lock(_lock);
         var queued = false;
-        if (Capacity == 0 || State[1] < Capacity) {
+        if (_capacity == 0 || _state[1] < _capacity) {
             queued = this._push(copied);
         }
         copied = __default<T>();
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return queued;
     }
 
@@ -187,12 +187,12 @@ export struct Channel<T> {
     ##         run(job.value());
     ##     }
     Result<T> receive() {
-        _async_sys_mutex_lock(Lock);
-        while (State[1] == 0 && State[3] == 0) {
-            _async_sys_condition_wait(NotEmpty, Lock);
+        _async_sys_mutex_lock(_lock);
+        while (_state[1] == 0 && _state[3] == 0) {
+            _async_sys_condition_wait(_not_empty, _lock);
         }
         var received = this._pop();
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return received;
     }
 
@@ -200,9 +200,9 @@ export struct Channel<T> {
     ##
     ## @returns the value, or an error if none is waiting (see `is_closed()` to tell an empty channel from a closed one)
     Result<T> try_receive() {
-        _async_sys_mutex_lock(Lock);
+        _async_sys_mutex_lock(_lock);
         var received = this._pop();
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return received;
     }
 
@@ -212,16 +212,16 @@ export struct Channel<T> {
     ## @returns the value, or an error if the time ran out or once the channel is closed and empty
     Result<T> receive_for(ulong milliseconds) {
         var deadline = _async_sys_monotonic_milliseconds() + milliseconds;
-        _async_sys_mutex_lock(Lock);
-        while (State[1] == 0 && State[3] == 0) {
+        _async_sys_mutex_lock(_lock);
+        while (_state[1] == 0 && _state[3] == 0) {
             var now = _async_sys_monotonic_milliseconds();
             if (now >= deadline) {
                 break;
             }
-            _async_sys_condition_wait_for(NotEmpty, Lock, deadline - now);
+            _async_sys_condition_wait_for(_not_empty, _lock, deadline - now);
         }
         var received = this._pop();
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return received;
     }
 
@@ -231,20 +231,20 @@ export struct Channel<T> {
     ## them; after the last one, `receive()` returns an error and `for` loops
     ## end. Closing a closed channel does nothing.
     void close() {
-        _async_sys_mutex_lock(Lock);
-        State[3] = 1;
-        _async_sys_condition_notify_all(NotEmpty);
-        _async_sys_condition_notify_all(NotFull);
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_lock(_lock);
+        _state[3] = 1;
+        _async_sys_condition_notify_all(_not_empty);
+        _async_sys_condition_notify_all(_not_full);
+        _async_sys_mutex_unlock(_lock);
     }
 
     ## Reports whether `close()` has been called.
     ##
     ## @returns true once the channel is closed, even while values are still queued
     bool is_closed() {
-        _async_sys_mutex_lock(Lock);
-        var closed = State[3] != 0;
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_lock(_lock);
+        var closed = _state[3] != 0;
+        _async_sys_mutex_unlock(_lock);
         return closed;
     }
 
@@ -253,9 +253,9 @@ export struct Channel<T> {
     ##
     ## @returns the number of queued values
     ulong count() {
-        _async_sys_mutex_lock(Lock);
-        var queued = State[1];
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_lock(_lock);
+        var queued = _state[1];
+        _async_sys_mutex_unlock(_lock);
         return queued;
     }
 
@@ -278,41 +278,41 @@ export struct Channel<T> {
     # if closed. The caller holds the lock and has checked a bounded
     # channel's capacity.
     bool _push(T value) {
-        if (State[3] != 0) {
+        if (_state[3] != 0) {
             return false;
         }
-        if (State[1] == State[2]) {
+        if (_state[1] == _state[2]) {
             this._grow();
         }
         __ptr<T> buffer = this._slots();
-        buffer[(State[0] + State[1]) % State[2]] = value;
-        State[1] = State[1] + 1;
-        _async_sys_condition_notify_one(NotEmpty);
+        buffer[(_state[0] + _state[1]) % _state[2]] = value;
+        _state[1] = _state[1] + 1;
+        _async_sys_condition_notify_one(_not_empty);
         return true;
     }
 
     # Takes the value at the head; an error if none is queued. The caller
     # holds the lock.
     Result<T> _pop() {
-        if (State[1] == 0) {
-            if (State[3] != 0) {
+        if (_state[1] == 0) {
+            if (_state[3] != 0) {
                 return Result<T>.err(Error("the channel is closed"));
             }
             return Result<T>.err(Error("no value is waiting"));
         }
         __ptr<T> buffer = this._slots();
-        var head = State[0];
+        var head = _state[0];
         var received = Result<T>.ok(buffer[head]);
         buffer[head] = __default<T>();
-        State[0] = (head + 1) % State[2];
-        State[1] = State[1] - 1;
-        _async_sys_condition_notify_one(NotFull);
+        _state[0] = (head + 1) % _state[2];
+        _state[1] = _state[1] - 1;
+        _async_sys_condition_notify_one(_not_full);
         return received;
     }
 
     # The ring buffer, as `T` slots.
     __ptr<T> _slots() {
-        __ptr<void> raw = Buffer[0];
+        __ptr<void> raw = _buffer[0];
         return raw;
     }
 
@@ -320,19 +320,19 @@ export struct Channel<T> {
     # caller holds the lock.
     void _grow() {
         __ptr<T> old = this._slots();
-        var slots = State[2];
+        var slots = _state[2];
         __ptr<T> grown = _pep_malloc(2 * slots * sizeof<T>());
         var i: ulong = 0;
-        while (i < State[1]) {
-            var from = (State[0] + i) % slots;
+        while (i < _state[1]) {
+            var from = (_state[0] + i) % slots;
             grown[i] = old[from];
             old[from] = __default<T>();
             i = i + 1;
         }
         _pep_free(old);
-        Buffer[0] = grown;
-        State[0] = 0;
-        State[2] = 2 * slots;
+        _buffer[0] = grown;
+        _state[0] = 0;
+        _state[2] = 2 * slots;
     }
 }
 
@@ -349,8 +349,8 @@ export struct Channel<T> {
 ##         total = total + values.current();
 ##     }
 export struct ChannelIterator<T> {
-    ## The channel it receives from.
-    const Source: Channel<T>;
+    # The channel it receives from.
+    const _source: Channel<T>;
 
     ## The value the last successful `next()` received.
     T Current;
@@ -360,14 +360,14 @@ export struct ChannelIterator<T> {
     ##
     ## @param source the channel to receive from
     construct(Channel<T> source) {
-        Source = source;
+        _source = source;
     }
 
     ## Waits for the next value.
     ##
     ## @returns true if a value arrived (read it with `current()`), false once the channel is closed and empty
     bool next() {
-        var received = Source.receive();
+        var received = _source.receive();
         if (received.is_err()) {
             Current = __default<T>();
             return false;

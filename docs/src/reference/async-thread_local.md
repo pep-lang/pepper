@@ -49,16 +49,6 @@ so destroy one only after the threads that used it have exited.
     }
 ```
 
-### Fields
-
-#### Key
-
-```pepper
-const Key: ulong
-```
-
-The operating-system thread-local key.
-
 ### Constructor
 
 #### ThreadLocal()

@@ -39,40 +39,6 @@ threads.
     }
 ```
 
-### Fields
-
-#### State
-
-```pepper
-const State: Atomic<int>
-```
-
-0 before any call, 1 while a body runs, 2 once it has finished.
-
-#### Runner
-
-```pepper
-const Runner: Atomic<ulong>
-```
-
-The operating-system id of the thread running the body, or 0.
-
-#### Lock
-
-```pepper
-const Lock: __ptr<void>
-```
-
-The platform mutex that guards the move from 0 to 1 and the wait.
-
-#### Finished
-
-```pepper
-const Finished: __ptr<void>
-```
-
-The platform condition variable that waiting callers sleep on.
-
 ### Constructor
 
 #### Once()
@@ -148,8 +114,8 @@ compile error.
 
     [Shared]
     struct Settings {
-        const Workers: long;
-        construct(this.Workers = 1) {}
+        const workers: long;
+        construct(this.workers = 1) {}
     }
 
     load_settings(): Settings {
@@ -159,37 +125,10 @@ compile error.
     const settings = async.Lazy<Settings>(load_settings);
 
     main(): int {
-        var workers = settings.get().Workers;   # built here, on first use
+        var workers = settings.get().workers;   # built here, on first use
         return 0;
     }
 ```
-
-### Fields
-
-#### Initializer
-
-```pepper
-const Initializer: shared () => T
-```
-
-The function that builds the value.
-
-#### Value
-
-```pepper
-const Value: __ptr<T>
-```
-
-A heap slot holding the value once it is built: `sizeof<T>()` bytes,
-one reference for a struct `T`.
-
-#### Built
-
-```pepper
-const Built: Once
-```
-
-Runs the initializer once.
 
 ### Constructor
 

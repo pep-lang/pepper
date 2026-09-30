@@ -84,28 +84,28 @@ const _async_main_os_thread = _async_sys_os_thread();
 ##     }
 [Shared]
 export struct Thread {
-    ## The thread's id.
-    const Id: ThreadId;
+    # The thread's id.
+    const _id: ThreadId;
 
-    ## The name's UTF-8 bytes, NUL-terminated, or null for an unnamed thread.
-    const NameData: __ptr<char>;
+    # The name's UTF-8 bytes, NUL-terminated, or null for an unnamed thread.
+    const _name_data: __ptr<char>;
 
-    ## The name's size in bytes.
-    const NameSize: ulong;
+    # The name's size in bytes.
+    const _name_size: ulong;
 
-    ## The name's length in code points.
-    const NameLength: ulong;
+    # The name's length in code points.
+    const _name_length: ulong;
 
-    ## The function the thread runs (a no-op for a thread that was not
-    ## started by `spawn`, such as the main thread).
-    const Body: ThreadBody;
+    # The function the thread runs (a no-op for a thread that was not
+    # started by `spawn`, such as the main thread).
+    const _body: ThreadBody;
 
-    ## The operating-system handle while the thread can still be joined or
-    ## detached (a `pthread_t` or a Windows `HANDLE`), else null.
-    const Handle: Atomic<__ptr<void>>;
+    # The operating-system handle while the thread can still be joined or
+    # detached (a `pthread_t` or a Windows `HANDLE`), else null.
+    const _handle: Atomic<__ptr<void>>;
 
-    ## 1 once the body has returned, else 0.
-    const Finished: Atomic<int>;
+    # 1 once the body has returned, else 0.
+    const _finished: Atomic<int>;
 
     ## Creates a `Thread` value for a thread that is already running. Programs
     ## get threads from `spawn` and `current()` instead; a `Thread` made
@@ -114,25 +114,25 @@ export struct Thread {
     ## @param name the thread's name; empty for an unnamed thread
     ## @param body the function the thread runs
     construct(String name, ThreadBody body) {
-        Id = _async_next_id.fetch_add(1);
-        NameSize = name.size();
-        NameLength = name.length();
-        if (NameSize > 0) {
-            NameData = _pep_malloc(NameSize + 1);
-            memcpy(NameData, name.c_str(), NameSize);
+        _id = _async_next_id.fetch_add(1);
+        _name_size = name.size();
+        _name_length = name.length();
+        if (_name_size > 0) {
+            _name_data = _pep_malloc(_name_size + 1);
+            memcpy(_name_data, name.c_str(), _name_size);
         }
-        Body = body;
-        Handle = Atomic<__ptr<void>>(__null);
-        Finished = Atomic<int>(0);
+        _body = body;
+        _handle = Atomic<__ptr<void>>(__null);
+        _finished = Atomic<int>(0);
     }
 
     destruct {
         # Dropped without join(): let the thread run on and free itself.
-        var handle = Handle.exchange(__null);
+        var handle = _handle.exchange(__null);
         if (handle != __null) {
             _async_sys_detach(handle);
         }
-        _pep_free(NameData);
+        _pep_free(_name_data);
     }
 
     ## Starts a new thread that runs `body`.
@@ -158,7 +158,7 @@ export struct Thread {
             _pep_free(start);
             panic("Thread.spawn: the operating system could not create a thread");
         }
-        thread.Handle.store(handle);
+        thread._handle.store(handle);
         return thread;
     }
 
@@ -204,17 +204,17 @@ export struct Thread {
     ##
     ## @returns the thread's id
     ThreadId id() {
-        return Id;
+        return _id;
     }
 
     ## Returns the name the thread was given.
     ##
     ## @returns the name passed to `spawn`, `main` for the main thread, or an empty String for an unnamed thread
     String name() {
-        if (NameSize == 0) {
+        if (_name_size == 0) {
             return String();
         }
-        return String(NameData, NameSize, NameLength);
+        return String(_name_data, _name_size, _name_length);
     }
 
     ## Reports whether the thread's body has returned.
@@ -225,7 +225,7 @@ export struct Thread {
     ##
     ## @returns true once the body has returned
     bool is_finished() {
-        return Finished.load() == 1;
+        return _finished.load() == 1;
     }
 
     ## Reports whether `join()` can be called: the thread was started by
@@ -233,7 +233,7 @@ export struct Thread {
     ##
     ## @returns true if the thread can be joined
     bool is_joinable() {
-        return Handle.load() != __null;
+        return _handle.load() != __null;
     }
 
     ## Waits for the thread's body to return.
@@ -245,10 +245,10 @@ export struct Thread {
     ##
     ## @panics if the thread cannot be joined (see `is_joinable()`), or if a thread tries to join itself
     void join() {
-        if (Id == Thread.current().id()) {
+        if (_id == Thread.current().id()) {
             panic("Thread.join: a thread cannot join itself");
         }
-        var handle = Handle.exchange(__null);
+        var handle = _handle.exchange(__null);
         if (handle == __null) {
             panic("Thread.join: the thread was already joined, or was not started by Thread.spawn");
         }
@@ -267,8 +267,8 @@ export _async_thread_run(start: __ptr<void>) {
     slot[0] = __default<Thread>();
     _pep_free(slot);
     _async_current.set(thread);
-    thread.Body();
-    thread.Finished.store(1);
+    thread._body();
+    thread._finished.store(1);
 }
 
 # The C entry point of a spawned thread: `void* (*)(void*)` for pthreads, and

@@ -81,66 +81,6 @@ outside. A `panic` or failed `assert` on any thread ends the whole program.
     }
 ```
 
-### Fields
-
-#### Id
-
-```pepper
-const Id: ThreadId
-```
-
-The thread's id.
-
-#### NameData
-
-```pepper
-const NameData: __ptr<char>
-```
-
-The name's UTF-8 bytes, NUL-terminated, or null for an unnamed thread.
-
-#### NameSize
-
-```pepper
-const NameSize: ulong
-```
-
-The name's size in bytes.
-
-#### NameLength
-
-```pepper
-const NameLength: ulong
-```
-
-The name's length in code points.
-
-#### Body
-
-```pepper
-const Body: ThreadBody
-```
-
-The function the thread runs (a no-op for a thread that was not
-started by `spawn`, such as the main thread).
-
-#### Handle
-
-```pepper
-const Handle: Atomic<__ptr<void>>
-```
-
-The operating-system handle while the thread can still be joined or
-detached (a `pthread_t` or a Windows `HANDLE`), else null.
-
-#### Finished
-
-```pepper
-const Finished: Atomic<int>
-```
-
-1 once the body has returned, else 0.
-
 ### Constructor
 
 #### Thread()

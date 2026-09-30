@@ -43,11 +43,11 @@ program, so a Mutex is never left "poisoned".
 
     [Shared]
     struct Account {
-        const Checking: Atomic<long>;
-        const Savings: Atomic<long>;
+        const checking: Atomic<long>;
+        const savings: Atomic<long>;
         construct(long checking = 0, long savings = 0) {
-            Checking = Atomic<long>(checking);
-            Savings = Atomic<long>(savings);
+            this.checking = Atomic<long>(checking);
+            this.savings = Atomic<long>(savings);
         }
     }
 
@@ -56,40 +56,11 @@ program, so a Mutex is never left "poisoned".
     save(long amount) {
         with (var a = account.lock()) {
             # No other thread sees the money in neither account.
-            a.Checking.fetch_sub(amount);
-            a.Savings.fetch_add(amount);
+            a.checking.fetch_sub(amount);
+            a.savings.fetch_add(amount);
         }
     }
 ```
-
-### Fields
-
-#### Lock
-
-```pepper
-const Lock: __ptr<void>
-```
-
-The platform lock: a heap block holding a `pthread_mutex_t`, or a
-Windows `SRWLOCK`. It never moves, which a pthread mutex requires.
-
-#### Value
-
-```pepper
-const Value: __ptr<T>
-```
-
-A heap slot holding the value: `sizeof<T>()` bytes, one reference for
-a struct `T`. Read and written only while the lock is held.
-
-#### Owner
-
-```pepper
-const Owner: Atomic<ulong>
-```
-
-The operating-system id of the thread holding the lock, or 0 when the
-Mutex is unlocked.
 
 ### Constructor
 
@@ -135,7 +106,7 @@ else holds the lock until its last reference is released.
 **Example**
 ```pepper
     with (var account = accounts.lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     }
 ```
 
@@ -157,7 +128,7 @@ calling thread already holding the lock counts as busy.
 **Example**
 ```pepper
     with (var account = accounts.try_lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     } else {
         print("busy; try later\n");
     }
@@ -214,19 +185,11 @@ it to another thread.
 **Example**
 ```pepper
     with (var totals = stats.lock()) {
-        totals.Requests.fetch_add(1);
+        totals.requests.fetch_add(1);
     }   # unlocked here
 ```
 
 ### Fields
-
-#### Source
-
-```pepper
-const Source: Mutex<T>
-```
-
-The Mutex this guard locks.
 
 #### Locked
 
@@ -308,8 +271,8 @@ A Condition is `[Shared]`, like its Mutex.
 
     [Shared]
     struct Jobs {
-        const Waiting: Atomic<long>;
-        construct() { Waiting = Atomic<long>(0); }
+        const waiting: Atomic<long>;
+        construct() { waiting = Atomic<long>(0); }
     }
 
     const jobs = async.Mutex<Jobs>(Jobs());
@@ -317,39 +280,20 @@ A Condition is `[Shared]`, like its Mutex.
 
     take_job() {
         with (var j = jobs.lock()) {
-            while (j.Waiting.load() == 0) {
+            while (j.waiting.load() == 0) {
                 has_work.wait();
             }
-            j.Waiting.fetch_sub(1);
+            j.waiting.fetch_sub(1);
         }
     }
 
     add_job() {
         with (var j = jobs.lock()) {
-            j.Waiting.fetch_add(1);
+            j.waiting.fetch_add(1);
             has_work.notify_one();
         }
     }
 ```
-
-### Fields
-
-#### Mutex
-
-```pepper
-const Mutex: Mutex<T>
-```
-
-The Mutex this condition waits on.
-
-#### Handle
-
-```pepper
-const Handle: __ptr<void>
-```
-
-The platform condition variable: a heap block holding a
-`pthread_cond_t`, or a Windows `CONDITION_VARIABLE`.
 
 ### Constructor
 
@@ -388,7 +332,7 @@ that re-checks what it waits for.
 **Example**
 ```pepper
     with (var q = queue.lock()) {
-        while (q.Waiting.load() == 0) {
+        while (q.waiting.load() == 0) {
             not_empty.wait();
         }
     }

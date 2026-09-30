@@ -136,8 +136,8 @@ const THREAD_LOCAL_PROGRAM: &str = r#"
 import async;
 
 struct Tracker {
-    int Value;
-    construct(this.Value = 0) {}
+    int value;
+    construct(this.value = 0) {}
     destruct {
         released.fetch_add(1);
     }
@@ -178,7 +178,7 @@ main(): int {
     tracker.set(Tracker(1));
     tracker.set(Tracker(2));
     assert(released.load() == 5, "set releases the value it replaces");
-    assert(tracker.get().Value == 2, "get returns the latest value");
+    assert(tracker.get().value == 2, "get returns the latest value");
     tracker.clear();
     assert(released.load() == 6, "clear releases the value");
     assert(!tracker.is_set(), "cleared");
@@ -209,8 +209,8 @@ import async;
 
 [Shared]
 struct Config {
-    const Port: int;
-    construct(this.Port = 0) {}
+    const port: int;
+    construct(this.port = 0) {}
 }
 
 const config = Config(8080);
@@ -220,7 +220,7 @@ copy_references() {
     var i = 0;
     while (i < 100000) {
         var copy = config;
-        total.fetch_add(copy.Port - 8079);
+        total.fetch_add(copy.port - 8079);
         i = i + 1;
     }
 }
@@ -249,8 +249,8 @@ import async;
 
 [Shared]
 struct Limits {
-    const Step: long;
-    construct(this.Step = 1) {}
+    const step: long;
+    construct(this.step = 1) {}
 }
 
 export const rounds = 50000;
@@ -260,7 +260,7 @@ export const hits = Atomic<long>(0);
 bump() {
     var i = 0;
     while (i < rounds) {
-        hits.fetch_add(limits.Step);
+        hits.fetch_add(limits.step);
         i = i + 1;
     }
 }
@@ -327,9 +327,9 @@ import async;
 
 [Shared]
 struct Job {
-    const Weight: long;
-    const Run: shared (long) => void;
-    construct(this.Weight = 1, this.Run = (n: long) => {}) {}
+    const weight: long;
+    const run: shared (long) => void;
+    construct(this.weight = 1, this.run = (n: long) => {}) {}
 }
 
 const total = Atomic<long>(0);
@@ -353,7 +353,7 @@ main(): int {
     var workers = Array<async.Thread>();
     var i = 0;
     while (i < 4) {
-        workers.append(async.Thread.spawn(() => { job.Run(job.Weight); }));
+        workers.append(async.Thread.spawn(() => { job.run(job.weight); }));
         workers.append(async.Thread.spawn(() => { add(1); }));
         workers.append(async.Thread.spawn(count_named));
         i = i + 1;
@@ -449,19 +449,19 @@ import async;
 
 [Shared]
 struct Counter {
-    const Slot: __ptr<long>;
+    const slot: __ptr<long>;
     construct() {
-        Slot = _pep_malloc(sizeof<long>());
+        slot = _pep_malloc(sizeof<long>());
     }
     destruct {
-        _pep_free(Slot);
+        _pep_free(slot);
     }
 }
 
 [Shared]
 struct Label {
-    const Id: long;
-    construct(this.Id = 0) {}
+    const id: long;
+    construct(this.id = 0) {}
 }
 
 const counter = async.Mutex<Counter>(Counter());
@@ -472,7 +472,7 @@ add_many() {
     var i = 0;
     while (i < 20000) {
         with (var c = counter.lock()) {
-            c.Slot[0] = c.Slot[0] + 1;
+            c.slot[0] = c.slot[0] + 1;
         }
         i = i + 1;
     }
@@ -491,8 +491,8 @@ try_from_other_thread() {
 long read_and_return(async.Mutex<Label> labels) {
     with (var label = labels.lock()) {
         var copy = label;
-        var extra = Label(label.Id + 1);
-        return copy.Id + extra.Id;
+        var extra = Label(label.id + 1);
+        return copy.id + extra.id;
     }
     return -1;
 }
@@ -511,7 +511,7 @@ long loop_paths(async.Mutex<Label> labels) {
             if (i > 6) {
                 break;
             }
-            seen = seen + local.Id + label.Id;
+            seen = seen + local.id + label.id;
         }
     }
     return seen;
@@ -528,7 +528,7 @@ main(): int {
         worker.join();
     }
     with (var c = counter.lock()) {
-        assert(c.Slot[0] == 160000, "every locked increment counted");
+        assert(c.slot[0] == 160000, "every locked increment counted");
         assert(counter.is_held(), "held inside the block");
     }
     assert(!counter.is_held(), "released after the block");
@@ -554,7 +554,7 @@ main(): int {
     assert(loop_paths(labels) == 1 + 10 + 3 + 10 + 5 + 10, "continue and break out of the body");
     assert(_pep_live_allocs() == before, "lock paths leak nothing");
     with (var label = labels.try_lock()) {
-        assert(label.Id == 10, "the Mutex is unlocked and still holds its value");
+        assert(label.id == 10, "the Mutex is unlocked and still holds its value");
     } else {
         assert(false, "a return or break left the Mutex locked");
     }
@@ -570,7 +570,7 @@ make_and_drop() {
     var m = async.Mutex<Label>(Label(3));
     var cond = m.condition();
     with (var label = m.lock()) {
-        assert(label.Id == 3, "the value");
+        assert(label.id == 3, "the value");
     }
 }
 "#;
@@ -582,8 +582,8 @@ import async;
 
 [Shared]
 struct Box {
-    const N: long;
-    construct(this.N = 0) {}
+    const n: long;
+    construct(this.n = 0) {}
 }
 
 main(): int {
@@ -603,8 +603,8 @@ import async;
 
 [Shared]
 struct Box {
-    const N: long;
-    construct(this.N = 0) {}
+    const n: long;
+    construct(this.n = 0) {}
 }
 
 main(): int {
@@ -622,15 +622,15 @@ import async;
 
 [Shared]
 struct Queue {
-    const Waiting: __ptr<long>;
-    const Done: __ptr<long>;
+    const waiting: __ptr<long>;
+    const done: __ptr<long>;
     construct() {
-        Waiting = _pep_malloc(sizeof<long>());
-        Done = _pep_malloc(sizeof<long>());
+        waiting = _pep_malloc(sizeof<long>());
+        done = _pep_malloc(sizeof<long>());
     }
     destruct {
-        _pep_free(Waiting);
-        _pep_free(Done);
+        _pep_free(waiting);
+        _pep_free(done);
     }
 }
 
@@ -641,13 +641,13 @@ const taken = Atomic<long>(0);
 consumer() {
     while (true) {
         with (var q = queue.lock()) {
-            while (q.Waiting[0] == 0 && q.Done[0] == 0) {
+            while (q.waiting[0] == 0 && q.done[0] == 0) {
                 changed.wait();
             }
-            if (q.Waiting[0] == 0) {
+            if (q.waiting[0] == 0) {
                 return;
             }
-            q.Waiting[0] = q.Waiting[0] - 1;
+            q.waiting[0] = q.waiting[0] - 1;
             taken.fetch_add(1);
             changed.notify_all();
         }
@@ -665,16 +665,16 @@ main(): int {
     while (i < 300) {
         with (var q = queue.lock()) {
             # Bound the queue at 4: wait for the consumers to catch up.
-            while (q.Waiting[0] >= 4) {
+            while (q.waiting[0] >= 4) {
                 changed.wait();
             }
-            q.Waiting[0] = q.Waiting[0] + 1;
+            q.waiting[0] = q.waiting[0] + 1;
             changed.notify_one();
         }
         i = i + 1;
     }
     with (var q = queue.lock()) {
-        q.Done[0] = 1;
+        q.done[0] = 1;
         changed.notify_all();
     }
     for (var c in consumers) {
@@ -703,8 +703,8 @@ import async;
 
 [Shared]
 struct Settings {
-    const Workers: long;
-    construct(this.Workers = 0) {}
+    const workers: long;
+    construct(this.workers = 0) {}
 }
 
 const once = async.Once();
@@ -755,7 +755,7 @@ main(): int {
     assert(once_runs.load() == 1, "later calls do not run a body");
     assert(lazy_runs.load() == 1, "Lazy built its value once");
     assert(same.load() == 8, "every thread got the same value");
-    assert(settings.get().Workers == 7, "the value");
+    assert(settings.get().workers == 7, "the value");
     assert(settings.is_built(), "built");
 
     # A dropped Lazy releases its value.
@@ -771,7 +771,7 @@ make_settings(): Settings {
 
 make_lazy() {
     var l = async.Lazy<Settings>(make_settings);
-    assert(l.get().Workers == 1, "built");
+    assert(l.get().workers == 1, "built");
 }
 "#;
 
@@ -801,8 +801,8 @@ import async;
 
 [Shared]
 struct Message {
-    const Id: long;
-    construct(this.Id = 0) {}
+    const id: long;
+    construct(this.id = 0) {}
     destruct {
         released.fetch_add(1);
     }
@@ -867,7 +867,7 @@ drop_with_queued() {
         i = i + 1;
     }
     var r = c.receive();
-    assert(r.value().Id == 0, "the oldest message comes first");
+    assert(r.value().id == 0, "the oldest message comes first");
     assert(c.count() == 39, "39 left");
 }
 

@@ -37,31 +37,31 @@ import "sys_windows";
 ##     }
 [Shared]
 export struct Once {
-    ## 0 before any call, 1 while a body runs, 2 once it has finished.
-    const State: Atomic<int>;
+    # 0 before any call, 1 while a body runs, 2 once it has finished.
+    const _state: Atomic<int>;
 
-    ## The operating-system id of the thread running the body, or 0.
-    const Runner: Atomic<ulong>;
+    # The operating-system id of the thread running the body, or 0.
+    const _runner: Atomic<ulong>;
 
-    ## The platform mutex that guards the move from 0 to 1 and the wait.
-    const Lock: __ptr<void>;
+    # The platform mutex that guards the move from 0 to 1 and the wait.
+    const _lock: __ptr<void>;
 
-    ## The platform condition variable that waiting callers sleep on.
-    const Finished: __ptr<void>;
+    # The platform condition variable that waiting callers sleep on.
+    const _finished: __ptr<void>;
 
     ## Creates a Once whose body has not run.
     ##
     ## @panics if the operating system cannot create a mutex or condition variable
     construct() {
-        State = Atomic<int>(0);
-        Runner = Atomic<ulong>(0);
-        Lock = _async_sys_mutex_create();
-        Finished = _async_sys_condition_create();
+        _state = Atomic<int>(0);
+        _runner = Atomic<ulong>(0);
+        _lock = _async_sys_mutex_create();
+        _finished = _async_sys_condition_create();
     }
 
     destruct {
-        _async_sys_condition_destroy(Finished);
-        _async_sys_mutex_destroy(Lock);
+        _async_sys_condition_destroy(_finished);
+        _async_sys_mutex_destroy(_lock);
     }
 
     ## Runs `body` if no call has run a body yet; otherwise waits until that
@@ -85,41 +85,41 @@ export struct Once {
     ##
     ## @returns true once a `call` has completed its body on some thread
     bool is_done() {
-        return State.load() == 2;
+        return _state.load() == 2;
     }
 
     # True if the caller must run the body (and then call `_finish`); false
     # once another thread's run has finished.
     bool _start() {
-        if (State.load() == 2) {
+        if (_state.load() == 2) {
             return false;
         }
         var me = _async_sys_os_thread();
-        _async_sys_mutex_lock(Lock);
-        if (State.load() == 0) {
-            State.store(1);
-            Runner.store(me);
-            _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_lock(_lock);
+        if (_state.load() == 0) {
+            _state.store(1);
+            _runner.store(me);
+            _async_sys_mutex_unlock(_lock);
             return true;
         }
-        if (Runner.load() == me) {
-            _async_sys_mutex_unlock(Lock);
+        if (_runner.load() == me) {
+            _async_sys_mutex_unlock(_lock);
             panic("Once.call: the body called 'call' on the Once that is running it");
         }
-        while (State.load() != 2) {
-            _async_sys_condition_wait(Finished, Lock);
+        while (_state.load() != 2) {
+            _async_sys_condition_wait(_finished, _lock);
         }
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_unlock(_lock);
         return false;
     }
 
     # Marks the body finished and wakes every waiting caller.
     void _finish() {
-        _async_sys_mutex_lock(Lock);
-        Runner.store(0);
-        State.store(2);
-        _async_sys_condition_notify_all(Finished);
-        _async_sys_mutex_unlock(Lock);
+        _async_sys_mutex_lock(_lock);
+        _runner.store(0);
+        _state.store(2);
+        _async_sys_condition_notify_all(_finished);
+        _async_sys_mutex_unlock(_lock);
     }
 }
 
@@ -140,8 +140,8 @@ export struct Once {
 ##
 ##     [Shared]
 ##     struct Settings {
-##         const Workers: long;
-##         construct(this.Workers = 1) {}
+##         const workers: long;
+##         construct(this.workers = 1) {}
 ##     }
 ##
 ##     load_settings(): Settings {
@@ -151,20 +151,20 @@ export struct Once {
 ##     const settings = async.Lazy<Settings>(load_settings);
 ##
 ##     main(): int {
-##         var workers = settings.get().Workers;   # built here, on first use
+##         var workers = settings.get().workers;   # built here, on first use
 ##         return 0;
 ##     }
 [Shared]
 export struct Lazy<T> {
-    ## The function that builds the value.
-    const Initializer: shared () => T;
+    # The function that builds the value.
+    const _initializer: shared () => T;
 
-    ## A heap slot holding the value once it is built: `sizeof<T>()` bytes,
-    ## one reference for a struct `T`.
-    const Value: __ptr<T>;
+    # A heap slot holding the value once it is built: `sizeof<T>()` bytes,
+    # one reference for a struct `T`.
+    const _value: __ptr<T>;
 
-    ## Runs the initializer once.
-    const Built: Once;
+    # Runs the initializer once.
+    const _built: Once;
 
     ## Creates a Lazy whose value `initializer` builds on the first `get()`.
     ## Nothing runs yet.
@@ -172,14 +172,14 @@ export struct Lazy<T> {
     ## @param initializer builds the value; runs at most once, on the thread that first calls `get()`
     ## @panics if the operating system cannot create a mutex or condition variable
     construct(shared () => T initializer) {
-        Initializer = initializer;
-        Value = _pep_malloc(sizeof<T>());
-        Built = Once();
+        _initializer = initializer;
+        _value = _pep_malloc(sizeof<T>());
+        _built = Once();
     }
 
     destruct {
-        Value[0] = __default<T>();
-        _pep_free(Value);
+        _value[0] = __default<T>();
+        _pep_free(_value);
     }
 
     ## Returns the value, building it with the initializer on the first call.
@@ -189,17 +189,17 @@ export struct Lazy<T> {
     ## @returns the value the initializer built
     ## @panics if the initializer itself calls `get()` on the same Lazy
     T get() {
-        if (Built._start()) {
-            Value[0] = Initializer();
-            Built._finish();
+        if (_built._start()) {
+            _value[0] = _initializer();
+            _built._finish();
         }
-        return Value[0];
+        return _value[0];
     }
 
     ## Reports whether the value has been built.
     ##
     ## @returns true once a `get()` has finished running the initializer
     bool is_built() {
-        return Built.is_done();
+        return _built.is_done();
     }
 }

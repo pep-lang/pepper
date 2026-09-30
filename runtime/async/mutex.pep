@@ -9,7 +9,7 @@
 # `Atomic<T>`. A later phase lifts that by keeping the compiler from letting
 # references into the value escape the `with` block.
 #
-# `Owner` holds the operating-system id of the thread holding the lock (0
+# `_owner` holds the operating-system id of the thread holding the lock (0
 # when unlocked), so a second `lock()` on that thread panics instead of
 # deadlocking, and `Condition.wait` can check that its caller holds the lock.
 # Only the holder writes it while it holds the lock, so a thread reading its
@@ -45,11 +45,11 @@ import "sys_windows";
 ##
 ##     [Shared]
 ##     struct Account {
-##         const Checking: Atomic<long>;
-##         const Savings: Atomic<long>;
+##         const checking: Atomic<long>;
+##         const savings: Atomic<long>;
 ##         construct(long checking = 0, long savings = 0) {
-##             Checking = Atomic<long>(checking);
-##             Savings = Atomic<long>(savings);
+##             this.checking = Atomic<long>(checking);
+##             this.savings = Atomic<long>(savings);
 ##         }
 ##     }
 ##
@@ -58,23 +58,23 @@ import "sys_windows";
 ##     save(long amount) {
 ##         with (var a = account.lock()) {
 ##             # No other thread sees the money in neither account.
-##             a.Checking.fetch_sub(amount);
-##             a.Savings.fetch_add(amount);
+##             a.checking.fetch_sub(amount);
+##             a.savings.fetch_add(amount);
 ##         }
 ##     }
 [Shared]
 export struct Mutex<T> {
-    ## The platform lock: a heap block holding a `pthread_mutex_t`, or a
-    ## Windows `SRWLOCK`. It never moves, which a pthread mutex requires.
-    const Lock: __ptr<void>;
+    # The platform lock: a heap block holding a `pthread_mutex_t`, or a
+    # Windows `SRWLOCK`. It never moves, which a pthread mutex requires.
+    const _lock: __ptr<void>;
 
-    ## A heap slot holding the value: `sizeof<T>()` bytes, one reference for
-    ## a struct `T`. Read and written only while the lock is held.
-    const Value: __ptr<T>;
+    # A heap slot holding the value: `sizeof<T>()` bytes, one reference for
+    # a struct `T`. Read and written only while the lock is held.
+    const _value: __ptr<T>;
 
-    ## The operating-system id of the thread holding the lock, or 0 when the
-    ## Mutex is unlocked.
-    const Owner: Atomic<ulong>;
+    # The operating-system id of the thread holding the lock, or 0 when the
+    # Mutex is unlocked.
+    const _owner: Atomic<ulong>;
 
     ## Creates an unlocked Mutex that owns `value`.
     ##
@@ -84,17 +84,17 @@ export struct Mutex<T> {
     ## @param value the value to protect
     ## @panics if the operating system cannot create a mutex
     construct(T value) {
-        Lock = _async_sys_mutex_create();
-        Value = _pep_malloc(sizeof<T>());
-        Value[0] = value;
-        Owner = Atomic<ulong>(0);
+        _lock = _async_sys_mutex_create();
+        _value = _pep_malloc(sizeof<T>());
+        _value[0] = value;
+        _owner = Atomic<ulong>(0);
     }
 
     destruct {
         # No guard is alive (each holds a reference), so the lock is free.
-        Value[0] = __default<T>();
-        _pep_free(Value);
-        _async_sys_mutex_destroy(Lock);
+        _value[0] = __default<T>();
+        _pep_free(_value);
+        _async_sys_mutex_destroy(_lock);
     }
 
     ## Waits until the calling thread holds the lock, and returns the guard
@@ -109,7 +109,7 @@ export struct Mutex<T> {
     ## @panics if the calling thread already holds the lock
     ## @example
     ##     with (var account = accounts.lock()) {
-    ##         account.Balance.fetch_add(10);
+    ##         account.balance.fetch_add(10);
     ##     }
     MutexGuard<T> lock() {
         return MutexGuard<T>(this);
@@ -124,7 +124,7 @@ export struct Mutex<T> {
     ## @returns the guard; its `enter()` returns the value, or null when the lock was busy
     ## @example
     ##     with (var account = accounts.try_lock()) {
-    ##         account.Balance.fetch_add(10);
+    ##         account.balance.fetch_add(10);
     ##     } else {
     ##         print("busy; try later\n");
     ##     }
@@ -136,7 +136,7 @@ export struct Mutex<T> {
     ##
     ## @returns true between a `lock()` (or a successful `try_lock()`) on this thread and the guard's destruction
     bool is_held() {
-        return Owner.load() == _async_sys_os_thread();
+        return _owner.load() == _async_sys_os_thread();
     }
 
     ## Returns a new condition variable that waits on this Mutex.
@@ -155,26 +155,26 @@ export struct Mutex<T> {
     # Waits for the lock and records the caller as its holder.
     void _lock() {
         var me = _async_sys_os_thread();
-        if (Owner.load() == me) {
+        if (_owner.load() == me) {
             panic("Mutex.lock: the calling thread already holds this Mutex");
         }
-        _async_sys_mutex_lock(Lock);
-        Owner.store(me);
+        _async_sys_mutex_lock(_lock);
+        _owner.store(me);
     }
 
     # Takes the lock if it is free; true if the caller now holds it.
     bool _try_lock() {
         var me = _async_sys_os_thread();
-        if (Owner.load() == me || !_async_sys_mutex_try_lock(Lock)) {
+        if (_owner.load() == me || !_async_sys_mutex_try_lock(_lock)) {
             return false;
         }
-        Owner.store(me);
+        _owner.store(me);
         return true;
     }
 
     void _unlock() {
-        Owner.store(0);
-        _async_sys_mutex_unlock(Lock);
+        _owner.store(0);
+        _async_sys_mutex_unlock(_lock);
     }
 }
 
@@ -189,11 +189,11 @@ export struct Mutex<T> {
 ## @typeParam T the protected value's type
 ## @example
 ##     with (var totals = stats.lock()) {
-##         totals.Requests.fetch_add(1);
+##         totals.requests.fetch_add(1);
 ##     }   # unlocked here
 export struct MutexGuard<T> {
-    ## The Mutex this guard locks.
-    const Source: Mutex<T>;
+    # The Mutex this guard locks.
+    const _source: Mutex<T>;
 
     ## Whether the guard holds the lock: false once `exit()` has run, and for
     ## a `try_lock()` that found the lock busy.
@@ -206,7 +206,7 @@ export struct MutexGuard<T> {
     ## @param wait true to wait for the lock; false to take it only if it is free right now
     ## @panics if `wait` is true and the calling thread already holds the lock
     construct(Mutex<T> source, bool wait = true) {
-        Source = source;
+        _source = source;
         if (wait) {
             source._lock();
             Locked = true;
@@ -228,7 +228,7 @@ export struct MutexGuard<T> {
         if (!Locked) {
             return __default<T>();
         }
-        return Source.Value[0];
+        return _source._value[0];
     }
 
     ## Unlocks the Mutex if the guard holds it. The destructor calls it;
@@ -236,7 +236,7 @@ export struct MutexGuard<T> {
     void exit() {
         if (Locked) {
             Locked = false;
-            Source._unlock();
+            _source._unlock();
         }
     }
 }
@@ -263,8 +263,8 @@ extend MutexGuard<T> with Scoped<T> {}
 ##
 ##     [Shared]
 ##     struct Jobs {
-##         const Waiting: Atomic<long>;
-##         construct() { Waiting = Atomic<long>(0); }
+##         const waiting: Atomic<long>;
+##         construct() { waiting = Atomic<long>(0); }
 ##     }
 ##
 ##     const jobs = async.Mutex<Jobs>(Jobs());
@@ -272,27 +272,27 @@ extend MutexGuard<T> with Scoped<T> {}
 ##
 ##     take_job() {
 ##         with (var j = jobs.lock()) {
-##             while (j.Waiting.load() == 0) {
+##             while (j.waiting.load() == 0) {
 ##                 has_work.wait();
 ##             }
-##             j.Waiting.fetch_sub(1);
+##             j.waiting.fetch_sub(1);
 ##         }
 ##     }
 ##
 ##     add_job() {
 ##         with (var j = jobs.lock()) {
-##             j.Waiting.fetch_add(1);
+##             j.waiting.fetch_add(1);
 ##             has_work.notify_one();
 ##         }
 ##     }
 [Shared]
 export struct Condition<T> {
-    ## The Mutex this condition waits on.
-    const Mutex: Mutex<T>;
+    # The Mutex this condition waits on.
+    const _mutex: Mutex<T>;
 
-    ## The platform condition variable: a heap block holding a
-    ## `pthread_cond_t`, or a Windows `CONDITION_VARIABLE`.
-    const Handle: __ptr<void>;
+    # The platform condition variable: a heap block holding a
+    # `pthread_cond_t`, or a Windows `CONDITION_VARIABLE`.
+    const _handle: __ptr<void>;
 
     ## Creates a condition variable that waits on `mutex`. `mutex.condition()`
     ## does the same.
@@ -300,12 +300,12 @@ export struct Condition<T> {
     ## @param mutex the Mutex that waiters hold
     ## @panics if the operating system cannot create a condition variable
     construct(Mutex<T> mutex) {
-        Mutex = mutex;
-        Handle = _async_sys_condition_create();
+        _mutex = mutex;
+        _handle = _async_sys_condition_create();
     }
 
     destruct {
-        _async_sys_condition_destroy(Handle);
+        _async_sys_condition_destroy(_handle);
     }
 
     ## Unlocks the Mutex, sleeps until another thread calls `notify_one()` or
@@ -317,18 +317,18 @@ export struct Condition<T> {
     ## @panics if the calling thread does not hold the Mutex
     ## @example
     ##     with (var q = queue.lock()) {
-    ##         while (q.Waiting.load() == 0) {
+    ##         while (q.waiting.load() == 0) {
     ##             not_empty.wait();
     ##         }
     ##     }
     void wait() {
         var me = _async_sys_os_thread();
-        if (Mutex.Owner.load() != me) {
+        if (_mutex._owner.load() != me) {
             panic("Condition.wait: the calling thread does not hold the Mutex");
         }
-        Mutex.Owner.store(0);
-        _async_sys_condition_wait(Handle, Mutex.Lock);
-        Mutex.Owner.store(me);
+        _mutex._owner.store(0);
+        _async_sys_condition_wait(_handle, _mutex._lock);
+        _mutex._owner.store(me);
     }
 
     ## Like `wait()`, but gives up after about `milliseconds` milliseconds.
@@ -339,12 +339,12 @@ export struct Condition<T> {
     ## @panics if the calling thread does not hold the Mutex
     bool wait_for(ulong milliseconds) {
         var me = _async_sys_os_thread();
-        if (Mutex.Owner.load() != me) {
+        if (_mutex._owner.load() != me) {
             panic("Condition.wait_for: the calling thread does not hold the Mutex");
         }
-        Mutex.Owner.store(0);
-        var woken = _async_sys_condition_wait_for(Handle, Mutex.Lock, milliseconds);
-        Mutex.Owner.store(me);
+        _mutex._owner.store(0);
+        var woken = _async_sys_condition_wait_for(_handle, _mutex._lock, milliseconds);
+        _mutex._owner.store(me);
         return woken;
     }
 
@@ -352,12 +352,12 @@ export struct Condition<T> {
     ## not need to hold the Mutex, but usually does, having just changed the
     ## value.
     void notify_one() {
-        _async_sys_condition_notify_one(Handle);
+        _async_sys_condition_notify_one(_handle);
     }
 
     ## Wakes every thread waiting on this condition. Each locks the Mutex in
     ## turn before its `wait()` returns.
     void notify_all() {
-        _async_sys_condition_notify_all(Handle);
+        _async_sys_condition_notify_all(_handle);
     }
 }

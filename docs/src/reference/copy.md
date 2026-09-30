@@ -71,23 +71,23 @@ already made, so objects referenced twice stay shared.
 **Example**
 ```pepper
     struct Buffer {
-        __ptr<u8> Data;
-        ulong Size;
+        __ptr<u8> data;
+        ulong size;
 
         construct(ulong size = 0) {
-            Data = _pep_malloc(size);
-            Size = size;
+            data = _pep_malloc(size);
+            this.size = size;
         }
 
         destruct {
-            _pep_free(Data);
+            _pep_free(data);
         }
 
         Buffer copy(Copies copies) {
-            var made = Buffer(Size);
+            var made = Buffer(size);
             var i: ulong = 0;
-            while (i < Size) {
-                made.Data[i] = Data[i];
+            while (i < size) {
+                made.data[i] = data[i];
                 i = i + 1;
             }
             return made;

@@ -64,59 +64,6 @@ threads.
     }
 ```
 
-### Fields
-
-#### Capacity
-
-```pepper
-const Capacity: ulong
-```
-
-The most values that may wait before `send` blocks, or 0 for no limit.
-
-#### Lock
-
-```pepper
-const Lock: __ptr<void>
-```
-
-The platform mutex that guards `State` and `Buffer`.
-
-#### NotEmpty
-
-```pepper
-const NotEmpty: __ptr<void>
-```
-
-The platform condition variable receivers wait on.
-
-#### NotFull
-
-```pepper
-const NotFull: __ptr<void>
-```
-
-The platform condition variable senders wait on while a bounded
-channel is full.
-
-#### State
-
-```pepper
-const State: __ptr<ulong>
-```
-
-The head index, the number of queued values, the number of slots in
-the buffer, and 1 once closed. Read and written only under `Lock`.
-
-#### Buffer
-
-```pepper
-const Buffer: __ptr<__ptr<void>>
-```
-
-Holds the ring buffer of values (`T` slots). Read and written only
-under `Lock`.
-
 ### Constructor
 
 #### Channel()
@@ -307,14 +254,6 @@ without naming it. It belongs to the thread that runs the loop.
 ```
 
 ### Fields
-
-#### Source
-
-```pepper
-const Source: Channel<T>
-```
-
-The channel it receives from.
 
 #### Current
 
