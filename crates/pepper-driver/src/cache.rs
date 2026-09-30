@@ -7,9 +7,11 @@
 //!
 //! - `<unit>.o`: the object;
 //! - `<unit>.json`: the record,
-//!   `{"key": "<hex>", "bitcode": "<hex>", "warnings": "no"}`: the unit's
-//!   source key ([`unit_key`]), the hash of the code the object was emitted
-//!   from, and whether compiling the unit warned;
+//!   `{"key": "<hex>", "bitcode": "<hex>", "warnings": "no", "interfaces": "<namespace>=<hex>;..."}`:
+//!   the unit's key ([`crate::keys`]), the hash of the code the object was
+//!   emitted from, whether compiling the unit warned, and its files'
+//!   interface hashes (`pepper_sema::interface`), which other units' keys
+//!   read;
 //! - `<unit>.summaries`: its functions' link summaries (see
 //!   [`parse_summaries`]), which a build that skips the unit's bodies uses
 //!   in their place;
@@ -28,7 +30,6 @@
 //! another, so two compilers cannot deadlock.
 
 use inkwell::module::Module;
-use pepper_sema::program::{Program, Unit};
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -84,6 +85,14 @@ impl Cache {
         Ok(reused)
     }
 
+    /// The interface hashes of the unit `name`'s files, by namespace, when
+    /// its record has the key `key`. Read without the lock: a record is
+    /// replaced whole, and its interfaces follow from its key, so they are
+    /// right for this program whichever writer wrote them.
+    pub fn interfaces(&self, name: &str, key: &str) -> Option<Vec<(String, String)>> {
+        self.record(name).filter(|r| r.key == key && !r.interfaces.is_empty()).map(|r| r.interfaces)
+    }
+
     /// Put the object of `unit.name` at `unit.out`. A unit whose record has
     /// `unit.key` (its sources, see [`unit_key`]) is a hit: its object is
     /// reused without generating any code. Otherwise `generate` builds the
@@ -99,7 +108,7 @@ impl Cache {
         unit: &UnitRequest<'_>,
         generate: impl FnOnce() -> Result<Module<'ctx>, String>,
     ) -> Result<(Outcome, String), String> {
-        let UnitRequest { name, key, out, verify, warned, summaries } = *unit;
+        let UnitRequest { name, key, out, verify, warned, summaries, interfaces } = *unit;
         let lock = self.lock_file(name)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", name, e))?;
         let record = self.record(name);
@@ -107,6 +116,15 @@ impl Cache {
         let present = object.is_file();
         let (outcome, code) = if present && let Some(record) = record.as_ref().filter(|r| r.key == key) {
             if verify {
+                if record.interfaces != interfaces {
+                    return Err(format!(
+                        "build cache: unit '{}' matched its recorded key, but its files' interface hashes changed \
+                         (recorded {}, now {}); an interface depends on something its key leaves out",
+                        name,
+                        encode_interfaces(&record.interfaces),
+                        encode_interfaces(interfaces)
+                    ));
+                }
                 let module = generate()?;
                 let bitcode = self.bitcode_hash(&module);
                 if record.bitcode != bitcode {
@@ -136,7 +154,8 @@ impl Cache {
                 std::fs::rename(&temporary, &object).map_err(|e| format!("cannot write {}: {}", object.display(), e))?;
             }
             write_atomically(&self.path(name, "summaries"), summaries.as_bytes())?;
-            write_atomically(&self.path(name, "json"), Record { key: key.to_string(), bitcode: bitcode.clone(), warned }.to_json().as_bytes())?;
+            let record = Record { key: key.to_string(), bitcode: bitcode.clone(), warned, interfaces: interfaces.to_vec() };
+            write_atomically(&self.path(name, "json"), record.to_json().as_bytes())?;
             (if same_code { Outcome::SameCode } else { Outcome::Miss }, bitcode)
         };
         place(&object, out)?;
@@ -199,39 +218,12 @@ impl Cache {
     }
 }
 
-/// The source key of `unit`: a hash of the compiler, the unit's files,
-/// and `inputs`, every file its code can depend on
-/// ([`Program::unit_inputs`](pepper_sema::program::Program::unit_inputs)),
-/// each by name, namespace and text. `source_hashes` holds each program
-/// file's BLAKE3 hash, indexed like `program.files`.
-pub fn unit_key(compiler: &str, program: &Program, unit: &Unit, inputs: &[usize], source_hashes: &[blake3::Hash]) -> String {
-    let mut hasher = blake3::Hasher::new();
-    let mut field = |bytes: &[u8]| {
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    };
-    field(b"pepper unit key 1");
-    field(compiler.as_bytes());
-    field(unit.name.as_bytes());
-    for &file in &unit.files {
-        field(program.files[file].name.as_bytes());
-    }
-    for &file in inputs {
-        let f = &program.files[file];
-        field(f.name.as_bytes());
-        field(f.namespace.as_bytes());
-        field(&[f.prelude as u8, f.prelude_part as u8]);
-        field(source_hashes[file].as_bytes());
-    }
-    hasher.finalize().to_hex().to_string()
-}
-
 /// One unit for [`Cache::object`].
 #[derive(Debug, Clone, Copy)]
 pub struct UnitRequest<'a> {
     /// The unit's name, which names its cache files.
     pub name: &'a str,
-    /// Its source key ([`unit_key`]).
+    /// Its key ([`crate::keys`]).
     pub key: &'a str,
     /// Where to put its object.
     pub out: &'a Path,
@@ -242,6 +234,8 @@ pub struct UnitRequest<'a> {
     /// Its functions' link summaries, stored on a miss (see
     /// [`parse_summaries`]).
     pub summaries: &'a str,
+    /// Its files' interface hashes, by namespace, stored on a miss.
+    pub interfaces: &'a [(String, String)],
 }
 
 /// The lines of a unit's `<unit>.summaries`: each function's link summary
@@ -276,19 +270,28 @@ pub enum Outcome {
 
 /// A unit's record, `<unit>.json`.
 struct Record {
-    /// The unit's source key ([`unit_key`]).
+    /// The unit's key ([`crate::keys`]).
     key: String,
     /// The hash of the code its object was emitted from.
     bitcode: String,
     /// Compiling the unit reported warnings. A record without the field
     /// counts as warned, so its unit is checked again.
     warned: bool,
+    /// Its files' interface hashes, by namespace. Empty in a record from
+    /// before phase 2c, whose unit's dependents then miss.
+    interfaces: Vec<(String, String)>,
 }
 
 impl Record {
     fn to_json(&self) -> String {
         let warned = if self.warned { "yes" } else { "no" };
-        format!("{{\"key\": \"{}\", \"bitcode\": \"{}\", \"warnings\": \"{}\"}}\n", self.key, self.bitcode, warned)
+        format!(
+            "{{\"key\": \"{}\", \"bitcode\": \"{}\", \"warnings\": \"{}\", \"interfaces\": \"{}\"}}\n",
+            self.key,
+            self.bitcode,
+            warned,
+            encode_interfaces(&self.interfaces)
+        )
     }
 
     fn parse(text: &str) -> Option<Record> {
@@ -296,8 +299,19 @@ impl Record {
             key: json_string(text, "key")?.to_string(),
             bitcode: json_string(text, "bitcode")?.to_string(),
             warned: json_string(text, "warnings") != Some("no"),
+            interfaces: json_string(text, "interfaces").map(decode_interfaces).unwrap_or_default(),
         })
     }
+}
+
+/// `<namespace>=<hash>;...`, as a record holds interface hashes. Neither a
+/// namespace (a path) nor a hash has `=`, `;` or `"`.
+fn encode_interfaces(interfaces: &[(String, String)]) -> String {
+    interfaces.iter().map(|(namespace, hash)| format!("{}={}", namespace, hash)).collect::<Vec<_>>().join(";")
+}
+
+fn decode_interfaces(text: &str) -> Vec<(String, String)> {
+    text.split(';').filter_map(|entry| entry.split_once('=')).map(|(n, h)| (n.to_string(), h.to_string())).collect()
 }
 
 /// The string value of `field` in a record (`{"key": "<hex>", ...}`).
@@ -369,11 +383,14 @@ mod tests {
     #[test]
     fn records_round_trip() {
         for warned in [false, true] {
-            let record = Record { key: "ab12".to_string(), bitcode: "cd34".to_string(), warned };
+            let interfaces = vec![("io/file".to_string(), "ef56".to_string()), ("prelude".to_string(), "78ab".to_string())];
+            let record = Record { key: "ab12".to_string(), bitcode: "cd34".to_string(), warned, interfaces: interfaces.clone() };
             let read = Record::parse(&record.to_json()).unwrap();
             assert_eq!((read.key.as_str(), read.bitcode.as_str(), read.warned), ("ab12", "cd34", warned));
+            assert_eq!(read.interfaces, interfaces);
         }
         assert!(Record::parse("{\"key\": \"ab12\", \"bitcode\": \"cd34\"}\n").unwrap().warned);
+        assert!(Record::parse("{\"key\": \"ab12\", \"bitcode\": \"cd34\"}\n").unwrap().interfaces.is_empty());
         assert!(Record::parse("{\"key\": \"ab12\"}\n").is_none());
         assert!(Record::parse("").is_none());
     }

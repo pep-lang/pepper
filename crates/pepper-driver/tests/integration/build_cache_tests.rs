@@ -43,9 +43,10 @@ fn compile_entry(entry: &Path, cache: &Path, build: &Path, verify: bool) -> (pep
     // Not verifying overrides PEPPER_CACHE_VERIFY, which CI sets.
     args.push(if verify { "--verify-cache" } else { "--no-verify-cache" }.to_string());
     let options = pepper_driver::Options::parse_from(args);
-    let (module, program, trial) = pepper_driver::compiler::compile_for_objects(&options, &pepper_driver::units_dir(build, "main")).unwrap();
-    let objects = pepper_driver::objects(&options, &module, trial.as_ref(), &program, build, "main").unwrap();
-    (module, objects)
+    let compiled = pepper_driver::compiler::compile_for_objects(&options, &pepper_driver::units_dir(build, "main")).unwrap();
+    let objects = pepper_driver::objects(&options, &compiled.module, compiled.trial.as_ref(), &compiled.interfaces, &compiled.program, build, "main")
+        .unwrap();
+    (compiled.module, objects)
 }
 
 /// Whether sema kept the body of the function `name`.
@@ -132,7 +133,7 @@ fn a_record_that_does_not_match_is_a_miss() {
 }
 
 #[test]
-fn an_edit_rebuilds_only_its_unit_and_the_units_that_import_it() {
+fn an_edit_rebuilds_only_its_unit_and_the_units_whose_inputs_changed() {
     let dir = scratch("edit");
     let (cache, project) = (dir.join("cache"), dir.join("project"));
     std::fs::create_dir_all(&project).unwrap();
@@ -153,13 +154,23 @@ fn an_edit_rebuilds_only_its_unit_and_the_units_that_import_it() {
     assert_eq!(outcome(&edited, "lib"), Some(Outcome::Hit));
     assert_eq!(outcome(&edited, "other"), Some(Outcome::Hit));
     assert_eq!(outcome(&edited, "prelude"), Some(Outcome::Hit));
-    // A body in lib changes: lib misses, main (which imports lib) is
-    // generated again but its code, which only calls `twice`, is the same.
+    // A body in lib changes: lib misses, but lib's interface is the same,
+    // so main (which imports lib) is a hit (early cutoff).
     write(&project, &[("lib.pep", "export twice(x: int): int { return x + x; }\n")]);
     let body = build_entry(&entry, &cache, &dir.join("c"));
     assert_eq!(outcome(&body, "lib"), Some(Outcome::Miss), "{:?}", outcomes(&body));
-    assert_eq!(outcome(&body, "main"), Some(Outcome::SameCode));
+    assert_eq!(outcome(&body, "main"), Some(Outcome::Hit), "{:?}", outcomes(&body));
     assert_eq!(outcome(&body, "other"), Some(Outcome::Hit));
+    // A comment moves every declaration of lib: positions are not part of
+    // its interface.
+    write(&project, &[("lib.pep", "# Doubling.\n\nexport twice(x: int): int { return x + x; }\n")]);
+    let moved = build_entry(&entry, &cache, &dir.join("d"));
+    assert_eq!(outcome(&moved, "main"), Some(Outcome::Hit), "{:?}", outcomes(&moved));
+    // Its signature changes: main is generated again.
+    write(&project, &[("lib.pep", "export twice(x: long): int { return (x + x) as int; }\n")]);
+    let signature = build_entry(&entry, &cache, &dir.join("e"));
+    assert_eq!(outcome(&signature, "lib"), Some(Outcome::Miss), "{:?}", outcomes(&signature));
+    assert_ne!(outcome(&signature, "main"), Some(Outcome::Hit), "{:?}", outcomes(&signature));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

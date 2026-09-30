@@ -13,10 +13,38 @@ pub struct Position {
 
 /// A byte-offset range within one source file. `start` is inclusive, `end`
 /// exclusive. Offsets are valid for the source the node was parsed from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+}
+
+thread_local! {
+    static POSITIONS_HIDDEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` with spans and locations printing as `_` in `{:?}`, so a
+/// declaration's debug text does not depend on where it sits in its file
+/// (the build cache's interface hashes, see `pepper_sema::interface`).
+pub fn without_positions<R>(f: impl FnOnce() -> R) -> R {
+    let previous = POSITIONS_HIDDEN.with(|p| p.replace(true));
+    let result = f();
+    POSITIONS_HIDDEN.with(|p| p.set(previous));
+    result
+}
+
+/// Whether [`without_positions`] is running.
+pub fn positions_hidden() -> bool {
+    POSITIONS_HIDDEN.with(|p| p.get())
+}
+
+impl std::fmt::Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if positions_hidden() {
+            return f.write_str("_");
+        }
+        f.debug_struct("Span").field("start", &self.start).field("end", &self.end).finish()
+    }
 }
 
 impl Span {

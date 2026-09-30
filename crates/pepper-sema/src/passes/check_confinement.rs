@@ -187,6 +187,17 @@ impl Summary {
     }
 }
 
+/// A recorded summary (`Summary::encode`) without its blame's position,
+/// which only places a note: what the build cache's interface hash of the
+/// function's file takes (see `crate::interface`).
+pub(crate) fn summary_without_position(text: &str) -> String {
+    match text.rsplit_once(';') {
+        Some((rest, "-")) => format!("{};-", rest),
+        Some((rest, _)) => format!("{};blamed", rest),
+        None => text.to_string(),
+    }
+}
+
 /// The number of elements of a tuple type, or 1.
 fn result_slots(ty: &TypeName) -> usize {
     if ty.name == crate::type_name::TUPLE && !ty.sub_types.is_empty() { ty.sub_types.len() } else { 1 }

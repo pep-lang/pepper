@@ -980,9 +980,10 @@ MSVC's link.exe writes unresolved symbols to stdout.
 
 ### 4.3 Build cache (`driver/src/cache.rs`, `codegen/src/partition.rs`)
 
-Phases 1, 2a and 2b of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
-sema still runs over the whole program, but codegen and object emission run
-per **compilation unit**, and a unit whose sources are unchanged takes its
+Phases 1, 2a, 2b and the early cutoff of 2c of
+`design-notes/build-cache/build-cache-proposal.md`: sema still runs over the
+whole program, but codegen and object emission run per **compilation unit**,
+and a unit whose sources and inputs' interfaces are unchanged takes its
 object from `.pep/cache` without generating any code, and sema skips its
 non-generic bodies.
 
@@ -1032,13 +1033,42 @@ non-generic bodies.
   take extensions from (transitively), and every file that declares a
   concrete override (`hash<Point>`), since sema honours an override
   wherever its generic is instantiated, imported or not.
-- **Keys.** `cache::unit_key` hashes (BLAKE3) the compiler's identity (crate
-  version, LLVM version, and the running executable's path, size and
-  modification time), the unit's name and files, and each input file's
-  name, namespace, prelude flags and text. A record also holds the hash of
-  the bitcode its object was emitted from.
+- **Keys** (`driver/src/keys.rs`). `Keys::key` hashes (BLAKE3) the
+  compiler's identity (crate version, LLVM version, and the running
+  executable's path, size and modification time), the unit's name and
+  files, and each input file's name, namespace and prelude flags, with its
+  **interface hash** when the file belongs to another unit (early cutoff,
+  phase 2c) and its text otherwise. An input whose unit reaches this unit
+  back through inputs (a strongly connected component of units reading each
+  other's files: an override file the prelude instantiates, a forced
+  import) is hashed by text, since its interface can depend on this unit. A
+  record also holds the hash of the bitcode its object was emitted from, and
+  its files' interface hashes.
+- **Interfaces** (`sema/src/interface.rs`, `interface_hash`): what code in
+  other units can depend on. The file's declarations as `build_file` makes
+  them, printed with `{:?}` inside `ast::without_positions` (spans and
+  locations print as `_`: no unit's code depends on another's positions),
+  with each body `strip_bodies` could skip (non-generic, explicit return
+  type, not a copied trait default) replaced by its recorded link summary
+  without the blame's position (`summary_without_position`), or kept when no
+  summary was recorded, plus how many closures it creates (a file's closure
+  structs are numbered in order). So a body edit, a comment or a moved
+  declaration leaves the interface alone; a signature, a field, a generic
+  body or an inferred return type changes it. That other units' code does
+  not depend on the skipped bodies is what verifying's trial checks, and a
+  verifying hit also requires its recorded interface hashes to match.
+- **Resolving keys.** Before sema (`compiler::reused`), units resolve bottom
+  up: a unit's key is known once every unit it reads through interfaces is a
+  hit, whose record gives their hashes (`Cache::interfaces`, read without the
+  lock: interfaces follow from the key). A unit whose dependency missed waits
+  for sema, which checks its bodies. After sema (`objects`) every interface
+  is known: recorded for the units whose bodies sema skipped
+  (`ForObjects::interfaces`), else hashed from the program's syntax trees
+  and `Module::summaries_to_record` (`file_interfaces`), so every unit is
+  keyed, and a unit whose dependency changed only a body is still a hit.
 - **Cache** (`cache::Cache`): `<cache>/v1/<target triple>/<unit>.o`,
-  `<unit>.json` (`{"key": …, "bitcode": …, "warnings": "no"}`),
+  `<unit>.json` (`{"key": …, "bitcode": …, "warnings": "no", "interfaces":
+  "<namespace>=<hash>;…"}`),
   `<unit>.summaries` (see below) and `<unit>.lock`. `object`
   takes an exclusive OS lock (`File::lock`) on the unit. When the record's
   key matches and the object exists, it is a **hit**: no code is generated.
@@ -1081,8 +1111,8 @@ non-generic bodies.
   requires every other unit's code from it to match
   (`Cache::check_code`, `<unit>.trial.ll` on a mismatch).
   `--no-verify-cache` overrides the variable.
-- **Not yet** (phases 2c and 3): interfaces (`.pepi`) that skip parsing,
-  and early cutoff for dependents by interface hash.
+- **Not yet** (phases 2c and 3): interface files (`.pepi`) that let a hit
+  unit skip parsing.
 
 ---
 

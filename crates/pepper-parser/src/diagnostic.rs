@@ -50,10 +50,20 @@ use std::fmt::Write;
 pub struct FileId(pub u32);
 
 /// A source location: a byte span in one file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Loc {
     pub file: FileId,
     pub span: Span,
+}
+
+impl std::fmt::Debug for Loc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The file index depends on load order: hidden with the span.
+        if crate::ast::positions_hidden() {
+            return f.write_str("_");
+        }
+        f.debug_struct("Loc").field("file", &self.file).field("span", &self.span).finish()
+    }
 }
 
 impl Loc {

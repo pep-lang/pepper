@@ -250,9 +250,10 @@ cargo run -- tests/hello.pep
 Both print `Hello world!`. Intermediate artifacts land in `.pep/build/` next to
 where you ran the compiler, which is gitignored. Each file (each import cycle,
 and the runtime as one) becomes its own object, and `.pep/cache/` keeps them:
-a file whose sources (and the files it imports) did not change is not
-compiled again (its bodies are not even checked), and one whose generated
-code did not change is not emitted again. Delete
+a file whose sources did not change, and whose imports' declarations did
+not change, is not compiled again (its bodies are not even checked), and one
+whose generated code did not change is not emitted again. Editing a function
+body recompiles only that file: the files importing it are reused. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
 `PEPPER_CACHE_DIR`.
 

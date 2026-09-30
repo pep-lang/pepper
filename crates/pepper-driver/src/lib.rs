@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod compiler;
+pub mod keys;
 pub mod linker;
 pub mod options;
 /// Import resolution, now in `pepper-files` (shared with the LSP server).
@@ -79,8 +80,8 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
 
     let build_dir = options.effective_build_dir();
-    let (sema_module, program, trial) = if options.emit_llvm {
-        compiler::compile_program(&options).map(|(module, program)| (module, program, None))?
+    let compiler::ForObjects { module: sema_module, program, trial, interfaces } = if options.emit_llvm {
+        compiler::compile_program(&options).map(|(module, program)| compiler::ForObjects { module, program, trial: None, interfaces: vec![] })?
     } else {
         compiler::compile_for_objects(&options, &units_dir(&build_dir, &module_name))?
     };
@@ -105,7 +106,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     // Full pipeline: one object per unit (from the build cache when the
     // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
-    let built = objects(&options, &sema_module, trial.as_ref(), &program, &build_dir, &module_name)?;
+    let built = objects(&options, &sema_module, trial.as_ref(), &interfaces, &program, &build_dir, &module_name)?;
     if options.tracing("cache") {
         for object in &built {
             let outcome = match object.outcome {
@@ -164,17 +165,25 @@ pub struct UnitObject {
 ///
 /// `trial` (from [`compiler::compile_for_objects`] when verifying) is the
 /// module with the cached units' bodies skipped: each unit generated from
-/// `module` must have the same code generated from it.
+/// `module` must have the same code generated from it. `interfaces` holds
+/// the interface hashes of the files whose bodies sema skipped, by file;
+/// the rest are hashed here (see [`keys`]).
 pub fn objects(
     options: &Options,
     module: &pepper_sema::model::Module,
     trial: Option<&pepper_sema::model::Module>,
+    interfaces: &[Option<String>],
     program: &pepper_sema::program::Program,
     build_dir: &std::path::Path,
     name: &str,
 ) -> Result<Vec<UnitObject>, String> {
-    let units = program.units();
+    let keys = keys::Keys::new(program);
+    let units = &keys.units;
     let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root)).transpose()?;
+    let interfaces = match cache {
+        Some(_) => file_interfaces(module, program, interfaces)?,
+        None => vec![],
+    };
     let build_units = units_dir(build_dir, name);
     // Files with warnings; their units are checked again next time.
     let mut warned_files = vec![false; program.files.len()];
@@ -185,19 +194,23 @@ pub fn objects(
     }
     let mut jobs: Vec<UnitJob> = units
         .iter()
-        .zip(unit_keys(cache.as_ref(), program, &units))
         .enumerate()
-        .map(|(i, (u, (inputs, key)))| {
+        .map(|(i, u)| {
             let mut is_input = vec![false; program.files.len()];
-            for &file in &inputs {
+            for &file in &keys.inputs[i] {
                 is_input[file] = true;
             }
+            let key = cache.as_ref().and_then(|c| keys.key(c.compiler(), i, |file| interfaces[file].as_deref()));
             UnitJob {
                 unit: Some(i),
                 name: u.name.clone(),
                 object: build_units.join(format!("{}.o", u.name)),
                 key,
                 inputs: is_input,
+                interfaces: match cache {
+                    Some(_) => u.files.iter().map(|&f| (program.files[f].namespace.clone(), interfaces[f].clone().unwrap_or_default())).collect(),
+                    None => vec![],
+                },
                 warned: u.files.iter().any(|&f| warned_files[f]),
                 summaries: unit_summaries(module, program, &u.files),
                 stripped: u.files.iter().any(|&f| module.cached_files.get(f).copied().unwrap_or(false)),
@@ -210,6 +223,7 @@ pub fn objects(
         object: build_dir.join(format!("{}.o", name)),
         key: None,
         inputs: vec![],
+        interfaces: vec![],
         warned: false,
         summaries: String::new(),
         stripped: false,
@@ -219,7 +233,7 @@ pub fn objects(
         module,
         trial,
         namespaces: &namespaces,
-        unit_of_file: unit_files(&units, program.files.len()),
+        unit_of_file: keys.unit_of_file.clone(),
         cache: cache.as_ref(),
         verify: options.verifying_cache(),
     };
@@ -245,22 +259,26 @@ fn unit_summaries(module: &pepper_sema::model::Module, program: &pepper_sema::pr
         .collect()
 }
 
-/// Each of `units`' inputs ([`Program::unit_inputs`]) and, with a cache,
-/// its source key ([`cache::unit_key`]).
-pub(crate) fn unit_keys(
-    cache: Option<&cache::Cache>,
+/// Each program file's interface hash (see [`keys`]): `known`'s, for the
+/// files whose bodies sema skipped, else hashed from `program` and the link
+/// summaries sema recorded in `module`.
+fn file_interfaces(
+    module: &pepper_sema::model::Module,
     program: &pepper_sema::program::Program,
-    units: &[pepper_sema::program::Unit],
-) -> Vec<(Vec<usize>, Option<String>)> {
-    let source_hashes: Vec<blake3::Hash> = program.files.iter().map(|f| blake3::hash(f.source.as_bytes())).collect();
-    units
-        .iter()
-        .map(|u| {
-            let inputs = program.unit_inputs(u);
-            let key = cache.map(|c| cache::unit_key(c.compiler(), program, u, &inputs, &source_hashes));
-            (inputs, key)
-        })
-        .collect()
+    known: &[Option<String>],
+) -> Result<Vec<Option<String>>, String> {
+    let summaries: std::collections::HashMap<pepper_parser::diagnostic::Loc, &str> =
+        module.summaries_to_record.iter().map(|(loc, summary)| (*loc, summary.as_str())).collect();
+    let mut interfaces = vec![];
+    for (i, file) in program.files.iter().enumerate() {
+        let interface = match known.get(i).cloned().flatten() {
+            Some(known) => known,
+            None => pepper_sema::interface::interface_hash(&file.module, pepper_parser::diagnostic::FileId(i as u32), &summaries)
+                .map_err(|d| module.sources.render(&d))?,
+        };
+        interfaces.push(Some(interface));
+    }
+    Ok(interfaces)
 }
 
 /// One object to build: a unit (`unit: Some(index into units)`) or the
@@ -269,11 +287,13 @@ struct UnitJob {
     unit: Option<usize>,
     name: String,
     object: PathBuf,
-    /// The unit's source key, when there is a cache.
+    /// The unit's key, when there is a cache.
     key: Option<String>,
     /// Per file, whether the unit's code may depend on it (see
     /// `Program::unit_inputs`); empty for the program module.
     inputs: Vec<bool>,
+    /// Its files' interface hashes, by namespace, when there is a cache.
+    interfaces: Vec<(String, String)>,
     /// Sema reported a warning in one of its files.
     warned: bool,
     /// Its functions' link summaries, for the cache (see
@@ -296,17 +316,6 @@ struct UnitSetup<'a> {
     /// `--verify-cache`: generate hit units anyway and check their code
     /// matches the cached object's.
     verify: bool,
-}
-
-/// Each file's index in `units`.
-fn unit_files(units: &[pepper_sema::program::Unit], files: usize) -> Vec<usize> {
-    let mut unit_of_file = vec![0; files];
-    for (index, unit) in units.iter().enumerate() {
-        for &file in &unit.files {
-            unit_of_file[file] = index;
-        }
-    }
-    unit_of_file
 }
 
 /// Put one unit's object at `job.object`: from the cache when the unit's
@@ -342,6 +351,7 @@ fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Ou
                 verify: setup.verify,
                 warned: job.warned,
                 summaries: &job.summaries,
+                interfaces: &job.interfaces,
             };
             let (outcome, code) = cache.object(&unit, generate)?;
             // A unit whose bodies the trial kept must come out the same:

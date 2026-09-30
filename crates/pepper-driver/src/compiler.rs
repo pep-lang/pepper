@@ -100,7 +100,22 @@ pub fn compile(
 /// [`compile`], also returning the loaded program, whose files and units
 /// ([`Program::units`]) the object pipeline splits the module by.
 pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String> {
-    compile_program_with(options, None, false)
+    compile_program_with(options, None, false).map(|(module, program, _)| (module, program))
+}
+
+/// What [`compile_for_objects`] hands [`crate::objects`].
+pub struct ForObjects {
+    /// The checked module.
+    pub module: Compiled,
+    pub program: Program,
+    /// Verifying the cache: the module with the cached units' bodies skipped
+    /// (when any were), for `objects` to check that skipping them changes no
+    /// other unit's code.
+    pub trial: Option<Compiled>,
+    /// Per program file, the interface hash its unit's cache record gave,
+    /// for the units whose bodies sema skipped (`objects` computes the
+    /// rest).
+    pub interfaces: Vec<Option<String>>,
 }
 
 /// [`compile_program`] for [`crate::objects`]: sema skips the bodies of the
@@ -109,32 +124,34 @@ pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String>
 /// split into unit objects by `objects`, never compiled whole.
 ///
 /// Verifying the cache (`--verify-cache`), the module is compiled whole,
-/// since every hit is generated again, and the third value is the module
-/// with those bodies skipped (when any were), for `objects` to check that
-/// skipping them changes no other unit's code.
-pub fn compile_for_objects(options: &Options, units_dir: &Path) -> Result<(Compiled, Program, Option<Compiled>), String> {
+/// since every hit is generated again, with a trial that skips the bodies.
+pub fn compile_for_objects(options: &Options, units_dir: &Path) -> Result<ForObjects, String> {
     let record = options.effective_cache_dir().is_some();
     if !options.verifying_cache() {
-        return compile_program_with(options, Some(units_dir), record).map(|(module, program)| (module, program, None));
+        let (module, program, reused) = compile_program_with(options, Some(units_dir), record)?;
+        return Ok(ForObjects { module, program, trial: None, interfaces: reused.interfaces });
     }
-    let (module, program) = compile_program_with(options, None, record)?;
+    let (module, program, _) = compile_program_with(options, None, record)?;
     let reused = reused(options, &program, units_dir)?;
+    let mut done = ForObjects { module, program, trial: None, interfaces: vec![] };
     if !reused.files.iter().any(|&c| c) {
-        return Ok((module, program, None));
+        return Ok(done);
     }
     // Numbered as if the program were compiled for the first time.
     pepper_sema::reset_program_counters();
-    let mut trial = merge(&program)?;
+    let mut trial = merge(&done.program)?;
     trial.cached_files = reused.files;
     trial.recorded_summaries = reused.summaries;
     run_passes(&mut trial).map_err(|e| format!("build cache: skipping the cached units' bodies broke sema:\n{}", e))?;
-    Ok((module, program, Some(trial)))
+    done.trial = Some(trial);
+    Ok(done)
 }
 
 /// [`compile_program`], skipping the bodies of the units the cache reuses
 /// into `reuse` when it is given, and recording link summaries for the
-/// cache (`Module::summaries_to_record`) when `record`.
-fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -> Result<(Compiled, Program), String> {
+/// cache (`Module::summaries_to_record`) when `record`. Also returns what
+/// was reused.
+fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -> Result<(Compiled, Program, Reused), String> {
     let entry_source = options
         .source_files
         .first()
@@ -145,10 +162,11 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     timer.stage("load and parse");
     let mut module = merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))?;
     module.record_summaries = record;
+    let mut reused_units = Reused::default();
     if let Some(units_dir) = reuse {
-        let reused = reused(options, &program, units_dir)?;
-        module.cached_files = reused.files;
-        module.recorded_summaries = reused.summaries;
+        reused_units = reused(options, &program, units_dir)?;
+        module.cached_files = std::mem::take(&mut reused_units.files);
+        module.recorded_summaries = std::mem::take(&mut reused_units.summaries);
     }
     timer.stage("check and build");
     // Warnings print whether or not the passes succeed, as clang prints
@@ -157,7 +175,7 @@ fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -
     crate::report_warnings(&module.render_warnings());
     result?;
     timer.stage("sema passes");
-    Ok((module, program))
+    Ok((module, program, reused_units))
 }
 
 /// The units whose objects came from the cache before sema.
@@ -168,28 +186,57 @@ struct Reused {
     files: Vec<bool>,
     /// Their recorded link summaries (`Module::recorded_summaries`).
     summaries: HashMap<Loc, String>,
+    /// Per program file, its interface hash, for the files of units that
+    /// were cache hits (reused or not).
+    interfaces: Vec<Option<String>>,
 }
 
 /// Reuse every unit the cache can supply ([`crate::cache::Cache::reuse`],
-/// into `units_dir`); nothing when there is no cache.
+/// into `units_dir`); nothing when there is no cache. Units resolve bottom
+/// up (see [`crate::keys`]): a unit's key is known once the units it reads
+/// through interfaces are hits, whose records give those interfaces.
 fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reused, String> {
     let Some(root) = options.effective_cache_dir() else {
         return Ok(Reused::default());
     };
     let cache = crate::cache::Cache::open(&root)?;
-    let mut reused = Reused { files: vec![false; program.files.len()], summaries: HashMap::new() };
+    let n = program.files.len();
+    let mut reused = Reused { files: vec![false; n], summaries: HashMap::new(), interfaces: vec![None; n] };
     let file_of: HashMap<&str, usize> = program.files.iter().enumerate().map(|(i, f)| (f.namespace.as_str(), i)).collect();
-    let units = program.units();
-    for (unit, (_, key)) in units.iter().zip(crate::unit_keys(Some(&cache), program, &units)) {
-        let Some(key) = key else { continue };
-        let Some(summaries) = cache.reuse(&unit.name, &key, &units_dir.join(format!("{}.o", unit.name)))? else { continue };
-        for &file in &unit.files {
-            reused.files[file] = true;
-        }
-        for (namespace, loc, summary) in crate::cache::parse_summaries(&summaries) {
-            if let Some(&file) = file_of.get(namespace) {
-                reused.summaries.insert(Loc::new(FileId(file as u32), loc), summary.to_string());
+    let keys = crate::keys::Keys::new(program);
+    let mut resolved = vec![false; keys.units.len()];
+    let mut progress = true;
+    while std::mem::take(&mut progress) {
+        for (u, unit) in keys.units.iter().enumerate() {
+            if resolved[u] {
+                continue;
             }
+            let Some(key) = keys.key(cache.compiler(), u, |file| reused.interfaces[file].as_deref()) else { continue };
+            resolved[u] = true;
+            progress = true;
+            // A miss: the units reading this one's interfaces wait for sema.
+            let Some(interfaces) = cache.interfaces(&unit.name, &key) else { continue };
+            for (namespace, hash) in interfaces {
+                if let Some(&file) = file_of.get(namespace.as_str()) {
+                    reused.interfaces[file] = Some(hash);
+                }
+            }
+            let Some(summaries) = cache.reuse(&unit.name, &key, &units_dir.join(format!("{}.o", unit.name)))? else { continue };
+            for &file in &unit.files {
+                reused.files[file] = true;
+            }
+            for (namespace, loc, summary) in crate::cache::parse_summaries(&summaries) {
+                if let Some(&file) = file_of.get(namespace) {
+                    reused.summaries.insert(Loc::new(FileId(file as u32), loc), summary.to_string());
+                }
+            }
+        }
+    }
+    // Only the reused units' interfaces are kept: sema checks the others'
+    // bodies, and `objects` hashes their interfaces from those.
+    for (file, interface) in reused.interfaces.iter_mut().enumerate() {
+        if !reused.files[file] {
+            *interface = None;
         }
     }
     Ok(reused)
