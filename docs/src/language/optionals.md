@@ -70,8 +70,8 @@ error.
 - An optional is checked as a condition (or with `is_some()` or
   `is_none()`) and read with `value()` or `value_or`; `match` does not work
   on it yet. `Optional` will become an [enum](enums.md) with `None` and
-  `Some(value)` cases once enum cases can carry values; its methods stay the
-  same.
+  `Some(value)` cases, as enum cases can now carry values; its methods stay
+  the same.
 - The runtime's own APIs still use null references or default values for
   "missing" (a `HashMap` returns the default value for a missing key, for
   example).

@@ -38,6 +38,7 @@ fn convert_expression(expr: &mut Expression) {
         match e {
             Expression::IsPod(ty)
             | Expression::Default(ty)
+            | Expression::StaticCase { ty, .. }
             | Expression::Allocate(ty)
             | Expression::RefCount(ty, _)
             | Expression::Address(ty, _)

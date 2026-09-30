@@ -726,7 +726,10 @@ fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
                 bindings: p.bindings.as_ref().map(|b| b.iter().map(|(n, s)| (n.clone(), loc(*s))).collect()),
             })
             .collect();
-        arms.push((patterns, block(&arm.body)?));
+        let mut body = block(&arm.body)?;
+        let bindings = match_bindings(arm, &subject, at)?;
+        body.items.splice(0..0, bindings);
+        arms.push((patterns, body));
     }
     if arms.is_empty() {
         arms.push((vec![], Block { name: String::new(), items: vec![], attributes: vec![] }));
@@ -738,6 +741,68 @@ fn match_statement(m: &ast::Match) -> Result<Statement, Diagnostic> {
     let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
     items.extend(chain.map(|b| b.items).unwrap_or_default());
     Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
+}
+
+/// The locals an arm's patterns bind, each a `const` whose value is the
+/// matched case's value at the binding's position ([`CaseValue`]). Every
+/// pattern of an arm must bind the same names.
+fn match_bindings(arm: &ast::MatchArm, subject: &str, at: Loc) -> Result<Vec<Statement>, Diagnostic> {
+    let bound = |p: &ast::Pattern| -> Vec<(String, ast::Span)> {
+        p.bindings.iter().flatten().filter(|(n, _)| n != "_").cloned().collect()
+    };
+    for p in &arm.patterns {
+        let names = bound(p);
+        for (i, (name, span)) in names.iter().enumerate() {
+            if names[..i].iter().any(|(n, _)| n == name) {
+                return Err(Diagnostic::error(format!("'{}' is bound twice in one pattern", name)).at(loc(*span)));
+            }
+        }
+    }
+    let mut names: Vec<(String, ast::Span)> = vec![];
+    for p in &arm.patterns {
+        for (name, span) in bound(p) {
+            if !names.iter().any(|(n, _)| *n == name) {
+                names.push((name, span));
+            }
+        }
+    }
+    let mut out = vec![];
+    for (name, span) in names {
+        let mut choices = vec![];
+        for p in &arm.patterns {
+            let all = p.bindings.as_deref().unwrap_or_default();
+            let Some(index) = all.iter().position(|(n, _)| *n == name) else {
+                return Err(Diagnostic::error(format!("'{}' is not bound by '{}': every pattern of an arm binds the same names", name, p.case))
+                    .at(loc(p.case_span))
+                    .with_note(format!("'{}' is bound here", name), Some(loc(span))));
+            };
+            choices.push(CaseChoice {
+                case: p.case.clone(),
+                case_loc: loc(p.case_span),
+                index,
+                bindings: all.iter().map(|(_, s)| loc(*s)).collect(),
+                loc: loc(all[index].1),
+            });
+        }
+        let value = CaseValue {
+            subject: Expression::SymbolRef { id: subject.to_string(), ty: TypeName::auto(), loc: at },
+            name: name.clone(),
+            choices,
+            loc: loc(span),
+        };
+        out.push(Statement::Declaration(Declaration::Variable(VariableDef {
+            name,
+            ty: TypeName::auto(),
+            default: Some(Expression::CaseValue(Box::new(value))),
+            hidden: false,
+            kind: Kind::Variable,
+            attributes: vec![],
+            loc: loc(span),
+            type_loc: Loc::NONE,
+            is_const: true,
+        })));
+    }
+    Ok(out)
 }
 
 fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
@@ -1104,6 +1169,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         traits: vec![],
         attributes: decl.attributes.clone(),
         loc: loc(decl.name_span),
+        enum_cases: None,
     })
 }
 
@@ -1179,6 +1245,7 @@ fn enum_def(decl: &ast::StructDecl) -> Result<EnumDef, Diagnostic> {
         cases.push(EnumCaseDef {
             name: case.name.clone(),
             value: value as i64,
+            payload: vec![],
             attributes: case.attributes.clone(),
             loc: loc(case.name_span),
         });
@@ -1191,6 +1258,185 @@ fn enum_def(decl: &ast::StructDecl) -> Result<EnumDef, Diagnostic> {
         attributes: decl.attributes.clone(),
         loc: loc(decl.name_span),
     })
+}
+
+/// Whether `decl` is an enum with a case that carries values: a reference
+/// enum, built as a struct by [`reference_enum_def`].
+fn is_reference_enum(decl: &ast::StructDecl) -> bool {
+    decl.enumeration.as_ref().is_some_and(|e| e.cases.iter().any(|c| c.payload.is_some()))
+}
+
+/// Build a reference enum (an enum with a case that carries values) as the
+/// struct its values are objects of:
+///
+/// - the field `__tag`, the case's position, then each case's values as the
+///   fields `Case.value` (see [`payload_field`]), `const`;
+/// - one constructor that sets every field, which only the cases call;
+/// - each case as a static method: `Text(text: String): Doc` makes a `Doc`
+///   whose other cases' fields hold their type's default;
+/// - the declared methods, and the built-in `name()`.
+///
+/// Generic parameters, attributes and `extend` work as for any struct.
+fn reference_enum_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
+    let body = decl.enumeration.as_ref().expect("an enum declaration");
+    if let Some(t) = &body.representation {
+        return Err(Diagnostic::error(format!(
+            "enum '{}' has cases that carry values, so it is not stored as an integer type",
+            decl.name
+        ))
+        .at(loc(t.span)));
+    }
+    if let Some(m) = decl.methods.iter().find(|m| m.name == "name") {
+        return Err(Diagnostic::error("'name' is built into every enum and cannot be redeclared").at(loc(m.name_span)));
+    }
+    let mut cases: Vec<EnumCaseDef> = vec![];
+    let mut fields: Vec<ast::VariableDecl> = vec![];
+    for (tag, case) in body.cases.iter().enumerate() {
+        check_deprecation(&case.attributes)?;
+        reject_implicit(&case.attributes)?;
+        if let Some(value) = &case.value {
+            return Err(Diagnostic::error(format!(
+                "case '{}' of '{}' cannot have a value: its cases carry values",
+                case.name, decl.name
+            ))
+            .at(loc(value.span())));
+        }
+        if let Some(previous) = cases.iter().find(|c| c.name == case.name) {
+            return Err(Diagnostic::error(format!("redefinition of case '{}'", case.name))
+                .at(loc(case.name_span))
+                .with_note("previous definition is here", Some(previous.loc)));
+        }
+        if let Some(m) = decl.methods.iter().find(|m| m.name == case.name) {
+            return Err(Diagnostic::error(format!("case '{}' has the same name as a method of '{}'", case.name, decl.name))
+                .at(loc(case.name_span))
+                .with_note("method declared here", Some(loc(m.name_span))));
+        }
+        let mut payload: Vec<(String, Loc)> = vec![];
+        for value in case.payload.iter().flatten() {
+            if let Some(default) = &value.default_value {
+                return Err(Diagnostic::error(format!("the values of case '{}' cannot have defaults", case.name))
+                    .at(loc(default.span())));
+            }
+            if let Some((_, previous)) = payload.iter().find(|(n, _)| *n == value.name) {
+                return Err(Diagnostic::error(format!("redefinition of '{}' in case '{}'", value.name, case.name))
+                    .at(loc(value.name_span))
+                    .with_note("previous definition is here", Some(*previous)));
+            }
+            let mut field = value.clone();
+            field.name = payload_field(&case.name, &value.name);
+            field.is_const = true;
+            fields.push(field);
+            payload.push((value.name.clone(), loc(value.name_span)));
+        }
+        cases.push(EnumCaseDef {
+            name: case.name.clone(),
+            value: tag as i64,
+            payload,
+            attributes: case.attributes.clone(),
+            loc: loc(case.name_span),
+        });
+    }
+    let mut lowered = decl.clone();
+    lowered.enumeration = None;
+    lowered.fields = fields;
+    lowered.constructors = vec![];
+    lowered.destructor = None;
+    let mut st = struct_def(&lowered)?;
+    let at = loc(decl.name_span);
+    st.field_members.insert(
+        0,
+        VariableDef {
+            name: TAG_FIELD.to_string(),
+            ty: TypeName::new("int"),
+            default: None,
+            hidden: false,
+            kind: Kind::Field,
+            attributes: vec![],
+            loc: at,
+            type_loc: Loc::NONE,
+            is_const: true,
+        },
+    );
+    // `construct(this.__tag, this.Text.text, ...)`: each parameter sets its
+    // field (`struct_body::finish`).
+    st.constructors[0].parameters = st
+        .field_members
+        .iter()
+        .map(|f| VariableDef {
+            name: format!("this.{}", f.name),
+            ty: f.ty.clone(),
+            default: None,
+            hidden: false,
+            kind: Kind::Param,
+            attributes: vec![],
+            loc: Loc::NONE,
+            type_loc: Loc::NONE,
+            is_const: false,
+        })
+        .collect();
+    let returns = |value: Expression| Statement::Return(ReturnStatement { expr: Some(value), loc: Loc::NONE });
+    let method = |name: &str, ty: TypeName, parameters: Vec<VariableDef>, items: Vec<Statement>, is_static: bool, attributes: Vec<ast::Attribute>, at: Loc| FunctionDef {
+        trait_default: None,
+        owner: Loc::NONE,
+        name: name.to_string(),
+        ty,
+        generic_params: vec![],
+        parameters,
+        body: Some(Block { name: String::new(), items, attributes: vec![] }),
+        parent: Some(decl.name.clone()),
+        is_static,
+        is_indexer: false,
+        is_generic_func: false,
+        attributes,
+        loc: at,
+    };
+    for (case, ast_case) in cases.iter().zip(&body.cases) {
+        let parameters = ast_case
+            .payload
+            .iter()
+            .flatten()
+            .map(|p| variable_def(p, Kind::Param))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut args = vec![Expression::IntLiteral(case.value)];
+        for f in st.field_members.iter().skip(1) {
+            let own = case.payload.iter().find(|(name, _)| payload_field(&case.name, name) == f.name);
+            args.push(match own {
+                Some((name, _)) => Expression::SymbolRef { id: name.clone(), ty: f.ty.clone(), loc: Loc::NONE },
+                None => Expression::Default(f.ty.clone()),
+            });
+        }
+        // Unlocated: `enums::resolve_enum_cases` reports every located
+        // construction of the enum, which only its cases may do. A case that
+        // carries nothing is one shared, immortal object.
+        let make = if case.payload.is_empty() {
+            Expression::StaticCase { ty: st.ty.clone(), tag: case.value }
+        } else {
+            Expression::FunctionCall { function: st.ty.to_string(), args, loc: Loc::NONE }
+        };
+        let f = method(&case.name, st.ty.clone(), parameters, vec![returns(make)], true, case.attributes.clone(), case.loc);
+        st.method_members.push(f);
+    }
+    let text = |value: &str| Expression::StringLiteral { value: value.to_string(), is_raw: false, loc: Loc::NONE };
+    let tag = || Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: TAG_FIELD.to_string(), loc: Loc::NONE };
+    let mut items: Vec<Statement> = cases
+        .iter()
+        .map(|c| {
+            Statement::Branch(Branch {
+                condition: Expression::Binary {
+                    op: BinaryOp::Equal,
+                    lhs: Box::new(tag()),
+                    rhs: Box::new(Expression::IntLiteral(c.value)),
+                    loc: Loc::NONE,
+                },
+                if_block: Block { name: String::new(), items: vec![returns(text(&c.name))], attributes: vec![] },
+                else_block: None,
+            })
+        })
+        .collect();
+    items.push(returns(text("")));
+    st.method_members.push(method("name", TypeName::new("String"), vec![], items, false, vec![], at));
+    st.enum_cases = Some(cases);
+    Ok(st)
 }
 
 /// A method of an enum, as the free function `E::m` (see
@@ -1321,6 +1567,7 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
                     out.functions.push(function_def(f, None)?);
                 }
             }
+            ast::Declaration::Struct(s) if is_reference_enum(s) => out.structs.push(reference_enum_def(s)?),
             ast::Declaration::Struct(s) if s.enumeration.is_some() => {
                 out.enums.push(enum_def(s)?);
                 for m in &s.methods {

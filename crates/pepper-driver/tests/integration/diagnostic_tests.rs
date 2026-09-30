@@ -1936,12 +1936,49 @@ fn match_on_a_non_enum() {
 }
 
 #[test]
-fn enum_payloads_not_supported_yet() {
+fn enum_payload_errors_point_at_the_token() {
+    let source = |body: &str| {
+        format!(
+            "enum Doc {{\n    Text(text: String),\n    Pair(a: int, b: int),\n    Line,\n}}\nmain(): int {{\n    var d = Doc.Line;\n    {}\n    return 0;\n}}\n",
+            body
+        )
+    };
     assert_eq!(
-        error_of("enum_payloads_not_supported_yet", "enum Shape {\n    Circle(radius: int),\n}\nmain(): int { return 0; }\n"),
-        "main.pep:2:5: error: cases that carry values are not supported yet ('Circle')\n\
-         \x20   2 |     Circle(radius: int),\n\
-         \x20     |     ^~~~~~"
+        error_of("enum_case_takes_values", &source("var x = Doc.Text;")),
+        "main.pep:8:17: error: case 'Text' of 'Doc' takes 1 value: 'Doc.Text(text)'\n\
+         \x20   8 |     var x = Doc.Text;\n\
+         \x20     |                 ^~~~\n\
+         main.pep:2:5: note: 'Text' declared here\n\
+         \x20   2 |     Text(text: String),\n\
+         \x20     |     ^~~~"
+    );
+    assert_eq!(
+        error_of("enum_too_many_bindings", &source("match (d) { Text(a, b) => {} else => {} }")),
+        "main.pep:8:25: error: too many bindings for case 'Text': expected 1, have 2\n\
+         \x20   8 |     match (d) { Text(a, b) => {} else => {} }\n\
+         \x20     |                         ^\n\
+         main.pep:2:5: note: 'Text' declared here\n\
+         \x20   2 |     Text(text: String),\n\
+         \x20     |     ^~~~"
+    );
+    assert_eq!(
+        error_of("enum_binding_types_differ", &source("match (d) { Text(t), Pair(t, _) => {} else => {} }")),
+        "main.pep:8:31: error: 't' has type 'int' here but 'String' in 'Text'\n\
+         \x20   8 |     match (d) { Text(t), Pair(t, _) => {} else => {} }\n\
+         \x20     |                               ^"
+    );
+    assert_eq!(
+        error_of("enum_direct_construction", &source("var x = Doc(0);")),
+        "main.pep:8:13: error: cannot construct enum 'Doc' directly: its values are made by its cases\n\
+         \x20   8 |     var x = Doc(0);\n\
+         \x20     |             ^~~\n\
+         note: use a case, such as 'Doc.Text'"
+    );
+    assert_eq!(
+        error_of("enum_payload_unknown_type", "enum Doc {\n    Text(text: Strin),\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:16: error: unknown type name 'Strin'\n\
+         \x20   2 |     Text(text: Strin),\n\
+         \x20     |                ^~~~~"
     );
 }
 

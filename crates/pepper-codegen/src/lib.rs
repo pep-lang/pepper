@@ -662,10 +662,13 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         let mut field_types: Vec<BasicTypeEnum<'ctx>> = vec![];
         for field in &st.field_members {
-            let ty = self
-                .types
-                .get(&field.ty.to_string())
-                .ok_or_else(|| format!("unknown type name '{}' for field '{}'", field.ty, field.name))?;
+            let Some(ty) = self.types.get(&field.ty.to_string()) else {
+                // At the field's type, the token to change.
+                let error: Result<(), String> = Err(format!("unknown type name '{}'", field.ty.display()));
+                let at = [field.type_loc, field.loc].into_iter().find(|l| !l.is_none()).unwrap_or(st.loc);
+                self.locate(&error, at);
+                return error;
+            };
             // A struct-typed field holds a reference, so its slot is a
             // pointer. Laying the struct out inline would make a field of
             // the struct's own type (or a cycle through other structs) an
@@ -3708,6 +3711,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Err("internal error: unlowered destructuring".to_string())
             }
             Expression::MatchArm(_) => Err("internal error: unlowered 'match' arm".to_string()),
+            Expression::CaseValue(_) => Err("internal error: unlowered 'match' binding".to_string()),
+            Expression::StaticCase { ty, tag } => self.static_case(ty, *tag),
             // Only a var default in well-formed models (codegen_var_def).
             Expression::ForIterator(source) => {
                 let iterator = self.for_loop_iterator(source)?;
@@ -4332,6 +4337,49 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.builder.position_at_end(block);
         }
         Ok(self.static_function_object(&global_name, struct_type, thunk))
+    }
+
+    /// The object of a reference enum's case that carries no values
+    /// (`Expression::StaticCase`): an immortal global whose counts start
+    /// at `STATIC_REFCOUNT` and 1, whose tag is `tag`, and whose other
+    /// fields are zero. Every unit that uses it emits the same `linkonce_odr`
+    /// global, so the linker keeps one and `===` sees one object.
+    fn static_case(&mut self, ty: &TypeName, tag: i64) -> Result<BasicValueEnum<'ctx>, String> {
+        let name = ty.to_string();
+        let global_name = format!("{}.case{}", name, tag);
+        if let Some(existing) = self.module.get_global(&global_name) {
+            return Ok(existing.as_pointer_value().into());
+        }
+        let desc = self.structs.get(&name).ok_or_else(|| format!("unknown enum '{}'", name))?;
+        let struct_type = desc.llvm_type;
+        let names: Vec<String> = desc.fields.iter().map(|(n, _)| n.clone()).collect();
+        let mut values: Vec<BasicValueEnum<'ctx>> = vec![];
+        for (i, field_type) in struct_type.get_field_types().into_iter().enumerate() {
+            let value: BasicValueEnum<'ctx> = match names.get(i).map(String::as_str) {
+                Some("__refcount") => field_type
+                    .into_int_type()
+                    .const_int(pepper_sema::passes::function_types::STATIC_REFCOUNT as u64, false)
+                    .into(),
+                Some("__weakcount") => field_type.into_int_type().const_int(1, false).into(),
+                Some(pepper_sema::model::TAG_FIELD) => field_type.into_int_type().const_int(tag as u64, true).into(),
+                _ => match field_type {
+                    BasicTypeEnum::IntType(t) => t.const_zero().into(),
+                    BasicTypeEnum::FloatType(t) => t.const_zero().into(),
+                    BasicTypeEnum::PointerType(t) => t.const_null().into(),
+                    BasicTypeEnum::StructType(t) => t.const_zero().into(),
+                    BasicTypeEnum::ArrayType(t) => t.const_zero().into(),
+                    BasicTypeEnum::VectorType(t) => t.const_zero().into(),
+                    BasicTypeEnum::ScalableVectorType(t) => t.const_zero().into(),
+                },
+            };
+            values.push(value);
+        }
+        // External like a function definition: `partition::finish` makes it
+        // `linkonce_odr` in a comdat when units are split. A bare
+        // `linkonce_odr` here crashes the JIT on COFF.
+        let object = self.module.add_global(struct_type, None, &global_name);
+        object.set_initializer(&struct_type.const_named_struct(&values));
+        Ok(object.as_pointer_value().into())
     }
 
     /// The immortal global `{ STATIC_REFCOUNT, 1, thunk, null }` named

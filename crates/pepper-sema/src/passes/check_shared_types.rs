@@ -236,6 +236,11 @@ fn check_shared_structs(module: &Module) -> bool {
             }
             let Some(offender) = unsafe_part(&field.ty, module) else { continue };
             let field_loc = [field.type_loc, field.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+            // A reference enum's field holds a value of one of its cases.
+            let (what, owner) = match field.name.split_once('.') {
+                Some((case, value)) if st.enum_cases.is_some() => (format!("value '{}' of case '{}'", value, case), "enum"),
+                _ => (format!("field '{}'", field.name), "struct"),
+            };
             let diagnostic = if is_specialization {
                 Diagnostic::error(format!(
                     "shared struct '{}' requires thread-safe type arguments; '{}' is not thread-safe",
@@ -243,11 +248,12 @@ fn check_shared_structs(module: &Module) -> bool {
                     offender.display()
                 ))
                 .at(use_site(module, &st.name).unwrap_or(field_loc))
-                .with_note(format!("required by field '{}' declared here", field.name), Some(field_loc))
+                .with_note(format!("required by {} declared here", what), Some(field_loc))
             } else {
                 Diagnostic::error(format!(
-                    "field '{}' of shared struct '{}' has type '{}', which is not thread-safe",
-                    field.name,
+                    "{} of shared {} '{}' has type '{}', which is not thread-safe",
+                    what,
+                    owner,
                     st.name,
                     field.ty.display()
                 ))

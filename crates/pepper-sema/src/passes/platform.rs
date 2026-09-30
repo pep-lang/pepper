@@ -379,6 +379,11 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
     // Members of surviving declarations: drop the ones that don't match.
     for s in &mut module.structs {
         s.method_members.retain(|m| keep(&m.attributes).unwrap_or(false));
+        // A reference enum's case goes with its static method, which carries
+        // the case's attributes; its fields stay, holding their defaults.
+        if let Some(cases) = &mut s.enum_cases {
+            cases.retain(|c| keep(&c.attributes).unwrap_or(false));
+        }
     }
     for t in &mut module.traits {
         t.methods.retain(|m| keep(&m.attributes).unwrap_or(false));

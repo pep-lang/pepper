@@ -32,6 +32,122 @@ thread_local! {
     /// (enum name, method name) → whether the method is static, for this
     /// run. Filled by [`resolve_enum_cases`].
     static METHODS: RefCell<HashMap<(String, String), bool>> = RefCell::new(HashMap::new());
+    /// Reference enum name (without type arguments) → its cases and the
+    /// location of its name, for this run. Filled by [`resolve_enum_cases`].
+    static REFERENCE_ENUMS: RefCell<HashMap<String, (Vec<EnumCaseDef>, Loc)>> = RefCell::new(HashMap::new());
+}
+
+/// Make the reference enums among `structs` the ones [`reference_cases`]
+/// knows, replacing any earlier run's.
+pub fn install_reference_enums(structs: &[StructDef]) {
+    REFERENCE_ENUMS.with(|r| {
+        let mut r = r.borrow_mut();
+        r.clear();
+        for st in structs {
+            if let Some(cases) = &st.enum_cases {
+                r.entry(st.ty.name.clone()).or_insert_with(|| (cases.clone(), st.loc));
+            }
+        }
+    });
+}
+
+/// The cases of reference enum `ty` (any specialization of it) and the
+/// location of its name, or `None` when `ty` is not a reference enum.
+pub fn reference_cases(ty: &TypeName) -> Option<(Vec<EnumCaseDef>, Loc)> {
+    REFERENCE_ENUMS.with(|r| r.borrow().get(&ty.name).cloned())
+}
+
+/// `ty` is a reference enum.
+pub fn is_reference_enum(ty: &TypeName) -> bool {
+    REFERENCE_ENUMS.with(|r| r.borrow().contains_key(&ty.name))
+}
+
+fn shown(ty: &TypeName) -> String {
+    pepper_parser::namespace::demangle_name(&ty.to_string()).to_string()
+}
+
+/// The case named `name` among `cases`, or the `no case named` error at
+/// `at`.
+fn find_case<'c>(cases: &'c [EnumCaseDef], name: &str, ty: &TypeName, declared: Loc, at: Loc) -> Result<&'c EnumCaseDef, Diagnostic> {
+    cases.iter().find(|c| c.name == name).ok_or_else(|| {
+        Diagnostic::error(format!("no case named '{}' in '{}'", name, shown(ty)))
+            .at(at)
+            .with_note(format!("'{}' declared here", shown(ty)), Some(declared))
+    })
+}
+
+/// Check a pattern's binding count against its case: `count` bindings, the
+/// first extra one at `extra` (when there is one).
+fn check_binding_count(case: &EnumCaseDef, count: usize, extra: Option<Loc>, pattern: Loc) -> Result<(), Diagnostic> {
+    let expected = case.payload.len();
+    if count > expected {
+        return Err(Diagnostic::error(format!(
+            "too many bindings for case '{}': expected {}, have {}",
+            case.name, expected, count
+        ))
+        .at(extra.unwrap_or(pattern))
+        .with_note(format!("'{}' declared here", case.name), Some(case.loc)));
+    }
+    if count < expected {
+        return Err(Diagnostic::error(format!(
+            "too few bindings for case '{}': expected {}, have {}",
+            case.name, expected, count
+        ))
+        .at(pattern)
+        .with_note(format!("'{}' declared here", case.name), Some(case.loc)));
+    }
+    Ok(())
+}
+
+/// The type of a value a pattern binds, once the `match`'s subject has
+/// type `subject`: `Ok(None)` while that type is unknown, the error when
+/// the patterns do not fit the enum. `field` gives the type of a field of
+/// the subject's struct.
+pub fn case_value_type(
+    value: &CaseValue,
+    subject: &TypeName,
+    field: impl Fn(&str) -> Option<TypeName>,
+) -> Result<Option<TypeName>, Diagnostic> {
+    if subject.is_auto() || subject.is_empty() {
+        return Ok(None);
+    }
+    let Some((cases, declared)) = reference_cases(subject) else {
+        let first = &value.choices[0];
+        if is_enum(&subject.to_string()) {
+            return Err(Diagnostic::error(format!(
+                "case '{}' of '{}' carries no values to bind",
+                first.case,
+                shown(subject)
+            ))
+            .at(first.loc));
+        }
+        return Err(Diagnostic::error(format!("cannot match on a value of '{}': 'match' needs an enum", shown(subject)))
+            .at(value.subject.loc()));
+    };
+    let mut found: Option<(TypeName, &CaseChoice)> = None;
+    for choice in &value.choices {
+        let case = find_case(&cases, &choice.case, subject, declared, choice.case_loc)?;
+        let extra = choice.bindings.get(case.payload.len()).copied();
+        check_binding_count(case, choice.bindings.len(), extra, choice.case_loc)?;
+        let Some(ty) = field(&payload_field(&case.name, &case.payload[choice.index].0)) else {
+            return Ok(None);
+        };
+        match &found {
+            Some((first, first_choice)) if *first != ty => {
+                return Err(Diagnostic::error(format!(
+                    "'{}' has type '{}' here but '{}' in '{}'",
+                    value.name,
+                    shown(&ty),
+                    shown(first),
+                    first_choice.case
+                ))
+                .at(choice.loc));
+            }
+            Some(_) => {}
+            None => found = Some((ty, choice)),
+        }
+    }
+    Ok(found.map(|(ty, _)| ty))
 }
 
 /// The methods every enum has without declaring them.
@@ -191,7 +307,8 @@ fn for_each_body(module: &mut Module, mut f: impl FnMut(&mut Block, bool)) {
 /// (`Color.Red => ...`). Reports `no case named 'X' in 'E'`.
 pub fn resolve_enum_cases(module: &mut Module) {
     install(&module.enums);
-    if module.enums.is_empty() {
+    install_reference_enums(&module.structs);
+    if module.enums.is_empty() && !module.structs.iter().any(|st| st.enum_cases.is_some()) {
         return;
     }
     for ext in &module.extensions {
@@ -209,7 +326,61 @@ pub fn resolve_enum_cases(module: &mut Module) {
     install_methods(module);
     method_bodies(module);
     let enums: HashMap<String, EnumDef> = module.enums.iter().map(|e| (e.name.clone(), e.clone())).collect();
+    // The types named as receivers (`Tree<int>` in `Tree<int>.Leaf`), which
+    // the walk meets as calls right after the member they are the receiver
+    // of.
+    let mut receivers: std::collections::HashSet<Loc> = std::collections::HashSet::new();
     let mut resolve = |expr: &mut Expression| {
+        if let Expression::MethodCall { this, .. } | Expression::MemberRef { lhs: this, .. } = expr
+            && let Expression::FunctionCall { loc, .. } = this.as_ref()
+        {
+            receivers.insert(*loc);
+        }
+        // `Doc(...)`: a reference enum's values are made by its cases only.
+        if let Expression::FunctionCall { function, loc, .. } = expr
+            && !loc.is_none()
+            && !receivers.contains(loc)
+            && let ty = crate::passes::gather_generics::parse_type_string(function)
+            && let Some((cases, _)) = reference_cases(&ty)
+        {
+            report(
+                Diagnostic::error(format!("cannot construct enum '{}' directly: its values are made by its cases", shown(&ty)))
+                    .at(*loc)
+                    .with_note(
+                        format!("use a case, such as '{}.{}'", shown(&ty), cases.first().map_or("Case", |c| c.name.as_str())),
+                        None,
+                    ),
+            );
+            return;
+        }
+        // `Doc.Line`: a reference enum's case that carries no values is a
+        // call of its static method, `Doc.Line()`.
+        if let Expression::MemberRef { lhs, name, loc } = expr
+            && let Some(ty) = named_type(lhs)
+            && let Some((cases, declared)) = reference_cases(&ty)
+        {
+            match find_case(&cases, name, &ty, declared, *loc) {
+                Ok(case) if case.payload.is_empty() => {
+                    *expr = Expression::MethodCall { this: lhs.clone(), method: name.clone(), args: vec![], loc: *loc }
+                }
+                Ok(case) => report(
+                    Diagnostic::error(format!(
+                        "case '{}' of '{}' takes {} value{}: '{}.{}({})'",
+                        case.name,
+                        shown(&ty),
+                        case.payload.len(),
+                        if case.payload.len() == 1 { "" } else { "s" },
+                        shown(&ty),
+                        case.name,
+                        case.payload.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+                    ))
+                    .at(*loc)
+                    .with_note(format!("'{}' declared here", case.name), Some(case.loc)),
+                ),
+                Err(d) => report(d),
+            }
+            return;
+        }
         // `Color.from_value(1)`: a static method called on the enum.
         if let Expression::MethodCall { this, method, args, loc } = expr
             && let Expression::SymbolRef { id, .. } = this.as_ref()
@@ -303,6 +474,18 @@ pub fn resolve_enum_cases(module: &mut Module) {
             global.default = default_expression(&global.ty);
         }
         crate::passes::walk_global(global, &mut resolve);
+    }
+}
+
+/// The type an expression names when it is a type used as a value's
+/// receiver: `Doc` in `Doc.Line`, `Tree<int>` in `Tree<int>.Leaf`.
+fn named_type(e: &Expression) -> Option<TypeName> {
+    match e {
+        Expression::SymbolRef { id, .. } => Some(TypeName::new(id)),
+        Expression::FunctionCall { function, args, .. } if args.is_empty() => {
+            Some(crate::passes::gather_generics::parse_type_string(function))
+        }
+        _ => None,
     }
 }
 
@@ -458,8 +641,65 @@ fn no_case(name: &str, e: &EnumDef, at: Loc) -> Diagnostic {
 #[derive(Default)]
 struct Coverage {
     site: Option<MatchSite>,
-    enum_name: Option<String>,
+    /// The enum matched (as shown) and its cases.
+    matched: Option<(String, Vec<EnumCaseDef>)>,
     handled: BTreeMap<String, Loc>,
+}
+
+/// The enum a `match` is over: a value enum, or a reference enum's cases.
+enum Matched<'e> {
+    Value(&'e EnumDef),
+    Reference { ty: TypeName, cases: Vec<EnumCaseDef>, declared: Loc },
+}
+
+impl Matched<'_> {
+    fn of<'e>(ty: &TypeName, enums: &'e HashMap<String, EnumDef>) -> Option<Matched<'e>> {
+        if let Some(e) = enums.get(&ty.to_string()) {
+            return Some(Matched::Value(e));
+        }
+        reference_cases(ty).map(|(cases, declared)| Matched::Reference { ty: ty.clone(), cases, declared })
+    }
+
+    fn name(&self) -> String {
+        match self {
+            Matched::Value(e) => e.name.clone(),
+            Matched::Reference { ty, .. } => shown(ty),
+        }
+    }
+
+    fn cases(&self) -> &[EnumCaseDef] {
+        match self {
+            Matched::Value(e) => &e.cases,
+            Matched::Reference { cases, .. } => cases,
+        }
+    }
+}
+
+/// `subject.__tag`, the case of a reference enum's object.
+fn tag_of(subject: &str, ty: &TypeName, at: Loc) -> Expression {
+    Expression::MemberRef {
+        lhs: Box::new(Expression::SymbolRef { id: subject.to_string(), ty: ty.clone(), loc: at }),
+        name: TAG_FIELD.to_string(),
+        loc: at,
+    }
+}
+
+fn tag_is(subject: &str, ty: &TypeName, case: &EnumCaseDef, at: Loc) -> Expression {
+    Expression::Binary {
+        op: BinaryOp::Equal,
+        lhs: Box::new(tag_of(subject, ty, at)),
+        rhs: Box::new(Expression::IntLiteral(case.value)),
+        loc: at,
+    }
+}
+
+/// The payload field a pattern's binding reads: `subject.Text.text`.
+fn case_field(subject: &str, ty: &TypeName, case: &EnumCaseDef, index: usize, at: Loc) -> Expression {
+    Expression::MemberRef {
+        lhs: Box::new(Expression::SymbolRef { id: subject.to_string(), ty: ty.clone(), loc: at }),
+        name: payload_field(&case.name, &case.payload[index].0),
+        loc: at,
+    }
 }
 
 /// Turn each `match` arm test into `==` tests on the `match`'s subject, and
@@ -478,7 +718,7 @@ pub fn lower_matches(module: &mut Module) {
         let mut coverage: BTreeMap<usize, Coverage> = BTreeMap::new();
         lower_block(block, &enums, &mut HashMap::new(), &mut coverage);
         for c in coverage.values() {
-            if let Some(w) = check_exhaustive(c, &enums)
+            if let Some(w) = check_exhaustive(c)
                 && !warnings.iter().any(|seen| seen.loc == w.loc)
             {
                 warnings.push(w);
@@ -494,9 +734,94 @@ fn lower_block(
     subjects: &mut HashMap<String, TypeName>,
     coverage: &mut BTreeMap<usize, Coverage>,
 ) {
-    for stmt in &mut block.items {
-        lower_statement(stmt, enums, subjects, coverage);
+    let mut items = Vec::with_capacity(block.items.len());
+    for mut stmt in std::mem::take(&mut block.items) {
+        lower_statement(&mut stmt, enums, subjects, coverage);
+        let after = match &mut stmt {
+            Statement::Declaration(Declaration::Variable(var)) => lower_declaration(var, subjects),
+            _ => vec![],
+        };
+        items.push(stmt);
+        items.extend(after);
     }
+    block.items = items;
+}
+
+/// What follows a declaration in a lowered `match`:
+///
+/// - after the subject (`__match_N`) of a reference enum, a check that it is
+///   not null;
+/// - a binding's local gets the matched case's value: the payload field
+///   itself when one pattern binds it, else a chain of assignments that
+///   picks the field by the object's tag (alternatives, `A(x), B(x)`).
+fn lower_declaration(var: &mut VariableDef, subjects: &HashMap<String, TypeName>) -> Vec<Statement> {
+    if var.hidden && var.name.starts_with("__match_") && is_reference_enum(&var.ty) {
+        let message = format!("match on a null '{}'", shown(&var.ty));
+        let not_null = Expression::Binary {
+            op: BinaryOp::NotIdentical,
+            lhs: Box::new(Expression::SymbolRef { id: var.name.clone(), ty: var.ty.clone(), loc: var.loc }),
+            rhs: Box::new(Expression::PointerLiteral),
+            loc: var.loc,
+        };
+        let check = Expression::FunctionCall {
+            function: "_pep_assert".to_string(),
+            args: vec![not_null, Expression::StringLiteral { value: message, is_raw: true, loc: var.loc }],
+            loc: var.loc,
+        };
+        return vec![Statement::Expression(check)];
+    }
+    let Some(Expression::CaseValue(value)) = var.default.clone() else {
+        return vec![];
+    };
+    let Expression::SymbolRef { id: subject, .. } = &value.subject else {
+        return vec![];
+    };
+    let Some(ty) = subjects.get(subject) else {
+        return vec![];
+    };
+    let Some((cases, _)) = reference_cases(ty) else {
+        return vec![];
+    };
+    let picks: Vec<(&EnumCaseDef, usize)> = value
+        .choices
+        .iter()
+        .filter_map(|c| cases.iter().find(|case| case.name == c.case).map(|case| (case, c.index)))
+        .filter(|(case, index)| *index < case.payload.len())
+        .collect();
+    let at = value.loc;
+    if let [(case, index)] = picks[..] {
+        var.default = Some(case_field(subject, ty, case, index, at));
+        return vec![];
+    }
+    // `var x; if (tag == A) { x = subject.A.x; } else if ... else { x = subject.Z.x; }`
+    var.default = None;
+    let assign = |case: &EnumCaseDef, index: usize| Block {
+        name: String::new(),
+        items: vec![Statement::Expression(Expression::Binary {
+            op: BinaryOp::Assign,
+            lhs: Box::new(Expression::SymbolRef { id: var.name.clone(), ty: var.ty.clone(), loc: at }),
+            rhs: Box::new(case_field(subject, ty, case, index, at)),
+            loc: at,
+        })],
+        attributes: vec![],
+    };
+    let mut chain: Option<Block> = None;
+    for (i, (case, index)) in picks.iter().enumerate().rev() {
+        chain = Some(if i + 1 == picks.len() {
+            assign(case, *index)
+        } else {
+            Block {
+                name: String::new(),
+                items: vec![Statement::Branch(Branch {
+                    condition: tag_is(subject, ty, case, at),
+                    if_block: assign(case, *index),
+                    else_block: chain.take(),
+                })],
+                attributes: vec![],
+            }
+        });
+    }
+    chain.map(|b| b.items).unwrap_or_default()
 }
 
 fn lower_statement(
@@ -573,7 +898,7 @@ fn lower_arm(
     let ty = subjects.get(id).cloned().unwrap_or_else(TypeName::auto);
     let entry = coverage.entry(test.site.id).or_default();
     entry.site = Some(test.site.clone());
-    let Some(e) = enums.get(&ty.to_string()) else {
+    let Some(matched) = Matched::of(&ty, enums) else {
         let shown = if ty.is_auto() { "an unknown type".to_string() } else { format!("'{}'", ty) };
         report(
             Diagnostic::error(format!("cannot match on a value of {}: 'match' needs an enum", shown))
@@ -581,31 +906,57 @@ fn lower_arm(
         );
         return None;
     };
-    entry.enum_name = Some(e.name.clone());
+    entry.matched = Some((matched.name(), matched.cases().to_vec()));
     let mut condition: Option<Expression> = None;
     for p in &test.patterns {
+        let qualifier_fits = |q: &TypeName| match &matched {
+            Matched::Value(e) => q.to_string() == e.name,
+            Matched::Reference { ty, .. } => q.name == ty.name,
+        };
         if let Some(q) = &p.qualifier
-            && q.to_string() != e.name
+            && !qualifier_fits(q)
         {
             report(
-                Diagnostic::error(format!("'{}' is not the type of the value matched, '{}'", q, e.name))
+                Diagnostic::error(format!("'{}' is not the type of the value matched, '{}'", q, matched.name()))
                     .at(p.loc)
                     .with_note("the value matched is here", Some(*subject_loc)),
             );
             return None;
         }
-        let Some(case) = e.case(&p.case) else {
-            report(no_case(&p.case, e, p.loc));
-            return None;
+        let case = match &matched {
+            Matched::Value(e) => match e.case(&p.case) {
+                Some(case) => case,
+                None => {
+                    report(no_case(&p.case, e, p.loc));
+                    return None;
+                }
+            },
+            Matched::Reference { ty, cases, declared } => match find_case(cases, &p.case, ty, *declared, p.loc) {
+                Ok(case) => case,
+                Err(d) => {
+                    report(d);
+                    return None;
+                }
+            },
         };
-        if let Some(bindings) = &p.bindings {
-            let at = bindings.first().map_or(p.loc, |(_, l)| *l);
-            report(
-                Diagnostic::error(format!("case '{}' of '{}' carries no values to bind", case.name, e.name))
-                    .at(at)
-                    .with_note(format!("'{}' declared here", case.name), Some(case.loc)),
-            );
-            return None;
+        match (&matched, &p.bindings) {
+            (Matched::Value(e), Some(bindings)) => {
+                let at = bindings.first().map_or(p.loc, |(_, l)| *l);
+                report(
+                    Diagnostic::error(format!("case '{}' of '{}' carries no values to bind", case.name, e.name))
+                        .at(at)
+                        .with_note(format!("'{}' declared here", case.name), Some(case.loc)),
+                );
+                return None;
+            }
+            (Matched::Reference { .. }, Some(bindings)) => {
+                let extra = bindings.get(case.payload.len()).map(|(_, l)| *l);
+                if let Err(d) = check_binding_count(case, bindings.len(), extra, p.loc) {
+                    report(d);
+                    return None;
+                }
+            }
+            _ => {}
         }
         if let Some(first) = entry.handled.get(&case.name) {
             report(
@@ -616,11 +967,14 @@ fn lower_arm(
             return None;
         }
         entry.handled.insert(case.name.clone(), p.loc);
-        let equal = Expression::Binary {
-            op: BinaryOp::Equal,
-            lhs: Box::new(Expression::SymbolRef { id: id.clone(), ty: ty.clone(), loc: *subject_loc }),
-            rhs: Box::new(case_value(e, case, p.loc)),
-            loc: p.loc,
+        let equal = match &matched {
+            Matched::Value(e) => Expression::Binary {
+                op: BinaryOp::Equal,
+                lhs: Box::new(Expression::SymbolRef { id: id.clone(), ty: ty.clone(), loc: *subject_loc }),
+                rhs: Box::new(case_value(e, case, p.loc)),
+                loc: p.loc,
+            },
+            Matched::Reference { .. } => tag_is(id, &ty, case, p.loc),
         };
         condition = Some(match condition {
             None => equal,
@@ -632,16 +986,15 @@ fn lower_arm(
 
 /// Report a `match` that leaves cases unhandled; return the warning for an
 /// `else` that nothing reaches.
-fn check_exhaustive(c: &Coverage, enums: &HashMap<String, EnumDef>) -> Option<Diagnostic> {
-    let (Some(site), Some(name)) = (&c.site, &c.enum_name) else {
+fn check_exhaustive(c: &Coverage) -> Option<Diagnostic> {
+    let (Some(site), Some((name, cases))) = (&c.site, &c.matched) else {
         return None;
     };
-    let e = &enums[name];
-    let missing: Vec<&EnumCaseDef> = e.cases.iter().filter(|case| !c.handled.contains_key(&case.name)).collect();
+    let missing: Vec<&EnumCaseDef> = cases.iter().filter(|case| !c.handled.contains_key(&case.name)).collect();
     match site.else_arm {
-        Some(else_loc) if missing.is_empty() && !e.cases.is_empty() => {
+        Some(else_loc) if missing.is_empty() && !cases.is_empty() => {
             return Some(
-                Diagnostic::warning(format!("'else' is unreachable: every case of '{}' is handled", e.name)).at(else_loc),
+                Diagnostic::warning(format!("'else' is unreachable: every case of '{}' is handled", name)).at(else_loc),
             );
         }
         Some(_) => {}
@@ -654,7 +1007,7 @@ fn check_exhaustive(c: &Coverage, enums: &HashMap<String, EnumDef>) -> Option<Di
                 n => format!("{} and {}", names[..n - 1].join(", "), names[n - 1]),
             };
             let more = if missing.len() > SHOWN { format!(" and {} more", missing.len() - SHOWN) } else { String::new() };
-            let mut diagnostic = Diagnostic::error(format!("match on '{}' does not handle {}{}", e.name, listed, more))
+            let mut diagnostic = Diagnostic::error(format!("match on '{}' does not handle {}{}", name, listed, more))
                 .at(site.keyword)
                 .with_note("handle each case, or add an 'else' arm", None);
             for m in missing.iter().take(SHOWN) {

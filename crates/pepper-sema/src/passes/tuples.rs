@@ -104,6 +104,7 @@ pub fn tuple_struct(ty: &TypeName) -> StructDef {
         })
         .collect();
     let mut st = StructDef {
+        enum_cases: None,
         name: name.clone(),
         ty: ty.clone(),
         generic_params: vec![],

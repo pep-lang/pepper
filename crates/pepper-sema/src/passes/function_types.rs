@@ -266,7 +266,7 @@ fn destructor(parent: &str) -> FunctionDef {
 /// check of a plain function type's `__acquire` and `__release`: a named
 /// function's static object may be reached from several threads, and plain
 /// steps on it would race (see the module docs).
-fn skip_static_objects(st: &mut StructDef) {
+pub(crate) fn skip_static_objects(st: &mut StructDef) {
     for method in [&mut st.acquire, &mut st.release] {
         let Some(body) = &mut method.body else { continue };
         let guard = Statement::Branch(Branch {
@@ -295,6 +295,7 @@ fn skip_static_objects(st: &mut StructDef) {
 fn function_struct(ty: &TypeName) -> StructDef {
     let name = ty.to_string();
     StructDef {
+        enum_cases: None,
         name: name.clone(),
         ty: ty.clone(),
         generic_params: vec![],

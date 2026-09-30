@@ -40,6 +40,7 @@ fn when(condition: Expression, items: Vec<Statement>) -> Statement {
 pub fn weak_struct(ty: &TypeName, atomic: bool) -> StructDef {
     let name = ty.to_string();
     let mut st = StructDef {
+        enum_cases: None,
         name: name.clone(),
         ty: ty.clone(),
         generic_params: vec![],

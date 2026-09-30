@@ -718,7 +718,24 @@ impl<'p, 'a> Walk<'p, 'a> {
                     }
                 }
             }
-            Expression::BoolLiteral(_)
+            // A payload value bound by a match arm: a field of the subject.
+            Expression::CaseValue(case) => {
+                let owner = self.eval(&case.subject);
+                if !self.has_region(expr) {
+                    return None;
+                }
+                match owner {
+                    Some(owner) => Some(owner),
+                    None => {
+                        let region = self.fresh();
+                        self.regions[region].untracked = true;
+                        Some(region)
+                    }
+                }
+            }
+            // An immortal payload-free case: no fields to reach.
+            Expression::StaticCase { .. }
+            | Expression::BoolLiteral(_)
             | Expression::IntLiteral(_)
             | Expression::FloatLiteral(_)
             | Expression::SizeOf(_)
@@ -1694,7 +1711,9 @@ fn children(expr: &Expression) -> Vec<&Expression> {
         | Expression::MethodAddress(_)
         | Expression::CountStep { .. }
         | Expression::FunctionPointer { .. }
+        | Expression::StaticCase { .. }
         | Expression::ClosureLiteral(_) => vec![],
+        Expression::CaseValue(case) => vec![&case.subject],
         Expression::MemberRef { lhs, .. } => vec![lhs],
         Expression::Binary { lhs, rhs, .. } | Expression::Index { lhs, rhs, .. } | Expression::ArrayIndex { lhs, rhs, .. } => vec![lhs, rhs],
         Expression::Unary { operand, .. } => vec![operand],

@@ -552,6 +552,56 @@ fn a_match_missing_cases_offers_to_add_them() {
     assert!(missing_arms_fix(&uri, &text, &program, &error, Range::new(Position::new(0, 0), Position::new(0, 1))).is_none());
 }
 
+const SHAPES: &str = r#"## A shape to draw.
+enum Shape {
+    ## A circle.
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Empty,
+}
+
+area(s: Shape): int {
+    match (s) {
+        Empty => { return 0; }
+    }
+    return 0;
+}
+
+test(): int { return area(Shape.Rect(2, 3)); }
+"#;
+
+#[test]
+fn hover_and_completion_show_the_values_a_case_carries() {
+    let complete = SHAPES.replace("Empty => { return 0; }", "Empty => { return 0; }\n        else => { return 1; }");
+    let (uri, text, program) = load("payload_hover", &complete, "main.pep");
+    let shown = hover(&uri, &text, &program, at(&text, "Shape.Rect", 0, 7));
+    assert!(shown.contains("Shape.Rect(width: int, height: int)"), "{}", shown);
+    // While the program does not build, from the document.
+    let (uri, text, program) = load("payload_hover_broken", SHAPES, "main.pep");
+    let shown = hover(&uri, &text, &program, at(&text, "Shape.Rect", 0, 7));
+    assert!(shown.contains("Shape.Rect(width: int, height: int)"), "{}", shown);
+
+    let text = SHAPES.replace("Shape.Rect(2, 3)", "Shape.");
+    let offset = at(&text, "Shape.)", 0, 6);
+    let ast = parse_after_dot(&uri, &text, offset).expect("parses with a placeholder");
+    let items = enum_cases_before(&ast, &text, offset).expect("cases");
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+    assert_eq!(labels, ["Circle", "Rect", "Empty"]);
+    assert_eq!(items[0].detail.as_deref(), Some("Shape.Circle(radius: int)"));
+}
+
+#[test]
+fn a_match_missing_cases_with_values_binds_them() {
+    let (uri, text, program) = load("payload_missing_arms", SHAPES, "main.pep");
+    let error = sema_model_of(&program).expect_err("missing cases");
+    let at_match = Range::new(Position::new(9, 6), Position::new(9, 6));
+    let Some(CodeActionOrCommand::CodeAction(action)) = missing_arms_fix(&uri, &text, &program, &error, at_match) else {
+        panic!("no fix for {:?}", error.message)
+    };
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    assert_eq!(edits[0].new_text, "        Circle(radius) => {}\n        Rect(width, height) => {}\n");
+}
+
 const OVERLOADED_METHODS: &str = r#"struct Meter {
     var n: int;
     ## Adds a whole number.

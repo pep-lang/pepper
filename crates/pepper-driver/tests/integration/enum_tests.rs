@@ -1,7 +1,10 @@
-//! Enums whose cases carry no values, and `match` over them
+//! Enums, their cases with and without values, and `match` over them
 //! (docs/src/language/enums.md).
 
+use clap::Parser;
 use pepper_codegen::CodeGenerator;
+use std::path::PathBuf;
+use std::process::Command;
 
 fn run(source: &str) -> i32 {
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
@@ -534,4 +537,281 @@ fn method_errors() {
     assert!(error_of(&format!("{}extend Light {{ extra(): int {{ return 1; }} }}\ntest(): int {{ return 0; }}", LIGHT))
         .contains("cannot extend enum 'Light': declare its methods inside the enum"));
     assert!(declared("pick<T>(x: T): T { return x; }").contains("methods of an enum cannot be generic yet ('pick')"));
+}
+
+// ── Cases that carry values (phase 3) ──
+
+const SHAPE: &str = r#"
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Empty,
+}
+
+area(s: Shape): int {
+    match (s) {
+        Circle(r) => { return 3 * r * r; }
+        Rect(w, h) => { return w * h; }
+        Empty => { return 0; }
+    }
+    return -1;
+}
+"#;
+
+#[test]
+fn a_case_carries_its_values_to_the_arm() {
+    let src = format!(
+        "{}{}",
+        SHAPE,
+        r#"
+test(): int {
+    return area(Shape.Circle(2)) + area(Shape.Rect(3, 4)) * 100 + area(Shape.Empty);
+}
+"#
+    );
+    assert_eq!(run(&src), 1212);
+}
+
+const DOC: &str = r#"
+enum Doc {
+    Text(text: String),
+    Concat(parts: Array<Doc>),
+    Indent(parts: Array<Doc>),
+    Line,
+
+    width(): int {
+        match (this) {
+            Text(t) => { return t.length() as int; }
+            Concat(parts), Indent(parts) => {
+                var total = 0;
+                for (var p in parts) { total += p.width(); }
+                return total;
+            }
+            Line => { return 1; }
+        }
+        return 0;
+    }
+}
+"#;
+
+#[test]
+fn alternatives_bind_one_name_and_nothing_leaks() {
+    let src = format!(
+        "{}{}",
+        DOC,
+        r#"
+build(): int {
+    var inner = Array<Doc>();
+    inner.append(Doc.Text("ab"));
+    var parts = Array<Doc>();
+    parts.append(Doc.Text("hello"));
+    parts.append(Doc.Line);
+    parts.append(Doc.Indent(inner));
+    return Doc.Concat(parts).width();
+}
+test(): int {
+    var before = _pep_live_allocs();
+    var width = build();
+    if (_pep_live_allocs() != before) { return -1; }
+    return width;
+}
+"#
+    );
+    assert_eq!(run(&src), 8);
+}
+
+#[test]
+fn a_generic_enum_can_hold_itself() {
+    let src = r#"
+enum Tree<T> {
+    Leaf,
+    Node(left: Tree<T>, value: T, right: Tree<T>),
+}
+
+sum(t: Tree<int>): int {
+    match (t) {
+        Leaf => { return 0; }
+        Node(l, v, r) => { return sum(l) + v + sum(r); }
+    }
+    return 0;
+}
+
+root(t: Tree<int>): int {
+    match (t) {
+        Node(_, v, _) => { return v; }
+        else => { return -1; }
+    }
+    return 0;
+}
+
+test(): int {
+    var leaf = Tree<int>.Leaf;
+    var t = Tree<int>.Node(Tree<int>.Node(leaf, 1, leaf), 2, Tree<int>.Node(leaf, 4, leaf));
+    return sum(t) * 10 + root(t) + root(leaf) * 100;
+}
+"#;
+    assert_eq!(run(src), -28);
+}
+
+#[test]
+fn a_case_without_values_is_one_shared_object() {
+    let src = format!(
+        "{}{}",
+        DOC,
+        r#"
+line(): Doc { return Doc.Line; }
+test(): int {
+    var before = _pep_live_allocs();
+    var total = 0;
+    var a = Doc.Line;
+    if (a === line()) { total += 1; }
+    var many = Array<Doc>();
+    var i = 0;
+    while (i < 10) { many.append(Doc.Line); i += 1; }
+    if (many[9] === a) { total += 10; }
+    var w = __weak_from<Doc>(a);
+    if (__weak_upgrade<Doc>(w) === a) { total += 100; }
+    many = Array<Doc>();
+    # Only the arrays allocated; the cases did not.
+    if (_pep_live_allocs() - before != 1) { return -1; }
+    return total;
+}
+"#
+    );
+    assert_eq!(run(&src), 111);
+}
+
+#[test]
+fn reference_enums_have_methods_traits_and_names() {
+    let src = r#"
+trait Describe {
+    describe(): String;
+}
+
+[Shared]
+enum Message {
+    Quit,
+    Move(x: int, y: int),
+}
+
+extend Message with Describe {
+    describe(): String {
+        match (this) {
+            Quit => { return "quit"; }
+            Move(x, y) => { return "move"; }
+        }
+        return "";
+    }
+}
+
+enum Maybe<T> {
+    Nothing,
+    Just(value: T),
+
+    or_else(fallback: T): T {
+        match (this) {
+            Just(v) => { return v; }
+            Nothing => { return fallback; }
+        }
+        return fallback;
+    }
+}
+
+length_of(d: Describe): int {
+    return d.describe().length() as int;
+}
+
+test(): int {
+    var total = length_of(Message.Move(1, 2)) + length_of(Message.Quit) * 10;
+    total += Maybe<int>.Just(5).or_else(0) * 100 + Maybe<int>.Nothing.or_else(7) * 1000;
+    if (Maybe<String>.Just("x").name() == "Just" && Message.Quit.name() == "Quit") { total += 10000; }
+    return total;
+}
+"#;
+    assert_eq!(run(src), 17544);
+}
+
+#[test]
+fn reference_enum_errors() {
+    let declared = |cases: &str| error_of(&format!("enum Doc {{\n{}\n}}\ntest(): int {{ return 0; }}\n", cases));
+    assert!(declared("A = 1, B(v: int),").contains("case 'A' of 'Doc' cannot have a value: its cases carry values"));
+    assert!(declared("A(v: int = 1),").contains("the values of case 'A' cannot have defaults"));
+    assert!(declared("A(v: int, v: int),").contains("redefinition of 'v' in case 'A'"));
+    assert!(declared("A(v: int),\nA(): int { return 1; }").contains("case 'A' has the same name as a method of 'Doc'"));
+    let used = |body: &str| {
+        error_of(&format!(
+            "{}test(): int {{\n    var d = Doc.Line;\n    {}\n    return 0;\n}}\n",
+            DOC, body
+        ))
+    };
+    assert!(used("var t = Doc.Text;").contains("case 'Text' of 'Doc' takes 1 value: 'Doc.Text(text)'"));
+    assert!(used("var t = Doc.Txt;").contains("no case named 'Txt' in 'Doc'"));
+    assert!(used("var t = Doc(0);").contains("cannot construct enum 'Doc' directly: its values are made by its cases"));
+    assert!(used("match (d) { Text(a, b) => {} else => {} }").contains("too many bindings for case 'Text': expected 1, have 2"));
+    assert!(used("match (d) { Concat => {} Text() => {} else => {} }").contains("too few bindings for case 'Text': expected 1, have 0"));
+    assert!(used("match (d) { Text(t), Concat(t) => {} else => {} }")
+        .contains("'t' has type 'Array<Doc>' here but 'String' in 'Text'"));
+    assert!(used("match (d) { Text(t), Line => {} else => {} }")
+        .contains("'t' is not bound by 'Line': every pattern of an arm binds the same names"));
+    assert!(used("match (d) { Text(t) => { t = \"x\"; } else => {} }").contains("cannot assign to const variable 't'"));
+    assert!(used("match (d) { Text(t) => {} Line => {} }").contains("match on 'Doc' does not handle 'Concat' and 'Indent'"));
+}
+
+fn run_binary(name: &str, files: &[(&str, &str)]) -> (bool, String) {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf();
+    std::env::set_current_dir(root).unwrap();
+    let dir = std::env::temp_dir().join(format!("pepper_enum_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (file, source) in files {
+        std::fs::write(dir.join(file), source).unwrap();
+    }
+    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+    let options = pepper_driver::Options::parse_from(vec![
+        "pepper".to_string(),
+        dir.join(files[0].0).to_string_lossy().into_owned(),
+        "-o".to_string(),
+        out_path.to_string_lossy().into_owned(),
+        "--build".to_string(),
+        dir.join("build").to_string_lossy().into_owned(),
+    ]);
+    pepper_driver::run(options).expect("compile + link");
+    let output = Command::new(&out_path).output().expect("spawn linked binary");
+    (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[test]
+fn a_case_without_values_is_one_object_across_files() {
+    let lib = "export enum Token {\n    Word(text: String),\n    End,\n}\nexport end(): Token { return Token.End; }\n";
+    let main = "import \"lib\";\nmain(): int {\n    if (end() === Token.End) { return 0; }\n    return 1;\n}\n";
+    let (ok, stdout) = run_binary("static_case_units", &[("main.pep", main), ("lib.pep", lib)]);
+    assert!(ok, "stdout: {stdout}");
+}
+
+#[test]
+fn matching_a_null_reference_enum_panics() {
+    let main = "enum Token {\n    Word(text: String),\n    End,\n}\nmain(): int {\n    Token t;\n    match (t) {\n        Word(w) => {}\n        End => {}\n    }\n    return 0;\n}\n";
+    let (ok, stdout) = run_binary("null_match", &[("main.pep", main)]);
+    assert!(!ok, "expected a panic");
+    assert!(stdout.contains("match on a null 'Token'"), "stdout: {stdout}");
+}
+
+#[test]
+fn a_case_can_be_selected_by_platform() {
+    let src = r#"
+enum Handle {
+    Path(text: String),
+    [Target(OS(Windows))]
+    Win(code: int),
+    [Target(!OS(Windows))]
+    Posix(fd: int),
+}
+test(): int {
+    match (Handle.Path("x")) {
+        Path(t) => { return t.length() as int; }
+        else => { return 2; }
+    }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 1);
 }

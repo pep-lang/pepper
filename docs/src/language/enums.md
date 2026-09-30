@@ -5,6 +5,14 @@ enum holds exactly one of them. Use an enum where you would otherwise pass an
 integer code or a string, so the compiler checks that only the listed cases
 flow through, and that a `match` handles each one.
 
+There are two kinds:
+
+- In an enum whose cases carry nothing (`Red`, `Green`), each case is an
+  integer. Such an enum is a value type, like `int`.
+- When a case carries values (`Circle(radius: int)`), the enum is a
+  reference type, like a struct. See
+  [Cases that carry values](#cases-that-carry-values).
+
 ```pepper
 {{#include ../../examples/enums-basics.pep}}
 ```
@@ -41,7 +49,9 @@ the others.
 
 ## Using enum values
 
-`Name.Case` is a value of the enum type. An enum is a value type, like `int`:
+This section is about enums whose cases carry nothing.
+
+`Name.Case` is a value of the enum type. Such an enum is a value type, like `int`:
 it is copied, not reference counted, and it can be stored in locals, fields,
 arrays and module-scope constants, and passed to and returned from functions.
 
@@ -60,6 +70,37 @@ arrays and module-scope constants, and passed to and returned from functions.
   element, in an `Atomic<Name>`, and in an `extern` function's signature,
   where C sees the representation (an `int` unless the enum names another).
 
+## Cases that carry values
+
+A case can carry values, declared like parameters: `Circle(radius: int)`.
+An enum with such a case is a **reference type**: each value is an object,
+reference counted like a [struct](structs.md).
+
+```pepper
+{{#include ../../examples/enums-values.pep}}
+```
+
+- `Name.Case(values...)` makes a new value, like a constructor call, and
+  `Name.Case` alone is a case that carries nothing. An enum's values are
+  made only by its cases: `Shape(...)` is an error.
+- A case that carries values must be given them: `Shape.Circle` without
+  `(radius)` is an error.
+- The values are fixed once made. There is no way to change them, so a value
+  can be shared freely. To change one, make a new value.
+- Each case that carries nothing is a single object that every use shares.
+  It is never freed and costs no allocation, however often it is used.
+- A slot of the enum type that is not given a value holds null, as a struct
+  slot does. `===` and `!==` compare identity.
+- An enum can have type parameters (`enum List<T>`), and its cases can hold
+  the enum itself, directly or through other types, so lists and trees are
+  enums.
+- The enum can be `[Shared]` when every value its cases carry is
+  thread-safe (see [Threads](threads.md)). It can conform to a trait with
+  `extend Name with Trait`, like a struct, and its methods can come from an
+  `extend` block too.
+- Cases cannot have explicit values (`= 3`), and the enum has no
+  representation type (`: u8`), since its values are not integers.
+
 ## Methods
 
 An enum can declare methods after its cases. Inside a method, `this` is the
@@ -71,18 +112,20 @@ itself (`Light.first()`).
 {{#include ../../examples/enums-methods.pep}}
 ```
 
-`this` is passed by value, like an `int`: a method cannot change the value it
-was called on. Return a new case instead, as `next()` does.
+For an enum whose cases carry nothing, `this` is passed by value, like an
+`int`: a method cannot change the value it was called on. Return a new case
+instead, as `next()` does. For an enum whose cases carry values, `this` is
+the object, as in a struct's method; its values still cannot change.
 
 ### Built-in methods
 
-Every enum has two methods without declaring them, and cannot declare
+Every enum has these methods without declaring them, and cannot declare
 methods of the same names:
 
 | Method | What it does |
 |---|---|
-| `value.name()` | Returns the case's name as written (`"Red"`), a `String`. |
-| `Name.from_value(n)` | Returns a `Result<Name>`: Ok with the case whose value is `n`, or an Err when no case has it. `n` has the enum's representation type. |
+| `value.name()` | Returns the case's name as written (`"Red"`), a `String`. Every enum has it. |
+| `Name.from_value(n)` | Returns a `Result<Name>`: Ok with the case whose value is `n`, or an Err when no case has it. `n` has the enum's representation type. Only enums whose cases carry nothing have it. |
 
 `from_value` is the checked way back from an integer (from a file, a C
 library or the network) to a case, since `as` only goes the other way.
@@ -98,6 +141,12 @@ library or the network) to a case, since `as` only goes the other way.
 - Each arm is one or more patterns, separated by commas, then `=>` and a
   block. A pattern is a case name (`Red`) or the case qualified by its enum
   (`Light.Red`).
+- A pattern for a case that carries values can **bind** them:
+  `Rect(w, h)` declares `w` and `h` in its arm, holding the case's values in
+  order. The bindings are `const`. `_` skips a value. A pattern binds all of
+  its case's values or, written without parentheses (`Rect`), none.
+- Patterns that share an arm must bind the same names, with the same types
+  (`Rect(w, _), Square(w)`).
 - An `else => { ... }` arm, last, handles every case the other arms do not.
 - The arms must handle **every case**. A missing case is an error that names
   it, located at `match`; the language server offers a quick fix that adds an
@@ -107,17 +156,22 @@ library or the network) to a case, since `as` only goes the other way.
 - `match` is a statement. `break`, `continue` and `return` inside an arm act
   on the enclosing loop or function, as they would inside an `if`.
 
-The value is evaluated once, before any arm runs.
+The value is evaluated once, before any arm runs. A `match` on a null value
+of an enum whose cases carry values panics with `match on a null 'Name'`.
 
 ## Current limits
 
-- Cases cannot carry values yet (`Circle(radius: float)`); that is the next
-  step, and it is what lets [`Optional`](optionals.md) and
-  [`Result`](results.md) become enums.
-- Enums cannot be generic yet, and neither can their methods. An enum
-  cannot declare operators or indexers yet; `==` and `!=` are built in.
+- [`Optional`](optionals.md) and [`Result`](results.md) are not enums yet,
+  so they cannot be matched.
+- An enum whose cases carry nothing cannot be generic. The methods of any
+  enum cannot be generic yet. An enum cannot declare operators or indexers
+  yet; `==` and `!=` are built in for enums whose cases carry nothing.
+- Patterns cannot be nested (`Some(Text(t))`), compare values
+  (`Text("")`), or have guards yet.
 - `match` works only on enums, and only as a statement: it does not produce
-  a value, and cannot match integers, characters or strings yet.
-- An enum cannot be extended (`extend Color { ... }`); declare its methods
-  inside it. So it cannot conform to a trait either, and a trait value is a
-  reference to an object, which an enum value is not.
+  a value, and cannot match integers, characters or strings yet. There is no
+  `is` test yet.
+- An enum whose cases carry nothing cannot be extended
+  (`extend Color { ... }`); declare its methods inside it. So it cannot
+  conform to a trait either, and a trait value is a reference to an object,
+  which such an enum's value is not.

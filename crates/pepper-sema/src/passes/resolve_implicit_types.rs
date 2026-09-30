@@ -264,6 +264,12 @@ impl<'t> Scopes<'t> {
 fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&TypeName>) -> TypeName {
     match expr {
         Expression::Destructure { value, .. } => type_of_expr(value, scopes, current_struct),
+        Expression::StaticCase { ty, .. } => ty.clone(),
+        Expression::CaseValue(value) => {
+            let subject = type_of_expr(&value.subject, scopes, current_struct);
+            let field = |name: &str| scopes.field_type(&subject, name);
+            crate::enums::case_value_type(value, &subject, field).ok().flatten().unwrap_or_else(TypeName::auto)
+        }
         // A tuple literal before its type is spelled out: the tuple of its
         // elements' types, once they are all known.
         Expression::FunctionCall { function, args, .. } if crate::passes::tuples::constructor_labels(function).is_some() => {
@@ -972,6 +978,16 @@ fn resolve_expression(
                 *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
                 return;
             }
+        }
+        // A value a `match` pattern binds: report patterns that do not fit
+        // the enum matched.
+        if let Expression::CaseValue(value) = e {
+            let subject = type_of_expr(&value.subject, scopes, current);
+            let field = |name: &str| scopes.field_type(&subject, name);
+            if let Err(d) = crate::enums::case_value_type(value, &subject, field) {
+                crate::errors::report(d);
+            }
+            return;
         }
         // `c.name()` on an enum value calls the function `Color::name(c)`.
         if let Expression::MethodCall { this, method, args, loc } = e {

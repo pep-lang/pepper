@@ -375,6 +375,19 @@ pub enum Expression {
     /// exhaustiveness across the arms that share `site`. Never reaches
     /// codegen.
     MatchArm(Box<MatchArmTest>),
+    /// A value a `match` pattern binds (`text` in `Text(text) => ...`): the
+    /// value at `index` of the matched case of `subject`, a reference enum.
+    /// The builder makes it the default of the binding's local. Typed by
+    /// `resolve_implicit_types`, which reports a case or position the enum
+    /// lacks; `enums::lower_matches` replaces it with the payload field.
+    /// Never reaches codegen.
+    CaseValue(Box<CaseValue>),
+    /// A reference enum's case that carries no values (`Doc.Line`), as the
+    /// one object every use of it shares: an immortal global of struct
+    /// `ty` whose tag is `tag` and whose count starts at `STATIC_REFCOUNT`,
+    /// so it is never freed and needs no allocation. The case's static
+    /// method returns it.
+    StaticCase { ty: TypeName, tag: i64 },
     /// A struct reference converted to a trait-typed value (`Shape s =
     /// Square(2);`): the same object, seen through the vtable of `from`'s
     /// conformance to `to`. Inserted by `convert_to_traits` wherever a value
@@ -437,6 +450,35 @@ pub struct MatchSite {
     pub else_arm: Option<Loc>,
 }
 
+/// See [`Expression::CaseValue`].
+#[derive(Debug, Clone)]
+pub struct CaseValue {
+    /// The hidden `__match_N` local.
+    pub subject: Expression,
+    /// The name bound.
+    pub name: String,
+    /// Each pattern of the arm that binds the name: its case and the
+    /// position of the name among its bindings. Several when alternatives
+    /// (`Concat(parts), Indent(parts)`) bind one name.
+    pub choices: Vec<CaseChoice>,
+    /// Location of the binding.
+    pub loc: Loc,
+}
+
+/// One pattern's part in a [`CaseValue`].
+#[derive(Debug, Clone)]
+pub struct CaseChoice {
+    pub case: String,
+    /// Location of the case name in the pattern.
+    pub case_loc: Loc,
+    /// Position of the binding among the pattern's bindings.
+    pub index: usize,
+    /// Every binding of the pattern, `_` included.
+    pub bindings: Vec<Loc>,
+    /// Location of the binding in this pattern.
+    pub loc: Loc,
+}
+
 /// A pattern of a `match` arm: `Case`, `Enum.Case`, or `Case(x, _)`.
 #[derive(Debug, Clone)]
 pub struct CasePattern {
@@ -449,7 +491,9 @@ pub struct CasePattern {
     pub bindings: Option<Vec<(String, Loc)>>,
 }
 
-/// An `enum` declaration whose cases carry no values: an integer type.
+/// An `enum` declaration whose cases carry no values: an integer type. An
+/// enum with a case that carries values is a struct instead, with
+/// [`StructDef::enum_cases`].
 #[derive(Debug, Clone)]
 pub struct EnumDef {
     pub name: String,
@@ -482,11 +526,25 @@ impl EnumDef {
 #[derive(Debug, Clone)]
 pub struct EnumCaseDef {
     pub name: String,
+    /// The case's value; a reference enum's tag.
     pub value: i64,
+    /// A reference enum's case: the names of the values it carries, each
+    /// with its location. Each is the field [`payload_field`] names.
+    pub payload: Vec<(String, Loc)>,
     pub attributes: Vec<ast::Attribute>,
     /// Location of the case's name.
     pub loc: Loc,
 }
+
+/// The field of a reference enum's object that holds `value` of case
+/// `case`: `Text.text`. The dot keeps two cases' values apart and keeps
+/// source code from naming the field.
+pub fn payload_field(case: &str, value: &str) -> String {
+    format!("{}.{}", case, value)
+}
+
+/// The field of a reference enum's object that says which case it is.
+pub const TAG_FIELD: &str = "__tag";
 
 /// A closure literal: `(x: int) => x * 2`. Parameters and the return type
 /// written without a type are `auto`.
@@ -687,6 +745,11 @@ pub struct StructDef {
     pub attributes: Vec<ast::Attribute>,
     /// Location of the declared name.
     pub loc: Loc,
+    /// A reference enum (an `enum` with a case that carries values): its
+    /// cases, each tagged by its position. The object holds the tag in
+    /// [`TAG_FIELD`] and every case's values in [`payload_field`]s; each
+    /// case is a static method that makes one.
+    pub enum_cases: Option<Vec<EnumCaseDef>>,
 }
 
 /// The attribute that makes a struct shareable between threads.

@@ -36,6 +36,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         traits: base.traits.clone(),
         attributes: base.attributes.clone(),
         loc: base.loc,
+        enum_cases: base.enum_cases.clone(),
     };
 
     // Declared traits name the parameters too (`extend Box<T> with
@@ -260,6 +261,7 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             Expression::ArrayIndex { ty, .. }
             | Expression::IsPod(ty)
             | Expression::Default(ty)
+            | Expression::StaticCase { ty, .. }
             | Expression::Allocate(ty)
             | Expression::Cast { ty, .. } => substitute(ty, type_map),
             Expression::RefCount(ty, _) | Expression::Weak(_, ty, _) => substitute(ty, type_map),

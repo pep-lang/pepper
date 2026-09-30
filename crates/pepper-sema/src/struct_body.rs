@@ -229,6 +229,11 @@ pub fn apply_synthesized(st: &mut StructDef) {
             ),
         ];
     }
+    // A reference enum's cases that carry nothing are immortal objects any
+    // thread may reach (`Expression::StaticCase`): leave their counts alone.
+    if st.enum_cases.as_ref().is_some_and(|cases| cases.iter().any(|c| c.payload.is_empty())) {
+        crate::passes::function_types::skip_static_objects(st);
+    }
 }
 
 /// Ctor finish, for each constructor: allocation prologue + field inits + user ctor body +

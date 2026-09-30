@@ -366,17 +366,37 @@ with no extension, and `module_name()` is the output's stem.
     hidden variable and destructures it at the top of the body.
   - An `enum` is an `ast::StructDecl` whose `enumeration` is set, so
     linking, visibility, exports and name mangling treat it as a struct.
-    `enum_def` builds an `EnumDef` in `module.enums` instead (cases with
-    their values folded, checked for range and duplicates); an enum is not
-    a struct in the model. Each method becomes a free function named
-    `E::m` (`enum_method`, `enums::method_name`); an instance method gets a
-    first parameter `this: E`, passed by value like any integer.
+    When no case carries values, `enum_def` builds an `EnumDef` in
+    `module.enums` instead (cases with their values folded, checked for
+    range and duplicates); such an enum is not a struct in the model. Each
+    method becomes a free function named `E::m` (`enum_method`,
+    `enums::method_name`); an instance method gets a first parameter
+    `this: E`, passed by value like any integer.
+  - An enum with a case that carries values (a reference enum) *is* a
+    struct in the model (`reference_enum_def`): `StructDef::enum_cases`
+    lists its cases (`EnumCaseDef::payload` names each case's values, and
+    its `value` is the case's tag, its position). Its fields are `__tag`
+    (`model::TAG_FIELD`) and every case's values as `const` fields named
+    `Case.value` (`model::payload_field`; the dot keeps source code from
+    naming them). One constructor takes every field (`this.field`
+    parameters); each case is a static method named after it that calls it
+    with the case's tag, its values, and `Default` for the other cases'
+    fields, or, for a case that carries nothing, returns
+    `Expression::StaticCase`, one immortal object per enum type and case.
+    The built-in `name()` is a method that tests `__tag`. Declared methods
+    stay ordinary methods, so generics, `[Shared]`, `extend` and trait
+    conformance work as for any struct.
   - A `match (e) { arms }` becomes a block holding a hidden `__match_N`
     local (`e`) and an `if`/`else if` chain whose conditions are
     `Expression::MatchArm` (the subject, the arm's `CasePattern`s, and a
     `MatchSite` shared by the arms of one `match`); the `else` arm is the
     chain's last `else`. The model has no `match` statement;
-    `enums::lower_matches` turns each test into `==` comparisons.
+    `enums::lower_matches` turns each test into `==` comparisons. Each name
+    an arm's patterns bind (`match_bindings`) is a `const` local at the top
+    of the arm whose value is `Expression::CaseValue` (the subject, and per
+    pattern the case and the binding's position), which
+    `resolve_implicit_types` types from the payload field and checks
+    (`enums::case_value_type`), and `lower_matches` replaces with the field.
   - A character literal (`ast::Literal::Char`) becomes
     `Cast { IntLiteral(byte), byte }`, so it is typed `byte` where nothing
     else gives it a type and widens like any `byte` value.
@@ -508,7 +528,7 @@ several passes run more than once on purpose.
 
 | # | Step | What it does |
 | --- | --- | --- |
-| 0 | `enums::resolve_enum_cases` (`enums.rs`) | Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E::from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums::method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums::call_on_value`); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
+| 0 | `enums::resolve_enum_cases` (`enums.rs`) | Installs the reference enums (structs with `enum_cases`) in their own registry (`enums::reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E::from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums::method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums::call_on_value`); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
 | 2 | `synthesize_function_types` (`function_types.rs`) | Each tuple type `__tuple<A, B>` becomes a synthesized struct (`tuples::tuple_struct`) with const fields `"0"`, `"1"`, … and a constructor taking the elements, so every pass that types fields, constructor arguments and member reads handles tuples unchanged; codegen emits no object for it (§4.3). Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
@@ -540,7 +560,7 @@ several passes run more than once on purpose.
 | final | `tuples::lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
 | final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Sending]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `[ReturnsOwned]` (runtime files only, checked against the discovered runtime directory) makes a function's results fresh whatever its body shows; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Sending]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number. A syntactic prefilter skips functions that mention no trigger name. |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
-| final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` and checks each `match` (`MatchSite`): the subject must be an enum, a pattern's qualifier must name it, each case is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case). An `else` after every case is a warning in `module.warnings`. `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
+| final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it). It checks each `match` (`MatchSite`): the subject must be an enum, a pattern's qualifier must name it, each case is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case). An `else` after every case is a warning in `module.warnings`. `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
@@ -647,6 +667,17 @@ How the language lowers:
   `AtomicLoad` (acquire), `AtomicStore` (release, via `xchg`),
   `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), and `AtomicFetch`
   (`atomicrmw` acq_rel).
+- **Enum cases that carry nothing**: `StaticCase` (`static_case`) is the
+  global `<Enum>.case<tag>`, the enum's struct with its counts at
+  `STATIC_REFCOUNT` and 1, its `__tag` set and every other field zero. It
+  is emitted with external linkage, like a function, and
+  `partition::finish` makes it `linkonce_odr` (in a comdat), so the units
+  that use it share one object and `===` holds across files (a bare
+  `linkonce_odr` global crashes the JIT on Windows). A reference enum with such a case
+  gets the same guard as a plain function type (`skip_static_objects`,
+  added by `struct_body::apply_synthesized`): its `__acquire` and
+  `__release` leave a count at or above `STATIC_REFCOUNT` alone, so the
+  object any thread may reach is only ever read.
 - **Function values**: `FunctionRef` produces a static function object
   (`__function_object.<name>`, or `__function_object.shared.<name>` for a
   `shared` function type) whose `__invoke` points at a thunk
@@ -1041,10 +1072,12 @@ diagnostics"). The mechanics:
   with a placeholder after the dot, `parse_after_dot`, since `Color.` alone
   does not parse). Document symbols come from the AST.
 - Enums: hover on `Enum.Case` shows its value from the sema model
-  (`enum_case_of`), or the bare case while the program does not build
+  (`enum_case_of`), or the values a case carries (`Doc.Text(text:
+  String)`), or the bare case while the program does not build
   (`enum_case_in`). A `match on 'E' does not handle ...` error offers a
   quick fix that adds an empty arm per missing case before the `match`'s
-  closing brace (`missing_arms_fix`, `find_match`).
+  closing brace (`missing_arms_fix`, `find_match`), binding a case's values
+  by their declared names.
 - Runtime discovery is the same as the compiler's (section 2.2): from the
   directory the server was started in, then from the `pepper-lsp`
   executable's directory, unless `PEPPER_RUNTIME` is set. In `Lenient`
@@ -1075,7 +1108,8 @@ dogfooding of the language.
   source order, and each comment hangs off the token next to it (a comment
   on the same line after a token is its `trailing_comment`, any other is an
   entry in `leading_comments` of the next token). Nodes are uniform (`kind`, `leaf`,
-  `children`), since Pepper has no enums or sum types yet.
+  `children`), written before Pepper had enums; moving the node kinds to
+  enums is the last phase of the enums proposal.
 - The parser mirrors `parsers.rs` decision for decision; like it, it
   treats line breaks as whitespace except at a declaration missing its `;`
   (`_declaration_boundary`, using the next token's `newlines_before`), and

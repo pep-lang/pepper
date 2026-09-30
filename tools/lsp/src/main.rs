@@ -490,16 +490,27 @@ fn missing_arms_fix(uri: &Url, text: &str, program: &Program, error: &diag::Diag
         return None;
     }
     let enum_name = error.message["match on '".len()..].split('\'').next()?;
+    // A generic enum's `match` names its specialization (`Tree<int>`).
+    let base_name = enum_name.split('<').next()?;
     let ast = parse_source(uri.as_str(), text).ok()?;
     let found = find_match(&ast, loc.span.start)?;
     let cases = program.files.iter().find_map(|f| {
         f.module.declarations.iter().find_map(|d| match d {
-            ast::Declaration::Struct(s) if s.name == enum_name || demangle_name(&s.name) == enum_name => s.enumeration.as_ref(),
+            ast::Declaration::Struct(s) if s.name == base_name || demangle_name(&s.name) == base_name => s.enumeration.as_ref(),
             _ => None,
         })
     })?;
     let handled: Vec<&str> = found.arms.iter().flat_map(|a| &a.patterns).map(|p| p.case.as_str()).collect();
-    let missing: Vec<&str> = cases.cases.iter().map(|c| c.name.as_str()).filter(|c| !handled.contains(c)).collect();
+    // A case that carries values gets a binding for each, named as declared.
+    let missing: Vec<String> = cases
+        .cases
+        .iter()
+        .filter(|c| !handled.contains(&c.name.as_str()))
+        .map(|c| match &c.payload {
+            Some(values) => format!("{}({})", c.name, values.iter().map(|v| v.name.as_str()).collect::<Vec<_>>().join(", ")),
+            None => c.name.clone(),
+        })
+        .collect();
     if missing.is_empty() {
         return None;
     }
@@ -567,11 +578,31 @@ fn find_match(module: &ast::Module, start: usize) -> Option<&ast::Match> {
 }
 
 /// What hover shows for `lhs.name` when `lhs` names an enum and `name` one
-/// of its cases: `Color.Red = 0`.
+/// of its cases: `Color.Red = 0`, or `Doc.Text(text: String)` for a case
+/// that carries values.
 fn enum_case_of(module: &SemaModule, lhs: &ast::Expression, name: &str) -> Option<String> {
     let ast::Expression::SymbolRef { id, .. } = lhs else {
         return None;
     };
+    if let Some(st) = find_sema_struct(module, id)
+        && let Some(cases) = &st.enum_cases
+    {
+        let case = cases.iter().find(|c| c.name == name)?;
+        let values: Vec<String> = case
+            .payload
+            .iter()
+            .map(|(value, _)| {
+                let field = pepper_sema::model::payload_field(&case.name, value);
+                let ty = st.field_members.iter().find(|f| f.name == field).map(|f| f.ty.display()).unwrap_or_default();
+                format!("{}: {}", value, ty)
+            })
+            .collect();
+        return Some(if values.is_empty() {
+            format!("{}.{}", id, case.name)
+        } else {
+            format!("{}.{}({})", id, case.name, values.join(", "))
+        });
+    }
     let e = module
         .enums
         .iter()
@@ -601,7 +632,11 @@ fn enum_case_in(ast: &ast::Module, lhs: &ast::Expression, name: &str) -> Option<
         ast::Declaration::Struct(s) if s.name == *id => s.enumeration.as_ref(),
         _ => None,
     })?;
-    body.cases.iter().any(|c| c.name == name).then(|| format!("{}.{}", id, name))
+    let case = body.cases.iter().find(|c| c.name == name)?;
+    Some(match &case.payload {
+        Some(values) => format!("{}.{}({})", id, name, values.iter().map(|v| format!("{}: {}", v.name, v.type_name)).collect::<Vec<_>>().join(", ")),
+        None => format!("{}.{}", id, name),
+    })
 }
 
 /// The signature of an enum method named `name` (`name(): String`), as its
@@ -632,15 +667,19 @@ fn enum_cases_before(ast: &ast::Module, text: &str, offset: usize) -> Option<Vec
     let cases = body.cases.iter().map(|c| CompletionItem {
         label: c.name.clone(),
         kind: Some(CompletionItemKind::ENUM_MEMBER),
-        detail: Some(format!("{}.{}", name, c.name)),
+        detail: Some(match &c.payload {
+            Some(values) => format!("{}.{}({})", name, c.name, values.iter().map(|v| format!("{}: {}", v.name, v.type_name)).collect::<Vec<_>>().join(", ")),
+            None => format!("{}.{}", name, c.name),
+        }),
         ..Default::default()
     });
-    // Its static methods, `from_value` included.
+    // Its static methods, and `from_value` when its cases are integers.
+    let is_value_enum = body.cases.iter().all(|c| c.payload.is_none());
     let statics = methods
         .iter()
         .filter(|m| m.is_static)
         .map(|m| (m.name.clone(), m.to_string()))
-        .chain([("from_value".to_string(), format!("static from_value(value): Result<{}>", name))])
+        .chain(is_value_enum.then(|| ("from_value".to_string(), format!("static from_value(value): Result<{}>", name))))
         .map(|(label, detail)| CompletionItem {
             label,
             kind: Some(CompletionItemKind::METHOD),

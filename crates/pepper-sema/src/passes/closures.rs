@@ -453,6 +453,7 @@ pub(crate) fn closure_struct(
         loc,
     };
     StructDef {
+        enum_cases: None,
         name: base.to_string(),
         ty: ty.clone(),
         generic_params: generics.to_vec(),

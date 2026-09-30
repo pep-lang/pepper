@@ -207,7 +207,7 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
 pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression)) {
     f(expr);
     match expr {
-        Expression::SymbolRef { .. } | Expression::ThisRef => {}
+        Expression::SymbolRef { .. } | Expression::ThisRef | Expression::StaticCase { .. } => {}
         Expression::MemberRef { lhs, .. } => walk_expression(lhs, f),
         Expression::BoolLiteral(_)
         | Expression::IntLiteral(_)
@@ -271,6 +271,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
         Expression::Destructure { value, .. } => walk_expression(value, f),
         Expression::MatchArm(test) => walk_expression(&mut test.subject, f),
+        Expression::CaseValue(value) => walk_expression(&mut value.subject, f),
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
         Expression::ToTrait { value, .. } => walk_expression(value, f),
@@ -298,6 +299,7 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::SizeOf(_)
         | Expression::IsPod(_)
         | Expression::Default(_)
+        | Expression::StaticCase { .. }
         | Expression::Allocate(_)
         | Expression::FunctionRef { .. }
         | Expression::MethodAddress(_)
@@ -320,6 +322,7 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::ForIterator(arg)
         | Expression::WithEntered(arg) => vec![arg.as_mut()],
         Expression::MatchArm(test) => vec![&mut test.subject],
+        Expression::CaseValue(value) => vec![&mut value.subject],
         Expression::AtomicStore(_, ptr, val) | Expression::AtomicFetch(_, _, ptr, val) => vec![ptr.as_mut(), val.as_mut()],
         Expression::AtomicCmpXchg(_, ptr, expected, desired) => vec![ptr.as_mut(), expected.as_mut(), desired.as_mut()],
         Expression::FunctionCall { args, .. } => args.iter_mut().collect(),
