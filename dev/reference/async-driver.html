@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
+            window.path_to_searchindex_js = "../searchindex-af87de6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -196,11 +196,17 @@
 </code></pre>
 <p>The best one the system has: epoll on Linux, kqueue on macOS, IOCP on
 Windows. The <code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>,
-<code>kqueue</code>, <code>iocp</code> or <code>poll</code>) picks another.</p>
+<code>io_uring</code>, <code>kqueue</code>, <code>iocp</code> or <code>poll</code>) picks another.</p>
 <h4 id="epoll"><a class="header" href="#epoll">Epoll</a></h4>
 <pre><code class="language-pepper">Epoll
 </code></pre>
 <p>Linux’s epoll, edge-triggered.</p>
+<h4 id="iouring"><a class="header" href="#iouring">IoUring</a></h4>
+<pre><code class="language-pepper">IoUring
+</code></pre>
+<p>Linux’s io_uring (kernel 5.11 or later), waiting for sockets with
+one-shot poll requests. Not the default: container seccomp profiles
+and hardened kernels often refuse it.</p>
 <h4 id="kqueue"><a class="header" href="#kqueue">Kqueue</a></h4>
 <pre><code class="language-pepper">Kqueue
 </code></pre>

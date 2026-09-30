@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
+            window.path_to_searchindex_js = "../searchindex-af87de6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -572,18 +572,19 @@ every few dozen tasks, so a busy task cannot starve the network.</p>
 </thead>
 <tbody>
 <tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
+<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring, with a one-shot poll request per waiting socket; never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
 <tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
 <tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
 <tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
 </tbody>
 </table>
 </div>
-<p><code>Backend.Automatic</code>, the default, picks the first of the three that the
-system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and <code>run_with</code>
-panics if the system does not have it), and the <code>PEPPER_IO_BACKEND</code>
-environment variable (<code>epoll</code>, <code>kqueue</code>, <code>iocp</code> or <code>poll</code>) overrides the
-automatic choice without changing the program, for testing and
-benchmarks. <code>async.current_backend()</code> says which one is running.</p>
+<p><code>Backend.Automatic</code>, the default, picks epoll, kqueue or IOCP, whichever
+the system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and
+<code>run_with</code> panics if the system does not have it), and the
+<code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>, <code>io_uring</code>, <code>kqueue</code>,
+<code>iocp</code> or <code>poll</code>) overrides the automatic choice without changing the
+program, for testing and benchmarks. <code>async.current_backend()</code> says which one is running.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>
@@ -668,16 +669,17 @@ stack is reserved address space with a guard page below it; only the pages
 the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.</p>
 <p>Each worker has its own ready queue, timers and backend. Workers talk
-through a queue of messages each (a spawned task finished, was cancelled,
-or was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends a worker’s wait in its backend from
-another thread: an eventfd with epoll, a user event with kqueue, a posted
-completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
-a second socket sends to) with <code>poll()</code>. <code>run_blocking</code>’s pool threads are
-plain threads that report back through the same messages.</p>
+through a queue of messages each (a spawned task finished, was cancelled, or
+was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends
+a worker’s wait in its backend from another thread: an eventfd with epoll
+and io_uring, a user event with kqueue, a posted completion with IOCP, and a
+pipe (on Windows, a loopback UDP socket that a second socket sends to) with
+<code>poll()</code>. <code>run_blocking</code>’s pool threads are plain threads that report back
+through the same messages.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li>Files block the thread on every platform. io_uring on Linux, and
-asynchronous files, come later.</li>
+<li>Files block the thread on every platform; asynchronous files come
+later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 </ul>
