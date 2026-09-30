@@ -33,6 +33,8 @@ env:
   # cache mixed objects across branches there.
   CARGO_INCREMENTAL: 0
   PEPPER_CACHE_VERIFY: 1
+  # See ci.yml: the runners share hosts, so each caps its test threads.
+  RUST_TEST_THREADS: 16
 
 jobs:
   # Which LLVM versions to test is not a fixed list: it is every major this

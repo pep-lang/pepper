@@ -1068,8 +1068,8 @@ non-generic bodies.
   and destructors stay whole. `objects` generates nothing for those units. A unit that warned is
   checked again, so its warnings print on every build. `--emit-llvm` and
   the JIT compile whole programs, never stripped.
-- **Verifying** (`--verify-cache`, or `PEPPER_CACHE_VERIFY=1`, which CI
-  sets): a hit generates the unit anyway and fails if its bitcode differs
+- **Verifying** (`--verify-cache`, or `PEPPER_CACHE_VERIFY=1`, which CI's
+  `test-linux` job sets, recording each failure in the run's summary): a hit generates the unit anyway and fails if its bitcode differs
   from the record's, naming the unit; it keeps `<unit>.ll` beside each
   object it stores and writes `<unit>.verify.ll` on a mismatch, to diff.
   A mismatch means a unit's code depends on something its key leaves out:
@@ -1529,7 +1529,8 @@ GitHub-hosted one: **`pepper-windows`** and **`pepper-linux`** (x64), and
 **`pepper-macos`** (arm64). A new job picks one of those labels. `ci.yml` jobs build into a
 target dir beside the checkout that persists across runs of every PR, with
 `CARGO_INCREMENTAL=0`: rustc's incremental cache mixed objects across branches
-there.
+there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
+`support::parallel_map`'s), since several runners share one host.
 
 - **`ci.yml`** (push to `main`, PRs):
   - `test` is the required check. It runs on the self-hosted

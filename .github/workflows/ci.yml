@@ -53,11 +53,11 @@ env:
   # that exists only in #140). Dependencies are still reused; only the
   # workspace crates rebuild in full, which is seconds.
   CARGO_INCREMENTAL: 0
-  # Every build the tests make checks its build-cache hits: a unit whose
-  # sources matched is generated anyway and must produce the cached code, so
-  # an input missing from a unit's cache key fails here instead of linking
-  # stale code.
-  PEPPER_CACHE_VERIFY: 1
+  # The runners share hosts: pepper-windows and both pepper-linux runners are
+  # one 32-core machine, and both pepper-macos runners one Mac. Left to
+  # default, each test binary (and each test's parallel_map) runs one thread
+  # per core, so concurrent jobs oversubscribe the host several times over.
+  RUST_TEST_THREADS: 16
 
 jobs:
   # Whether the PR touches anything the build or the tests read. A PR that
@@ -213,6 +213,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     timeout-minutes: 20
+    env:
+      # Every build the tests make checks its build-cache hits: a unit whose
+      # sources matched is generated anyway and must produce the cached code,
+      # so an input missing from a unit's cache key fails here instead of
+      # linking stale code. It doubles the cost of a warm build, so only this
+      # job, which is not the required check, pays it.
+      PEPPER_CACHE_VERIFY: 1
 
     steps:
       - uses: actions/checkout@v7
@@ -234,4 +241,39 @@ jobs:
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       - name: Test
-        run: cargo test --workspace --locked
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      # Every verification failure's message starts with "build cache:". Put
+      # each one in the run's summary and as an annotation, and keep the log,
+      # so a cache bug is recorded even when the PR is later fixed or closed.
+      - name: Record build cache verification failures
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/test.log"
+          [ -f "$log" ] || exit 0
+          failures=$(grep -n "build cache:" "$log" || true)
+          [ -n "$failures" ] || exit 0
+          {
+            echo "## Build cache verification failures"
+            echo
+            echo '```'
+            echo "$failures"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            echo "::error title=Build cache verification failed::${line#*:}"
+          done <<< "$failures"
+
+      - name: Keep the test log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-linux-log
+          path: ${{ runner.temp }}/test.log
+          if-no-files-found: ignore
+          retention-days: 90
