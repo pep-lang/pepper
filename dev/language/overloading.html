@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
+            window.path_to_searchindex_js = "../searchindex-c188a1df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -213,9 +213,9 @@ main(): int {
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
 member of it. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
-set too, and so are its static methods and its operators. Constructors and
-extension methods do not overload yet (see
-<a href="#what-is-not-supported-yet">What is not supported yet</a>).</p>
+set too, and so are its static methods, its operators, its
+<a href="#constructors">constructors</a>, and the methods its
+<a href="#extensions-and-traits">extensions</a> add.</p>
 <h2 id="declaring-overloads"><a class="header" href="#declaring-overloads">Declaring overloads</a></h2>
 <ul>
 <li>
@@ -477,6 +477,55 @@ that name; the copy joins their set.</li>
 <li><strong>A missing overload</strong> is named with its parameter types:
 <code>'Square' does not implement 'area(int)', required by trait 'Shape'</code>.</li>
 </ul>
+<h2 id="constructors"><a class="header" href="#constructors">Constructors</a></h2>
+<p>A struct may declare several constructors. A call <code>Span(...)</code> picks among
+them exactly as a call picks among functions:</p>
+<pre><code class="language-pepper">struct Span {
+    var start: int = 0;
+    var length: int = 0;
+
+    # Constructors overload like functions: each takes its own parameters.
+    construct(this.length = 0) {}
+
+    construct(start: int, end: int) {
+        this.start = start;
+        length = end - start;
+    }
+
+    construct(text: String) {
+        length = text.length() as int;
+    }
+}
+
+main(): int {
+    assert(Span().length == 0, "no arguments");
+    assert(Span(5).length == 5, "one int");
+
+    var middle = Span(2, 7);
+    assert(middle.start == 2 &amp;&amp; middle.length == 5, "two ints");
+
+    assert(Span("pepper").length == 6, "a String");
+
+    # As a value, the expected function type picks the constructor.
+    var make: (int, int) =&gt; Span = Span;
+    assert(make(1, 4).length == 3, "the (int, int) constructor");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Two constructors with the same parameter types</strong> are <code>constructor of 'Span' cannot be redeclared</code>, with a note at the first.</li>
+<li><strong>No constructor fits</strong> is <code>no matching constructor for initialization of 'Span'</code>, and a tie is <code>call to constructor of 'Span' is ambiguous</code>; the
+notes point at each <code>candidate constructor</code>.</li>
+<li><strong>A generic struct’s</strong> constructors resolve in each specialization:
+<code>Pair&lt;int&gt;(1, 2)</code> picks among <code>Pair&lt;int&gt;</code>’s constructors.</li>
+<li><strong>At most one constructor may be <code>[Implicit]</code></strong>: an
+<a href="structs.html#implicit-conversions">implicit conversion</a> needs one
+constructor to call.</li>
+<li><strong><code>[Deprecated]</code> on one constructor</strong> warns only at the calls that
+resolve to it.</li>
+<li><strong>A constructor as a value</strong> (<code>var make: (int, int) =&gt; Span = Span;</code>)
+picks its member from the expected function type, like a function below.</li>
+</ul>
 <h2 id="overloaded-functions-as-values"><a class="header" href="#overloaded-functions-as-values">Overloaded functions as values</a></h2>
 <p>The name of an overload set, written without a call, is a value only where
 the expected function type picks one member exactly: a typed variable, an
@@ -526,9 +575,6 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Constructors</strong> do not overload: a struct has one constructor. Use
-default arguments, or a <a href="structs.html#static-methods">static method</a> for each
-alternative.</li>
 <li><strong>Unary operators</strong> cannot be declared at all yet.</li>
 <li><strong><code>extern</code> functions</strong> do not overload.</li>
 <li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name

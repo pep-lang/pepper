@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
+            window.path_to_searchindex_js = "../searchindex-c188a1df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -353,11 +353,10 @@ optional default: <code>fahrenheit: float = 32.0</code>. The C-style form,
 <code>float fahrenheit = 32.0</code>, is accepted too.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
-<li>A struct has at most one constructor, and declaring a second is an error
-(<code>redefinition of the constructor of 'S'</code>). Constructors do not
-<a href="overloading.html">overload</a> yet: use default arguments, or a <a href="#static-methods">static method</a>
-for each alternative way to build the object. Likewise, a struct has at
-most one destructor.</li>
+<li>A struct may declare several constructors with different parameter
+lists; a call picks one by its arguments, as for any
+<a href="overloading.html#constructors">overloaded</a> function. At most one of them
+may be <code>[Implicit]</code>. A struct has at most one destructor.</li>
 </ul>
 <p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
 <pre><code class="language-pepper">struct Point {

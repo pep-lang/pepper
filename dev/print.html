@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ba5b0f46.js";
+            window.path_to_searchindex_js = "searchindex-c188a1df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -243,8 +243,8 @@ can be stored, passed and called through a function type such as
 <li>A constructor marked <code>[Implicit]</code> converts a value into its struct
 wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
 (see <a href="#implicit-conversions">implicit conversions</a>).</li>
-<li>Free functions, methods, operators, extension methods and trait members
-can be <a href="#overloading-1">overloaded</a>; constructors cannot yet.</li>
+<li>Free functions, methods, operators, constructors, extension methods and
+trait members can be <a href="#overloading-1">overloaded</a>.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel copies what it is sent with <code>copy</code>,
@@ -2620,9 +2620,9 @@ main(): int {
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
 member of it. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
-set too, and so are its static methods and its operators. Constructors and
-extension methods do not overload yet (see
-<a href="#what-is-not-supported-yet-1">What is not supported yet</a>).</p>
+set too, and so are its static methods, its operators, its
+<a href="#constructors">constructors</a>, and the methods its
+<a href="#extensions-and-traits">extensions</a> add.</p>
 <h2 id="declaring-overloads"><a class="header" href="#declaring-overloads">Declaring overloads</a></h2>
 <ul>
 <li>
@@ -2884,6 +2884,55 @@ that name; the copy joins their set.</li>
 <li><strong>A missing overload</strong> is named with its parameter types:
 <code>'Square' does not implement 'area(int)', required by trait 'Shape'</code>.</li>
 </ul>
+<h2 id="constructors"><a class="header" href="#constructors">Constructors</a></h2>
+<p>A struct may declare several constructors. A call <code>Span(...)</code> picks among
+them exactly as a call picks among functions:</p>
+<pre><code class="language-pepper">struct Span {
+    var start: int = 0;
+    var length: int = 0;
+
+    # Constructors overload like functions: each takes its own parameters.
+    construct(this.length = 0) {}
+
+    construct(start: int, end: int) {
+        this.start = start;
+        length = end - start;
+    }
+
+    construct(text: String) {
+        length = text.length() as int;
+    }
+}
+
+main(): int {
+    assert(Span().length == 0, "no arguments");
+    assert(Span(5).length == 5, "one int");
+
+    var middle = Span(2, 7);
+    assert(middle.start == 2 &amp;&amp; middle.length == 5, "two ints");
+
+    assert(Span("pepper").length == 6, "a String");
+
+    # As a value, the expected function type picks the constructor.
+    var make: (int, int) =&gt; Span = Span;
+    assert(make(1, 4).length == 3, "the (int, int) constructor");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Two constructors with the same parameter types</strong> are <code>constructor of 'Span' cannot be redeclared</code>, with a note at the first.</li>
+<li><strong>No constructor fits</strong> is <code>no matching constructor for initialization of 'Span'</code>, and a tie is <code>call to constructor of 'Span' is ambiguous</code>; the
+notes point at each <code>candidate constructor</code>.</li>
+<li><strong>A generic struct’s</strong> constructors resolve in each specialization:
+<code>Pair&lt;int&gt;(1, 2)</code> picks among <code>Pair&lt;int&gt;</code>’s constructors.</li>
+<li><strong>At most one constructor may be <code>[Implicit]</code></strong>: an
+<a href="#implicit-conversions">implicit conversion</a> needs one
+constructor to call.</li>
+<li><strong><code>[Deprecated]</code> on one constructor</strong> warns only at the calls that
+resolve to it.</li>
+<li><strong>A constructor as a value</strong> (<code>var make: (int, int) =&gt; Span = Span;</code>)
+picks its member from the expected function type, like a function below.</li>
+</ul>
 <h2 id="overloaded-functions-as-values"><a class="header" href="#overloaded-functions-as-values">Overloaded functions as values</a></h2>
 <p>The name of an overload set, written without a call, is a value only where
 the expected function type picks one member exactly: a typed variable, an
@@ -2933,9 +2982,6 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
 <h2 id="what-is-not-supported-yet-1"><a class="header" href="#what-is-not-supported-yet-1">What is not supported yet</a></h2>
 <ul>
-<li><strong>Constructors</strong> do not overload: a struct has one constructor. Use
-default arguments, or a <a href="#static-methods">static method</a> for each
-alternative.</li>
 <li><strong>Unary operators</strong> cannot be declared at all yet.</li>
 <li><strong><code>extern</code> functions</strong> do not overload.</li>
 <li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name
@@ -3063,7 +3109,7 @@ main(): int {
 <p>Objects that refer to each other in a loop keep each other alive, so make
 back pointers such as a child’s parent a <code>Weak&lt;T&gt;</code> (see
 <a href="#cycles-leak">Cycles leak</a>).</p>
-<h2 id="constructors"><a class="header" href="#constructors">Constructors</a></h2>
+<h2 id="constructors-1"><a class="header" href="#constructors-1">Constructors</a></h2>
 <p>A constructor sets up a new object. Declare it with <code>construct</code>, followed by
 its parameters and a body. Callers create the object by calling the struct’s
 name like a function.</p>
@@ -3114,11 +3160,10 @@ optional default: <code>fahrenheit: float = 32.0</code>. The C-style form,
 <code>float fahrenheit = 32.0</code>, is accepted too.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
-<li>A struct has at most one constructor, and declaring a second is an error
-(<code>redefinition of the constructor of 'S'</code>). Constructors do not
-<a href="#overloading-1">overload</a> yet: use default arguments, or a <a href="#static-methods">static method</a>
-for each alternative way to build the object. Likewise, a struct has at
-most one destructor.</li>
+<li>A struct may declare several constructors with different parameter
+lists; a call picks one by its arguments, as for any
+<a href="#constructors">overloaded</a> function. At most one of them
+may be <code>[Implicit]</code>. A struct has at most one destructor.</li>
 </ul>
 <p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
 <pre><code class="language-pepper">struct Point {
