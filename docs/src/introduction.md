@@ -54,8 +54,8 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with `export * from` re-exports), `Result`-based error handling, `Optional` values, iteration (with `map` and
 `filter` adapters),
-`with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a `StringBuilder`
-and `to_string` for integers), sortable arrays, hash
+`with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a `StringBuilder`,
+`to_string` and a `ToString` trait, and `$"{name}"` interpolation), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, file-system access,
 TCP and UDP sockets, and command-line arguments (`main(args: String[])`). That is enough to write real
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, is

@@ -10,6 +10,7 @@
 # Language guide
 
 - [Types and variables](language/types-and-variables.md)
+- [String interpolation](language/interpolation.md)
 - [Statements and semicolons](language/statements.md)
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)

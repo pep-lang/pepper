@@ -40,6 +40,7 @@ pub mod tuples;
 pub mod copies;
 pub mod strip_bodies;
 pub mod check_confinement;
+pub mod interpolation;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -86,6 +87,9 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_implicit_types(module));
     step!(resolve_resolvables(module, false)); // resolve as much as possible
     step!(apply_extensions(module, false)); // apply generic/concrete extensions
+    // Values interpolated outside generic code, before specializing
+    // `to_string<T>` for a type it cannot convert fails inside it.
+    step!(interpolation::check_interpolations(module));
     step!(specialize_structs(module));
     step!(specialize_functions(module));
     step!(generic_methods::specialize_methods(module));
@@ -126,6 +130,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             break;
         }
     }
+    // And those in the specializations of generic code.
+    step!(interpolation::check_interpolations(module));
     step!(convert_intrinsics(module));
     step!(resolve_resolvables(module, false));
     step!(convert_member_refs(module));

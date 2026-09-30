@@ -35,6 +35,7 @@ mod function_value_tests;
 mod generic_method_tests;
 mod hash_tests;
 mod implicit_conversion_tests;
+mod interpolation_tests;
 mod int16_tests;
 mod io_tests;
 mod iterator_tests;

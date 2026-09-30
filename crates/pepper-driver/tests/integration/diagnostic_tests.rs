@@ -2468,3 +2468,80 @@ fn different_specializations_do_not_convert() {
          \x20     |                     ^~~~~~~~~~"
     );
 }
+
+#[test]
+fn interpolation_without_to_string() {
+    assert_eq!(
+        error_of("interpolation_no_to_string", "struct Foo {}\n\nmain(): int {\n    var f = Foo();\n    print($\"f = {f}\");\n    return 0;\n}\n"),
+        "main.pep:5:17: error: cannot interpolate a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload\n\
+         \x20   5 |     print($\"f = {f}\");\n\
+         \x20     |                 ^~~\n\
+         main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToString' with 'extend Foo with ToString'\n\
+         \x20   1 | struct Foo {}\n\
+         \x20     |        ^~~"
+    );
+}
+
+#[test]
+fn interpolation_undeclared_name() {
+    assert_eq!(
+        error_of("interpolation_undeclared", "main(): int {\n    print($\"{nope}\");\n    return 0;\n}\n"),
+        "main.pep:2:14: error: use of undeclared identifier 'nope'\n\
+         \x20   2 |     print($\"{nope}\");\n\
+         \x20     |              ^~~~"
+    );
+}
+
+#[test]
+fn interpolation_unmatched_brace() {
+    assert_eq!(
+        error_of("interpolation_unmatched", "main(): int {\n    print($\"a } b\");\n    return 0;\n}\n"),
+        "main.pep:2:15: error: unmatched '}' in interpolated string; write '}}' for a literal '}'\n\
+         \x20   2 |     print($\"a } b\");\n\
+         \x20     |               ^"
+    );
+}
+
+#[test]
+fn interpolation_unclosed_brace() {
+    assert_eq!(
+        error_of("interpolation_unclosed", "main(): int {\n    var x = 1;\n    print($\"a {x b\");\n    return 0;\n}\n"),
+        "main.pep:3:17: error: expected '}'\n\
+         \x20   3 |     print($\"a {x b\");\n\
+         \x20     |                 ^\n\
+         main.pep:3:15: note: to match this '{'\n\
+         \x20   3 |     print($\"a {x b\");\n\
+         \x20     |               ^"
+    );
+}
+
+#[test]
+fn interpolation_missing_name() {
+    assert_eq!(
+        error_of("interpolation_missing_name", "main(): int {\n    print($\"a {} b\");\n    return 0;\n}\n"),
+        "main.pep:2:16: error: expected a variable name after '{' in interpolated string; write '{{' for a literal '{'\n\
+         \x20   2 |     print($\"a {} b\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn interpolation_unterminated() {
+    assert_eq!(
+        error_of("interpolation_unterminated", "main(): int {\n    print($\"a);\n    return 0;\n}\n"),
+        "main.pep:2:12: error: missing terminating '\"' character\n\
+         \x20   2 |     print($\"a);\n\
+         \x20     |            ^"
+    );
+}
+
+#[test]
+fn undeclared_argument_of_generic_call() {
+    // Not "cannot infer the type arguments": the argument names nothing.
+    assert_eq!(
+        error_of("undeclared_generic_argument", "wrap<T>(value: T): T {\n    return value;\n}\n\nmain(): int {\n    wrap(nope);\n    return 0;\n}\n"),
+        "main.pep:6:10: error: use of undeclared identifier 'nope'\n\
+         \x20   6 |     wrap(nope);\n\
+         \x20     |          ^~~~"
+    );
+}

@@ -657,3 +657,5 @@ export struct Path {
         return !(_value == rhs._value);
     }
 }
+
+extend Path with ToString {}

@@ -684,6 +684,127 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     Ok(Literal::String(content))
 }
 
+/// The runtime function an interpolated string calls on each value: it
+/// returns the value's text through `to_string` (runtime/string.pep).
+pub const INTERPOLATE_FUNCTION: &str = "_pep_interpolate";
+
+/// An interpolated string, `$"x is {x}"`: text with variable names in
+/// braces, and `{{` and `}}` for a literal brace. Lowered here to the
+/// concatenation of its text and `_pep_interpolate(name)` for each name
+/// (`"x is " + _pep_interpolate(x)`), so linking, visibility and sema see
+/// ordinary references and calls.
+fn interpolated_string(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    let open = start + 1;
+    *input = &input[2..]; // consume `$"`
+    let mut parts: Vec<Expression> = vec![];
+    let mut text = String::new();
+    let mut text_start = pos(input);
+    // The text from the first line break on: a brace error after one more
+    // likely means the literal was never closed, which is reported at its
+    // opening quote, as clang does.
+    let mut line_break = false;
+    let unclosed = || error_at(Span { start: open, end: open + 1 }, "missing terminating '\"' character".to_string());
+    let flush = |parts: &mut Vec<Expression>, text: &mut String, text_start: usize, end: usize| {
+        if !text.is_empty() {
+            let value = Literal::String(std::mem::take(text));
+            parts.push(Expression::Literal { value, span: Span { start: text_start, end } });
+        }
+    };
+    while let Some(c) = input.chars().next() {
+        match c {
+            '"' => break,
+            '\\' => text.push(escape_sequence(input)?),
+            '{' if input[1..].starts_with('{') => {
+                text.push('{');
+                *input = &input[2..];
+            }
+            '}' if input[1..].starts_with('}') => {
+                text.push('}');
+                *input = &input[2..];
+            }
+            '}' => {
+                if line_break {
+                    return Err(unclosed());
+                }
+                let at = pos(input);
+                return Err(error_at(
+                    Span { start: at, end: at + 1 },
+                    "unmatched '}' in interpolated string; write '}}' for a literal '}'".to_string(),
+                ));
+            }
+            '{' => {
+                flush(&mut parts, &mut text, text_start, pos(input));
+                let brace = pos(input);
+                *input = &input[1..];
+                let name_start = pos(input);
+                let Ok(name) = identifier(input) else {
+                    if line_break {
+                        return Err(unclosed());
+                    }
+                    let end = name_start + input.chars().next().map_or(0, |c| c.len_utf8());
+                    return Err(error_at(
+                        Span { start: name_start, end },
+                        "expected a variable name after '{' in interpolated string; write '{{' for a literal '{'".to_string(),
+                    ));
+                };
+                let name_span = Span { start: name_start, end: pos(input) };
+                if !input.starts_with('}') {
+                    if line_break {
+                        return Err(unclosed());
+                    }
+                    let at = pos(input);
+                    let end = at + input.chars().next().filter(|c| *c != '"').map_or(0, |c| c.len_utf8());
+                    return Err(fail_with(
+                        Diagnostic::error("expected '}'")
+                            .at(Loc::new(FileId::default(), Span { start: at, end }))
+                            .with_note("to match this '{'", Some(Loc::new(FileId::default(), Span { start: brace, end: brace + 1 }))),
+                    ));
+                }
+                *input = &input[1..];
+                let braces = Span { start: brace, end: pos(input) };
+                parts.push(Expression::FunctionCall {
+                    function: Box::new(Expression::SymbolRef { id: INTERPOLATE_FUNCTION.to_string(), span: braces }),
+                    arguments: vec![Expression::SymbolRef { id: name, span: name_span }],
+                    span: braces,
+                });
+                text_start = pos(input);
+            }
+            _ => {
+                if c == '\n' {
+                    line_break = true;
+                }
+                text.push(c);
+                *input = &input[c.len_utf8()..];
+            }
+        }
+    }
+    if !input.starts_with('"') {
+        if line_break {
+            return Err(unclosed());
+        }
+        expected_with_note(input, "'\"'", Some((open, "to match this '\"'")));
+        return Err(cut(input));
+    }
+    flush(&mut parts, &mut text, text_start, pos(input));
+    *input = &input[1..];
+    let span = Span { start, end: pos(input) };
+    let mut parts = parts.into_iter();
+    let Some(first) = parts.next() else {
+        return Ok(Expression::Literal { value: Literal::String(String::new()), span });
+    };
+    let mut joined = parts.fold(first, |lhs, rhs| {
+        let span = Span { start: lhs.span().start, end: rhs.span().end };
+        Expression::Binary { lhs: Box::new(lhs), op: "+".to_string(), rhs: Box::new(rhs), span }
+    });
+    // The whole expression covers the literal, `$` and quotes included.
+    match &mut joined {
+        Expression::Binary { span: whole, .. } | Expression::Literal { span: whole, .. } => *whole = span,
+        _ => {}
+    }
+    Ok(joined)
+}
+
 /// A character literal: one ASCII character or escape sequence between single
 /// quotes (`'a'`, `'"'`, `'\n'`). Its value is that character's byte; `\xHH`
 /// may name any byte, including those above `\x7F`.
@@ -877,6 +998,10 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     if input.starts_with(|c: char| c.is_ascii_digit()) || (input.starts_with('-') && input[1..].starts_with(|c: char| c.is_ascii_digit())) {
         let n = numeric_constant(input)?;
         return Ok(Expression::Literal { value: n, span: Span { start, end: pos(input) } });
+    }
+    // Interpolated string: $"x is {x}"
+    if input.starts_with("$\"") {
+        return interpolated_string(input);
     }
     // String
     if input.starts_with('"') || input.starts_with('@') {
@@ -4145,6 +4270,31 @@ mod tests {
         match e {
             Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "hello world"),
             other => panic!("expected String, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn interpolated_string_lowers_to_concatenation() {
+        // `"n{" + _pep_interpolate(n) + "}"`, with each name at its own span.
+        let source = "$\"n{{{n}}}\"";
+        let e = parse_expr(source);
+        let Expression::Binary { lhs, op, rhs, span } = e else { panic!("expected +") };
+        assert_eq!((op.as_str(), span.start, span.end), ("+", 0, source.len()));
+        assert!(matches!(*rhs, Expression::Literal { value: Literal::String(ref s), .. } if s == "}"));
+        let Expression::Binary { lhs: text, rhs: call, .. } = *lhs else { panic!("expected +") };
+        assert!(matches!(*text, Expression::Literal { value: Literal::String(ref s), .. } if s == "n{"));
+        let Expression::FunctionCall { function, arguments, .. } = *call else { panic!("expected a call") };
+        assert!(matches!(*function, Expression::SymbolRef { ref id, .. } if id == INTERPOLATE_FUNCTION));
+        assert!(matches!(&arguments[..], [Expression::SymbolRef { id, span }] if id == "n" && span.start == 6 && span.end == 7));
+    }
+
+    #[test]
+    fn interpolated_string_without_names_is_a_literal() {
+        for (source, text) in [("$\"\"", ""), ("$\"a\\tb {{}}\"", "a\tb {}")] {
+            match parse_expr(source) {
+                Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, text),
+                other => panic!("expected String, got {:?}", other),
+            }
         }
     }
 

@@ -109,7 +109,13 @@ pub fn check_type_arguments(module: &Module) {
         return;
     }
     let report = |expr: &Expression| {
-        if let Expression::FunctionCall { function, loc, .. } = expr {
+        if let Expression::FunctionCall { function, args, loc } = expr {
+            // An argument naming nothing gives no type to infer from;
+            // `resolve_resolvables` reports it as undeclared instead.
+            let undeclared = args.iter().any(|a| matches!(a, Expression::SymbolRef { ty, .. } if ty.is_empty() || ty.is_auto()));
+            if undeclared {
+                return;
+            }
             if let Some(base) = generics.get(function.as_str()) {
                 let params: Vec<&str> = base.generic_params.iter().map(|p| p.name.as_str()).collect();
                 crate::errors::report(

@@ -67,6 +67,8 @@ signatures ending in `;`. Then declare that a type has the trait with
   match (see [Overloading](overloading.md#extensions-and-traits)).
 - The methods in the extension are ordinary methods of the struct, so you
   call them on a `Square` as usual.
+- The runtime declares traits too. `ToString` (`to_string(): String`) makes
+  a type usable in an [interpolated string](interpolation.md).
 
 The compiler checks that the type has every method the trait declares, either
 in the extension or in the struct itself. A missing method is an error at the

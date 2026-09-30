@@ -158,7 +158,8 @@ number, or a [tuple](tuples.md) of these (printed as `(1, two)`).
 {{#include ../../examples/functions-print.pep}}
 ```
 
-To print several values on one line, build a `String` with `+` first
+To print several values on one line, build a `String` first, with an
+[interpolated string](interpolation.md) (`print($"line {n}")`) or `+`
 (`print("line " + to_string(n))`).
 
 `print` buffers its output. Writing to standard output through

@@ -412,6 +412,15 @@ export struct String {
         return result;
     }
 
+    ## Returns this String, so a String is `ToString` and can be
+    ## interpolated (`$"name: {name}"`). The result is the same object, not
+    ## a copy. O(1).
+    ##
+    ## @returns this String
+    to_string(): String {
+        return this;
+    }
+
     ## Returns the byte at byte offset `index` of the UTF-8 data. O(1).
     ##
     ## The offset counts bytes, not code points, so a byte inside a
@@ -686,6 +695,83 @@ export to_string(value: byte): String {
     return _decimal(value as ulong, false);
 }
 
+## Returns `"true"` or `"false"`.
+##
+## @param value the value to convert
+## @returns a new String, `"true"` or `"false"`
+export to_string(value: bool): String {
+    if (value) {
+        return "true";
+    }
+    return "false";
+}
+
+## Returns the text of `value` by calling its `to_string()` method: the
+## overload for any type that is `ToString`.
+##
+## Declare a concrete override for a type that has no `to_string()` method
+## of its own, or whose interpolated text should differ from it; like
+## `hash<Point>`, an override is used by the whole program, including
+## interpolated strings.
+##
+## @typeParam T the type of `value`; it must have a `to_string()` method
+## unless an override `to_string<T>` exists
+## @param value the value to convert
+## @returns the String that `value.to_string()` returns
+## @example
+##     struct Point {
+##         var x: int = 0;
+##         var y: int = 0;
+##         construct(this.x = 0, this.y = 0) {}
+##     }
+##
+##     to_string<Point>(value: Point): String {
+##         var x = value.x;
+##         var y = value.y;
+##         return $"({x}, {y})";
+##     }
+export to_string<T>(value: T): String {
+    return value.to_string();
+}
+
+## Something with a text form: a `to_string()` method returning a String.
+##
+## An interpolated string (`$"total: {total}"`) converts each value it names
+## with `to_string(value)`, so a struct that implements `ToString` can be
+## interpolated, as can the integers, `bool`, and `String`, which have
+## `to_string` overloads. `String`, `StringBuilder` and `io.Path` implement
+## it.
+##
+## @example
+##     struct Point {
+##         var x: int = 0;
+##         var y: int = 0;
+##         construct(this.x = 0, this.y = 0) {}
+##     }
+##
+##     extend Point with ToString {
+##         to_string(): String {
+##             return $"({x}, {y})";
+##         }
+##     }
+##
+##     var p = Point(1, 2);
+##     assert($"p = {p}" == "p = (1, 2)", "interpolated");
+export trait ToString {
+    ## Returns the text of this value.
+    ##
+    ## @returns a String
+    to_string(): String;
+}
+
+# The call an interpolated string makes for each `{name}` it holds (the
+# parser lowers `$"a{x}"` to `"a" + _pep_interpolate(x)`). A separate name
+# keeps a struct's own `to_string()` method from capturing the call inside
+# its methods, and resolves `to_string` here, in the runtime, for every file.
+export _pep_interpolate<T>(value: T): String {
+    return to_string(value);
+}
+
 # The decimal digits of `magnitude`, after a `-` when `negative`.
 _decimal(magnitude: ulong, negative: bool): String {
     # 20 digits hold the largest ulong; one more for the sign.
@@ -887,3 +973,7 @@ export struct StringIterator {
 extend StringIterator with Iterator<String> {}
 
 extend String with Copyable<String> {}
+
+extend String with ToString {}
+
+extend StringBuilder with ToString {}

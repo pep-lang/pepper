@@ -214,10 +214,16 @@ export lex(source: String): Result<Token[], SyntaxError> {
                     }
                 }
             }
-        } else if (c == '"' or c == '\'') {
+        } else if (c == '"' or c == '\'' or (c == '$' and i + 1 < size and data[i + 1] == '"')) {
             kind = TokenKind.String;
             if (c == '\'') {
                 kind = TokenKind.Character;
+            }
+            # An interpolated string, `$"n = {n}"`, is one token; its names
+            # hold no quotes, so it ends at the next unescaped `"` too.
+            if (c == '$') {
+                c = '"';
+                i += 1;
             }
             i += 1;
             bool closed = false;

@@ -464,6 +464,19 @@ operand is modified. Runs in O(size() + rhs.size()).
     var greeting = "Hello, " + "world";
 ```
 
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+Returns this String, so a String is `ToString` and can be
+interpolated (`$"name: {name}"`). The result is the same object, not
+a copy. O(1).
+
+**Returns**
+- this String
+
 #### byte_at
 
 ```pepper
@@ -789,6 +802,103 @@ Returns the decimal text of `value`.
 
 **Returns**
 - a new String such as `"7"`
+
+## to_string
+
+```pepper
+to_string(value: bool): String
+```
+
+Returns `"true"` or `"false"`.
+
+**Parameters**
+- `value` — the value to convert
+
+**Returns**
+- a new String, `"true"` or `"false"`
+
+## to_string
+
+```pepper
+to_string<T>(value: T): String
+```
+
+Returns the text of `value` by calling its `to_string()` method: the
+overload for any type that is `ToString`.
+
+Declare a concrete override for a type that has no `to_string()` method
+of its own, or whose interpolated text should differ from it; like
+`hash<Point>`, an override is used by the whole program, including
+interpolated strings.
+
+**Type parameters**
+- `T` — the type of `value`; it must have a `to_string()` method unless an override `to_string<T>` exists
+
+**Parameters**
+- `value` — the value to convert
+
+**Returns**
+- the String that `value.to_string()` returns
+
+**Example**
+```pepper
+    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    to_string<Point>(value: Point): String {
+        var x = value.x;
+        var y = value.y;
+        return $"({x}, {y})";
+    }
+```
+
+## ToString
+
+```pepper
+trait ToString
+```
+
+Something with a text form: a `to_string()` method returning a String.
+
+An interpolated string (`$"total: {total}"`) converts each value it names
+with `to_string(value)`, so a struct that implements `ToString` can be
+interpolated, as can the integers, `bool`, and `String`, which have
+`to_string` overloads. `String`, `StringBuilder` and `io.Path` implement
+it.
+
+**Example**
+```pepper
+    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    extend Point with ToString {
+        to_string(): String {
+            return $"({x}, {y})";
+        }
+    }
+
+    var p = Point(1, 2);
+    assert($"p = {p}" == "p = (1, 2)", "interpolated");
+```
+
+### Methods
+
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+Returns the text of this value.
+
+**Returns**
+- a String
 
 ## StringBuilder
 

@@ -9,7 +9,8 @@ export enum TokenKind {
     Identifier,
     ## An integer or floating-point literal (`42`, `0xFF`, `1.5e3`).
     Number,
-    ## A string literal, quotes and escapes included (`"a\n"`).
+    ## A string literal, quotes and escapes included (`"a\n"`), or an
+    ## interpolated one, `$` included (`$"n = {n}"`).
     String,
     ## An operator or punctuation mark (`+`, `==`, `{`, `=>`). `>` is always
     ## its own token, so `Array<Array<int>>` closes two generic lists; the
