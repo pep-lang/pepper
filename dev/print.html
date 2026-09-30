@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2dc62ec0.js";
+            window.path_to_searchindex_js = "searchindex-c810979d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -3697,12 +3697,86 @@ applies to an enum.</li>
 and <code>Color c = 0</code> are errors, and so is comparing a <code>Color</code> with a <code>Size</code>.</li>
 <li><code>value as int</code> (or any integer type) gives a case’s integer value. The
 reverse, <code>1 as Color</code>, is an error, since the integer may not name a case;
-name the case instead.</li>
+name the case, or use <a href="#built-in-methods"><code>from_value</code></a>.</li>
 <li>A slot of an enum type that is not given a value (a field, or a local
 declared without one) holds the case whose value is 0, or the first case
 when no case is 0.</li>
 <li><code>sizeof&lt;Name&gt;()</code> is the size of the representation.</li>
+<li>An enum works wherever an integer does: as a <code>HashMap</code> key or <code>HashSet</code>
+element, in an <code>Atomic&lt;Name&gt;</code>, and in an <code>extern</code> function’s signature,
+where C sees the representation (an <code>int</code> unless the enum names another).</li>
 </ul>
+<h2 id="methods-1"><a class="header" href="#methods-1">Methods</a></h2>
+<p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
+value the method was called on, and a bare call of another method of the
+enum (<code>next()</code>) calls it on <code>this</code>. A <code>static</code> method is called on the enum
+itself (<code>Light.first()</code>).</p>
+<pre><code class="language-pepper"># An enum can declare methods after its cases; `this` is the value.
+enum Light: u8 {
+    Red,
+    Amber,
+    Green,
+
+    may_go(): bool {
+        return this == Light.Green;
+    }
+
+    next(): Light {
+        match (this) {
+            Red =&gt; { return Light.Green; }
+            Amber =&gt; { return Light.Red; }
+            Green =&gt; { return Light.Amber; }
+        }
+        return this;
+    }
+
+    # A bare call of another method acts on `this`.
+    after_two(): Light {
+        return next().next();
+    }
+
+    static first(): Light {
+        return Light.Red;
+    }
+}
+
+main(): int {
+    var light = Light.first();
+    assert(!light.may_go(), "red means stop");
+    assert(light.next().may_go(), "green follows red");
+    assert(light.after_two() == Light.Amber, "then amber");
+
+    # Every enum has name() and from_value().
+    assert(light.name() == "Red", "name() spells the case");
+    var found = Light.from_value(2);
+    assert(found.is_ok() and found.value() == Light.Green, "2 is Green");
+    assert(!Light.from_value(7).is_ok(), "no case has the value 7");
+
+    # Enums key hash maps and fill atomics, like integers.
+    var waits = HashMap&lt;Light, int&gt;();
+    waits[Light.Red] = 30;
+    assert(waits[Light.Red] == 30, "an enum is a hash key");
+    return 0;
+}
+</code></pre>
+<p><code>this</code> is passed by value, like an <code>int</code>: a method cannot change the value it
+was called on. Return a new case instead, as <code>next()</code> does.</p>
+<h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
+<p>Every enum has two methods without declaring them, and cannot declare
+methods of the same names:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>value.name()</code></td><td>Returns the case’s name as written (<code>"Red"</code>), a <code>String</code>.</td></tr>
+<tr><td><code>Name.from_value(n)</code></td><td>Returns a <code>Result&lt;Name&gt;</code>: Ok with the case whose value is <code>n</code>, or an Err when no case has it. <code>n</code> has the enum’s representation type.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>from_value</code> is the checked way back from an integer (from a file, a C
+library or the network) to a case, since <code>as</code> only goes the other way.</p>
 <h2 id="match-1"><a class="header" href="#match-1"><code>match</code></a></h2>
 <p><code>match (value) { ... }</code> runs the arm for the case that <code>value</code> holds:</p>
 <pre><code class="language-pepper"># 'match' runs the arm of the case a value holds, and must handle every case.
@@ -3769,11 +3843,13 @@ on the enclosing loop or function, as they would inside an <code>if</code>.</li>
 <li>Cases cannot carry values yet (<code>Circle(radius: float)</code>); that is the next
 step, and it is what lets <a href="#optional-values"><code>Optional</code></a> and
 <a href="#error-handling-with-result"><code>Result</code></a> become enums.</li>
-<li>Enums cannot have methods, and cannot be generic, yet.</li>
+<li>Enums cannot be generic yet, and neither can their methods. An enum
+cannot declare operators or indexers yet; <code>==</code> and <code>!=</code> are built in.</li>
 <li><code>match</code> works only on enums, and only as a statement: it does not produce
 a value, and cannot match integers, characters or strings yet.</li>
-<li>There is no way to get a case’s name as a string, or to turn an integer
-back into a case, yet.</li>
+<li>An enum cannot be extended (<code>extend Color { ... }</code>); declare its methods
+inside it. So it cannot conform to a trait either, and a trait value is a
+reference to an object, which an enum value is not.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="memory-and-reference-counting"><a class="header" href="#memory-and-reference-counting">Memory and reference counting</a></h1>
@@ -8720,7 +8796,7 @@ whole count 0.</p>
 <ul>
 <li>the number of code points, or 0 for invalid UTF-8</li>
 </ul>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="length"><a class="header" href="#length">length</a></h4>
 <pre><code class="language-pepper">ulong length()
 </code></pre>
@@ -9123,7 +9199,7 @@ would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count() == 0, a.capacity() == 16
 </code></pre>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
 <pre><code class="language-pepper">ArrayIterator&lt;T&gt; iterate()
 </code></pre>
@@ -9715,7 +9791,7 @@ three arrays of that many slots.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="grow-2"><a class="header" href="#grow-2">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
@@ -10259,7 +10335,7 @@ which a <code>for</code> loop drives through the trait.</p>
         return total;
     }
 </code></pre>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
@@ -10502,7 +10578,7 @@ has nothing to bind.</p>
         return open;   # 0: the session was destroyed at the end of the block
     }
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
 <pre><code class="language-pepper">T enter()
 </code></pre>
@@ -10568,7 +10644,7 @@ freely.</p>
 <ul>
 <li><code>target</code> — the object to point at; a null reference makes a weak reference that is always expired</li>
 </ul>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="expired"><a class="header" href="#expired">expired</a></h4>
 <pre><code class="language-pepper">bool expired()
 </code></pre>
@@ -10691,7 +10767,7 @@ default (zero for a POD type, null for a struct type).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">bool is_ok()
 </code></pre>
@@ -10836,7 +10912,7 @@ by itself (<code>if (found)</code>).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var nothing = Optional&lt;String&gt;.none();
 </code></pre>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
 <pre><code class="language-pepper">is_some(): bool
 </code></pre>
@@ -10948,7 +11024,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 <pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
     var p = Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">T load()
 </code></pre>
@@ -11296,7 +11372,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">bool is_not_found()
 </code></pre>
@@ -11487,7 +11563,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
@@ -11889,7 +11965,7 @@ sharing read, write and delete access with other openers.</p>
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
@@ -12688,7 +12764,7 @@ junctions included), which is not followed.</p>
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>
@@ -13116,7 +13192,7 @@ cannot be joined.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
@@ -13218,7 +13294,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
 <pre><code class="language-pepper">T get()
 </code></pre>
@@ -13398,7 +13474,7 @@ under <code>Lock</code>.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="send"><a class="header" href="#send">send</a></h4>
 <pre><code class="language-pepper">bool send(T value)
 </code></pre>
@@ -13643,7 +13719,7 @@ releases it when the Mutex is destroyed.</p>
 <ul>
 <li>if the operating system cannot create a mutex</li>
 </ul>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="lock-1-1"><a class="header" href="#lock-1-1">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
@@ -13935,7 +14011,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">void call(ThreadBody body)
 </code></pre>
@@ -14130,7 +14206,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">T copy(Copies copies)
 </code></pre>
