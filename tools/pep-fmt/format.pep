@@ -517,39 +517,43 @@ export struct Formatter {
         }
         var first = item.child(i);
         if (first.kind == syntax.NODE_TYPE) {
-            var name = item.child(i + 1);
-            bool identifier = name.kind == syntax.NODE_TOKEN and name.leaf.kind == syntax.TOKEN_IDENTIFIER;
-            if (identifier) {
-                # `R name(...)`, optionally with `: R2`, which wins.
-                ulong j = i + 2;
-                syntax.Node parameters = __null;
-                if (j < item.count() and item.child(j).kind == syntax.NODE_PARAMETERS) {
-                    parameters = item.child(j);
-                    j += 1;
-                }
-                bool annotated = j < item.count() and item.child(j).is_token(":");
-                if (!annotated or !first.has_comments()) {
-                    result.add(_leading(first.first_token()));
-                    result.add(_leaf(name));
-                    if (parameters === __null) {
-                        result.add(text("()"));
-                    } else {
-                        result.add(_delimited(parameters, true));
-                    }
-                    if (annotated) {
-                        result.add(_leaf(item.child(j)));
-                        result.add(text(" "));
-                        result.add(_type_name(item.child(j + 1)));
-                        j += 2;
-                    } else {
-                        result.add(text(": "));
-                        result.add(_type_name(first));
-                    }
-                    _function_rest(item, j, result);
-                    return result;
-                }
+            # `R name(...)`, `R ==(...)` or `R [](...)`, optionally with
+            # `: R2`, which wins. The name may span several tokens.
+            ulong j = i + 1;
+            var name = concat();
+            while (j < item.count() and
+                item.child(j).kind == syntax.NODE_TOKEN and
+                !item.child(j).is_token(":") and
+                !item.child(j).is_token(";")) {
+                name.add(_leaf(item.child(j)));
+                j += 1;
             }
-            # An operator method or indexer: `R ==(...)`, `R [](...)`.
+            syntax.Node parameters = __null;
+            if (j < item.count() and item.child(j).kind == syntax.NODE_PARAMETERS) {
+                parameters = item.child(j);
+                j += 1;
+            }
+            bool annotated = j < item.count() and item.child(j).is_token(":");
+            if (!annotated or !first.has_comments()) {
+                result.add(_leading(first.first_token()));
+                result.add(name);
+                if (parameters === __null) {
+                    result.add(text("()"));
+                } else {
+                    result.add(_delimited(parameters, true));
+                }
+                if (annotated) {
+                    result.add(_leaf(item.child(j)));
+                    result.add(text(" "));
+                    result.add(_type_name(item.child(j + 1)));
+                    j += 2;
+                } else {
+                    result.add(text(": "));
+                    result.add(_type_name(first));
+                }
+                _function_rest(item, j, result);
+                return result;
+            }
             result.add(_type_name(first));
             result.add(text(" "));
             i += 1;
@@ -600,7 +604,7 @@ export struct Formatter {
         while (i < item.count()) {
             var child = item.child(i);
             if (child.kind == syntax.NODE_PARAMETERS) {
-                result.add(_delimited(child, false));
+                result.add(_delimited(child, true));
             } else {
                 result.add(text(" "));
                 result.add(_braced(child));

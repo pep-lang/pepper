@@ -13,8 +13,8 @@ struct Rect {
 struct Temperature {
     var celsius: float;
 
-    # Ordinary parameters work too; write them `Type name`.
-    construct(float fahrenheit = 32.0) {
+    # Ordinary parameters work too, written like a function's: `name: Type`.
+    construct(fahrenheit: float = 32.0) {
         celsius = (fahrenheit - 32.0) * 5.0 / 9.0;
     }
 }

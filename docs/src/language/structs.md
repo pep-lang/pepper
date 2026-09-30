@@ -54,9 +54,9 @@ name like a function.
 - A parameter written `this.width = 1` stores its argument directly into the
   field `width`, before the body runs. The `= 1` is required: it is the value
   used when the caller omits that argument.
-- Ordinary parameters are written C-style, `Type name`, with an optional
-  default: `float fahrenheit = 32.0`. The `name: Type` form that functions
-  use is not accepted in a constructor yet.
+- Ordinary parameters are written as in a function, `name: Type`, with an
+  optional default: `fahrenheit: float = 32.0`. The C-style form,
+  `float fahrenheit = 32.0`, is accepted too.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
 - A struct has at most one constructor, and declaring a second is an error
@@ -200,7 +200,9 @@ are the usual way to offer named constructors, such as the standard library's
 ## Operators
 
 A struct can define what the operators do for it. Declare a method whose name
-is the operator, with the return type written first:
+is the operator, written like any other method: `==(other: Money): bool`.
+The C-style form with the return type first, `bool ==(Money other)`, is
+accepted too.
 
 ```pepper
 {{#include ../../examples/structs-operators.pep}}
@@ -214,8 +216,9 @@ can be any type. These binary operators can be defined:
 |---|---|
 | Arithmetic | `+` `-` `*` `/` `%` `**` |
 | Bitwise | `&` `\|` `^` `>>` |
-| Comparison and logical | `==` `!=` `>` `>=` `&&` `\|\|` |
-| Compound assignment | `+=` `-=` `*=` `/=` `%=` `>>=` `&=` `\|=` `^=` |
+| Bitwise shifts | `<<` `>>` |
+| Comparison and logical | `==` `!=` `<` `<=` `>` `>=` `&&` `\|\|` |
+| Compound assignment | `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` `\|=` `^=` |
 
 Keep these rules in mind:
 
@@ -230,12 +233,13 @@ Keep these rules in mind:
 - The left operand decides: `a + b` uses the method on `a`'s type. An
   expression with a number on the left and a struct on the right, such as
   `2 * v`, is not supported.
-- Operators that start with `<` (`<`, `<=`, `<<`, `<<=`) cannot be declared
-  yet, because the parser reads the `<` as the start of generic arguments.
+- Operators that start with `<` (`<`, `<=`, `<<`, `<<=`) can only be declared
+  in the `name: Type` form, `<(other: V): bool`: in the C-style form the
+  parser reads `bool <` as the start of generic arguments.
 - Unary operators (`-a`, `!a`, `~a`) cannot be overloaded yet.
 
 The result of an operator has the type its method returns, so with
-`int -(V other)`, `var r = a - b;` is an `int`.
+`-(other: V): int`, `var r = a - b;` is an `int`.
 
 ### Comparing structs
 
@@ -248,12 +252,13 @@ count as equal, as `String` and `Array` do; `!=` then follows from it. `===` and
 
 ### Indexers
 
-An indexer lets you write `object[index]`. Declare it with the element type,
-`[]`, and parameters, but no name:
+An indexer lets you write `object[index]`. Declare it as a method named `[]`:
 
-- With one parameter, `String [](int index)`, it handles reads: `shelf[i]`.
-- With two parameters, `String [](int index, String value)`, it handles
+- With one parameter, `[](index: int): String`, it handles reads: `shelf[i]`.
+- With two parameters, `[](index: int, value: String): String`, it handles
   writes: `shelf[i] = value`. The second parameter is the value being stored.
+
+The C-style form, `String [](int index)`, is accepted too.
 
 A struct can have both. With both, compound assignment through an index
 (`counts[i] += 1`) reads with the first and writes with the second.

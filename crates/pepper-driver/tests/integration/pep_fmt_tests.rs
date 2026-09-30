@@ -145,10 +145,12 @@ fn assert_formats(input: &str, expected: &str) {
 fn pep_fmt_places_braces_attributes_and_declarations() {
     assert_formats(
         "[Test] [Target(OS(Linux))] export int add(int a, int b = 2)\n{\n  return a+b;\n}\n\
-         struct Point { int X; var Y: int = 0;\n bool ==(Point other) { return X == other.X; }\n\
+         struct Point { int X; var Y: int = 0; construct(int x = 0) { X = x; }\n bool ==(Point other) { return X == other.X; }\n\
+         int [](ulong i) { return X; }\n\
          static Point origin() { return Point(); } }\n",
         "[Test]\n[Target(OS(Linux))]\nexport add(a: int, b: int = 2): int {\n    return a + b;\n}\n\n\
-         struct Point {\n    int X;\n    var Y: int = 0;\n    bool ==(other: Point) { return X == other.X; }\n\
+         struct Point {\n    int X;\n    var Y: int = 0;\n    construct(x: int = 0) {\n        X = x;\n    }\n    ==(other: Point): bool { return X == other.X; }\n\
+         \x20   [](i: ulong): int { return X; }\n\
          \x20   static origin(): Point { return Point(); }\n}\n",
     );
 }

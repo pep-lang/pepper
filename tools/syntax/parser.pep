@@ -930,7 +930,8 @@ struct Parser {
 
     _attributes(): Node[] {
         var list = Array<Node>();
-        while (_at("[")) {
+        # `[]` starts a Pepper-style indexer (`[](index: ulong): T`).
+        while (_at("[") and !_peek_at(1).is("]")) {
             var node = Node(NODE_ATTRIBUTE);
             _take(node);
             _skip();
@@ -1538,6 +1539,38 @@ struct Parser {
         ulong position = _position;
         bool skipped = _skipped;
         ulong children = node.count();
+
+        # Pepper-style indexer or operator method: `[](params)[: Type] { }`,
+        # `==(params)[: Type] { }`.
+        bool pepper_style = false;
+        if (_at("[") and _peek_at(1).is("]")) {
+            _take(node);
+            _take(node);
+            pepper_style = true;
+        } else {
+            var leading = _operator_text();
+            if (_operator_names.contains(leading)) {
+                _take_operator(node, leading);
+                pepper_style = true;
+            }
+        }
+        if (pepper_style) {
+            _skip();
+            if (_at("(")) {
+                node.add(_parameters());
+                if (_failed) {
+                    return node;
+                }
+                _return_annotation(node);
+                if (_failed) {
+                    return node;
+                }
+                _function_body(node, bodyless);
+                return node;
+            }
+            _restore(position, skipped);
+            node.children.truncate(children);
+        }
 
         # Indexer: `T [](params) { }`
         var index_type = Node(NODE_TYPE);

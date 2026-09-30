@@ -5,19 +5,24 @@ struct Money {
 
     # `a == b` calls `a.==(b)`. Without this method, `==` on two structs
     # compares identity, like `===`.
-    bool ==(Money other) {
+    ==(other: Money): bool {
         return cents == other.cents;
     }
 
     # `!=` is derived from `==` when the struct does not define it.
 
+    # `a < b` calls `a.<(b)`.
+    <(other: Money): bool {
+        return cents < other.cents;
+    }
+
     # `a + b` calls `a.+(b)` and returns a new Money.
-    Money +(Money other) {
+    +(other: Money): Money {
         return Money(cents + other.cents);
     }
 
     # `a += b` needs its own method; it is not rewritten to `a = a + b`.
-    Money +=(Money other) {
+    +=(other: Money): Money {
         cents += other.cents;
         return this;
     }
@@ -33,12 +38,12 @@ struct Shelf {
     }
 
     # An indexer with one parameter handles reads: `shelf[i]`.
-    String [](int index) {
+    [](index: int): String {
         return slots[index];
     }
 
     # An indexer with two parameters handles writes: `shelf[i] = value`.
-    String [](int index, String value) {
+    [](index: int, value: String): String {
         slots[index] = value;
         return value;
     }
@@ -56,6 +61,8 @@ main(): int {
     var total = price + Money(50);
     assert(total.cents == 300, "+ makes a new value");
     assert(price.cents == 250, "+ left its operands alone");
+
+    assert(price < total, "< compares cents");
 
     total += Money(25);
     assert(total.cents == 325, "+= updated total in place");

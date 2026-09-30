@@ -1324,7 +1324,8 @@ pub fn is_os_or_arch_name(id: &str) -> bool {
 /// Zero or more attributes preceding a declaration or block.
 fn attributes(input: &mut &str) -> Result<Vec<Attribute>> {
     let mut out = vec![];
-    while input.starts_with('[') {
+    // `[]` starts a Pepper-style indexer (`[](index: ulong): T`), not an attribute.
+    while input.starts_with('[') && !input.starts_with("[]") {
         out.push(attribute(input)?);
         ws(input)?;
     }
@@ -2095,7 +2096,13 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
             is_exported: false,
         });
     }
-    variable_declaration(input, vec![])
+    // `var x: T` / `const x = v`, else a parameter written either way:
+    // `name: Type` or C-style `Type name`.
+    let keyword = |k: &str| input.starts_with(k) && !input[k.len()..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    if keyword("var") || keyword("const") {
+        return variable_declaration(input, vec![]);
+    }
+    typed_parameter(input)
 }
 
 /// A function with an already-parsed name: `name (params) [: TypeName] { body }`.
@@ -2160,8 +2167,33 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
         false
     };
 
-    // Indexer method: `T [](params) { body }`
+    // Pepper-style indexer or operator method: `[](params) [: T] { body }`,
+    // `==(params) [: T] { body }`.
     let before = *input;
+    let op_start = pos(input);
+    let mut after: &str = *input;
+    let op_name = if after.starts_with("[]") {
+        after = &after[2..];
+        Some("[]".to_string())
+    } else {
+        operator_name(&mut after).ok()
+    };
+    if let Some(op) = op_name {
+        let op_span = Span { start: op_start, end: pos(after) };
+        ws(&mut after)?;
+        if after.starts_with('(') {
+            *input = after;
+            let mut f = named_function(input, op.clone(), op_span, start, attributes)?;
+            f.is_static = is_static;
+            if op == "[]" {
+                f.name = if f.parameters.len() >= 2 { "__index_set".into() } else { "__index_get".into() };
+                f.is_indexer = true;
+            }
+            return Ok(f);
+        }
+    }
+
+    // Indexer method: `T [](params) { body }`
     let mut after: &str = *input;
     if let Ok(ty) = type_name_base(&mut after) {
         ws(&mut after)?;
@@ -4190,6 +4222,25 @@ f() { var r = c.Result<int>.ok(1); }");
             }
             other => panic!("{:?}", other),
         }
+    }
+
+    #[test]
+    fn pepper_style_operators_indexers_and_constructor_parameters() {
+        // `name: Type` everywhere, and the same AST as the C-style forms.
+        let pepper = "struct S {\n    int v;\n    construct(a: int = 1, this.v = 0, int b = 2) {}\n    ==(o: S): bool { return true; }\n    \
+                      static +(a: S, b: S): S { return a; }\n    <(o: S): bool { return false; }\n    >>=(n: int): S { return this; }\n    \
+                      [](i: ulong): int { return v; }\n    [](i: ulong, x: int): void { v = x; }\n}\n";
+        let c_style = "struct S {\n    int v;\n    construct(int a = 1, this.v = 0, int b = 2) {}\n    bool ==(S o) { return true; }\n    \
+                       static S +(S a, S b) { return a; }\n    <(o: S): bool { return false; }\n    S >>=(int n) { return this; }\n    \
+                       int [](ulong i) { return v; }\n    void [](ulong i, int x) { v = x; }\n}\n";
+        let m = parse(pepper);
+        let Declaration::Struct(s) = &m.declarations[0] else { panic!("expected a struct") };
+        let names: Vec<&str> = s.methods.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["==", "+", "<", ">>=", "__index_get", "__index_set"]);
+        assert!(s.methods[1].is_static);
+        assert!(s.methods[4].is_indexer && s.methods[5].is_indexer);
+        assert_eq!(s.methods[0].span.start, pepper.find("==(").unwrap());
+        assert_eq!(m.to_string(), parse(c_style).to_string());
     }
 
     #[test]

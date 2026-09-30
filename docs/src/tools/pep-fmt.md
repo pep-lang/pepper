@@ -87,10 +87,9 @@ export open_file(path: String): int { return 0; }
 parameter types after the names and the return type last,
 `add(a: int, b: int): int`. The C-style form, `int add(int a, int b)`, is
 kept for `extern` functions, which mirror C prototypes; `pep-fmt` rewrites
-it everywhere else. Operator methods and indexers (`bool ==(other: Point)`,
-`T [](index: ulong)`) keep their return type in front, because the grammar
-has no other way to write them, and constructor parameters keep the form
-they were written in.
+it everywhere else, including operator methods (`bool ==(Point other)`
+becomes `==(other: Point): bool`), indexers (`T [](ulong index)` becomes
+`[](index: ulong): T`) and constructor parameters.
 
 **Blank lines.** At most one blank line in a row. Top-level structs,
 traits, extensions and functions with a body are separated by one blank
