@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b39ddd66.js";
+            window.path_to_searchindex_js = "searchindex-84056950.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -1789,8 +1789,8 @@ and each call picks the best fit for its arguments. See
 <h2 id="printing-with-print"><a class="header" href="#printing-with-print">Printing with <code>print</code></a></h2>
 <p><code>print</code> is a built-in function that writes its arguments to standard output,
 each on its own line. It accepts any number of arguments, and each one can be a
-<code>String</code>, an integer, a <code>bool</code> (printed as <code>1</code> or <code>0</code>), or a floating-point
-number.</p>
+<code>String</code>, an integer, a <code>bool</code> (printed as <code>1</code> or <code>0</code>), a floating-point
+number, or a <a href="#tuples-and-multiple-return-values">tuple</a> of these (printed as <code>(1, two)</code>).</p>
 <pre><code class="language-pepper"># The print builtin writes each argument on its own line.
 main(): int {
     print("Hello, world!");     # a String
@@ -1859,6 +1859,45 @@ value), each element converts to its element type, as it would on its own:
 element 0 of element 1. An element that does not exist is a compile error.</li>
 <li>Elements are read-only. <code>t.0 = 3</code> is a compile error; build a new tuple
 instead: <code>t = (3, t.1);</code>.</li>
+<li><code>Tuple&lt;A, B&gt;</code> is another spelling of <code>(A, B)</code>, for places where a type in
+angle brackets reads better.</li>
+</ul>
+<h2 id="labels"><a class="header" href="#labels">Labels</a></h2>
+<p>A tuple type can name its elements: <code>(line: int, column: int)</code>. A label is
+another name for a position, so <code>p.line</code> and <code>p.0</code> read the same element:</p>
+<pre><code class="language-pepper"># Labels name a tuple's elements.
+position(): (line: int, column: int) {
+    return (3, 7);
+}
+
+struct Token {
+    var text: String = "";
+    var at: (line: int, column: int);
+}
+
+main(): int {
+    var p = position();
+    assert(p.line == 3 &amp;&amp; p.column == 7, "read by label");
+    assert(p.0 == 3, "positions still work");
+
+    # Labeled and unlabeled tuples convert to each other.
+    var plain: (int, int) = p;
+    assert(plain.1 == 7, "same elements");
+
+    var t = Token();
+    t.at = (5, 6);
+    assert(t.at.column == 6, "a labeled field");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Labels belong to the type you write, not to the value. A labeled tuple and
+an unlabeled one with the same element types are the same type, so each
+converts to the other freely.</li>
+<li>Either every element has a label or none does, and labels in one tuple must
+differ.</li>
+<li>A tuple value cannot have labels yet: write <code>(3, 7)</code> where a
+<code>(line: int, column: int)</code> is expected, not <code>(line: 3, column: 7)</code>.</li>
 </ul>
 <h2 id="destructuring"><a class="header" href="#destructuring">Destructuring</a></h2>
 <p><code>var (a, b) = value;</code> declares one variable for each element of a tuple:</p>
@@ -1918,6 +1957,9 @@ main(): int {
 <li>A name may state its type, <code>var (_, top: long) = …</code>; the element converts
 to it. Without one, the variable takes the element’s type.</li>
 <li><code>const (a, b) = …</code> declares constants.</li>
+<li>Patterns nest: <code>var (id, (name, age)) = …</code> takes an element that is itself
+a tuple apart.</li>
+<li>A <code>for</code> loop destructures each element: <code>for (var (name, count) in pairs)</code>.</li>
 <li><code>(a, b) = value;</code> assigns to places that already exist: variables, fields
 (<code>p.x</code>) and array elements. The whole right side is evaluated before any
 assignment, so <code>(a, b) = (b, a)</code> swaps.</li>
@@ -1938,15 +1980,55 @@ it would after <code>var a = make();</code>.</li>
 </ul>
 <p>A tuple is thread-safe when all its elements are, so a module-scope
 <code>const origin: (int, long) = (0, 0);</code> is allowed.</p>
+<h2 id="collections-comparing-and-printing"><a class="header" href="#collections-comparing-and-printing">Collections, comparing and printing</a></h2>
+<p>A tuple works anywhere a type does, including as a type argument:
+<code>Array&lt;(int, String)&gt;</code>, <code>HashMap&lt;(int, int), String&gt;</code>. Iterating a <code>HashMap</code>
+yields <code>(key, value)</code> tuples:</p>
+<pre><code class="language-pepper">main(): int {
+    # A tuple can be a key: here, a grid position.
+    var grid = HashMap&lt;(int, int), String&gt;();
+    grid[(0, 0)] = "start";
+    grid[(2, 3)] = "goal";
+    assert(grid[(2, 3)] == "goal", "looked up by value");
+
+    # Tuples compare element by element.
+    assert((1, "a") == (1, "a"), "equal");
+    assert((1, "a") != (1, "b"), "different");
+
+    # A HashMap yields (key, value) tuples; destructure them in the loop.
+    var ages = HashMap&lt;String, int&gt;();
+    ages["ada"] = 36;
+    ages["grace"] = 85;
+    var total = 0;
+    for (var (name, age) in ages) {
+        total += age;
+    }
+    assert(total == 121, "every entry");
+
+    # An array of tuples.
+    var pairs = Array&lt;(String, int)&gt;();
+    pairs.append(("x", 1));
+    pairs.append(("y", 2));
+    for (var (name, count) in pairs) {
+        print((name, count));
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>==</code> and <code>!=</code> compare element by element. Each element compares the way it
+would on its own: a type with an <code>==</code> operator (such as <code>String</code>) uses it,
+and any other struct compares by identity (the same object).</li>
+<li>A tuple can be a <code>HashMap</code> key or a <code>HashSet</code> member. Its hash combines the
+hashes of its elements, so equal tuples hash equally.</li>
+<li><code>print((1, "two"))</code> prints <code>(1, two)</code>.</li>
+<li><code>copy(t)</code> (see <a href="#copying-a-value-with-copy">Copying a value</a>) copies each element: a struct
+element as <code>copy</code> would copy it on its own, anything thread-safe as is.</li>
+</ul>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <p>These come in later phases:</p>
 <ul>
-<li>Tuples cannot be generic type arguments yet (<code>Array&lt;(int, String)&gt;</code>,
-<code>HashMap&lt;String, (int, int)&gt;</code>), and there is no <code>Tuple&lt;A, B&gt;</code> spelling.</li>
-<li>Tuples cannot be compared with <code>==</code>, hashed, or passed to <code>print</code>.</li>
-<li>Elements cannot be named (<code>(line: int, column: int)</code>).</li>
-<li>Destructuring does not nest (<code>var (a, (b, c)) = …</code>) and does not work in a
-<code>for</code> loop (<code>for (var (k, v) in map)</code>).</li>
+<li>A tuple value cannot have labels (<code>(line: 3, column: 7)</code>).</li>
 <li><code>match</code> cannot match tuple patterns.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -4794,8 +4876,9 @@ and returns <code>true</code>, or returns <code>false</code> when there are no m
 returning <code>false</code> after that). <code>current()</code> returns the element <code>next()</code>
 moved to.</li>
 <li>An <strong>iterable</strong> is a collection that hands out a fresh iterator from
-<code>iterate()</code>. <code>Array&lt;T&gt;</code> returns an <code>ArrayIterator&lt;T&gt;</code> and <code>String</code> returns a
-<code>StringIterator</code>.</li>
+<code>iterate()</code>. <code>Array&lt;T&gt;</code> returns an <code>ArrayIterator&lt;T&gt;</code>, <code>String</code> returns a
+<code>StringIterator</code>, and <code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> return a
+<code>HashMapIterator&lt;K, V&gt;</code> and a <code>HashSetIterator&lt;K&gt;</code>.</li>
 </ul>
 <p><code>for (var x in source) { body }</code> behaves exactly like this:</p>
 <pre><code class="language-pepper">{
@@ -4814,8 +4897,11 @@ neither is a compile error:</p>
     4 |     for (var x in f) {
       |                   ^
 </code></pre>
-<p><code>HashMap</code> and <code>HashSet</code> do not implement the protocol yet, so they cannot be
-used in a <code>for</code> loop.</p>
+<p><code>HashMap&lt;K, V&gt;</code> yields each entry as a <a href="#tuples-and-multiple-return-values">tuple</a> <code>(K, V)</code>, so
+<code>for (var (name, age) in ages)</code> names both parts; <code>HashSet&lt;K&gt;</code> yields its
+members. Both visit entries in no particular order. Changing a value
+(<code>ages[name] = …</code> for a key already present) is fine while looping, but adding
+or removing an entry stops the program at the iterator’s next step.</p>
 <h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
 <p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
 Each one works lazily, one element at a time as the loop asks for it:</p>
@@ -9409,7 +9495,7 @@ before an insert of a new key would fill half of it (live entries plus
 removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while <code>count()</code>
 stays small.</p>
-<p>There is no iterator, and entries have no defined order.</p>
+<p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples, in no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>K</code> — the key type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
@@ -9612,6 +9698,24 @@ same as <code>insert</code>.</p>
 <pre><code class="language-pepper">    var m = HashMap&lt;String, int&gt;();
     m["hello"] = 5;
 </code></pre>
+<h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): HashMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries as <code>(key, value)</code> tuples, in no
+defined order; <code>for (var (key, value) in map)</code> drives it.</p>
+<p>The iterator holds a reference to the map. Changing a value through an
+existing key while iterating is allowed; adding or removing an entry
+makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first entry</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var total = 0;
+    for (var (name, age) in ages) {
+        total += age;
+    }
+</code></pre>
 <h2 id="hashset"><a class="header" href="#hashset">HashSet</a></h2>
 <pre><code class="language-pepper">struct HashSet&lt;K&gt;
 </code></pre>
@@ -9625,8 +9729,8 @@ insert and releases it on remove, on <code>clear</code>, or when the set is
 destroyed.</p>
 <p>Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the <code>_find_slot</code>
+(members plus tombstones), and it never shrinks. <code>iterate()</code> visits the
+members, in no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>
 <p><strong>Type parameters</strong></p>
@@ -9774,6 +9878,22 @@ element is not inserted.</p>
 <ul>
 <li><code>key</code> (the argument, not an existing equal member), the value of the assignment expression</li>
 </ul>
+<h4 id="iterate-1-1"><a class="header" href="#iterate-1-1">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): HashSetIterator&lt;K&gt;
+</code></pre>
+<p>Returns an iterator over the members, in no defined order;
+<code>for (var x in set)</code> drives it.</p>
+<p>The iterator holds a reference to the set. Adding or removing a member
+while iterating makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first member</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    for (var name in seen) {
+        print(name);
+    }
+</code></pre>
 <h4 id="copy-1-1"><a class="header" href="#copy-1-1">copy</a></h4>
 <pre><code class="language-pepper">HashSet&lt;K&gt; copy(Copies copies)
 </code></pre>
@@ -9791,6 +9911,110 @@ of copying the elements.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
+</ul>
+<h2 id="hashmapiterator"><a class="header" href="#hashmapiterator">HashMapIterator</a></h2>
+<pre><code class="language-pepper">struct HashMapIterator&lt;K, V&gt;
+</code></pre>
+<p>An <code>Iterator&lt;(K, V)&gt;</code> over the entries of a <code>HashMap</code>, as <code>(key, value)</code>
+tuples in no defined order; returned by <code>HashMap.iterate()</code> and driven by
+<code>for (var (key, value) in map)</code>.</p>
+<p>Holds a reference to the map. It is fail-fast: adding or removing an
+entry after the iterator was created makes its next <code>next()</code> or
+<code>current()</code> panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type of the map</li>
+<li><code>V</code> — the value type of the map</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>HashMap.iterate</code></li>
+</ul>
+<h3 id="constructor-2-1"><a class="header" href="#constructor-2-1">Constructor</a></h3>
+<h4 id="hashmapiterator-1"><a class="header" href="#hashmapiterator-1">HashMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: HashMap&lt;K, V&gt;)
+</code></pre>
+<p>Creates an iterator positioned before the first entry of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the map to iterate</li>
+</ul>
+<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“HashMap modified during iteration”)</li>
+</ul>
+<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<pre><code class="language-pepper">current(): (K, V)
+</code></pre>
+<p>Returns the entry the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry as a <code>(key, value)</code> tuple</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“HashMap modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“HashMapIterator.current() without an entry”)</li>
+</ul>
+<h2 id="hashsetiterator"><a class="header" href="#hashsetiterator">HashSetIterator</a></h2>
+<pre><code class="language-pepper">struct HashSetIterator&lt;K&gt;
+</code></pre>
+<p>An <code>Iterator&lt;K&gt;</code> over the members of a <code>HashSet</code>, in no defined order;
+returned by <code>HashSet.iterate()</code> and driven by <code>for (var x in set)</code>.</p>
+<p>Holds a reference to the set. It is fail-fast: adding or removing a member
+after the iterator was created makes its next <code>next()</code> or <code>current()</code>
+panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the element type of the set</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>HashSet.iterate</code></li>
+</ul>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="hashsetiterator-1"><a class="header" href="#hashsetiterator-1">HashSetIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: HashSet&lt;K&gt;)
+</code></pre>
+<p>Creates an iterator positioned before the first member of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the set to iterate</li>
+</ul>
+<h3 id="methods-3-1"><a class="header" href="#methods-3-1">Methods</a></h3>
+<h4 id="next-1-1"><a class="header" href="#next-1-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“HashSet modified during iteration”)</li>
+</ul>
+<h4 id="current-1-1"><a class="header" href="#current-1-1">current</a></h4>
+<pre><code class="language-pepper">current(): K
+</code></pre>
+<p>Returns the member the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“HashSet modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“HashSetIterator.current() without a member”)</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/iterator.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="iterators"><a class="header" href="#iterators">Iterators</a></h1>
@@ -9848,7 +10072,7 @@ which a <code>for</code> loop drives through the trait.</p>
     }
 </code></pre>
 <h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
-<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
 <p>Advances to the next element.</p>
@@ -9858,7 +10082,7 @@ false it must keep returning false.</p>
 <ul>
 <li>true if there is a current element, false when the elements are exhausted</li>
 </ul>
-<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
 <pre><code class="language-pepper">T current()
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -9929,7 +10153,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
 </code></pre>
@@ -9940,7 +10164,7 @@ passed through the transform function.</p>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
 <h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
-<h4 id="next-1-1"><a class="header" href="#next-1-1">next</a></h4>
+<h4 id="next-1-2"><a class="header" href="#next-1-2">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -9948,7 +10172,7 @@ passed through the transform function.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-1-1"><a class="header" href="#current-1-1">current</a></h4>
+<h4 id="current-1-2"><a class="header" href="#current-1-2">current</a></h4>
 <pre><code class="language-pepper">U current()
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
@@ -9979,7 +10203,7 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h3 id="methods-2-2"><a class="header" href="#methods-2-2">Methods</a></h3>
 <h4 id="next-2-1"><a class="header" href="#next-2-1">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
@@ -10022,8 +10246,8 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
         total = total + x;
     }
 </code></pre>
-<h3 id="methods-3-1"><a class="header" href="#methods-3-1">Methods</a></h3>
-<h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
+<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
 <p>Returns a new iterator positioned before the first element.</p>
@@ -10147,7 +10371,7 @@ freely.</p>
         }
     }
 </code></pre>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(T target)
 </code></pre>
@@ -10196,7 +10420,7 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String message = "")
 </code></pre>
@@ -10386,7 +10610,7 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
         return found.value() - 4;   # 0
     }
 </code></pre>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="optional-2"><a class="header" href="#optional-2">Optional()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -10505,7 +10729,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
         return 0;
     }
 </code></pre>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
 </code></pre>
@@ -10842,7 +11066,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(ErrorCode code = 0, String message = "")
 </code></pre>
@@ -11015,7 +11239,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(String value = "")
 </code></pre>
@@ -11454,7 +11678,7 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.value();
 </code></pre>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -11667,7 +11891,7 @@ kinds apart portably.</p>
 <p>The path the File was opened with; <code>&lt;stdin&gt;</code>, <code>&lt;stdout&gt;</code> or
 <code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
 opened.</p>
-<h3 id="constructor-2-1"><a class="header" href="#constructor-2-1">Constructor</a></h3>
+<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
 <h4 id="file-2"><a class="header" href="#file-2">File()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -12253,7 +12477,7 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -12415,7 +12639,7 @@ Windows a read-only file inside the tree is such a failure
         print(r.error().message);
     }
 </code></pre>
-<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;Path&gt; current()
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
@@ -12625,7 +12849,7 @@ detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.
 <pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
 </code></pre>
 <p>1 once the body has returned, else 0.</p>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
 </code></pre>
@@ -12661,7 +12885,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
     worker.join();
 </code></pre>
-<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
 <pre><code class="language-pepper">static Thread current()
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
@@ -12780,7 +13004,7 @@ so destroy one only after the threads that used it have exited.</p>
 <pre><code class="language-pepper">const Key: ulong
 </code></pre>
 <p>The operating-system thread-local key.</p>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -12952,7 +13176,7 @@ the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p
 </code></pre>
 <p>Holds the ring buffer of values (<code>T</code> slots). Read and written only
 under <code>Lock</code>.</p>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
 </code></pre>
@@ -13062,7 +13286,7 @@ change it as soon as it returns.</p>
 <ul>
 <li>the number of queued values</li>
 </ul>
-<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
+<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
 <pre><code class="language-pepper">ChannelIterator&lt;T&gt; iterate()
 </code></pre>
 <p>Returns an iterator that receives until the channel is closed and
@@ -13100,7 +13324,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
 <pre><code class="language-pepper">const Source: Channel&lt;T&gt;
 </code></pre>
 <p>The channel it receives from.</p>
-<h4 id="current-5"><a class="header" href="#current-5">Current</a></h4>
+<h4 id="current-6"><a class="header" href="#current-6">Current</a></h4>
 <pre><code class="language-pepper">T Current
 </code></pre>
 <p>The value the last successful <code>next()</code> received.</p>
@@ -13115,7 +13339,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
-<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
 <p>Waits for the next value.</p>
@@ -13123,7 +13347,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-1-2"><a class="header" href="#current-1-2">current</a></h4>
+<h4 id="current-1-3"><a class="header" href="#current-1-3">current</a></h4>
 <pre><code class="language-pepper">T current()
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
@@ -13199,7 +13423,7 @@ a struct <code>T</code>. Read and written only while the lock is held.</p>
 </code></pre>
 <p>The operating-system id of the thread holding the lock, or 0 when the
 Mutex is unlocked.</p>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct(T value)
 </code></pre>
@@ -13390,7 +13614,7 @@ usually while it still holds the lock.</p>
 </code></pre>
 <p>The platform condition variable: a heap block holding a
 <code>pthread_cond_t</code>, or a Windows <code>CONDITION_VARIABLE</code>.</p>
-<h3 id="constructor-2-2"><a class="header" href="#constructor-2-2">Constructor</a></h3>
+<h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; mutex)
 </code></pre>
@@ -13404,7 +13628,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-2"><a class="header" href="#methods-2-2">Methods</a></h3>
+<h3 id="methods-2-3"><a class="header" href="#methods-2-3">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">void wait()
 </code></pre>
@@ -13497,7 +13721,7 @@ threads.</p>
 <pre><code class="language-pepper">const Finished: __ptr&lt;void&gt;
 </code></pre>
 <p>The platform condition variable that waiting callers sleep on.</p>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -13725,7 +13949,7 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>

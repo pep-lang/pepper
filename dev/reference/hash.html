@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b39ddd66.js";
+            window.path_to_searchindex_js = "../searchindex-84056950.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -257,7 +257,7 @@ before an insert of a new key would fill half of it (live entries plus
 removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while <code>count()</code>
 stays small.</p>
-<p>There is no iterator, and entries have no defined order.</p>
+<p><code>iterate()</code> visits the entries as <code>(key, value)</code> tuples, in no defined order.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>K</code> — the key type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
@@ -460,6 +460,24 @@ same as <code>insert</code>.</p>
 <pre><code class="language-pepper">    var m = HashMap&lt;String, int&gt;();
     m["hello"] = 5;
 </code></pre>
+<h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): HashMapIterator&lt;K, V&gt;
+</code></pre>
+<p>Returns an iterator over the entries as <code>(key, value)</code> tuples, in no
+defined order; <code>for (var (key, value) in map)</code> drives it.</p>
+<p>The iterator holds a reference to the map. Changing a value through an
+existing key while iterating is allowed; adding or removing an entry
+makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first entry</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var total = 0;
+    for (var (name, age) in ages) {
+        total += age;
+    }
+</code></pre>
 <h2 id="hashset"><a class="header" href="#hashset">HashSet</a></h2>
 <pre><code class="language-pepper">struct HashSet&lt;K&gt;
 </code></pre>
@@ -473,8 +491,8 @@ insert and releases it on remove, on <code>clear</code>, or when the set is
 destroyed.</p>
 <p>Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the <code>_find_slot</code>
+(members plus tombstones), and it never shrinks. <code>iterate()</code> visits the
+members, in no defined order. The lowercase fields and the <code>_find_slot</code>
 and <code>grow</code> methods are the table’s internal state: they are public but
 may change, and writing to them breaks the set.</p>
 <p><strong>Type parameters</strong></p>
@@ -622,6 +640,22 @@ element is not inserted.</p>
 <ul>
 <li><code>key</code> (the argument, not an existing equal member), the value of the assignment expression</li>
 </ul>
+<h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): HashSetIterator&lt;K&gt;
+</code></pre>
+<p>Returns an iterator over the members, in no defined order;
+<code>for (var x in set)</code> drives it.</p>
+<p>The iterator holds a reference to the set. Adding or removing a member
+while iterating makes the iterator’s next <code>next()</code> or <code>current()</code> panic.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the first member</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    for (var name in seen) {
+        print(name);
+    }
+</code></pre>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
 <pre><code class="language-pepper">HashSet&lt;K&gt; copy(Copies copies)
 </code></pre>
@@ -639,6 +673,110 @@ of copying the elements.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the copy</li>
+</ul>
+<h2 id="hashmapiterator"><a class="header" href="#hashmapiterator">HashMapIterator</a></h2>
+<pre><code class="language-pepper">struct HashMapIterator&lt;K, V&gt;
+</code></pre>
+<p>An <code>Iterator&lt;(K, V)&gt;</code> over the entries of a <code>HashMap</code>, as <code>(key, value)</code>
+tuples in no defined order; returned by <code>HashMap.iterate()</code> and driven by
+<code>for (var (key, value) in map)</code>.</p>
+<p>Holds a reference to the map. It is fail-fast: adding or removing an
+entry after the iterator was created makes its next <code>next()</code> or
+<code>current()</code> panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the key type of the map</li>
+<li><code>V</code> — the value type of the map</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>HashMap.iterate</code></li>
+</ul>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="hashmapiterator-1"><a class="header" href="#hashmapiterator-1">HashMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: HashMap&lt;K, V&gt;)
+</code></pre>
+<p>Creates an iterator positioned before the first entry of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the map to iterate</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="next"><a class="header" href="#next">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“HashMap modified during iteration”)</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
+<pre><code class="language-pepper">current(): (K, V)
+</code></pre>
+<p>Returns the entry the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current entry as a <code>(key, value)</code> tuple</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created (“HashMap modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“HashMapIterator.current() without an entry”)</li>
+</ul>
+<h2 id="hashsetiterator"><a class="header" href="#hashsetiterator">HashSetIterator</a></h2>
+<pre><code class="language-pepper">struct HashSetIterator&lt;K&gt;
+</code></pre>
+<p>An <code>Iterator&lt;K&gt;</code> over the members of a <code>HashSet</code>, in no defined order;
+returned by <code>HashSet.iterate()</code> and driven by <code>for (var x in set)</code>.</p>
+<p>Holds a reference to the set. It is fail-fast: adding or removing a member
+after the iterator was created makes its next <code>next()</code> or <code>current()</code>
+panic.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the element type of the set</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>HashSet.iterate</code></li>
+</ul>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="hashsetiterator-1"><a class="header" href="#hashsetiterator-1">HashSetIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: HashSet&lt;K&gt;)
+</code></pre>
+<p>Creates an iterator positioned before the first member of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the set to iterate</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“HashSet modified during iteration”)</li>
+</ul>
+<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<pre><code class="language-pepper">current(): K
+</code></pre>
+<p>Returns the member the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created (“HashSet modified during iteration”)</li>
+<li>if <code>next()</code> was never called or already returned false (“HashSetIterator.current() without a member”)</li>
 </ul>
 
                     </main>

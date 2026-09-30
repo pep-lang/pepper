@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b39ddd66.js";
+            window.path_to_searchindex_js = "../searchindex-84056950.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -225,6 +225,45 @@ value), each element converts to its element type, as it would on its own:
 element 0 of element 1. An element that does not exist is a compile error.</li>
 <li>Elements are read-only. <code>t.0 = 3</code> is a compile error; build a new tuple
 instead: <code>t = (3, t.1);</code>.</li>
+<li><code>Tuple&lt;A, B&gt;</code> is another spelling of <code>(A, B)</code>, for places where a type in
+angle brackets reads better.</li>
+</ul>
+<h2 id="labels"><a class="header" href="#labels">Labels</a></h2>
+<p>A tuple type can name its elements: <code>(line: int, column: int)</code>. A label is
+another name for a position, so <code>p.line</code> and <code>p.0</code> read the same element:</p>
+<pre><code class="language-pepper"># Labels name a tuple's elements.
+position(): (line: int, column: int) {
+    return (3, 7);
+}
+
+struct Token {
+    var text: String = "";
+    var at: (line: int, column: int);
+}
+
+main(): int {
+    var p = position();
+    assert(p.line == 3 &amp;&amp; p.column == 7, "read by label");
+    assert(p.0 == 3, "positions still work");
+
+    # Labeled and unlabeled tuples convert to each other.
+    var plain: (int, int) = p;
+    assert(plain.1 == 7, "same elements");
+
+    var t = Token();
+    t.at = (5, 6);
+    assert(t.at.column == 6, "a labeled field");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Labels belong to the type you write, not to the value. A labeled tuple and
+an unlabeled one with the same element types are the same type, so each
+converts to the other freely.</li>
+<li>Either every element has a label or none does, and labels in one tuple must
+differ.</li>
+<li>A tuple value cannot have labels yet: write <code>(3, 7)</code> where a
+<code>(line: int, column: int)</code> is expected, not <code>(line: 3, column: 7)</code>.</li>
 </ul>
 <h2 id="destructuring"><a class="header" href="#destructuring">Destructuring</a></h2>
 <p><code>var (a, b) = value;</code> declares one variable for each element of a tuple:</p>
@@ -284,6 +323,9 @@ main(): int {
 <li>A name may state its type, <code>var (_, top: long) = …</code>; the element converts
 to it. Without one, the variable takes the element’s type.</li>
 <li><code>const (a, b) = …</code> declares constants.</li>
+<li>Patterns nest: <code>var (id, (name, age)) = …</code> takes an element that is itself
+a tuple apart.</li>
+<li>A <code>for</code> loop destructures each element: <code>for (var (name, count) in pairs)</code>.</li>
 <li><code>(a, b) = value;</code> assigns to places that already exist: variables, fields
 (<code>p.x</code>) and array elements. The whole right side is evaluated before any
 assignment, so <code>(a, b) = (b, a)</code> swaps.</li>
@@ -304,15 +346,55 @@ it would after <code>var a = make();</code>.</li>
 </ul>
 <p>A tuple is thread-safe when all its elements are, so a module-scope
 <code>const origin: (int, long) = (0, 0);</code> is allowed.</p>
+<h2 id="collections-comparing-and-printing"><a class="header" href="#collections-comparing-and-printing">Collections, comparing and printing</a></h2>
+<p>A tuple works anywhere a type does, including as a type argument:
+<code>Array&lt;(int, String)&gt;</code>, <code>HashMap&lt;(int, int), String&gt;</code>. Iterating a <code>HashMap</code>
+yields <code>(key, value)</code> tuples:</p>
+<pre><code class="language-pepper">main(): int {
+    # A tuple can be a key: here, a grid position.
+    var grid = HashMap&lt;(int, int), String&gt;();
+    grid[(0, 0)] = "start";
+    grid[(2, 3)] = "goal";
+    assert(grid[(2, 3)] == "goal", "looked up by value");
+
+    # Tuples compare element by element.
+    assert((1, "a") == (1, "a"), "equal");
+    assert((1, "a") != (1, "b"), "different");
+
+    # A HashMap yields (key, value) tuples; destructure them in the loop.
+    var ages = HashMap&lt;String, int&gt;();
+    ages["ada"] = 36;
+    ages["grace"] = 85;
+    var total = 0;
+    for (var (name, age) in ages) {
+        total += age;
+    }
+    assert(total == 121, "every entry");
+
+    # An array of tuples.
+    var pairs = Array&lt;(String, int)&gt;();
+    pairs.append(("x", 1));
+    pairs.append(("y", 2));
+    for (var (name, count) in pairs) {
+        print((name, count));
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>==</code> and <code>!=</code> compare element by element. Each element compares the way it
+would on its own: a type with an <code>==</code> operator (such as <code>String</code>) uses it,
+and any other struct compares by identity (the same object).</li>
+<li>A tuple can be a <code>HashMap</code> key or a <code>HashSet</code> member. Its hash combines the
+hashes of its elements, so equal tuples hash equally.</li>
+<li><code>print((1, "two"))</code> prints <code>(1, two)</code>.</li>
+<li><code>copy(t)</code> (see <a href="memory.html#copying-a-value-with-copy">Copying a value</a>) copies each element: a struct
+element as <code>copy</code> would copy it on its own, anything thread-safe as is.</li>
+</ul>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <p>These come in later phases:</p>
 <ul>
-<li>Tuples cannot be generic type arguments yet (<code>Array&lt;(int, String)&gt;</code>,
-<code>HashMap&lt;String, (int, int)&gt;</code>), and there is no <code>Tuple&lt;A, B&gt;</code> spelling.</li>
-<li>Tuples cannot be compared with <code>==</code>, hashed, or passed to <code>print</code>.</li>
-<li>Elements cannot be named (<code>(line: int, column: int)</code>).</li>
-<li>Destructuring does not nest (<code>var (a, (b, c)) = …</code>) and does not work in a
-<code>for</code> loop (<code>for (var (k, v) in map)</code>).</li>
+<li>A tuple value cannot have labels (<code>(line: 3, column: 7)</code>).</li>
 <li><code>match</code> cannot match tuple patterns.</li>
 </ul>
 

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b39ddd66.js";
+            window.path_to_searchindex_js = "../searchindex-84056950.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -335,8 +335,9 @@ and returns <code>true</code>, or returns <code>false</code> when there are no m
 returning <code>false</code> after that). <code>current()</code> returns the element <code>next()</code>
 moved to.</li>
 <li>An <strong>iterable</strong> is a collection that hands out a fresh iterator from
-<code>iterate()</code>. <code>Array&lt;T&gt;</code> returns an <code>ArrayIterator&lt;T&gt;</code> and <code>String</code> returns a
-<code>StringIterator</code>.</li>
+<code>iterate()</code>. <code>Array&lt;T&gt;</code> returns an <code>ArrayIterator&lt;T&gt;</code>, <code>String</code> returns a
+<code>StringIterator</code>, and <code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> return a
+<code>HashMapIterator&lt;K, V&gt;</code> and a <code>HashSetIterator&lt;K&gt;</code>.</li>
 </ul>
 <p><code>for (var x in source) { body }</code> behaves exactly like this:</p>
 <pre><code class="language-pepper">{
@@ -355,8 +356,11 @@ neither is a compile error:</p>
     4 |     for (var x in f) {
       |                   ^
 </code></pre>
-<p><code>HashMap</code> and <code>HashSet</code> do not implement the protocol yet, so they cannot be
-used in a <code>for</code> loop.</p>
+<p><code>HashMap&lt;K, V&gt;</code> yields each entry as a <a href="tuples.html">tuple</a> <code>(K, V)</code>, so
+<code>for (var (name, age) in ages)</code> names both parts; <code>HashSet&lt;K&gt;</code> yields its
+members. Both visit entries in no particular order. Changing a value
+(<code>ages[name] = …</code> for a key already present) is fine while looping, but adding
+or removing an entry stops the program at the iterator’s next step.</p>
 <h2 id="adapters"><a class="header" href="#adapters">Adapters</a></h2>
 <p><code>Iterator&lt;T&gt;</code> has two default methods that wrap an iterator in another one.
 Each one works lazily, one element at a time as the loop asks for it:</p>
