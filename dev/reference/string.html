@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e20dfc5e.js";
+            window.path_to_searchindex_js = "../searchindex-16cc205f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -891,7 +891,7 @@ interpolated strings.</p>
 <pre><code class="language-pepper">trait ToString
 </code></pre>
 <p>Something with a text form: a <code>to_string()</code> method returning a String.</p>
-<p>An interpolated string (<code>$"total: {total}"</code>) converts each value it names
+<p>An interpolated string (<code>$"total: {a + b}"</code>) converts each value it holds
 with <code>to_string(value)</code>, so a struct that implements <code>ToString</code> can be
 interpolated, as can the integers, <code>bool</code>, and <code>String</code>, which have
 <code>to_string</code> overloads. <code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement

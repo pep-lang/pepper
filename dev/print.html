@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e20dfc5e.js";
+            window.path_to_searchindex_js = "searchindex-16cc205f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e51e852e.js"></script>
@@ -229,7 +229,7 @@ traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
-<code>to_string</code> and a <code>ToString</code> trait, and <code>$"{name}"</code> interpolation), sortable arrays, hash
+<code>to_string</code> and a <code>ToString</code> trait, and <code>$"{a + b}"</code> interpolation), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
 TCP and UDP sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
@@ -1068,8 +1068,8 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>An interpolated string puts variables’ text into a string literal:
-<code>$"line {line}: {message}"</code>. <a href="#string-interpolation">String interpolation</a> covers
+<p>An interpolated string puts values’ text into a string literal:
+<code>$"line {line + 1}: {message}"</code>. <a href="#string-interpolation">String interpolation</a> covers
 which values it accepts.</p>
 <p>A backslash in a string literal starts an escape sequence, as in C and Rust:</p>
 <div class="table-wrapper">
@@ -1425,9 +1425,9 @@ with the parentheses.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="string-interpolation"><a class="header" href="#string-interpolation">String interpolation</a></h1>
 <p>An interpolated string is a string literal with a <code>$</code> before its opening
-quote. Inside it, a variable’s name in braces, <code>{name}</code>, is replaced by that
-variable’s text:</p>
-<pre><code class="language-pepper"># Interpolated strings: `$"..."` with variable names in braces.
+quote. Inside it, an expression in braces, <code>{name}</code> or <code>{a + b}</code>, is replaced
+by the text of its value:</p>
+<pre><code class="language-pepper"># Interpolated strings: `$"..."` with expressions in braces.
 main(): int {
     var name = "Pepper";
     var count = 3;
@@ -1437,6 +1437,12 @@ main(): int {
     var line = $"{name} has {count} items, ready: {ready}";
     assert(line == "Pepper has 3 items, ready: true", "integers, bool and String");
 
+    # Any expression fits between the braces, strings included.
+    var sizes = [2, 5];
+    assert($"total {sizes[0] + sizes[1]}" == "total 7", "arithmetic and index");
+    assert($"{name.size()} letters" == "6 letters", "call");
+    assert($"{count &gt; 1 ? "many" : "one"}" == "many", "ternary with strings");
+
     # Doubled braces are literal braces; escapes work as in any string.
     assert($"{{count}} = {count}" == "{count} = 3", "literal braces");
     assert($"tab\t{count}\n" == "tab\t3\n", "escapes");
@@ -1444,13 +1450,22 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li><strong><code>{name}</code></strong> names a local, a parameter, a global, or (inside a method) a
-field. Only a name fits between the braces: no spaces, member accesses
-(<code>{p.x}</code>), calls or other expressions. Store the value in a variable first.</li>
+<li><strong><code>{expression}</code></strong> holds any expression but an assignment: a name (a
+local, a parameter, a global, or inside a method a field), a member access
+(<code>{p.x}</code>), a call (<code>{f(x)}</code>), an index (<code>{items[0]}</code>), arithmetic
+(<code>{a + b}</code>), or a ternary (<code>{a &gt; b ? a : b}</code>). Spaces around it are
+ignored.</li>
+<li><strong>String literals</strong> may appear inside the braces (<code>{greet("you")}</code>), and
+so may character literals and other interpolated strings. A <code>}</code> inside
+them, or inside brackets of the expression’s own, does not end it.</li>
+<li>The expression fits on <strong>one line</strong> and holds <strong>no comment</strong>: a line break
+or a <code>#</code> inside the braces is an error.</li>
+<li>There are <strong>no format specifiers</strong>: <code>{x:5}</code> is an error. Pad or format the
+value with a call instead.</li>
 <li><strong><code>{{</code> and <code>}}</code></strong> are a literal <code>{</code> and <code>}</code>.</li>
 <li><strong>Escapes</strong> (<code>\n</code>, <code>\t</code>, <code>\"</code>, …) work as in any
 <a href="#strings">string literal</a>.</li>
-<li>The result is a new <code>String</code>. An interpolated string with no names is an
+<li>The result is a new <code>String</code>. An interpolated string with no braces is an
 ordinary string.</li>
 </ul>
 <h2 id="which-values-can-be-interpolated"><a class="header" href="#which-values-can-be-interpolated">Which values can be interpolated</a></h2>
@@ -1487,8 +1502,7 @@ struct Celsius {
 }
 
 to_string&lt;Celsius&gt;(value: Celsius): String {
-    var degrees = value.degrees;
-    return $"{degrees} C";
+    return $"{value.degrees} C";
 }
 
 main(): int {
@@ -1521,21 +1535,28 @@ main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToStri
     1 | struct Foo {}
       |        ^~~
 </code></pre>
-<p>A lone brace is an error, since doubling it is how to write one:</p>
+<p>A lone brace is an error, since doubling it is how to write one, and so is
+anything after the expression but its <code>}</code>:</p>
 <pre><code class="language-text">main.pep:2:15: error: unmatched '}' in interpolated string; write '}}' for a literal '}'
     2 |     print($"a } b");
       |               ^
-main.pep:3:17: error: expected '}'
+main.pep:3:18: error: expected '}'
     3 |     print($"a {x b");
-      |                 ^
+      |                  ^
 main.pep:3:15: note: to match this '{'
     3 |     print($"a {x b");
       |               ^
 </code></pre>
-<p>A name that is not declared is reported like any other
-(<code>use of undeclared identifier 'x'</code>), at the name inside the braces.</p>
+<p>Empty braces are reported where the expression should start:</p>
+<pre><code class="language-text">main.pep:2:16: error: expected an expression after '{' in interpolated string; write '{{' for a literal '{'
+    2 |     print($"a {} b");
+      |                ^
+</code></pre>
+<p>An error in the expression itself, such as a name that is not declared
+(<code>use of undeclared identifier 'x'</code>), is reported like any other, at the
+token inside the braces.</p>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
-<p>The compiler turns <code>$"({x}, {y})"</code> into <code>"(" + to_string(x) + ", " + to_string(y) + ")"</code>, resolving <code>to_string</code> in the runtime rather than in
+<p>The compiler turns <code>$"({x}, {y + 1})"</code> into <code>"(" + to_string(x) + ", " + to_string(y + 1) + ")"</code>, resolving <code>to_string</code> in the runtime rather than in
 your file. So a struct’s own <code>to_string()</code> method can interpolate its fields
 without calling itself, and the result costs what the same <code>+</code> expression
 does.</p>
@@ -11088,7 +11109,7 @@ interpolated strings.</p>
 <pre><code class="language-pepper">trait ToString
 </code></pre>
 <p>Something with a text form: a <code>to_string()</code> method returning a String.</p>
-<p>An interpolated string (<code>$"total: {total}"</code>) converts each value it names
+<p>An interpolated string (<code>$"total: {a + b}"</code>) converts each value it holds
 with <code>to_string(value)</code>, so a struct that implements <code>ToString</code> can be
 interpolated, as can the integers, <code>bool</code>, and <code>String</code>, which have
 <code>to_string</code> overloads. <code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement

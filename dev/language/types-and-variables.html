@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e20dfc5e.js";
+            window.path_to_searchindex_js = "../searchindex-16cc205f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -386,8 +386,8 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>An interpolated string puts variables’ text into a string literal:
-<code>$"line {line}: {message}"</code>. <a href="interpolation.html">String interpolation</a> covers
+<p>An interpolated string puts values’ text into a string literal:
+<code>$"line {line + 1}: {message}"</code>. <a href="interpolation.html">String interpolation</a> covers
 which values it accepts.</p>
 <p>A backslash in a string literal starts an escape sequence, as in C and Rust:</p>
 <div class="table-wrapper">
