@@ -59,7 +59,7 @@ pub(crate) fn build(name: &str, source: &str) -> Result<PathBuf, String> {
 /// Build and run `source`; return (exit code, stdout, stderr).
 fn run(name: &str, source: &str) -> (i32, String, String) {
     let exe = build(name, source).unwrap_or_else(|e| panic!("{name}: compile failed: {e}"));
-    let output = Command::new(&exe).output().expect("spawn");
+    let output = support::run_program(&mut Command::new(&exe), source).expect("spawn");
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     (output.status.code().unwrap_or(-1), stdout, stderr)

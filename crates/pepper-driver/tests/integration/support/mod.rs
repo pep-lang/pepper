@@ -1,7 +1,25 @@
 //! Helpers shared by the integration tests. A module that needs one
 //! declares `use crate::support;`.
 
+use std::process::{Command, Output};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// Runs `command`, a compiled test program built from `source`, and waits
+/// for its output.
+///
+/// A program that calls `async.run` goes wide: its scheduler starts one
+/// worker thread per logical CPU. With the harness running many tests at
+/// once, several such programs together put hundreds of busy threads on the
+/// host, and each one ran about ten times slower than alone. So those run
+/// one at a time; everything else, compiling included, stays parallel.
+pub fn run_program(command: &mut Command, source: &str) -> std::io::Result<Output> {
+    static WIDE: Mutex<()> = Mutex::new(());
+    // A test that panicked while holding the lock poisons it; the lock
+    // guards no data, so carry on.
+    let _wide = source.contains("async.run").then(|| WIDE.lock().unwrap_or_else(|e| e.into_inner()));
+    command.output()
+}
 
 /// Calls `f` on every item, spread over one thread per logical CPU, and
 /// returns the results in item order.

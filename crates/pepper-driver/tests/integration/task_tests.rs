@@ -1383,7 +1383,7 @@ fn tasks_are_cancelled_and_awaited() {
 /// Runs `source`, which must panic with `message`.
 fn assert_panics(name: &str, source: &str, message: &str) {
     let exe = crate::io_tests::build(name, source).expect("build");
-    let output = std::process::Command::new(&exe).output().expect("spawn");
+    let output = support::run_program(&mut std::process::Command::new(&exe), source).expect("spawn");
     let text = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     assert!(!output.status.success(), "{name} should panic");
     assert!(text.contains(message), "{name} output: {text}");
