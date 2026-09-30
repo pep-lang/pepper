@@ -1,6 +1,6 @@
 
 
 main(): int {
-    const str = "TEST";
-    return str.length() - 4;
+    const STR = "TEST";
+    return STR.length() - 4;
 }

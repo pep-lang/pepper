@@ -8,7 +8,7 @@ struct Box {
     construct(this.v = 0) {}
 }
 
-const global_alias_value: I = 3;
+const GLOBAL_ALIAS_VALUE: I = 3;
 
 main(): int {
     # Non-generic alias in a local.
@@ -34,7 +34,7 @@ main(): int {
     # Alias in a struct field and module global.
     var s = Box();
     if (s.v != 0) { return 6; }
-    if (global_alias_value != 3) { return 7; }
+    if (GLOBAL_ALIAS_VALUE != 3) { return 7; }
 
     return 0;
 }

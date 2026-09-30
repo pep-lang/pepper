@@ -104,6 +104,9 @@ than 120 columns when it has nowhere to break.
 export open_file(path: String): int { return 0; }
 ```
 
+A parameter's attributes are the exception: they stay on the parameter's line,
+in front of it, as in `construct([Sending] T value)`.
+
 **Declarations.** Pepper functions and methods are written with the
 parameter types after the names and the return type last,
 `add(a: int, b: int): int`. The C-style form, `int add(int a, int b)`, is

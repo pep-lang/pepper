@@ -250,6 +250,20 @@ name working behind `[Deprecated("use 'new_name' instead", "new_name")]` (see
 data member cannot answer to two names, so a renamed public field changes
 outright; say so in the PR.
 
+## Attributes go one per line, above their target
+
+In all Pepper code, each attribute sits on its own line, and the declaration
+it applies to starts on the next line, as `pep-fmt` writes it:
+
+```pepper
+[Target(OS(Linux))]
+[Deprecated("use 'open' instead", "open")]
+export open_file(path: String): int { ... }
+```
+
+The exception is a parameter: its attributes stay on its line, in front of
+it (`construct([Sending] T value)`).
+
 ## Library code is documented with `##` doc comments
 
 Every public declaration in library code (`runtime/`, and any library added

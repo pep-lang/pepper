@@ -6,13 +6,13 @@ struct Label {
     construct(String text) { length = text.length(); }
 }
 
-const limit = 7;
+const LIMIT = 7;
 const counter = Atomic<int>(7);
 const name = Label("pepper");
 
 main(): int {
     # Read a global.
-    if (limit != 7 || counter.load() != 7) { return -1; }
+    if (LIMIT != 7 || counter.load() != 7) { return -1; }
 
     # Change state through a global, then read it back.
     counter.fetch_add(3);
