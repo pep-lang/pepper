@@ -108,11 +108,30 @@ library uses this to give [`hash<String>`](../reference/hash.md) a
 content-based hash, while `hash<T>` hashes other structs by identity.
 
 An override can name a built-in type (`int`, `bool`, `String`, and so on) or
-one of your own structs, such as `describe<Point>`. An override for a struct
-must be in the same file as the generic function: in another file,
-`describe<Point>` is a second, private generic function whose type parameter
-is named `Point` (see
-[Visibility](visibility.md#each-file-has-its-own-namespace)).
+a struct, such as `describe<Point>`. It may be declared in any file that can
+see both the generic function and the struct: here `main.pep` overrides
+`shapes.pep`'s `describe<T>` for its own `Point`, and the generic code in
+`shapes.pep` uses the override too:
+
+```pepper
+{{#include ../../examples/generics-struct-override/shapes.pep}}
+```
+
+```pepper
+{{#include ../../examples/generics-struct-override/main.pep}}
+```
+
+A function whose type parameters all name types the file can see (its own,
+the ones it imports, under any name such as `P` after
+`import [Point as P] from geo`, and the standard library's) is an override
+when the file can also see a generic function of that name and number of
+type parameters (its own, an imported one, or the standard library's);
+otherwise a struct's name is just the name of a type parameter. The generic
+may be spelled by any name the file has for it (`show<Point>` after
+`import [describe as show]`). A type argument must name a struct, not a type
+alias or a trait. Declaring a generic and another function of the same name in one file is an
+error, since it usually means an override whose type argument the file
+cannot see, or of a generic the file's own function of that name hides.
 
 To add methods to a generic struct from outside its declaration, use an
 [extension](traits-and-extensions.md#extending-generic-structs).

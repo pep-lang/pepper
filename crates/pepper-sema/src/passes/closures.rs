@@ -464,7 +464,9 @@ pub(crate) fn field(name: &str, ty: TypeName, default: Option<Expression>, loc: 
 /// Lift the literals in `function`, whose parameters are locals.
 fn lift_function(function: &mut FunctionDef, ctx: &Context, lifted: &mut Vec<StructDef>) {
     let mut ctx = ctx.clone();
-    ctx.generics.extend(function.generic_params.iter().cloned());
+    // An override's type arguments (`describe<Point>`) are types, not
+    // parameters the lifted closure would take.
+    ctx.generics.extend(function.generic_params.iter().filter(|p| !p.is_argument).cloned());
     let mut lifter = Lifter::new(&ctx);
     for param in &mut function.parameters {
         if let Some(default) = &mut param.default {
@@ -533,7 +535,7 @@ pub fn lift_closures(module: &mut Module) {
                 .sub_types
                 .iter()
                 .filter(|t| t.sub_types.is_empty() && !types.contains(&t.name) && !type_name::INTEGRAL_TYPES.contains(t.name.as_str()))
-                .map(|t| GenericParam { name: t.name.clone(), default: None })
+                .map(|t| GenericParam { name: t.name.clone(), default: None, is_argument: false })
                 .collect();
             let target = module.structs.iter().find(|s| s.ty.name == ext.target.name);
             let mut methods: HashSet<String> = target.map(|s| s.method_members.iter().map(|m| m.name.clone()).collect()).unwrap_or_default();

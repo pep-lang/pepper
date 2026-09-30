@@ -528,6 +528,9 @@ pub struct GenericParam {
     pub name: String,
     /// Default type substituted when a use omits this argument.
     pub default: Option<TypeName>,
+    /// A type argument, not a parameter: module linking decided the function
+    /// is a concrete override (see `ast::GenericParam::is_argument`).
+    pub is_argument: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -768,6 +771,10 @@ pub struct Module {
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,
+    /// Built from files module linking processed, which decided which
+    /// generic functions are concrete overrides and marked them
+    /// (`GenericParam::is_argument`): sema follows those marks alone.
+    pub linked: bool,
 }
 
 impl Module {
@@ -782,5 +789,6 @@ impl Module {
         self.struct_specs.extend(other.struct_specs);
         self.func_specs.extend(other.func_specs);
         self.type_aliases.extend(other.type_aliases);
+        self.linked |= other.linked;
     }
 }

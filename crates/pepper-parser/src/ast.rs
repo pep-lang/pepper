@@ -288,8 +288,14 @@ pub struct FunctionDecl {
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
+    /// Span of the name token.
+    pub name_span: Span,
     /// Default type substituted when a use omits this argument.
     pub default: Option<TypeName>,
+    /// Set by module linking: the name is a type argument, not a parameter
+    /// (`Point` in `describe<Point>`), so the function is a concrete
+    /// override of the generic of its name.
+    pub is_argument: bool,
 }
 
 #[derive(Debug, Clone)]

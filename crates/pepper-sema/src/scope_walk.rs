@@ -142,10 +142,12 @@ macro_rules! scope_walker {
                 self.walk_type_name(ty);
             }
 
-            /// A function's generic parameters, before they are bound: a
-            /// parameter that names a type (`describe<Point>`) makes the
-            /// function a concrete override rather than a generic.
-            fn visit_function_generics(&mut self, _params: &$($m)? [GenericParam]) {}
+            /// A function, before its generic parameters are bound. True
+            /// when they are types, not parameters (`describe<Point>`, a
+            /// concrete override): then they bind no names.
+            fn visit_function_generics(&mut self, _f: &$($m)? FunctionDecl) -> bool {
+                false
+            }
 
             /// A value is about to be bound (a parameter, local, loop or
             /// `with` binding, or closure parameter), with its declared type
@@ -262,8 +264,11 @@ macro_rules! scope_walker {
             }
 
             fn walk_function_body(&mut self, f: &$($m)? FunctionDecl) {
-                self.visit_function_generics(&$($m)? f.generic_params);
-                self.push_generics(&$($m)? f.generic_params);
+                if self.visit_function_generics(f) {
+                    self.scopes_mut().push(Scope::Generics(HashSet::new()));
+                } else {
+                    self.push_generics(&$($m)? f.generic_params);
+                }
                 self.visit_type_name(&$($m)? f.return_type);
                 self.scopes_mut().push(Scope::Values(HashSet::new()));
                 for p in &$($m)? f.parameters {

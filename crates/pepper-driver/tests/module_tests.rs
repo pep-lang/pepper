@@ -1648,3 +1648,288 @@ fn values_whose_type_contains_a_type_parameter_are_checked_where_instantiated() 
         compile("generic_containers", &files).unwrap_or_else(|e| panic!("{}\n{}", lib, e));
     }
 }
+
+#[test]
+fn a_struct_override_of_an_imported_generic_is_honored() {
+    // main.pep's `describe<Point>` overrides lib.pep's exported
+    // `describe<T>` for its own (private) Point.
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }"),
+        ("main.pep", "import \"lib\";\nstruct Point { var x: int; }\ndescribe<Point>(p: Point): int { return 2; }\n\
+                      test(): int { return describe<int>(1) * 10 + describe<Point>(Point()); }"),
+    ];
+    assert_eq!(run("struct_override_imported", &files), 12);
+}
+
+#[test]
+fn a_struct_override_applies_where_the_generic_is_instantiated() {
+    // lib.pep's generic code calls `describe<T>`; with T = Point@main, it
+    // reaches main.pep's override, as it would for `describe<int>`.
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("./geo/module.pep", "export struct Point { var x: int; }"),
+        ("main.pep", "import \"lib\";\nimport \"geo\" as g;\nstruct Point { var y: int; }\n\
+                      describe<Point>(p: Point): int { return 20; }\n\
+                      test(): int { return twice<Point>(Point()) + twice<g.Point>(g.Point()); }"),
+    ];
+    // main's Point: 20 * 2; geo's Point has no override: 1 * 2.
+    assert_eq!(run("struct_override_instantiated", &files), 42);
+}
+
+#[test]
+fn a_struct_override_in_a_non_root_file_is_honored() {
+    // lib.pep's Point is mangled; its override of the runtime's `hash<T>`
+    // names it, and calls to `hash<Point>` reach it.
+    let lib = "export struct Point { var x: int; }\nhash<Point>(Point p): u64 { return p.x as u64; }\n\
+               export same_bucket(): int { var a = Point(); a.x = 5; return (hash<Point>(a) == 5 as u64) ? 1 : 0; }";
+    let files = [("lib.pep", lib), ("main.pep", "import \"lib\";\ntest(): int { return same_bucket(); }")];
+    assert_eq!(run("struct_override_nonroot", &files), 1);
+}
+
+#[test]
+fn another_files_private_struct_named_like_a_type_parameter_changes_nothing() {
+    // other.pep's private `T` is mangled apart: `describe<T>` stays the base.
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("other.pep", "struct T { var x: int; }\nexport other(): int { return 0; }"),
+        ("main.pep", "import \"lib\";\nimport \"other\";\nstruct Point { var x: int; }\n\
+                      describe<Point>(p: Point): int { return 20; }\ntest(): int { return twice<Point>(Point()) + other(); }"),
+    ];
+    assert_eq!(run("private_struct_t_elsewhere", &files), 40);
+}
+
+#[test]
+fn another_files_private_generic_is_no_base_for_a_struct_override() {
+    // lib.pep's `describe<T>` is private, so main.pep's `describe<Point>`
+    // is main.pep's own generic, not an override of lib.pep's.
+    let files = [
+        ("lib.pep", "describe<T>(v: T): int { return 1; }\nexport one(): int { return describe<int>(0); }"),
+        ("main.pep", "import \"lib\";\nstruct Point { var x: int; }\ndescribe<Point>(p: Point): int { return 2; }\n\
+                      test(): int { return describe<Point>(Point()) * 10 + one(); }"),
+    ];
+    assert_eq!(run("struct_override_private_base", &files), 21);
+}
+
+#[test]
+fn an_override_must_name_a_struct_its_file_can_see() {
+    // lib.pep has no Point of its own or imported; main's private Point is
+    // not lib's to override for.
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\ndescribe<Point>(p: Point): int { return 2; }\nexport one(): int { return 0; }"),
+        ("main.pep", "import \"lib\";\nstruct Point { var x: int; }\ntest(): int { return describe<Point>(Point()) + one(); }"),
+    ];
+    let err = error("override_unknown_struct", &files);
+    assert!(err.contains("redefinition of generic 'describe'"), "{}", err);
+}
+
+#[test]
+fn a_struct_override_may_name_an_aliased_import() {
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("geo.pep", "export struct Point { var x: int; }"),
+        ("main.pep", "import \"lib\";\nimport [Point as P] from \"geo\";\ndescribe<P>(p: P): int { return 20; }\n\
+                      test(): int { return twice<P>(P()); }"),
+    ];
+    assert_eq!(run("override_aliased_struct", &files), 40);
+}
+
+#[test]
+fn a_struct_override_may_spell_the_generic_by_an_alias() {
+    let lib = "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }";
+    let files = [
+        ("lib.pep", lib),
+        ("main.pep", "import [describe as dd, twice] from \"lib\";\nstruct Point { var x: int; }\n\
+                      dd<Point>(p: Point): int { return 20; }\ntest(): int { return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run("override_generic_import_alias", &files), 40);
+    let files = [
+        ("./m/module.pep", "import \"impl\";\nexport describe as d;\nexport twice;"),
+        ("./m/impl.pep", lib),
+        ("main.pep", "import [d, twice] from \"m\";\nstruct Point { var x: int; }\n\
+                      d<Point>(p: Point): int { return 20; }\ntest(): int { return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run("override_generic_reexport_alias", &files), 40);
+}
+
+#[test]
+fn an_exported_struct_named_like_a_type_parameter_changes_nothing() {
+    // lib.pep does not import other.pep, so its `T` is a type parameter.
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("other.pep", "export struct T { var x: int; }"),
+        ("main.pep", "import \"lib\";\nimport \"other\";\nstruct Point { var x: int; }\n\
+                      describe<Point>(p: Point): int { return 20; }\ntest(): int { var t = T(); return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run("exported_struct_t_elsewhere", &files), 40);
+}
+
+#[test]
+fn only_generics_a_file_can_see_are_bases_for_its_overrides() {
+    // other.pep's private `describe<U>` is not main.pep's to override:
+    // main.pep's `describe<T>` (T an imported struct) is its own generic.
+    let files = [
+        ("types.pep", "export struct T { var x: int; }"),
+        ("other.pep", "describe<U>(v: U): int { return 1; }\nexport other(): int { return describe<int>(0); }"),
+        ("mid.pep", "import \"other\";\nexport mid(): int { return other(); }"),
+        ("main.pep", "import \"types\";\nimport \"mid\";\ndescribe<T>(v: T): int { return 7; }\ntest(): int { return describe<int>(0) + mid(); }"),
+    ];
+    assert_eq!(run("invisible_base", &files), 8);
+}
+
+#[test]
+fn a_module_import_sees_only_the_modules_exports_as_types() {
+    // m's impl.pep exports `T` to its module, but m does not export it:
+    // main.pep's `describe<T>` is a generic.
+    let files = [
+        ("m/module.pep", "import \"impl\";\nexport helper(): int { return 1; }"),
+        ("m/impl.pep", "export struct T { var x: int; }"),
+        ("main.pep", "import m;\ndescribe<T>(v: T): int { return 3; }\ntest(): int { return describe<int>(0) + m.helper(); }"),
+    ];
+    assert_eq!(run("module_exports_types", &files), 4);
+}
+
+#[test]
+fn a_struct_reexported_under_another_name_can_be_overridden_for() {
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("./m/module.pep", "import \"impl\";\nexport Point as Pt;"),
+        ("./m/impl.pep", "export struct Point { var x: int; }"),
+        ("main.pep", "import \"lib\";\nimport \"m\";\ndescribe<Pt>(p: Pt): int { return 20; }\ntest(): int { return twice<Pt>(Pt()); }"),
+    ];
+    assert_eq!(run("reexported_struct_override", &files), 40);
+}
+
+#[test]
+fn a_generic_reexported_through_a_qualifier_can_be_overridden() {
+    let files = [
+        ("geo/module.pep", "import \"impl\" as i;\nexport i.describe;\nexport i.twice;"),
+        ("geo/impl.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("main.pep", "import [describe, twice] from geo;\nstruct Point { var x: int; }\n\
+                      describe<Point>(p: Point): int { return 20; }\ntest(): int { return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run("override_qualified_reexport", &files), 40);
+}
+
+#[test]
+fn a_forced_modules_internal_types_are_not_types_everywhere() {
+    // fm's impl.pep exports `T` to its module only: main.pep's `wrap<T>`
+    // is a generic.
+    let files = [
+        ("fm/module.pep", "import \"impl\";\nexport wrap;"),
+        ("fm/impl.pep", "export struct T { var x: int; }\nexport wrap<U>(v: U): int { return 1; }"),
+        ("main.pep", "wrap<T>(v: T): int { return 7; }\ntest(): int { return wrap<int>(0); }"),
+    ];
+    assert_eq!(run_with("forced_module_internal_types", &files, &["--import", "fm"]), 7);
+}
+
+#[test]
+fn a_trait_is_not_an_override_argument() {
+    let files = [
+        ("base.pep", "export describe<T>(v: T): int { return 1; }"),
+        ("main.pep", "import \"base\";\ntrait Shape { area(): int; }\ndescribe<Shape>(s: Shape): int { return 2; }\ntest(): int { return 0; }"),
+    ];
+    let err = error("trait_override_argument", &files);
+    assert!(err.contains("'Shape' is not a struct; an override's type argument must name a struct"), "{}", err);
+}
+
+#[test]
+fn a_closure_in_an_override_captures_nothing_of_its_type_arguments() {
+    let files = [
+        ("lib.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("main.pep", "import \"lib\";\nstruct Point { var x: int; }\n\
+                      describe<Point>(p: Point): int { var f = (q: Point): int => q.x * 10; return f(p); }\n\
+                      test(): int { var p = Point(); p.x = 2; return twice<Point>(p); }"),
+    ];
+    assert_eq!(run("closure_in_override", &files), 40);
+}
+
+#[test]
+fn another_files_private_generic_of_the_same_name_does_not_block_an_override() {
+    // lib.pep's private `describe<T>` is mangled apart; main.pep's override
+    // binds base.pep's exported one.
+    let files = [
+        ("base.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("lib.pep", "describe<T>(v: T): int { return 5; }\nexport five(): int { return describe<int>(0); }"),
+        ("main.pep", "import \"base\";\nimport \"lib\";\nstruct Point { var x: int; }\n\
+                      describe<Point>(p: Point): int { return 20; }\ndescribe<int>(v: int): int { return 30; }\n\
+                      test(): int { return twice<Point>(Point()) + describe<int>(0) + five(); }"),
+    ];
+    assert_eq!(run("private_same_name_generic", &files), 75);
+}
+
+#[test]
+fn an_unrelated_exported_base_does_not_unlock_a_private_override() {
+    // c.pep overrides b.pep's private `describe<T>`; a.pep's exported one
+    // is not c.pep's to bind, since c.pep does not import a.pep.
+    let files = [
+        ("a.pep", "export describe<T>(v: T): int { return 1; }"),
+        ("b.pep", "describe<T>(v: T): int { return 10; }\nexport twice_b<T>(v: T): int { return describe<T>(v) * 2; }"),
+        ("c.pep", "import \"b\";\ndescribe<int>(v: int): int { return 30; }\nexport c_val(): int { return twice_b<int>(0); }"),
+        ("main.pep", "import \"a\";\nimport \"c\";\ntest(): int { return c_val(); }"),
+    ];
+    let err = error("unrelated_exported_base", &files);
+    assert!(err.contains("'describe' is private to") && err.contains("b.pep"), "{}", err);
+}
+
+#[test]
+fn a_type_parameter_named_like_a_trait_is_still_a_base() {
+    // lib.pep's `describe<Shape>` is a generic whose parameter is named
+    // Shape, as before traits were types; main.pep overrides it for Point.
+    let files = [
+        ("lib.pep", "export trait Shape { area(): int; }\nexport describe<Shape>(v: Shape): int { return 1; }\n\
+                     export twice<U>(v: U): int { return describe<U>(v) * 2; }"),
+        ("main.pep", "import \"lib\";\nstruct Point { var x: int; }\ndescribe<Point>(p: Point): int { return 20; }\n\
+                      test(): int { return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run("trait_named_type_parameter_base", &files), 40);
+}
+
+#[test]
+fn a_forced_modules_generics_are_bases_everywhere() {
+    // lib's `describe<T>` lives in impl.pep, reached through module.pep;
+    // b.pep's private generic of that name is not main.pep's to override.
+    let files = [
+        ("lib/module.pep", "import \"impl\";\nexport describe;\nexport twice;"),
+        ("lib/impl.pep", "export describe<T>(v: T): int { return 1; }\nexport twice<U>(v: U): int { return describe<U>(v) * 2; }"),
+        ("b.pep", "describe<T>(v: T): int { return 5; }\nexport five(): int { return describe<int>(0); }"),
+        ("main.pep", "import \"b\";\nstruct Point { var x: int; }\ndescribe<Point>(p: Point): int { return 20; }\n\
+                      test(): int { return twice<Point>(Point()) + five(); }"),
+    ];
+    assert_eq!(run_with("forced_module_base", &files, &["--import", "lib"]), 45);
+}
+
+#[test]
+fn a_forced_modules_trait_named_type_parameter_is_a_base() {
+    let files = [
+        ("lib/module.pep", "export trait Shape { area(): int; }\nexport describe<Shape>(v: Shape): int { return 1; }\n\
+                            export twice<U>(v: U): int { return describe<U>(v) * 2; }"),
+        ("main.pep", "struct Point { var x: int; }\ndescribe<Point>(p: Point): int { return 20; }\n\
+                      test(): int { return twice<Point>(Point()); }"),
+    ];
+    assert_eq!(run_with("forced_trait_named_base", &files, &["--import", "lib"]), 40);
+}
+
+#[test]
+fn an_overrides_struct_argument_is_a_known_type() {
+    // In `describe<S>`, `p` is an S, not a value of generic type: its
+    // `hidden` needs ext.pep imported.
+    let lib = "import \"types\";\nexport describe<T>(v: T): int { return 1; }\ndescribe<S>(p: S): int { return p.hidden(); }\nexport one(): int { return 0; }";
+    let files = [HIDDEN, &[("lib.pep", lib), ("main.pep", "import \"lib\";\nimport \"ext\";\ntest(): int { return one(); }")]].concat();
+    let err = error("override_argument_known_type", &files);
+    assert!(err.contains("'hidden' is declared in an extension in"), "{}", err);
+}
+
+#[test]
+fn a_files_own_function_hides_the_imported_generic_it_would_override() {
+    // main.pep's own `describe` (of another arity, or not generic) hides
+    // lib.pep's: `describe<Point>` is a second declaration of that name.
+    let lib = "export describe<T>(v: T): int { return 1; }\nexport twice<T>(v: T): int { return describe<T>(v) * 2; }";
+    for own in ["describe<A, B>(a: A, b: B): int { return 7; }", "describe(a: int): int { return 7; }"] {
+        let main = format!(
+            "import \"lib\";\nstruct Point {{ var x: int; }}\n{}\ndescribe<Point>(p: Point): int {{ return 20; }}\ntest(): int {{ return twice<Point>(Point()); }}",
+            own
+        );
+        let err = error("own_function_hides_generic", &[("lib.pep", lib), ("main.pep", &main)]);
+        assert!(err.contains("redefinition of generic 'describe'"), "{}\n{}", own, err);
+    }
+}

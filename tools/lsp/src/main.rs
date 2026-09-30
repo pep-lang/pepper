@@ -621,7 +621,7 @@ type Program = pepper_sema::program::Program;
 /// in the document (`program[0]`) are reported; other files that fail to
 /// build are skipped. Locations carry the file's index in `program`.
 fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
-    let mut module = SemaModule::default();
+    let mut module = SemaModule { linked: true, ..SemaModule::default() };
     for (i, file) in program.files.iter().enumerate().skip(1) {
         if let Ok(m) = pepper_sema::builder::build_file(&file.module, FileId(i as u32)) {
             module.merge(m);

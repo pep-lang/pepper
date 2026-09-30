@@ -39,6 +39,7 @@ fn generic_param_from(p: &ast::GenericParam) -> GenericParam {
     GenericParam {
         name: p.name.clone(),
         default: p.default.as_ref().map(type_name_from),
+        is_argument: p.is_argument,
     }
 }
 

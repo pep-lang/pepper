@@ -18,12 +18,12 @@
 //! declaration is left unrenamed by linking; it is matched here by its
 //! demangled name and reported as private. What keeps its name in the merged
 //! program must still be unique: an exported declaration of a non-prelude
-//! file, and a concrete override (`hash<String>` of `hash<T>`, as
-//! `type_name::is_concrete_override` defines it), which takes its generic's
-//! name. Externs are exempt, since every `extern` of a name is the same C
-//! symbol. Anything else with generic parameters is a generic base, compared
-//! by parameter count, not spelling: `pick<T>` and `pick<U>` collide, and so
-//! do `hash<Point>` and `hash<T>`, since a user type is not an override.
+//! file, and a concrete override (`hash<String>` or `hash<Point>` of
+//! `hash<T>`, as [`crate::modules::Overrides`] decides), which takes its
+//! generic's name. Externs are exempt, since every `extern` of a name is the
+//! same C symbol. Anything else with generic parameters is a generic base,
+//! compared by parameter count, not spelling: `pick<T>` and `pick<U>`
+//! collide.
 //!
 //! Declarations that platform selection drops (a false `[Target(...)]`) are
 //! ignored as declarations: they can never collide or be referenced.
@@ -37,9 +37,8 @@
 //! [`crate::modules::FileScope::extensions`]).
 
 use crate::passes::platform::keep;
-use crate::type_name::{is_concrete_override, is_override};
 use crate::scope_walk::{ScopeWalk, Scopes};
-use pepper_parser::ast::{Declaration, Expression, Module, Span, StructDecl, TypeName};
+use pepper_parser::ast::{Declaration, Expression, FunctionDecl, Module, Span, StructDecl, TypeName};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
 use pepper_parser::namespace::{SEPARATOR, demangle_name};
 use std::collections::{HashMap, HashSet};
@@ -103,6 +102,9 @@ pub struct VisibilityError {
     /// Index of the other file involved: the one that declares the name
     /// privately, or for `Duplicate`, the one that also declares it.
     pub declared_in: usize,
+    /// The declaration in `declared_in`, when it is known here rather than
+    /// looked up by name (a duplicate override's).
+    pub declared_at: Option<Span>,
     pub kind: VisibilityErrorKind,
 }
 
@@ -151,7 +153,9 @@ impl VisibilityError {
             VisibilityErrorKind::DuplicateOverride => "also declared here",
             _ => "declared here",
         };
-        let declared_at = declaration_span(files[self.declared_in].module, &self.name, self.kind)
+        let declared_at = self
+            .declared_at
+            .or_else(|| declaration_span(files[self.declared_in].module, &self.name, self.kind))
             .map(|span| Loc::new(FileId(self.declared_in as u32), span));
         Diagnostic::error(self.message(files))
             .at(Loc::new(FileId(self.file as u32), self.span))
@@ -200,12 +204,22 @@ struct Decl<'a> {
     /// A function's generic parameters as spelled, which tell a concrete
     /// override (`hash<Point>`) from the generic it specializes (`hash<T>`).
     generics: Vec<&'a str>,
+    /// A concrete override (see [`is_function_override`]).
+    is_override: bool,
+}
+
+/// A concrete override: one for primitives or `String` (`hash<int>`), or
+/// one module linking marked (`hash<Point>`, see
+/// [`crate::modules::Overrides`]).
+fn is_function_override(f: &FunctionDecl) -> bool {
+    crate::type_name::is_override(f.generic_params.iter().map(|g| g.name.as_str()))
+        || f.generic_params.iter().any(|g| g.is_argument)
 }
 
 /// A generic function a concrete override (`pick<int>`) would specialize:
-/// it has generic parameters, and they are not all concrete.
+/// it has generic parameters, and it is not an override itself.
 fn is_generic_base(d: &Decl) -> bool {
-    !d.generics.is_empty() && !is_override(d.generics.iter().copied())
+    !d.generics.is_empty() && !d.is_override
 }
 
 /// Check every file's references against the other files' exports.
@@ -228,7 +242,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         }
     }
     for (i, file) in files.iter().enumerate() {
-        let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![] };
+        let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![], is_override: false };
         for d in &file.module.declarations {
             // A malformed attribute is reported by platform filtering itself.
             if !keep(d.attributes()).unwrap_or(true) {
@@ -238,6 +252,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                 Declaration::Function(f) => decls.entry(&f.name).or_default().push(Decl {
                     external: f.external,
                     generics: f.generic_params.iter().map(|g| g.name.as_str()).collect(),
+                    is_override: is_function_override(f),
                     ..decl(f.is_exported, f.name_span)
                 }),
                 Declaration::Struct(s) => {
@@ -296,7 +311,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     // A concrete override is identified by its arguments; a generic base
     // only by how many parameters it has.
     let shape = |d: &Decl| -> Vec<Option<String>> {
-        if is_concrete_override(d.generics.iter().copied()) {
+        if d.is_override {
             d.generics.iter().map(|&g| Some(g.to_string())).collect()
         } else {
             vec![None; d.generics.len()]
@@ -312,7 +327,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         // import may supply its own definition of a runtime export. Every
         // other file's names must be unique.
         // Private declarations are mangled apart, except overrides.
-        let kept_name = |d: &&Decl| d.exported || is_override(d.generics.iter().copied());
+        let kept_name = |d: &&Decl| d.exported || d.is_override;
         for d in entries.iter().filter(|d| !d.external && (!d.exported || !exempt[d.file])).filter(kept_name) {
             if let Some(other) = entries.iter().find(|o| o.file != d.file && shape(o) == shape(d)) {
                 let (name, kind) = if d.exported {
@@ -320,7 +335,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                 } else {
                     (format!("{}<{}>", name, d.generics.join(", ")), VisibilityErrorKind::DuplicateOverride)
                 };
-                errors.push(VisibilityError { file: d.file, span: d.span, name, declared_in: other.file, kind });
+                errors.push(VisibilityError { file: d.file, span: d.span, name, declared_in: other.file, declared_at: Some(other.span), kind });
             }
         }
     }
@@ -328,9 +343,15 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     // declares, privately, would replace that file's own instantiation of
     // it, whether or not this file ever calls it: the base is out of reach.
     for (name, entries) in &decls {
-        for d in entries.iter().filter(|d| !d.external && is_override(d.generics.iter().copied())) {
+        for d in entries.iter().filter(|d| !d.external && d.is_override) {
             let is_base_of_d = |e: &&Decl| is_generic_base(e) && e.generics.len() == d.generics.len();
-            if entries.iter().any(|e| e.file == d.file && is_base_of_d(&e)) {
+            // An exported base the override's file can reach (its imports
+            // bind it, or the prelude's) binds it; a private base elsewhere
+            // is mangled apart and unaffected.
+            let reachable = |e: &Decl| {
+                e.exported && (files[e.file].duplicate_exempt || files[d.file].bound.contains(name.to_string().as_str()))
+            };
+            if entries.iter().any(|e| (e.file == d.file || reachable(e)) && is_base_of_d(&e)) {
                 continue;
             }
             // The base may be private under its own name (in the root file)
@@ -342,6 +363,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     span: d.span,
                     name: name.to_string(),
                     declared_in: base.file,
+                    declared_at: Some(base.span),
                     kind: VisibilityErrorKind::Private,
                 });
             }
@@ -361,7 +383,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             .iter()
             .filter(|d| match d {
                 Declaration::Extend(_) => false,
-                Declaration::Function(f) => !is_override(f.generic_params.iter().map(|g| g.name.as_str())),
+                Declaration::Function(f) => !is_function_override(f),
                 _ => true,
             })
             // Nor does one platform selection drops: it is never compiled.
@@ -535,7 +557,7 @@ impl Checker<'_, '_> {
             // declaration unrenamed.
             if let Some(d) = self.private.get(name).and_then(|p| p.iter().find(|d| d.file != self.file)) {
                 let kind = VisibilityErrorKind::Private;
-                self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in: d.file, kind });
+                self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in: d.file, declared_at: None, kind });
                 return;
             }
             // Not a top-level name: possibly a bare extension method in a
@@ -552,7 +574,7 @@ impl Checker<'_, '_> {
             // private generic is reported once, at the override.)
             || entries.iter().any(|d| {
                 (d.file == self.file
-                    && (!is_override(d.generics.iter().copied())
+                    && (!d.is_override
                         || !entries
                             .iter()
                             .any(|e| e.file != self.file && e.exported && is_generic_base(e))))
@@ -567,7 +589,7 @@ impl Checker<'_, '_> {
             Some(d) => (d.file, VisibilityErrorKind::NotImported),
             None => (elsewhere.file, VisibilityErrorKind::Private),
         };
-        self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, kind });
+        self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, declared_at: None, kind });
     }
 }
 
@@ -639,7 +661,7 @@ impl ScopeWalk for Checker<'_, '_> {
             if let Some(&(_, file, exported)) = methods().min_by_key(|&&(_, _, exported)| !exported) {
                 let kind =
                     if exported { VisibilityErrorKind::ExtensionNotImported } else { VisibilityErrorKind::PrivateExtension };
-                self.errors.push(VisibilityError { file: self.file, span: *span, name: id.clone(), declared_in: file, kind });
+                self.errors.push(VisibilityError { file: self.file, span: *span, name: id.clone(), declared_in: file, declared_at: None, kind });
                 self.captured = Some(span.start);
                 return;
             }
@@ -648,6 +670,12 @@ impl ScopeWalk for Checker<'_, '_> {
 
     /// A value typed by a generic parameter in scope, or initialized from
     /// such a value, is marked: its type is unknown here.
+    /// An override's type arguments (`describe<S>`, marked by linking)
+    /// are types, not parameters: they bind no names.
+    fn visit_function_generics(&mut self, f: &FunctionDecl) -> bool {
+        f.generic_params.iter().any(|p| p.is_argument)
+    }
+
     fn visit_binding(&mut self, ty: &TypeName, init: Option<&Expression>) -> bool {
         mentions(ty, &|name| self.scopes.is_type_local(name)) || init.is_some_and(|e| self.is_unknown_type(e))
     }
@@ -709,7 +737,7 @@ impl ScopeWalk for Checker<'_, '_> {
             Some(&(file, _)) => (file, VisibilityErrorKind::ExtensionNotImported),
             None => (entries[0].0, VisibilityErrorKind::PrivateExtension),
         };
-        self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, kind });
+        self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, declared_at: None, kind });
     }
 }
 

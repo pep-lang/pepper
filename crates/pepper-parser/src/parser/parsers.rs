@@ -1731,7 +1731,9 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
             *input = &input[1..];
             break;
         }
+        let start = pos(input);
         let name = identifier(input)?;
+        let name_span = Span { start, end: pos(input) };
         ws(input)?;
         // Optional default: `T=Default` (a single `=`; `==` is an operator).
         let mut default = None;
@@ -1741,7 +1743,7 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
             default = Some(type_name(input)?);
             ws(input)?;
         }
-        params.push(GenericParam { name, default });
+        params.push(GenericParam { name, name_span, default, is_argument: false });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;

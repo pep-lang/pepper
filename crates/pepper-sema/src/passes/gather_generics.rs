@@ -207,6 +207,7 @@ fn concrete_overrides(module: &mut Module) {
     // `describe<T>`), but a struct's name is also a legal generic parameter
     // name: it overrides only when a generic base of the same name and
     // arity exists, one with a parameter that names no type.
+    let linked = module.linked;
     let is_struct = |name: &str| module.structs.iter().any(|st| st.ty.name == name);
     let names_type = |p: &str| crate::type_name::is_concrete_override(std::iter::once(p)) || is_struct(p);
     let has_base = |function: &crate::model::FunctionDef| {
@@ -222,8 +223,12 @@ fn concrete_overrides(module: &mut Module) {
             continue;
         }
         let params = || function.generic_params.iter().map(|p| p.name.as_str());
+        // Module linking decides by what each file can see, and marks what
+        // it decided; only an unlinked module falls back to program-wide
+        // names.
         let all_concrete = crate::type_name::is_concrete_override(params())
-            || (params().all(names_type) && has_base(function));
+            || function.generic_params.iter().any(|p| p.is_argument)
+            || (!linked && params().all(names_type) && has_base(function));
         if !all_concrete {
             continue;
         }

@@ -34,7 +34,7 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// [`Program::initialization_order`]).
 pub fn merge(program: &Program) -> Result<SemaModule, String> {
     program.check()?;
-    let mut module = SemaModule::default();
+    let mut module = SemaModule { linked: true, ..SemaModule::default() };
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
     }

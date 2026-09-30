@@ -130,13 +130,12 @@ fn leak_census_helper_is_exported() {
 }
 
 #[test]
-fn private_generic_named_like_a_runtime_export_stays_in_its_file() {
-    // Only primitive and String overrides exist; `hash<Pt>` is a second
-    // generic base, private to this file: it does not replace the runtime's
-    // `hash<T>`, which the runtime's own hash tables still call.
+fn a_struct_override_of_a_runtime_generic_is_honored() {
+    // `hash<Pt>` overrides the runtime's `hash<T>` for `Pt`, as `hash<int>`
+    // would: it compiles, and must not be reported as a private duplicate.
     let main = "struct Pt { var x: int; }\nhash<Pt>(Pt p): u64 { return 42; }\n\
-                main(): int { var s = HashSet<int>(); s.insert(1); return hash<Pt>(Pt()) as int; }";
-    compile("override", LIB, main).expect("a private generic stays in its file");
+                main(): int { var s = HashSet<Pt>(); s.insert(Pt()); return hash<Pt>(Pt()) as int; }";
+    compile("override", LIB, main).expect("a struct override");
 }
 
 #[test]

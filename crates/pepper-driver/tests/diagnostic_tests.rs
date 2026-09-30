@@ -850,3 +850,28 @@ fn extension_method_from_a_file_not_imported() {
          \x20     |                   ^~~~~~"
     );
 }
+
+
+#[test]
+fn override_type_argument_names_a_type_alias() {
+    let files = [("lib.pep", "export describe<T>(v: T): int { return 1; }\n")];
+    let main = "import \"lib\";\nstruct Point { var x: int; }\ntype P = Point;\ndescribe<P>(p: P): int { return 2; }\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of_files("override_alias_argument", main, &files),
+        "main.pep:4:10: error: 'P' is not a struct; an override's type argument must name a struct\n\
+         \x20   4 | describe<P>(p: P): int { return 2; }\n\
+         \x20     |          ^"
+    );
+}
+
+#[test]
+fn duplicate_override_notes_the_other_declaration() {
+    let files = [
+        ("a.pep", "export struct Point { var x: int; }\nexport describe<T>(v: T): int { return 0; }\ndescribe<Point>(p: Point): int { return 1; }\n"),
+        ("b.pep", "import \"a\";\ndescribe<Point>(p: Point): int { return 2; }\n"),
+    ];
+    let main = "import \"a\";\nimport \"b\";\nmain(): int { return 0; }\n";
+    let err = error_of_files("duplicate_override_note", main, &files);
+    assert!(err.starts_with("b.pep:2:1: error: override 'describe<Point>' is also declared in a.pep"), "{}", err);
+    assert!(err.contains("a.pep:3:1: note: also declared here\n    3 | describe<Point>"), "{}", err);
+}

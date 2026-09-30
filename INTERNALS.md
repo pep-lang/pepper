@@ -144,9 +144,24 @@ with no extension, and `module_name()` is the output's stem.
   order). Exports, externs, and concrete overrides keep their names; so do
   the root file's private names, unless another file keeps the same name
   (so `main` and a JIT test's `test` stay findable). `own_names` decides
-  this. A function's generic parameter named after one of the file's own
-  types (`describe<Point>`) is that type, so it is renamed too
-  (`visit_function_generics`) and the function stays a concrete override.
+  this. Which generic functions are concrete overrides (`hash<int>`, and
+  `hash<Point>` of a visible `hash<T>`) is decided by `modules::Overrides`,
+  the same rule sema's `gather_generics::concrete_overrides` applies: every
+  type parameter names a primitive, `String`, or a struct, and either all
+  are primitives or `String`, or a generic of that name and arity exists.
+  "A type" and "a base" mean ones the declaring file can name: its own,
+  the exports of the files it imports (a module's are its `module.pep`'s,
+  re-exports included), the prelude's, under import-list aliases too
+  (`visible_names`, iterated until re-exports settle). Linking marks an
+  override's parameters (`GenericParam::is_argument`) and resolves them
+  like type references to the structs they denote, mangled or imported,
+  binding no names (`visit_function_generics`); a type alias there is an
+  error. Sema (`concrete_overrides`) and the visibility check follow the
+  mark; sema's own program-wide rule applies only to an unlinked module
+  (`Module::linked`). A file's own function of a name hides the imported
+  generics of that name, and a generic beside another function of its name
+  in one file is an error. The
+  visibility check applies the same rule (`Decl::is_override`).
   Codegen gives every mangled declaration internal linkage
   (`set_private_linkage`): no other object can name it, and ELF linkers
   read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged
