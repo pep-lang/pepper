@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-af87de6a.js";
+            window.path_to_searchindex_js = "searchindex-1131c58d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e51e852e.js"></script>
@@ -222,7 +222,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests), tuples
+structs with constructors, destructors and methods, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests and tuple patterns), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
@@ -2260,10 +2260,78 @@ hashes of its elements, so equal tuples hash equally.</li>
 <li><code>copy(t)</code> (see <a href="#copying-a-value-with-copy">Copying a value</a>) copies each element: a struct
 element as <code>copy</code> would copy it on its own, anything thread-safe as is.</li>
 </ul>
-<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
-<p>These come in later phases:</p>
+<h2 id="matching-tuples"><a class="header" href="#matching-tuples">Matching tuples</a></h2>
+<p>A <a href="#match-1"><code>match</code></a> over a tuple tests all of its elements at once.
+A tuple pattern lists a pattern for each element: <code>(Rock, Scissors)</code>,
+<code>(Number(v), 1)</code>, <code>(4, column)</code>. Write the tuple in the <code>match</code> itself with
+double parentheses, <code>match ((a, b))</code>, or match a tuple value, <code>match (at)</code>.</p>
+<pre><code class="language-pepper"># `match` takes a tuple apart, testing every element at once.
+enum Move {
+    Rock,
+    Paper,
+    Scissors,
+}
+
+# Who wins: 1 for the first player, 2 for the second, 0 for a draw.
+winner(first: Move, second: Move): int {
+    match ((first, second)) {
+        (Rock, Scissors), (Paper, Rock), (Scissors, Paper) =&gt; {
+            return 1;
+        }
+        (Rock, Rock), (Paper, Paper), (Scissors, Scissors) =&gt; {
+            return 0;
+        }
+        else =&gt; {
+            return 2;
+        }
+    }
+}
+
+enum Token {
+    Number(value: int),
+    Word(text: String),
+}
+
+# Literals, cases with values, bound names and `_` mix in one pattern.
+describe(token: Token, line: int): String {
+    return match ((token, line)) {
+        (Number(v), 1) =&gt; "a number on the first line",
+        (Word(text), _) =&gt; text,
+        (_, _) =&gt; "another number",
+    };
+}
+
+main(): int {
+    assert(winner(Move.Rock, Move.Scissors) == 1, "rock blunts scissors");
+    assert(winner(Move.Paper, Move.Scissors) == 2, "scissors cut paper");
+    assert(winner(Move.Paper, Move.Paper) == 0, "a draw");
+
+    assert(describe(Token.Word("hi"), 3) == "hi", "a word binds its text");
+    assert(describe(Token.Number(7), 1) == "a number on the first line", "a literal element");
+
+    # A name binds its element; `is` tests one pattern.
+    var at = (4, 2);
+    if (at is (4, column)) {
+        assert(column == 2, "bound by the pattern");
+    }
+    return 0;
+}
+</code></pre>
 <ul>
-<li><code>match</code> cannot match tuple patterns.</li>
+<li>Each element takes a case of its enum (<code>Rock</code>, <code>Word(text)</code>), a literal
+(<code>1</code>, <code>"x"</code>, <code>true</code>), another tuple pattern, <code>_</code> for any value, or a name.</li>
+<li>A name binds its element, unless the element is an enum with a case of
+that name, which it then matches. So in <code>(Circle, other)</code> over two shapes,
+<code>Circle</code> is a case and <code>other</code> holds the second shape.</li>
+<li>An arm’s patterns bind the same names, each at the same element: <code>(x, 0), (0, x)</code> is an error, since <code>x</code> would mean a different element depending
+on which pattern matched.</li>
+<li>The arms must handle every value unless there is an <code>else</code>. A missing
+value is named with an example: <code>match on '(Shape, int)' does not handle '(Line, _)'</code>. Only enum cases and <code>true</code>/<code>false</code> can be listed in full;
+other literals need a pattern with <code>_</code> or a name at that element.</li>
+<li>A pattern that the arms before it already cover is an error, and an
+<code>else</code> after arms that cover everything is a warning.</li>
+<li><code>value is (4, column)</code> tests one tuple pattern, and binds its names as
+the whole condition of an <code>if</code> or <code>while</code>, as for enums.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="collection-literals"><a class="header" href="#collection-literals">Collection literals</a></h1>
@@ -4361,9 +4429,11 @@ case names, not literals, and a match on <code>int</code> takes literals, not na
 <li>An enum whose cases carry nothing cannot be generic. The methods of any
 enum cannot be generic yet. An enum cannot declare operators or indexers
 yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
-<li>Patterns cannot be nested (<code>Some(Text(t))</code>), compare values
-(<code>Text("")</code>), match ranges (<code>1..9</code>), or have guards yet. A literal pattern
-is a literal, not a named constant.</li>
+<li>A case’s values bind names only: a pattern cannot nest inside a case
+(<code>Some(Text(t))</code>) or compare its values (<code>Text("")</code>) yet. Patterns nest
+inside <a href="#matching-tuples">tuple patterns</a> (<code>(Text(t), 0)</code>).
+Patterns cannot match ranges (<code>1..9</code>) or have guards yet. A literal
+pattern is a literal, not a named constant.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>An enum whose cases carry nothing cannot be extended
 (<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
@@ -9653,7 +9723,7 @@ out of range or a failed <code>assert</code>. These are not compiler errors: the
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
-<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <p>The type check does not compare the type arguments of generic structs yet, so
 <code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
 resulting program has undefined behavior.</p>

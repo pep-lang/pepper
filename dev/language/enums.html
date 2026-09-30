@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-af87de6a.js";
+            window.path_to_searchindex_js = "../searchindex-1131c58d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -590,9 +590,11 @@ case names, not literals, and a match on <code>int</code> takes literals, not na
 <li>An enum whose cases carry nothing cannot be generic. The methods of any
 enum cannot be generic yet. An enum cannot declare operators or indexers
 yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
-<li>Patterns cannot be nested (<code>Some(Text(t))</code>), compare values
-(<code>Text("")</code>), match ranges (<code>1..9</code>), or have guards yet. A literal pattern
-is a literal, not a named constant.</li>
+<li>A case’s values bind names only: a pattern cannot nest inside a case
+(<code>Some(Text(t))</code>) or compare its values (<code>Text("")</code>) yet. Patterns nest
+inside <a href="tuples.html#matching-tuples">tuple patterns</a> (<code>(Text(t), 0)</code>).
+Patterns cannot match ranges (<code>1..9</code>) or have guards yet. A literal
+pattern is a literal, not a named constant.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>An enum whose cases carry nothing cannot be extended
 (<code>extend Color { ... }</code>); declare its methods inside it. So it cannot
