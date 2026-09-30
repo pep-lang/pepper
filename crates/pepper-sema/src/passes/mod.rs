@@ -37,6 +37,7 @@ pub mod convert_to_traits;
 pub mod shared_functions;
 pub mod tuples;
 pub mod copies;
+pub mod strip_bodies;
 pub mod check_confinement;
 
 use apply_extensions::apply_extensions;

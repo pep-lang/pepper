@@ -100,7 +100,7 @@ The CLI produces an executable and never runs it. Tests usually stop after
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-o`, `--build`, `--emit-llvm`, `--emit-ast`, and
-`--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
+`--no-runtime`, `--no-cache`, `--cache <dir>`, `--verify-cache`, `--no-verify-cache` (see [section 4.3](#43-build-cache-driversrccachers-codegensrcpartitionrs)), `-T time` (or `--Tall`), which prints each stage's
 time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
 and build, sema passes, codegen and emission, link), and `-T cache`, which
 prints how the cache supplied each unit's object (`hit`, `hit (same code)`
@@ -491,7 +491,9 @@ cross-compilation.
 turns every closure literal into a synthesized struct
 `__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
 over the enclosing code's type parameters, and a `MakeClosure` creation
-expression, so the new structs get their bodies below like any other. The
+expression, so the new structs get their bodies below like any other.
+`passes::strip_bodies` runs next, dropping the bodies of units the build
+cache reuses (§4.3). The
 struct's fields are `__invoke` and `__destroy` (defaults `MethodAddress`
 of `__call` and `__dtor`), so its head matches the function type struct,
 then one field per captured local, then `__this` when the body uses `this`
@@ -573,7 +575,7 @@ several passes run more than once on purpose.
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). A C function pointer slot takes only the same C function pointer type (`extern_flows_into`, with a hint saying what converts), and a C function pointer converts only to `void*`. An extern call's arguments are checked here only for its function-typed parameters; codegen checks the rest. It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `tuples::lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
-| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `lower_moved_arguments` wraps in `Expression::Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when it is the only holder (`Region::holders`) of an unshared, untainted region, and a `[Move]` parameter starts in a fresh region of its own; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. |
+| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `lower_moved_arguments` wraps in `Expression::Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when it is the only holder (`Region::holders`) of an unshared, untainted region, and a `[Move]` parameter starts in a fresh region of its own; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. For the build cache (`Module::record_summaries`), it summarizes every function and hands out, by location, the summaries that reach no trait call (`summaries_to_record`); a build that skips a cached unit's bodies seeds those (`recorded_summaries`, §4.3). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 | final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `module.warnings`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`check_arm_types`). `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
@@ -842,10 +844,11 @@ MSVC's link.exe writes unresolved symbols to stdout.
 
 ### 4.3 Build cache (`driver/src/cache.rs`, `codegen/src/partition.rs`)
 
-Phases 1 and 2a of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
+Phases 1, 2a and 2b of `/mnt/project-files/build-cache-design/build-cache-proposal.md`:
 sema still runs over the whole program, but codegen and object emission run
 per **compilation unit**, and a unit whose sources are unchanged takes its
-object from `.pep/cache` without generating any code.
+object from `.pep/cache` without generating any code, and sema skips its
+non-generic bodies.
 
 - **Units** (`Program::units`, `sema/src/program.rs`): the runtime's
   top-level files (prelude files outside any module) are the unit
@@ -899,7 +902,8 @@ object from `.pep/cache` without generating any code.
   name, namespace, prelude flags and text. A record also holds the hash of
   the bitcode its object was emitted from.
 - **Cache** (`cache::Cache`): `<cache>/v1/<target triple>/<unit>.o`,
-  `<unit>.json` (`{"key": …, "bitcode": …}`) and `<unit>.lock`. `object`
+  `<unit>.json` (`{"key": …, "bitcode": …, "warnings": "no"}`),
+  `<unit>.summaries` (see below) and `<unit>.lock`. `object`
   takes an exclusive OS lock (`File::lock`) on the unit. When the record's
   key matches and the object exists, it is a **hit**: no code is generated.
   Otherwise it generates the unit; when the bitcode hash matches the
@@ -911,6 +915,23 @@ object from `.pep/cache` without generating any code.
   change what is linked. The OS releases the lock on exit or crash. The
   cache directory is `--cache`, else `$PEPPER_CACHE_DIR`, else
   `<cwd>/.pep/cache`; `--no-cache` skips it.
+- **Skipping bodies** (phase 2b; `compiler::compile_for_objects`): before
+  sema, `Cache::reuse` checks each unit's record and, for a hit that
+  compiled without warnings, hard-links its object into the build
+  directory under the unit's lock, so another program replacing it later
+  (a program with other overrides gives a unit another key) cannot matter.
+  `Module::cached_files` marks those units' files, and
+  `passes::strip_bodies`, right after `lift_closures` in
+  `struct_body::apply`, drops their non-generic functions' and methods'
+  bodies with explicit return types, and the closure structs lifted out of
+  them. It drops only a body whose link summary the cache recorded
+  (`<unit>.summaries`: `check_confinement` reads callees' bodies to decide
+  whether a result is fresh, so it uses the recorded summary instead; a
+  summary that reaches a trait call depends on the program and is never
+  recorded, so its body stays). Generic code, trait defaults, constructors
+  and destructors stay whole. `objects` generates nothing for those units. A unit that warned is
+  checked again, so its warnings print on every build. `--emit-llvm` and
+  the JIT compile whole programs, never stripped.
 - **Verifying** (`--verify-cache`, or `PEPPER_CACHE_VERIFY=1`, which CI
   sets): a hit generates the unit anyway and fails if its bitcode differs
   from the record's, naming the unit; it keeps `<unit>.ll` beside each
@@ -919,10 +940,13 @@ object from `.pep/cache` without generating any code.
   add it to `unit_inputs`, or make codegen stop depending on it. So names
   sema synthesizes are numbered per file, never per program: hidden locals
   restart in each `build_file`, and closure structs are
-  `__closure_N@<namespace>` (`Module::namespaces`).
-- **Not yet** (phases 2b, 2c and 3): skipping sema of unchanged units'
-  bodies, interfaces (`.pepi`) that skip parsing, and early cutoff for
-  dependents by interface hash.
+  `__closure_N@<namespace>` (`Module::namespaces`). Verifying also runs sema
+  a second time with the hit units' bodies skipped (the "trial") and
+  requires every other unit's code from it to match
+  (`Cache::check_code`, `<unit>.trial.ll` on a mismatch).
+  `--no-verify-cache` overrides the variable.
+- **Not yet** (phases 2c and 3): interfaces (`.pepi`) that skip parsing,
+  and early cutoff for dependents by interface hash.
 
 ---
 
@@ -1199,7 +1223,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
-| Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. |
+| Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 

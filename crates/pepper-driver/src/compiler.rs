@@ -9,6 +9,8 @@ use pepper_sema::model::Module as SemaModule;
 use pepper_sema::passes::transform_pass;
 use pepper_sema::program::{self, Program, Root, Setup};
 use pepper_sema::struct_body;
+use pepper_parser::diagnostic::Loc;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Compiled sema module: parse + merge + transform complete.
@@ -98,6 +100,41 @@ pub fn compile(
 /// [`compile`], also returning the loaded program, whose files and units
 /// ([`Program::units`]) the object pipeline splits the module by.
 pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String> {
+    compile_program_with(options, None, false)
+}
+
+/// [`compile_program`] for [`crate::objects`]: sema skips the bodies of the
+/// units the build cache reuses (`Cache::reuse`, which puts their objects
+/// in `units_dir` now, see [`crate::units_dir`]), so the module can only be
+/// split into unit objects by `objects`, never compiled whole.
+///
+/// Verifying the cache (`--verify-cache`), the module is compiled whole,
+/// since every hit is generated again, and the third value is the module
+/// with those bodies skipped (when any were), for `objects` to check that
+/// skipping them changes no other unit's code.
+pub fn compile_for_objects(options: &Options, units_dir: &Path) -> Result<(Compiled, Program, Option<Compiled>), String> {
+    let record = options.effective_cache_dir().is_some();
+    if !options.verifying_cache() {
+        return compile_program_with(options, Some(units_dir), record).map(|(module, program)| (module, program, None));
+    }
+    let (module, program) = compile_program_with(options, None, record)?;
+    let reused = reused(options, &program, units_dir)?;
+    if !reused.files.iter().any(|&c| c) {
+        return Ok((module, program, None));
+    }
+    // Numbered as if the program were compiled for the first time.
+    pepper_sema::reset_program_counters();
+    let mut trial = merge(&program)?;
+    trial.cached_files = reused.files;
+    trial.recorded_summaries = reused.summaries;
+    run_passes(&mut trial).map_err(|e| format!("build cache: skipping the cached units' bodies broke sema:\n{}", e))?;
+    Ok((module, program, Some(trial)))
+}
+
+/// [`compile_program`], skipping the bodies of the units the cache reuses
+/// into `reuse` when it is given, and recording link summaries for the
+/// cache (`Module::summaries_to_record`) when `record`.
+fn compile_program_with(options: &Options, reuse: Option<&Path>, record: bool) -> Result<(Compiled, Program), String> {
     let entry_source = options
         .source_files
         .first()
@@ -107,6 +144,12 @@ pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String>
     let program = load(options, entry_source)?;
     timer.stage("load and parse");
     let mut module = merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))?;
+    module.record_summaries = record;
+    if let Some(units_dir) = reuse {
+        let reused = reused(options, &program, units_dir)?;
+        module.cached_files = reused.files;
+        module.recorded_summaries = reused.summaries;
+    }
     timer.stage("check and build");
     // Warnings print whether or not the passes succeed, as clang prints
     // them beside errors.
@@ -115,6 +158,41 @@ pub fn compile_program(options: &Options) -> Result<(Compiled, Program), String>
     result?;
     timer.stage("sema passes");
     Ok((module, program))
+}
+
+/// The units whose objects came from the cache before sema.
+#[derive(Default)]
+struct Reused {
+    /// Per program file, whether its unit's object came from the cache
+    /// (`Module::cached_files`).
+    files: Vec<bool>,
+    /// Their recorded link summaries (`Module::recorded_summaries`).
+    summaries: HashMap<Loc, String>,
+}
+
+/// Reuse every unit the cache can supply ([`crate::cache::Cache::reuse`],
+/// into `units_dir`); nothing when there is no cache.
+fn reused(options: &Options, program: &Program, units_dir: &Path) -> Result<Reused, String> {
+    let Some(root) = options.effective_cache_dir() else {
+        return Ok(Reused::default());
+    };
+    let cache = crate::cache::Cache::open(&root)?;
+    let mut reused = Reused { files: vec![false; program.files.len()], summaries: HashMap::new() };
+    let file_of: HashMap<&str, usize> = program.files.iter().enumerate().map(|(i, f)| (f.namespace.as_str(), i)).collect();
+    let units = program.units();
+    for (unit, (_, key)) in units.iter().zip(crate::unit_keys(Some(&cache), program, &units)) {
+        let Some(key) = key else { continue };
+        let Some(summaries) = cache.reuse(&unit.name, &key, &units_dir.join(format!("{}.o", unit.name)))? else { continue };
+        for &file in &unit.files {
+            reused.files[file] = true;
+        }
+        for (namespace, loc, summary) in crate::cache::parse_summaries(&summaries) {
+            if let Some(&file) = file_of.get(namespace) {
+                reused.summaries.insert(Loc::new(FileId(file as u32), loc), summary.to_string());
+            }
+        }
+    }
+    Ok(reused)
 }
 
 /// Platform selection, struct bodies and the transform passes (the last of

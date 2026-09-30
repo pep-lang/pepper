@@ -1044,6 +1044,20 @@ pub struct Module {
     /// synthesizes for a file's code (closure structs) take it, so they do
     /// not depend on the other files of the program. `merge` leaves it alone.
     pub namespaces: Vec<String>,
+    /// Per file, by `FileId`: its unit's object comes from the build cache,
+    /// so `strip_bodies` drops its non-generic bodies once closures are
+    /// lifted. Empty when nothing is cached. `merge` leaves it alone.
+    pub cached_files: Vec<bool>,
+    /// The link summaries (`check_confinement`) the build cache recorded for
+    /// the functions of cached units, by each function's location:
+    /// `strip_bodies` drops only bodies recorded here, and the pass uses the
+    /// summaries in their place. `merge` leaves it alone.
+    pub recorded_summaries: std::collections::HashMap<Loc, String>,
+    /// Have `check_confinement` summarize every function and fill
+    /// `summaries_to_record`, for the build cache to store.
+    pub record_summaries: bool,
+    /// The summaries worth recording (see `record_summaries`), by location.
+    pub summaries_to_record: Vec<(Loc, String)>,
     /// Warnings found while compiling: those the driver carried over from
     /// the loaded program (`Program::warnings`), then the uses of
     /// deprecated members `check_deprecated_members` found. `merge` leaves

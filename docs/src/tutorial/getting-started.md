@@ -115,7 +115,8 @@ The compiler also writes intermediate files to `.pep/build/` under the
 directory you run it from, and keeps a build cache in `.pep/cache/`: each file
 of the program (and the standard library) is compiled to its own object, and
 on the next build a file whose sources and imports did not change reuses its
-object without being compiled again. Deleting
+object without being compiled or checked again. A file that compiled with
+warnings is checked again, so its warnings print on every build. Deleting
 `.pep/cache/` is always safe.
 
 ## When something is wrong
@@ -164,7 +165,8 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `-T cache` | Print how the build cache supplied each object: `hit` (sources unchanged), `hit (same code)` (recompiled, same code), or `miss`. |
 | `--no-cache` | Compile everything without reading or writing the build cache. |
 | `--cache <dir>` | Keep the build cache in `<dir>` instead of `.pep/cache/` (also `PEPPER_CACHE_DIR`). |
-| `--verify-cache` | Compile cache hits anyway and fail if their code differs from the cached object (for testing the compiler; also `PEPPER_CACHE_VERIFY=1`). |
+| `--verify-cache` | Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file's code (for testing the compiler; also `PEPPER_CACHE_VERIFY=1`). |
+| `--no-verify-cache` | Do not verify the cache, even with `PEPPER_CACHE_VERIFY` set. |
 | `--help` | List every option. |
 
 A program can span several files: pass the entry file, and the compiler finds

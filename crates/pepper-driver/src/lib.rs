@@ -72,11 +72,15 @@ pub fn run(options: Options) -> Result<i32, String> {
         return Err("the MSVC linker path is not ported".to_string());
     }
 
-    let (sema_module, program) = compiler::compile_program(&options)?;
+    let build_dir = options.effective_build_dir();
+    let (sema_module, program, trial) = if options.emit_llvm {
+        compiler::compile_program(&options).map(|(module, program)| (module, program, None))?
+    } else {
+        compiler::compile_for_objects(&options, &units_dir(&build_dir, &module_name))?
+    };
     let mut timer = StageTimer::new(options.tracing("time"));
     let link_libraries = link_libraries(&sema_module);
     let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
-    let build_dir = options.effective_build_dir();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
 
     // --emit-llvm: write the whole program's IR as one module.
@@ -95,7 +99,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     // Full pipeline: one object per unit (from the build cache when the
     // unit is unchanged), the program object, then link.
     let out_path = options.output_path()?;
-    let built = objects(&options, &sema_module, &program, &build_dir, &module_name)?;
+    let built = objects(&options, &sema_module, trial.as_ref(), &program, &build_dir, &module_name)?;
     if options.tracing("cache") {
         for object in &built {
             let outcome = match object.outcome {
@@ -151,22 +155,33 @@ pub struct UnitObject {
 /// unless `--no-cache`, plus the program object (`<build>/<name>.o`) that
 /// runs every file's global initializer. Unit objects go in
 /// `<build>/<name>.units/`. The objects to link, units first.
+///
+/// `trial` (from [`compiler::compile_for_objects`] when verifying) is the
+/// module with the cached units' bodies skipped: each unit generated from
+/// `module` must have the same code generated from it.
 pub fn objects(
     options: &Options,
     module: &pepper_sema::model::Module,
+    trial: Option<&pepper_sema::model::Module>,
     program: &pepper_sema::program::Program,
     build_dir: &std::path::Path,
     name: &str,
 ) -> Result<Vec<UnitObject>, String> {
     let units = program.units();
     let cache = options.effective_cache_dir().map(|root| cache::Cache::open(&root)).transpose()?;
-    let build_units = build_dir.join(format!("{}.units", name));
-    let source_hashes: Vec<blake3::Hash> = program.files.iter().map(|f| blake3::hash(f.source.as_bytes())).collect();
+    let build_units = units_dir(build_dir, name);
+    // Files with warnings; their units are checked again next time.
+    let mut warned_files = vec![false; program.files.len()];
+    for loc in module.warnings.iter().filter_map(|w| w.loc).filter(|l| !l.is_none()) {
+        if let Some(warned) = warned_files.get_mut(loc.file.0 as usize) {
+            *warned = true;
+        }
+    }
     let mut jobs: Vec<UnitJob> = units
         .iter()
+        .zip(unit_keys(cache.as_ref(), program, &units))
         .enumerate()
-        .map(|(i, u)| {
-            let inputs = program.unit_inputs(u);
+        .map(|(i, (u, (inputs, key)))| {
             let mut is_input = vec![false; program.files.len()];
             for &file in &inputs {
                 is_input[file] = true;
@@ -175,8 +190,11 @@ pub fn objects(
                 unit: Some(i),
                 name: u.name.clone(),
                 object: build_units.join(format!("{}.o", u.name)),
-                key: cache.as_ref().map(|c| cache::unit_key(c.compiler(), program, u, &inputs, &source_hashes)),
+                key,
                 inputs: is_input,
+                warned: u.files.iter().any(|&f| warned_files[f]),
+                summaries: unit_summaries(module, program, &u.files),
+                stripped: u.files.iter().any(|&f| module.cached_files.get(f).copied().unwrap_or(false)),
             }
         })
         .collect();
@@ -186,10 +204,14 @@ pub fn objects(
         object: build_dir.join(format!("{}.o", name)),
         key: None,
         inputs: vec![],
+        warned: false,
+        summaries: String::new(),
+        stripped: false,
     });
     let namespaces: Vec<String> = program.files.iter().map(|f| f.namespace.clone()).collect();
     let setup = UnitSetup {
         module,
+        trial,
         namespaces: &namespaces,
         unit_of_file: unit_files(&units, program.files.len()),
         cache: cache.as_ref(),
@@ -199,6 +221,40 @@ pub fn objects(
     default_target_machine()?;
     let outcomes = parallel(&jobs, |job| compile_unit(&setup, job))?;
     Ok(jobs.into_iter().zip(outcomes).map(|(job, outcome)| UnitObject { unit: job.name, path: job.object, outcome }).collect())
+}
+
+/// Where [`objects`] puts the unit objects of the program `name`.
+pub fn units_dir(build_dir: &std::path::Path, name: &str) -> PathBuf {
+    build_dir.join(format!("{}.units", name))
+}
+
+/// The link summaries sema recorded for the functions in `files`
+/// (`Module::summaries_to_record`), as the cache stores them.
+fn unit_summaries(module: &pepper_sema::model::Module, program: &pepper_sema::program::Program, files: &[usize]) -> String {
+    module
+        .summaries_to_record
+        .iter()
+        .filter(|(loc, _)| files.contains(&(loc.file.0 as usize)))
+        .map(|(loc, summary)| cache::summary_line(&program.files[loc.file.0 as usize].namespace, loc.span, summary))
+        .collect()
+}
+
+/// Each of `units`' inputs ([`Program::unit_inputs`]) and, with a cache,
+/// its source key ([`cache::unit_key`]).
+pub(crate) fn unit_keys(
+    cache: Option<&cache::Cache>,
+    program: &pepper_sema::program::Program,
+    units: &[pepper_sema::program::Unit],
+) -> Vec<(Vec<usize>, Option<String>)> {
+    let source_hashes: Vec<blake3::Hash> = program.files.iter().map(|f| blake3::hash(f.source.as_bytes())).collect();
+    units
+        .iter()
+        .map(|u| {
+            let inputs = program.unit_inputs(u);
+            let key = cache.map(|c| cache::unit_key(c.compiler(), program, u, &inputs, &source_hashes));
+            (inputs, key)
+        })
+        .collect()
 }
 
 /// One object to build: a unit (`unit: Some(index into units)`) or the
@@ -212,11 +268,22 @@ struct UnitJob {
     /// Per file, whether the unit's code may depend on it (see
     /// `Program::unit_inputs`); empty for the program module.
     inputs: Vec<bool>,
+    /// Sema reported a warning in one of its files.
+    warned: bool,
+    /// Its functions' link summaries, for the cache (see
+    /// [`cache::parse_summaries`]).
+    summaries: String,
+    /// Sema skipped its bodies (`Module::cached_files`): its object was
+    /// put in place before sema ([`cache::Cache::reuse`]).
+    stripped: bool,
 }
 
 /// What every [`compile_unit`] shares.
 struct UnitSetup<'a> {
     module: &'a pepper_sema::model::Module,
+    /// The module with the cached units' bodies skipped, to check against
+    /// (see [`objects`]).
+    trial: Option<&'a pepper_sema::model::Module>,
     namespaces: &'a [String],
     unit_of_file: Vec<usize>,
     cache: Option<&'a cache::Cache>,
@@ -243,21 +310,47 @@ fn unit_files(units: &[pepper_sema::program::Unit], files: usize) -> Vec<usize> 
 /// separate threads (and LLVM names struct types per context: a second
 /// `String` in one context would become `String.0`).
 fn compile_unit(setup: &UnitSetup<'_>, job: &UnitJob) -> Result<Option<cache::Outcome>, String> {
-    let ctx = inkwell::context::Context::create();
-    let generate = || -> Result<inkwell::module::Module<'_>, String> {
-        let mut generator = CodeGenerator::new(&ctx, &job.name);
+    let generate_in = |ctx, module: &pepper_sema::model::Module| -> Result<_, String> {
+        let mut generator = CodeGenerator::new(ctx, &job.name);
         generator.file_namespaces = setup.namespaces.to_vec();
         generator.unit = Some(pepper_codegen::partition::UnitFilter {
             unit_of_file: setup.unit_of_file.clone(),
             unit: job.unit,
             inputs: job.inputs.clone(),
         });
-        generator.generate(setup.module).map_err(|d| setup.module.sources.render(&d))?;
+        generator.generate(module).map_err(|d| module.sources.render(&d))?;
         pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
         Ok(generator.module)
     };
+    if job.stripped {
+        return Ok(Some(cache::Outcome::Hit));
+    }
+    let ctx = inkwell::context::Context::create();
+    let generate = || generate_in(&ctx, setup.module);
     match (setup.cache, &job.key) {
-        (Some(cache), Some(key)) => cache.object(&job.name, key, &job.object, setup.verify, generate).map(Some),
+        (Some(cache), Some(key)) => {
+            let unit = cache::UnitRequest {
+                name: &job.name,
+                key,
+                out: &job.object,
+                verify: setup.verify,
+                warned: job.warned,
+                summaries: &job.summaries,
+            };
+            let (outcome, code) = cache.object(&unit, generate)?;
+            // A unit whose bodies the trial kept must come out the same:
+            // skipping the others' bodies may not change its code.
+            let kept = |trial: &pepper_sema::model::Module| {
+                let file = job.unit.map(|u| setup.unit_of_file.iter().position(|&f| f == u));
+                !file.flatten().is_some_and(|f| trial.cached_files.get(f).copied().unwrap_or(false))
+            };
+            if let Some(trial) = setup.trial.filter(|&t| kept(t)) {
+                // Its own context, so its types keep their names.
+                let trial_ctx = inkwell::context::Context::create();
+                cache.check_code(&job.name, &code, &generate_in(&trial_ctx, trial)?)?;
+            }
+            Ok(Some(outcome))
+        }
         _ => cache::emit(&generate()?, &job.object).map(|_| None),
     }
 }

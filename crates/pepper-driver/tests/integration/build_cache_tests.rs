@@ -1,8 +1,9 @@
 //! The build cache: a program is emitted as one object per compilation
 //! unit, and a unit whose sources are unchanged comes from the cache without
-//! generating its code (see INTERNALS.md §4.3). Every build here verifies
-//! its hits (`--verify-cache`): a hit unit's code is generated anyway and
-//! must match the cached object's.
+//! generating its code or checking its bodies (see INTERNALS.md §4.3). Most
+//! builds here verify the cache (`--verify-cache`): a hit unit's code is
+//! generated anyway and must match the cached object's, and every other
+//! unit must come out the same when sema skips the hit units' bodies.
 
 use clap::Parser;
 use pepper_driver::cache::Outcome;
@@ -21,21 +22,35 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
-/// Build `entry` with the cache at `cache` into `build`, verifying hits.
+/// Build `entry` with the cache at `cache` into `build`, verifying the cache.
 fn build_entry(entry: &Path, cache: &Path, build: &Path) -> Vec<UnitObject> {
+    compile_entry(entry, cache, build, true).1
+}
+
+/// Build `entry` with the cache at `cache` into `build`, verifying the
+/// cache when `verify`: the module sema produced and the objects.
+fn compile_entry(entry: &Path, cache: &Path, build: &Path, verify: bool) -> (pepper_sema::model::Module, Vec<UnitObject>) {
     // chdir so namespaces (paths from the project) resolve like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
-    let options = pepper_driver::Options::parse_from([
+    let mut args = vec![
         "pepper".to_string(),
         entry.to_string_lossy().into_owned(),
         "--cache".to_string(),
         cache.to_string_lossy().into_owned(),
         "--build".to_string(),
         build.to_string_lossy().into_owned(),
-        "--verify-cache".to_string(),
-    ]);
-    let (module, program) = pepper_driver::compiler::compile_program(&options).unwrap();
-    pepper_driver::objects(&options, &module, &program, build, "main").unwrap()
+    ];
+    // Not verifying overrides PEPPER_CACHE_VERIFY, which CI sets.
+    args.push(if verify { "--verify-cache" } else { "--no-verify-cache" }.to_string());
+    let options = pepper_driver::Options::parse_from(args);
+    let (module, program, trial) = pepper_driver::compiler::compile_for_objects(&options, &pepper_driver::units_dir(build, "main")).unwrap();
+    let objects = pepper_driver::objects(&options, &module, trial.as_ref(), &program, build, "main").unwrap();
+    (module, objects)
+}
+
+/// Whether sema kept the body of the function `name`.
+fn has_body(module: &pepper_sema::model::Module, name: &str) -> bool {
+    module.functions.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("no function '{}'", name)).body.is_some()
 }
 
 /// Build the documentation example `example`.
@@ -212,5 +227,110 @@ fn concurrent_builds_share_one_cache() {
             assert_eq!(std::fs::read(&a.path).unwrap(), std::fs::read(&b.path).unwrap(), "{} differs", a.unit);
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn sema_skips_the_bodies_of_cached_units() {
+    let dir = scratch("skip");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    write(
+        &project,
+        &[
+            ("lib.pep", "export twice(x: int): int { return x * 2; }\nexport inferred(x: int) { return x; }\n"),
+            ("main.pep", "import \"lib\";\nmain(): int { return twice(3) - 6 + inferred(0); }\n"),
+        ],
+    );
+    let entry = project.join("main.pep");
+    let (first, _) = compile_entry(&entry, &cache, &dir.join("a"), false);
+    assert!(has_body(&first, "twice") && has_body(&first, "main"), "nothing is cached yet");
+    // Every unit is a hit: no body is checked, except one whose return
+    // type comes from it.
+    let (again, objects) = compile_entry(&entry, &cache, &dir.join("b"), false);
+    assert!(!has_body(&again, "twice") && !has_body(&again, "main"));
+    assert!(has_body(&again, "inferred"), "a return type inferred from the body needs the body");
+    assert!(objects.iter().all(|o| o.unit == "__program" || o.outcome == Some(Outcome::Hit)), "{:?}", outcomes(&objects));
+    // An edit to main: its body is checked again; lib's still is not.
+    write(&project, &[("main.pep", "import \"lib\";\nmain(): int { return twice(4) - 8; }\n")]);
+    let (edited, objects) = compile_entry(&entry, &cache, &dir.join("c"), false);
+    assert!(has_body(&edited, "main") && !has_body(&edited, "twice"));
+    assert_eq!(outcome(&objects, "main"), Some(Outcome::Miss));
+    // Verifying generates every unit, so no body is skipped.
+    let (verified, _) = compile_entry(&entry, &cache, &dir.join("d"), true);
+    assert!(has_body(&verified, "twice") && has_body(&verified, "main"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_unit_that_warned_keeps_its_bodies_so_it_warns_again() {
+    let dir = scratch("warned");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    write(
+        &project,
+        &[
+            (
+                "lib.pep",
+                "## Deprecated: use `new_way` instead.\n[Deprecated(\"use 'new_way' instead\", \"new_way\")]\nexport old_way(): int { return 0; }\nexport new_way(): int { return 0; }\n",
+            ),
+            ("main.pep", "import \"lib\";\nmain(): int { return old_way(); }\n"),
+        ],
+    );
+    let entry = project.join("main.pep");
+    let (first, _) = compile_entry(&entry, &cache, &dir.join("a"), false);
+    assert!(first.warnings.iter().any(|w| w.message.contains("old_way")), "expected a deprecation warning: {:?}", first.warnings);
+    let (again, objects) = compile_entry(&entry, &cache, &dir.join("b"), false);
+    assert_eq!(outcome(&objects, "main"), Some(Outcome::Hit));
+    assert!(has_body(&again, "main"), "main warned, so its body is checked again");
+    assert!(again.warnings.iter().any(|w| w.message.contains("old_way")), "the warning is reported again: {:?}", again.warnings);
+    assert!(!has_body(&again, "old_way"), "lib did not warn");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn skipping_the_cached_units_bodies_changes_no_other_unit() {
+    // After the first program, the runtime units are hits, so each later
+    // program's own units are also generated from a module without the
+    // runtime's bodies, and verifying requires the same code (generics
+    // instantiated from the runtime included).
+    let dir = scratch("trial");
+    let cache = dir.join("cache");
+    for (i, example) in ["threads-basics", "tuples-collections", "tutorial-word-count/main", "threads-copy"].iter().enumerate() {
+        let objects = build(example, &cache, &dir.join(format!("b{}", i)));
+        if i > 0 {
+            assert_eq!(outcome(&objects, "prelude"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_skipped_body_keeps_its_recorded_link_summary() {
+    // `make` returns a new Tracker, so its result may go to the `[Sending]`
+    // parameter of `ThreadLocal.set`. With lib's bodies skipped, sema knows
+    // that only from the link summary the cache recorded for `make`.
+    let dir = scratch("summaries");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    let main = |n: i32| {
+        format!(
+            "import async;\nimport \"lib\";\nconst slot = async.ThreadLocal<Tracker>();\nmain(): int {{\n    slot.set(make());\n    return {} - {};\n}}\n",
+            n, n
+        )
+    };
+    write(
+        &project,
+        &[
+            ("lib.pep", "export struct Tracker {\n    var value: int;\n}\nexport make(): Tracker {\n    return Tracker();\n}\n"),
+            ("main.pep", &main(1)),
+        ],
+    );
+    let entry = project.join("main.pep");
+    compile_entry(&entry, &cache, &dir.join("a"), false);
+    write(&project, &[("main.pep", &main(2))]);
+    let (edited, objects) = compile_entry(&entry, &cache, &dir.join("b"), false);
+    assert_ne!(outcome(&objects, "main"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+    assert!(!has_body(&edited, "make"), "lib's bodies are skipped");
     let _ = std::fs::remove_dir_all(&dir);
 }

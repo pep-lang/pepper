@@ -40,6 +40,13 @@
 //!   `copy(x)`); never a named variable;
 //! - `ThreadLocal<T>.get()` for a `T` that is not thread-safe (reach the
 //!   value with `with (var v = local.enter())`), and `Mutex<T>` of a number.
+//!
+//! **Recorded summaries.** For the build cache (phase 2b), the pass can
+//! summarize every function and hand out the summaries that do not depend
+//! on the rest of the program (`Module::summaries_to_record`): those that
+//! reach no call through a trait value, whose implementations differ from
+//! program to program. A later build that skips a cached unit's bodies
+//! seeds its functions' summaries from them (`Module::recorded_summaries`).
 
 use crate::model::*;
 use pepper_parser::diagnostic::Fix;
@@ -85,18 +92,21 @@ struct Summary {
     /// The first `return` whose value shares an operand's class or is
     /// tainted, for notes. Not compared.
     blame: Option<Loc>,
+    /// It reaches a call through a trait value, so it depends on which
+    /// implementations the program has: never recorded.
+    dependent: bool,
 }
 
 impl Summary {
     /// Nothing linked, nothing tainted: every slot its own class.
     fn bottom(operands: usize, results: usize) -> Summary {
-        Summary { class: (0..operands + results).collect(), tainted: vec![false; results], blame: None }
+        Summary { class: (0..operands + results).collect(), tainted: vec![false; results], blame: None, dependent: false }
     }
 
     /// Everything linked and every result tainted: a callee nothing is
     /// known about.
     fn top(operands: usize, results: usize) -> Summary {
-        Summary { class: vec![0; operands + results], tainted: vec![true; results], blame: None }
+        Summary { class: vec![0; operands + results], tainted: vec![true; results], blame: None, dependent: false }
     }
 
     fn results(&self) -> usize {
@@ -134,7 +144,38 @@ impl Summary {
         }
         let class = (0..slots).map(|slot| (0..slots).find(|&s| sets.find(s) == sets.find(slot)).unwrap()).collect();
         let tainted = self.tainted.iter().zip(&other.tainted).map(|(a, b)| *a || *b).collect();
-        Summary { class, tainted, blame: self.blame.or(other.blame) }
+        Summary { class, tainted, blame: self.blame.or(other.blame), dependent: self.dependent || other.dependent }
+    }
+
+    /// The summary as recorded for the build cache, for a function in the
+    /// file of `blame`: `classes;taints;blame` (`0,1,0;0;12-30`).
+    fn encode(&self) -> String {
+        let join = |values: Vec<String>| values.join(",");
+        let blame = self.blame.map_or("-".to_string(), |b| format!("{}-{}", b.span.start, b.span.end));
+        format!(
+            "{};{};{}",
+            join(self.class.iter().map(|c| c.to_string()).collect()),
+            join(self.tainted.iter().map(|&t| u8::from(t).to_string()).collect()),
+            blame
+        )
+    }
+
+    /// A summary [`Summary::encode`] wrote, for a function in `file`.
+    fn decode(text: &str, file: pepper_parser::diagnostic::FileId) -> Option<Summary> {
+        let mut fields = text.split(';');
+        let numbers = |field: &str| -> Option<Vec<usize>> {
+            if field.is_empty() { Some(vec![]) } else { field.split(',').map(|n| n.parse().ok()).collect() }
+        };
+        let class = numbers(fields.next()?)?;
+        let tainted = numbers(fields.next()?)?.into_iter().map(|t| t != 0).collect();
+        let blame = match fields.next()? {
+            "-" => None,
+            span => {
+                let (start, end) = span.split_once('-')?;
+                Some(Loc::new(file, pepper_parser::ast::Span { start: start.parse().ok()?, end: end.parse().ok()? }))
+            }
+        };
+        Some(Summary { class, tainted, blame, dependent: false })
     }
 }
 
@@ -247,6 +288,8 @@ struct Program<'a> {
     isolated: std::collections::HashSet<String>,
     /// `has_region` by type, as computed.
     regions: std::cell::RefCell<HashMap<String, bool>>,
+    /// What [`record_summaries`] found.
+    recorded_out: Vec<(Loc, String)>,
     /// The runtime's directory, found on first use.
     runtime_directory: std::cell::OnceCell<Option<std::path::PathBuf>>,
 }
@@ -261,12 +304,13 @@ impl<'a> Program<'a> {
             module,
             table: StructTable::build(module),
             safe: ThreadSafeStructs::of(module),
-            summaries: HashMap::new(),
+            summaries: recorded(module),
             bodies,
             structs,
             constructors,
             isolated,
             regions: std::cell::RefCell::new(HashMap::new()),
+            recorded_out: vec![],
             runtime_directory: std::cell::OnceCell::new(),
         }
     }
@@ -353,6 +397,8 @@ struct Walk<'p, 'a> {
     operands: Vec<Option<usize>>,
     /// The summary keys of the functions the walk called.
     called: Vec<String>,
+    /// The walk called through a trait value.
+    dependent: bool,
     /// The operand slots of `[Move]` parameters (summaries).
     sending: Vec<usize>,
     error: Option<Diagnostic>,
@@ -360,7 +406,7 @@ struct Walk<'p, 'a> {
 
 impl<'p, 'a> Walk<'p, 'a> {
     fn new(program: &'p Program<'a>, mode: Mode, current: Option<TypeName>) -> Self {
-        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], sending: vec![], error: None }
+        Walk { program, mode, regions: vec![], scopes: vec![vec![]], locks: vec![], open: vec![], current, returns: vec![], operands: vec![], called: vec![], dependent: false, sending: vec![], error: None }
     }
 
     fn region(&mut self, part: Part) -> usize {
@@ -1128,7 +1174,10 @@ impl<'p, 'a> Walk<'p, 'a> {
     fn apply(&mut self, expr: &Expression, callee: Callee, operands: Vec<(Option<usize>, &Expression)>) -> Option<usize> {
         match &callee {
             Callee::Known(key, _) => self.called.push(key.clone()),
-            Callee::Trait(keys) => self.called.extend(keys.iter().cloned()),
+            Callee::Trait(keys) => {
+                self.called.extend(keys.iter().cloned());
+                self.dependent = true;
+            }
             _ => {}
         }
         let has_result = self.has_region(expr);
@@ -1258,6 +1307,52 @@ fn bodies(module: &Module) -> Vec<(Option<TypeName>, String, &FunctionDef)> {
     out
 }
 
+/// The recorded summaries (`Module::recorded_summaries`) of the functions
+/// whose bodies were skipped, by summary key.
+fn recorded(module: &Module) -> HashMap<String, Summary> {
+    let mut out = HashMap::new();
+    if module.recorded_summaries.is_empty() {
+        return out;
+    }
+    let mut seed = |key: String, function: &FunctionDef| {
+        if function.body.is_none()
+            && let Some(summary) = module.recorded_summaries.get(&function.loc).and_then(|text| Summary::decode(text, function.loc.file))
+        {
+            out.insert(key, summary);
+        }
+    };
+    for f in &module.functions {
+        seed(f.name.clone(), f);
+    }
+    for st in &module.structs {
+        for m in &st.method_members {
+            seed(method_key(&st.name, &m.name), m);
+        }
+    }
+    out
+}
+
+/// Record the summary of every function the build cache may skip the body
+/// of later (`Module::summaries_to_record`): each non-generic function and
+/// method at its own location, whose summary does not depend on the rest of
+/// the program. Locations more than one function share are left out.
+fn record_summaries(program: &mut Program) {
+    let module = program.module;
+    let keys: Vec<String> = bodies(module).into_iter().map(|(_, key, _)| key).collect();
+    summaries(program, keys);
+    let mut at: HashMap<Loc, Option<String>> = HashMap::new();
+    for (_, key, function) in bodies(module) {
+        if function.loc.is_none() || !function.owner.is_none() || key.contains('<') || key.ends_with(".__ctor") {
+            continue;
+        }
+        let text = program.summaries.get(&key).filter(|s| !s.dependent).map(Summary::encode);
+        at.entry(function.loc).and_modify(|shared| *shared = None).or_insert(text);
+    }
+    let mut out: Vec<(Loc, String)> = at.into_iter().filter_map(|(loc, text)| Some((loc, text?))).collect();
+    out.sort_by_key(|(loc, _)| (loc.file.0, loc.span.start));
+    program.recorded_out = out;
+}
+
 /// The number of operand slots of `function`: `this` (for a non-static
 /// method) and its parameters.
 fn slots(owner: &Option<TypeName>, key: &str, function: &FunctionDef) -> usize {
@@ -1316,6 +1411,7 @@ fn summarize(program: &Program, owner: &Option<TypeName>, key: &str, function: &
         summary.tainted[k] = walk.regions[root].tainted;
     }
     summary.blame = blame;
+    summary.dependent = walk.dependent || walk.called.iter().any(|k| program.summaries.get(k).is_some_and(|s| s.dependent));
     (summary, walk.called)
 }
 
@@ -1357,7 +1453,8 @@ fn summaries(program: &mut Program, roots: Vec<String>) {
                 queue.push_back(callee);
             }
         }
-        let changed = program.summaries.get(&key).map(|s| (&s.class, &s.tainted)) != Some((&summary.class, &summary.tainted));
+        let changed =
+            program.summaries.get(&key).map(|s| (&s.class, &s.tainted, s.dependent)) != Some((&summary.class, &summary.tainted, summary.dependent));
         program.summaries.insert(key.clone(), summary);
         if changed {
             for caller in callers.get(&key).cloned().unwrap_or_default() {
@@ -1414,15 +1511,23 @@ fn roots(module: &Module) -> Vec<String> {
 
 pub fn check_confinement(module: &mut Module) {
     lower_moved_arguments(module);
-    let module: &Module = module;
+    let recorded = check(module);
+    module.summaries_to_record = recorded;
+}
+
+/// [`check_confinement`], returning the summaries to record.
+fn check(module: &Module) -> Vec<(Loc, String)> {
     let mut program = Program::new(module);
     if check_parameter_attributes(&program) || check_mutex_arguments(&program) || check_guard_fields(&program) {
-        return;
+        return vec![];
     }
     let roots = roots(module);
     // Only a function with a `with` block needs the region walk.
     let with_blocks: std::collections::HashSet<String> = roots.iter().cloned().collect();
-    if !roots.is_empty() {
+    if module.record_summaries {
+        // Every function's, which includes the roots'.
+        record_summaries(&mut program);
+    } else if !roots.is_empty() {
         summaries(&mut program, roots);
     }
     let triggers = triggers(&program);
@@ -1433,9 +1538,10 @@ pub fn check_confinement(module: &mut Module) {
         }
         if let Some(error) = check_function(&program, &owner, function, regions) {
             crate::errors::report(error);
-            return;
+            return vec![];
         }
     }
+    program.recorded_out
 }
 
 /// The names a function must mention for the expression checks to find

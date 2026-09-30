@@ -404,6 +404,9 @@ pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
     if let Some(error) = crate::errors::take() {
         return Err(error);
     }
+    // Names synthesized from a file are numbered by now, so dropping the
+    // cached units' bodies cannot renumber anything the others see.
+    crate::passes::strip_bodies::strip_bodies(module);
     crate::passes::resolve_type_aliases::resolve_type_aliases(module);
     if let Some(error) = crate::errors::take() {
         return Err(error);

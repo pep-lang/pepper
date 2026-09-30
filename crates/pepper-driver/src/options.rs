@@ -70,10 +70,15 @@ pub struct Options {
     pub cache_dir: Option<PathBuf>,
 
     /// Check the build cache: generate the code of every unit that hits
-    /// anyway, and fail if it differs from the cached object's (also
-    /// `PEPPER_CACHE_VERIFY=1`). For testing the compiler.
-    #[arg(long = "verify-cache")]
+    /// anyway, and fail if it differs from the cached object's, or if
+    /// skipping the hit units' bodies in sema changes another unit's code
+    /// (also `PEPPER_CACHE_VERIFY=1`). For testing the compiler.
+    #[arg(long = "verify-cache", conflicts_with = "no_verify_cache")]
     pub verify_cache: bool,
+
+    /// Do not check the build cache, even with `PEPPER_CACHE_VERIFY` set.
+    #[arg(long = "no-verify-cache")]
+    pub no_verify_cache: bool,
 
     /// Use the MSVC linker (not ported; errors on non-Windows).
     #[arg(long = "MSVC")]
@@ -105,9 +110,10 @@ impl Options {
     }
 
     /// Whether cache hits are checked (`--verify-cache`, or
-    /// `PEPPER_CACHE_VERIFY` set to anything but empty or `0`).
+    /// `PEPPER_CACHE_VERIFY` set to anything but empty or `0`, unless
+    /// `--no-verify-cache`).
     pub fn verifying_cache(&self) -> bool {
-        self.verify_cache || std::env::var_os("PEPPER_CACHE_VERIFY").is_some_and(|v| !v.is_empty() && v != "0")
+        self.verify_cache || !self.no_verify_cache && std::env::var_os("PEPPER_CACHE_VERIFY").is_some_and(|v| !v.is_empty() && v != "0")
     }
 
     /// Whether trace channel `channel` (`-T channel`, or `--Tall`) is on.

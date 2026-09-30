@@ -1,14 +1,18 @@
 //! The build cache: one object per compilation unit under
 //! `.pep/cache/v1/<target>/`, reused without generating code when the
 //! unit's sources and inputs are unchanged, or without emitting it when its
-//! LLVM bitcode is (build cache phases 1 and 2a; see INTERNALS.md §4.3).
+//! LLVM bitcode is (build cache phases 1, 2a and 2b; see INTERNALS.md §4.3).
 //!
 //! Each unit has three files, named by the unit's path (`io/file`):
 //!
 //! - `<unit>.o`: the object;
-//! - `<unit>.json`: the record, `{"key": "<hex>", "bitcode": "<hex>"}`: the
-//!   unit's source key ([`unit_key`]) and the hash of the code the object
-//!   was emitted from;
+//! - `<unit>.json`: the record,
+//!   `{"key": "<hex>", "bitcode": "<hex>", "warnings": "no"}`: the unit's
+//!   source key ([`unit_key`]), the hash of the code the object was emitted
+//!   from, and whether compiling the unit warned;
+//! - `<unit>.summaries`: its functions' link summaries (see
+//!   [`parse_summaries`]), which a build that skips the unit's bodies uses
+//!   in their place;
 //! - `<unit>.lock`: an empty file that writers and readers lock.
 //!
 //! **Locking.** A compiler holds an exclusive OS lock on `<unit>.lock`
@@ -56,33 +60,56 @@ impl Cache {
         Ok(Cache { dir, compiler: compiler_id() })
     }
 
-    /// Put the object of the unit `name` at `out`. A unit whose record has
-    /// `key` (its sources, see [`unit_key`]) is a hit: its object is reused
-    /// without generating any code. Otherwise `generate` builds the unit's
-    /// module; if its bitcode matches the record's (an edit that changed no
-    /// code, such as a comment), the object is still reused, else it is
-    /// emitted and stored. With `verify`, a hit generates the module anyway
-    /// and fails if its bitcode differs from the record's, which proves the
-    /// key covers every input. Safe to call from several threads for
-    /// different units.
+    /// Reuse the unit `name` before sema, so sema may skip its bodies
+    /// (phase 2b): when it is a hit for `key` and compiled without warnings
+    /// (a unit that warned is checked again, so its warnings are reported
+    /// on every build), its object is put at `out` now, under the lock, and
+    /// this returns its recorded link summaries (see [`parse_summaries`]).
+    /// Another program can replace the unit's object in the cache later in
+    /// this build (a program with other overrides gives a unit another
+    /// key), so the unit's object must not be looked up again.
+    pub fn reuse(&self, name: &str, key: &str, out: &Path) -> Result<Option<String>, String> {
+        if !self.record(name).is_some_and(|r| r.key == key && !r.warned) {
+            return Ok(None);
+        }
+        let lock = self.lock_file(name)?;
+        lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", name, e))?;
+        let object = self.path(name, "o");
+        let mut reused = None;
+        if object.is_file() && self.record(name).is_some_and(|r| r.key == key && !r.warned) {
+            place(&object, out)?;
+            reused = Some(std::fs::read_to_string(self.path(name, "summaries")).unwrap_or_default());
+        }
+        drop(lock);
+        Ok(reused)
+    }
+
+    /// Put the object of `unit.name` at `unit.out`. A unit whose record has
+    /// `unit.key` (its sources, see [`unit_key`]) is a hit: its object is
+    /// reused without generating any code. Otherwise `generate` builds the
+    /// unit's module; if its bitcode matches the record's (an edit that
+    /// changed no code, such as a comment), the object is still reused,
+    /// else it is emitted and stored. With `unit.verify`, a hit generates
+    /// the module anyway and fails if its bitcode differs from the record's,
+    /// which proves the key covers every input. Returns how the object was
+    /// got and the hash of its code. Safe to call from several threads for different
+    /// units.
     pub fn object<'ctx>(
         &self,
-        name: &str,
-        key: &str,
-        out: &Path,
-        verify: bool,
+        unit: &UnitRequest<'_>,
         generate: impl FnOnce() -> Result<Module<'ctx>, String>,
-    ) -> Result<Outcome, String> {
+    ) -> Result<(Outcome, String), String> {
+        let UnitRequest { name, key, out, verify, warned, summaries } = *unit;
         let lock = self.lock_file(name)?;
         lock.lock().map_err(|e| format!("cannot lock the cache for '{}': {}", name, e))?;
         let record = self.record(name);
         let object = self.path(name, "o");
         let present = object.is_file();
-        let outcome = if present && record.as_ref().is_some_and(|r| r.key == key) {
+        let (outcome, code) = if present && let Some(record) = record.as_ref().filter(|r| r.key == key) {
             if verify {
                 let module = generate()?;
                 let bitcode = self.bitcode_hash(&module);
-                if record.as_ref().map(|r| r.bitcode.as_str()) != Some(bitcode.as_str()) {
+                if record.bitcode != bitcode {
                     let now = self.path(name, "verify.ll");
                     let _ = module.print_to_file(&now);
                     return Err(format!(
@@ -94,7 +121,7 @@ impl Cache {
                     ));
                 }
             }
-            Outcome::Hit
+            (Outcome::Hit, record.bitcode.clone())
         } else {
             let module = generate()?;
             let bitcode = self.bitcode_hash(&module);
@@ -108,12 +135,31 @@ impl Cache {
                 emit(&module, &temporary)?;
                 std::fs::rename(&temporary, &object).map_err(|e| format!("cannot write {}: {}", object.display(), e))?;
             }
-            write_atomically(&self.path(name, "json"), Record { key: key.to_string(), bitcode }.to_json().as_bytes())?;
-            if same_code { Outcome::SameCode } else { Outcome::Miss }
+            write_atomically(&self.path(name, "summaries"), summaries.as_bytes())?;
+            write_atomically(&self.path(name, "json"), Record { key: key.to_string(), bitcode: bitcode.clone(), warned }.to_json().as_bytes())?;
+            (if same_code { Outcome::SameCode } else { Outcome::Miss }, bitcode)
         };
         place(&object, out)?;
         drop(lock);
-        Ok(outcome)
+        Ok((outcome, code))
+    }
+
+    /// Fail unless `module` has the code `code` (a hash [`Cache::object`]
+    /// returned for the unit `name`): verifying, a unit generated with the
+    /// cached units' bodies skipped must match the one generated from the
+    /// whole program. Writes `<unit>.trial.ll` on a mismatch.
+    pub fn check_code(&self, name: &str, code: &str, module: &Module<'_>) -> Result<(), String> {
+        if self.bitcode_hash(module) == code {
+            return Ok(());
+        }
+        let trial = self.path(name, "trial.ll");
+        let _ = module.print_to_file(&trial);
+        Err(format!(
+            "build cache: unit '{}' has different code when sema skips the cached units' bodies (compare {} with {})",
+            name,
+            self.path(name, "ll").display(),
+            trial.display()
+        ))
     }
 
     /// The hash of a unit's code: its bitcode and the compiler that made it.
@@ -180,6 +226,42 @@ pub fn unit_key(compiler: &str, program: &Program, unit: &Unit, inputs: &[usize]
     hasher.finalize().to_hex().to_string()
 }
 
+/// One unit for [`Cache::object`].
+#[derive(Debug, Clone, Copy)]
+pub struct UnitRequest<'a> {
+    /// The unit's name, which names its cache files.
+    pub name: &'a str,
+    /// Its source key ([`unit_key`]).
+    pub key: &'a str,
+    /// Where to put its object.
+    pub out: &'a Path,
+    /// Generate a hit anyway and check its code (`--verify-cache`).
+    pub verify: bool,
+    /// Compiling it warned (recorded on a miss; see [`Cache::reuse`]).
+    pub warned: bool,
+    /// Its functions' link summaries, stored on a miss (see
+    /// [`parse_summaries`]).
+    pub summaries: &'a str,
+}
+
+/// The lines of a unit's `<unit>.summaries`: each function's link summary
+/// (`check_confinement`), by its file's namespace and its location's span:
+/// `<namespace>\t<start>\t<end>\t<summary>`.
+pub fn parse_summaries(text: &str) -> impl Iterator<Item = (&str, pepper_parser::ast::Span, &str)> {
+    text.lines().filter_map(|line| {
+        let mut fields = line.splitn(4, '\t');
+        let namespace = fields.next()?;
+        let start = fields.next()?.parse().ok()?;
+        let end = fields.next()?.parse().ok()?;
+        Some((namespace, pepper_parser::ast::Span { start, end }, fields.next()?))
+    })
+}
+
+/// One line of a unit's summaries file (see [`parse_summaries`]).
+pub fn summary_line(namespace: &str, span: pepper_parser::ast::Span, summary: &str) -> String {
+    format!("{}\t{}\t{}\t{}\n", namespace, span.start, span.end, summary)
+}
+
 /// How [`Cache::object`] got a unit's object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -198,15 +280,23 @@ struct Record {
     key: String,
     /// The hash of the code its object was emitted from.
     bitcode: String,
+    /// Compiling the unit reported warnings. A record without the field
+    /// counts as warned, so its unit is checked again.
+    warned: bool,
 }
 
 impl Record {
     fn to_json(&self) -> String {
-        format!("{{\"key\": \"{}\", \"bitcode\": \"{}\"}}\n", self.key, self.bitcode)
+        let warned = if self.warned { "yes" } else { "no" };
+        format!("{{\"key\": \"{}\", \"bitcode\": \"{}\", \"warnings\": \"{}\"}}\n", self.key, self.bitcode, warned)
     }
 
     fn parse(text: &str) -> Option<Record> {
-        Some(Record { key: json_string(text, "key")?.to_string(), bitcode: json_string(text, "bitcode")?.to_string() })
+        Some(Record {
+            key: json_string(text, "key")?.to_string(),
+            bitcode: json_string(text, "bitcode")?.to_string(),
+            warned: json_string(text, "warnings") != Some("no"),
+        })
     }
 }
 
@@ -278,9 +368,12 @@ mod tests {
 
     #[test]
     fn records_round_trip() {
-        let record = Record { key: "ab12".to_string(), bitcode: "cd34".to_string() };
-        let read = Record::parse(&record.to_json()).unwrap();
-        assert_eq!((read.key.as_str(), read.bitcode.as_str()), ("ab12", "cd34"));
+        for warned in [false, true] {
+            let record = Record { key: "ab12".to_string(), bitcode: "cd34".to_string(), warned };
+            let read = Record::parse(&record.to_json()).unwrap();
+            assert_eq!((read.key.as_str(), read.bitcode.as_str(), read.warned), ("ab12", "cd34", warned));
+        }
+        assert!(Record::parse("{\"key\": \"ab12\", \"bitcode\": \"cd34\"}\n").unwrap().warned);
         assert!(Record::parse("{\"key\": \"ab12\"}\n").is_none());
         assert!(Record::parse("").is_none());
     }
