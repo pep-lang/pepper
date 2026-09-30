@@ -163,3 +163,24 @@ test(): int {
     assert!(err.contains("cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)"), "{}", err);
     assert!(err.contains("test.pep:5:13"), "{}", err);
 }
+
+#[test]
+fn inferred_calls_in_a_generic_structs_generic_method() {
+    // `describe(this.v)` in `Box<T>` names `T` until `Box` is specialized:
+    // it is inferred in `Box<int>.show<U>` (as `describe<int>`), not in the
+    // generic base, where it would have become `describe<T>`.
+    let src = r#"
+describe<T>(v: T): int { return 7; }
+wrap<X>(x: X): int { return describe(x) + 1; }
+struct Box<T> {
+    var v: T;
+    construct(T v) { this.v = v; }
+    show<U>(U u): int { return describe(this.v) + wrap(u); }
+    plain(): int { return describe(this.v); }
+}
+test(): int { var b = Box<int>(1); return b.show(true) * 100 + b.plain(); }
+"#;
+    let (result, leaked) = run(src);
+    assert_eq!(result, 1507);
+    assert_eq!(leaked, 0);
+}

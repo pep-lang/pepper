@@ -25,6 +25,10 @@ struct Scopes {
     /// While walking a function with no declared return type: the types of
     /// its `return <value>` statements.
     returns: Option<Vec<TypeName>>,
+    /// Walking a generic base (a generic struct's methods, a generic
+    /// function): its types still name its type parameters, so calls are
+    /// not inferred here; each specialization infers its own.
+    generic_base: bool,
 }
 
 impl Scopes {
@@ -40,6 +44,7 @@ impl Scopes {
             generic_functions: vec![],
             generic_methods: Default::default(),
             returns: None,
+            generic_base: false,
         }
     }
 
@@ -527,6 +532,8 @@ fn resolve_once(module: &mut Module) -> bool {
         scopes.generic_functions = generic_functions.clone();
         scopes.generic_methods = generic_methods.clone();
         scopes.symbols[0].extend(global_symbols.iter().cloned());
+        // A generic base (`Box` of `Box<T>`), not a specialization.
+        scopes.generic_base = st.ty.is_generic() && st.name == st.ty.name;
 
         // Resolve field types with defaults.
         for field in &mut st.field_members {
@@ -572,6 +579,9 @@ fn resolve_once(module: &mut Module) -> bool {
         for method in &mut st.method_members {
             let parent = method.parent.clone();
             let method_struct = match &parent {
+                // A specialization's methods keep the base's name as their
+                // parent (`Box` in `Box<int>`): they belong to this struct.
+                Some(name) if *name == current_struct.name => current_struct.clone(),
                 Some(name) => {
                     // Find the struct by declared name (snapshot avoids the
                     // double borrow of module.structs).
@@ -610,6 +620,7 @@ fn resolve_once(module: &mut Module) -> bool {
             scopes.generic_functions = generic_functions.clone();
         scopes.generic_methods = generic_methods.clone();
             scopes.symbols[0].extend(global_symbols.iter().cloned());
+            scopes.generic_base = function.is_generic_func;
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
             scopes.push(&function.name);
@@ -726,6 +737,9 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
 /// `larger(3, 9)`, becomes a call to the specialization its arguments
 /// select, `larger<i32>(3, 9)` (see `type_arguments`).
 fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    if scopes.generic_base {
+        return;
+    }
     if let Expression::MethodCall { this, method, args, .. } = e {
         // `x.map(f)` calling a generic method: `x.map<U>(f)`.
         if method.contains('<') {
