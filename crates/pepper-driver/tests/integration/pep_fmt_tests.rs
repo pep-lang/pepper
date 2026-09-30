@@ -156,22 +156,40 @@ fn pep_fmt_places_braces_attributes_and_declarations() {
 }
 
 #[test]
-fn pep_fmt_keeps_semicolons_one_line_bodies_and_else_as_written() {
+fn pep_fmt_adds_semicolons_and_keeps_one_line_bodies_and_else_as_written() {
     assert_formats(
         "main(): int {\n    for (var x in xs) { if x > 1 { continue } else if x < 0 { break; }\n    else { print(x) } }\n    return 0\n}\n",
-        "main(): int {\n    for (var x in xs) {\n        if x > 1 { continue } else if x < 0 { break; } else {\n            print(x)\n        }\n    }\n    return 0\n}\n",
+        "main(): int {\n    for (var x in xs) {\n        if x > 1 { continue; } else if x < 0 { break; } else {\n            print(x);\n        }\n    }\n    return 0;\n}\n",
+    );
+    assert_formats(
+        "import io\ntype T = int\nstruct S {\n    int x\n}\nextern int puts(char* s)\nvar limit = 3  # most\n",
+        "import io;\ntype T = int;\n\nstruct S {\n    int x;\n}\n\nextern int puts(char* s);\nvar limit = 3;  # most\n",
     );
 }
 
 #[test]
-fn pep_fmt_wraps_long_lines_after_commas_and_operators() {
+fn pep_fmt_wraps_long_lines_after_commas_and_before_operators() {
     let input = "main(): int {\n    call(argument_number_one, argument_number_two, argument_number_three, argument_number_four, argument_number_five_xy);\n\
                  \x20   call(argument_number_one, argument_number_two, argument_number_three, argument_number_four, argument_number_five_is_long, x);\n\
                  \x20   if (first_condition_is_long(argument_value) and second_condition_is_long(argument_value) or third_condition(value)) { return 1; }\n    return 0;\n}\n";
     let expected = "main(): int {\n    call(\n        argument_number_one, argument_number_two, argument_number_three, argument_number_four, argument_number_five_xy\n    );\n\
                     \x20   call(\n        argument_number_one,\n        argument_number_two,\n        argument_number_three,\n        argument_number_four,\n        argument_number_five_is_long,\n        x\n    );\n\
-                    \x20   if (first_condition_is_long(argument_value) and second_condition_is_long(argument_value) or\n        third_condition(value)) { return 1; }\n    return 0;\n}\n";
+                    \x20   if (first_condition_is_long(argument_value) and second_condition_is_long(argument_value)\n        or third_condition(value)) { return 1; }\n    return 0;\n}\n";
     assert_formats(input, expected);
+}
+
+#[test]
+fn pep_fmt_breaks_before_operators_and_dots() {
+    // Line breaks never end a statement, so a long expression breaks before
+    // each operator, and a chain of three calls or more before each `.`.
+    assert_formats(
+        "main(): int {\n    total = first_value_that_is_long_enough + second_value_that_is_long_enough + third_value_that_is_long_and_longer_still;\n\
+         \x20   var n = words.iterate().filter((w) => w.length() > 4).map((w) => w.length() * 2).collect_all_the_things_right_now_x();\n\
+         \x20   File.stderr().write_string(\"a message that is long enough to need its own line, and then some more words to be sure\");\n    return 0;\n}\n",
+        "main(): int {\n    total = first_value_that_is_long_enough\n        + second_value_that_is_long_enough\n        + third_value_that_is_long_and_longer_still;\n\
+         \x20   var n = words\n        .iterate()\n        .filter((w) => w.length() > 4)\n        .map((w) => w.length() * 2)\n        .collect_all_the_things_right_now_x();\n\
+         \x20   File.stderr().write_string(\n        \"a message that is long enough to need its own line, and then some more words to be sure\"\n    );\n    return 0;\n}\n",
+    );
 }
 
 #[test]

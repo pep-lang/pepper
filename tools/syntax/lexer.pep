@@ -255,8 +255,6 @@ export lex(source: String): Result<Token[], SyntaxError> {
         token.newlines_after_comments = newlines_since_comment;
         token.space_before = space;
         token.leading_comments = pending;
-        token.newline_right_after = i < size and
-            (data[i] == '\n' or (data[i] == '\r' and i + 1 < size and data[i + 1] == '\n'));
         tokens.append(token);
         pending = Array<Comment>();
         newlines = 0;

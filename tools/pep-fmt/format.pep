@@ -61,10 +61,10 @@ blank_before(node: syntax.Node): bool {
 # extension, or a function with a body), so it gets blank lines around it.
 is_big(node: syntax.Node): bool {
     int kind = node.kind;
-    if (kind == syntax.node_struct or
-        kind == syntax.node_trait or
-        kind == syntax.node_extend or
-        kind == syntax.node_enum) {
+    if (kind == syntax.node_struct
+        or kind == syntax.node_trait
+        or kind == syntax.node_extend
+        or kind == syntax.node_enum) {
         return true;
     }
     return kind == syntax.node_function and node.child(node.count() - 1).kind == syntax.node_block;
@@ -140,10 +140,10 @@ sort_imports(items: syntax.Node[]) {
             continue;
         }
         ulong end = start + 1;
-        while (end < items.count() and
-            is_sortable_import(items[end]) and
-            !blank_before(items[end]) and
-            items[end].first_token().leading_comments.count() == 0) {
+        while (end < items.count()
+            and is_sortable_import(items[end])
+            and !blank_before(items[end])
+            and items[end].first_token().leading_comments.count() == 0) {
             end += 1;
         }
         if (end - start > 1) {
@@ -202,7 +202,7 @@ export struct Formatter {
                 }
             }
             result.add(_leading(item.first_token()));
-            result.add(_node(item));
+            result.add(_item(item));
             index += 1;
         }
         var end = module.child(module.count() - 1).leaf;
@@ -332,17 +332,17 @@ export struct Formatter {
         if (kind == syntax.node_block or kind == syntax.node_members or kind == syntax.node_match_arms) {
             return _braced(item);
         }
-        if (kind == syntax.node_if or
-            kind == syntax.node_while or
-            kind == syntax.node_for or
-            kind == syntax.node_with or
-            kind == syntax.node_match) {
+        if (kind == syntax.node_if
+            or kind == syntax.node_while
+            or kind == syntax.node_for
+            or kind == syntax.node_with
+            or kind == syntax.node_match) {
             return _control(item);
         }
-        if (kind == syntax.node_return or
-            kind == syntax.node_jump or
-            kind == syntax.node_expression_statement or
-            kind == syntax.node_empty) {
+        if (kind == syntax.node_return
+            or kind == syntax.node_jump
+            or kind == syntax.node_expression_statement
+            or kind == syntax.node_empty) {
             return _simple_statement(item);
         }
         if (kind == syntax.node_type or kind == syntax.node_type_arguments) {
@@ -354,10 +354,10 @@ export struct Formatter {
         if (kind == syntax.node_attribute) {
             return _attribute(item);
         }
-        if (kind == syntax.node_parameters or
-            kind == syntax.node_arguments or
-            kind == syntax.node_import_list or
-            kind == syntax.node_closure_parameters) {
+        if (kind == syntax.node_parameters
+            or kind == syntax.node_arguments
+            or kind == syntax.node_import_list
+            or kind == syntax.node_closure_parameters) {
             return _delimited(item, false);
         }
         return _expression(item);
@@ -609,10 +609,10 @@ export struct Formatter {
             # `: R2`, which wins. The name may span several tokens.
             ulong j = i + 1;
             var name = concat();
-            while (j < item.count() and
-                item.child(j).kind == syntax.node_token and
-                !item.child(j).is_token(":") and
-                !item.child(j).is_token(";")) {
+            while (j < item.count()
+                and item.child(j).kind == syntax.node_token
+                and !item.child(j).is_token(":")
+                and !item.child(j).is_token(";")) {
                 name.add(_leaf(item.child(j)));
                 j += 1;
             }
@@ -870,6 +870,16 @@ export struct Formatter {
     # ── Blocks and statements ────────────────────────────────────────────────
 
     # A block or member list: `{`, the items one per line, `}`.
+    # A statement, member or top-level declaration, with the `;` it ends
+    # with added when the source omitted it.
+    _item(item: syntax.Node): Doc {
+        var result = _node(item);
+        if (syntax.ends_in_semicolon(item.kind) and !item.child(item.count() - 1).is_token(";")) {
+            result = concat().add(result).add(text(";"));
+        }
+        return result;
+    }
+
     _braced(item: syntax.Node): Doc {
         var result = concat();
         ulong i = 0;
@@ -889,13 +899,13 @@ export struct Formatter {
         if (items.empty() and close.leaf.leading_comments.count() == 0) {
             return result.add(_leaf(open)).add(_leaf(close));
         }
-        if (items.count() == 1 and
-            !item.has_comments() and
-            items[0].first_token().newlines_before == 0 and
-            close.leaf.newlines_before == 0 and
-            (items[0].kind == syntax.node_return or items[0].kind == syntax.node_jump)) {
+        if (items.count() == 1
+            and !item.has_comments()
+            and items[0].first_token().newlines_before == 0
+            and close.leaf.newlines_before == 0
+            and (items[0].kind == syntax.node_return or items[0].kind == syntax.node_jump)) {
             # One trivial statement written on one line stays there.
-            var body = concat().add(_leaf(open)).add(indent(concat().add(line()).add(_node(items[0])))).add(line());
+            var body = concat().add(_leaf(open)).add(indent(concat().add(line()).add(_item(items[0])))).add(line());
             return result.add(group(body.add(_leaf(close))));
         }
         result.add(_leaf(open));
@@ -913,7 +923,7 @@ export struct Formatter {
                 body.add(hardline());
             }
             body.add(_leading(entry.first_token()));
-            body.add(_node(entry));
+            body.add(_item(entry));
             index += 1;
         }
         result.add(indent(body));
@@ -988,14 +998,17 @@ export struct Formatter {
         if (kind == syntax.node_binary) {
             return _binary(item);
         }
+        if ((kind == syntax.node_call or kind == syntax.node_member) and called_members(item) >= 3) {
+            return _member_chain(item);
+        }
         if (kind == syntax.node_call) {
             return concat().add(_expression(item.child(0))).add(_delimited(item.child(1), false));
         }
-        if (kind == syntax.node_member or
-            kind == syntax.node_index or
-            kind == syntax.node_postfix or
-            kind == syntax.node_parenthesized or
-            kind == syntax.node_sizeof) {
+        if (kind == syntax.node_member
+            or kind == syntax.node_index
+            or kind == syntax.node_postfix
+            or kind == syntax.node_parenthesized
+            or kind == syntax.node_sizeof) {
             var result = concat();
             for (var child in item.children) {
                 result.add(_node(child));
@@ -1048,9 +1061,37 @@ export struct Formatter {
         return result;
     }
 
+    # `a.b(x).c(y).d(z)`, three calls or more: on one line if it fits, else
+    # a line break before each called member, indented under the first
+    # operand.
+    _member_chain(item: syntax.Node): Doc {
+        var links = Array<syntax.Node>();
+        var base = item;
+        while (base.kind == syntax.node_call or base.kind == syntax.node_member or base.kind == syntax.node_index) {
+            links.append(base);
+            base = base.child(0);
+        }
+        links.reverse();
+        var rest = concat();
+        ulong i = 0;
+        while (i < links.count()) {
+            var link = links[i];
+            bool called = i + 1 < links.count() and links[i + 1].kind == syntax.node_call;
+            if (link.kind == syntax.node_member and called) {
+                rest.add(softline());
+            }
+            ulong k = 1;
+            while (k < link.count()) {
+                rest.add(_node(link.child(k)));
+                k += 1;
+            }
+            i += 1;
+        }
+        return group(concat().add(_expression(base)).add(indent(rest)));
+    }
+
     # A binary expression. A chain of operators of one precedence breaks
-    # after each operator, never before one: a line break ends a Pepper
-    # expression.
+    # before each operator.
     _binary(item: syntax.Node): Doc {
         var op = item.child(1).leaf.text;
         int level = precedence(op);
@@ -1073,14 +1114,30 @@ export struct Formatter {
         var rest = concat();
         ulong i = 0;
         while (i < operators.count()) {
-            rest.add(text(" "));
-            rest.add(_leaf(operators[i]));
             rest.add(line());
+            rest.add(_leaf(operators[i]));
+            rest.add(text(" "));
             rest.add(_expression(operands[i + 1]));
             i += 1;
         }
         return group(concat().add(_expression(operands[0])).add(indent(rest)));
     }
+}
+
+# The number of members in the chain `item` heads that are called, as the
+# two in `a.b(x).c(y)`.
+called_members(item: syntax.Node): int {
+    int count = 0;
+    var current = item;
+    while (current.kind == syntax.node_call
+        or current.kind == syntax.node_member
+        or current.kind == syntax.node_index) {
+        if (current.kind == syntax.node_call and current.child(0).kind == syntax.node_member) {
+            count += 1;
+        }
+        current = current.child(0);
+    }
+    return count;
 }
 
 ## Aligns trailing comments on consecutive lines to one column, and removes

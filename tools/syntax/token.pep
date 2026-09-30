@@ -53,10 +53,6 @@ export struct Token {
     ## Whether any whitespace or comment separates this token from the one
     ## before it.
     bool space_before;
-    ## Whether a line break (`\n` or `\r\n`) follows this token immediately,
-    ## with no space or comment between. The Pepper grammar ends an
-    ## expression there.
-    bool newline_right_after;
     ## The comments on their own lines before this token.
     Comment[] leading_comments = Array<Comment>();
     ## A comment after this token on the same line, or an empty String.

@@ -246,6 +246,17 @@ with no extension, and `module_name()` is the output's stem.
   `export [...] from`, which `reexport` recognizes and parses as imports),
   `export` re-exports, then `declaration`. Rules return `ErrMode::Backtrack` (via `bt`) to let an
   alternative try, or `ErrMode::Cut` (via `cut`/`cut_expecting`) to commit.
+- **Semicolons.** Simple statements and non-block declarations end with
+  `;` (`docs/src/language/statements.md`); line breaks are whitespace
+  everywhere (`ws`), so an expression runs on across lines for as long as a
+  token extends it. A missing `;` is deprecated: `semicolon` takes it, or
+  `missing_semicolon` warns at the end of the statement's span with a fix
+  inserting it. So that the warning lands after the statement rather than
+  after trailing whitespace, rules that look ahead for a continuing token
+  (postfix, binary, ternary, cast, type suffixes) do so on a copy of the
+  input and restore the position when nothing continues. The one place a
+  line break matters is `decl_boundary`: until a missing `;` is an error, a
+  declaration without one ends at the end of its line.
 - **Generic method calls.** In postfix position, `.name<types>(` is a call
   with type arguments only when `<` follows the name and `(` follows `>`
   with no whitespace; the method name becomes the string `"map<long>"`.
@@ -263,7 +274,7 @@ with no extension, and `module_name()` is the output's stem.
   (the furthest offset any rule reached), `EXPECTATION` (what was expected
   at that furthest failure), `QUALIFIERS` (import qualifiers bound so far,
   so `q.Box<int>()` counts as a generic construction only when `q` is an
-  import), `EXPRESSION_PROBE`, `WARNINGS` (deprecations), and `ERROR` (a
+  import), `EXPRESSION_PROBE`, `WARNINGS` (deprecations), `ERROR` (a
   hard error that is not an unmet expectation).
   `track_source(len)` returns a `SourceGuard` that resets all of it for one
   parse. **Any code that calls a grammar rule directly (the unit tests do)
@@ -951,17 +962,19 @@ dogfooding of the language.
   on the same line after a token is its `trailing_comment`, any other is an
   entry in `leading_comments` of the next token). Nodes are uniform (`kind`, `leaf`,
   `children`), since Pepper has no enums or sum types yet.
-- The parser mirrors `parsers.rs` decision for decision, including every
-  place the compiler's grammar checks for a raw line break
-  (`input.starts_with('\n')`) before or after calling `ws()`. The parser
-  tracks that with `Skipped` (set by `skip()`, the `ws()` equivalent) and
-  the token's `NewlineRightAfter`. `>` is always its own token; the parser
+- The parser mirrors `parsers.rs` decision for decision; like it, it
+  treats line breaks as whitespace except at a declaration missing its `;`
+  (`_declaration_boundary`, using the next token's `newlines_before`).
+  `>` is always its own token; the parser
   joins adjacent ones into `>>`, `>=` and `>>=` where the compiler's
   grammar would read those operators.
 - `tools/pep-fmt` turns the tree into a Wadler-style layout document
   (`doc.pep`: text, soft and hard lines, indentation, groups, and a
   `doc_choice` of layouts tried in order) and renders it at 120 columns;
-  `format.pep` holds the style. Trailing comments are emitted as line
+  `format.pep` holds the style (`_item` adds a `;` a statement or
+  declaration left out, using `syntax.ends_in_semicolon`); a long binary
+  expression breaks before each operator, and `_member_chain` breaks a chain
+  of three or more calls before each `.`. Trailing comments are emitted as line
   suffixes marked with byte 0x01, which `align_trailing_comments` aligns and
   removes.
 - `pep_fmt_tests.rs` compiles pep-fmt and runs it on every `.pep` file in

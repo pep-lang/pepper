@@ -125,6 +125,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `io.Path.is_dir()` | `io.Path.is_directory()` |
 | `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
 | `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
+| A statement or declaration without its `;` | End it with `;` (see [Statements and semicolons](statements.md)) |
 
 ## Errors in the editor
 

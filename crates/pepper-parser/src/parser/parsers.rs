@@ -269,16 +269,51 @@ fn ws(input: &mut &str) -> Result<()> {
     Ok(())
 }
 
-/// Skip spaces/tabs only, stopping before a newline (used after a default
-/// expression so decl_boundary can see the statement separator).
-fn skip_inline_ws(input: &mut &str) {
-    while let Some(c) = input.chars().next() {
-        if c == ' ' || c == '\t' || c == '\r' {
-            *input = &input[1..];
-        } else {
-            break;
-        }
+/// Whether a line break comes before the next token (after spaces and a
+/// trailing comment). Line breaks mean nothing to the grammar; this only
+/// places the `;` a declaration left out (see [`decl_boundary`]).
+fn at_line_break(input: &str) -> bool {
+    let rest = input.trim_start_matches(|c: char| c.is_whitespace() && c != '\n');
+    rest.starts_with('\n') || rest.starts_with('#')
+}
+
+/// Take the `;` that ends a statement or declaration whose text ends at byte
+/// `end`. A missing one is deprecated (see [`missing_semicolon`]).
+fn semicolon(input: &mut &str, end: usize) -> Result<()> {
+    let mut rest = *input;
+    ws(&mut rest)?;
+    if rest.starts_with(';') {
+        *input = &rest[1..];
+    } else {
+        missing_semicolon(end);
     }
+    Ok(())
+}
+
+/// Warn that the statement or declaration ending at byte `end` has no `;`,
+/// with a fix that adds it.
+fn missing_semicolon(end: usize) {
+    let loc = Loc::new(FileId::default(), Span { start: end, end });
+    let fix = Fix::replace("Insert ';'", loc, ";");
+    warn(Diagnostic::deprecated("omitting ';'", "end the statement with ';'", loc, fix));
+}
+
+/// Skip to the next token when it satisfies `test`; otherwise leave `input`
+/// where it is, so a span ends at the last token rather than after the
+/// whitespace that follows it.
+fn next_is(input: &mut &str, test: impl Fn(&str) -> bool) -> bool {
+    let mut rest = *input;
+    if ws(&mut rest).is_ok() && test(rest) {
+        *input = rest;
+        true
+    } else {
+        false
+    }
+}
+
+/// `=`, not `==`.
+fn is_assign(s: &str) -> bool {
+    s.starts_with('=') && !s[1..].starts_with('=')
 }
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
@@ -322,20 +357,19 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     // End of the last token of the type, excluding trailing whitespace.
     let mut end = ty.span.end;
 
-    // Array suffix: one or more `[]`  (e.g. int[], int[][], ptr<char>[]) 
+    // Array suffix: one or more `[]`  (e.g. int[], int[][], ptr<char>[])
     loop {
-        ws(input)?;
-        if input.starts_with('[') {
-            *input = &input[1..];
-            ws(input)?;
-            if input.starts_with(']') {
-                *input = &input[1..];
+        let mut rest = *input;
+        let _ = ws(&mut rest);
+        if rest.starts_with('[') {
+            rest = &rest[1..];
+            ws(&mut rest)?;
+            if rest.starts_with(']') {
+                *input = &rest[1..];
                 end = pos(input);
                 ty.name.push_str("[]");
                 continue;
             }
-            // malformed — restore and break
-            break;
         }
         break;
     }
@@ -360,9 +394,10 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     // type position so a misplaced `T*` gets a targeted error; it is legal only
     // in extern declarations (see `check_pointer_syntax`).
     loop {
-        ws(input)?;
-        if input.starts_with('*') {
-            *input = &input[1..];
+        let mut rest = *input;
+        let _ = ws(&mut rest);
+        if rest.starts_with('*') {
+            *input = &rest[1..];
             end = pos(input);
             ty.name.push('*');
         } else {
@@ -383,7 +418,7 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
 /// first branch is followed by `:` instead.
 fn optional_suffix_in_probe(after: &str) -> bool {
     let mut rest: &str = after;
-    skip_inline_ws(&mut rest);
+    rest = rest.trim_start_matches([' ', '\t', '\r']);
     if rest.starts_with('>') || rest.starts_with(',') {
         return true;
     }
@@ -392,7 +427,7 @@ fn optional_suffix_in_probe(after: &str) -> bool {
         return false;
     }
     rest = rest.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
-    skip_inline_ws(&mut rest);
+    rest = rest.trim_start_matches([' ', '\t', '\r']);
     rest.is_empty()
         || rest.starts_with(';')
         || rest.starts_with('\n')
@@ -536,12 +571,13 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
     let mut name = identifier(input)?;
     qualified_tail(input, &mut name);
     let mut end = pos(input);
-    ws(input)?;
 
     // generic types: < T, T, ... >
     let mut generic_types = vec![];
-    if input.starts_with('<') {
-        *input = &input[1..];
+    let mut rest = *input;
+    let _ = ws(&mut rest);
+    if rest.starts_with('<') {
+        *input = &rest[1..];
         loop {
             ws(input)?;
             generic_types.push(type_name(input)?);
@@ -809,8 +845,10 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
         *input = &input[1..];
         // `sizeof<T>()` is the same expression; absorb the call parens so we
         // don't wrap a `SizeOf` in an empty `FunctionCall`.
-        ws(input)?;
-        if input.starts_with('(') {
+        let mut rest = *input;
+        let _ = ws(&mut rest);
+        if rest.starts_with('(') {
+            *input = rest;
             *input = &input[1..];
             ws(input)?;
             if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
@@ -840,8 +878,9 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     }
     // The span is the name alone, not the whitespace after it.
     let end = pos(input);
-    ws(input)?;
-    if input.starts_with('<') {
+    let mut rest = *input;
+    let _ = ws(&mut rest);
+    if rest.starts_with('<') {
         let mut probe: &str = before;
         if let Ok(ty) = probe_type_name(&mut probe) {
             // The whole `Name<...>` parsed as a type; advance the real input past it.
@@ -966,11 +1005,7 @@ fn atom(input: &mut &str) -> Result<Expression> {
 fn postfix(input: &mut &str) -> Result<Expression> {
     let mut expr = atom(input)?;
     loop {
-        // The raw remainder starting with a newline separates statements:
-        // stop before ws() swallows it into a postfix operator check.
-        if input.starts_with('\n') || input.starts_with("\r\n") {
-            break;
-        }
+        let before = *input;
         ws(input)?;
         if input.starts_with('.') {
             *input = &input[1..];
@@ -1036,6 +1071,7 @@ fn postfix(input: &mut &str) -> Result<Expression> {
             expr = Expression::Unary { op: op.to_string(), prefix: false, operand: Box::new(expr), span: Span { start, end: pos(input) } };
             continue;
         }
+        *input = before;
         break;
     }
     Ok(expr)
@@ -1044,10 +1080,8 @@ fn postfix(input: &mut &str) -> Result<Expression> {
 /// `**` — right-associative, operand is postfix (function-call level)
 fn pow(input: &mut &str) -> Result<Expression> {
     let base = postfix(input)?;
-    // A newline after the operand separates statements; no `**` can follow.
-    if !input.starts_with('\n') && !input.starts_with("\r\n") {
-        ws(input)?;
-    }
+    let before = *input;
+    ws(input)?;
     if input.starts_with("**") {
         let start = pos(input);
         *input = &input[2..];
@@ -1055,6 +1089,7 @@ fn pow(input: &mut &str) -> Result<Expression> {
         let rhs = pow(input)?; // right-assoc: rhs is another pow
         return Ok(Expression::Binary { lhs: Box::new(base), op: "**".into(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
+    *input = before;
     Ok(base)
 }
 
@@ -1071,6 +1106,7 @@ fn unary(input: &mut &str) -> Result<Expression> {
     if let Some(op) = op {
         let start = pos(input);
         *input = &input[op.len()..];
+        ws(input)?;
         let operand = cast(input)?;
         return Ok(Expression::Unary { op: op.to_string(), prefix: true, operand: Box::new(operand), span: Span { start, end: pos(input) } });
     }
@@ -1083,9 +1119,8 @@ fn unary(input: &mut &str) -> Result<Expression> {
 /// `(int)x` is NOT a cast.
 fn cast(input: &mut &str) -> Result<Expression> {
     let expr = pow(input)?;
-    if !input.starts_with('\n') && !input.starts_with("\r\n") {
-        ws(input)?;
-    }
+    let before = *input;
+    ws(input)?;
     if input.starts_with("as") && !input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = expr.span().start;
         *input = &input[2..];
@@ -1093,6 +1128,7 @@ fn cast(input: &mut &str) -> Result<Expression> {
         let ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
         return Ok(Expression::Cast { expr: Box::new(expr), ty, span: Span { start, end: pos(input) } });
     }
+    *input = before;
     Ok(expr)
 }
 
@@ -1120,19 +1156,9 @@ fn binary_left(
     try_op: impl Fn(&str) -> Option<&str>,
 ) -> Result<Expression> {
     let mut lhs = operand(input)?;
-    // If the remainder after the operand begins a new line, the expression is
-    // complete: a statement separator follows. The caller's boundary check
-    // must see that newline, so don't let ws() in the operator loop swallow
-    // it — track whether the first loop iteration started at a newline.
-    let started_at_newline = input.starts_with('\n') || input.starts_with("\r\n");
     loop {
-        if started_at_newline {
-            // No operator can follow a statement separator on the next line
-            // in this grammar (no line continuation); stop before ws eats it.
-            break;
-        }
-        ws(input)?;
         let before = *input;
+        ws(input)?;
         if let Some(op) = try_op(input) {
             let start = pos(input);
             *input = &input[op.len()..];
@@ -1152,15 +1178,15 @@ fn binary_right(
     try_op: impl Fn(&str) -> Option<&str>,
 ) -> Result<Expression> {
     let lhs = operand(input)?;
-    if !input.starts_with('\n') && !input.starts_with("\r\n") {
-        ws(input)?;
-    }
+    let before = *input;
+    ws(input)?;
     if let Some(op) = try_op(input) {
         let start = pos(input);
         *input = &input[op.len()..];
         let rhs = binary_right(input, operand, try_op)?;
         return Ok(Expression::Binary { lhs: Box::new(lhs), op: op.to_string(), rhs: Box::new(rhs), span: Span { start, end: pos(input) } });
     }
+    *input = before;
     Ok(lhs)
 }
 
@@ -1251,11 +1277,12 @@ fn logical_or(input: &mut &str) -> Result<Expression> {
 
 fn ternary(input: &mut &str) -> Result<Expression> {
     let cond = logical_or(input)?;
-    // A newline after the condition separates statements; no ternary follows.
-    if !input.starts_with('\n') && !input.starts_with("\r\n") {
-        ws(input)?;
+    let before = *input;
+    ws(input)?;
+    if !input.starts_with('?') {
+        *input = before;
+        return Ok(cond);
     }
-    if !input.starts_with('?') { return Ok(cond); }
     *input = &input[1..];
     ws(input)?;
     let true_expr = expression(input)?;
@@ -1396,22 +1423,17 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         let name_span_start = pos(input);
         let name = identifier(input)?;
         let name_span_end = pos(input);
-        ws(input)?;
         let mut ty = TypeName::auto();
-        if input.starts_with(':') {
+        if next_is(input, |s| s.starts_with(':')) {
             *input = &input[1..];
             ws(input)?;
             ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-            ws(input)?;
         }
         let mut dv = None;
-        if input.starts_with('=') && !input[1..].starts_with('=') {
+        if next_is(input, is_assign) {
             *input = &input[1..];
             ws(input)?;
             dv = Some(expression(input)?);
-            // Stop whitespace-skipping at a newline so decl_boundary can see
-            // the statement separator.
-            skip_inline_ws(input);
         }
         return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) }, is_exported: false });
     }
@@ -1421,22 +1443,17 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         let name_span_start = pos(input);
         let name = identifier(input)?;
         let name_span_end = pos(input);
-        ws(input)?;
         let mut ty = TypeName::auto();
-        if input.starts_with(':') {
+        if next_is(input, |s| s.starts_with(':')) {
             *input = &input[1..];
             ws(input)?;
             ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-            ws(input)?;
         }
         let mut dv = None;
-        if input.starts_with('=') && !input[1..].starts_with('=') {
+        if next_is(input, is_assign) {
             *input = &input[1..];
             ws(input)?;
             dv = Some(expression(input)?);
-            // Stop whitespace-skipping at a newline so decl_boundary can see
-            // the statement separator.
-            skip_inline_ws(input);
         }
         return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
     }
@@ -1457,21 +1474,18 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
     let name_span_start = pos(input);
     let name = identifier(input)?;
     let name_span_end = pos(input);
-    ws(input)?;
     // Optional `: Type` annotation (parameter style: `a: int`).
-    if input.starts_with(':') {
+    if next_is(input, |s| s.starts_with(':')) {
         *input = &input[1..];
         ws(input)?;
         ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-        ws(input)?;
     }
 
     let mut dv = None;
-    if input.starts_with('=') && !input[1..].starts_with('=') {
+    if next_is(input, is_assign) {
         *input = &input[1..];
         ws(input)?;
         dv = Some(expression(input)?);
-        skip_inline_ws(input);
     }
 
     Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
@@ -1493,11 +1507,13 @@ fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
             continue;
         }
         let stmt = statement(input)?;
-        statements.push(stmt);
-        ws(input)?;
-        if input.starts_with(';') {
-            *input = &input[1..];
+        // A simple statement ends with a `;` (a missing one is deprecated);
+        // one that ends in a block needs nothing more.
+        let simple = matches!(stmt, Statement::Expression(_) | Statement::Declaration(_) | Statement::Return(_) | Statement::LoopBreak(_));
+        if simple {
+            semicolon(input, stmt.span().end)?;
         }
+        statements.push(stmt);
     }
     ws(input)?;
     if !input.starts_with('}') {
@@ -1774,33 +1790,25 @@ fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     let keyword_end = pos(input);
     ws(input)?;
     // A bare `return;` (or `return }`) returns no value.
-    if input.starts_with(';') || input.starts_with('}') {
+    if input.is_empty() || input.starts_with(';') || input.starts_with('}') {
         return Ok(ReturnStatement { expr: None, span: Span { start, end: keyword_end } });
     }
     let expr = expression(input)?;
-    ws(input)?;
     let end = expr.span().end;
     Ok(ReturnStatement { expr: Some(expr), span: Span { start, end } })
 }
 
-/// After a `TypeName name` style declaration the next token must be a boundary
-/// (`;`, `=`, `}`, newline, or end of input) — otherwise it was an expression
-/// all along.
+/// After a `TypeName name` style declaration the next token must end the
+/// statement (`;`, `}`, or end of input); otherwise it was an expression all
+/// along. While a missing `;` is only deprecated, a line break also ends the
+/// declaration, the one place a line break means anything.
 fn decl_boundary(input: &mut &str) -> bool {
-    // The raw (pre-ws) remainder starting with a newline separates statements
-    // that omit semicolons; ws() would swallow it into the next token.
-    if input.starts_with('\n') || input.starts_with("\r\n") {
+    if at_line_break(input) {
         return true;
     }
-    if ws(input).is_err() {
-        return false;
-    }
-    let s = *input;
-    s.is_empty()
-        || s.starts_with(';')
-        || s.starts_with('}')
-        || s.starts_with('\n')
-        || (s.starts_with('=') && !s.starts_with("=="))
+    let mut rest = *input;
+    let _ = ws(&mut rest);
+    rest.is_empty() || rest.starts_with(';') || rest.starts_with('}')
 }
 
 fn statement(input: &mut &str) -> Result<Statement> {
@@ -1838,13 +1846,11 @@ fn statement(input: &mut &str) -> Result<Statement> {
     if input.starts_with("break") && !input[5..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = pos(input);
         *input = &input[5..];
-        ws(input)?;
         return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Break, span: Span { start, end: pos(input) } }));
     }
     if input.starts_with("continue") && !input[8..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         let start = pos(input);
         *input = &input[8..];
-        ws(input)?;
         return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Continue, span: Span { start, end: pos(input) } }));
     }
     // Variable declaration: `var`/`const` prefix OR `TypeName name = value` form.
@@ -1876,7 +1882,6 @@ fn statement(input: &mut &str) -> Result<Statement> {
     }
     // otherwise: expression statement
     let expr = expression(input)?;
-    ws(input)?;
     Ok(Statement::Expression(expr))
 }
 
@@ -1942,7 +1947,6 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
             *input = &input[1..];
             ws(input)?;
             dv = Some(expression(input)?);
-            skip_inline_ws(input);
         }
         return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
     }
@@ -1959,7 +1963,6 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
         *input = &input[1..];
         ws(input)?;
         dv = Some(expression(input)?);
-        skip_inline_ws(input);
     }
     Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
 }
@@ -2205,10 +2208,7 @@ fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> 
     let name_span_end = pos(input);
     ws(input)?;
     let (parameters, is_variadic) = extern_parameters(input)?;
-    ws(input)?;
-    if input.starts_with(';') {
-        *input = &input[1..];
-    }
+    // The caller takes the `;` (see `semicolon`).
 
     Ok(FunctionDecl {
         is_exported: false,
@@ -2791,7 +2791,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
 
         if keyword(&mut { *input }, "extern") && !starts_extern_function_type(input) {
             let m = extern_function_declaration(input, m_attrs)?;
-            ws(input)?;
+            semicolon(input, m.span.end)?;
             methods.push(m);
             continue;
         }
@@ -2812,15 +2812,13 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             return Err(cut(input));
         }
         let f = variable_declaration(input, m_attrs)?;
-        ws(input)?;
+        let end = f.span.end;
         if !decl_boundary(input) {
             *input = after_attrs;
             return Err(bt(input));
         }
+        semicolon(input, end)?;
         fields.push(f);
-        if input.starts_with(';') {
-            *input = &input[1..];
-        }
     }
 
     ws(input)?;
@@ -3274,8 +3272,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
             if let Some(q) = imp.qualifier() {
                 QUALIFIERS.with(|qs| qs.borrow_mut().insert(q.to_string()));
             }
-            ws(input)?;
-            if input.starts_with(';') { *input = &input[1..]; }
+            semicolon(input, imp.span.end)?;
             imports.push(imp);
             continue;
         }
@@ -3283,8 +3280,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
             match reexport(input) {
                 Ok(mut imp) => {
                     with_attributes(&mut imp.span, &mut imp.attributes, attrs);
-                    ws(input)?;
-                    if input.starts_with(';') { *input = &input[1..]; }
+                    semicolon(input, imp.span.end)?;
                     imports.push(imp);
                     continue;
                 }
@@ -3294,8 +3290,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
             match export_alias(input) {
                 Ok(mut exp) => {
                     with_attributes(&mut exp.span, &mut exp.attributes, attrs);
-                    ws(input)?;
-                    if input.starts_with(';') { *input = &input[1..]; }
+                    semicolon(input, exp.span.end)?;
                     exports.push(exp);
                     continue;
                 }
@@ -3308,8 +3303,17 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
 
         let at = *input;
         let decl = declaration(input).inspect_err(|_| expected(at, "declaration"))?;
-        ws(input)?;
-        if input.starts_with(';') { *input = &input[1..]; }
+        let needs_semicolon = match &decl {
+            Declaration::Variable(_) | Declaration::TypeAlias(_) => true,
+            Declaration::Function(f) => f.body.is_none(),
+            _ => false,
+        };
+        if needs_semicolon {
+            semicolon(input, decl.span().end)?;
+        } else {
+            ws(input)?;
+            if input.starts_with(';') { *input = &input[1..]; }
+        }
         declarations.push(decl);
     }
 
@@ -4483,6 +4487,64 @@ f() { var r = c.Result<int>.ok(1); }");
             }
             other => panic!("{:?}", other),
         }
+    }
+
+    // ── Semicolons and line breaks ──
+
+    /// The statements of a function whose body is `body`.
+    fn statements_of(body: &str) -> Vec<Statement> {
+        let src = format!("f() {{\n{body}\n}}\n");
+        let m = parse(&src);
+        match &m.declarations[0] {
+            Declaration::Function(f) => f.body.clone().unwrap().statements,
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn line_breaks_never_end_an_expression() {
+        for body in [
+            "x = a\n    + b;",
+            "x = a +\n    b;",
+            "x = y\n-z;",
+            "foo\n(bar);",
+            "n = items\n    .filter(p)\n    .count();",
+            "x = c\n    ? a\n    : b;",
+            "x = a # why\n    + b;",
+            "return\n    x;",
+        ] {
+            assert_eq!(statements_of(body).len(), 1, "{body:?}");
+        }
+    }
+
+    #[test]
+    fn statements_are_separated_by_semicolons() {
+        assert_eq!(statements_of("x = 1; y = 2;").len(), 2);
+        let statements = statements_of("return;");
+        assert!(matches!(&statements[0], Statement::Return(ReturnStatement { expr: None, .. })));
+        // Leaving the `;` out still separates them, with a warning each.
+        let m = parse("f() {\n    x = 1 y = 2\n    var z = 3\n    z = 4\n}\n");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!() };
+        assert_eq!(f.body.as_ref().unwrap().statements.len(), 4);
+        assert_eq!(m.warnings.len(), 4);
+    }
+
+    #[test]
+    fn a_missing_semicolon_is_deprecated() {
+        let m = parse("import io\nvar x = 1  # one\nstruct S {\n    int y\n}\nf() {\n    x = 2\n    if x > 1 { return }\n}\n");
+        let at: Vec<usize> = m.warnings.iter().map(|w| w.loc.unwrap().span.start).collect();
+        // After `io`, `1`, `y`, `2` and `return`.
+        assert_eq!(at, vec![9, 19, 47, 65, 87]);
+        assert!(m.warnings.iter().all(|w| w.fixes[0].edits[0].replacement == ";"));
+        let m = parse("import io;\nvar x = 1;\nstruct S {\n    int y;\n}\nf() {\n    x = 2;\n    if x > 1 { return; }\n}\n");
+        assert!(m.warnings.is_empty(), "{:?}", m.warnings);
+    }
+
+    #[test]
+    fn a_declaration_missing_its_semicolon_ends_at_its_line() {
+        let m = parse("var x = 1  # note\nvar y = x\n");
+        assert_eq!(m.declarations.len(), 2);
+        assert_eq!(m.warnings.len(), 2);
     }
 
     // ── Struct features: constructors, destructors, static, indexers, operator overloads ──

@@ -10,6 +10,7 @@
 # Language guide
 
 - [Types and variables](language/types-and-variables.md)
+- [Statements and semicolons](language/statements.md)
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)
 - [Function types and closures](language/function-types.md)

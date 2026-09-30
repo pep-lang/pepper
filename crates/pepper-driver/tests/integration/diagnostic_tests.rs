@@ -52,6 +52,20 @@ fn parse_error() {
 }
 
 #[test]
+fn missing_semicolon_is_deprecated() {
+    let source = "main(): int {\n    var total = 1\n    return total;\n}\n";
+    let module = pepper_parser::parser::parse_source_diag(source).unwrap();
+    let warning = module.warnings[0].render_in("main.pep", source);
+    assert_eq!(
+        warning,
+        "main.pep:2:18: warning: omitting ';' is deprecated; end the statement with ';' [deprecated]\n\
+         \x20   2 |     var total = 1\n\
+         \x20     |                  ^\n\
+         \x20     |                  ;"
+    );
+}
+
+#[test]
 fn undeclared_identifier() {
     assert_eq!(
         error_of("undeclared_identifier", "main(): int {\n    var a = 1;\n    return a + nope;\n}\n"),

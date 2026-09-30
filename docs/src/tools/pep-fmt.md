@@ -61,19 +61,26 @@ report_values(
 );
 ```
 
-A long condition breaks after an operator:
+A long expression breaks before each operator, and a chain of three or more
+method calls that does not fit breaks before each `.`:
 
 ```pepper
-if (first_condition_that_is_long(value) and second_condition_that_is_long(value) or
-    third_condition_that_is_long(value)) {
+if (first_condition_that_is_long(value) and second_condition_that_is_long(value)
+    or third_condition_that_is_long(value)) {
     run();
 }
+total = first_value_that_is_long_enough
+    + second_value_that_is_long_enough
+    + third_value_that_is_long_and_longer_still;
+var count = words
+    .iterate()
+    .filter((w) => w.length() > 4)
+    .map((w) => w.length() * 2)
+    .count_them_all();
 ```
 
-A Pepper expression ends at a line break that directly follows a complete
-operand, so `pep-fmt` never breaks a line before an operator or before the
-`.` of a method call. Comments and string literals are never reflowed, so a
-line can stay longer than 120 columns when it has nowhere to break.
+Comments and string literals are never reflowed, so a line can stay longer
+than 120 columns when it has nowhere to break.
 
 **Attributes** go one per line, each on its own line above the declaration:
 
@@ -109,7 +116,10 @@ var average = 0.0;  # total / count
 them) are sorted: modules first (`import io;`), then files of this module
 (`import "util";`), each by name.
 
-**Kept as written:** semicolons (the grammar lets a line break end a
-statement, and `pep-fmt` neither adds nor removes them), parentheses around
+**Semicolons** are added where a statement or declaration leaves its `;`
+out (see [Statements and semicolons](../language/statements.md)); none are
+removed.
+
+**Kept as written:** parentheses around
 conditions (`if x` and `if (x)` are both fine), fields declared either way
 (`int x;` or `var x: int;`), and the file's line endings (`\n` or `\r\n`).
