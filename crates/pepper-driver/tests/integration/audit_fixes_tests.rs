@@ -214,7 +214,8 @@ fn logical_operators_short_circuit() {
     // The right side must not run when the left decides the result.
     assert_eq!(
         jit(r#"
-const calls = Atomic<int>(0);
+import async;
+const calls = async.Atomic<int>(0);
 bump(result: bool): bool {
     calls.fetch_add(1);
     return result;
@@ -402,22 +403,23 @@ test(): int {
 fn atomic_releases_its_struct_reference() {
     let (result, leaked) = jit_census(
         r#"
+import async;
 [Shared]
 struct Point {
     const x: int;
     construct(this.x = 0) {}
 }
 keep(): int {
-    var a = Atomic<Point>(Point(1));
+    var a = async.Atomic<Point>(Point(1));
     a.store(Point(2));
-    var empty = Atomic<Point>();
-    var n = Atomic<int>(5);
+    var empty = async.Atomic<Point>();
+    var n = async.Atomic<int>(5);
     return a.load().x + n.load();
 }
 test(): int {
     var p = Point(3);
     {
-        var a = Atomic<Point>(p);
+        var a = async.Atomic<Point>(p);
         if (__refcount<Point>(p) != 2) { return -1; }
     }
     if (__refcount<Point>(p) != 1) { return -2; }

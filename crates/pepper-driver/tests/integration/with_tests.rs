@@ -18,8 +18,9 @@ fn error_of(source: &str) -> String {
 
 /// A scope object that counts enters and exits, created fresh per block.
 const SESSION: &str = r#"
-const entered = Atomic<int>(0);
-const exited = Atomic<int>(0);
+import async;
+const entered = async.Atomic<int>(0);
+const exited = async.Atomic<int>(0);
 
 struct Session {
     int id = 0;
@@ -138,7 +139,8 @@ test(): int {
 #[test]
 fn with_void_enter_binds_nothing() {
     let src = r#"
-const depth = Atomic<int>(0);
+import async;
+const depth = async.Atomic<int>(0);
 
 struct Lock {
     construct() {}

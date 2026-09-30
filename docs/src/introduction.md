@@ -12,7 +12,7 @@ three things first:
   no ownership annotations to learn. Structs hold data, methods and
   extensions add behavior, and traits describe what a type can do.
 - **Concurrent safety.** Shared data should be safe to use from more than one
-  thread. Only thread-safe values can be shared: numbers, `Atomic<T>`, and
+  thread. Only thread-safe values can be shared: numbers, `async.Atomic<T>`, and
   structs declared `[Shared]`, whose fields the compiler checks.
 
 Here is a complete Pepper program:

@@ -37,8 +37,9 @@ fn compile_error(source: &str) -> String {
 /// `Name` converts from a `String`, `Meters` from a `long`; `made` counts
 /// `Name`s constructed and `destroyed` counts `Name`s destroyed.
 const TYPES: &str = r#"
-const made = Atomic<int>(0);
-const destroyed = Atomic<int>(0);
+import async;
+const made = async.Atomic<int>(0);
+const destroyed = async.Atomic<int>(0);
 
 struct Name {
     String text;

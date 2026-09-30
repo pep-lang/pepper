@@ -10,6 +10,7 @@ Like `io`, `async` is a module: bring it in with `import async` (and write
 `async.Thread`, `async.logical_cpus()`) or import names directly with
 `import [Thread, ThreadLocal] from async`.
 
+- [Atomic](async-atomic.md): `Atomic<T>`, a value threads read and update without a lock
 - [Thread](async-thread.md): starting, naming and joining threads, `ThreadId` and `ThreadBody`
 - [ThreadLocal](async-thread_local.md): a variable with a separate value on every thread, and its `ThreadLocalGuard<T>`
 - [Processor counts](async-cpus.md): `logical_cpus()` and `physical_cpus()`
@@ -32,7 +33,7 @@ values only. See the language guide's Threads chapter.
 ```pepper
     import async;
 
-    const hits = Atomic<long>(0);
+    const hits = async.Atomic<long>(0);
 
     work() {
         hits.fetch_add(1);

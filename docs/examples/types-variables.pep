@@ -1,11 +1,13 @@
+import async;
+
 # Declaring variables: inferred, explicitly typed, constant, and module-level.
 
 # Module-level variables (globals) live for the whole program. Any thread
 # can reach them, so they are const and of a thread-safe type: a number, or
 # an Atomic for state that changes.
 const MAX_REQUESTS = 10;
-const request_count = Atomic<int>(0);
-const total_bytes = Atomic<long>(0);
+const request_count = async.Atomic<int>(0);
+const total_bytes = async.Atomic<long>(0);
 
 record(bytes: int) {
     request_count.fetch_add(1);

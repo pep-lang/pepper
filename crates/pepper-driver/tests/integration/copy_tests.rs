@@ -182,7 +182,8 @@ test(): int {
 fn copyable_implementations_are_used() {
     assert_runs(
         r#"
-const copies_made = Atomic<int>(0);
+import async;
+const copies_made = async.Atomic<int>(0);
 
 struct Buffer {
     __ptr<u8> _data;

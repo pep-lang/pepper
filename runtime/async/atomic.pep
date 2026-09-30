@@ -5,8 +5,6 @@
 # compare_exchange = cmpxchg, fetch_* = atomicrmw. exchange is a CAS loop
 # over compare_exchange.
 
-import "internals";
-
 ## A value of type `T` that threads can read and update without data races,
 ## like C++ `std::atomic<T>`.
 ##
@@ -21,12 +19,12 @@ import "internals";
 ## `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
 ## be used from several threads at once: pass the Atomic around (or keep it
 ## in a `const` global) to share the value between threads. A struct `T` must be
-## thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
+## thread-safe (itself `[Shared]`); `async.Atomic<String>` is a compile error.
 ##
 ## @typeParam T the type of the stored value
 ## @example
 ##     main(): int {
-##         var counter = Atomic<long>(0);
+##         var counter = async.Atomic<long>(0);
 ##         var before = counter.fetch_add(5);   # before == 0
 ##         if (counter.load() != 5) { return 1; }
 ##         return 0;
@@ -45,8 +43,8 @@ export struct Atomic<T> {
     ##
     ## @param value the initial value; defaults to zero for a POD `T` and null for a struct `T`
     ## @example
-    ##     var a = Atomic<int>(41);
-    ##     var p = Atomic<Point>();   # holds null until a store
+    ##     var a = async.Atomic<int>(41);
+    ##     var p = async.Atomic<Point>();   # holds null until a store
     construct(value: T = __default<T>()) {
         # A struct T occupies its reference pointer in the slot; a POD T
         # occupies sizeof(T) bytes of the value itself.
@@ -114,7 +112,7 @@ export struct Atomic<T> {
     ## @param v the new value
     ## @returns the value stored immediately before the exchange
     ## @example
-    ##     var e = Atomic<int>(1);
+    ##     var e = async.Atomic<int>(1);
     ##     var old = e.exchange(2);   # old == 1, e.load() == 2
     exchange(v: T): T {
         var old = this.load();
@@ -151,7 +149,7 @@ export struct Atomic<T> {
     ## @param v the amount to add
     ## @returns the value stored immediately before the addition
     ## @example
-    ##     var c = Atomic<long>(10);
+    ##     var c = async.Atomic<long>(10);
     ##     var old = c.fetch_add(5);   # old == 10, c.load() == 15
     fetch_add(v: T): T {
         return __atomic_fetch_add<T>(this._data, v);

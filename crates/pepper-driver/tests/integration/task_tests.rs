@@ -353,9 +353,9 @@ const SPAWN_PROGRAM: &str = r##"
 import async;
 import io;
 
-const running = Atomic<long>(0);
-const overlapped = Atomic<long>(0);
-const total = Atomic<long>(0);
+const running = async.Atomic<long>(0);
+const overlapped = async.Atomic<long>(0);
+const total = async.Atomic<long>(0);
 
 # Waits (without yielding) until another task runs at the same time, for up
 # to two seconds: only another worker can run it meanwhile.
@@ -426,7 +426,7 @@ main(): int {
         var low = async.spawn<long>(() => { return sum(0, 500000); });
         var high = async.spawn<long>(() => { return sum(500000, 1000000); });
         assert(low.join().value() + high.join().value() == 499999500000, "long results");
-        var counter = async.spawn<Atomic<long>>(() => { return Atomic<long>(42); });
+        var counter = async.spawn<async.Atomic<long>>(() => { return async.Atomic<long>(42); });
         assert(counter.join().value().load() == 42, "a [Shared] result");
         var nothing = async.spawn<void>(() => { total.fetch_add(1); });
         assert(nothing.join().is_ok(), "a void task");
@@ -526,11 +526,11 @@ const BLOCKING_PROGRAM: &str = r##"
 import async;
 import io;
 
-const inside = Atomic<long>(0);
-const most = Atomic<long>(0);
-const finished = Atomic<long>(0);
-const ticks = Atomic<long>(0);
-const served = Atomic<long>(0);
+const inside = async.Atomic<long>(0);
+const most = async.Atomic<long>(0);
+const finished = async.Atomic<long>(0);
+const ticks = async.Atomic<long>(0);
+const served = async.Atomic<long>(0);
 
 # Blocks its thread for `milliseconds`, counting how many run at once.
 block_for(milliseconds: ulong): long {
@@ -734,7 +734,7 @@ struct Tally {
 
 const tally = async.Mutex<Tally>(Tally());
 const changed = tally.condition();
-const ticks = Atomic<long>(0);
+const ticks = async.Atomic<long>(0);
 const pings = async.Channel<long>();
 const pongs = async.Channel<long>();
 const slots = async.Channel<long>(1);
@@ -753,7 +753,7 @@ add_slowly(who: long) {
 }
 
 # Counts ticks until told to stop, proving the worker stays free.
-tick_until(stop: Atomic<int>) {
+tick_until(stop: async.Atomic<int>) {
     while (stop.load() == 0) {
         ticks.fetch_add(1);
         async.yield_now();
@@ -761,7 +761,7 @@ tick_until(stop: Atomic<int>) {
 }
 
 one_worker() {
-    var stop = Atomic<int>(0);
+    var stop = async.Atomic<int>(0);
     var ticker = async.Task<void>.spawn_local(() => { tick_until(stop); });
 
     # A task holding the lock across a sleep; another waits for it.
@@ -954,7 +954,7 @@ const FILES_PROGRAM: &str = r##"
 import async;
 import io;
 
-const ticks = Atomic<long>(0);
+const ticks = async.Atomic<long>(0);
 
 # Writes `size` patterned bytes to `path`, reads them back in 64 KiB reads,
 # and checks them. Returns how many reads it took.
@@ -996,7 +996,7 @@ main(): int {
     var path = io.Directory.temp().join("SCRATCH.bin");
     var before = _pep_live_allocs();
     async.run_with(async.RuntimeOptions().workers(1), () => {
-        var stop = Atomic<int>(0);
+        var stop = async.Atomic<int>(0);
         var ticker = async.Task<void>.spawn_local(() => {
             while (stop.load() == 0) {
                 ticks.fetch_add(1);

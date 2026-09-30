@@ -8,6 +8,7 @@
 # arrived meanwhile, which sleep on a platform condition variable. The done
 # store is a release, so a caller that sees 2 also sees what the body did.
 
+import "atomic";
 import "sys_posix";
 import "sys_windows";
 import "thread";

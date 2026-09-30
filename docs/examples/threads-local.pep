@@ -1,8 +1,10 @@
+import async;
+
 import [Thread, ThreadLocal] from async;
 
 # One variable, a separate value on every thread.
 const calls = ThreadLocal<int>();
-const totals = Atomic<long>(0);
+const totals = async.Atomic<long>(0);
 
 record_call() {
     calls.set(calls.get() + 1);

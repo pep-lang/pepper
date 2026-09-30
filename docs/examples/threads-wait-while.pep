@@ -3,7 +3,7 @@ import async;
 # A worker takes jobs from a queue, sleeping while it is empty.
 const jobs = async.Mutex<Array<long>>(Array<long>());
 const changed = jobs.condition();
-const done = Atomic<long>(0);
+const done = async.Atomic<long>(0);
 
 work() {
     var taken = 0;

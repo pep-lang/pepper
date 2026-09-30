@@ -12,6 +12,7 @@
 # passed with `__function_pointer`) takes that reference, records it as the
 # thread's current Thread, runs the body, and marks the thread finished.
 
+import "atomic";
 import "sys_posix";
 import "sys_windows";
 import "task";

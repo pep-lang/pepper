@@ -1,5 +1,7 @@
+import async;
+
 # A module-scope counter: const, and changed through an Atomic.
-const closed = Atomic<int>(0);
+const closed = async.Atomic<int>(0);
 
 struct Connection {
     var name: String;

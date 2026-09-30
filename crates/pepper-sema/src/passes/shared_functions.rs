@@ -229,7 +229,7 @@ impl Converter {
                 captured,
                 capture.ty.display()
             );
-            let advice = "capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct";
+            let advice = "capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct";
             let declared = (!capture.type_loc.is_none()).then_some(capture.type_loc);
             crate::errors::report(Diagnostic::error(message).at(at).with_note(advice, declared));
             return;

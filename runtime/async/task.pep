@@ -50,6 +50,7 @@
 # it also sets a timer for the deadline.
 
 import io;
+import "atomic";
 import "cpus";
 import "driver";
 import "fiber_posix";

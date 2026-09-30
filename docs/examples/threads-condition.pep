@@ -4,17 +4,17 @@ import async;
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const pies: Atomic<long>;
-    const closed: Atomic<int>;
+    const pies: async.Atomic<long>;
+    const closed: async.Atomic<int>;
     construct() {
-        pies = Atomic<long>(0);
-        closed = Atomic<int>(0);
+        pies = async.Atomic<long>(0);
+        closed = async.Atomic<int>(0);
     }
 }
 
 const bakery = async.Mutex<Bakery>(Bakery());
 const changed = bakery.condition();
-const eaten = Atomic<long>(0);
+const eaten = async.Atomic<long>(0);
 
 eat() {
     while (true) {

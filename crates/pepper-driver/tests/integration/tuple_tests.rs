@@ -16,7 +16,8 @@ fn run(source: &str) -> i32 {
 }
 
 const NODE: &str = r#"
-const destroyed = Atomic<int>(0);
+import async;
+const destroyed = async.Atomic<int>(0);
 
 trait Shape {
     area(): int;

@@ -30,6 +30,7 @@
 # lock is still what excludes, and a task locks and unlocks it on the one
 # thread it runs on. `Condition` does the same with its own `_waiters`.
 
+import "atomic";
 import "sync_wait";
 import "sys_posix";
 import "sys_windows";

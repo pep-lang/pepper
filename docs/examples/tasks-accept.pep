@@ -1,7 +1,8 @@
 import async;
+
 import io;
 
-const served = Atomic<int>(0);
+const served = async.Atomic<int>(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(4), () => {

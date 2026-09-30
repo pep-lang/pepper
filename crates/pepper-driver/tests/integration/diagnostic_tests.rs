@@ -449,7 +449,7 @@ fn shared_struct_field_not_const() {
         "main.pep:3:9: error: field 'count' of shared struct 'Counter' must be 'const'\n\
          \x20   3 |     int count;\n\
          \x20     |         ^~~~~\n\
-         note: threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'"
+         note: threads change a shared struct's state through a thread-safe member such as 'async.Atomic<T>' (after 'import async')"
     );
 }
 
@@ -477,7 +477,7 @@ fn module_scope_variable_not_const() {
         "main.pep:1:5: error: module-scope variable 'hits' must be 'const'\n\
          \x20   1 | var hits = 0;\n\
          \x20     |     ^~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
     );
 }
 
@@ -488,7 +488,7 @@ fn c_style_module_scope_variable_not_const() {
         "main.pep:1:6: error: module-scope variable 'total' must be 'const'\n\
          \x20   1 | long total = 0;\n\
          \x20     |      ^~~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
     );
 }
 
@@ -499,7 +499,7 @@ fn exported_variable_not_const() {
         "main.pep:1:12: error: module-scope variable 'hits' must be 'const'\n\
          \x20   1 | export var hits = 0;\n\
          \x20     |            ^~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
     );
 }
 
@@ -576,7 +576,7 @@ fn reexported_variable_not_const() {
         "lib.pep:1:5: error: module-scope variable 'count' must be 'const'\n\
          \x20   1 | var count = 0;\n\
          \x20     |     ^~~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
     );
 }
 
@@ -584,12 +584,12 @@ fn reexported_variable_not_const() {
 fn shared_generic_argument_not_thread_safe() {
     // The error points at the code that names the specialization; the notes
     // (in the runtime) name the field and the type.
-    let error = error_of("shared_generic_argument", "main(): int {\n    var a = Atomic<String>();\n    return 0;\n}\n");
+    let error = error_of("shared_generic_argument", "import async;\nmain(): int {\n    var a = async.Atomic<String>();\n    return 0;\n}\n");
     assert!(
         error.starts_with(
-            "main.pep:2:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
-             \x20   2 |     var a = Atomic<String>();\n\
-             \x20     |             ^~~~~~~~~~~~~~\n"
+            "main.pep:3:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+             \x20   3 |     var a = async.Atomic<String>();\n\
+             \x20     |             ^~~~~~~~~~~~~~~~~~~~\n"
         ),
         "{error}"
     );
@@ -1031,7 +1031,7 @@ fn a_mutex_cannot_protect_a_number() {
         "main.pep:4:13: error: 'Mutex<int>' cannot protect a number: its 'with' binding is a copy that the block cannot store back\n\
          \x20   4 |     var m = async.Mutex<int>(0);\n\
          \x20     |             ^~~~~~~~~~~~~~~~\n\
-         note: use 'Atomic<int>' for a number that threads share"
+         note: use 'async.Atomic<int>' for a number that threads share"
     );
 }
 
@@ -1630,7 +1630,7 @@ fn shared_closure_captures_not_thread_safe() {
         "main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe\n\
          \x20   5 |     var t = async.Thread.spawn(() => { print(name); });\n\
          \x20     |                                              ^~~~\n\
-         main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct\n\
+         main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct\n\
          \x20   4 |     var name = \"worker\";\n\
          \x20     |         ^~~~"
     );
@@ -1642,7 +1642,7 @@ fn shared_closure_captures_not_thread_safe() {
         "main.pep:3:18: error: closure returned as 'shared () => int' captures 's' of type 'String', which is not thread-safe\n\
          \x20   3 |     return () => s.length() as int;\n\
          \x20     |                  ^\n\
-         main.pep:2:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct\n\
+         main.pep:2:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct\n\
          \x20   2 |     var s = \"x\";\n\
          \x20     |         ^"
     );
@@ -1658,7 +1658,7 @@ fn shared_closure_captures_this() {
         "main.pep:5:41: error: closure stored as 'shared () => int' captures 'this' of type 'S', which is not thread-safe\n\
          \x20   5 |         var f: shared () => int = () => n;\n\
          \x20     |                                         ^\n\
-         note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct"
+         note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct"
     );
 }
 
@@ -1672,7 +1672,7 @@ fn shared_method_value_captures_receiver() {
         "main.pep:9:19: error: method value passed as 'shared () => int' captures its receiver of type 'P', which is not thread-safe\n\
          \x20   9 |     return take(p.get);\n\
          \x20     |                   ^~~\n\
-         note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct"
+         note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct"
     );
 }
 

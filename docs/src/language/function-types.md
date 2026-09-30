@@ -211,7 +211,7 @@ or `shared (long) => void`, is thread-safe. Its reference counts are atomic,
 and its values hold only thread-safe state, so any thread may copy, call and
 drop them. It goes wherever a thread-safe type is required: the body of a
 thread (`ThreadBody` is `shared () => void`), a field of a `[Shared]` struct,
-a module-scope variable, or `Atomic<shared (int) => int>`.
+a module-scope variable, or `async.Atomic<shared (int) => int>`.
 
 ```pepper
 {{#include ../../examples/function-types-shared.pep}}
@@ -231,7 +231,7 @@ a module-scope variable, or `Atomic<shared (int) => int>`.
   main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
       5 |     var t = async.Thread.spawn(() => { print(name); });
         |                                              ^~~~
-  main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+  main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct
       4 |     var name = "worker";
         |         ^~~~
   ```

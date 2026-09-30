@@ -1,3 +1,5 @@
+import async;
+
 # Everything here is private to lib.pep unless it says `export`.
 
 export struct Point {
@@ -13,7 +15,7 @@ export trait Describe {
 
 # A module-scope variable is `const` and thread-safe: change it through
 # an Atomic.
-export const points_made = Atomic<int>(0);
+export const points_made = async.Atomic<int>(0);
 
 export origin(): Point {
     return make(0, 0);

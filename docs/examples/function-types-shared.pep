@@ -1,7 +1,7 @@
 # shared function types: function values that threads can share.
 import async;
 
-const total = Atomic<long>(0);
+const total = async.Atomic<long>(0);
 
 # A named function holds no state, so it is always thread-safe.
 add_one() {

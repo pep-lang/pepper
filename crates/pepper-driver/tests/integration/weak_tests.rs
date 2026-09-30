@@ -18,7 +18,8 @@ fn error_of(source: &str) -> String {
 }
 
 const NODE: &str = r#"
-const destroyed = Atomic<int>(0);
+import async;
+const destroyed = async.Atomic<int>(0);
 
 struct Node {
     int value = 0;
@@ -92,7 +93,8 @@ test(): int {
 #[test]
 fn weak_field_breaks_a_cycle() {
     let src = r#"
-const freed = Atomic<int>(0);
+import async;
+const freed = async.Atomic<int>(0);
 
 struct Child {
     __weak<Parent> parent;
@@ -131,7 +133,8 @@ test(): int {
 #[test]
 fn weak_to_self_released_in_destructor() {
     let src = r#"
-const ran = Atomic<int>(0);
+import async;
+const ran = async.Atomic<int>(0);
 
 struct Self {
     __weak<Self> me;
@@ -175,7 +178,8 @@ fn weak_made_during_construction_does_not_free() {
     // No strong owner exists until the constructor returns: dropping a weak
     // reference then must not free the object.
     let src = r#"
-const upgraded = Atomic<int>(0);
+import async;
+const upgraded = async.Atomic<int>(0);
 
 struct Early {
     construct() {
@@ -223,7 +227,7 @@ test(): int {
 }
 "#,
     ));
-    assert!(err.contains("test.pep:12:22: error: cannot initialize variable 'w' of type '__weak<Node>' with a value of type 'Node'; use '__weak_from<Node>(...)' to make one"), "{}", err);
+    assert!(err.contains("test.pep:13:22: error: cannot initialize variable 'w' of type '__weak<Node>' with a value of type 'Node'; use '__weak_from<Node>(...)' to make one"), "{}", err);
 }
 
 #[test]
@@ -238,13 +242,14 @@ test(): int {
 }
 "#,
     ));
-    assert!(err.contains("test.pep:13:14: error: cannot initialize variable 'm' of type 'Node' with a value of type '__weak<Node>'; use '__weak_upgrade<Node>(...)' to get a strong reference"), "{}", err);
+    assert!(err.contains("test.pep:14:14: error: cannot initialize variable 'm' of type 'Node' with a value of type '__weak<Node>'; use '__weak_upgrade<Node>(...)' to get a strong reference"), "{}", err);
 }
 
 #[test]
 fn weak_struct_in_a_with_block() {
     let src = r#"
-const freed = Atomic<int>(0);
+import async;
+const freed = async.Atomic<int>(0);
 
 struct Parent {
     String name;

@@ -1,3 +1,5 @@
+import async;
+
 # An Atomic can only hold a thread-safe struct: one declared [Shared], whose
 # fields are const and thread-safe.
 [Shared]
@@ -7,14 +9,14 @@ struct Config {
 }
 
 # A module-scope Atomic that every function can share.
-const next_id = Atomic<long>(0);
+const next_id = async.Atomic<long>(0);
 
 new_id(): long {
     return next_id.fetch_add(1) + 1;
 }
 
 # The compare-and-swap retry loop: build any read-modify-write update.
-double_it(Atomic<int> value) {
+double_it(async.Atomic<int> value) {
     var current = value.load();
     while (!value.compare_exchange(current, current * 2)) {
         current = value.load();
@@ -25,7 +27,7 @@ main(): int {
     assert(new_id() == 1, "first id");
     assert(new_id() == 2, "second id");
 
-    var n = Atomic<int>(21);
+    var n = async.Atomic<int>(21);
     double_it(n);
     assert(n.load() == 42, "doubled");
 
@@ -36,7 +38,7 @@ main(): int {
 
     # An Atomic can hold a struct reference.
     var first = Config(1);
-    var current = Atomic<Config>(first);
+    var current = async.Atomic<Config>(first);
     assert(current.load().version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.

@@ -287,7 +287,8 @@ fn void_function() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const g = Atomic<int>(0);
+import async;
+const g = async.Atomic<int>(0);
 bump(): void {
     g.store(g.load() + 5);
 }
@@ -307,7 +308,8 @@ fn global_variable() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const counter = Atomic<int>(1);
+import async;
+const counter = async.Atomic<int>(1);
 test(): int {
     counter.fetch_add(41);
     return counter.load() - 42;
@@ -446,7 +448,8 @@ fn logical_short_circuit() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const side = Atomic<int>(0);
+import async;
+const side = async.Atomic<int>(0);
 boom(): bool {
     side.store(1);
     return true;
@@ -468,7 +471,8 @@ fn logical_short_circuit2() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const side = Atomic<int>(0);
+import async;
+const side = async.Atomic<int>(0);
 boom(): bool {
     side.store(1);
     return true;
@@ -593,7 +597,8 @@ fn destructor_runs() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const destroyed = Atomic<int>(0);
+import async;
+const destroyed = async.Atomic<int>(0);
 struct T {
     int v = 0;
     construct(this.v = 0) {}
@@ -1584,7 +1589,8 @@ fn generic_struct_field_of_its_own_type() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
-const destroyed = Atomic<int>(0);
+import async;
+const destroyed = async.Atomic<int>(0);
 struct Link<T> {
     var value: T;
     var next: Link<T>;

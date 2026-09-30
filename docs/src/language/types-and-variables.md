@@ -159,7 +159,7 @@ main.pep:2:13: error: unknown escape sequence '\q'
   [HashMap and HashSet](../reference/hash.md).
 - `Result<TValue, TError>` and `Error` describe operations that can
   fail. See [Error handling with Result](results.md).
-- `Atomic<T>` is a value that threads can update safely. See
+- `async.Atomic<T>` is a value that threads can update safely. See
   [Atomics](atomics.md) and [Threads and shared data](threads.md).
 
 ### Raw pointers and `__null`
@@ -249,7 +249,7 @@ changes is an `Atomic<T>`:
 
 ```pepper
 const MAX_RETRIES = 3;
-const requests = Atomic<long>(0);   # changed with requests.fetch_add(1)
+const requests = async.Atomic<long>(0);   # changed with requests.fetch_add(1)
 ```
 
 ## Casting with `as`

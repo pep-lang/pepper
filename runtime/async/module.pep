@@ -6,6 +6,7 @@
 ## `async.Thread`, `async.logical_cpus()`) or import names directly with
 ## `import [Thread, ThreadLocal] from async`.
 ##
+## - [Atomic](async-atomic.md): `Atomic<T>`, a value threads read and update without a lock
 ## - [Thread](async-thread.md): starting, naming and joining threads, `ThreadId` and `ThreadBody`
 ## - [ThreadLocal](async-thread_local.md): a variable with a separate value on every thread, and its `ThreadLocalGuard<T>`
 ## - [Processor counts](async-cpus.md): `logical_cpus()` and `physical_cpus()`
@@ -27,7 +28,7 @@
 ## @example
 ##     import async;
 ##
-##     const hits = Atomic<long>(0);
+##     const hits = async.Atomic<long>(0);
 ##
 ##     work() {
 ##         hits.fetch_add(1);
@@ -53,6 +54,7 @@
 # `_async_*` helpers are exported between the async files but not from the
 # module.
 
+import "atomic";
 import "channel";
 import "cpus";
 import "driver";
@@ -64,6 +66,7 @@ import "thread";
 import "thread_local";
 import "workers";
 
+export Atomic;
 export ThreadId;
 export ThreadBody;
 export Thread;

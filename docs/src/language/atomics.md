@@ -2,15 +2,18 @@
 
 An **atomic** value can be read and updated by several threads at once without
 a data race: every operation on it happens as one indivisible step. Pepper
-provides this through `Atomic<T>`, the equivalent of C++ `std::atomic<T>`.
+provides this through `async.Atomic<T>`, the equivalent of C++
+`std::atomic<T>`.
 
 Threads themselves, and the rules for what they can share, are in
 [Threads and shared data](threads.md).
 
 ## Atomic&lt;T&gt;
 
-`Atomic<T>` is part of the runtime, so you can use it without an import. The
-[Atomic reference](../reference/atomic.md) documents every method.
+`Atomic<T>` belongs to the [`async` module](threads.md), with the other
+types threads share: `import async` and write `async.Atomic<T>`, or bring
+the name in with `import [Atomic] from async`. The
+[Atomic reference](../reference/async-atomic.md) documents every method.
 
 ```pepper
 {{#include ../../examples/atomics-basics.pep}}

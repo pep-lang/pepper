@@ -1,5 +1,7 @@
+import async;
+
 # A module-scope counter: const, and changed through an Atomic.
-const open_sessions = Atomic<int>(0);
+const open_sessions = async.Atomic<int>(0);
 
 # A scope object: enter() hands out what the block works with, and the
 # destructor calls exit() when the last reference goes away.

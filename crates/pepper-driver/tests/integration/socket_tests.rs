@@ -362,7 +362,7 @@ import io;
 main(): int {
     var listener = io.TcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
     var port = listener.local_address().value().port();
-    var sent = Atomic<long>(0);
+    var sent = async.Atomic<long>(0);
     var client = async.Thread.spawn(() => {
         var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
         var chunk = Array<u8>();

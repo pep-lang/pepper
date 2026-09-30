@@ -14,7 +14,7 @@ struct Order {
 }
 
 const orders = async.Channel<Order>();
-const letters = Atomic<long>(0);
+const letters = async.Atomic<long>(0);
 
 count_letters() {
     for (var order in orders) {

@@ -1,5 +1,7 @@
+import async;
+
 main(): int {
-    var a = Atomic<int>(41);
+    var a = async.Atomic<int>(41);
     assert(a.load() == 41, "the initial value");
 
     a.store(1);
@@ -11,7 +13,7 @@ main(): int {
     assert(a.fetch_sub(2) == 6, "fetch_sub returns the old value");
     assert(a.load() == 4, "6 - 2");
 
-    var flags = Atomic<uint>(12);          # 0b1100
+    var flags = async.Atomic<uint>(12);          # 0b1100
     flags.fetch_and(10);                   # 0b1000
     assert(flags.load() == 8, "fetch_and");
     flags.fetch_or(1);                     # 0b1001

@@ -34,8 +34,9 @@ fn load_store_pod() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<int>(41);
+    var a = async.Atomic<int>(41);
     if (a.load() != 41) { return -1; }
     a.store(99);
     if (a.load() != 99) { return -2; }
@@ -51,8 +52,9 @@ fn load_store_long() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<long>(1234567890123);
+    var a = async.Atomic<long>(1234567890123);
     if (a.load() != 1234567890123) { return -1; }
     a.store(42);
     if (a.load() != 42) { return -2; }
@@ -68,9 +70,10 @@ fn load_store_struct() {
     assert_eq!(
         compile_jit_with_runtime(
             &format!(
-                r#"{point}
+                r#"import async;
+{point}
 test(): int {{
-    var a = Atomic<Point>();
+    var a = async.Atomic<Point>();
     var p = Point(7);
     a.store(p);
     var q = a.load();
@@ -91,12 +94,13 @@ fn load_store_double() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<double>(1.5);
+    var a = async.Atomic<double>(1.5);
     if (a.load() != 1.5) { return -1; }
     a.store(2.25);
     if (a.load() != 2.25) { return -2; }
-    var b = Atomic<double>(3.0);
+    var b = async.Atomic<double>(3.0);
     if (!b.compare_exchange(3.0, 4.0)) { return -3; }
     if (b.load() != 4.0) { return -4; }
     return 0;
@@ -111,9 +115,10 @@ fn store_replaces_struct_ref() {
     assert_eq!(
         compile_jit_with_runtime(
             &format!(
-                r#"{point}
+                r#"import async;
+{point}
 test(): int {{
-    var a = Atomic<Point>();
+    var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
     if (__refcount<Point>(p1) != 2) {{ return -1; }}
@@ -139,8 +144,9 @@ fn cmpxchg_success_and_failure_pod() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<int>(10);
+    var a = async.Atomic<int>(10);
     if (!a.compare_exchange(10, 20)) { return -1; }
     if (a.load() != 20) { return -2; }
     # Failure: expected does not match the slot.
@@ -158,9 +164,10 @@ fn cmpxchg_struct_refcount() {
     assert_eq!(
         compile_jit_with_runtime(
             &format!(
-                r#"{point}
+                r#"import async;
+{point}
 test(): int {{
-    var a = Atomic<Point>();
+    var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
     if (__refcount<Point>(p1) != 2) {{ return -1; }}
@@ -190,8 +197,9 @@ fn exchange_pod() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<int>(5);
+    var a = async.Atomic<int>(5);
     var old = a.exchange(8);
     if (old != 5) { return -1; }
     if (a.load() != 8) { return -2; }
@@ -207,9 +215,10 @@ fn exchange_struct_refcount() {
     assert_eq!(
         compile_jit_with_runtime(
             &format!(
-                r#"{point}
+                r#"import async;
+{point}
 test(): int {{
-    var a = Atomic<Point>();
+    var a = async.Atomic<Point>();
     var p1 = Point(1);
     a.store(p1);
     var p2 = Point(2);
@@ -235,8 +244,9 @@ fn fetch_ops_int() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<int>(10);
+    var a = async.Atomic<int>(10);
     if (a.fetch_add(5) != 10 || a.load() != 15) { return -1; }
     if (a.fetch_sub(3) != 15 || a.load() != 12) { return -2; }
     if (a.fetch_and(12) != 12 || a.load() != 12) { return -3; }
@@ -254,8 +264,9 @@ fn fetch_ops_long() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
 test(): int {
-    var a = Atomic<long>(100);
+    var a = async.Atomic<long>(100);
     if (a.fetch_add(50) != 100 || a.load() != 150) { return -1; }
     if (a.fetch_sub(30) != 150 || a.load() != 120) { return -2; }
     if (a.fetch_and(128) != 120 || a.load() != 0) { return -3; }
@@ -275,11 +286,12 @@ fn is_lock_free() {
     assert_eq!(
         compile_jit_with_runtime(
             &format!(
-                r#"{point}
+                r#"import async;
+{point}
 test(): int {{
-    if (!Atomic<int>(0).is_lock_free()) {{ return -1; }}
-    if (!Atomic<long>(0).is_lock_free()) {{ return -2; }}
-    if (!Atomic<Point>().is_lock_free()) {{ return -3; }}
+    if (!async.Atomic<int>(0).is_lock_free()) {{ return -1; }}
+    if (!async.Atomic<long>(0).is_lock_free()) {{ return -2; }}
+    if (!async.Atomic<Point>().is_lock_free()) {{ return -3; }}
     return 0;
 }}"#,
                 point = POINT
@@ -297,7 +309,8 @@ fn fetch_add_contention() {
     const STEPS: i64 = 50_000;
     let mut module = build_module(
         r#"
-const counter = Atomic<long>(0);
+import async;
+const counter = async.Atomic<long>(0);
 test(): int { return 0; }
 
 add_one(): long {
@@ -341,7 +354,8 @@ fn cas_contention() {
     const STEPS: i64 = 25_000;
     let mut module = build_module(
         r#"
-const counter = Atomic<long>(0);
+import async;
+const counter = async.Atomic<long>(0);
 
 # CAS-retry increment: each call wins exactly one step of the counter.
 try_inc(): int {

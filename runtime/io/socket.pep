@@ -9,6 +9,7 @@
 # `_io_sys_*`. The sockaddr encoding below is shared; only its header (the
 # family field) differs per platform.
 
+import async;
 import "address";
 import "socket_posix";
 import "socket_windows";
@@ -672,13 +673,13 @@ export struct TcpStream {
 export struct SocketTransfer {
     # The socket as a number (`SocketHandle` widened to `long`), or -1 once
     # taken; `INVALID_SOCKET` on Windows is -1 too.
-    const _handle: Atomic<long>;
+    const _handle: async.Atomic<long>;
 
     ## Wraps a socket handle. `TcpStream.into_transfer` makes these; use it.
     ##
     ## @param handle the socket, or an invalid handle for an empty token
     construct(handle: SocketHandle) {
-        _handle = Atomic<long>(handle as long);
+        _handle = async.Atomic<long>(handle as long);
     }
 
     ## Closes the connection if no one adopted it.

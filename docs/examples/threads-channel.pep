@@ -14,7 +14,7 @@ square_numbers() {
 
 # A `shared` function value is thread-safe, so a channel can carry work.
 const tasks = async.Channel<async.ThreadBody>();
-const ran = Atomic<long>(0);
+const ran = async.Atomic<long>(0);
 
 run_tasks() {
     for (var task in tasks) {

@@ -758,10 +758,24 @@ extern "C" fn unresolved_extern() {
     std::process::abort();
 }
 
+/// async's module-scope variables set up thread-local keys and note the main
+/// thread when the program starts, and io imports async, so a Windows path
+/// program calls these before `main`. On a Unix host they answer 0: a valid
+/// key index and thread id, and a failed (ignored) free.
+#[cfg(unix)]
+const WINDOWS_STARTUP_CALLS: [&str; 5] = ["FlsAlloc", "FlsFree", "TlsAlloc", "TlsFree", "GetCurrentThreadId"];
+
+#[cfg(unix)]
+extern "C" fn startup_call() -> usize {
+    0
+}
+
 /// Path syntax is pure Pepper, so the path program runs, in-process by JIT,
 /// with every simulated host's rules: Windows separators, drives and UNC
 /// prefixes are checked on any Unix host. (A failed assert aborts the test
-/// process after printing its message.)
+/// process after printing its message.) Only this host's architecture is
+/// simulated: io imports async, whose fibers carry inline assembly for the
+/// simulated architecture, and the JIT can only assemble its own.
 #[cfg(unix)]
 #[test]
 fn path_functions_on_every_platform() {
@@ -771,17 +785,25 @@ fn path_functions_on_every_platform() {
     let rtld_default: *mut std::ffi::c_void = std::ptr::null_mut();
     // The raw handle is not Sync; carry it across threads as an address.
     let rtld_default = rtld_default as usize;
-    let codes = support::parallel_map(&SIMULATED_HOSTS, |&(os, arch)| {
+    let hosts: Vec<(&str, &str)> =
+        SIMULATED_HOSTS.iter().copied().filter(|&(_, arch)| arch == std::env::consts::ARCH).collect();
+    let codes = support::parallel_map(&hosts, |&(os, arch)| {
         with_codegen_as(os, arch, "path_jit", PATH_PROGRAM, |generator, module| {
             let ee = generator.jit_engine_mapped(module, |name| {
                 let c = std::ffi::CString::new(name).ok()?;
                 let found = unsafe { dlsym(rtld_default as *mut std::ffi::c_void, c.as_ptr()) };
-                found.is_null().then_some(unresolved_extern as *const () as usize)
+                if !found.is_null() {
+                    None
+                } else if WINDOWS_STARTUP_CALLS.contains(&name) {
+                    Some(startup_call as *const () as usize)
+                } else {
+                    Some(unresolved_extern as *const () as usize)
+                }
             })?;
             CodeGenerator::jit_call_i32(&ee, "main")
         })
     });
-    for ((os, arch), code) in SIMULATED_HOSTS.iter().zip(codes) {
+    for ((os, arch), code) in hosts.iter().zip(codes) {
         assert_eq!(code, Ok(0), "path program as {os}/{arch}");
     }
 }

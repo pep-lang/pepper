@@ -1,5 +1,7 @@
+import async;
+
 # Module-scope variables are `const` and thread-safe: a number, an
-# Atomic<T>, or a [Shared] struct.
+# async.Atomic<T>, or a [Shared] struct.
 [Shared]
 struct Label {
     const length: ulong;
@@ -7,7 +9,7 @@ struct Label {
 }
 
 const LIMIT = 7;
-const counter = Atomic<int>(7);
+const counter = async.Atomic<int>(7);
 const name = Label("pepper");
 
 main(): int {

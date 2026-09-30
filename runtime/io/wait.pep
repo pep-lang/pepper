@@ -19,6 +19,7 @@
 # names are exported from the module for `async` only; they are not part of
 # the public API.
 
+import async;
 import "socket_posix";
 import "socket_windows";
 import "sys_posix";
@@ -74,7 +75,7 @@ export trait _IoWaiter {
 # thread's waiter (or null), once the first `_io_set_waiter` has made it; 0
 # before. The key is made on first use so that a program that never runs
 # tasks makes none.
-const _io_waiter_key = Atomic<ulong>(0);
+const _io_waiter_key = async.Atomic<ulong>(0);
 
 # This thread's waiter slot, or null.
 _io_waiter_slot(): __ptr<_IoWaiter> {

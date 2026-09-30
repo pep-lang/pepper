@@ -159,7 +159,7 @@ attribute described in [Calling C](c-interop.md).
 ## The runtime's exports
 
 The runtime's public surface (`String`, `Array`, `HashMap`, `HashSet`,
-`Atomic`, `Result`, `Error`, `hash`, `assert`, `panic`, and the rest of the
+`Result`, `Error`, `hash`, `assert`, `panic`, and the rest of the
 [standard library reference](../reference/README.md)) is exported the same
 way, and is visible in every file without an import. The runtime's own helpers
 are private, so calling one, such as the integer formatter `dec`, reports

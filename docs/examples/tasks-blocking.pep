@@ -1,6 +1,6 @@
 import async;
 
-const ticks = Atomic<int>(0);
+const ticks = async.Atomic<int>(0);
 
 main(): int {
     async.run_with(async.RuntimeOptions().workers(1), () => {

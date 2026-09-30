@@ -72,8 +72,8 @@ fn assert_runs_with(name: &str, source: &str, env: &[(&str, &str)]) -> String {
 const THREAD_PROGRAM: &str = r#"
 import async;
 
-const ran = Atomic<long>(0);
-const names_ok = Atomic<long>(0);
+const ran = async.Atomic<long>(0);
+const names_ok = async.Atomic<long>(0);
 # The runtime's globals are initialized before this file's, so an
 # initializer may already use the async module.
 const initializing_thread = async.Thread.current();
@@ -148,10 +148,10 @@ struct Tracker {
     }
 }
 
-const released = Atomic<long>(0);
+const released = async.Atomic<long>(0);
 const counter = async.ThreadLocal<int>();
 const tracker = async.ThreadLocal<Tracker>();
-const sum = Atomic<long>(0);
+const sum = async.Atomic<long>(0);
 
 work() {
     assert(!counter.is_set(), "a new thread starts without a value");
@@ -223,7 +223,7 @@ struct Config {
 }
 
 const config = Config(8080);
-const total = Atomic<long>(0);
+const total = async.Atomic<long>(0);
 
 copy_references() {
     var i = 0;
@@ -264,7 +264,7 @@ struct Limits {
 
 export const rounds = 50000;
 export const limits = Limits(2);
-export const hits = Atomic<long>(0);
+export const hits = async.Atomic<long>(0);
 
 bump() {
     var i = 0;
@@ -305,7 +305,7 @@ const CLOSURE_BODY_PROGRAM: &str = r#"
 import async;
 
 main(): int {
-    var total = Atomic<long>(0);
+    var total = async.Atomic<long>(0);
     var workers = Array<async.Thread>();
     var i = 0;
     while (i < 4) {
@@ -341,8 +341,8 @@ struct Job {
     construct(this.weight = 1, this.run = (n: long) => {}) {}
 }
 
-const total = Atomic<long>(0);
-const named_runs = Atomic<long>(0);
+const total = async.Atomic<long>(0);
+const named_runs = async.Atomic<long>(0);
 
 count_named() {
     named_runs.fetch_add(1);
@@ -401,7 +401,7 @@ twice(x: int): int { return x * 2; }
 
 main(): int {
     extern (int) => int f = twice;
-    var total = Atomic<int>(0);
+    var total = async.Atomic<int>(0);
     var worker = async.Thread.spawn(() => { total.fetch_add(f(21)); });
     worker.join();
     assert(total.load() == 42, "the thread called the C function pointer");
@@ -479,8 +479,8 @@ struct Label {
 }
 
 const counter = async.Mutex<Counter>(Counter());
-const busy_seen = Atomic<long>(0);
-const free_seen = Atomic<long>(0);
+const busy_seen = async.Atomic<long>(0);
+const free_seen = async.Atomic<long>(0);
 
 add_many() {
     var i = 0;
@@ -650,7 +650,7 @@ struct Queue {
 
 const queue = async.Mutex<Queue>(Queue());
 const changed = queue.condition();
-const taken = Atomic<long>(0);
+const taken = async.Atomic<long>(0);
 
 consumer() {
     while (true) {
@@ -722,9 +722,9 @@ struct Settings {
 }
 
 const once = async.Once();
-const once_runs = Atomic<long>(0);
-const lazy_runs = Atomic<long>(0);
-const same = Atomic<long>(0);
+const once_runs = async.Atomic<long>(0);
+const lazy_runs = async.Atomic<long>(0);
+const same = async.Atomic<long>(0);
 
 slow_setup() {
     async.Thread.sleep(20);
@@ -738,7 +738,7 @@ build_settings(): Settings {
 }
 
 const settings = async.Lazy<Settings>(build_settings);
-const first = Atomic<Settings>();
+const first = async.Atomic<Settings>();
 
 race() {
     once.call(slow_setup);
@@ -822,16 +822,16 @@ struct Message {
     }
 }
 
-const released = Atomic<long>(0);
+const released = async.Atomic<long>(0);
 const fifo = async.Channel<long>();
 const bounded = async.Channel<long>(1);
-const second_sent = Atomic<long>(0);
+const second_sent = async.Atomic<long>(0);
 const empty = async.Channel<long>();
 const full = async.Channel<long>(1);
-const woken = Atomic<long>(0);
+const woken = async.Atomic<long>(0);
 const work = async.Channel<long>(8);
-const sum = Atomic<long>(0);
-const received_count = Atomic<long>(0);
+const sum = async.Atomic<long>(0);
+const received_count = async.Atomic<long>(0);
 
 check_order() {
     var expected: long = 0;
@@ -956,8 +956,8 @@ main(): int {
 
     # Generic and function payloads (a pointer to a pointer to a generic
     # type in the buffer field once crashed the thread-safety check).
-    var counters = async.Channel<Atomic<long>>();
-    var one = Atomic<long>(1);
+    var counters = async.Channel<async.Atomic<long>>();
+    var one = async.Atomic<long>(1);
     counters.send(one);
     assert(counters.receive().value().load() == 1, "an Atomic crosses by reference");
     var bodies = async.Channel<async.ThreadBody>();
@@ -989,8 +989,8 @@ struct Order {
 }
 
 const orders = async.Channel<Order>(8);
-const received_items = Atomic<long>(0);
-const received_letters = Atomic<long>(0);
+const received_items = async.Atomic<long>(0);
+const received_letters = async.Atomic<long>(0);
 const first = async.Channel<String>();
 
 produce() {

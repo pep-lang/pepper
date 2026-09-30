@@ -9,6 +9,7 @@
 # again), and not inherited by child processes. Errors come from WSAGetLastError, whose
 # WSAE* codes FormatMessageW describes like any other system error.
 
+import async;
 import "address";
 import "socket";
 import "sys_windows";
@@ -88,7 +89,7 @@ extern int SetHandleInformation(ulong h, uint mask, uint flags);  # the SOCKET a
 # Set once Winsock is started. Two threads may both call WSAStartup the first
 # time; it counts calls, so the extra one is harmless.
 [Target(OS(Windows))]
-const _io_winsock_started = Atomic<int>(0);
+const _io_winsock_started = async.Atomic<int>(0);
 
 [Target(OS(Windows))]
 export _io_win_socket_startup() {

@@ -1,6 +1,6 @@
 import async;
 
-const finished = Atomic<int>(0);
+const finished = async.Atomic<int>(0);
 
 # A thread body is a function that takes nothing and returns nothing.
 count_to_a_million() {

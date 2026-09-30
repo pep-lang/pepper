@@ -1,5 +1,7 @@
+import async;
+
 # A module-scope counter: const, and changed through an Atomic.
-const destroyed = Atomic<int>(0);
+const destroyed = async.Atomic<int>(0);
 
 struct Folder {
     var name: String;

@@ -6,7 +6,7 @@ struct Settings {
     construct(this.workers = 1) {}
 }
 
-const builds = Atomic<long>(0);
+const builds = async.Atomic<long>(0);
 
 load_settings(): Settings {
     builds.fetch_add(1);
@@ -18,7 +18,7 @@ const settings = async.Lazy<Settings>(load_settings);
 
 # Runs initialize() once, however many threads call it.
 const setup = async.Once();
-const setups = Atomic<long>(0);
+const setups = async.Atomic<long>(0);
 
 initialize() {
     setups.fetch_add(1);

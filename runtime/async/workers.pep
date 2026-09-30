@@ -45,6 +45,7 @@
 # until every worker is done before it closes its driver, so no ring ever
 # reaches a closed handle.
 
+import "atomic";
 import "channel";
 import "driver";
 import "sys_posix";

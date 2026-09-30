@@ -1,24 +1,26 @@
+import async;
+
 main(): int {
     # POD: load/store round-trip.
-    var a = Atomic<int>(41);
+    var a = async.Atomic<int>(41);
     if (a.load() != 41) { return 1; }
     a.store(99);
     if (a.load() != 99) { return 2; }
 
     # fetch_add returns the previous value.
-    var c = Atomic<long>(10);
+    var c = async.Atomic<long>(10);
     if (c.fetch_add(5) != 10) { return 3; }
     if (c.load() != 15) { return 4; }
 
     # compare_exchange: success and failure paths.
-    var b = Atomic<int>(7);
+    var b = async.Atomic<int>(7);
     if (!b.compare_exchange(7, 8)) { return 5; }
     if (b.load() != 8) { return 6; }
     if (b.compare_exchange(99, 100)) { return 7; }
     if (b.load() != 8) { return 8; }
 
     # exchange returns the previous value.
-    var e = Atomic<int>(1);
+    var e = async.Atomic<int>(1);
     if (e.exchange(2) != 1) { return 9; }
     if (e.load() != 2) { return 10; }
 

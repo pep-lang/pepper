@@ -9,10 +9,10 @@ struct Settings {
     construct(this.port = 0, this.retries = 0) {}
 }
 
-# Atomic<T> of a [Shared] struct: threads read the current settings, and one
+# async.Atomic<T> of a [Shared] struct: threads read the current settings, and one
 # of them can replace them.
-const current = Atomic<Settings>(Settings(8080, 3));
-const seen = Atomic<long>(0);
+const current = async.Atomic<Settings>(Settings(8080, 3));
+const seen = async.Atomic<long>(0);
 
 read_settings() {
     var settings = current.load();

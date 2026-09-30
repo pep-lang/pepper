@@ -29,6 +29,7 @@
 # Mutex a Condition waits on); `Mutex` unlocks outside any such lock, so it
 # calls `_wake_one_locked`, which always looks.
 
+import "atomic";
 import "sys_posix";
 import "sys_windows";
 import "task";

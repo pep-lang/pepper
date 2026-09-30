@@ -37,9 +37,10 @@ fn compile_error(source: &str) -> String {
 /// Two shapes whose destructors count into `destroyed` (1 per Square, 10 per
 /// Rect), so a test can tell which concrete destructor ran.
 const SHAPES: &str = r#"
+import async;
 import [ThreadLocal] from async;
 
-const destroyed = Atomic<int>(0);
+const destroyed = async.Atomic<int>(0);
 
 trait Shape {
     int area();
@@ -553,7 +554,7 @@ fn atomics_reject_trait_values() {
     // Atomic is [Shared], and a trait value is not thread-safe: sema rejects
     // the specialization before codegen's own guard is reached.
     let error = sema(&shapes(
-        "test(): int {\n    var a = Atomic<Shape>();\n    a.store(Square(1));\n    return 0;\n}\n",
+        "test(): int {\n    var a = async.Atomic<Shape>();\n    a.store(Square(1));\n    return 0;\n}\n",
     ))
     .expect_err("expected a thread-safety error");
     assert!(

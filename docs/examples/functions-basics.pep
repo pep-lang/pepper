@@ -1,5 +1,7 @@
 # Declaring and calling functions.
 
+import async;
+
 # Parameters are written 'name: Type'; the return type follows the ')'.
 area(width: int, height: int): int {
     return width * height;
@@ -13,7 +15,7 @@ int perimeter(int width, int height) {
 # A function that returns nothing leaves out the return type
 # (or writes ': void', or 'void' in front).
 # A module-scope counter: const, and changed through an Atomic.
-const log_count = Atomic<int>(0);
+const log_count = async.Atomic<int>(0);
 log(message: String) {
     log_count.fetch_add(1);
     print("log: " + message);

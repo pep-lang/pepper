@@ -1,4 +1,7 @@
 # Function values in fields, arrays, globals, and return values.
+
+import async;
+
 square(x: int): int { return x * x; }
 negate(x: int): int { return -x; }
 increment(x: int): int { return x + 1; }
@@ -20,7 +23,7 @@ pick(squared: bool): (int) => int {
 # A module-level function variable. Every module-level variable is const
 # and thread-safe: an Atomic lets it change, and a function type every thread
 # can reach is declared shared.
-const handler = Atomic<shared (int) => int>(increment);
+const handler = async.Atomic<shared (int) => int>(increment);
 
 # A type alias can name a function type, even a generic one.
 type Combine<T> = (T, T) => T;
@@ -34,7 +37,7 @@ fold(values: int[], combine: Combine<int>, start: int): int {
 }
 
 # A function that returns nothing has the return type void.
-const events = Atomic<int>(0);
+const events = async.Atomic<int>(0);
 record(n: int) { events.fetch_add(n); }
 
 main(): int {

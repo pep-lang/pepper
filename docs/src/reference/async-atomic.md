@@ -1,8 +1,8 @@
-<!-- Generated from runtime/atomic.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/async/atomic.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
 # Atomic
 
-Source: `runtime/atomic.pep`
+Source: `runtime/async/atomic.pep`
 
 ## Atomic
 
@@ -24,7 +24,7 @@ acquire-release.
 `Atomic` is a `[Shared]` struct, so copies of it share one slot and may
 be used from several threads at once: pass the Atomic around (or keep it
 in a `const` global) to share the value between threads. A struct `T` must be
-thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
+thread-safe (itself `[Shared]`); `async.Atomic<String>` is a compile error.
 
 **Type parameters**
 - `T` — the type of the stored value
@@ -32,7 +32,7 @@ thread-safe (itself `[Shared]`); `Atomic<String>` is a compile error.
 **Example**
 ```pepper
     main(): int {
-        var counter = Atomic<long>(0);
+        var counter = async.Atomic<long>(0);
         var before = counter.fetch_add(5);   # before == 0
         if (counter.load() != 5) { return 1; }
         return 0;
@@ -56,8 +56,8 @@ For a struct `T` the Atomic acquires a reference to `value`.
 
 **Example**
 ```pepper
-    var a = Atomic<int>(41);
-    var p = Atomic<Point>();   # holds null until a store
+    var a = async.Atomic<int>(41);
+    var p = async.Atomic<Point>();   # holds null until a store
 ```
 
 ### Methods
@@ -143,7 +143,7 @@ acquires `v`, and the caller owns the returned reference.
 
 **Example**
 ```pepper
-    var e = Atomic<int>(1);
+    var e = async.Atomic<int>(1);
     var old = e.exchange(2);   # old == 1, e.load() == 2
 ```
 
@@ -184,7 +184,7 @@ program when it runs.
 
 **Example**
 ```pepper
-    var c = Atomic<long>(10);
+    var c = async.Atomic<long>(10);
     var old = c.fetch_add(5);   # old == 10, c.load() == 15
 ```
 

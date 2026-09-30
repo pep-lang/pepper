@@ -159,8 +159,8 @@ test(): int {
 
 #[test]
 fn module_scope_function_value() {
-    let src = format!("{}{}", FUNCTIONS, r#"
-const handler = Atomic<shared (int) => int>(square);
+    let src = format!("import async;\n{}{}", FUNCTIONS, r#"
+const handler = async.Atomic<shared (int) => int>(square);
 
 test(): int {
     var before = handler.load()(3);
@@ -215,7 +215,8 @@ test(): int {
 #[test]
 fn void_function_values() {
     let src = r#"
-const counter = Atomic<int>(0);
+import async;
+const counter = async.Atomic<int>(0);
 bump(by: int) { counter.fetch_add(by); }
 
 test(): int {

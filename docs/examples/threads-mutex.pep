@@ -4,16 +4,16 @@ import async;
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const checking: Atomic<long>;
-    const savings: Atomic<long>;
+    const checking: async.Atomic<long>;
+    const savings: async.Atomic<long>;
     construct(long checking = 0, long savings = 0) {
-        this.checking = Atomic<long>(checking);
-        this.savings = Atomic<long>(savings);
+        this.checking = async.Atomic<long>(checking);
+        this.savings = async.Atomic<long>(savings);
     }
 }
 
 const accounts = async.Mutex<Accounts>(Accounts(1000, 0));
-const bad_totals = Atomic<long>(0);
+const bad_totals = async.Atomic<long>(0);
 
 move_to_savings() {
     var i = 0;

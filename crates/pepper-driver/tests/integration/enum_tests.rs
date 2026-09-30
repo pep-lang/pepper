@@ -487,7 +487,7 @@ test(): int {
 #[test]
 fn enums_key_hash_maps_and_fill_atomics() {
     let src = format!(
-        "{}{}",
+        "import async;\n{}{}",
         COLOR,
         r#"
 test(): int {
@@ -496,7 +496,7 @@ test(): int {
     counts[Color.Blue] = 3;
     var seen = HashSet<Color>();
     seen.insert(Color.Green);
-    var a = Atomic<Color>(Color.Red);
+    var a = async.Atomic<Color>(Color.Red);
     a.store(Color.Blue);
     var total = counts[Color.Blue];
     if (seen.contains(Color.Green) and !seen.contains(Color.Red)) { total += 10; }

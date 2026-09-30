@@ -35,6 +35,7 @@
 # value the way `try_receive` does, telling an empty channel from a closed
 # one.
 
+import "atomic";
 import "sync_wait";
 import "sys_posix";
 import "sys_windows";

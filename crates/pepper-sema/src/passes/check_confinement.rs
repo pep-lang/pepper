@@ -1804,7 +1804,7 @@ fn check_mutex_arguments(program: &Program) -> bool {
         crate::errors::report(
             Diagnostic::error(format!("'{}' cannot protect a number: its 'with' binding is a copy that the block cannot store back", st.ty.display()))
                 .at(at)
-                .with_note(format!("use 'Atomic<{}>' for a number that threads share", argument.display()), None),
+                .with_note(format!("use 'async.Atomic<{}>' for a number that threads share", argument.display()), None),
         );
         return true;
     }

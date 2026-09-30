@@ -179,11 +179,11 @@ fn globals_are_initialized_after_the_globals_they_import() {
     // main imports a and b, and a imports b: b's globals are initialized
     // first, then a's, then main's, whatever order the files were loaded in.
     let files = [
-        ("b.pep", "export const start = Atomic<int>(40);"),
-        ("a.pep", "import \"b\";\nexport const next = Atomic<int>(start.load() + 1);"),
+        ("b.pep", "import async;\nexport const start = async.Atomic<int>(40);"),
+        ("a.pep", "import async;\nimport \"b\";\nexport const next = async.Atomic<int>(start.load() + 1);"),
         (
             "main.pep",
-            "import \"a\";\nimport \"b\";\nconst answer = Atomic<int>(next.load() + 1);\ntest(): int { return answer.load() + start.load(); }",
+            "import async;\nimport \"a\";\nimport \"b\";\nconst answer = async.Atomic<int>(next.load() + 1);\ntest(): int { return answer.load() + start.load(); }",
         ),
     ];
     assert_eq!(run("init_order", &files), 82);

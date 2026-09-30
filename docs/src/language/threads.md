@@ -35,7 +35,7 @@ The body can be a named function or a [closure](function-types.md). A
 closure passes data to the thread through its captures:
 
 ```pepper
-var total = Atomic<long>(0);
+var total = async.Atomic<long>(0);
 var step: long = 5;
 var worker = async.Thread.spawn(() => { total.fetch_add(step); });
 worker.join();
@@ -50,7 +50,7 @@ capture and reports one that is not thread-safe where the closure uses it:
 main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() => { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 ```
@@ -145,10 +145,10 @@ A generic `[Shared]` struct is checked for each set of type arguments.
 and `Atomic<String>` is an error that points at the code that names it:
 
 ```text
-main.pep:2:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe
-    2 |     var a = Atomic<String>();
-      |             ^~~~~~~~~~~~~~
-runtime/atomic.pep:40:17: note: required by field 'Data' declared here
+main.pep:3:13: error: shared struct 'Atomic<String>' requires thread-safe type arguments; 'String' is not thread-safe
+    3 |     var a = async.Atomic<String>();
+      |             ^~~~~~~~~~~~~~~~~~~~
+runtime/async/atomic.pep:39:18: note: required by field '_data' declared here
 runtime/string.pep:33:15: note: 'String' is not declared [Shared]
 ```
 
@@ -159,7 +159,7 @@ reported at the field:
 main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
     3 |     int Count;
       |         ^~~~~
-note: threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'
+note: threads change a shared struct's state through a thread-safe member such as 'async.Atomic<T>' (after 'import async')
 ```
 
 `Thread`, `ThreadLocal<T>` and `Atomic<T>` are `[Shared]` themselves, and so
@@ -181,7 +181,7 @@ the same two rules as a field of a `[Shared]` struct:
 
 ```pepper
 const MAX_WORKERS = 8;                  # a number
-const jobs_done = Atomic<long>(0);      # changed with fetch_add
+const jobs_done = async.Atomic<long>(0);  # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal<String>();  # a String per thread
 const double: shared (int) => int = (x: int) => x * 2;  # a shared function
@@ -193,7 +193,7 @@ A variable that breaks a rule is reported at its name or type:
 main.pep:1:5: error: module-scope variable 'hits' must be 'const'
     1 | var hits = 0;
       |     ^~~~
-note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')
 ```
 
 ```text
@@ -328,7 +328,7 @@ reach the value is a [`with` block](scopes.md):
 
 `T` is a struct type: a struct of your own, an `Array<String>`, or a
 `[Shared]` struct whose `Atomic` fields must change as a unit.
-`Mutex<int>` is an error (use `Atomic<int>`). A Mutex of values that are not
+`Mutex<int>` is an error (use `async.Atomic<int>`). A Mutex of values that are not
 thread-safe is kept apart from the rest of the program by the compiler; see
 [What a lock body may do](#what-a-lock-body-may-do).
 

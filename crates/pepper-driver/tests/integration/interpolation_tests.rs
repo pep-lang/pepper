@@ -260,6 +260,8 @@ fn string_format() {
     assert_eq!(
         compile_jit_with_runtime(
             r#"
+import async;
+
 struct Point {
     var x: int = 0;
     construct(this.x = 0) {}
@@ -271,7 +273,7 @@ extend Point with ToString {
     }
 }
 
-const order = Atomic<int>(0);
+const order = async.Atomic<int>(0);
 
 # Records the order of the calls in its result's digits.
 next(value: int): int {

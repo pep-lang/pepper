@@ -44,7 +44,7 @@ The exception is a constant: a `const`, at module scope or in a function,
 whose value is fixed, such as a number, string, or character. Its name is
 `SCREAMING_CASE`, uppercase words joined by underscores (`MAX_REQUESTS`,
 `LINE_WIDTH`). A module-scope `const` that holds an object, such as
-`const request_count = Atomic<int>(0);`, is a variable and stays
+`const request_count = async.Atomic<int>(0);`, is a variable and stays
 `snake_case`.
 
 Spell words out. A name is read far more often than it is typed, so prefer

@@ -218,7 +218,7 @@ fn check_globals(module: &Module) {
                 Diagnostic::error(format!("module-scope variable '{}' must be 'const'", global.name))
                     .at(global.loc)
                     .with_note(
-                        "every thread can reach a module-scope variable; change its state through a thread-safe type such as 'Atomic<T>' or 'ThreadLocal<T>'",
+                        "every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')",
                         None,
                     ),
             );
@@ -252,7 +252,7 @@ fn check_shared_structs(module: &Module) -> bool {
                     Diagnostic::error(format!("field '{}' of shared struct '{}' must be 'const'", field.name, st.name))
                         .at(field.loc)
                         .with_note(
-                            "threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'",
+                            "threads change a shared struct's state through a thread-safe member such as 'async.Atomic<T>' (after 'import async')",
                             None,
                         ),
                 );

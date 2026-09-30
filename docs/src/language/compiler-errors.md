@@ -129,6 +129,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
 | `Channel.send(x)`, `try_send(x)` with a variable something else references (now an error: `send` no longer copies) | `send(move(x))`, or `send(copy(x))` to keep using `x` |
 | `[Sending]` parameter attribute (now an error) | `[Move]` |
+| `Atomic<T>` without an import (now an error: it moved to the `async` module) | `async.Atomic<T>` after `import async`, or `import [Atomic] from async` |
 
 ## Errors in the editor
 
@@ -286,7 +287,7 @@ main.pep:6:8: note: declare it with 'extend Circle with Shape'
 main.pep:5:46: error: closure passed as 'shared () => void' captures 'name' of type 'String', which is not thread-safe
     5 |     var t = async.Thread.spawn(() => { print(name); });
       |                                              ^~~~
-main.pep:4:9: note: capture a thread-safe value instead, such as an 'Atomic<T>' or a '[Shared]' struct
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic<T>' or a '[Shared]' struct
     4 |     var name = "worker";
       |         ^~~~
 ```
