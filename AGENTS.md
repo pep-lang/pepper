@@ -264,6 +264,23 @@ export open_file(path: String): int { ... }
 The exception is a parameter: its attributes stay on its line, in front of
 it (`construct([Sending] T value)`).
 
+## Run pep-fmt over runtime/ and tools/ before committing
+
+Every `.pep` file under `runtime/` and `tools/` is kept in `pep-fmt`'s
+style, and `pep_fmt_sources_are_formatted` fails CI on any file that is
+not. So any change there, a new file or an edit, goes through `pep-fmt`
+before it is committed:
+
+```bash
+cargo run --release -- -I tools tools/pep-fmt/main.pep -o pep-fmt
+./pep-fmt -w runtime tools     # rewrite what is not formatted
+./pep-fmt --check runtime tools  # lists nothing when all is formatted
+```
+
+After a merge from the default branch that touches these folders, run it
+again: a conflict resolved by hand is rarely formatted. Code whose layout
+must stay as written goes between `# format: off` and `# format: on`.
+
 ## Library code is documented with `##` doc comments
 
 Every public declaration in library code (`runtime/`, and any library added
