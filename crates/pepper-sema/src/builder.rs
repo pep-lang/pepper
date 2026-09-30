@@ -108,6 +108,13 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
             ast::Literal::Integer(v) => Ok(Expression::IntLiteral(*v)),
             ast::Literal::Float(v) => Ok(Expression::FloatLiteral(*v)),
             ast::Literal::Bool(v) => Ok(Expression::BoolLiteral(*v)),
+            // A `byte`: the cast gives it that type where nothing else does,
+            // and it widens to any integer it is compared with or passed as.
+            ast::Literal::Char(v) => Ok(Expression::Cast {
+                expr: Box::new(Expression::IntLiteral(*v as i64)),
+                ty: TypeName::new("byte"),
+                loc: loc(*span),
+            }),
             ast::Literal::Null => Ok(Expression::PointerLiteral),
         },
         ast::Expression::SymbolRef { id, .. } => {

@@ -777,7 +777,8 @@ struct Parser {
             token.is_word("false") or
             token.is_word("__null") or
             token.kind == TOKEN_NUMBER or
-            token.kind == TOKEN_STRING) {
+            token.kind == TOKEN_STRING or
+            token.kind == TOKEN_CHARACTER) {
             return Node.of_token(_advance());
         }
         # A `-` written directly before a number is part of the literal.

@@ -980,7 +980,7 @@ export align_trailing_comments(printed: String, newline: String): String {
     ulong start = 0;
     ulong i = 0;
     while (i < printed.size()) {
-        if (data[i] == 10) {
+        if (data[i] == '\n') {
             if (i > start) {
                 lines.append(String(data + start, i - start));
             } else {
@@ -1062,7 +1062,7 @@ export format_source(source: String): Result<String, syntax.SyntaxError> {
     }
     var newline = "\n";
     long first_break = source.find("\n");
-    if (first_break > 0 and source.c_str()[(first_break - 1) as ulong] == 13) {
+    if (first_break > 0 and source.c_str()[(first_break - 1) as ulong] == '\r') {
         newline = "\r\n";
     }
     var layout = Formatter().format(tree.value());

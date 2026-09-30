@@ -194,3 +194,13 @@ fn pep_fmt_reports_syntax_errors_with_their_location() {
     let error = format("main(): int {\n    return (1;\n}\n").unwrap_err();
     assert_eq!(error, "<stdin>:2:14: error: expected ')'\n");
 }
+
+#[test]
+fn pep_fmt_keeps_character_literals_as_written() {
+    assert_formats(
+        "main(): int {\n    var q='\"';\n    if (q=='#' or q=='\\'' or q=='\\x7F') { return 1; }\n    return 0;\n}\n",
+        "main(): int {\n    var q = '\"';\n    if (q == '#' or q == '\\'' or q == '\\x7F') { return 1; }\n    return 0;\n}\n",
+    );
+    let error = format("main(): int {\n    var c = 'a;\n}\n").unwrap_err();
+    assert_eq!(error, "<stdin>:2:13: error: missing terminating ' character\n");
+}

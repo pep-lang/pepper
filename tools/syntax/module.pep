@@ -15,6 +15,7 @@ export TOKEN_IDENTIFIER;
 export TOKEN_NUMBER;
 export TOKEN_STRING;
 export TOKEN_PUNCTUATION;
+export TOKEN_CHARACTER;
 export Comment;
 export Token;
 export SyntaxError;

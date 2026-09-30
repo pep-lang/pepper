@@ -65,6 +65,8 @@ pub enum Literal {
     Integer(i64),
     Float(f64),
     Bool(bool),
+    /// A character literal (`'a'`): the character's byte, of type `byte`.
+    Char(u8),
     Null,
 }
 
@@ -681,6 +683,16 @@ impl Display for Literal {
             Literal::Integer(v) => write!(f, "{}", v),
             Literal::Float(v) => write!(f, "{}", v),
             Literal::Bool(v) => write!(f, "{}", v),
+            Literal::Char(b) => match b {
+                b'\n' => write!(f, "'\\n'"),
+                b'\t' => write!(f, "'\\t'"),
+                b'\r' => write!(f, "'\\r'"),
+                0 => write!(f, "'\\0'"),
+                b'\\' => write!(f, "'\\\\'"),
+                b'\'' => write!(f, "'\\''"),
+                0x20..=0x7e => write!(f, "'{}'", *b as char),
+                _ => write!(f, "'\\x{:02X}'", b),
+            },
             Literal::Null => write!(f, "__null"),
         }
     }

@@ -58,9 +58,33 @@ is a `double`.
 
 ### Characters
 
-`char` is an 8-bit signed integer, the same type as `i8`. Pepper has no character
-literals (`'a'` is a syntax error); text is a `String`, and a single character is
-a one-code-point `String`.
+A character literal is one ASCII character between single quotes: `'a'`, `'"'`,
+`'#'`. Its value is the character's code, and its type is `byte` (`u8`), the type
+of one byte of a UTF-8 string. Like any `byte` it widens to the other integer
+types, so it compares with, and stores into, an `int` or a `char` as well:
+
+```pepper
+{{#include ../../examples/types-characters.pep}}
+```
+
+The escapes are the same as a string's (see the table under
+[Strings](#strings)), plus `\xHH` for any byte, `'\xFF'` included. A
+character literal holds exactly one ASCII character; for anything else use a
+string:
+
+```text
+main.pep:2:13: error: character literal may only contain one character; use a string for more
+    2 |     var x = 'ab';
+      |             ^~~~
+main.pep:2:14: error: character literal must be a single ASCII character; use a string for other characters
+    2 |     var x = 'é';
+      |              ^
+```
+
+`char` is an 8-bit **signed** integer, the same type as `i8`, used mostly for C
+strings (`__ptr<char>`). The ASCII characters have the same value as a `char`
+and as a `byte`; `'\xFF'` is 255 as a `byte` but -1 read through a `char`.
+Text is a `String`, and a single character of it is a one-code-point `String`.
 
 ### Strings
 
@@ -91,7 +115,7 @@ A backslash in a string literal starts an escape sequence, as in C and Rust:
 | `\\` | a backslash |
 | `\"` | a double quote |
 | `\'` | a single quote |
-| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` |
+| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` (any byte in a [character literal](#characters)) |
 | `\u{H...}` | the Unicode code point with hexadecimal code `H...` (1 to 6 digits) |
 
 ```pepper

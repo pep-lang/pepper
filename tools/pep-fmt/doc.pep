@@ -341,7 +341,7 @@ export render(document: Doc, width: int): String {
 export trim_end(value: String): String {
     var data = value.c_str();
     ulong end = value.size();
-    while (end > 0 and data[end - 1] == 32) {
+    while (end > 0 and data[end - 1] == ' ') {
         end -= 1;
     }
     if (end == value.size()) {

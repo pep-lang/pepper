@@ -13,6 +13,8 @@ export const TOKEN_STRING = 3;
 ## its own token, so `Array<Array<int>>` closes two generic lists; the
 ## parser joins adjacent `>` tokens into `>>`, `>=` and `>>=`.
 export const TOKEN_PUNCTUATION = 4;
+## A character literal, quotes and escapes included (`'a'`, `'\n'`).
+export const TOKEN_CHARACTER = 5;
 
 ## A `#` comment, from the `#` to the end of its line.
 export struct Comment {

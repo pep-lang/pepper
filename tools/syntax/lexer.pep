@@ -3,30 +3,6 @@
 
 import "token";
 
-# Pepper has no character literals, so the bytes the lexer compares against
-# are named here.
-const BYTE_TAB = 9;
-const BYTE_NEWLINE = 10;
-const BYTE_RETURN = 13;
-const BYTE_SPACE = 32;
-const BYTE_QUOTE = 34;
-const BYTE_HASH = 35;
-const BYTE_PERIOD = 46;
-const BYTE_ZERO = 48;
-const BYTE_NINE = 57;
-const BYTE_UPPER_A = 65;
-const BYTE_UPPER_E = 69;
-const BYTE_UPPER_Z = 90;
-const BYTE_BACKSLASH = 92;
-const BYTE_UNDERSCORE = 95;
-const BYTE_LOWER_A = 97;
-const BYTE_LOWER_E = 101;
-const BYTE_LOWER_F = 102;
-const BYTE_LOWER_X = 120;
-const BYTE_LOWER_Z = 122;
-const BYTE_PLUS = 43;
-const BYTE_MINUS = 45;
-
 ## A syntax error: what went wrong and where.
 export struct SyntaxError {
     ## What went wrong, worded like a clang diagnostic (`expected ';'`).
@@ -46,7 +22,7 @@ export struct SyntaxError {
 ## @param c the byte to test
 ## @returns true for `0` to `9`
 export is_digit(c: int): bool {
-    return c >= BYTE_ZERO and c <= BYTE_NINE;
+    return c >= '0' and c <= '9';
 }
 
 ## Returns whether `c` can start an identifier: an ASCII letter or `_`.
@@ -54,9 +30,7 @@ export is_digit(c: int): bool {
 ## @param c the byte to test
 ## @returns true for a letter or underscore
 export is_identifier_start(c: int): bool {
-    return (c >= BYTE_LOWER_A and c <= BYTE_LOWER_Z) or
-        (c >= BYTE_UPPER_A and c <= BYTE_UPPER_Z) or
-        c == BYTE_UNDERSCORE;
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_';
 }
 
 ## Returns whether `c` can continue an identifier: a letter, digit or `_`.
@@ -68,7 +42,7 @@ export is_identifier_part(c: int): bool {
 }
 
 is_hex_digit(c: int): bool {
-    return is_digit(c) or (c >= BYTE_LOWER_A and c <= BYTE_LOWER_F) or (c >= BYTE_UPPER_A and c <= 70);
+    return is_digit(c) or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
 }
 
 # The punctuation the lexer recognizes, longest first so the first match is
@@ -168,26 +142,25 @@ export lex(source: String): Result<Token[], SyntaxError> {
     bool space = false;
     while (i < size) {
         int c = data[i];
-        if (c == BYTE_NEWLINE) {
+        if (c == '\n') {
             newlines += 1;
             newlines_since_comment += 1;
             space = true;
             i += 1;
             continue;
         }
-        if (c == BYTE_SPACE or c == BYTE_TAB or c == BYTE_RETURN) {
+        if (c == ' ' or c == '\t' or c == '\r') {
             space = true;
             i += 1;
             continue;
         }
-        if (c == BYTE_HASH) {
+        if (c == '#') {
             ulong start = i;
-            while (i < size and data[i] != BYTE_NEWLINE) {
+            while (i < size and data[i] != '\n') {
                 i += 1;
             }
             ulong end = i;
-            while (end > start and
-                (data[end - 1] == BYTE_SPACE or data[end - 1] == BYTE_TAB or data[end - 1] == BYTE_RETURN)) {
+            while (end > start and (data[end - 1] == ' ' or data[end - 1] == '\t' or data[end - 1] == '\r')) {
                 end -= 1;
             }
             var text = slice(data, start, end);
@@ -210,7 +183,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
             }
         } else if (is_digit(c)) {
             kind = TOKEN_NUMBER;
-            if (c == BYTE_ZERO and i + 1 < size and data[i + 1] == BYTE_LOWER_X) {
+            if (c == '0' and i + 1 < size and data[i + 1] == 'x') {
                 i += 2;
                 while (i < size and is_hex_digit(data[i])) {
                     i += 1;
@@ -219,15 +192,15 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 while (i < size and is_digit(data[i])) {
                     i += 1;
                 }
-                if (i < size and data[i] == BYTE_PERIOD) {
+                if (i < size and data[i] == '.') {
                     i += 1;
                     while (i < size and is_digit(data[i])) {
                         i += 1;
                     }
                 }
-                if (i < size and (data[i] == BYTE_LOWER_E or data[i] == BYTE_UPPER_E)) {
+                if (i < size and (data[i] == 'e' or data[i] == 'E')) {
                     i += 1;
-                    if (i < size and (data[i] == BYTE_PLUS or data[i] == BYTE_MINUS)) {
+                    if (i < size and (data[i] == '+' or data[i] == '-')) {
                         i += 1;
                     }
                     while (i < size and is_digit(data[i])) {
@@ -235,23 +208,29 @@ export lex(source: String): Result<Token[], SyntaxError> {
                     }
                 }
             }
-        } else if (c == BYTE_QUOTE) {
+        } else if (c == '"' or c == '\'') {
             kind = TOKEN_STRING;
+            if (c == '\'') {
+                kind = TOKEN_CHARACTER;
+            }
             i += 1;
             bool closed = false;
-            while (i < size) {
+            while (i < size and (c == '"' or data[i] != '\n')) {
                 int b = data[i];
-                if (b == BYTE_BACKSLASH) {
+                if (b == '\\') {
                     i += 2;
                     continue;
                 }
                 i += 1;
-                if (b == BYTE_QUOTE) {
+                if (b == c) {
                     closed = true;
                     break;
                 }
             }
             if (!closed) {
+                if (c == '\'') {
+                    return Result<Token[], SyntaxError>.err(SyntaxError("missing terminating ' character", start));
+                }
                 return Result<Token[], SyntaxError>.err(SyntaxError("missing terminating '\"' character", start));
             }
         } else {
@@ -277,7 +256,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
         token.space_before = space;
         token.leading_comments = pending;
         token.newline_right_after = i < size and
-            (data[i] == BYTE_NEWLINE or (data[i] == BYTE_RETURN and i + 1 < size and data[i + 1] == BYTE_NEWLINE));
+            (data[i] == '\n' or (data[i] == '\r' and i + 1 < size and data[i + 1] == '\n'));
         tokens.append(token);
         pending = Array<Comment>();
         newlines = 0;
@@ -303,7 +282,7 @@ export line_of(source: String, offset: ulong): ulong {
     ulong line = 1;
     ulong i = 0;
     while (i < offset and i < source.size()) {
-        if (data[i] == BYTE_NEWLINE) {
+        if (data[i] == '\n') {
             line += 1;
         }
         i += 1;
@@ -323,7 +302,7 @@ export column_of(source: String, offset: ulong): ulong {
         i = source.size();
     }
     ulong column = 1;
-    while (i > 0 and data[i - 1] != BYTE_NEWLINE) {
+    while (i > 0 and data[i - 1] != '\n') {
         column += 1;
         i -= 1;
     }

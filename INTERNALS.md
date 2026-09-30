@@ -305,6 +305,9 @@ with no extension, and `module_name()` is the output's stem.
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
     (Expression::WithEntered(x)) { body } else { other }`. The model has no
     `with` statement; `lower_with_blocks` resolves the condition.
+  - A character literal (`ast::Literal::Char`) becomes
+    `Cast { IntLiteral(byte), byte }`, so it is typed `byte` where nothing
+    else gives it a type and widens like any `byte` value.
   - A closure literal becomes `Expression::ClosureLiteral` (parameters,
     return type and body, types `auto` where not written); an expression
     body is lowered to `{ return expr; }`. `lift_closures` removes it

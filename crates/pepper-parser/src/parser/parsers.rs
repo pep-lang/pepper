@@ -540,6 +540,60 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
     Ok(Literal::String(content))
 }
 
+/// A character literal: one ASCII character or escape sequence between single
+/// quotes (`'a'`, `'"'`, `'\n'`). Its value is that character's byte; `\xHH`
+/// may name any byte, including those above `\x7F`.
+fn char_constant(input: &mut &str) -> Result<Literal> {
+    let open = pos(input);
+    *input = &input[1..]; // consume opening quote
+    // As clang: an unclosed literal is reported at its opening quote.
+    let unterminated = || error_at(Span { start: open, end: open + 1 }, "missing terminating ' character".to_string());
+    let value = match input.chars().next() {
+        None | Some('\n') | Some('\r') => return Err(unterminated()),
+        Some('\'') => {
+            return Err(error_at(Span { start: open, end: pos(input) + 1 }, "empty character literal".to_string()));
+        }
+        Some('\\') if input[1..].starts_with('x') => {
+            let start = pos(input);
+            *input = &input[2..];
+            let digits: String = input.chars().take(2).take_while(|d| d.is_ascii_hexdigit()).collect();
+            *input = &input[digits.len()..];
+            match u8::from_str_radix(&digits, 16) {
+                Ok(byte) if digits.len() == 2 => byte,
+                _ => return Err(error_at(Span { start, end: pos(input) }, "'\\x' escape needs two hexadecimal digits".to_string())),
+            }
+        }
+        Some(c) => {
+            let start = pos(input);
+            let c = if c == '\\' {
+                escape_sequence(input)?
+            } else {
+                *input = &input[c.len_utf8()..];
+                c
+            };
+            if !c.is_ascii() {
+                return Err(error_at(
+                    Span { start, end: pos(input) },
+                    "character literal must be a single ASCII character; use a string for other characters".to_string(),
+                ));
+            }
+            c as u8
+        }
+    };
+    if !input.starts_with('\'') {
+        let line_end = input.find(['\n', '\r']).unwrap_or(input.len());
+        return match input[..line_end].find('\'') {
+            Some(close) => Err(error_at(
+                Span { start: open, end: pos(input) + close + 1 },
+                "character literal may only contain one character; use a string for more".to_string(),
+            )),
+            None => Err(unterminated()),
+        };
+    }
+    *input = &input[1..];
+    Ok(Literal::Char(value))
+}
+
 /// One escape sequence at `input` (which starts at its backslash), as C and
 /// Rust spell them: `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'`, `\xHH` for an
 /// ASCII byte and `\u{H...}` for a code point.
@@ -684,6 +738,11 @@ fn primary_expression(input: &mut &str) -> Result<Expression> {
     if input.starts_with('"') || input.starts_with('@') {
         let s = string_constant(input)?;
         return Ok(Expression::Literal { value: s, span: Span { start, end: pos(input) } });
+    }
+    // Character: 'a'
+    if input.starts_with('\'') {
+        let c = char_constant(input)?;
+        return Ok(Expression::Literal { value: c, span: Span { start, end: pos(input) } });
     }
     // __null
     if input.starts_with("__null") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
@@ -3277,6 +3336,20 @@ mod tests {
         match e {
             Expression::Literal { value: Literal::String(s), .. } => assert_eq!(s, "hello world"),
             other => panic!("expected String, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_char_literal() {
+        for (source, byte) in [("'a'", b'a'), ("'\"'", b'"'), ("'#'", b'#'), ("'\\n'", b'\n'), ("'\\''", b'\''), ("'\\xFF'", 0xFF)] {
+            match parse_expr(source) {
+                Expression::Literal { value: Literal::Char(b), .. } => {
+                    assert_eq!(b, byte, "{}", source);
+                    let printed = Literal::Char(b).to_string();
+                    assert!(matches!(parse_expr(&printed), Expression::Literal { value: Literal::Char(c), .. } if c == b), "{} round-trips", printed);
+                }
+                other => panic!("expected Char for {}, got {:?}", source, other),
+            }
         }
     }
 

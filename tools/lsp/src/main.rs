@@ -157,6 +157,7 @@ fn variable_type(v: &ast::VariableDecl) -> String {
                 ast::Literal::Integer(_) => "int".to_string(),
                 ast::Literal::Float(_) => "float".to_string(),
                 ast::Literal::Bool(_) => "bool".to_string(),
+                ast::Literal::Char(_) => "byte".to_string(),
                 ast::Literal::Null => "__null".to_string(),
             },
             _ => "unknown".to_string(),
@@ -1005,6 +1006,7 @@ impl PepperLsp {
                     ast::Literal::Integer(_) => "int",
                     ast::Literal::Float(_) => "float",
                     ast::Literal::Bool(_) => "bool",
+                    ast::Literal::Char(_) => "byte",
                     ast::Literal::Null => "__null",
                 };
                 Some(Hover { contents: md(format!("`{}` — `{}`", value, ty)), range: None })
