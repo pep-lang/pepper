@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -210,23 +210,6 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="state"><a class="header" href="#state">State</a></h4>
-<pre><code class="language-pepper">const State: Atomic&lt;int&gt;
-</code></pre>
-<p>0 before any call, 1 while a body runs, 2 once it has finished.</p>
-<h4 id="runner"><a class="header" href="#runner">Runner</a></h4>
-<pre><code class="language-pepper">const Runner: Atomic&lt;ulong&gt;
-</code></pre>
-<p>The operating-system id of the thread running the body, or 0.</p>
-<h4 id="lock"><a class="header" href="#lock">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform mutex that guards the move from 0 to 1 and the wait.</p>
-<h4 id="finished"><a class="header" href="#finished">Finished</a></h4>
-<pre><code class="language-pepper">const Finished: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable that waiting callers sleep on.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
@@ -283,8 +266,8 @@ compile error.</p>
 
     [Shared]
     struct Settings {
-        const Workers: long;
-        construct(this.Workers = 1) {}
+        const workers: long;
+        construct(this.workers = 1) {}
     }
 
     load_settings(): Settings {
@@ -294,24 +277,10 @@ compile error.</p>
     const settings = async.Lazy&lt;Settings&gt;(load_settings);
 
     main(): int {
-        var workers = settings.get().Workers;   # built here, on first use
+        var workers = settings.get().workers;   # built here, on first use
         return 0;
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="initializer"><a class="header" href="#initializer">Initializer</a></h4>
-<pre><code class="language-pepper">const Initializer: shared () =&gt; T
-</code></pre>
-<p>The function that builds the value.</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
-</code></pre>
-<p>A heap slot holding the value once it is built: <code>sizeof&lt;T&gt;()</code> bytes,
-one reference for a struct <code>T</code>.</p>
-<h4 id="built"><a class="header" href="#built">Built</a></h4>
-<pre><code class="language-pepper">const Built: Once
-</code></pre>
-<p>Runs the initializer once.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(shared () =&gt; T initializer)

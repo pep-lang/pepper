@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -234,34 +234,6 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="capacity"><a class="header" href="#capacity">Capacity</a></h4>
-<pre><code class="language-pepper">const Capacity: ulong
-</code></pre>
-<p>The most values that may wait before <code>send</code> blocks, or 0 for no limit.</p>
-<h4 id="lock"><a class="header" href="#lock">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform mutex that guards <code>State</code> and <code>Buffer</code>.</p>
-<h4 id="notempty"><a class="header" href="#notempty">NotEmpty</a></h4>
-<pre><code class="language-pepper">const NotEmpty: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable receivers wait on.</p>
-<h4 id="notfull"><a class="header" href="#notfull">NotFull</a></h4>
-<pre><code class="language-pepper">const NotFull: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable senders wait on while a bounded
-channel is full.</p>
-<h4 id="state"><a class="header" href="#state">State</a></h4>
-<pre><code class="language-pepper">const State: __ptr&lt;ulong&gt;
-</code></pre>
-<p>The head index, the number of queued values, the number of slots in
-the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p>
-<h4 id="buffer"><a class="header" href="#buffer">Buffer</a></h4>
-<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;void&gt;&gt;
-</code></pre>
-<p>Holds the ring buffer of values (<code>T</code> slots). Read and written only
-under <code>Lock</code>.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -405,11 +377,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">const Source: Channel&lt;T&gt;
-</code></pre>
-<p>The channel it receives from.</p>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="current"><a class="header" href="#current">Current</a></h4>
 <pre><code class="language-pepper">T Current
 </code></pre>

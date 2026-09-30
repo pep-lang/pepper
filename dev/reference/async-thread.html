@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -243,37 +243,6 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="id"><a class="header" href="#id">Id</a></h4>
-<pre><code class="language-pepper">const Id: ThreadId
-</code></pre>
-<p>The thread’s id.</p>
-<h4 id="namedata"><a class="header" href="#namedata">NameData</a></h4>
-<pre><code class="language-pepper">const NameData: __ptr&lt;char&gt;
-</code></pre>
-<p>The name’s UTF-8 bytes, NUL-terminated, or null for an unnamed thread.</p>
-<h4 id="namesize"><a class="header" href="#namesize">NameSize</a></h4>
-<pre><code class="language-pepper">const NameSize: ulong
-</code></pre>
-<p>The name’s size in bytes.</p>
-<h4 id="namelength"><a class="header" href="#namelength">NameLength</a></h4>
-<pre><code class="language-pepper">const NameLength: ulong
-</code></pre>
-<p>The name’s length in code points.</p>
-<h4 id="body"><a class="header" href="#body">Body</a></h4>
-<pre><code class="language-pepper">const Body: ThreadBody
-</code></pre>
-<p>The function the thread runs (a no-op for a thread that was not
-started by <code>spawn</code>, such as the main thread).</p>
-<h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
-<pre><code class="language-pepper">const Handle: Atomic&lt;__ptr&lt;void&gt;&gt;
-</code></pre>
-<p>The operating-system handle while the thread can still be joined or
-detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.</p>
-<h4 id="finished"><a class="header" href="#finished">Finished</a></h4>
-<pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
-</code></pre>
-<p>1 once the body has returned, else 0.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
@@ -337,7 +306,7 @@ cannot be joined.</p>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
+<h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
 <p>Returns the thread’s id, which no other thread in the program has.</p>

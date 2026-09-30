@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -239,23 +239,23 @@ already made, so objects referenced twice stay shared.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Buffer {
-        __ptr&lt;u8&gt; Data;
-        ulong Size;
+        __ptr&lt;u8&gt; data;
+        ulong size;
 
         construct(ulong size = 0) {
-            Data = _pep_malloc(size);
-            Size = size;
+            data = _pep_malloc(size);
+            this.size = size;
         }
 
         destruct {
-            _pep_free(Data);
+            _pep_free(data);
         }
 
         Buffer copy(Copies copies) {
-            var made = Buffer(Size);
+            var made = Buffer(size);
             var i: ulong = 0;
-            while (i &lt; Size) {
-                made.Data[i] = Data[i];
+            while (i &lt; size) {
+                made.data[i] = data[i];
                 i = i + 1;
             }
             return made;

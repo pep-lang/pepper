@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -215,11 +215,11 @@ program, so a Mutex is never left “poisoned”.</p>
 
     [Shared]
     struct Account {
-        const Checking: Atomic&lt;long&gt;;
-        const Savings: Atomic&lt;long&gt;;
+        const checking: Atomic&lt;long&gt;;
+        const savings: Atomic&lt;long&gt;;
         construct(long checking = 0, long savings = 0) {
-            Checking = Atomic&lt;long&gt;(checking);
-            Savings = Atomic&lt;long&gt;(savings);
+            this.checking = Atomic&lt;long&gt;(checking);
+            this.savings = Atomic&lt;long&gt;(savings);
         }
     }
 
@@ -228,27 +228,11 @@ program, so a Mutex is never left “poisoned”.</p>
     save(long amount) {
         with (var a = account.lock()) {
             # No other thread sees the money in neither account.
-            a.Checking.fetch_sub(amount);
-            a.Savings.fetch_add(amount);
+            a.checking.fetch_sub(amount);
+            a.savings.fetch_add(amount);
         }
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="lock"><a class="header" href="#lock">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform lock: a heap block holding a <code>pthread_mutex_t</code>, or a
-Windows <code>SRWLOCK</code>. It never moves, which a pthread mutex requires.</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
-</code></pre>
-<p>A heap slot holding the value: <code>sizeof&lt;T&gt;()</code> bytes, one reference for
-a struct <code>T</code>. Read and written only while the lock is held.</p>
-<h4 id="owner"><a class="header" href="#owner">Owner</a></h4>
-<pre><code class="language-pepper">const Owner: Atomic&lt;ulong&gt;
-</code></pre>
-<p>The operating-system id of the thread holding the lock, or 0 when the
-Mutex is unlocked.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct(T value)
@@ -265,7 +249,7 @@ releases it when the Mutex is destroyed.</p>
 <li>if the operating system cannot create a mutex</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
-<h4 id="lock-1"><a class="header" href="#lock-1">lock</a></h4>
+<h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
 <p>Waits until the calling thread holds the lock, and returns the guard
@@ -284,7 +268,7 @@ else holds the lock until its last reference is released.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var account = accounts.lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     }
 </code></pre>
 <h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
@@ -300,7 +284,7 @@ calling thread already holding the lock counts as busy.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var account = accounts.try_lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     } else {
         print("busy; try later\n");
     }
@@ -342,14 +326,10 @@ it to another thread.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var totals = stats.lock()) {
-        totals.Requests.fetch_add(1);
+        totals.requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">const Source: Mutex&lt;T&gt;
-</code></pre>
-<p>The Mutex this guard locks.</p>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">Locked</a></h4>
 <pre><code class="language-pepper">bool Locked
 </code></pre>
@@ -407,8 +387,8 @@ usually while it still holds the lock.</p>
 
     [Shared]
     struct Jobs {
-        const Waiting: Atomic&lt;long&gt;;
-        construct() { Waiting = Atomic&lt;long&gt;(0); }
+        const waiting: Atomic&lt;long&gt;;
+        construct() { waiting = Atomic&lt;long&gt;(0); }
     }
 
     const jobs = async.Mutex&lt;Jobs&gt;(Jobs());
@@ -416,30 +396,20 @@ usually while it still holds the lock.</p>
 
     take_job() {
         with (var j = jobs.lock()) {
-            while (j.Waiting.load() == 0) {
+            while (j.waiting.load() == 0) {
                 has_work.wait();
             }
-            j.Waiting.fetch_sub(1);
+            j.waiting.fetch_sub(1);
         }
     }
 
     add_job() {
         with (var j = jobs.lock()) {
-            j.Waiting.fetch_add(1);
+            j.waiting.fetch_add(1);
             has_work.notify_one();
         }
     }
 </code></pre>
-<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
-<h4 id="mutex-2"><a class="header" href="#mutex-2">Mutex</a></h4>
-<pre><code class="language-pepper">const Mutex: Mutex&lt;T&gt;
-</code></pre>
-<p>The Mutex this condition waits on.</p>
-<h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
-<pre><code class="language-pepper">const Handle: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable: a heap block holding a
-<code>pthread_cond_t</code>, or a Windows <code>CONDITION_VARIABLE</code>.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; mutex)
@@ -468,7 +438,7 @@ that re-checks what it waits for.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var q = queue.lock()) {
-        while (q.Waiting.load() == 0) {
+        while (q.waiting.load() == 0) {
             not_empty.wait();
         }
     }

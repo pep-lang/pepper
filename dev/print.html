@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3fa0b426.js";
+            window.path_to_searchindex_js = "searchindex-408da3b1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -13106,37 +13106,6 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
-<h4 id="id"><a class="header" href="#id">Id</a></h4>
-<pre><code class="language-pepper">const Id: ThreadId
-</code></pre>
-<p>The thread’s id.</p>
-<h4 id="namedata"><a class="header" href="#namedata">NameData</a></h4>
-<pre><code class="language-pepper">const NameData: __ptr&lt;char&gt;
-</code></pre>
-<p>The name’s UTF-8 bytes, NUL-terminated, or null for an unnamed thread.</p>
-<h4 id="namesize"><a class="header" href="#namesize">NameSize</a></h4>
-<pre><code class="language-pepper">const NameSize: ulong
-</code></pre>
-<p>The name’s size in bytes.</p>
-<h4 id="namelength"><a class="header" href="#namelength">NameLength</a></h4>
-<pre><code class="language-pepper">const NameLength: ulong
-</code></pre>
-<p>The name’s length in code points.</p>
-<h4 id="body"><a class="header" href="#body">Body</a></h4>
-<pre><code class="language-pepper">const Body: ThreadBody
-</code></pre>
-<p>The function the thread runs (a no-op for a thread that was not
-started by <code>spawn</code>, such as the main thread).</p>
-<h4 id="handle"><a class="header" href="#handle">Handle</a></h4>
-<pre><code class="language-pepper">const Handle: Atomic&lt;__ptr&lt;void&gt;&gt;
-</code></pre>
-<p>The operating-system handle while the thread can still be joined or
-detached (a <code>pthread_t</code> or a Windows <code>HANDLE</code>), else null.</p>
-<h4 id="finished"><a class="header" href="#finished">Finished</a></h4>
-<pre><code class="language-pepper">const Finished: Atomic&lt;int&gt;
-</code></pre>
-<p>1 once the body has returned, else 0.</p>
 <h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(String name, ThreadBody body)
@@ -13200,7 +13169,7 @@ cannot be joined.</p>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
 <h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
-<h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
+<h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
 <p>Returns the thread’s id, which no other thread in the program has.</p>
@@ -13287,11 +13256,6 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
-<h4 id="key"><a class="header" href="#key">Key</a></h4>
-<pre><code class="language-pepper">const Key: ulong
-</code></pre>
-<p>The operating-system thread-local key.</p>
 <h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
@@ -13436,34 +13400,6 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
-<h4 id="capacity-2"><a class="header" href="#capacity-2">Capacity</a></h4>
-<pre><code class="language-pepper">const Capacity: ulong
-</code></pre>
-<p>The most values that may wait before <code>send</code> blocks, or 0 for no limit.</p>
-<h4 id="lock"><a class="header" href="#lock">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform mutex that guards <code>State</code> and <code>Buffer</code>.</p>
-<h4 id="notempty"><a class="header" href="#notempty">NotEmpty</a></h4>
-<pre><code class="language-pepper">const NotEmpty: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable receivers wait on.</p>
-<h4 id="notfull"><a class="header" href="#notfull">NotFull</a></h4>
-<pre><code class="language-pepper">const NotFull: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable senders wait on while a bounded
-channel is full.</p>
-<h4 id="state"><a class="header" href="#state">State</a></h4>
-<pre><code class="language-pepper">const State: __ptr&lt;ulong&gt;
-</code></pre>
-<p>The head index, the number of queued values, the number of slots in
-the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p>
-<h4 id="buffer"><a class="header" href="#buffer">Buffer</a></h4>
-<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;void&gt;&gt;
-</code></pre>
-<p>Holds the ring buffer of values (<code>T</code> slots). Read and written only
-under <code>Lock</code>.</p>
 <h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -13607,11 +13543,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">const Source: Channel&lt;T&gt;
-</code></pre>
-<p>The channel it receives from.</p>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
 <h4 id="current-6"><a class="header" href="#current-6">Current</a></h4>
 <pre><code class="language-pepper">T Current
 </code></pre>
@@ -13677,11 +13609,11 @@ program, so a Mutex is never left “poisoned”.</p>
 
     [Shared]
     struct Account {
-        const Checking: Atomic&lt;long&gt;;
-        const Savings: Atomic&lt;long&gt;;
+        const checking: Atomic&lt;long&gt;;
+        const savings: Atomic&lt;long&gt;;
         construct(long checking = 0, long savings = 0) {
-            Checking = Atomic&lt;long&gt;(checking);
-            Savings = Atomic&lt;long&gt;(savings);
+            this.checking = Atomic&lt;long&gt;(checking);
+            this.savings = Atomic&lt;long&gt;(savings);
         }
     }
 
@@ -13690,27 +13622,11 @@ program, so a Mutex is never left “poisoned”.</p>
     save(long amount) {
         with (var a = account.lock()) {
             # No other thread sees the money in neither account.
-            a.Checking.fetch_sub(amount);
-            a.Savings.fetch_add(amount);
+            a.checking.fetch_sub(amount);
+            a.savings.fetch_add(amount);
         }
     }
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
-<h4 id="lock-1"><a class="header" href="#lock-1">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform lock: a heap block holding a <code>pthread_mutex_t</code>, or a
-Windows <code>SRWLOCK</code>. It never moves, which a pthread mutex requires.</p>
-<h4 id="value-2"><a class="header" href="#value-2">Value</a></h4>
-<pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
-</code></pre>
-<p>A heap slot holding the value: <code>sizeof&lt;T&gt;()</code> bytes, one reference for
-a struct <code>T</code>. Read and written only while the lock is held.</p>
-<h4 id="owner"><a class="header" href="#owner">Owner</a></h4>
-<pre><code class="language-pepper">const Owner: Atomic&lt;ulong&gt;
-</code></pre>
-<p>The operating-system id of the thread holding the lock, or 0 when the
-Mutex is unlocked.</p>
 <h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct(T value)
@@ -13727,7 +13643,7 @@ releases it when the Mutex is destroyed.</p>
 <li>if the operating system cannot create a mutex</li>
 </ul>
 <h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
-<h4 id="lock-1-1"><a class="header" href="#lock-1-1">lock</a></h4>
+<h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
 <p>Waits until the calling thread holds the lock, and returns the guard
@@ -13746,7 +13662,7 @@ else holds the lock until its last reference is released.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var account = accounts.lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     }
 </code></pre>
 <h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
@@ -13762,7 +13678,7 @@ calling thread already holding the lock counts as busy.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var account = accounts.try_lock()) {
-        account.Balance.fetch_add(10);
+        account.balance.fetch_add(10);
     } else {
         print("busy; try later\n");
     }
@@ -13804,14 +13720,10 @@ it to another thread.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var totals = stats.lock()) {
-        totals.Requests.fetch_add(1);
+        totals.requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
-<h4 id="source-1"><a class="header" href="#source-1">Source</a></h4>
-<pre><code class="language-pepper">const Source: Mutex&lt;T&gt;
-</code></pre>
-<p>The Mutex this guard locks.</p>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">Locked</a></h4>
 <pre><code class="language-pepper">bool Locked
 </code></pre>
@@ -13869,8 +13781,8 @@ usually while it still holds the lock.</p>
 
     [Shared]
     struct Jobs {
-        const Waiting: Atomic&lt;long&gt;;
-        construct() { Waiting = Atomic&lt;long&gt;(0); }
+        const waiting: Atomic&lt;long&gt;;
+        construct() { waiting = Atomic&lt;long&gt;(0); }
     }
 
     const jobs = async.Mutex&lt;Jobs&gt;(Jobs());
@@ -13878,30 +13790,20 @@ usually while it still holds the lock.</p>
 
     take_job() {
         with (var j = jobs.lock()) {
-            while (j.Waiting.load() == 0) {
+            while (j.waiting.load() == 0) {
                 has_work.wait();
             }
-            j.Waiting.fetch_sub(1);
+            j.waiting.fetch_sub(1);
         }
     }
 
     add_job() {
         with (var j = jobs.lock()) {
-            j.Waiting.fetch_add(1);
+            j.waiting.fetch_add(1);
             has_work.notify_one();
         }
     }
 </code></pre>
-<h3 id="fields-2-1"><a class="header" href="#fields-2-1">Fields</a></h3>
-<h4 id="mutex-2"><a class="header" href="#mutex-2">Mutex</a></h4>
-<pre><code class="language-pepper">const Mutex: Mutex&lt;T&gt;
-</code></pre>
-<p>The Mutex this condition waits on.</p>
-<h4 id="handle-1"><a class="header" href="#handle-1">Handle</a></h4>
-<pre><code class="language-pepper">const Handle: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable: a heap block holding a
-<code>pthread_cond_t</code>, or a Windows <code>CONDITION_VARIABLE</code>.</p>
 <h3 id="constructor-2-3"><a class="header" href="#constructor-2-3">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; mutex)
@@ -13930,7 +13832,7 @@ that re-checks what it waits for.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    with (var q = queue.lock()) {
-        while (q.Waiting.load() == 0) {
+        while (q.waiting.load() == 0) {
             not_empty.wait();
         }
     }
@@ -13992,23 +13894,6 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
-<h4 id="state-1"><a class="header" href="#state-1">State</a></h4>
-<pre><code class="language-pepper">const State: Atomic&lt;int&gt;
-</code></pre>
-<p>0 before any call, 1 while a body runs, 2 once it has finished.</p>
-<h4 id="runner"><a class="header" href="#runner">Runner</a></h4>
-<pre><code class="language-pepper">const Runner: Atomic&lt;ulong&gt;
-</code></pre>
-<p>The operating-system id of the thread running the body, or 0.</p>
-<h4 id="lock-2"><a class="header" href="#lock-2">Lock</a></h4>
-<pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform mutex that guards the move from 0 to 1 and the wait.</p>
-<h4 id="finished-1"><a class="header" href="#finished-1">Finished</a></h4>
-<pre><code class="language-pepper">const Finished: __ptr&lt;void&gt;
-</code></pre>
-<p>The platform condition variable that waiting callers sleep on.</p>
 <h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
@@ -14065,8 +13950,8 @@ compile error.</p>
 
     [Shared]
     struct Settings {
-        const Workers: long;
-        construct(this.Workers = 1) {}
+        const workers: long;
+        construct(this.workers = 1) {}
     }
 
     load_settings(): Settings {
@@ -14076,24 +13961,10 @@ compile error.</p>
     const settings = async.Lazy&lt;Settings&gt;(load_settings);
 
     main(): int {
-        var workers = settings.get().Workers;   # built here, on first use
+        var workers = settings.get().workers;   # built here, on first use
         return 0;
     }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
-<h4 id="initializer"><a class="header" href="#initializer">Initializer</a></h4>
-<pre><code class="language-pepper">const Initializer: shared () =&gt; T
-</code></pre>
-<p>The function that builds the value.</p>
-<h4 id="value-3"><a class="header" href="#value-3">Value</a></h4>
-<pre><code class="language-pepper">const Value: __ptr&lt;T&gt;
-</code></pre>
-<p>A heap slot holding the value once it is built: <code>sizeof&lt;T&gt;()</code> bytes,
-one reference for a struct <code>T</code>.</p>
-<h4 id="built"><a class="header" href="#built">Built</a></h4>
-<pre><code class="language-pepper">const Built: Once
-</code></pre>
-<p>Runs the initializer once.</p>
 <h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(shared () =&gt; T initializer)
@@ -14188,23 +14059,23 @@ already made, so objects referenced twice stay shared.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    struct Buffer {
-        __ptr&lt;u8&gt; Data;
-        ulong Size;
+        __ptr&lt;u8&gt; data;
+        ulong size;
 
         construct(ulong size = 0) {
-            Data = _pep_malloc(size);
-            Size = size;
+            data = _pep_malloc(size);
+            this.size = size;
         }
 
         destruct {
-            _pep_free(Data);
+            _pep_free(data);
         }
 
         Buffer copy(Copies copies) {
-            var made = Buffer(Size);
+            var made = Buffer(size);
             var i: ulong = 0;
-            while (i &lt; Size) {
-                made.Data[i] = Data[i];
+            while (i &lt; size) {
+                made.data[i] = data[i];
                 i = i + 1;
             }
             return made;
