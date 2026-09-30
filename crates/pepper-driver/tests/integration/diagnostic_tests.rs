@@ -2665,12 +2665,50 @@ fn interpolation_assignment() {
     // An assignment is not an interpolated expression.
     assert_eq!(
         error_of("interpolation_assignment", "main(): int {\n    var a = 1;\n    print($\"{a = 2}\");\n    return 0;\n}\n"),
-        "main.pep:3:16: error: expected '}'\n\
+        "main.pep:3:16: error: an assignment cannot appear in an interpolated string\n\
          \x20   3 |     print($\"{a = 2}\");\n\
-         \x20     |                ^\n\
-         main.pep:3:13: note: to match this '{'\n\
-         \x20   3 |     print($\"{a = 2}\");\n\
-         \x20     |             ^"
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn interpolation_compound_assignment() {
+    assert_eq!(
+        error_of("interpolation_compound_assignment", "main(): int {\n    var a = 1;\n    print($\"{a += 1}\");\n    return 0;\n}\n"),
+        "main.pep:3:16: error: an assignment cannot appear in an interpolated string\n\
+         \x20   3 |     print($\"{a += 1}\");\n\
+         \x20     |                ^~"
+    );
+}
+
+#[test]
+fn interpolation_nested_assignment() {
+    // Not only at the top: inside a call's arguments and a ternary's branches too.
+    assert_eq!(
+        error_of("interpolation_nested_assignment", "f(x: int): int {\n    return x;\n}\n\nmain(): int {\n    var a = 1;\n    print($\"{true ? f(a <<= 3) : 2}\");\n    return 0;\n}\n"),
+        "main.pep:7:25: error: an assignment cannot appear in an interpolated string\n\
+         \x20   7 |     print($\"{true ? f(a <<= 3) : 2}\");\n\
+         \x20     |                         ^~~"
+    );
+}
+
+#[test]
+fn interpolation_increment() {
+    assert_eq!(
+        error_of("interpolation_increment", "main(): int {\n    var a = 1;\n    var items = [1, 2];\n    print($\"{items[a++]}\");\n    return 0;\n}\n"),
+        "main.pep:4:21: error: an increment cannot appear in an interpolated string\n\
+         \x20   4 |     print($\"{items[a++]}\");\n\
+         \x20     |                     ^~"
+    );
+}
+
+#[test]
+fn interpolation_decrement() {
+    assert_eq!(
+        error_of("interpolation_decrement", "main(): int {\n    var a = 1;\n    print($\"{--a}\");\n    return 0;\n}\n"),
+        "main.pep:3:14: error: a decrement cannot appear in an interpolated string\n\
+         \x20   3 |     print($\"{--a}\");\n\
+         \x20     |              ^~"
     );
 }
 

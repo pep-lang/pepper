@@ -8,11 +8,14 @@ by the text of its value:
 {{#include ../../examples/interpolation-basics.pep}}
 ```
 
-- **`{expression}`** holds any expression but an assignment: a name (a
-  local, a parameter, a global, or inside a method a field), a member access
-  (`{p.x}`), a call (`{f(x)}`), an index (`{items[0]}`), arithmetic
-  (`{a + b}`), or a ternary (`{a > b ? a : b}`). Spaces around it are
-  ignored.
+- **`{expression}`** holds an expression: a name (a local, a parameter, a
+  global, or inside a method a field), a member access (`{p.x}`), a call
+  (`{f(x)}`), an index (`{items[0]}`), arithmetic (`{a + b}`), or a ternary
+  (`{a > b ? a : b}`). Spaces around it are ignored.
+- The expression **changes no variable**: an assignment (`=`, `+=`, ...),
+  `++` or `--` anywhere in it is an error, even inside a call's arguments
+  (`{f(a = 3)}`). Only a closure's body, which does not run in place, may
+  hold one. A function it calls may still have effects of its own.
 - **String literals** may appear inside the braces (`{greet("you")}`), and
   so may character literals and other interpolated strings. A `}` inside
   them, or inside brackets of the expression's own, does not end it.
@@ -94,6 +97,14 @@ main.pep:2:16: error: expected an expression after '{' in interpolated string; w
 An error in the expression itself, such as a name that is not declared
 (`use of undeclared identifier 'x'`), is reported like any other, at the
 token inside the braces.
+
+Changing a variable inside the braces is reported at the operator:
+
+```text
+main.pep:3:16: error: an assignment cannot appear in an interpolated string
+    3 |     print($"{a += 1}");
+      |                ^~
+```
 
 ## How it works
 

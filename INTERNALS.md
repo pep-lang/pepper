@@ -285,8 +285,10 @@ with no extension, and `module_name()` is the output's stem.
   brackets and skips string, character and nested interpolated literals
   whole, and stops at a line break or `#` (so a hole is one line with no
   comment); `tools/syntax/lexer.pep` mirrors it to find the end of the
-  string token. The hole is then parsed with `ternary` (any expression but
-  an assignment) and must end exactly at that `}`. A lone `}`, an empty
+  string token. The hole is then parsed with `expression` and must end
+  exactly at that `}`; `find_mutation` rejects an assignment, compound
+  assignment, `++` or `--` anywhere in it but inside a closure's body, at
+  the operator. A lone `}`, an empty
   hole, a `#`, or a missing `}` (with a note at the `{`) is an `error_at`,
   except after a line break inside the literal, where it reports
   `missing terminating '"' character` at the opening quote.

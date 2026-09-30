@@ -746,13 +746,64 @@ fn interpolation_end(bytes: &[u8], mut i: usize) -> std::result::Result<usize, u
     Err(bytes.len())
 }
 
+/// The operators that store into their operand: every assignment, and
+/// `++` and `--`.
+const ASSIGNMENT_OPERATORS: &[&str] = &["=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|="];
+
+/// The first operator in `e` that changes a variable (an assignment, `++`
+/// or `--`), outside the bodies of closures, which do not run in place:
+/// its span and what it is called in an error.
+fn find_mutation(e: &Expression) -> Option<(Span, &'static str)> {
+    fn first<'a>(es: impl IntoIterator<Item = &'a Expression>) -> Option<(Span, &'static str)> {
+        es.into_iter().find_map(find_mutation)
+    }
+    match e {
+        Expression::Binary { lhs, op, rhs, span } => {
+            if ASSIGNMENT_OPERATORS.contains(&op.as_str()) {
+                return Some((Span { start: span.start, end: span.start + op.len() }, "an assignment"));
+            }
+            find_mutation(lhs).or_else(|| find_mutation(rhs))
+        }
+        Expression::Unary { op, prefix, operand, span } => {
+            if op == "++" || op == "--" {
+                let at = if *prefix { span.start } else { span.end - op.len() };
+                let what = if op == "++" { "an increment" } else { "a decrement" };
+                return Some((Span { start: at, end: at + op.len() }, what));
+            }
+            find_mutation(operand)
+        }
+        Expression::Cast { expr, .. } => find_mutation(expr),
+        Expression::Ternary { condition, true_expr, false_expr, .. } => {
+            first([&**condition, &**true_expr, &**false_expr])
+        }
+        Expression::Index { lhs, rhs, .. } => find_mutation(lhs).or_else(|| find_mutation(rhs)),
+        Expression::MemberAccess { lhs, .. } => find_mutation(lhs),
+        Expression::FunctionCall { function, arguments, .. } => {
+            find_mutation(function).or_else(|| first(arguments))
+        }
+        Expression::Tuple { elements, .. } | Expression::ArrayLiteral { elements, .. } => first(elements),
+        Expression::MapLiteral { entries, .. } => first(entries.iter().flat_map(|(k, v)| [k, v])),
+        Expression::Match(m) => find_mutation(&m.value)
+            .or_else(|| first(m.arms.iter().map(|arm| &arm.value)))
+            .or_else(|| m.else_arm.as_ref().and_then(|(_, value)| find_mutation(value))),
+        Expression::Is { value, .. } => find_mutation(value),
+        Expression::Literal { .. }
+        | Expression::SymbolRef { .. }
+        | Expression::TypeLiteral(_)
+        | Expression::SizeOf(_)
+        | Expression::Closure(_) => None,
+    }
+}
+
 /// An interpolated string, `$"sum is {a + b}"`: text with expressions in
 /// braces, and `{{` and `}}` for a literal brace. Lowered here to the
 /// concatenation of its text and `_pep_interpolate(expression)` for each
 /// expression (`"sum is " + _pep_interpolate(a + b)`), so linking,
 /// visibility and sema see ordinary references and calls. The expression
-/// is any expression but an assignment, and may hold string literals of its
-/// own (`{f("x")}`); where it ends is decided by [`interpolation_end`].
+/// may hold string literals of its own (`{f("x")}`), but nothing that
+/// changes a variable: no assignment, `++` or `--` outside a closure's body
+/// (see [`find_mutation`]). Where it ends is decided by
+/// [`interpolation_end`].
 fn interpolated_string(input: &mut &str) -> Result<Expression> {
     let start = pos(input);
     let open = start + 1;
@@ -821,7 +872,7 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
                         let stop = pos(input) + stop;
                         let mut rest = *input;
                         ws(&mut rest)?;
-                        if ternary(&mut rest).is_ok() {
+                        if expression(&mut rest).is_ok() {
                             ws(&mut rest)?;
                         }
                         return Err(missing_brace(char_span(input, pos(rest).min(stop)), brace));
@@ -842,11 +893,14 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
                 if expression_start == end {
                     return Err(no_expression());
                 }
-                let value = match ternary(input) {
+                let value = match expression(input) {
                     Ok(value) => value,
                     Err(ErrMode::Backtrack(_)) => return Err(no_expression()),
                     Err(e) => return Err(if line_break { unclosed() } else { e }),
                 };
+                if let Some((at, what)) = find_mutation(&value) {
+                    return Err(error_at(at, format!("{} cannot appear in an interpolated string", what)));
+                }
                 ws(input)?;
                 if pos(input) != end {
                     if line_break {
@@ -4445,6 +4499,25 @@ mod tests {
             ("a", Err(1)),
         ] {
             assert_eq!(interpolation_end(text.as_bytes(), 0), end, "{:?}", text);
+        }
+    }
+
+    #[test]
+    fn find_mutation_reports_assignments_outside_closures() {
+        for (source, found) in [
+            ("a + b", None),
+            ("a == b", None),
+            ("a <= b", None),
+            ("a = b", Some((2, 3, "an assignment"))),
+            ("a >>= b", Some((2, 5, "an assignment"))),
+            ("f(x, a++)", Some((6, 8, "an increment"))),
+            ("--a", Some((0, 2, "a decrement"))),
+            ("c ? [a, b = 1] : d", Some((10, 11, "an assignment"))),
+            ("g(() => { a = 1; return a; })", None),
+        ] {
+            let e = parse_expr(source);
+            let got = find_mutation(&e).map(|(span, what)| (span.start, span.end, what));
+            assert_eq!(got, found, "{}", source);
         }
     }
 

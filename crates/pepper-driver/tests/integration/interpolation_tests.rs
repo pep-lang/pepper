@@ -218,3 +218,24 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn closure_bodies_may_change_their_own_locals() {
+    // A closure's body does not run in place, so it is not checked for
+    // assignments.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+call(f: () => int): int {
+    return f();
+}
+
+test(): int {
+    var s = $"{call(() => { var c = 1; c += 2; c++; return c; })}";
+    if (!(s == "4")) { return -1; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
