@@ -66,11 +66,10 @@ name like a function.
   `float fahrenheit = 32.0`, is accepted too.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
-- A struct has at most one constructor, and declaring a second is an error
-  (`redefinition of the constructor of 'S'`). Constructors do not
-  [overload](overloading.md) yet: use default arguments, or a [static method](#static-methods)
-  for each alternative way to build the object. Likewise, a struct has at
-  most one destructor.
+- A struct may declare several constructors with different parameter
+  lists; a call picks one by its arguments, as for any
+  [overloaded](overloading.md#constructors) function. At most one of them
+  may be `[Implicit]`. A struct has at most one destructor.
 
 A `this.field` parameter must have a default. Leaving it out is an error:
 

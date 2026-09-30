@@ -2884,7 +2884,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
 
     let mut fields = vec![];
     let mut methods = vec![];
-    let mut constructor = None;
+    let mut constructors = vec![];
     let mut destructor = None;
 
     loop {
@@ -2903,16 +2903,6 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
         if is_new || is_construct {
             let construct_span_start = pos(input);
             *input = if is_new { &input[3..] } else { &input[9..] };
-            let keyword_span = Span { start: construct_span_start, end: pos(input) };
-            if let Some(previous) = &constructor {
-                let previous: &FunctionDecl = previous;
-                return Err(fail_with(
-                    Diagnostic::error(format!("redefinition of the constructor of '{}'", name))
-                        .at(Loc::new(FileId::default(), keyword_span))
-                        .with_note("previous definition is here", Some(Loc::new(FileId::default(), previous.name_span)))
-                        .with_note("a struct has one constructor; give its parameters default values to allow shorter calls", None),
-                ));
-            }
             if is_new {
                 let span = Span { start: construct_span_start, end: construct_span_start + 3 };
                 deprecated_syntax(span, "`new`", "constructors are spelled `construct`, matching `destruct`", "construct");
@@ -2938,7 +2928,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             ws(input)?;
             let body = block(input, vec![])?;
             ws(input)?;
-            constructor = Some(FunctionDecl {
+            constructors.push(FunctionDecl {
                 is_exported: false,
                 name: "construct".into(),
                 name_span: Span { start: construct_span_start, end: construct_span_end },
@@ -3005,7 +2995,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructor, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, methods, constructors, destructor, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
 }
 
 /// `enum Name[<T, ...>] [: IntegerType] { Case, Case = value, Case(x: T), ... methods }`.
@@ -3134,7 +3124,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         generic_params,
         fields: vec![],
         methods,
-        constructor: None,
+        constructors: vec![],
         destructor: None,
         span: Span { start: decl_start, end: pos(input) },
         attributes: attrs,
@@ -3595,7 +3585,7 @@ fn ptr_check_decl(d: &Declaration) -> std::result::Result<(), PostParseError> {
             ptr_check_generic_params(&s.generic_params)?;
             s.fields.iter().try_for_each(ptr_check_var)?;
             s.methods.iter().try_for_each(ptr_check_fn)?;
-            s.constructor.as_ref().map_or(Ok(()), ptr_check_fn)?;
+            s.constructors.iter().try_for_each(ptr_check_fn)?;
             for case in s.enumeration.iter().flat_map(|e| &e.cases) {
                 ptr_check_attrs(&case.attributes)?;
                 case.payload.iter().flatten().try_for_each(ptr_check_var)?;
@@ -4742,7 +4732,7 @@ f() { var r = c.Result<int>.ok(1); }");
         match &m.declarations[0] {
             Declaration::Struct(s) => {
                 assert_eq!(s.name, "S");
-                let c = s.constructor.as_ref().expect("constructor");
+                let c = s.constructors.first().expect("constructor");
                 assert_eq!(c.name, "construct");
                 assert_eq!(c.parameters.len(), 1);
                 assert_eq!(c.parameters[0].name, "this.x");
@@ -4760,7 +4750,7 @@ f() { var r = c.Result<int>.ok(1); }");
         let src = "struct S {\n    int x;\n    new(this.x = 1) {}\n}";
         let m = parse(src);
         match &m.declarations[0] {
-            Declaration::Struct(s) => assert_eq!(s.constructor.as_ref().expect("constructor").name, "construct"),
+            Declaration::Struct(s) => assert_eq!(s.constructors.first().expect("constructor").name, "construct"),
             other => panic!("{:?}", other),
         }
         assert_eq!(m.warnings.len(), 1);
@@ -5199,7 +5189,7 @@ f() { var r = c.Result<int>.ok(1); }");
         let m = parse("struct S {\n    int x;\n    [Export] construct(this.x = 0) {\n        x += 1;\n    }\n    [Cleanup(1)] destruct {\n        x = 0;\n    }\n    [Inline] extern int helper(int a);\n}");
         match &m.declarations[0] {
             Declaration::Struct(s) => {
-                let c = s.constructor.as_ref().expect("constructor present");
+                let c = s.constructors.first().expect("constructor present");
                 assert_eq!(c.attributes.len(), 1);
                 assert_bare_attr(&c.attributes[0].body, "Export");
                 assert_eq!(s.destructor.as_ref().unwrap().attributes.len(), 1);

@@ -51,7 +51,7 @@ pub fn convert_print_calls(module: &mut Module) {
 
     // Struct ctor and method bodies.
     for st in &mut module.structs {
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             walk_body(body, &table, Some(&st.ty));
         }
         for method in &mut st.method_members {

@@ -482,3 +482,162 @@ test(): int {
 "#;
     assert_eq!(value(source), 4124008);
 }
+
+// ── Constructors ───────────────────────────────────────────────────────────
+
+#[test]
+fn constructors_overload_by_parameters() {
+    let source = r#"
+struct Point {
+    int x;
+    int y;
+    construct() { x = 1; y = 2; }
+    construct(v: int) { x = v; y = v; }
+    construct(a: int, b: int) { x = a; y = b; }
+    construct(s: String) { x = s.length() as int; y = 0; }
+}
+test(): int {
+    var a = Point();
+    var b = Point(3);
+    var c = Point(4, 5);
+    var d = Point("hello");
+    return a.x * 1000000 + a.y * 100000 + b.x * 10000 + c.x * 1000 + c.y * 100 + d.x * 10 + d.y;
+}
+"#;
+    assert_eq!(value(source), 1234550);
+}
+
+#[test]
+fn generic_constructors_overload_in_each_specialization() {
+    let source = r#"
+struct Pair<T> {
+    T first;
+    T second;
+    construct(v: T) { first = v; second = v; }
+    construct(a: T, b: T) { first = a; second = b; }
+}
+test(): int {
+    var a = Pair<int>(7);
+    var b = Pair<int>(1, 2);
+    var c = Pair<String>("x");
+    return a.first * 1000 + a.second * 100 + b.first * 10 + b.second + (c.first.length() as int) * 0;
+}
+"#;
+    assert_eq!(value(source), 7712);
+}
+
+#[test]
+fn an_overloaded_constructor_is_a_function_value_by_type() {
+    let source = r#"
+struct Point {
+    int x;
+    construct(v: int) { x = v; }
+    construct(a: int, b: int) { x = a + b; }
+}
+test(): int {
+    var one: (int) => Point = Point;
+    var two: (int, int) => Point = Point;
+    return one(4).x * 10 + two(2, 3).x;
+}
+"#;
+    assert_eq!(value(source), 45);
+}
+
+#[test]
+fn no_matching_constructor_is_an_error() {
+    let err = compile_error(
+        r#"
+struct Point {
+    int x;
+    construct(v: int) { x = v; }
+    construct(a: int, b: int) { x = a + b; }
+}
+test(): int { return Point(1, 2, 3).x; }
+"#,
+    );
+    assert!(err.contains("error: no matching constructor for initialization of 'Point'"), "{}", err);
+    assert!(err.contains("note: candidate constructor not viable: requires 1 argument, but 3 were provided"), "{}", err);
+}
+
+#[test]
+fn an_ambiguous_constructor_call_is_an_error() {
+    let err = compile_error(
+        r#"
+struct Point {
+    int x;
+    construct(v: long) { x = v as int; }
+    construct(v: double) { x = 0; }
+}
+test(): int { var i: ulong = 3; return Point(i).x; }
+"#,
+    );
+    assert!(err.contains("error: call to constructor of 'Point' is ambiguous"), "{}", err);
+}
+
+#[test]
+fn a_redeclared_constructor_is_an_error() {
+    let err = compile_error(
+        r#"
+struct Point {
+    int x;
+    construct(v: int) { x = v; }
+    construct(w: int) { x = w; }
+}
+test(): int { return Point(1).x; }
+"#,
+    );
+    assert!(err.contains("error: constructor of 'Point' cannot be redeclared"), "{}", err);
+    assert!(err.contains("note: previous declaration is here"), "{}", err);
+}
+
+#[test]
+fn an_implicit_constructor_converts_beside_its_overloads() {
+    let source = r#"
+struct Meters {
+    int value;
+    [Implicit]
+    construct(v: int) { value = v; }
+    construct(a: int, b: int) { value = a * b; }
+}
+twice(m: Meters): int { return m.value * 2; }
+test(): int { return twice(21) * 100 + Meters(3, 4).value; }
+"#;
+    assert_eq!(value(source), 4212);
+}
+
+#[test]
+fn only_one_constructor_may_be_implicit() {
+    let err = compile_error(
+        r#"
+struct Meters {
+    int value;
+    [Implicit]
+    construct(v: int) { value = v; }
+    [Implicit]
+    construct(v: double) { value = 0; }
+}
+test(): int { return 0; }
+"#,
+    );
+    assert!(err.contains("error: only one constructor of 'Meters' may be 'Implicit'"), "{}", err);
+}
+
+#[test]
+fn a_deprecated_constructor_overload_warns_only_where_called() {
+    let module = sema(
+        r#"
+struct Point {
+    int x;
+    construct(v: int) { x = v; }
+    [Deprecated("use 'Point(int)' instead")]
+    construct(v: double) { x = 0; }
+}
+test(): int { return Point(1).x + Point(2.5).x; }
+"#,
+    )
+    .expect("compile");
+    let warnings = module.render_warnings();
+    assert_eq!(warnings.matches("warning:").count(), 1, "{}", warnings);
+    assert!(warnings.contains("'Point' is deprecated: use 'Point(int)' instead"), "{}", warnings);
+    assert!(warnings.contains("Point(2.5)"), "{}", warnings);
+}

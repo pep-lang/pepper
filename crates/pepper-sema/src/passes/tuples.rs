@@ -76,7 +76,7 @@ pub fn tuple_struct(ty: &TypeName) -> StructDef {
         field_members: ty.tuple_elements().iter().enumerate().map(|(i, e)| field(i, e)).collect(),
         method_members: vec![],
         generic_methods: vec![],
-        constructor,
+        constructors: vec![constructor],
         destructor: crate::passes::function_types::empty_function("__dtor", TypeName::void(), &name),
         acquire: crate::passes::function_types::empty_function("__acquire", TypeName::void(), &name),
         release: crate::passes::function_types::empty_function("__release", TypeName::void(), &name),
@@ -88,7 +88,7 @@ pub fn tuple_struct(ty: &TypeName) -> StructDef {
     crate::struct_body::finish(&mut st).expect("tuple struct");
     // The constructor sets every element from its parameters, so it needs
     // no zero stores (and a tuple element is never null).
-    if let Some(body) = &mut st.constructor.body {
+    if let Some(body) = &mut st.constructors[0].body {
         body.items.retain(|item| {
             !matches!(item, Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. })
                 if matches!(lhs.as_ref(), Expression::MemberRef { lhs: this, name, .. }
@@ -167,7 +167,7 @@ pub fn lower_destructures(module: &mut Module) {
     // A tuple's own constructor is what sets its elements.
     for st in module.structs.iter_mut().filter(|st| !st.ty.is_tuple()) {
         let current = st.ty.clone();
-        for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
             crate::passes::walk_function(method, &mut |e| check(e, Some(&current)));
         }
     }

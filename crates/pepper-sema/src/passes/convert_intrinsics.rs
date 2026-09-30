@@ -245,7 +245,7 @@ pub fn convert_intrinsics(module: &mut Module) {
         let statics: HashSet<String> =
             st.method_members.iter().filter(|m| m.is_static).map(|m| m.name.clone()).collect();
         let owner = st.ty.clone();
-        for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
             convert_function_pointers(method, Some((&owner, &statics)), &free_functions);
         }
     }
@@ -264,7 +264,9 @@ pub fn convert_intrinsics(module: &mut Module) {
             convert_function(method);
         }
         // Constructor and destructor: signature, expressions, and body locals.
-        convert_function(&mut st.constructor);
+        for constructor in &mut st.constructors {
+            convert_function(constructor);
+        }
         convert_function(&mut st.destructor);
     }
 }

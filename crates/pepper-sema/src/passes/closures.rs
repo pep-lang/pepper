@@ -444,7 +444,7 @@ pub(crate) fn closure_struct(
         field_members: fields,
         method_members: vec![call],
         generic_methods: vec![],
-        constructor,
+        constructors: vec![constructor],
         destructor: empty_function("__dtor", TypeName::void(), base),
         acquire: empty_function("__acquire", TypeName::void(), base),
         release: empty_function("__release", TypeName::void(), base),
@@ -570,9 +570,13 @@ pub fn lift_closures(module: &mut Module) {
                 lift_default(default, ctx, &mut lifted);
             }
         }
-        lift_function(&mut st.constructor, ctx, &mut lifted);
+        for constructor in &mut st.constructors {
+            let before = lifted.len();
+            lift_function(constructor, ctx, &mut lifted);
+            inherit_deprecation(&[&st.attributes, &constructor.attributes], &mut lifted[before..]);
+        }
         lift_function(&mut st.destructor, ctx, &mut lifted);
-        inherit_deprecation(&[&st.attributes, &st.constructor.attributes], &mut lifted[before..]);
+        inherit_deprecation(&[&st.attributes], &mut lifted[before..]);
         for method in st.method_members.iter_mut().chain(st.generic_methods.iter_mut()) {
             let before = lifted.len();
             lift_function(method, ctx, &mut lifted);
@@ -737,14 +741,14 @@ fn apply_learned(st: &mut StructDef, learned: &Learned) -> bool {
         st.field_members[i].ty = ty.clone();
         let name = st.field_members[i].name.clone();
         let init = format!("__init_{}", name);
-        for param in &mut st.constructor.parameters {
+        for param in st.constructors.iter_mut().flat_map(|c| c.parameters.iter_mut()) {
             if param.name == init {
                 param.ty = ty.clone();
             }
         }
         // The constructor zero-initializes every field first; the zero was
         // chosen while the type was unknown.
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             for stmt in &mut body.items {
                 if let Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. }) = stmt {
                     let zeroes_field = matches!(lhs.as_ref(), Expression::MemberRef { lhs, name: n, .. } if matches!(lhs.as_ref(), Expression::ThisRef) && *n == name);
@@ -848,7 +852,9 @@ impl Table {
         let mut fields = HashMap::new();
         let mut methods = HashMap::new();
         for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {
-            callables.insert(st.ty.to_string(), st.constructor.parameters.iter().map(|p| p.ty.clone()).collect());
+            for c in &st.constructors {
+                callables.insert(c.name.clone(), c.parameters.iter().map(|p| p.ty.clone()).collect());
+            }
             fields.insert(st.ty.to_string(), st.field_members.iter().map(|f| (f.name.clone(), f.ty.clone())).collect());
             methods.insert(
                 st.ty.to_string(),
@@ -955,7 +961,7 @@ fn sites_in_module(
                 sites_in_expression(default, Some(&field.ty), table, current, &mut visit);
             }
         }
-        for method in st.method_members.iter().chain([&st.constructor, &st.destructor]) {
+        for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]) {
             sites_in_function(method, table, current, &mut visit);
         }
     }
@@ -1109,7 +1115,7 @@ pub(crate) fn for_each_expression_mut(module: &mut Module, f: &mut impl FnMut(&m
                 crate::passes::walk_expression(default, f);
             }
         }
-        for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
             for param in &mut method.parameters {
                 if let Some(default) = &mut param.default {
                     crate::passes::walk_expression(default, f);

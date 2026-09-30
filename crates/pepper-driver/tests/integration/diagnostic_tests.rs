@@ -1362,6 +1362,23 @@ fn no_matching_overload_notes_each_candidate() {
 }
 
 #[test]
+fn no_matching_constructor_notes_each_candidate() {
+    let main = "struct P {\n    int x;\n    construct(v: int) { x = v; }\n    construct(a: int, b: int) { x = a + b; }\n}\nmain(): int {\n    return P(String()).x;\n}\n";
+    assert_eq!(
+        error_of("no_matching_constructor", main),
+        "main.pep:7:12: error: no matching constructor for initialization of 'P'\n\
+         \x20   7 |     return P(String()).x;\n\
+         \x20     |            ^\n\
+         main.pep:3:5: note: candidate constructor not viable: no known conversion from 'String' to 'int' for 1st argument\n\
+         \x20   3 |     construct(v: int) { x = v; }\n\
+         \x20     |     ^~~~~~~~~\n\
+         main.pep:4:5: note: candidate constructor not viable: requires 2 arguments, but 1 was provided\n\
+         \x20   4 |     construct(a: int, b: int) { x = a + b; }\n\
+         \x20     |     ^~~~~~~~~"
+    );
+}
+
+#[test]
 fn c_function_pointer_from_a_capturing_closure() {
     assert_eq!(
         error_of(

@@ -71,7 +71,7 @@ pub fn synthesize_function_types(module: &mut Module) {
             for field in &st.field_members {
                 add(&field.ty);
             }
-            for method in st.method_members.iter().chain([&st.constructor, &st.destructor]) {
+            for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]) {
                 function_types(method, &mut add);
             }
         }
@@ -300,7 +300,7 @@ fn function_struct(ty: &TypeName) -> StructDef {
         field_members: vec![pointer_field(INVOKE_FIELD), pointer_field(DESTROY_FIELD)],
         method_members: vec![],
         generic_methods: vec![],
-        constructor: empty_function(&name, ty.clone(), &name),
+        constructors: vec![empty_function(&name, ty.clone(), &name)],
         destructor: destructor(&name),
         acquire: empty_function("__acquire", TypeName::void(), &name),
         release: empty_function("__release", TypeName::void(), &name),

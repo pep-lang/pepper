@@ -28,7 +28,6 @@ use crate::type_name::TypeName;
 use std::collections::HashMap;
 
 struct StructFacts {
-    ctor_params: Vec<TypeName>,
     methods: HashMap<String, Vec<TypeName>>,
     traits: Vec<TypeName>,
     loc: Loc,
@@ -39,7 +38,7 @@ struct StructFacts {
 struct Implicit {
     /// The constructor's parameter type.
     from: TypeName,
-    /// The constructor call's name (`Path`, `Box<int>`).
+    /// The constructor call's name (`Path`, `Box<int>`, `Path$2`).
     callee: String,
     /// The constructor, for the language server.
     constructor: Loc,
@@ -458,11 +457,8 @@ impl Converter {
                 if self.reject_weak_trait(&TypeName::new(function), *loc) {
                     return;
                 }
-                let params = self.functions.get(function.as_str()).cloned().or_else(|| {
-                    self.structs
-                        .get(function.as_str())
-                        .map(|s| s.ctor_params.clone())
-                });
+                // Constructors are listed with the functions, by name.
+                let params = self.functions.get(function.as_str()).cloned();
                 if let Some(params) = params {
                     let loc = *loc;
                     self.arguments(&params, args, current, loc);
@@ -650,11 +646,13 @@ pub fn convert_to_traits(module: &mut Module) {
     let concrete = |st: &StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
     let mut implicit = HashMap::new();
     for st in module.structs.iter().filter(|st| concrete(st)) {
-        if let Some(from) = st.implicit_from() {
+        if let Some(ctor) = st.implicit_constructor()
+            && let Some(from) = st.implicit_from()
+        {
             let entry = Implicit {
                 from: from.clone(),
-                callee: st.ty.to_string(),
-                constructor: st.constructor.loc,
+                callee: ctor.name.clone(),
+                constructor: ctor.loc,
             };
             implicit.insert(st.name.clone(), entry.clone());
             implicit.insert(st.ty.to_string(), entry);
@@ -679,6 +677,14 @@ pub fn convert_to_traits(module: &mut Module) {
                     f.parameters.iter().map(|p| p.ty.clone()).collect(),
                 )
             })
+            .chain(
+                module
+                    .structs
+                    .iter()
+                    .filter(|st| concrete(st))
+                    .flat_map(|st| st.constructors.iter())
+                    .map(|c| (c.name.clone(), c.parameters.iter().map(|p| p.ty.clone()).collect())),
+            )
             .collect(),
         structs: module
             .structs
@@ -686,12 +692,6 @@ pub fn convert_to_traits(module: &mut Module) {
             .filter(|st| concrete(st))
             .map(|st| {
                 let facts = StructFacts {
-                    ctor_params: st
-                        .constructor
-                        .parameters
-                        .iter()
-                        .map(|p| p.ty.clone())
-                        .collect(),
                     methods: st
                         .method_members
                         .iter()
@@ -718,7 +718,9 @@ pub fn convert_to_traits(module: &mut Module) {
             continue;
         }
         let current = st.ty.clone();
-        converter.function(&mut st.constructor, Some(&current));
+        for constructor in &mut st.constructors {
+            converter.function(constructor, Some(&current));
+        }
         for method in &mut st.method_members {
             converter.function(method, Some(&current));
         }

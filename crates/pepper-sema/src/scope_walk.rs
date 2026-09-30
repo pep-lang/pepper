@@ -234,7 +234,7 @@ macro_rules! scope_walker {
                         }
                         // Platform selection never drops a constructor or
                         // destructor, whatever its attributes.
-                        if let Some(c) = &$($m)? s.constructor {
+                        for c in &$($m)? s.constructors {
                             self.walk_function_body(c);
                         }
                         if let Some(d) = &$($m)? s.destructor {

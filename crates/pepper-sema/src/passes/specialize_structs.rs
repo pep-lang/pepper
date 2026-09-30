@@ -29,7 +29,7 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         field_members: vec![],
         method_members: vec![],
         generic_methods: vec![],
-        constructor: base.constructor.clone(),
+        constructors: vec![],
         destructor: base.destructor.clone(),
         acquire: base.acquire.clone(),
         release: base.release.clone(),
@@ -82,20 +82,30 @@ fn specialize_struct(base: &StructDef, spec_type: &TypeName) -> StructDef {
         specialized.method_members.push(m);
     }
 
-    // Constructor: substitute the body's variable types.
-    let mut ctor = base.constructor.clone();
-    substitute(&mut ctor.ty, &type_map);
-    for param in &mut ctor.parameters {
-        substitute(&mut param.ty, &type_map);
-        if let Some(default) = &mut param.default {
-            substitute_expression(default, &type_map);
+    // Constructors: substitute the body's variable types. A single one is
+    // named after the specialized type; an overload set keeps its ordinal
+    // (`Box<T>$2` → `Box<int>$2`).
+    let base_name = base.ty.to_string();
+    for base_ctor in &base.constructors {
+        let mut ctor = base_ctor.clone();
+        substitute(&mut ctor.ty, &type_map);
+        for param in &mut ctor.parameters {
+            substitute(&mut param.ty, &type_map);
+            if let Some(default) = &mut param.default {
+                substitute_expression(default, &type_map);
+            }
         }
+        if let Some(body) = &mut ctor.body {
+            substitute_block(body, &type_map);
+        }
+        ctor.name = match base_ctor.name.strip_prefix(&base_name) {
+            Some(suffix) if suffix.starts_with(pepper_parser::namespace::OVERLOAD_SEPARATOR) => {
+                format!("{}{}", spec_type, suffix)
+            }
+            _ => spec_type.to_string(),
+        };
+        specialized.constructors.push(ctor);
     }
-    if let Some(body) = &mut ctor.body {
-        substitute_block(body, &type_map);
-    }
-    ctor.name = spec_type.to_string();
-    specialized.constructor = ctor;
 
     // Dtor/acquire/release.
     let mut dtor = base.destructor.clone();
@@ -138,7 +148,7 @@ fn erase_void(st: &mut StructDef) {
     let has_void_param = |f: &FunctionDef| f.parameters.iter().any(|p| is_void(&p.ty));
     if fields.is_empty()
         && !st.method_members.iter().any(has_void_param)
-        && !has_void_param(&st.constructor)
+        && !st.constructors.iter().any(has_void_param)
     {
         return;
     }
@@ -159,7 +169,9 @@ fn erase_void(st: &mut StructDef) {
     for method in &mut st.method_members {
         erase_function(method);
     }
-    erase_function(&mut st.constructor);
+    for constructor in &mut st.constructors {
+        erase_function(constructor);
+    }
 }
 
 fn erase_void_block(block: &mut Block, fields: &[String], params: &[String], returns_void: bool) {
@@ -267,10 +279,13 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
         }
         // Constructor calls inside method bodies (`Array<T>(n)` →
         // `Array<int>(n)`): parse the name, substitute, re-emit.
+        // An overloaded constructor keeps its ordinal (`Box<T>$2`).
         if let Expression::FunctionCall { function, .. } = e {
-            let mut parsed = crate::passes::gather_generics::parse_type_string(function);
+            let set = crate::passes::overloads::set_name(function);
+            let ordinal = function[set.len()..].to_string();
+            let mut parsed = crate::passes::gather_generics::parse_type_string(set);
             substitute(&mut parsed, type_map);
-            *function = parsed.to_string();
+            *function = parsed.to_string() + &ordinal;
         }
         // A generic method call spelled with its type arguments
         // (`copies.copy<T>(v)`).

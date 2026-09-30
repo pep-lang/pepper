@@ -9,6 +9,10 @@
 //!   members of each set of two or more `name$1`, `name$2`, … in declaration
 //!   order, and records the set in `Module::overload_sets`. A set of one
 //!   keeps its name, so a program without overloads is unchanged.
+//!   Constructors are named by the builder (`Point$1`, `Point$2`, see
+//!   `StructDef::constructors`); this pass checks them for redefinition,
+//!   and their set is the type (`Point`, `Box<int>`), resolved like a
+//!   function's.
 //! - `resolve_implicit_types` resolves each call that names a set, as soon
 //!   as its argument types are known, with [`Overloads::select`], and
 //!   rewrites the call to the chosen member (a generic member becomes its
@@ -148,7 +152,7 @@ pub fn name_overloads(module: &mut Module) {
         }
     }
 
-    if !name_method_overloads(module) {
+    if !check_constructors(module) || !name_method_overloads(module) {
         return;
     }
     for ((_, name), members) in groups {
@@ -164,6 +168,33 @@ pub fn name_overloads(module: &mut Module) {
         module.overload_sets.insert(name, names);
     }
     attach_overrides(module);
+}
+
+/// Check that no two constructors of a struct take the same parameters.
+/// Returns false after reporting an error.
+fn check_constructors(module: &Module) -> bool {
+    for st in module.structs.iter().filter(|st| st.constructors.len() > 1) {
+        for (j, later) in st.constructors.iter().enumerate() {
+            let key = parameter_key(later);
+            if let Some(earlier) = st.constructors[..j].iter().find(|c| parameter_key(c) == key) {
+                crate::errors::report(
+                    Diagnostic::error(format!("constructor of '{}' cannot be redeclared", demangle_name(&st.name)))
+                        .at(later.loc)
+                        .with_note("previous declaration is here", Some(earlier.loc)),
+                );
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Whether the module has anything to resolve: an overloaded free
+/// function, method or constructor.
+pub fn has_overloads(module: &Module) -> bool {
+    !module.overload_sets.is_empty()
+        || !module.method_overload_sets.is_empty()
+        || module.structs.iter().any(|st| st.constructors.len() > 1)
 }
 
 /// Check each struct's same-name methods and rename the members of every
@@ -413,6 +444,9 @@ struct Viable {
 #[derive(Default)]
 pub struct Overloads {
     sets: HashMap<String, Vec<Member>>,
+    /// The sets in `sets` that are a struct's constructors (`Point`,
+    /// `Box<int>`).
+    constructors: HashSet<String>,
     /// Method overload sets: struct type → set name → members.
     methods: HashMap<String, HashMap<String, Vec<Member>>>,
     /// Struct type → the parameter type of its `[Implicit]` constructor.
@@ -487,7 +521,7 @@ fn promotes(from: &str, to: &str) -> bool {
 
 impl Overloads {
     pub fn build(module: &Module) -> Self {
-        if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
+        if !has_overloads(module) {
             return Overloads::default();
         }
         let mut methods: HashMap<String, HashMap<String, Vec<Member>>> = HashMap::new();
@@ -523,7 +557,7 @@ impl Overloads {
             }
         }
         let functions: HashMap<&str, &FunctionDef> = module.functions.iter().map(|f| (f.name.as_str(), f)).collect();
-        let sets = module
+        let mut sets: HashMap<String, Vec<Member>> = module
             .overload_sets
             .iter()
             .map(|(set, members)| {
@@ -531,6 +565,12 @@ impl Overloads {
             })
             .collect();
         let concrete = |st: &&StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
+        let mut constructors = HashSet::new();
+        for st in module.structs.iter().filter(concrete).filter(|st| st.constructors.len() > 1) {
+            let set = st.ty.to_string();
+            sets.insert(set.clone(), st.constructors.iter().map(Member::of).collect());
+            constructors.insert(set);
+        }
         let implicit = module
             .structs
             .iter()
@@ -548,12 +588,22 @@ impl Overloads {
         let extension_methods =
             module.extensions.iter().flat_map(|ext| ext.methods.iter().map(|m| (m.loc, ext.is_exported))).collect();
         let scopes = module.extension_scopes.clone();
-        Overloads { sets, methods, implicit, conforms, traits, extension_methods, scopes }
+        Overloads { sets, constructors, methods, implicit, conforms, traits, extension_methods, scopes }
     }
 
     /// Whether `name` names an overload set.
     pub fn is_set(&self, name: &str) -> bool {
         self.sets.contains_key(name)
+    }
+
+    /// The set a call to `function` names and the type arguments it
+    /// spells: `f<int>` is set `f` with `[int]`, but `Box<int>` is the
+    /// constructor set of `Box<int>`.
+    pub fn call_set<'f>(&self, function: &'f str) -> (&'f str, Option<Vec<TypeName>>) {
+        if self.constructors.contains(function) {
+            return (function, None);
+        }
+        split_type_arguments(function)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -581,7 +631,8 @@ impl Overloads {
 
     /// `candidate function` notes, one per member of `set`.
     pub fn candidate_notes(&self, set: &str) -> Vec<(String, Loc)> {
-        self.sets.get(set).map(|ms| ms.iter().map(|m| ("candidate function".to_string(), m.loc)).collect()).unwrap_or_default()
+        let what = if self.constructors.contains(set) { "candidate constructor" } else { "candidate function" };
+        self.sets.get(set).map(|ms| ms.iter().map(|m| (what.to_string(), m.loc)).collect()).unwrap_or_default()
     }
 
     /// How well `arg` converts to a parameter of type `param`, or `None`
@@ -660,6 +711,10 @@ impl Overloads {
     /// the call spells (`f<int>(x)`).
     pub fn select(&self, set: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
         match self.sets.get(set) {
+            Some(members) if self.constructors.contains(set) => match self.select_in(members, demangle_name(set), explicit, args) {
+                Outcome::Failed(failure) => Outcome::Failed(constructor_failure(failure, set)),
+                outcome => outcome,
+            },
             Some(members) => self.select_in(members, demangle_name(set), explicit, args),
             None => Outcome::Pending,
         }
@@ -854,6 +909,23 @@ impl Overloads {
     }
 }
 
+/// A failed constructor call worded as clang words it: `no matching
+/// constructor for initialization of 'Point'`, `candidate constructor`.
+fn constructor_failure(failure: Failure, set: &str) -> Failure {
+    let ty = demangle_name(set);
+    let message = if failure.message.starts_with("no matching function") {
+        format!("no matching constructor for initialization of '{}'", ty)
+    } else {
+        format!("call to constructor of '{}' is ambiguous", ty)
+    };
+    let notes = failure
+        .notes
+        .into_iter()
+        .map(|(note, at)| (note.replacen("candidate function", "candidate constructor", 1), at))
+        .collect();
+    Failure { message, notes }
+}
+
 /// Rewrite a call resolved to `choice`: its callee, and each string literal
 /// passed to a raw pointer parameter as that literal's global.
 pub fn apply_choice(function: &mut String, args: &mut [Expression], choice: &Choice) {
@@ -898,7 +970,7 @@ pub(crate) fn resolve_method_call(
 /// scale;`). Runs in `resolve_implicit_types`' loop; returns whether it
 /// bound any.
 pub fn bind_function_values(module: &mut Module) -> bool {
-    if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
+    if !has_overloads(module) {
         return false;
     }
     let overloads = Overloads::build(module);
@@ -950,7 +1022,7 @@ pub fn bind_function_values(module: &mut Module) -> bool {
 /// final (see the module docs). Generic bases are skipped: their
 /// specializations are checked.
 pub fn check_overloads(module: &Module) {
-    if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
+    if !has_overloads(module) {
         return;
     }
     let overloads = Overloads::build(module);
@@ -979,7 +1051,7 @@ pub fn check_overloads(module: &Module) {
         }
         match expr {
             Expression::FunctionCall { function, args, loc } => {
-                let (base, explicit) = split_type_arguments(function);
+                let (base, explicit) = overloads.call_set(function);
                 if !overloads.is_set(base) {
                     return;
                 }
@@ -1088,8 +1160,12 @@ pub fn check_overloads(module: &Module) {
     });
 }
 
-/// `name<args>` split into `name` and the written type arguments.
+/// `name<args>` split into `name` and the written type arguments. A
+/// resolved member (`Box<int>$2`) is returned whole.
 pub fn split_type_arguments(function: &str) -> (&str, Option<Vec<TypeName>>) {
+    if set_name(function) != function {
+        return (function, None);
+    }
     match function.split_once('<') {
         Some((base, _)) => (base, Some(crate::passes::gather_generics::parse_type_string(function).sub_types)),
         None => (function, None),
@@ -1156,7 +1232,7 @@ fn untyped_function_values(module: &Module, overloads: &Overloads) -> HashMap<Lo
     let bodies = module
         .functions
         .iter()
-        .chain(module.structs.iter().flat_map(|s| s.method_members.iter().chain([&s.constructor])))
+        .chain(module.structs.iter().flat_map(|s| s.method_members.iter().chain(s.constructors.iter())))
         .filter_map(|f| f.body.as_ref());
     for body in bodies {
         walk(body, &mut visit);

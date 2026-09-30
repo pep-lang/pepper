@@ -233,8 +233,16 @@ impl<'a> Checker<'a> {
     /// `[Implicit]`, a note at the constructor saying how to convert.
     fn constructor_hint(&self, expected: &TypeName, actual: &TypeName) -> Option<(String, Loc)> {
         let st = self.module.structs.iter().find(|s| s.name == expected.to_string() || s.ty.to_string() == expected.to_string())?;
-        let (first, rest) = st.constructor.parameters.split_first()?;
-        if st.implicit_from().is_some() || rest.iter().any(|p| p.default.is_none()) || !same_type(&first.ty, actual) {
+        if st.implicit_from().is_some() {
+            return None;
+        }
+        let ctor = st.constructors.iter().find(|c| {
+            c.parameters.split_first().is_some_and(|(first, rest)| {
+                rest.iter().all(|p| p.default.is_some()) && same_type(&first.ty, actual)
+            })
+        })?;
+        let (first, rest) = ctor.parameters.split_first()?;
+        if rest.iter().any(|p| p.default.is_none()) || !same_type(&first.ty, actual) {
             return None;
         }
         Some((
@@ -244,7 +252,7 @@ impl<'a> Checker<'a> {
                 actual.display(),
                 expected.display()
             ),
-            st.constructor.loc,
+            ctor.loc,
         ))
     }
 
@@ -376,14 +384,14 @@ impl<'a> Checker<'a> {
         if let Some(e) = self.module.externs.iter().find(|e| e.name == function) {
             return Some((format!("argument {{}} of '{}'", function), e.parameters.iter().map(|p| p.ty.clone()).collect()));
         }
-        let st = self.module.structs.iter().find(|s| s.name == function)?;
+        let (st, ctor) = self.module.constructor_of(function)?;
         // A tuple literal's arguments are its elements, numbered as `t.0`.
         let label = if st.ty.is_tuple() {
             format!("element {{}} of '{}'", st.ty.display())
         } else {
-            format!("argument {{}} of '{}'", function)
+            format!("argument {{}} of '{}'", st.name)
         };
-        Some((label, st.constructor.parameters.iter().map(|p| p.ty.clone()).collect()))
+        Some((label, ctor.parameters.iter().map(|p| p.ty.clone()).collect()))
     }
 
     fn parameters_of_method(&self, this_type: &TypeName, method: &str) -> Option<Vec<TypeName>> {
@@ -643,7 +651,9 @@ pub fn check_function_types(module: &mut Module) {
         }
         let current = st.ty.clone();
         checker.unbound = base_params(&st.name, true);
-        checker.function(&st.constructor, Some(&current));
+        for constructor in &st.constructors {
+            checker.function(constructor, Some(&current));
+        }
         for method in &st.method_members {
             checker.function(method, Some(&current));
         }

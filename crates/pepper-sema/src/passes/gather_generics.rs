@@ -32,7 +32,7 @@ pub fn gather_generics(module: &mut Module) {
         for method in &mut st.method_members {
             walk_function(method, &mut gather);
         }
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             crate::passes::walk_block(body, &mut gather);
         }
         if let Some(body) = &mut st.destructor.body {
@@ -139,7 +139,7 @@ pub fn gather_generics(module: &mut Module) {
                 gather_local_declarations(body, &mut structs, &params);
             }
         }
-        if let Some(body) = &st.constructor.body {
+        for body in st.constructors.iter().filter_map(|c| c.body.as_ref()) {
             gather_local_declarations(body, &mut structs, &params);
         }
     }
@@ -263,7 +263,13 @@ fn param_names(params: &[crate::model::GenericParam]) -> Vec<TypeName> {
 }
 
 /// Parse `Name<a, b>` back into a TypeName (specs are carried as TypeNames).
+/// A call to an overloaded constructor (`Box<int>$2`) parses as the type
+/// it constructs.
 pub fn parse_type_string(s: &str) -> TypeName {
+    let s = match crate::passes::overloads::set_name(s) {
+        set if set.ends_with('>') => set,
+        _ => s,
+    };
     // A pointer type keeps its stars in the name (`Atomic<long>*`), with no
     // type arguments of its own.
     if s.ends_with('*') {

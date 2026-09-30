@@ -164,7 +164,7 @@ fn method(out: &mut String, source: &str, owner: &str, f: &FunctionDecl) {
     entry(out, 4, &title, &function_signature(source, f), doc);
 }
 
-fn members(out: &mut String, source: &str, owner: &str, fields: &[VariableDecl], constructor: Option<&FunctionDecl>, methods: &[FunctionDecl]) {
+fn members(out: &mut String, source: &str, owner: &str, fields: &[VariableDecl], constructors: &[FunctionDecl], methods: &[FunctionDecl]) {
     let fields: Vec<_> = fields.iter().filter(|f| is_public(&f.name)).collect();
     if !fields.is_empty() {
         out.push_str("\n### Fields\n");
@@ -172,9 +172,11 @@ fn members(out: &mut String, source: &str, owner: &str, fields: &[VariableDecl],
             field(out, source, f);
         }
     }
-    if let Some(c) = constructor {
-        out.push_str("\n### Constructor\n");
-        method(out, source, owner, c);
+    if !constructors.is_empty() {
+        out.push_str(if constructors.len() == 1 { "\n### Constructor\n" } else { "\n### Constructors\n" });
+        for c in constructors {
+            method(out, source, owner, c);
+        }
     }
     let (statics, instance): (Vec<_>, Vec<_>) =
         methods.iter().filter(|m| is_public_member(m)).partition(|m| m.is_static);
@@ -244,17 +246,17 @@ fn page_body(module: &Module, source: &str) -> String {
             Declaration::Struct(s) if is_public(&s.name) => {
                 let end = source[s.name_span.end..].find('{').map_or(s.span.end, |i| s.name_span.end + i);
                 entry(&mut out, 2, &s.name, &signature(source, start, end), doc);
-                members(&mut out, source, &s.name, &s.fields, s.constructor.as_ref(), &s.methods);
+                members(&mut out, source, &s.name, &s.fields, &s.constructors, &s.methods);
             }
             Declaration::Trait(t) if is_public(&t.name) => {
                 let end = source[t.name_span.end..].find('{').map_or(t.span.end, |i| t.name_span.end + i);
                 entry(&mut out, 2, &t.name, &signature(source, start, end), doc);
-                members(&mut out, source, &t.name, &[], None, &t.methods);
+                members(&mut out, source, &t.name, &[], &[], &t.methods);
             }
             Declaration::Extend(e) => {
                 let end = source[e.target.span.end..].find('{').map_or(e.span.end, |i| e.target.span.end + i);
                 entry(&mut out, 2, &format!("extend {}", e.target), &signature(source, start, end), doc);
-                members(&mut out, source, &e.target.name, &[], None, &e.methods);
+                members(&mut out, source, &e.target.name, &[], &[], &e.methods);
             }
             Declaration::TypeAlias(t) if is_public(&t.name) => {
                 entry(&mut out, 2, &t.name, &signature(source, start, t.span.end), doc);

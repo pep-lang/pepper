@@ -403,7 +403,7 @@ fn compiled_functions(module: &mut Module) -> Vec<&mut FunctionDef> {
     let mut out: Vec<&mut FunctionDef> = module.functions.iter_mut().filter(|f| !f.is_generic_func).collect();
     for st in module.structs.iter_mut().filter(|st| !(st.name == st.ty.name && st.ty.is_generic())) {
         out.extend(st.method_members.iter_mut().filter(|m| !m.is_generic_func));
-        out.push(&mut st.constructor);
+        out.extend(st.constructors.iter_mut());
     }
     out
 }
@@ -595,7 +595,7 @@ fn request_site(module: &Module, ty: &TypeName) -> Option<Loc> {
         look(function);
     }
     for st in &module.structs {
-        for m in st.method_members.iter().chain([&st.constructor]) {
+        for m in st.method_members.iter().chain(st.constructors.iter()) {
             look(m);
         }
     }

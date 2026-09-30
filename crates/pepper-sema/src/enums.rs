@@ -89,7 +89,8 @@ fn for_each_body(module: &mut Module, mut f: impl FnMut(&mut Block, bool)) {
             .method_members
             .iter_mut()
             .chain(st.generic_methods.iter_mut())
-            .chain([&mut st.constructor, &mut st.destructor, &mut st.acquire, &mut st.release])
+            .chain(st.constructors.iter_mut())
+            .chain([&mut st.destructor, &mut st.acquire, &mut st.release])
         {
             if let Some(body) = &mut method.body {
                 f(body, generic_base || method.is_generic_func);
@@ -169,7 +170,7 @@ pub fn resolve_enum_cases(module: &mut Module) {
                 crate::passes::walk_expression(default, &mut resolve);
             }
         }
-        for method in st.method_members.iter_mut().chain([&mut st.constructor]) {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()) {
             for p in &mut method.parameters {
                 if let Some(default) = &mut p.default {
                     crate::passes::walk_expression(default, &mut resolve);

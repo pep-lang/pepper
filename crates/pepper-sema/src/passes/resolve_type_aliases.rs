@@ -69,7 +69,9 @@ pub fn resolve_type_aliases(module: &mut Module) {
         for method in &mut st.method_members {
             subst_function(method, &aliases, struct_values.clone());
         }
-        subst_function(&mut st.constructor, &aliases, struct_values.clone());
+        for constructor in &mut st.constructors {
+            subst_function(constructor, &aliases, struct_values.clone());
+        }
         subst_function(&mut st.destructor, &aliases, struct_values.clone());
         subst_function(&mut st.acquire, &aliases, struct_values.clone());
         subst_function(&mut st.release, &aliases, struct_values.clone());

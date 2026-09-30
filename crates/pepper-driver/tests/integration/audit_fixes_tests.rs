@@ -529,19 +529,18 @@ fn duplicate_local_is_an_error() {
 }
 
 #[test]
-fn second_constructor_is_an_error() {
+fn redeclared_constructor_is_an_error() {
     assert_eq!(
         error_of(
             "two_constructors",
-            "struct P {\n    int x;\n    construct(this.x = 0) {}\n    construct(y: int) { x = y; }\n}\nmain(): int { return 0; }\n"
+            "struct P {\n    int x;\n    construct(y: int) { x = y; }\n    construct(z: int) { x = z; }\n}\nmain(): int { return 0; }\n"
         ),
-        "main.pep:4:5: error: redefinition of the constructor of 'P'\n\
-         \x20   4 |     construct(y: int) { x = y; }\n\
+        "main.pep:4:5: error: constructor of 'P' cannot be redeclared\n\
+         \x20   4 |     construct(z: int) { x = z; }\n\
          \x20     |     ^~~~~~~~~\n\
-         main.pep:3:5: note: previous definition is here\n\
-         \x20   3 |     construct(this.x = 0) {}\n\
-         \x20     |     ^~~~~~~~~\n\
-         note: a struct has one constructor; give its parameters default values to allow shorter calls"
+         main.pep:3:5: note: previous declaration is here\n\
+         \x20   3 |     construct(y: int) { x = y; }\n\
+         \x20     |     ^~~~~~~~~"
     );
     let destructors = error_of("two_destructors", "struct P {\n    destruct {}\n    destruct {}\n}\nmain(): int { return 0; }\n");
     assert!(destructors.starts_with("main.pep:3:5: error: redefinition of the destructor of 'P'"), "{destructors}");

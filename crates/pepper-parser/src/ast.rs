@@ -342,8 +342,9 @@ pub struct StructDecl {
     pub generic_params: Vec<GenericParam>,
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
-    /// `construct(...)` constructor
-    pub constructor: Option<FunctionDecl>,
+    /// `construct(...)` constructors, in declaration order; several
+    /// overload one another
+    pub constructors: Vec<FunctionDecl>,
     /// `destruct { ... }` destructor body
     pub destructor: Option<Block>,
     pub span: Span,
@@ -1037,7 +1038,7 @@ impl Display for StructDecl {
         for field in &self.fields {
             write!(f, "\n    {}", field)?;
         }
-        if let Some(constructor) = &self.constructor {
+        for constructor in &self.constructors {
             let body = constructor.body.as_ref().expect("constructor has a body");
             write!(f, "\n    ")?;
             write_attributes(f, &constructor.attributes)?;
@@ -1054,7 +1055,7 @@ impl Display for StructDecl {
         }
         let has_members = self.enumeration.as_ref().is_some_and(|e| !e.cases.is_empty())
             || !self.fields.is_empty()
-            || self.constructor.is_some()
+            || !self.constructors.is_empty()
             || self.destructor.is_some()
             || !self.methods.is_empty();
         if has_members {

@@ -10,9 +10,9 @@ best:
 
 The functions of one name in one file are an **overload set**, and each is a
 member of it. [Methods](#methods-and-operators) of one name in a struct are a
-set too, and so are its static methods and its operators. Constructors and
-extension methods do not overload yet (see
-[What is not supported yet](#what-is-not-supported-yet)).
+set too, and so are its static methods, its operators, its
+[constructors](#constructors), and the methods its
+[extensions](#extensions-and-traits) add.
 
 ## Declaring overloads
 
@@ -181,6 +181,30 @@ the trait type picks among the trait's members the same way:
 - **A missing overload** is named with its parameter types:
   `'Square' does not implement 'area(int)', required by trait 'Shape'`.
 
+## Constructors
+
+A struct may declare several constructors. A call `Span(...)` picks among
+them exactly as a call picks among functions:
+
+```pepper
+{{#include ../../examples/overloading-constructors.pep}}
+```
+
+- **Two constructors with the same parameter types** are `constructor of
+  'Span' cannot be redeclared`, with a note at the first.
+- **No constructor fits** is `no matching constructor for initialization of
+  'Span'`, and a tie is `call to constructor of 'Span' is ambiguous`; the
+  notes point at each `candidate constructor`.
+- **A generic struct's** constructors resolve in each specialization:
+  `Pair<int>(1, 2)` picks among `Pair<int>`'s constructors.
+- **At most one constructor may be `[Implicit]`**: an
+  [implicit conversion](structs.md#implicit-conversions) needs one
+  constructor to call.
+- **`[Deprecated]` on one constructor** warns only at the calls that
+  resolve to it.
+- **A constructor as a value** (`var make: (int, int) => Span = Span;`)
+  picks its member from the expected function type, like a function below.
+
 ## Overloaded functions as values
 
 The name of an overload set, written without a call, is a value only where
@@ -216,9 +240,6 @@ An expected type that matches no member is `address of overloaded function
 
 ## What is not supported yet
 
-- **Constructors** do not overload: a struct has one constructor. Use
-  default arguments, or a [static method](structs.md#static-methods) for each
-  alternative.
 - **Unary operators** cannot be declared at all yet.
 - **`extern` functions** do not overload.
 - **Overloads across files** do not merge: a file's own functions of a name

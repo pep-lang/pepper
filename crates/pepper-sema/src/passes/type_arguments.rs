@@ -132,7 +132,7 @@ pub fn check_type_arguments(module: &Module) {
         }
     };
     for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {
-        for method in st.method_members.iter().chain([&st.constructor]) {
+        for method in st.method_members.iter().chain(st.constructors.iter()) {
             visit(method);
         }
     }

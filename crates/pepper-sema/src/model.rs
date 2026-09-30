@@ -670,7 +670,11 @@ pub struct StructDef {
     /// apart: only their specializations (`map<long>`, added to
     /// `method_members` by `generic_methods`) are compiled.
     pub generic_methods: Vec<FunctionDef>,
-    pub constructor: FunctionDef,
+    /// The constructors, at least one (an empty one when the struct
+    /// declares none). A single constructor is named after the type
+    /// (`Point`, `Box<int>`); several are an overload set named `Point$1`,
+    /// `Point$2`, … in declaration order (see `overloads::name_overloads`).
+    pub constructors: Vec<FunctionDef>,
     pub destructor: FunctionDef,
     pub acquire: FunctionDef,
     pub release: FunctionDef,
@@ -716,10 +720,22 @@ impl StructDef {
     /// The type an `[Implicit]` constructor converts from: its first
     /// parameter's (the builder checked the rest have defaults).
     pub fn implicit_from(&self) -> Option<&TypeName> {
-        if !has_attribute(&self.constructor.attributes, IMPLICIT_ATTRIBUTE) {
-            return None;
-        }
-        self.constructor.parameters.first().map(|p| &p.ty)
+        self.implicit_constructor()?.parameters.first().map(|p| &p.ty)
+    }
+
+    /// The constructor marked `[Implicit]`, if any (the builder allows one).
+    pub fn implicit_constructor(&self) -> Option<&FunctionDef> {
+        self.constructors.iter().find(|c| has_attribute(&c.attributes, IMPLICIT_ATTRIBUTE))
+    }
+
+    /// The constructor a call names: `Point`, `Point$2` or `Box<int>$2`.
+    pub fn constructor_named(&self, name: &str) -> Option<&FunctionDef> {
+        self.constructors.iter().find(|c| c.name == name)
+    }
+
+    /// Whether `name` names one of the constructors, or their set.
+    pub fn is_constructor_name(&self, name: &str) -> bool {
+        name == self.ty.to_string() || self.constructors.iter().any(|c| c.name == name)
     }
 
     /// Whether acquire/release step the counts atomically: `[Shared]`
@@ -923,6 +939,17 @@ pub struct Module {
 }
 
 impl Module {
+    /// The struct constructed by a call to `function` and the constructor
+    /// it calls: `Point` (a single constructor) or `Point$2`, `Box<int>$2`.
+    /// A call still naming an overloaded struct's set has none yet.
+    pub fn constructor_of(&self, function: &str) -> Option<(&StructDef, &FunctionDef)> {
+        let ty = crate::passes::overloads::set_name(function);
+        let st = self.structs.iter().find(|s| s.name == ty || s.ty.to_string() == ty)?;
+        let single = || (st.constructors.len() == 1).then(|| &st.constructors[0]);
+        let ctor = st.constructor_named(function).or_else(single)?;
+        Some((st, ctor))
+    }
+
     /// [`Module::warnings`] in source order, rendered clang-style against
     /// [`Module::sources`]; empty when there are none.
     pub fn render_warnings(&self) -> String {

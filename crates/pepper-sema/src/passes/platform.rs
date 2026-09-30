@@ -341,7 +341,9 @@ pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
         for m in &mut s.method_members {
             filter_function(m, file)?;
         }
-        filter_function(&mut s.constructor, file)?;
+        for constructor in &mut s.constructors {
+            filter_function(constructor, file)?;
+        }
         filter_function(&mut s.destructor, file)?;
         filter_function(&mut s.acquire, file)?;
         filter_function(&mut s.release, file)?;

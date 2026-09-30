@@ -940,15 +940,34 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         .into_iter()
         .partition(|m| m.is_generic_func);
 
-    let constructor = match &decl.constructor {
-        Some(ctor) => {
-            check_implicit_constructor(decl, ctor)?;
-            let mut f = member_def(ctor, Some(base_name.clone()))?;
-            f.name = ty.to_string();
-            f.ty = ty.clone();
-            f
+    // Several constructors overload one another as the set `Point$1`,
+    // `Point$2`, … (declaration order); a single one is named after the type.
+    let mut constructors = vec![];
+    let mut implicit: Option<&ast::FunctionDecl> = None;
+    for (index, ctor) in decl.constructors.iter().enumerate() {
+        check_implicit_constructor(decl, ctor)?;
+        if let Some(attr) = implicit_attribute(&ctor.attributes) {
+            if let Some(first) = implicit {
+                return Err(Diagnostic::error(format!(
+                    "only one constructor of '{}' may be '{}'",
+                    decl.name, IMPLICIT_ATTRIBUTE
+                ))
+                .at(loc(attr.span))
+                .with_note("previous implicit constructor is here", Some(loc(first.name_span))));
+            }
+            implicit = Some(ctor);
         }
-        None => FunctionDef {
+        let mut f = member_def(ctor, Some(base_name.clone()))?;
+        f.name = if decl.constructors.len() == 1 {
+            ty.to_string()
+        } else {
+            format!("{}{}{}", ty, pepper_parser::namespace::OVERLOAD_SEPARATOR, index + 1)
+        };
+        f.ty = ty.clone();
+        constructors.push(f);
+    }
+    if constructors.is_empty() {
+        constructors.push(FunctionDef {
             trait_default: None,
             name: ty.to_string(),
             ty: ty.clone(),
@@ -965,8 +984,8 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
             is_generic_func: false,
             attributes: vec![],
             loc: loc(decl.name_span),
-        },
-    };
+        });
+    }
     let destructor = match &decl.destructor {
         Some(body) => FunctionDef {
             trait_default: None,
@@ -1009,7 +1028,7 @@ fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
         field_members,
         method_members,
         generic_methods,
-        constructor,
+        constructors,
         destructor,
         acquire: empty_method(&base_name, "__acquire"),
         release: empty_method(&base_name, "__release"),

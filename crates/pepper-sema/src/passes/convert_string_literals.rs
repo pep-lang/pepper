@@ -62,8 +62,10 @@ pub fn convert_string_literals(module: &mut Module) {
 
     // Struct method bodies and ctor.
     for st in &mut module.structs {
-        convert_defaults(&mut st.constructor.parameters);
-        if let Some(body) = &mut st.constructor.body {
+        for c in &mut st.constructors {
+            convert_defaults(&mut c.parameters);
+        }
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             walk_body(body);
         }
         for method in &mut st.method_members {

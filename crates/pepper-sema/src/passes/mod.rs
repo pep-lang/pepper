@@ -107,7 +107,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         // arguments inferred, only now.
         // Likewise a call to an overloaded function whose arguments the
         // round just typed (`f(x)` with `x: T`, now `int`).
-        if generic_methods::has_generic_methods(module) || !module.overload_sets.is_empty() || !module.method_overload_sets.is_empty() {
+        if generic_methods::has_generic_methods(module) || overloads::has_overloads(module) {
             step!(resolve_implicit_types(module));
         }
         let methods_added = generic_methods::specialize_methods(module);

@@ -143,7 +143,7 @@ pub fn check_conditions(module: &mut Module) {
             continue;
         }
         let current = st.ty.clone();
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             check_body(body, Some(&current));
         }
         for method in &mut st.method_members {

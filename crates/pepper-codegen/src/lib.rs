@@ -305,7 +305,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             if st.ty.is_generic() && st.name == st.ty.name {
                 continue;
             }
-            callables.push((self.patched_ctor(st), st.loc));
+            callables.extend(self.patched_ctors(st).into_iter().map(|c| (c, st.loc)));
             for method in &st.method_members {
                 let mut m = method.clone();
                 m.name = format!("{}.{}", st.name, method.name);
@@ -907,12 +907,17 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// The ctor with its `__alloc_size` literal patched to the computed struct size
-    /// (port of StructGen's `locals()->function(structDesc->constructor())`).
-    /// Both the instantiation pass and codegen must use this, so the declared
+    /// The ctors (several when overloaded) with their `__alloc_size` literal
+    /// patched to the computed struct size (port of StructGen's
+    /// `locals()->function(structDesc->constructor())`). Both the
+    /// instantiation pass and codegen must use this, so the declared
     /// function and the emitted body agree on the allocation size.
-    fn patched_ctor(&self, st: &StructDef) -> FunctionDef {
-        let mut ctor = st.constructor.clone();
+    fn patched_ctors(&self, st: &StructDef) -> Vec<FunctionDef> {
+        st.constructors.iter().map(|c| self.patched_ctor(st, c)).collect()
+    }
+
+    fn patched_ctor(&self, st: &StructDef, constructor: &FunctionDef) -> FunctionDef {
+        let mut ctor = constructor.clone();
         let struct_size = self.structs.get(&st.name).map(|d| d.size).unwrap_or(0) as i64;
         if let Some(body) = &mut ctor.body {
             for stmt in &mut body.items {
@@ -932,7 +937,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
-        self.instantiate_function(&self.patched_ctor(st))
+        for ctor in self.patched_ctors(st) {
+            self.instantiate_function(&ctor)?;
+        }
+        Ok(())
     }
 
     // ── Traits used as types ────────────────────────────────────────────────
@@ -1601,9 +1609,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
-        // The ctor lives in module.structs[i].constructor, not
-        // module.functions — it was instantiated in the instantiation pass.
-        self.codegen_function(&self.patched_ctor(st))?;
+        // The ctors live in module.structs[i].constructors, not
+        // module.functions — they were instantiated in the instantiation pass.
+        for ctor in self.patched_ctors(st) {
+            self.codegen_function(&ctor)?;
+        }
         for method in &st.method_members {
             // Methods are registered under the mangled name; rename the
             // snapshot for the functions-map lookup.

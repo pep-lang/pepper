@@ -150,7 +150,7 @@ fn in_declaration(decl: &ast::Declaration, offset: usize) -> Option<&ast::TypeNa
         ast::Declaration::Function(f) => in_function(f, offset),
         ast::Declaration::Struct(s) => in_generics(&s.generic_params, offset)
             .or_else(|| s.fields.iter().find_map(|f| in_variable(f, offset)))
-            .or_else(|| s.constructor.as_ref().and_then(|c| in_function(c, offset)))
+            .or_else(|| s.constructors.iter().find_map(|c| in_function(c, offset)))
             .or_else(|| s.destructor.as_ref().and_then(|d| in_block(d, offset)))
             .or_else(|| s.methods.iter().find_map(|m| in_function(m, offset))),
         ast::Declaration::Trait(t) => {

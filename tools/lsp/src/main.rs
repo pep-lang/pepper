@@ -133,7 +133,7 @@ fn collect_struct_members(s: &ast::StructDecl) -> Vec<Symbol> {
             ty: type_string(&field.type_name),
         });
     }
-    if let Some(ctor) = &s.constructor {
+    for ctor in &s.constructors {
         let params = ctor
             .parameters
             .iter()
@@ -334,7 +334,7 @@ fn body_at<'a>(module: &'a ast::Module, offset: usize) -> Option<(&'a ast::Block
                         return Some((body, Some(s)));
                     }
                 }
-                if let Some(c) = &s.constructor
+                if let Some(c) = s.constructors.iter().find(|c| c.span.start <= offset && offset < c.span.end)
                     && c.span.start <= offset
                     && offset < c.span.end
                     && let Some(body) = &c.body
@@ -555,7 +555,7 @@ fn find_match(module: &ast::Module, start: usize) -> Option<&ast::Match> {
                 .methods
                 .iter()
                 .filter_map(|m| m.body.as_ref())
-                .chain(s.constructor.as_ref().and_then(|c| c.body.as_ref()))
+                .chain(s.constructors.iter().filter_map(|c| c.body.as_ref()))
                 .chain(s.destructor.as_ref())
                 .collect(),
             ast::Declaration::Extend(e) => e.methods.iter().filter_map(|m| m.body.as_ref()).collect(),

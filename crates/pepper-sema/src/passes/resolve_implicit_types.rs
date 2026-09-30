@@ -615,12 +615,14 @@ fn resolve_once(module: &mut Module) -> bool {
         });
 
         // Constructor body.
-        resolve_parameter_defaults(&mut st.constructor.parameters, &mut scopes, &Some(current_struct.clone()));
-        if let Some(body) = &mut st.constructor.body {
-            scopes.push(&st.constructor.name);
-            scopes.params.push(st.constructor.parameters.clone());
-            resolve_block(body, &mut scopes, &Some(current_struct.clone()));
-            scopes.pop();
+        for c in &mut st.constructors {
+            resolve_parameter_defaults(&mut c.parameters, &mut scopes, &Some(current_struct.clone()));
+            if let Some(body) = &mut c.body {
+                scopes.push(&c.name);
+                scopes.params.push(c.parameters.clone());
+                resolve_block(body, &mut scopes, &Some(current_struct.clone()));
+                scopes.pop();
+            }
         }
 
         // Methods.
@@ -813,7 +815,7 @@ fn overload_call<'f>(function: &'f str, scopes: &Scopes, current: Option<&TypeNa
     if scopes.overloads.is_empty() {
         return None;
     }
-    let (base, explicit) = crate::passes::overloads::split_type_arguments(function);
+    let (base, explicit) = scopes.overloads.call_set(function);
     if !scopes.overloads.is_set(base) || scopes.value_callee(base, current).is_some() {
         return None;
     }

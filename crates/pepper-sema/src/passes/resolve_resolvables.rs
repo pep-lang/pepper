@@ -23,6 +23,14 @@ fn view_of(module: &Module) -> ResolvedModuleView {
             // A call in a generic base naming an overload set resolves in
             // each specialization (see `overloads`).
             .chain(module.overload_sets.keys().map(|set| (set.clone(), String::new())))
+            // A resolved call to an overloaded constructor (`Point$2`).
+            .chain(
+                module
+                    .structs
+                    .iter()
+                    .filter(|st| st.constructors.len() > 1)
+                    .flat_map(|st| st.constructors.iter().map(|c| (c.name.clone(), c.ty.to_string()))),
+            )
             .collect(),
         externs: module.externs.iter().map(|e| e.name.clone()).collect(),
         structs: module
@@ -102,7 +110,7 @@ pub fn resolve_resolvables(module: &mut Module, report_missing: bool) {
             continue;
         }
         let st = &mut module.structs[st_idx];
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             resolve_block(body, &view, report_missing);
         }
         for method in &mut st.method_members {

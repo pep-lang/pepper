@@ -68,7 +68,9 @@ pub fn check_bindings(module: &mut Module) {
         let fields: Vec<Binding> = st.field_members.iter().map(|f| (f.name.clone(), f.is_const.then_some(f.loc))).collect();
         // The constructor initializes the fields, const ones included.
         let unconstrained: Vec<Binding> = fields.iter().map(|(n, _)| (n.clone(), None)).collect();
-        check_function(&st.constructor, &globals, unconstrained);
+        for constructor in &st.constructors {
+            check_function(constructor, &globals, unconstrained.clone());
+        }
         check_function(&st.destructor, &globals, fields.clone());
         for method in &st.method_members {
             check_function(method, &globals, fields.clone());

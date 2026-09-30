@@ -146,7 +146,9 @@ pub fn check_uses(files: &[ProgramFile], scopes: &[FileScope]) -> Vec<Diagnostic
                     let names = members.entry(&s.name).or_default();
                     names.extend(s.fields.iter().map(|f| f.name.as_str()));
                     names.extend(s.methods.iter().map(|m| m.name.as_str()));
-                    if let Some(c) = &s.constructor
+                    // Overloaded constructors are checked per call, once
+                    // resolved (`passes::check_deprecated_members`).
+                    if let [c] = s.constructors.as_slice()
                         && let Some(deprecation) = declared(&c.attributes)
                     {
                         constructors.entry(&s.name).or_insert(Entry { deprecation, at: at(c.name_span) });

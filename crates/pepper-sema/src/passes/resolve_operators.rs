@@ -32,7 +32,7 @@ pub fn resolve_operators(module: &mut Module) {
         // the bodies below can coexist with it.
         let current = module.structs[st_idx].ty.clone();
         let st = &mut module.structs[st_idx];
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             targets.extend(resolve_body(body, &table, &overloads, Some(&current)));
         }
         for method in &mut st.method_members {

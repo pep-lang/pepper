@@ -38,7 +38,7 @@ pub fn specialize_methods(module: &mut Module) -> bool {
         };
         for st in module.structs.iter().filter(|s| s.generic_params.is_empty()) {
             let current = Some(&st.ty);
-            for method in st.method_members.iter().chain([&st.constructor, &st.destructor]) {
+            for method in st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]) {
                 if let Some(body) = &method.body {
                     let mut body = body.clone();
                     crate::passes::walk_block(&mut body, &mut |e| visit(e, current));

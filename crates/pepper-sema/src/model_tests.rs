@@ -74,7 +74,7 @@ fn basic_struct_builds_refcount_first() {
 fn ctor_body_contains_malloc_and_this() {
     let module = compile(BASIC_STRUCT);
     let st = &module.structs[0];
-    let ctor = &st.constructor;
+    let ctor = &st.constructors[0];
     assert_eq!(ctor.name, "Test");
     let body = ctor.body.as_ref().expect("ctor body");
     let dumped = format!("{:?}", body);

@@ -24,7 +24,7 @@ pub fn resolve_literals(module: &mut Module) {
         for method in &mut st.method_members {
             walk_function(method, &mut f);
         }
-        if let Some(body) = &mut st.constructor.body {
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
             crate::passes::walk_block(body, &mut f);
         }
         if let Some(body) = &mut st.destructor.body {

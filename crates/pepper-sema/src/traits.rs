@@ -97,7 +97,7 @@ pub fn used_trait_types(module: &Module) -> Vec<TypeName> {
         for method in st
             .method_members
             .iter()
-            .chain([&st.constructor, &st.destructor])
+            .chain(st.constructors.iter()).chain([&st.destructor])
         {
             function_types(method, &mut add);
         }

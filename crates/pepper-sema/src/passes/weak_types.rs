@@ -46,7 +46,7 @@ pub fn weak_struct(ty: &TypeName, atomic: bool) -> StructDef {
         field_members: vec![],
         method_members: vec![],
         generic_methods: vec![],
-        constructor: empty_function(&name, ty.clone(), &name),
+        constructors: vec![empty_function(&name, ty.clone(), &name)],
         destructor: empty_function("__dtor", TypeName::void(), &name),
         acquire: empty_function("__acquire", TypeName::void(), &name),
         release: empty_function("__release", TypeName::void(), &name),

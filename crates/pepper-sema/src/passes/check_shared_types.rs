@@ -153,7 +153,7 @@ pub(crate) fn use_site(module: &Module, spec: &str) -> Option<Loc> {
                 st.field_members
                     .iter()
                     .find_map(|f| var_loc(f, spec))
-                    .or_else(|| st.method_members.iter().chain([&st.constructor, &st.destructor]).find_map(|m| in_function(m, spec)))
+                    .or_else(|| st.method_members.iter().chain(st.constructors.iter()).chain([&st.destructor]).find_map(|m| in_function(m, spec)))
             })
         })
 }

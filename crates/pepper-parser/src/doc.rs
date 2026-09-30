@@ -338,7 +338,7 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
                 for field in s.fields.iter().filter(|f| is_public(&f.name)) {
                     checker.field(field, &format!("{}.{}", s.name, field.name));
                 }
-                if let Some(c) = &s.constructor {
+                for c in &s.constructors {
                     let doc = checker.member_doc(c);
                     checker.function(c, &format!("{}.{}", s.name, c.name), doc, &[]);
                 }

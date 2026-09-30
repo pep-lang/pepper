@@ -85,17 +85,21 @@ impl Declared {
                 own.entry(m.name.clone()).or_insert_with(|| Signature::of(m));
             }
             fields.insert(key.clone(), st.field_members.iter().map(|f| f.name.clone()).collect());
-            let mut ctor = Signature::of(&st.constructor);
-            ctor.ret = st.ty.clone();
-            // `this.x` parameters take their field's type.
-            for (name, ty) in &mut ctor.params {
-                if ty.contains_auto() || ty.is_empty() {
-                    if let Some(f) = st.field_members.iter().find(|f| f.name == *name) {
-                        *ty = f.ty.clone();
+            // Keyed by constructor name: the type (`Point`) or, when
+            // overloaded, a member of its set (`Point$2`).
+            for c in &st.constructors {
+                let mut ctor = Signature::of(c);
+                ctor.ret = st.ty.clone();
+                // `this.x` parameters take their field's type.
+                for (name, ty) in &mut ctor.params {
+                    if ty.contains_auto() || ty.is_empty() {
+                        if let Some(f) = st.field_members.iter().find(|f| f.name == *name) {
+                            *ty = f.ty.clone();
+                        }
                     }
                 }
+                constructors.insert(c.name.clone(), ctor);
             }
-            constructors.insert(key.clone(), ctor);
             if !st.name.starts_with("__") && !key.contains('<') {
                 plain_structs.insert(st.name.clone(), st.ty.clone());
             }
@@ -164,7 +168,7 @@ pub fn reference_functions(module: &mut Module) {
                     replacer.expression(default, false);
                 }
             }
-            for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+            for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
                 replacer.function(method);
             }
         }

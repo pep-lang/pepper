@@ -446,7 +446,7 @@ fn check_c_signatures(module: &Module) {
         for field in &st.field_members {
             check(field);
         }
-        for m in st.method_members.iter().chain([&st.constructor]) {
+        for m in st.method_members.iter().chain(st.constructors.iter()) {
             function(m, &mut check);
         }
     }
@@ -496,7 +496,8 @@ pub fn shared_functions(module: &mut Module) {
             .structs
             .iter()
             .filter(|st| concrete(st))
-            .map(|st| (st.name.clone(), params(&st.constructor)))
+            .flat_map(|st| st.constructors.iter())
+            .map(|c| (c.name.clone(), params(c)))
             .collect(),
         methods: module
             .structs
@@ -517,7 +518,9 @@ pub fn shared_functions(module: &mut Module) {
             continue;
         }
         let current = st.ty.clone();
-        converter.function(&mut st.constructor, Some(&current));
+        for constructor in &mut st.constructors {
+            converter.function(constructor, Some(&current));
+        }
         for method in &mut st.method_members {
             converter.function(method, Some(&current));
         }

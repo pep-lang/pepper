@@ -142,9 +142,11 @@ pub fn convert_member_refs(module: &mut Module) {
         // Constructor: params exempt.
         {
             let st = &mut module.structs[st_idx];
-            let mut locals: Vec<String> = st.constructor.parameters.iter().map(|p| p.name.clone()).collect();
-            if let Some(body) = &mut st.constructor.body {
-                convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
+            for c in &mut st.constructors {
+                let mut locals: Vec<String> = c.parameters.iter().map(|p| p.name.clone()).collect();
+                if let Some(body) = &mut c.body {
+                    convert_block(body, &st_name, &fields, &method_names, &mut locals, &globals);
+                }
             }
         }
 

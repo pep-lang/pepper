@@ -23,6 +23,10 @@ use std::collections::{HashMap, HashSet};
 /// -> its deprecation and where it is declared.
 type Members = HashMap<String, HashMap<String, (Deprecation, Loc)>>;
 
+/// The `Members` owner under which overloaded constructors are listed, by
+/// function name.
+const CONSTRUCTORS: &str = "";
+
 pub fn check_deprecated_members(module: &mut Module) {
     let mut members: Members = HashMap::new();
     let mut add = |owner: &str, name: &str, attributes: &[pepper_parser::ast::Attribute], at: Loc| {
@@ -46,6 +50,14 @@ pub fn check_deprecated_members(module: &mut Module) {
             add(&t.name, &m.name, &m.attributes, m.loc);
         }
     }
+    // An overloaded constructor (`Point$2`, `Box<int>$2`) is deprecated on
+    // its own; its calls are only known once overloads are resolved. A
+    // single constructor is checked on the AST with the struct.
+    for st in module.structs.iter().filter(|st| st.constructors.len() > 1) {
+        for c in &st.constructors {
+            add(CONSTRUCTORS, &c.name, &c.attributes, c.loc);
+        }
+    }
     if members.is_empty() {
         return;
     }
@@ -67,7 +79,9 @@ pub fn check_deprecated_members(module: &mut Module) {
             continue;
         }
         let current = st.ty.clone();
-        checker.function(&mut st.constructor, Some(&current));
+        for constructor in &mut st.constructors {
+            checker.function(constructor, Some(&current));
+        }
         checker.function(&mut st.destructor, Some(&current));
         for method in &mut st.method_members {
             if declared(&method.attributes).is_none() {
@@ -103,8 +117,30 @@ impl Checker<'_> {
         match expr {
             Expression::MethodCall { this, method, loc, .. } => self.member(this, method, *loc, current),
             Expression::MemberRef { lhs, name, loc } => self.member(lhs, name, *loc, current),
+            Expression::FunctionCall { function, loc, .. } => self.constructor(function, *loc),
             _ => {}
         }
+    }
+
+    /// A call to overloaded constructor `function` (`Point$2`) at `used`,
+    /// where the source spells the type (`Point`, `Box<int>` or `Box`).
+    fn constructor(&mut self, function: &str, used: Loc) {
+        let Some((deprecation, declared_at)) = self.members.get(CONSTRUCTORS).and_then(|m| m.get(function)).cloned()
+        else {
+            return;
+        };
+        let Some(used_at) = used.known() else { return };
+        let ty = super::overloads::set_name(function);
+        let base = ty.split('<').next().unwrap_or(ty);
+        let spelled = self
+            .sources
+            .get(used_at.file)
+            .and_then(|(_, text)| text.get(used_at.span.start..used_at.span.end))
+            .unwrap_or("");
+        if (spelled != ty && spelled != base) || !self.seen.insert((used_at.file.0, used_at.span.start)) {
+            return;
+        }
+        self.warnings.push(warning(base, &deprecation, used_at, spelled, declared_at));
     }
 
     /// The use of member `name` of `owner` at `used`.

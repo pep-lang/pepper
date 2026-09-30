@@ -36,7 +36,7 @@ pub fn lower_with_blocks(module: &mut Module) {
         if st.ty.is_generic() && st.name == st.ty.name {
             continue;
         }
-        for method in st.method_members.iter_mut().chain([&mut st.constructor, &mut st.destructor]) {
+        for method in st.method_members.iter_mut().chain(st.constructors.iter_mut()).chain([&mut st.destructor]) {
             if let Some(body) = &mut method.body {
                 lower_block(body, &types);
             }
