@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -476,6 +476,60 @@ such a struct’s fields to be <code>const</code> and thread-safe. See
 <code>() =&gt; void</code> has plain counts and stays on one thread, and a
 <a href="function-types.html#sharing-function-values-between-threads"><code>shared</code> function type</a>
 such as <code>shared () =&gt; void</code> has atomic counts.</p>
+<h2 id="copying-a-value-with-copy"><a class="header" href="#copying-a-value-with-copy">Copying a value with copy</a></h2>
+<p><code>copy(value)</code> makes a copy of a value that shares no object that is not
+thread-safe with the original, so the copy can go to another thread. A
+<a href="threads.html#channels">channel</a> copies every value it is sent this way.</p>
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("ada");
+var copied = copy(names);
+copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<ul>
+<li>Every struct object the value reaches is copied once. An object referenced
+twice is copied once and stays shared inside the copy, and a cycle becomes
+the same cycle among the copies.</li>
+<li>Thread-safe objects are not copied: a <code>[Shared]</code> struct or a <code>shared</code>
+function value in the original is the same object in the copy. For a
+thread-safe value, <code>copy</code> returns the value itself.</li>
+<li>A weak reference to an object that was copied points at its copy. A weak
+reference to an object outside the copied value becomes null.</li>
+<li>A struct is copied field by field, without running its constructor.</li>
+</ul>
+<p>A struct with a destructor or a raw pointer (<code>__ptr&lt;T&gt;</code>) field is not
+<strong>trivially copyable</strong>: copying its fields would share what it owns, such as
+a buffer it frees. Such a struct says how to copy itself by implementing
+<code>Copyable&lt;T&gt;</code>, with a <code>copy(Copies copies)</code> method that builds the copy and
+copies each value it holds with <code>copies.copy(value)</code>. <code>String</code>, <code>Array</code>,
+<code>HashMap</code> and <code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
+String; it replaces the deprecated <code>clone()</code>. <code>Array.clone()</code> is unchanged: it
+copies the Array but shares its elements.</p>
+<p>Copying a value that reaches a struct that is not trivially copyable and does
+not implement <code>Copyable&lt;T&gt;</code> is an error at the <code>copy</code> call. It names the
+struct, shows each field on the way to it, says why it cannot be copied, and
+shows a <code>Copyable&lt;T&gt;</code> to fill in (the editor offers to insert it):</p>
+<pre><code class="language-text">main.pep:14:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable
+   14 |     var c = copy(log);
+      |             ^~~~
+main.pep:9:5: note: 'Log' reaches it through field 'out'
+    9 |     Handle out;
+      |     ^~~~~~
+main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would release what it owns twice
+    1 | struct Handle {
+      |        ^~~~~~
+note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
+    extend Handle with Copyable&lt;Handle&gt; {
+        Handle copy(Copies copies) {
+            # Build the copy; copy each struct field with copies.copy(field).
+            panic("copying 'Handle' is not implemented");
+            return this;
+        }
+    }
+</code></pre>
+<p>Some types cannot be copied at all: an <code>io.File</code> owns an operating-system
+handle, so the error says to send its path instead. A plain function value
+cannot be copied, because it may capture anything; declare it <code>shared</code>. A
+trait value cannot be copied yet.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -490,6 +544,7 @@ such as <code>shared () =&gt; void</code> has atomic counts.</p>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
 <tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
+<tr><td><code>var c = copy(a);</code></td><td><code>c</code> refers to new objects; <code>a</code>’s count does not change.</td></tr>
 <tr><td>end of a block</td><td>Every local declared in the block releases its reference.</td></tr>
 </tbody>
 </table>

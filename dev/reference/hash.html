@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -337,6 +337,24 @@ the table.</p>
 </code></pre>
 <p>Removes every entry and releases the map’s references to their keys
 and values. The table keeps its capacity. Runs in O(capacity).</p>
+<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<pre><code class="language-pepper">HashMap&lt;K, V&gt; copy(Copies copies)
+</code></pre>
+<p>Returns a deep copy: a new map holding a copy of each key and value,
+made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashMap
+(the <code>Copyable&lt;HashMap&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code>
+rather than this method.</p>
+<p>The copied keys are hashed again, so a map keyed by struct identity
+finds its entries under the copied keys. Runs in O(capacity) plus the
+cost of copying the entries.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">bool contains(K key)
 </code></pre>
@@ -603,6 +621,24 @@ element is not inserted.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>key</code> (the argument, not an existing equal member), the value of the assignment expression</li>
+</ul>
+<h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
+<pre><code class="language-pepper">HashSet&lt;K&gt; copy(Copies copies)
+</code></pre>
+<p>Returns a deep copy: a new set holding a copy of each element, made
+with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashSet (the
+<code>Copyable&lt;HashSet&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than
+this method.</p>
+<p>The copied elements are hashed again, so a set of structs compared by
+identity finds the copied elements. Runs in O(capacity) plus the cost
+of copying the elements.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
 </ul>
 
                     </main>

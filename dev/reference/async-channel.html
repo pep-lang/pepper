@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,14 +198,19 @@ is full; <code>Channel&lt;T&gt;(0)</code>, the default, is unbounded and <code>s
 left and then get an error. Only <code>close()</code> closes a channel; dropping it
 or the threads that use it does not. <code>for (var v in channel)</code> receives
 until the channel is closed and empty.</p>
-<p><code>T</code> must be thread-safe (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-type such as <code>ThreadBody</code>), and is passed by reference; <code>Channel&lt;String&gt;</code> is
-a compile error.</p>
+<p><code>send</code> copies each value with <code>copy</code>, so the receiver gets a value that
+nothing on the sending thread references: a <code>String</code> or an <code>Array</code> can be
+sent, and changing the original afterwards does not affect what was sent.
+A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
+value such as a <code>ThreadBody</code>) is not copied but passed by reference. A
+type that <code>copy</code> cannot copy (a struct with a destructor or a raw pointer
+field that does not implement <code>Copyable&lt;T&gt;</code>, a plain function value, a
+trait value) is a compile error where the <code>Channel</code> is named.</p>
 <p>A Channel is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the values carried, which must be thread-safe</li>
+<li><code>T</code> — the type of the values carried</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
@@ -253,9 +258,10 @@ channel is full.</p>
 <p>The head index, the number of queued values, the number of slots in
 the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p>
 <h4 id="buffer"><a class="header" href="#buffer">Buffer</a></h4>
-<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;T&gt;&gt;
+<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;void&gt;&gt;
 </code></pre>
-<p>Holds the ring buffer of values. Read and written only under <code>Lock</code>.</p>
+<p>Holds the ring buffer of values (<code>T</code> slots). Read and written only
+under <code>Lock</code>.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -277,24 +283,29 @@ the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p
 <h4 id="send"><a class="header" href="#send">send</a></h4>
 <pre><code class="language-pepper">bool send(T value)
 </code></pre>
-<p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
+<p>Queues a copy of <code>value</code>, first waiting while a bounded channel is
+full.</p>
+<p>The copy is made with <code>copy</code> before waiting, so the value can be
+changed or dropped as soon as <code>send</code> returns; a thread-safe value is
+queued itself.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
+<li>true if the value was queued, false if the channel is closed (the copy is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (!results.send(42)) {
-        print("nobody is listening any more\n");
-    }
+<pre><code class="language-pepper">    var line = "hello";
+    lines.send(line);
+    line.append(" again");   # the receiver still gets "hello"
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
 <pre><code class="language-pepper">bool try_send(T value)
 </code></pre>
-<p>Queues <code>value</code> only if there is room right now, without waiting.</p>
+<p>Queues a copy of <code>value</code> only if there is room right now, without
+waiting. The copy is made even when it is not queued.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send</li>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,10 +198,10 @@
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
-<code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. The
-synchronization types carry and guard thread-safe values only, so
-<code>Channel&lt;String&gt;</code> is a compile error. See the language guide’s Threads
-chapter.</p>
+<code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. Any
+other value crosses threads as a copy: <code>Channel.send</code> copies what it sends
+with <code>copy</code>. <code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold thread-safe values only. See the
+language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 

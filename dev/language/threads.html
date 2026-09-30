@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -524,15 +524,78 @@ Several threads can loop over one channel; each value goes to one of them.</li>
 <li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
 threads may change right after.</li>
 </ul>
-<p><code>T</code> must be thread-safe, because the sender and the receiver both hold the
-value: numbers, <code>[Shared]</code> structs, and <code>shared</code> function values such as a
-<code>ThreadBody</code>, which makes a channel a work queue. A <code>Channel&lt;String&gt;</code> is a
-compile error for now (see <a href="#limitations">Limitations</a>):</p>
-<pre><code class="language-text">main.pep:4:17: error: shared struct 'Channel&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    4 |     var lines = async.Channel&lt;String&gt;(8);
-      |                 ^~~~~~~~~~~~~~~~~~~~~
-runtime/async/channel.pep:86:19: note: required by field 'Buffer' declared here
-runtime/string.pep:35:15: note: 'String' is not declared [Shared]
+<p><code>send</code> <a href="memory.html#copying-a-value-with-copy">copies</a> each value with
+<code>copy</code>, so the receiver gets a value that nothing on the sending thread
+references. A <code>String</code>, an <code>Array</code> or a struct of them can be sent, and
+changing the original after <code>send</code> does not change what was sent:</p>
+<pre><code class="language-pepper">import async;
+
+# A plain struct: no destructor and no raw pointer, so `copy` copies it field
+# by field. Its Strings and Array are not thread-safe, but a Channel copies
+# every value it is sent.
+struct Order {
+    String customer;
+    Array&lt;String&gt; items;
+    Order next;
+
+    construct(this.customer = "") {
+        items = Array&lt;String&gt;();
+    }
+}
+
+const orders = async.Channel&lt;Order&gt;();
+const letters = Atomic&lt;long&gt;(0);
+
+count_letters() {
+    for (var order in orders) {
+        for (var item in order.items) {
+            letters.fetch_add(item.length() as long);
+        }
+    }
+}
+
+main(): int {
+    # copy() makes a new object for everything that is not thread-safe.
+    var tea = Order("ada");
+    tea.items.append("tea");
+    var copied = copy(tea);
+    copied.items[0].append(" and cake");
+    assert(tea.items[0] == "tea", "the original is unchanged");
+
+    # Objects referenced twice stay shared in the copy, and cycles are kept.
+    var a = Order("a");
+    var b = Order("b");
+    a.next = b;
+    b.next = a;
+    var pair = copy(a);
+    assert(pair.next.next === pair, "the copy has the same cycle");
+    a.next = __null;
+    pair.next = __null;
+
+    # send() copies, so the order can change after it is sent.
+    var worker = async.Thread.spawn(count_letters);
+    var order = Order("grace");
+    order.items.append("coffee");
+    orders.send(order);
+    order.items.append("biscuits");
+    orders.close();
+    worker.join();
+    assert(letters.load() == 6, "the worker saw only what was sent");
+    return 0;
+}
+</code></pre>
+<p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value
+such as a <code>ThreadBody</code>) is not copied but passed by reference, which makes a
+channel of <code>ThreadBody</code> values a work queue. A type that <code>copy</code> cannot copy
+is an error where the <code>Channel</code> is named:</p>
+<pre><code class="language-text">main.pep:9:17: error: cannot copy 'Array&lt;Log&gt;' because it contains 'File', which cannot be copied
+    9 |     var lines = async.Channel&lt;Array&lt;Log&gt;&gt;();
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~
+note: 'Array&lt;Log&gt;' copies its values of type 'Log'
+main.pep:5:5: note: 'Log' reaches it through field 'out'
+    5 |     io.File out;
+      |     ^~~~~~~
+runtime/io/file.pep:244:15: note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread
 </code></pre>
 <p>The <a href="../reference/async-channel.html">Channel reference</a> documents every
 method.</p>
@@ -609,7 +672,7 @@ thread holds it.</li>
 <li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
 “poisoned”.</li>
 </ul>
-<p><code>T</code> must be thread-safe, as for a channel. A Mutex is for keeping several
+<p><code>T</code> must be thread-safe for now (see <a href="#limitations">Limitations</a>). A Mutex is for keeping several
 changes together, such as two <code>Atomic</code> fields of a <code>[Shared]</code> struct that
 must move as a unit, or state behind a raw pointer. For one number,
 <code>Atomic&lt;T&gt;</code> is simpler.</p>
@@ -753,8 +816,11 @@ must be thread-safe, since every thread gets the same value.</li>
 <p>The <a href="../reference/async-once.html">Once reference</a> has the details.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ul>
-<li><code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for
-now, so a <code>String</code> or an <code>Array</code> cannot cross threads through them yet.</li>
+<li><code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for now, so a
+<code>String</code> or an <code>Array</code> crosses threads only through a <code>Channel</code>, which
+copies it.</li>
+<li><code>copy</code> cannot copy a trait value yet, so a <code>Channel</code> of a trait type, or of
+an <code>Array</code> of one, is an error.</li>
 <li>There is no reader-writer lock, no <code>select</code> over several channels, and no
 barrier or semaphore. A Mutex is not re-entrant.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,

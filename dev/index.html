@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-845c075c.js"></script>
+        <script src="toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -248,8 +248,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 can be <a href="language/overloading.html">overloaded</a>; constructors cannot yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
-closure captures included. Channels, mutexes, <code>Once</code> and <code>Lazy</code> carry and
-guard thread-safe values only, so a <code>String</code> cannot cross threads yet (see
+closure captures included. A channel copies what it is sent with <code>copy</code>,
+so a <code>String</code> or an <code>Array</code> crosses threads that way; mutexes and <code>Lazy</code>
+hold thread-safe values only, and a trait value cannot be copied yet (see
 <a href="language/threads.html#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a

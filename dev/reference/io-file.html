@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -401,7 +401,7 @@ one.</p>
 <p>Creates a <code>Metadata</code> with every field zero or false. Metadata is
 normally obtained from a query such as <code>File.metadata()</code>.</p>
 <h2 id="file-1"><a class="header" href="#file-1">File</a></h2>
-<pre><code class="language-pepper">struct File
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")] struct File
 </code></pre>
 <p>An open file, or a standard stream, read and written through its
 platform handle (a file descriptor on POSIX, a <code>HANDLE</code> on Windows).</p>

@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-845c075c.js"></script>
+        <script src="toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -246,8 +246,9 @@ wherever the struct is expected, so <code>io.Path</code> parameters accept a <co
 can be <a href="#overloading-1">overloaded</a>; constructors cannot yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
-closure captures included. Channels, mutexes, <code>Once</code> and <code>Lazy</code> carry and
-guard thread-safe values only, so a <code>String</code> cannot cross threads yet (see
+closure captures included. A channel copies what it is sent with <code>copy</code>,
+so a <code>String</code> or an <code>Array</code> crosses threads that way; mutexes and <code>Lazy</code>
+hold thread-safe values only, and a trait value cannot be copied yet (see
 <a href="#limitations">threads</a>).</li>
 <li>Reference counting does not reclaim cycles on its own: two objects that
 refer to each other are never freed. Break the cycle with a
@@ -3609,6 +3610,60 @@ such a struct’s fields to be <code>const</code> and thread-safe. See
 <code>() =&gt; void</code> has plain counts and stays on one thread, and a
 <a href="#sharing-function-values-between-threads"><code>shared</code> function type</a>
 such as <code>shared () =&gt; void</code> has atomic counts.</p>
+<h2 id="copying-a-value-with-copy"><a class="header" href="#copying-a-value-with-copy">Copying a value with copy</a></h2>
+<p><code>copy(value)</code> makes a copy of a value that shares no object that is not
+thread-safe with the original, so the copy can go to another thread. A
+<a href="#channels">channel</a> copies every value it is sent this way.</p>
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("ada");
+var copied = copy(names);
+copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<ul>
+<li>Every struct object the value reaches is copied once. An object referenced
+twice is copied once and stays shared inside the copy, and a cycle becomes
+the same cycle among the copies.</li>
+<li>Thread-safe objects are not copied: a <code>[Shared]</code> struct or a <code>shared</code>
+function value in the original is the same object in the copy. For a
+thread-safe value, <code>copy</code> returns the value itself.</li>
+<li>A weak reference to an object that was copied points at its copy. A weak
+reference to an object outside the copied value becomes null.</li>
+<li>A struct is copied field by field, without running its constructor.</li>
+</ul>
+<p>A struct with a destructor or a raw pointer (<code>__ptr&lt;T&gt;</code>) field is not
+<strong>trivially copyable</strong>: copying its fields would share what it owns, such as
+a buffer it frees. Such a struct says how to copy itself by implementing
+<code>Copyable&lt;T&gt;</code>, with a <code>copy(Copies copies)</code> method that builds the copy and
+copies each value it holds with <code>copies.copy(value)</code>. <code>String</code>, <code>Array</code>,
+<code>HashMap</code> and <code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
+String; it replaces the deprecated <code>clone()</code>. <code>Array.clone()</code> is unchanged: it
+copies the Array but shares its elements.</p>
+<p>Copying a value that reaches a struct that is not trivially copyable and does
+not implement <code>Copyable&lt;T&gt;</code> is an error at the <code>copy</code> call. It names the
+struct, shows each field on the way to it, says why it cannot be copied, and
+shows a <code>Copyable&lt;T&gt;</code> to fill in (the editor offers to insert it):</p>
+<pre><code class="language-text">main.pep:14:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable
+   14 |     var c = copy(log);
+      |             ^~~~
+main.pep:9:5: note: 'Log' reaches it through field 'out'
+    9 |     Handle out;
+      |     ^~~~~~
+main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would release what it owns twice
+    1 | struct Handle {
+      |        ^~~~~~
+note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
+    extend Handle with Copyable&lt;Handle&gt; {
+        Handle copy(Copies copies) {
+            # Build the copy; copy each struct field with copies.copy(field).
+            panic("copying 'Handle' is not implemented");
+            return this;
+        }
+    }
+</code></pre>
+<p>Some types cannot be copied at all: an <code>io.File</code> owns an operating-system
+handle, so the error says to send its path instead. A plain function value
+cannot be copied, because it may capture anything; declare it <code>shared</code>. A
+trait value cannot be copied yet.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -3623,6 +3678,7 @@ such as <code>shared () =&gt; void</code> has atomic counts.</p>
 <tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
 <tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
 <tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
+<tr><td><code>var c = copy(a);</code></td><td><code>c</code> refers to new objects; <code>a</code>’s count does not change.</td></tr>
 <tr><td>end of a block</td><td>Every local declared in the block releases its reference.</td></tr>
 </tbody>
 </table>
@@ -6331,15 +6387,78 @@ Several threads can loop over one channel; each value goes to one of them.</li>
 <li><code>count()</code> and <code>is_closed()</code> report the channel’s state, which other
 threads may change right after.</li>
 </ul>
-<p><code>T</code> must be thread-safe, because the sender and the receiver both hold the
-value: numbers, <code>[Shared]</code> structs, and <code>shared</code> function values such as a
-<code>ThreadBody</code>, which makes a channel a work queue. A <code>Channel&lt;String&gt;</code> is a
-compile error for now (see <a href="#limitations">Limitations</a>):</p>
-<pre><code class="language-text">main.pep:4:17: error: shared struct 'Channel&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
-    4 |     var lines = async.Channel&lt;String&gt;(8);
-      |                 ^~~~~~~~~~~~~~~~~~~~~
-runtime/async/channel.pep:86:19: note: required by field 'Buffer' declared here
-runtime/string.pep:35:15: note: 'String' is not declared [Shared]
+<p><code>send</code> <a href="#copying-a-value-with-copy">copies</a> each value with
+<code>copy</code>, so the receiver gets a value that nothing on the sending thread
+references. A <code>String</code>, an <code>Array</code> or a struct of them can be sent, and
+changing the original after <code>send</code> does not change what was sent:</p>
+<pre><code class="language-pepper">import async;
+
+# A plain struct: no destructor and no raw pointer, so `copy` copies it field
+# by field. Its Strings and Array are not thread-safe, but a Channel copies
+# every value it is sent.
+struct Order {
+    String customer;
+    Array&lt;String&gt; items;
+    Order next;
+
+    construct(this.customer = "") {
+        items = Array&lt;String&gt;();
+    }
+}
+
+const orders = async.Channel&lt;Order&gt;();
+const letters = Atomic&lt;long&gt;(0);
+
+count_letters() {
+    for (var order in orders) {
+        for (var item in order.items) {
+            letters.fetch_add(item.length() as long);
+        }
+    }
+}
+
+main(): int {
+    # copy() makes a new object for everything that is not thread-safe.
+    var tea = Order("ada");
+    tea.items.append("tea");
+    var copied = copy(tea);
+    copied.items[0].append(" and cake");
+    assert(tea.items[0] == "tea", "the original is unchanged");
+
+    # Objects referenced twice stay shared in the copy, and cycles are kept.
+    var a = Order("a");
+    var b = Order("b");
+    a.next = b;
+    b.next = a;
+    var pair = copy(a);
+    assert(pair.next.next === pair, "the copy has the same cycle");
+    a.next = __null;
+    pair.next = __null;
+
+    # send() copies, so the order can change after it is sent.
+    var worker = async.Thread.spawn(count_letters);
+    var order = Order("grace");
+    order.items.append("coffee");
+    orders.send(order);
+    order.items.append("biscuits");
+    orders.close();
+    worker.join();
+    assert(letters.load() == 6, "the worker saw only what was sent");
+    return 0;
+}
+</code></pre>
+<p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value
+such as a <code>ThreadBody</code>) is not copied but passed by reference, which makes a
+channel of <code>ThreadBody</code> values a work queue. A type that <code>copy</code> cannot copy
+is an error where the <code>Channel</code> is named:</p>
+<pre><code class="language-text">main.pep:9:17: error: cannot copy 'Array&lt;Log&gt;' because it contains 'File', which cannot be copied
+    9 |     var lines = async.Channel&lt;Array&lt;Log&gt;&gt;();
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~
+note: 'Array&lt;Log&gt;' copies its values of type 'Log'
+main.pep:5:5: note: 'Log' reaches it through field 'out'
+    5 |     io.File out;
+      |     ^~~~~~~
+runtime/io/file.pep:244:15: note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread
 </code></pre>
 <p>The <a href="#asyncchannelpep">Channel reference</a> documents every
 method.</p>
@@ -6416,7 +6535,7 @@ thread holds it.</li>
 <li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
 “poisoned”.</li>
 </ul>
-<p><code>T</code> must be thread-safe, as for a channel. A Mutex is for keeping several
+<p><code>T</code> must be thread-safe for now (see <a href="#limitations">Limitations</a>). A Mutex is for keeping several
 changes together, such as two <code>Atomic</code> fields of a <code>[Shared]</code> struct that
 must move as a unit, or state behind a raw pointer. For one number,
 <code>Atomic&lt;T&gt;</code> is simpler.</p>
@@ -6560,8 +6679,11 @@ must be thread-safe, since every thread gets the same value.</li>
 <p>The <a href="#asynconcepep">Once reference</a> has the details.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ul>
-<li><code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for
-now, so a <code>String</code> or an <code>Array</code> cannot cross threads through them yet.</li>
+<li><code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold only thread-safe values for now, so a
+<code>String</code> or an <code>Array</code> crosses threads only through a <code>Channel</code>, which
+copies it.</li>
+<li><code>copy</code> cannot copy a trait value yet, so a <code>Channel</code> of a trait type, or of
+an <code>Array</code> of one, is an error.</li>
 <li>There is no reader-writer lock, no <code>select</code> over several channels, and no
 barrier or semaphore. A Mutex is not re-entrant.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
@@ -7350,6 +7472,7 @@ the code it replaces:</p>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
 <tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
+<tr><td><code>String.clone()</code></td><td><code>String.copy()</code></td></tr>
 <tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
 <tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
 <tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td><code>capacity()</code></td></tr>
@@ -8035,7 +8158,7 @@ contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
 <p>A String is a reference type: <code>var b = a;</code> shares one object, so
 <code>append</code>, <code>+=</code>, and <code>grow</code> are visible through every reference. Use
-<code>clone()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
+<code>copy()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
 content.</p>
 <p>A <code>StringIterator</code> panics when the String has been changed by <code>append</code>,
 <code>+=</code>, or <code>grow</code> since the iterator was created, so modifying a String
@@ -8250,11 +8373,31 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <ul>
 <li>the String’s NUL-terminated byte buffer, or <code>__null</code></li>
 </ul>
-<h4 id="clone"><a class="header" href="#clone">clone</a></h4>
-<pre><code class="language-pepper">String clone()
+<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<pre><code class="language-pepper">String copy(Copies copies = __null)
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size()).</p>
+<p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
+implementation), which passes <code>copies</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far, when <code>copy(value)</code> calls it; a String holds no other objects, so it is not used</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an independent copy of this String</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var a = "abc";
+    var b = a.copy();
+    b.append("d");   # a is still "abc"
+</code></pre>
+<h4 id="clone"><a class="header" href="#clone">clone</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'copy' instead", "copy")] String clone()
+</code></pre>
+<p>Deprecated: use <code>copy</code> instead. Returns a new String with the same
+content and its own buffer.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent copy of this String</li>
@@ -8820,6 +8963,30 @@ capacity equals this Array’s <code>count()</code>.</p>
 <pre><code class="language-pepper">    var b = a.clone();
     b.append(7);   # a is unchanged
 </code></pre>
+<h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
+<pre><code class="language-pepper">Array&lt;T&gt; copy(Copies copies)
+</code></pre>
+<p>Returns a deep copy: a new Array holding a copy of each element, made
+with <code>copies.copy</code>. This is how <code>copy(value)</code> copies an Array (the
+<code>Copyable&lt;Array&lt;T&gt;&gt;</code> implementation); call <code>copy(array)</code> rather than
+this method.</p>
+<p>Unlike <code>clone()</code>, which shares struct elements, the result shares no
+element that is not thread-safe with this Array. An element that
+appears twice is copied once. Runs in O(count) plus the cost of
+copying the elements.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    names.append("ada");
+    var copied = copy(names);   # calls this method
+</code></pre>
 <h4 id="operator--2-1"><a class="header" href="#operator--2-1">operator ==</a></h4>
 <pre><code class="language-pepper">bool ==(Array&lt;T&gt; rhs)
 </code></pre>
@@ -9095,6 +9262,24 @@ the table.</p>
 </code></pre>
 <p>Removes every entry and releases the map’s references to their keys
 and values. The table keeps its capacity. Runs in O(capacity).</p>
+<h4 id="copy-2"><a class="header" href="#copy-2">copy</a></h4>
+<pre><code class="language-pepper">HashMap&lt;K, V&gt; copy(Copies copies)
+</code></pre>
+<p>Returns a deep copy: a new map holding a copy of each key and value,
+made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashMap
+(the <code>Copyable&lt;HashMap&lt;K, V&gt;&gt;</code> implementation); call <code>copy(map)</code>
+rather than this method.</p>
+<p>The copied keys are hashed again, so a map keyed by struct identity
+finds its entries under the copied keys. Runs in O(capacity) plus the
+cost of copying the entries.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
 <h4 id="contains-2"><a class="header" href="#contains-2">contains</a></h4>
 <pre><code class="language-pepper">bool contains(K key)
 </code></pre>
@@ -9361,6 +9546,24 @@ element is not inserted.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>key</code> (the argument, not an existing equal member), the value of the assignment expression</li>
+</ul>
+<h4 id="copy-1-1"><a class="header" href="#copy-1-1">copy</a></h4>
+<pre><code class="language-pepper">HashSet&lt;K&gt; copy(Copies copies)
+</code></pre>
+<p>Returns a deep copy: a new set holding a copy of each element, made
+with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashSet (the
+<code>Copyable&lt;HashSet&lt;K&gt;&gt;</code> implementation); call <code>copy(set)</code> rather than
+this method.</p>
+<p>The copied elements are hashed again, so a set of structs compared by
+identity finds the copied elements. Runs in O(capacity) plus the cost
+of copying the elements.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/iterator.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="iterators"><a class="header" href="#iterators">Iterators</a></h1>
@@ -11202,7 +11405,7 @@ one.</p>
 <p>Creates a <code>Metadata</code> with every field zero or false. Metadata is
 normally obtained from a query such as <code>File.metadata()</code>.</p>
 <h2 id="file-1"><a class="header" href="#file-1">File</a></h2>
-<pre><code class="language-pepper">struct File
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")] struct File
 </code></pre>
 <p>An open file, or a standard stream, read and written through its
 platform handle (a file descriptor on POSIX, a <code>HANDLE</code> on Windows).</p>
@@ -11451,7 +11654,7 @@ leaves it truncated or partly written.</p>
         return 1;
     }
 </code></pre>
-<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<h4 id="copy-3"><a class="header" href="#copy-3">copy</a></h4>
 <pre><code class="language-pepper">static IoResult&lt;ulong&gt; copy(Path from, Path to)
 </code></pre>
 <p>Copies the contents of the file <code>from</code> to <code>to</code>, creating <code>to</code> or
@@ -12073,10 +12276,10 @@ sorted). Uses <code>opendir</code>/<code>readdir</code> on POSIX and
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
-<code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. The
-synchronization types carry and guard thread-safe values only, so
-<code>Channel&lt;String&gt;</code> is a compile error. See the language guide’s Threads
-chapter.</p>
+<code>Atomic&lt;T&gt;</code>, <code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code>, <code>Channel&lt;T&gt;</code> and <code>Mutex&lt;T&gt;</code>. Any
+other value crosses threads as a copy: <code>Channel.send</code> copies what it sends
+with <code>copy</code>. <code>Mutex&lt;T&gt;</code> and <code>Lazy&lt;T&gt;</code> hold thread-safe values only. See the
+language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
 
@@ -12458,14 +12661,19 @@ is full; <code>Channel&lt;T&gt;(0)</code>, the default, is unbounded and <code>s
 left and then get an error. Only <code>close()</code> closes a channel; dropping it
 or the threads that use it does not. <code>for (var v in channel)</code> receives
 until the channel is closed and empty.</p>
-<p><code>T</code> must be thread-safe (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
-type such as <code>ThreadBody</code>), and is passed by reference; <code>Channel&lt;String&gt;</code> is
-a compile error.</p>
+<p><code>send</code> copies each value with <code>copy</code>, so the receiver gets a value that
+nothing on the sending thread references: a <code>String</code> or an <code>Array</code> can be
+sent, and changing the original afterwards does not affect what was sent.
+A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function
+value such as a <code>ThreadBody</code>) is not copied but passed by reference. A
+type that <code>copy</code> cannot copy (a struct with a destructor or a raw pointer
+field that does not implement <code>Copyable&lt;T&gt;</code>, a plain function value, a
+trait value) is a compile error where the <code>Channel</code> is named.</p>
 <p>A Channel is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
-<li><code>T</code> — the type of the values carried, which must be thread-safe</li>
+<li><code>T</code> — the type of the values carried</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    import async;
@@ -12513,9 +12721,10 @@ channel is full.</p>
 <p>The head index, the number of queued values, the number of slots in
 the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p>
 <h4 id="buffer"><a class="header" href="#buffer">Buffer</a></h4>
-<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;T&gt;&gt;
+<pre><code class="language-pepper">const Buffer: __ptr&lt;__ptr&lt;void&gt;&gt;
 </code></pre>
-<p>Holds the ring buffer of values. Read and written only under <code>Lock</code>.</p>
+<p>Holds the ring buffer of values (<code>T</code> slots). Read and written only
+under <code>Lock</code>.</p>
 <h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -12537,24 +12746,29 @@ the buffer, and 1 once closed. Read and written only under <code>Lock</code>.</p
 <h4 id="send"><a class="header" href="#send">send</a></h4>
 <pre><code class="language-pepper">bool send(T value)
 </code></pre>
-<p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
+<p>Queues a copy of <code>value</code>, first waiting while a bounded channel is
+full.</p>
+<p>The copy is made with <code>copy</code> before waiting, so the value can be
+changed or dropped as soon as <code>send</code> returns; a thread-safe value is
+queued itself.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
+<li>true if the value was queued, false if the channel is closed (the copy is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (!results.send(42)) {
-        print("nobody is listening any more\n");
-    }
+<pre><code class="language-pepper">    var line = "hello";
+    lines.send(line);
+    line.append(" again");   # the receiver still gets "hello"
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
 <pre><code class="language-pepper">bool try_send(T value)
 </code></pre>
-<p>Queues <code>value</code> only if there is room right now, without waiting.</p>
+<p>Queues a copy of <code>value</code> only if there is room right now, without
+waiting. The copy is made even when it is not queued.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send</li>
@@ -13176,6 +13390,157 @@ Nothing runs yet.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true once a <code>get()</code> has finished running the initializer</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/copy.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="copypep"><a class="header" href="#copypep">copy.pep</a></h1>
+<p>Deep copies: <code>copy(value)</code> makes a copy that shares no object that is
+not thread-safe with the original, so it can be handed to another thread;
+<code>Copyable&lt;T&gt;</code> lets a type say how it is copied.</p>
+<p>Source: <code>runtime/copy.pep</code></p>
+<h2 id="copy-4"><a class="header" href="#copy-4">copy</a></h2>
+<pre><code class="language-pepper">copy&lt;T&gt;(T value): T
+</code></pre>
+<p>Returns a copy of <code>value</code> that shares no non-thread-safe object with it,
+so the copy can be handed to another thread.</p>
+<p>Every struct reachable from <code>value</code> whose type is not thread-safe is
+copied once. Objects referenced twice stay shared inside the copy, and
+cycles are preserved. Thread-safe objects (<code>[Shared]</code> structs, <code>shared</code>
+function values) are not copied: the copy references the same ones. A
+weak reference to a copied object points at its copy; a weak reference to
+an object outside the copied value becomes null.</p>
+<p>A struct is copied field by field, without running its constructor,
+unless it implements <code>Copyable&lt;T&gt;</code>. A struct with a destructor or a raw
+pointer field must implement <code>Copyable&lt;T&gt;</code> to be copied, since copying
+its fields would share what it owns; <code>String</code>, <code>Array</code>, <code>HashMap</code> and
+<code>HashSet</code> do. Copying such a struct that does not, a plain function value
+or a trait value is a compile error.</p>
+<p>Runs in O(size of the value) and allocates each copied object.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to copy</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a copy that shares no non-thread-safe object with <code>value</code>; <code>value</code> itself when <code>T</code> is thread-safe</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    names.append("ada");
+    var copied = copy(names);
+    copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<h2 id="copyable"><a class="header" href="#copyable">Copyable</a></h2>
+<pre><code class="language-pepper">trait Copyable&lt;T&gt;
+</code></pre>
+<p>A type that says how <code>copy</code> copies it, for a struct that <code>copy</code> cannot
+copy field by field: one with a destructor or a raw pointer field, such as
+a container that owns a buffer.</p>
+<p>Declare it with <code>extend Buffer with Copyable&lt;Buffer&gt; {}</code> and give the
+struct a <code>copy(Copies copies)</code> method. The method builds the copy and
+copies each value it holds with <code>copies.copy(value)</code>, which reuses a copy
+already made, so objects referenced twice stay shared.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the implementing type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Buffer {
+        __ptr&lt;u8&gt; Data;
+        ulong Size;
+
+        construct(ulong size = 0) {
+            Data = _pep_malloc(size);
+            Size = size;
+        }
+
+        destruct {
+            _pep_free(Data);
+        }
+
+        Buffer copy(Copies copies) {
+            var made = Buffer(Size);
+            var i: ulong = 0;
+            while (i &lt; Size) {
+                made.Data[i] = Data[i];
+                i = i + 1;
+            }
+            return made;
+        }
+    }
+
+    extend Buffer with Copyable&lt;Buffer&gt; {}
+</code></pre>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
+<pre><code class="language-pepper">T copy(Copies copies)
+</code></pre>
+<p>Returns a copy of this value, for <code>copy</code>.</p>
+<p>Copy each struct value this one holds with <code>copies.copy(value)</code>. A
+value that can hold a reference back to itself calls
+<code>copies.register(this, made)</code> before copying what it holds, so the
+cycle leads back to the copy.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="copies"><a class="header" href="#copies">Copies</a></h2>
+<pre><code class="language-pepper">struct Copies
+</code></pre>
+<p>The objects one <code>copy</code> call has copied so far, so each is copied once:
+objects referenced twice stay shared inside the copy, and cycles end.</p>
+<p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
+implementation it calls; programs do not create their own.</p>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty set of copies.</p>
+<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
+<pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
+</code></pre>
+<p>Returns the copy of <code>value</code>: <code>value</code> itself when <code>T</code> is thread-safe,
+the copy already made when the same object was copied before, and a
+new copy otherwise.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to copy</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    Pair copy(Copies copies) {
+        return Pair(copies.copy(first), copies.copy(second));
+    }
+</code></pre>
+<h4 id="register"><a class="header" href="#register">register</a></h4>
+<pre><code class="language-pepper">register&lt;T&gt;(original: T, made: T)
+</code></pre>
+<p>Records <code>made</code> as the copy of <code>original</code>, so that copying <code>original</code>
+again returns <code>made</code>. A <code>Copyable&lt;T&gt;</code> implementation calls it before
+copying the values it holds when one of them may lead back to it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value, a struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>original</code> — the object being copied</li>
+<li><code>made</code> — its copy</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>

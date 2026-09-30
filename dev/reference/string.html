@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
+            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-845c075c.js"></script>
+        <script src="../toc-53ed73c7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,7 +199,7 @@ contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
 <p>A String is a reference type: <code>var b = a;</code> shares one object, so
 <code>append</code>, <code>+=</code>, and <code>grow</code> are visible through every reference. Use
-<code>clone()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
+<code>copy()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
 content.</p>
 <p>A <code>StringIterator</code> panics when the String has been changed by <code>append</code>,
 <code>+=</code>, or <code>grow</code> since the iterator was created, so modifying a String
@@ -414,11 +414,31 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <ul>
 <li>the String’s NUL-terminated byte buffer, or <code>__null</code></li>
 </ul>
-<h4 id="clone"><a class="header" href="#clone">clone</a></h4>
-<pre><code class="language-pepper">String clone()
+<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<pre><code class="language-pepper">String copy(Copies copies = __null)
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size()).</p>
+<p>This is also how <code>copy(value)</code> copies a String (the <code>Copyable&lt;String&gt;</code>
+implementation), which passes <code>copies</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>copies</code> — the objects copied so far, when <code>copy(value)</code> calls it; a String holds no other objects, so it is not used</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an independent copy of this String</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var a = "abc";
+    var b = a.copy();
+    b.append("d");   # a is still "abc"
+</code></pre>
+<h4 id="clone"><a class="header" href="#clone">clone</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'copy' instead", "copy")] String clone()
+</code></pre>
+<p>Deprecated: use <code>copy</code> instead. Returns a new String with the same
+content and its own buffer.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent copy of this String</li>
