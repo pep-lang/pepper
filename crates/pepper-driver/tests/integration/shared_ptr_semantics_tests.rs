@@ -724,3 +724,104 @@ test(): int {{
     // jump site (the arm's fall-through tail is unreachable).
     assert_eq!(delta, 0, "break in an if-arm must release the arm's locals");
 }
+
+// ── sync primitives: locks, channels and lazy values net-zero ───────────────
+
+/// A `[Shared]` value with an atomic count, the kind the `async` sync types
+/// hold today.
+const LABEL: &str = r#"
+import async;
+
+[Shared]
+struct Label {
+    const Id: int;
+    construct(this.Id = 0) {}
+}
+"#;
+
+#[test]
+fn census_mutex_lock_exit_paths() {
+    let (code, delta) = compile_jit_census(&format!(
+        r#"{LABEL}
+int returns(async.Mutex<Label> m) {{
+    with (var label = m.lock()) {{
+        var local = Label(label.Id + 1);
+        return local.Id;
+    }}
+    return -1;
+}}
+
+test(): int {{
+    var m = async.Mutex<Label>(Label(1));
+    if (returns(m) != 2) {{ return 1; }}
+    var i = 0;
+    while (i < 4) {{
+        i = i + 1;
+        with (var label = m.lock()) {{
+            var local = Label(i);
+            if (i == 1) {{ continue; }}
+            if (i == 3) {{ break; }}
+        }}
+    }}
+    with (var label = m.try_lock()) {{
+        var local = label;
+    }} else {{
+        return 2;
+    }}
+    var c = m.condition();
+    return 0;
+}}"#
+    ));
+    assert_eq!(code, 0, "every exit path must unlock");
+    assert_eq!(delta, 0, "lock, try_lock and every exit from a with body must net zero");
+}
+
+#[test]
+fn census_channel_dropped_with_values() {
+    let (code, delta) = compile_jit_census(&format!(
+        r#"{LABEL}
+test(): int {{
+    var c = async.Channel<Label>();
+    var i = 0;
+    while (i < 40) {{
+        c.send(Label(i));
+        i = i + 1;
+    }}
+    var first = c.receive();
+    if (first.value().Id != 0) {{ return 1; }}
+    for (var label in c.iterate()) {{
+        if (label.Id == 10) {{ break; }}
+    }}
+    var bounded = async.Channel<Label>(2);
+    bounded.send(Label(1));
+    bounded.try_send(Label(2));
+    bounded.close();
+    return 0;
+}}"#
+    ));
+    assert_eq!(code, 0);
+    assert_eq!(delta, 0, "a channel dropped with values queued must release them");
+}
+
+#[test]
+fn census_once_and_lazy() {
+    let (code, delta) = compile_jit_census(&format!(
+        r#"{LABEL}
+make(): Label {{
+    return Label(7);
+}}
+
+nothing() {{}}
+
+test(): int {{
+    var once = async.Once();
+    once.call(nothing);
+    var lazy = async.Lazy<Label>(make);
+    if (lazy.get().Id != 7) {{ return 1; }}
+    var unused = async.Lazy<Label>(make);
+    return 0;
+}}"#
+    ));
+    assert_eq!(code, 0);
+    assert_eq!(delta, 0, "Once and Lazy, built or not, must free everything");
+}

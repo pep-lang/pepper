@@ -148,7 +148,9 @@ main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
 note: threads change a shared struct's state through a thread-safe member such as 'Atomic<T>'
 ```
 
-`Thread`, `ThreadLocal<T>` and `Atomic<T>` are `[Shared]` themselves.
+`Thread`, `ThreadLocal<T>` and `Atomic<T>` are `[Shared]` themselves, and so
+are the synchronization types below: `Channel<T>`, `Mutex<T>`,
+`Condition<T>`, `Once` and `Lazy<T>`.
 
 ### Module-scope variables
 
@@ -193,7 +195,122 @@ Module-scope variables are initialized before `main` runs, in the order they
 are declared, and each file's after those of the files it imports and of the
 runtime. So an initializer may use the variables of the files it imports.
 
+## Channels
+
+A `Channel<T>` carries values from threads that send to threads that
+receive, with any number of each, like a Go channel:
+
+```pepper
+{{#include ../../examples/threads-channel.pep}}
+```
+
+- `Channel<T>(capacity)` makes a channel that holds at most `capacity`
+  values; `send` waits while it is full. `Channel<T>()` (capacity 0) is
+  unbounded, and `send` never waits.
+- `send(value)` queues a value and returns `true`, or returns `false` if the
+  channel is closed. `try_send(value)` does not wait: it also returns
+  `false` when a bounded channel is full.
+- `receive()` waits for the next value and returns a `Result<T>`: the
+  value, or an error once the channel is closed and empty.
+  `try_receive()` returns an error right away when nothing is waiting, and
+  `receive_for(milliseconds)` when the time runs out.
+- `close()` ends the stream and wakes every waiting sender and receiver.
+  Values already queued are still received. Only `close()` closes a
+  channel: dropping it, or ending the threads that use it, does not.
+- `for (var v in channel)` receives until the channel is closed and empty.
+  Several threads can loop over one channel; each value goes to one of them.
+- Values from one sender arrive in the order they were sent.
+- `count()` and `is_closed()` report the channel's state, which other
+  threads may change right after.
+
+`T` must be thread-safe, because the sender and the receiver both hold the
+value: numbers, `[Shared]` structs, and `shared` function values such as a
+`ThreadBody`, which makes a channel a work queue. A `Channel<String>` is a
+compile error for now (see [Limitations](#limitations)):
+
+```text
+main.pep:4:17: error: shared struct 'Channel<String>' requires thread-safe type arguments; 'String' is not thread-safe
+    4 |     var lines = async.Channel<String>(8);
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+runtime/async/channel.pep:86:19: note: required by field 'Buffer' declared here
+runtime/string.pep:35:15: note: 'String' is not declared [Shared]
+```
+
+The [Channel reference](../reference/async-channel.md) documents every
+method.
+
+## Mutexes and conditions
+
+A `Mutex<T>` owns a value that one thread at a time can use. The way to
+reach the value is a [`with` block](scopes.md):
+
+```pepper
+{{#include ../../examples/threads-mutex.pep}}
+```
+
+- `with (var v = mutex.lock()) { ... }` waits until no other thread holds
+  the lock, binds the value, and unlocks when the block ends by any path:
+  the end of the body, `return`, `break` or `continue`. Everything a thread
+  did while it held the lock is visible to the next thread that takes it.
+- `try_lock()` does not wait. With `with (var v = mutex.try_lock()) { ... }
+  else { ... }`, the body runs if the lock was free and the `else` block runs
+  if it was not.
+- A Mutex is not re-entrant: calling `lock()` again on the thread that holds
+  it panics instead of deadlocking. `is_held()` reports whether the calling
+  thread holds it.
+- A `panic` while a Mutex is held ends the program, so a Mutex is never left
+  "poisoned".
+
+`T` must be thread-safe, as for a channel. A Mutex is for keeping several
+changes together, such as two `Atomic` fields of a `[Shared]` struct that
+must move as a unit, or state behind a raw pointer. For one number,
+`Atomic<T>` is simpler.
+
+A `Condition<T>` lets a thread that holds a Mutex sleep until another thread
+changes the value. Get one with `mutex.condition()`:
+
+```pepper
+{{#include ../../examples/threads-condition.pep}}
+```
+
+- `wait()` must run while the calling thread holds the Mutex, normally
+  inside its `with` block. It unlocks, sleeps until notified, and locks again
+  before returning. It panics if the thread does not hold the Mutex.
+- A thread can wake without a notification (a spurious wakeup), and another
+  thread may get to the value first, so always wait in a loop that re-checks
+  what it waits for.
+- `wait_for(milliseconds)` gives up after that long and returns `false`.
+- `notify_one()` wakes one waiting thread, and `notify_all()` wakes them all.
+
+The [Mutex reference](../reference/async-mutex.md) documents `Mutex`,
+`MutexGuard` and `Condition`.
+
+## Once and Lazy
+
+`Once` runs a function exactly once, however many threads ask, and `Lazy<T>`
+builds a value the first time a thread asks for it:
+
+```pepper
+{{#include ../../examples/threads-lazy.pep}}
+```
+
+- `once.call(body)` runs `body` if no call has run one yet. Threads that
+  call it while the body runs wait for it, and every caller sees what the
+  body did. `is_done()` reports whether it has run.
+- `Lazy<T>(initializer)` takes a `shared () => T` function. The first
+  `get()` runs it; later calls, from any thread, return the same value.
+  `is_built()` reports whether it has run.
+- A `Lazy<T>` is the usual way to give a module-scope variable a value that
+  is expensive to build, or that cannot be built before `main` runs. Its `T`
+  must be thread-safe, since every thread gets the same value.
+
+The [Once reference](../reference/async-once.md) has the details.
+
 ## Limitations
 
-- There are no mutexes, condition variables or channels yet. Coordinate
-  threads with `Atomic<T>` and `join()`.
+- `Channel<T>`, `Mutex<T>` and `Lazy<T>` hold only thread-safe values for
+  now, so a `String` or an `Array` cannot cross threads through them yet.
+- There is no reader-writer lock, no `select` over several channels, and no
+  barrier or semaphore. A Mutex is not re-entrant.
+- Deadlocks are not detected, except locking a Mutex twice on one thread,
+  which panics.

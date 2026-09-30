@@ -54,6 +54,9 @@
     - [Thread](reference/async-thread.md)
     - [ThreadLocal](reference/async-thread_local.md)
     - [Processor counts](reference/async-cpus.md)
+    - [async/channel.pep](reference/async-channel.md)
+    - [async/mutex.pep](reference/async-mutex.md)
+    - [async/once.pep](reference/async-once.md)
 <!-- reference:end -->
 
 # Contributing

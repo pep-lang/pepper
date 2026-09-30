@@ -732,7 +732,7 @@ diagnostics"). The mechanics:
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. `[Shared]`, so its `T` must be thread-safe. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
-| `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`), `cpus.pep` (`logical_cpus`, `physical_cpus`), and the platform layer in `sys_posix.pep` (pthreads, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `GetLogicalProcessorInformationEx`). |
+| `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`), `cpus.pep` (`logical_cpus`, `physical_cpus`), the synchronization types in `mutex.pep` (`Mutex<T>`, `MutexGuard<T>`, `Condition<T>`), `once.pep` (`Once`, `Lazy<T>`) and `channel.pep` (`Channel<T>`, `ChannelIterator<T>`), and the platform layer in `sys_posix.pep` (pthreads and pthread mutexes and condition variables, `clock_gettime`, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `SRWLOCK` and `CONDITION_VARIABLE`, `GetTickCount64`, `GetLogicalProcessorInformationEx`). The synchronization types are `[Shared]`: platform locks live in fixed heap blocks (`const __ptr<void>`), and state that changes lives in raw heap slots read and written only under the lock. Each stores its values behind a `const __ptr<T>` (or `__ptr<__ptr<T>>`) field, so `check_shared_types` accepts only a thread-safe `T` (`Channel<String>` is an error), with no compiler support. A Mutex records its holder's OS thread id (`_async_sys_os_thread`) to panic on a re-lock and to check `Condition.wait`'s caller. |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
 
 - **Loading.** Every top-level `runtime/*.pep` is a prelude file. Its
@@ -1074,6 +1074,10 @@ compiles the code but cannot run it. Run it for real with the
   (see `crates/pepper-codegen/Cargo.toml`).
 - Some passes leave unresolved nodes for codegen to report as
   `unknown …`.
+- **Sync types hold thread-safe values only.** `Channel<T>`, `Mutex<T>` and
+  `Lazy<T>` rely on `check_shared_types` to reject a non-thread-safe `T`.
+  A `String` crosses threads only once `send` copies values and the compiler
+  confines what a `with` block over a lock may let escape (both planned).
 - **Only the first sema error is reported** per compile
   (`errors::report`).
 - **Specialization fixpoint is capped at 16 rounds.** A type that nests

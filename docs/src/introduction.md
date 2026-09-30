@@ -54,7 +54,7 @@ traits (with default methods, and usable as types), function types and
 closures, modules, `Result`-based error handling, iteration (with `map` and
 `filter` adapters),
 `with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
-maps and sets, atomics, threads, and file-system access. That is enough to write real
+maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:
 
@@ -70,7 +70,8 @@ Some that you will meet quickly:
   There is no function or method overloading yet.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, which the compiler checks,
-  closure captures included; there are no mutexes or channels yet (see
+  closure captures included. Channels, mutexes, `Once` and `Lazy` carry and
+  guard thread-safe values only, so a `String` cannot cross threads yet (see
   [threads](language/threads.md#limitations)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a

@@ -23,6 +23,22 @@ import io;
 [Target(!OS(Windows))] extern int nanosleep(void* request, void* remaining);
 [Target(!OS(Windows))] extern long sysconf(int name);
 [Target(OS(Mac))] extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
+[Target(!OS(Windows))] extern int pthread_mutex_init(void* mutex, void* attributes);
+[Target(!OS(Windows))] extern int pthread_mutex_destroy(void* mutex);
+[Target(!OS(Windows))] extern int pthread_mutex_lock(void* mutex);
+[Target(!OS(Windows))] extern int pthread_mutex_trylock(void* mutex);
+[Target(!OS(Windows))] extern int pthread_mutex_unlock(void* mutex);
+[Target(!OS(Windows))] extern int pthread_cond_init(void* condition, void* attributes);
+[Target(!OS(Windows))] extern int pthread_cond_destroy(void* condition);
+[Target(!OS(Windows))] extern int pthread_cond_wait(void* condition, void* mutex);
+[Target(!OS(Windows))] extern int pthread_cond_signal(void* condition);
+[Target(!OS(Windows))] extern int pthread_cond_broadcast(void* condition);
+[Target(!OS(Windows))] extern int clock_gettime(int clock, void* time);
+[Target(OS(Linux))] extern int pthread_condattr_init(void* attributes);
+[Target(OS(Linux))] extern int pthread_condattr_setclock(void* attributes, int clock);
+[Target(OS(Linux))] extern int pthread_condattr_destroy(void* attributes);
+[Target(OS(Linux))] extern int pthread_cond_timedwait(void* condition, void* mutex, void* deadline);
+[Target(OS(Mac))] extern int pthread_cond_timedwait_relative_np(void* condition, void* mutex, void* timeout);
 
 # ── Threads ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +103,137 @@ import io;
 
 [Target(!OS(Windows))] export _async_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
+}
+
+# ── Mutexes and condition variables ──────────────────────────────────────────
+#
+# Each lives in its own 64-byte heap block, which covers `pthread_mutex_t`
+# (40 bytes on Linux x86_64, 48 on Linux aarch64, 64 on macOS) and
+# `pthread_cond_t` (48): a pthread mutex or condition must not move once
+# initialized. Mutexes are the default (non-recursive) kind; `Mutex<T>`
+# panics on a re-lock before it would deadlock.
+
+# A new, unlocked mutex.
+[Target(!OS(Windows))] export _async_sys_mutex_create(): __ptr<void> {
+    var mutex = _pep_malloc(64);
+    if (pthread_mutex_init(mutex, __null) != 0) {
+        panic("Mutex: the operating system could not create a mutex");
+    }
+    return mutex;
+}
+
+# Destroys an unlocked mutex and frees its block.
+[Target(!OS(Windows))] export _async_sys_mutex_destroy(mutex: __ptr<void>) {
+    pthread_mutex_destroy(mutex);
+    _pep_free(mutex);
+}
+
+[Target(!OS(Windows))] export _async_sys_mutex_lock(mutex: __ptr<void>) {
+    pthread_mutex_lock(mutex);
+}
+
+# Locks `mutex` only if it is free; true if it is now held.
+[Target(!OS(Windows))] export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
+    return pthread_mutex_trylock(mutex) == 0;
+}
+
+[Target(!OS(Windows))] export _async_sys_mutex_unlock(mutex: __ptr<void>) {
+    pthread_mutex_unlock(mutex);
+}
+
+# A new condition variable. On Linux it times waits against the monotonic
+# clock (CLOCK_MONOTONIC is 1), so a change to the wall clock cannot stretch
+# or cut a timed wait.
+[Target(OS(Linux))] export _async_sys_condition_create(): __ptr<void> {
+    var condition = _pep_malloc(64);
+    var attributes = _pep_malloc(16);   # pthread_condattr_t: 4 bytes
+    pthread_condattr_init(attributes);
+    pthread_condattr_setclock(attributes, 1);
+    var result = pthread_cond_init(condition, attributes);
+    pthread_condattr_destroy(attributes);
+    _pep_free(attributes);
+    if (result != 0) {
+        panic("Condition: the operating system could not create a condition variable");
+    }
+    return condition;
+}
+
+# A new condition variable. macOS times waits with
+# `pthread_cond_timedwait_relative_np`, which needs no clock setting.
+[Target(OS(Mac))] export _async_sys_condition_create(): __ptr<void> {
+    var condition = _pep_malloc(64);
+    if (pthread_cond_init(condition, __null) != 0) {
+        panic("Condition: the operating system could not create a condition variable");
+    }
+    return condition;
+}
+
+# Destroys a condition variable no thread waits on and frees its block.
+[Target(!OS(Windows))] export _async_sys_condition_destroy(condition: __ptr<void>) {
+    pthread_cond_destroy(condition);
+    _pep_free(condition);
+}
+
+# Unlocks `mutex` (held by the caller), sleeps until notified (or woken
+# spuriously), and locks it again.
+[Target(!OS(Windows))] export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
+    pthread_cond_wait(condition, mutex);
+}
+
+# Like `_async_sys_condition_wait`, for at most `milliseconds`; false if the
+# time ran out. Waits past ~31 years are capped.
+[Target(OS(Linux))] export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
+    var wait = milliseconds > 1000000000000 ? 1000000000000 : milliseconds;
+    # An absolute deadline on the monotonic clock: struct timespec
+    # { time_t tv_sec; long tv_nsec; }.
+    __ptr<long> deadline = _pep_malloc(16);
+    clock_gettime(1, deadline);
+    deadline[0] = deadline[0] + (wait / 1000) as long;
+    deadline[1] = deadline[1] + ((wait % 1000) * 1000000) as long;
+    if (deadline[1] >= 1000000000) {
+        deadline[0] = deadline[0] + 1;
+        deadline[1] = deadline[1] - 1000000000;
+    }
+    var result = pthread_cond_timedwait(condition, mutex, deadline);
+    _pep_free(deadline);
+    return result == 0;
+}
+
+[Target(OS(Mac))] export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
+    var wait = milliseconds > 1000000000000 ? 1000000000000 : milliseconds;
+    # A relative timeout: struct timespec { time_t tv_sec; long tv_nsec; }.
+    __ptr<long> timeout = _pep_malloc(16);
+    timeout[0] = (wait / 1000) as long;
+    timeout[1] = ((wait % 1000) * 1000000) as long;
+    var result = pthread_cond_timedwait_relative_np(condition, mutex, timeout);
+    _pep_free(timeout);
+    return result == 0;
+}
+
+[Target(!OS(Windows))] export _async_sys_condition_notify_one(condition: __ptr<void>) {
+    pthread_cond_signal(condition);
+}
+
+[Target(!OS(Windows))] export _async_sys_condition_notify_all(condition: __ptr<void>) {
+    pthread_cond_broadcast(condition);
+}
+
+# Milliseconds on a clock that only moves forward (CLOCK_MONOTONIC: 1 on
+# Linux, 6 on macOS), for measuring timeouts.
+[Target(OS(Linux))] export _async_sys_monotonic_milliseconds(): ulong {
+    return _async_monotonic_milliseconds(1);
+}
+
+[Target(OS(Mac))] export _async_sys_monotonic_milliseconds(): ulong {
+    return _async_monotonic_milliseconds(6);
+}
+
+[Target(!OS(Windows))] _async_monotonic_milliseconds(clock: int): ulong {
+    __ptr<long> time = _pep_malloc(16);
+    clock_gettime(clock, time);
+    var milliseconds = (time[0] * 1000 + time[1] / 1000000) as ulong;
+    _pep_free(time);
+    return milliseconds;
 }
 
 # ── Processor counts (0 when unknown) ────────────────────────────────────────

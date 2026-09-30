@@ -567,6 +567,24 @@ fn shared_generic_argument_not_thread_safe() {
 }
 
 #[test]
+fn channel_of_non_thread_safe_type() {
+    // Until values are copied on send, a Channel carries only thread-safe
+    // values; the buffer field's `__ptr<__ptr<T>>` makes that the existing
+    // shared-struct check.
+    let error = error_of("channel_of_string", "import async;\n\nmain(): int {\n    var lines = async.Channel<String>(8);\n    return 0;\n}\n");
+    assert!(
+        error.starts_with(
+            "main.pep:4:17: error: shared struct 'Channel<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
+             \x20   4 |     var lines = async.Channel<String>(8);\n\
+             \x20     |                 ^~~~~~~~~~~~~~~~~~~~~\n"
+        ),
+        "{error}"
+    );
+    assert!(error.contains("note: required by field 'Buffer' declared here"), "{error}");
+    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+}
+
+#[test]
 fn function_pointer_undeclared() {
     assert_eq!(
         error_of("function_pointer_undeclared", "main(): int {\n    var p = __function_pointer(nope);\n    return 0;\n}\n"),

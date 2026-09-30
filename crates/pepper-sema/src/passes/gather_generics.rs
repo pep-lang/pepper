@@ -264,6 +264,11 @@ fn param_names(params: &[crate::model::GenericParam]) -> Vec<TypeName> {
 
 /// Parse `Name<a, b>` back into a TypeName (specs are carried as TypeNames).
 pub fn parse_type_string(s: &str) -> TypeName {
+    // A pointer type keeps its stars in the name (`Atomic<long>*`), with no
+    // type arguments of its own.
+    if s.ends_with('*') {
+        return TypeName::new(s);
+    }
     let Some(open) = s.find('<') else {
         return TypeName::new(s);
     };
