@@ -863,7 +863,7 @@ trait ToString
 
 Something with a text form: a `to_string()` method returning a String.
 
-An interpolated string (`$"total: {total}"`) converts each value it names
+An interpolated string (`$"total: {a + b}"`) converts each value it holds
 with `to_string(value)`, so a struct that implements `ToString` can be
 interpolated, as can the integers, `bool`, and `String`, which have
 `to_string` overloads. `String`, `StringBuilder` and `io.Path` implement

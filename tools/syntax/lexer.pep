@@ -124,12 +124,91 @@ slice(data: __ptr<char>, start: ulong, end: ulong): String {
     return String(data + start, end - start);
 }
 
+# The offset of the `quote` that closes the string or character literal whose
+# text starts at `start`, or of the line break or end of source that stops
+# the scan first.
+quoted_end(data: __ptr<char>, size: ulong, start: ulong, quote: int): ulong {
+    ulong i = start;
+    while (i < size and data[i] != quote and data[i] != '\n') {
+        if (data[i] == '\\') {
+            i += 1;
+        }
+        i += 1;
+    }
+    if (i > size) {
+        return size;
+    }
+    return i;
+}
+
+# The offset of the `"` that closes the interpolated string whose text starts
+# at `start`, inside another one's braces, or of the line break, `#` or end
+# of source that stops the scan first.
+interpolated_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
+    ulong i = start;
+    while (i < size and data[i] != '"' and data[i] != '\n') {
+        int c = data[i];
+        if (c == '\\' or (c == '{' and i + 1 < size and data[i + 1] == '{')) {
+            i += 2;
+            continue;
+        }
+        if (c == '{') {
+            i = interpolation_end(data, size, i + 1);
+            if (i >= size or data[i] != '}') {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    if (i > size) {
+        return size;
+    }
+    return i;
+}
+
+# Where the expression in an interpolated string's braces ends, scanning from
+# `start`, just after the `{`: the offset of the `}` that closes it, or of the
+# line break, `#` or end of source that stops the scan first. Brackets nest,
+# and literals are skipped whole, so `{f("}")}` ends at its last `}`.
+# Mirrors `interpolation_end` in crates/pepper-parser/src/parser/parsers.rs.
+interpolation_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
+    ulong i = start;
+    ulong depth = 0;
+    while (i < size) {
+        int c = data[i];
+        if (c == '\n' or c == '#') {
+            return i;
+        }
+        if (c == '{') {
+            depth += 1;
+        } else if (c == '}') {
+            if (depth == 0) {
+                return i;
+            }
+            depth -= 1;
+        } else if (c == '"' or c == '\'') {
+            i = quoted_end(data, size, i + 1, c);
+            if (i >= size or data[i] != c) {
+                return i;
+            }
+        } else if (c == '$' and i + 1 < size and data[i + 1] == '"') {
+            i = interpolated_end(data, size, i + 2);
+            if (i >= size or data[i] != '"') {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return size;
+}
+
 ## Splits `source` into tokens. The last token is always a `TokenKind.End`
 ## that holds the comments after the last real token.
 ##
 ## @param source the text of a Pepper source file
-## @returns the tokens, or the first lexical error: an unterminated string or
-##   a character that cannot start a token
+## @returns the tokens, or the first lexical error: an unterminated string,
+##   an unclosed `{` in an interpolated string, or a character that cannot
+##   start a token
 export lex(source: String): Result<Token[], SyntaxError> {
     var tokens = Array<Token>();
     var table = punctuation_table();
@@ -219,19 +298,42 @@ export lex(source: String): Result<Token[], SyntaxError> {
             if (c == '\'') {
                 kind = TokenKind.Character;
             }
-            # An interpolated string, `$"n = {n}"`, is one token; its names
-            # hold no quotes, so it ends at the next unescaped `"` too.
-            if (c == '$') {
+            # An interpolated string, `$"sum = {a + b}"`, is one token; the
+            # expressions in its braces are skipped whole, strings and all.
+            bool interpolated = c == '$';
+            if (interpolated) {
                 c = '"';
                 i += 1;
             }
             i += 1;
             bool closed = false;
+            bool line_break = false;
             while (i < size and (c == '"' or data[i] != '\n')) {
                 int b = data[i];
-                if (b == '\\') {
+                if (b == '\\' or (interpolated and b == '{' and i + 1 < size and data[i + 1] == '{')) {
                     i += 2;
                     continue;
+                }
+                if (interpolated and b == '{') {
+                    ulong end = interpolation_end(data, size, i + 1);
+                    if (end >= size or data[end] != '}') {
+                        # After a line break, the literal was likely never
+                        # closed, as the compiler reports it.
+                        if (line_break) {
+                            break;
+                        }
+                        if (end < size and data[end] == '#') {
+                            return Result<Token[], SyntaxError>.err(
+                                SyntaxError("a comment cannot appear inside '{}' in an interpolated string", end)
+                            );
+                        }
+                        return Result<Token[], SyntaxError>.err(SyntaxError("expected '}'", end));
+                    }
+                    i = end + 1;
+                    continue;
+                }
+                if (b == '\n') {
+                    line_break = true;
                 }
                 i += 1;
                 if (b == c) {

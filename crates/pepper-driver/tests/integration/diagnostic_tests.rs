@@ -2545,9 +2545,9 @@ fn interpolation_unmatched_brace() {
 fn interpolation_unclosed_brace() {
     assert_eq!(
         error_of("interpolation_unclosed", "main(): int {\n    var x = 1;\n    print($\"a {x b\");\n    return 0;\n}\n"),
-        "main.pep:3:17: error: expected '}'\n\
+        "main.pep:3:18: error: expected '}'\n\
          \x20   3 |     print($\"a {x b\");\n\
-         \x20     |                 ^\n\
+         \x20     |                  ^\n\
          main.pep:3:15: note: to match this '{'\n\
          \x20   3 |     print($\"a {x b\");\n\
          \x20     |               ^"
@@ -2555,11 +2555,74 @@ fn interpolation_unclosed_brace() {
 }
 
 #[test]
-fn interpolation_missing_name() {
+fn interpolation_missing_expression() {
     assert_eq!(
-        error_of("interpolation_missing_name", "main(): int {\n    print($\"a {} b\");\n    return 0;\n}\n"),
-        "main.pep:2:16: error: expected a variable name after '{' in interpolated string; write '{{' for a literal '{'\n\
+        error_of("interpolation_missing_expression", "main(): int {\n    print($\"a {} b\");\n    return 0;\n}\n"),
+        "main.pep:2:16: error: expected an expression after '{' in interpolated string; write '{{' for a literal '{'\n\
          \x20   2 |     print($\"a {} b\");\n\
+         \x20     |                ^"
+    );
+}
+
+#[test]
+fn interpolation_expression_without_to_string() {
+    // The whole `{...}` is marked, as for a name.
+    assert_eq!(
+        error_of("interpolation_expression_no_to_string", "struct Foo {}\n\nmake(): Foo {\n    return Foo();\n}\n\nmain(): int {\n    print($\"f = {make()}\");\n    return 0;\n}\n"),
+        "main.pep:8:17: error: cannot interpolate a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload\n\
+         \x20   8 |     print($\"f = {make()}\");\n\
+         \x20     |                 ^~~~~~~~\n\
+         main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToString' with 'extend Foo with ToString'\n\
+         \x20   1 | struct Foo {}\n\
+         \x20     |        ^~~"
+    );
+}
+
+#[test]
+fn interpolation_expression_error() {
+    // An error inside the braces is located inside them.
+    assert_eq!(
+        error_of("interpolation_expression_error", "main(): int {\n    var a = 1;\n    print($\"{a + nope}\");\n    return 0;\n}\n"),
+        "main.pep:3:18: error: use of undeclared identifier 'nope'\n\
+         \x20   3 |     print($\"{a + nope}\");\n\
+         \x20     |                  ^~~~"
+    );
+}
+
+#[test]
+fn interpolation_assignment() {
+    // An assignment is not an interpolated expression.
+    assert_eq!(
+        error_of("interpolation_assignment", "main(): int {\n    var a = 1;\n    print($\"{a = 2}\");\n    return 0;\n}\n"),
+        "main.pep:3:16: error: expected '}'\n\
+         \x20   3 |     print($\"{a = 2}\");\n\
+         \x20     |                ^\n\
+         main.pep:3:13: note: to match this '{'\n\
+         \x20   3 |     print($\"{a = 2}\");\n\
+         \x20     |             ^"
+    );
+}
+
+#[test]
+fn interpolation_expression_across_lines() {
+    // The expression in braces fits on one line.
+    assert_eq!(
+        error_of("interpolation_across_lines", "main(): int {\n    var a = 1;\n    print($\"{a +\n        a}\");\n    return 0;\n}\n"),
+        "main.pep:3:17: error: expected '}'\n\
+         \x20   3 |     print($\"{a +\n\
+         \x20     |                 ^\n\
+         main.pep:3:13: note: to match this '{'\n\
+         \x20   3 |     print($\"{a +\n\
+         \x20     |             ^"
+    );
+}
+
+#[test]
+fn interpolation_comment() {
+    assert_eq!(
+        error_of("interpolation_comment", "main(): int {\n    var a = 1;\n    print($\"{a # one}\");\n    return 0;\n}\n"),
+        "main.pep:3:16: error: a comment cannot appear inside '{}' in an interpolated string\n\
+         \x20   3 |     print($\"{a # one}\");\n\
          \x20     |                ^"
     );
 }

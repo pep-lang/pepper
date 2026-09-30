@@ -305,6 +305,20 @@ fn pep_fmt_keeps_interpolated_strings_as_written() {
 }
 
 #[test]
+fn pep_fmt_keeps_interpolated_expressions_as_written() {
+    // The braces' expressions, strings and braces in them included, stay
+    // inside the one string token.
+    assert_formats(
+        "main(): int {\n    print($\"{a+b} {f(\"}\")} {c?\"x\":'}'} {$\"<{n}>\"} {{\"+x);\n    return 0;\n}\n",
+        "main(): int {\n    print($\"{a+b} {f(\"}\")} {c?\"x\":'}'} {$\"<{n}>\"} {{\" + x);\n    return 0;\n}\n",
+    );
+    let error = format("main(): int {\n    var s = $\"{a # b}\";\n}\n").unwrap_err();
+    assert_eq!(error, "<stdin>:2:18: error: a comment cannot appear inside '{}' in an interpolated string\n");
+    let error = format("main(): int {\n    var s = $\"{a;\n}\n").unwrap_err();
+    assert_eq!(error, "<stdin>:2:18: error: expected '}'\n");
+}
+
+#[test]
 fn pep_fmt_spaces_tuples_and_destructuring() {
     assert_formats(
         "pair():(int,(String,long)) {\n    return (1,(\"x\",2));\n}\n\nmain(): int {\n    var (a,b:(String,long))=pair();\n    const (_ ,c)=( b.1 ,a );\n    (a,c)=(c,a);\n    return pair().1.1+b.1;\n}\n",

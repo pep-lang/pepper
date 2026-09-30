@@ -1,20 +1,29 @@
 # String interpolation
 
 An interpolated string is a string literal with a `$` before its opening
-quote. Inside it, a variable's name in braces, `{name}`, is replaced by that
-variable's text:
+quote. Inside it, an expression in braces, `{name}` or `{a + b}`, is replaced
+by the text of its value:
 
 ```pepper
 {{#include ../../examples/interpolation-basics.pep}}
 ```
 
-- **`{name}`** names a local, a parameter, a global, or (inside a method) a
-  field. Only a name fits between the braces: no spaces, member accesses
-  (`{p.x}`), calls or other expressions. Store the value in a variable first.
+- **`{expression}`** holds any expression but an assignment: a name (a
+  local, a parameter, a global, or inside a method a field), a member access
+  (`{p.x}`), a call (`{f(x)}`), an index (`{items[0]}`), arithmetic
+  (`{a + b}`), or a ternary (`{a > b ? a : b}`). Spaces around it are
+  ignored.
+- **String literals** may appear inside the braces (`{greet("you")}`), and
+  so may character literals and other interpolated strings. A `}` inside
+  them, or inside brackets of the expression's own, does not end it.
+- The expression fits on **one line** and holds **no comment**: a line break
+  or a `#` inside the braces is an error.
+- There are **no format specifiers**: `{x:5}` is an error. Pad or format the
+  value with a call instead.
 - **`{{` and `}}`** are a literal `{` and `}`.
 - **Escapes** (`\n`, `\t`, `\"`, ...) work as in any
   [string literal](types-and-variables.md#strings).
-- The result is a new `String`. An interpolated string with no names is an
+- The result is a new `String`. An interpolated string with no braces is an
   ordinary string.
 
 ## Which values can be interpolated
@@ -59,27 +68,37 @@ main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToStri
       |        ^~~
 ```
 
-A lone brace is an error, since doubling it is how to write one:
+A lone brace is an error, since doubling it is how to write one, and so is
+anything after the expression but its `}`:
 
 ```text
 main.pep:2:15: error: unmatched '}' in interpolated string; write '}}' for a literal '}'
     2 |     print($"a } b");
       |               ^
-main.pep:3:17: error: expected '}'
+main.pep:3:18: error: expected '}'
     3 |     print($"a {x b");
-      |                 ^
+      |                  ^
 main.pep:3:15: note: to match this '{'
     3 |     print($"a {x b");
       |               ^
 ```
 
-A name that is not declared is reported like any other
-(`use of undeclared identifier 'x'`), at the name inside the braces.
+Empty braces are reported where the expression should start:
+
+```text
+main.pep:2:16: error: expected an expression after '{' in interpolated string; write '{{' for a literal '{'
+    2 |     print($"a {} b");
+      |                ^
+```
+
+An error in the expression itself, such as a name that is not declared
+(`use of undeclared identifier 'x'`), is reported like any other, at the
+token inside the braces.
 
 ## How it works
 
-The compiler turns `$"({x}, {y})"` into `"(" + to_string(x) + ", " +
-to_string(y) + ")"`, resolving `to_string` in the runtime rather than in
+The compiler turns `$"({x}, {y + 1})"` into `"(" + to_string(x) + ", " +
+to_string(y + 1) + ")"`, resolving `to_string` in the runtime rather than in
 your file. So a struct's own `to_string()` method can interpolate its fields
 without calling itself, and the result costs what the same `+` expression
 does.

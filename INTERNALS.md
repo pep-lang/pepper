@@ -278,12 +278,18 @@ with no extension, and `module_name()` is the output's stem.
   the runtime documentation standard.
 - **Interpolated strings.** `interpolated_string` parses `$"a{x}b"` and
   lowers it on the spot to `"a" + _pep_interpolate(x) + "b"`
-  (`INTERPOLATE_FUNCTION`; the call is located at the braces, the name at
-  itself), so linking, visibility, the LSP and sema see ordinary references
-  and calls. `{{`/`}}` are literal braces; between braces only an identifier
-  is accepted. A lone `}`, a missing name, or a missing `}` (with a note at
-  the `{`) is an `error_at`, except after a line break inside the literal,
-  where it reports `missing terminating '"' character` at the opening quote.
+  (`INTERPOLATE_FUNCTION`; the call is located at the braces, the expression
+  at itself), so linking, visibility, the LSP and sema see ordinary references
+  and calls. `{{`/`}}` are literal braces. Where the expression in braces
+  ends is decided first by `interpolation_end`, a byte scan that nests
+  brackets and skips string, character and nested interpolated literals
+  whole, and stops at a line break or `#` (so a hole is one line with no
+  comment); `tools/syntax/lexer.pep` mirrors it to find the end of the
+  string token. The hole is then parsed with `ternary` (any expression but
+  an assignment) and must end exactly at that `}`. A lone `}`, an empty
+  hole, a `#`, or a missing `}` (with a note at the `{`) is an `error_at`,
+  except after a line break inside the literal, where it reports
+  `missing terminating '"' character` at the opening quote.
   The runtime's `_pep_interpolate<T>` resolves `to_string(value)` in
   `string.pep`, so neither a struct's own `to_string()` method (which
   `convert_member_refs` would bind a bare call to) nor a file's own

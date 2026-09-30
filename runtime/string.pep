@@ -736,7 +736,7 @@ export to_string<T>(value: T): String {
 
 ## Something with a text form: a `to_string()` method returning a String.
 ##
-## An interpolated string (`$"total: {total}"`) converts each value it names
+## An interpolated string (`$"total: {a + b}"`) converts each value it holds
 ## with `to_string(value)`, so a struct that implements `ToString` can be
 ## interpolated, as can the integers, `bool`, and `String`, which have
 ## `to_string` overloads. `String`, `StringBuilder` and `io.Path` implement
@@ -764,8 +764,8 @@ export trait ToString {
     to_string(): String;
 }
 
-# The call an interpolated string makes for each `{name}` it holds (the
-# parser lowers `$"a{x}"` to `"a" + _pep_interpolate(x)`). A separate name
+# The call an interpolated string makes for each `{expression}` it holds
+# (the parser lowers `$"a{x + 1}"` to `"a" + _pep_interpolate(x + 1)`). A separate name
 # keeps a struct's own `to_string()` method from capturing the call inside
 # its methods, and resolves `to_string` here, in the runtime, for every file.
 export _pep_interpolate<T>(value: T): String {

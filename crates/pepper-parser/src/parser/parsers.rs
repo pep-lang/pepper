@@ -688,11 +688,71 @@ fn string_constant(input: &mut &str) -> Result<Literal> {
 /// returns the value's text through `to_string` (runtime/string.pep).
 pub const INTERPOLATE_FUNCTION: &str = "_pep_interpolate";
 
-/// An interpolated string, `$"x is {x}"`: text with variable names in
+/// The span of the character at byte `at` of the source, which `input`
+/// (a later part of it) holds; empty at a quote, a line break, or the end.
+fn char_span(input: &str, at: usize) -> Span {
+    let rest = &input[at.saturating_sub(pos(input)).min(input.len())..];
+    let len = rest.chars().next().filter(|c| *c != '"' && *c != '\n').map_or(0, |c| c.len_utf8());
+    Span { start: at, end: at + len }
+}
+
+/// Where the expression in an interpolated string's braces ends, scanning
+/// `bytes` from `i`, just after the `{`: `Ok` with the offset of the `}` that
+/// closes it, or `Err` with the offset of the line break, `#`, or end of
+/// source that stops the scan first. Brackets nest, and string, character
+/// and interpolated string literals are skipped whole, so `{f("}")}` ends at
+/// its last `}`. An expression in braces fits on one line and holds no
+/// comment. tools/syntax/lexer.pep mirrors this rule.
+fn interpolation_end(bytes: &[u8], mut i: usize) -> std::result::Result<usize, usize> {
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\n' | b'#' => return Err(i),
+            b'{' => depth += 1,
+            b'}' if depth == 0 => return Ok(i),
+            b'}' => depth -= 1,
+            quote @ (b'"' | b'\'') => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    match bytes[i] {
+                        b'\n' => return Err(i),
+                        b'\\' => i += 2,
+                        _ => i += 1,
+                    }
+                }
+                if i >= bytes.len() {
+                    return Err(bytes.len());
+                }
+            }
+            b'$' if bytes.get(i + 1) == Some(&b'"') => {
+                i += 2;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    match bytes[i] {
+                        b'\n' => return Err(i),
+                        b'\\' => i += 2,
+                        b'{' if bytes.get(i + 1) == Some(&b'{') => i += 2,
+                        b'{' => i = interpolation_end(bytes, i + 1)? + 1,
+                        _ => i += 1,
+                    }
+                }
+                if i >= bytes.len() {
+                    return Err(bytes.len());
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Err(bytes.len())
+}
+
+/// An interpolated string, `$"sum is {a + b}"`: text with expressions in
 /// braces, and `{{` and `}}` for a literal brace. Lowered here to the
-/// concatenation of its text and `_pep_interpolate(name)` for each name
-/// (`"x is " + _pep_interpolate(x)`), so linking, visibility and sema see
-/// ordinary references and calls.
+/// concatenation of its text and `_pep_interpolate(expression)` for each
+/// expression (`"sum is " + _pep_interpolate(a + b)`), so linking,
+/// visibility and sema see ordinary references and calls. The expression
+/// is any expression but an assignment, and may hold string literals of its
+/// own (`{f("x")}`); where it ends is decided by [`interpolation_end`].
 fn interpolated_string(input: &mut &str) -> Result<Expression> {
     let start = pos(input);
     let open = start + 1;
@@ -710,6 +770,14 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
             let value = Literal::String(std::mem::take(text));
             parts.push(Expression::Literal { value, span: Span { start: text_start, end } });
         }
+    };
+    // `expected '}'` at `at`, with a note at the `{` it would close.
+    let missing_brace = |at: Span, brace: usize| {
+        fail_with(
+            Diagnostic::error("expected '}'")
+                .at(Loc::new(FileId::default(), at))
+                .with_note("to match this '{'", Some(Loc::new(FileId::default(), Span { start: brace, end: brace + 1 }))),
+        )
     };
     while let Some(c) = input.chars().next() {
         match c {
@@ -737,35 +805,60 @@ fn interpolated_string(input: &mut &str) -> Result<Expression> {
                 flush(&mut parts, &mut text, text_start, pos(input));
                 let brace = pos(input);
                 *input = &input[1..];
-                let name_start = pos(input);
-                let Ok(name) = identifier(input) else {
-                    if line_break {
-                        return Err(unclosed());
+                let end = match interpolation_end(input.as_bytes(), 0) {
+                    Ok(end) => pos(input) + end,
+                    Err(_) if line_break => return Err(unclosed()),
+                    Err(stop) if input.as_bytes().get(stop) == Some(&b'#') => {
+                        let at = pos(input) + stop;
+                        return Err(error_at(
+                            Span { start: at, end: at + 1 },
+                            "a comment cannot appear inside '{}' in an interpolated string".to_string(),
+                        ));
                     }
-                    let end = name_start + input.chars().next().map_or(0, |c| c.len_utf8());
-                    return Err(error_at(
-                        Span { start: name_start, end },
-                        "expected a variable name after '{' in interpolated string; write '{{' for a literal '{'".to_string(),
-                    ));
+                    Err(stop) => {
+                        // Point at what follows the expression when one
+                        // parses: in `{x b"`, the `b`.
+                        let stop = pos(input) + stop;
+                        let mut rest = *input;
+                        ws(&mut rest)?;
+                        if ternary(&mut rest).is_ok() {
+                            ws(&mut rest)?;
+                        }
+                        return Err(missing_brace(char_span(input, pos(rest).min(stop)), brace));
+                    }
                 };
-                let name_span = Span { start: name_start, end: pos(input) };
-                if !input.starts_with('}') {
+                ws(input)?;
+                let expression_start = pos(input);
+                let expression_span = char_span(input, expression_start);
+                let no_expression = || {
+                    if line_break {
+                        return unclosed();
+                    }
+                    error_at(
+                        expression_span,
+                        "expected an expression after '{' in interpolated string; write '{{' for a literal '{'".to_string(),
+                    )
+                };
+                if expression_start == end {
+                    return Err(no_expression());
+                }
+                let value = match ternary(input) {
+                    Ok(value) => value,
+                    Err(ErrMode::Backtrack(_)) => return Err(no_expression()),
+                    Err(e) => return Err(if line_break { unclosed() } else { e }),
+                };
+                ws(input)?;
+                if pos(input) != end {
                     if line_break {
                         return Err(unclosed());
                     }
-                    let at = pos(input);
-                    let end = at + input.chars().next().filter(|c| *c != '"').map_or(0, |c| c.len_utf8());
-                    return Err(fail_with(
-                        Diagnostic::error("expected '}'")
-                            .at(Loc::new(FileId::default(), Span { start: at, end }))
-                            .with_note("to match this '{'", Some(Loc::new(FileId::default(), Span { start: brace, end: brace + 1 }))),
-                    ));
+                    return Err(missing_brace(char_span(input, pos(input).min(end)), brace));
                 }
                 *input = &input[1..];
                 let braces = Span { start: brace, end: pos(input) };
                 parts.push(Expression::FunctionCall {
                     function: Box::new(Expression::SymbolRef { id: INTERPOLATE_FUNCTION.to_string(), span: braces }),
-                    arguments: vec![Expression::SymbolRef { id: name, span: name_span }],
+                    arguments: vec![value],
                     span: braces,
                 });
                 text_start = pos(input);
@@ -4313,6 +4406,46 @@ mod tests {
         let Expression::FunctionCall { function, arguments, .. } = *call else { panic!("expected a call") };
         assert!(matches!(*function, Expression::SymbolRef { ref id, .. } if id == INTERPOLATE_FUNCTION));
         assert!(matches!(&arguments[..], [Expression::SymbolRef { id, span }] if id == "n" && span.start == 6 && span.end == 7));
+    }
+
+    #[test]
+    fn interpolated_string_holds_expressions() {
+        // `_pep_interpolate(a + b)`, the call at the braces and the sum at
+        // its operator, as every binary expression is.
+        let source = "$\"{ a + b }\"";
+        let Expression::FunctionCall { arguments, span, .. } = parse_expr(source) else { panic!("expected a call") };
+        assert_eq!((span.start, span.end), (2, 11));
+        assert!(matches!(&arguments[..], [Expression::Binary { op, span, .. }] if op == "+" && span.start == 6 && span.end == 9), "{:?}", arguments);
+        // A ternary, a nested string holding a brace, a character literal
+        // and a nested interpolated string each stay inside their braces.
+        for (source, inner) in [
+            ("$\"{c ? \"x\" : \"y\"}\"", "c ? \"x\" : \"y\""),
+            ("$\"{f(\"}\")}\"", "f(\"}\")"),
+            ("$\"{c == '}'}\"", "c == '}'"),
+            ("$\"{$\"<{n}>\"}\"", "$\"<{n}>\""),
+            ("$\"{items[0].x}\"", "items[0].x"),
+        ] {
+            let Expression::FunctionCall { arguments, span, .. } = parse_expr(source) else { panic!("expected a call for {}", source) };
+            assert_eq!((&source[span.start + 1..span.end - 1], arguments.len()), (inner, 1), "{}", source);
+        }
+    }
+
+    #[test]
+    fn interpolation_end_skips_literals_and_nested_braces() {
+        for (text, end) in [
+            ("a}", Ok(1)),
+            ("f(\"}\")}", Ok(6)),
+            ("'}'}", Ok(3)),
+            ("$\"{x}\"}", Ok(6)),
+            ("$\"{{\"}", Ok(5)),
+            ("g(() => { return 1; })}", Ok(22)),
+            ("a\n}", Err(1)),
+            ("a # b}", Err(2)),
+            ("\"a", Err(2)),
+            ("a", Err(1)),
+        ] {
+            assert_eq!(interpolation_end(text.as_bytes(), 0), end, "{:?}", text);
+        }
     }
 
     #[test]

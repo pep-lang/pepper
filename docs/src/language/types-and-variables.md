@@ -116,8 +116,8 @@ text built so far on every append:
 {{#include ../../examples/types-strings-text.pep}}
 ```
 
-An interpolated string puts variables' text into a string literal:
-`$"line {line}: {message}"`. [String interpolation](interpolation.md) covers
+An interpolated string puts values' text into a string literal:
+`$"line {line + 1}: {message}"`. [String interpolation](interpolation.md) covers
 which values it accepts.
 
 A backslash in a string literal starts an escape sequence, as in C and Rust:

@@ -19,8 +19,7 @@ struct Celsius {
 }
 
 to_string<Celsius>(value: Celsius): String {
-    var degrees = value.degrees;
-    return $"{degrees} C";
+    return $"{value.degrees} C";
 }
 
 main(): int {
