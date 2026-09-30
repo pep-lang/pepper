@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5f72b0da.js";
+            window.path_to_searchindex_js = "../searchindex-85c31b04.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-423bbc47.js"></script>
+        <script src="../toc-cf0312c8.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,9 +182,10 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
-<p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket addresses, and host
-name lookup. In a plain program every call blocks the calling thread until
-it completes, like <code>File</code>. To serve several connections at once, give each
+<p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket
+addresses, and host name lookup; the <code>tls</code> module encrypts TCP connections.
+In a plain program every call blocks the calling thread until it completes,
+like <code>File</code>. To serve several connections at once, give each
 one its own <a href="threads.html">thread</a>, or its own <a href="tasks.html#sockets">task</a>: in a
 task, a call that has to wait parks only that task.</p>
 <h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
@@ -363,6 +364,84 @@ fails with <code>is_invalid_input()</code>.</li>
 </ul>
 <p>Only stream sockets are supported, since Windows (10 version 1803 and later)
 has no Unix datagram sockets.</p>
+<h2 id="tls"><a class="header" href="#tls">TLS</a></h2>
+<p>The <code>tls</code> module encrypts a TCP connection with TLS 1.2 or 1.3. A
+<code>TlsConnector</code> makes client connections and checks the server’s
+certificate. A <code>TlsAcceptor</code> serves them with a certificate and key. Both
+produce a <code>TlsStream</code>, which reads and writes like a <code>TcpStream</code>:</p>
+<pre><code class="language-pepper">import async;
+import io;
+import tls;
+import "test_certificate";
+
+# A TLS server and client on this machine, in two tasks.
+main(): int {
+    var connector = tls.TlsConnector.create();
+    if (connector.is_err()) {
+        # On Windows, or where OpenSSL 3 is not installed.
+        print(connector.error().message);
+        return 0;
+    }
+    # A real server reads its certificate and key from files it was given.
+    var certificate = io.Directory.temp().join("pepper-example-cert.pem");
+    var key = io.Directory.temp().join("pepper-example-key.pem");
+    io.File.write_text(certificate, test_certificate());
+    io.File.write_text(key, test_private_key());
+
+    async.run(
+        () =&gt; {
+            var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = listener.local_address().value().port();
+            var server = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                var (tcp, peer) = listener.accept().value();
+                var stream = acceptor.accept(tcp).value();
+                var request = Array&lt;u8&gt;();
+                stream.read_exact(request, 4);
+                stream.write_string("pong");
+                stream.shutdown();
+            });
+
+            # The client trusts the test certificate as well as the system's.
+            var client = connector.value();
+            assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
+            var stream = client.connect_host("localhost", port).value();
+            stream.write_string("ping");
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 4096).value() &gt; 0) {}
+            assert(reply.count() == 4 &amp;&amp; reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+            server.join();
+        }
+    );
+    io.File.remove(certificate);
+    io.File.remove(key);
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>TlsConnector.create()</code> trusts the system’s root certificates, and
+<code>add_root_certificate(path)</code> adds more from a PEM file, such as a private
+certificate authority. Make one connector and share it: it is <code>[Shared]</code>.</li>
+<li><code>connector.connect(tcp, host)</code> runs the handshake over a connected
+<code>TcpStream</code>. It checks that the certificate is valid and was issued for
+<code>host</code>, which is also sent to the server (SNI). <code>connect_host(host, port)</code>
+connects the TCP stream first. An IP address in <code>host</code> is checked against
+the certificate’s addresses.</li>
+<li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
+<code>acceptor.accept(tcp)</code> runs the handshake over a connection a
+<code>TcpListener</code> accepted.</li>
+<li><code>read</code>, <code>read_exact</code>, <code>write</code>, <code>write_all</code> and <code>write_string</code> work on the
+decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
+returns 0 once the peer has sent one or closed the connection.</li>
+<li>A failed handshake returns an error whose message says why, such as
+<code>certificate verify failed: self-signed certificate</code>.</li>
+</ul>
+<p>On Linux and macOS the module uses OpenSSL 3, loaded when the first
+connector or acceptor is made: install it with the system’s package
+manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
+<code>create()</code> returns an error. On Windows it uses the system’s SChannel,
+which needs nothing installed; a server’s private key must be PKCS #8
+(<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or Server 2022.</p>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
@@ -400,12 +479,14 @@ program take over the port.</p>
 <li>Outside a task every call blocks its thread, with no timeout. In a task
 a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
-<li>TLS is not supported yet, nor Unix datagram sockets.</li>
+<li>TLS clients cannot present certificates.</li>
+<li>Unix datagram sockets are not supported.</li>
 <li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>
 <p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
 <a href="../reference/io-socket.html">sockets</a> and
-<a href="../reference/io-unix.html">Unix domain sockets</a> document every method.</p>
+<a href="../reference/io-unix.html">Unix domain sockets</a> and
+<a href="../reference/tls-stream.html">TLS</a> document every method.</p>
 
                     </main>
 
