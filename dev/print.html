@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f308eb6b.js"></script>
@@ -1335,6 +1335,9 @@ main(): int {
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
 one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
 reads <code>items[0]</code> from an empty array.</p>
+<p>Unary operators nest: <code>-~x</code> is <code>-(~x)</code>, and <code>!!x</code> is <code>!(!x)</code>, which turns a
+number into a <code>bool</code>. A struct can define its own operators, the truth test
+<code>!!</code> included (see <a href="#operators-1">Operators</a>).</p>
 <p><code>**</code> raises an integer to an integer power, and is right-associative:
 <code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. The exponent can be any integer expression. A negative
 exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base
@@ -1490,7 +1493,13 @@ main(): int {
 }
 </code></pre>
 <p>The condition is usually a <code>bool</code>, but a number also works: any value other
-than zero counts as true, as in C.</p>
+than zero counts as true, as in C. A raw pointer (<code>__ptr&lt;T&gt;</code>) or a function
+value counts as true when it is not null. A struct counts only if it declares
+the truth-test operator <code>!!(): bool</code>, which the condition calls; any other
+struct is an error, so write <code>node !== __null</code> to ask whether a reference is
+set (see <a href="#truth-tests-and-conditions">Truth tests and conditions</a>).
+The same holds for the condition of <code>while</code> and of <code>?:</code>, the operands of <code>&amp;&amp;</code>,
+<code>||</code>, <code>and</code> and <code>or</code>, and the operand of <code>!</code>.</p>
 <h3 id="chains-of-conditions"><a class="header" href="#chains-of-conditions">Chains of conditions</a></h3>
 <p><code>else if</code> tests another condition when the ones before it were false. The
 first true condition’s block runs, and the final <code>else</code> block, if there is
@@ -3349,6 +3358,17 @@ accepted too.</p>
         return Money(cents + other.cents);
     }
 
+    # `-a` calls `a.-()`: a unary operator takes no parameters.
+    -(): Money {
+        return Money(0 - cents);
+    }
+
+    # `a - b` calls `a.-(b)`. The unary and binary `-` overload each other,
+    # told apart by their number of parameters.
+    -(other: Money): Money {
+        return Money(cents - other.cents);
+    }
+
     # `a += b` needs its own method; it is not rewritten to `a = a + b`.
     +=(other: Money): Money {
         cents += other.cents;
@@ -3391,6 +3411,10 @@ main(): int {
     assert(price.cents == 250, "+ left its operands alone");
 
     assert(price &lt; total, "&lt; compares cents");
+
+    var refund = -price;
+    assert(refund.cents == -250, "unary - calls -()");
+    assert((total - price).cents == 50, "binary - calls -(other)");
 
     total += Money(25);
     assert(total.cents == 325, "+= updated total in place");
@@ -3438,10 +3462,103 @@ expression with a number on the left and a struct on the right, such as
 <li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) can only be declared
 in the <code>name: Type</code> form, <code>&lt;(other: V): bool</code>: in the C-style form the
 parser reads <code>bool &lt;</code> as the start of generic arguments.</li>
-<li>Unary operators (<code>-a</code>, <code>!a</code>, <code>~a</code>) cannot be overloaded yet.</li>
 </ul>
 <p>The result of an operator has the type its method returns, so with
 <code>-(other: V): int</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
+<h3 id="unary-operators"><a class="header" href="#unary-operators">Unary operators</a></h3>
+<p>A unary operator is a method with no parameters; its operand is <code>this</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operator</th><th>Declaration</th><th><code>op x</code> calls</th></tr>
+</thead>
+<tbody>
+<tr><td>Negation</td><td><code>-(): V</code></td><td><code>x.-()</code></td></tr>
+<tr><td>Bitwise complement</td><td><code>~(): V</code></td><td><code>x.~()</code></td></tr>
+<tr><td>Logical not</td><td><code>!(): bool</code></td><td><code>x.!()</code></td></tr>
+<tr><td>Truth test</td><td><code>!!(): bool</code></td><td><code>x.!!()</code> (see below)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The C-style form works here too: <code>V -()</code>, <code>bool !!()</code>. <code>!</code> and <code>!!</code> must
+return <code>bool</code> (<code>truth-test operator '!!' must return 'bool', not 'int'</code>), and
+<code>!</code>, <code>~</code> and <code>!!</code> take no parameters. <code>-a</code> on a number is unchanged. A struct
+may declare both a unary <code>-()</code> and a binary <code>-(other: V)</code>: they
+<a href="#overloading-1">overload</a> each other, told apart by their number of
+parameters.</p>
+<h3 id="truth-tests-and-conditions"><a class="header" href="#truth-tests-and-conditions">Truth tests and conditions</a></h3>
+<p>A condition asks a value “true or false?”. For <code>bool</code> the answer is the value,
+for a number it is “not zero”, and for a raw pointer (<code>__ptr&lt;T&gt;</code>) or a function
+value it is “not null”. A struct answers through its truth-test operator,
+<code>!!(): bool</code>, like C++’s <code>operator bool</code>:</p>
+<pre><code class="language-pepper"># A struct that declares `!!(): bool` can be used as a condition.
+struct Budget {
+    var cents: int = 0;
+
+    construct(this.cents = 0) {}
+
+    # The truth test: `if (budget)` calls `budget.!!()`.
+    !!(): bool {
+        return cents &gt; 0;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    construct(this.text = "") {}
+}
+
+spend(budget: Budget, amount: int): int {
+    var spent = 0;
+    # A condition, an operand of `&amp;&amp;`, and the operand of `!` all call `!!`.
+    while (budget &amp;&amp; amount &gt; 0) {
+        budget.cents -= 1;
+        amount -= 1;
+        spent += 1;
+    }
+    if (!budget) {
+        print("budget used up");
+    }
+    return spent;
+}
+
+main(): int {
+    var budget = Budget(3);
+    assert(spend(budget, 2) == 2, "spent 2 of 3");
+    assert(budget ? true : false, "a ternary condition calls !! too");
+    assert(spend(budget, 5) == 1, "only 1 left");
+    assert(!!budget == false, "!!x calls the truth test");
+
+    # A struct without `!!` is not a condition: `if (label)` is an error.
+    # Compare with `__null` to ask whether a reference is set.
+    var label: Label;
+    assert(label === __null, "no Label yet");
+    label = Label("sale");
+    assert(label !== __null, "now there is one");
+    return 0;
+}
+</code></pre>
+<p>These are the boolean contexts. In each, a struct value <code>x</code> becomes <code>x.!!()</code>:</p>
+<ul>
+<li>the condition of <code>if</code>, <code>else if</code> and <code>while</code>;</li>
+<li>the condition of <code>condition ? a : b</code>;</li>
+<li>each operand of <code>&amp;&amp;</code>, <code>||</code>, <code>and</code> and <code>or</code> (unless the struct declares <code>&amp;&amp;</code>
+or <code>||</code> itself, which then takes the whole operation);</li>
+<li>the operand of <code>!</code>: without its own <code>!</code> method, <code>!x</code> is <code>!(x.!!())</code>.</li>
+</ul>
+<p><code>!!x</code> is the truth test itself: on a struct it calls <code>x.!!()</code>; on a <code>bool</code> or
+a number it is still two negations. <a href="#optional-values"><code>Optional</code></a> declares <code>!!</code>,
+so <code>if (found)</code> asks whether an optional holds a value.</p>
+<p>A struct that does not declare <code>!!</code> cannot be used as a condition at all:</p>
+<pre><code class="language-text">main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+</code></pre>
+<p>A struct value is a reference, but a condition never tests it for null. To ask
+whether a reference is set, compare it with <code>__null</code> (<code>node !== __null</code>), or
+better, use an <a href="#optional-values"><code>Optional</code></a> for a value that may be missing. A trait value is
+treated the same way: it is a condition only when its trait declares <code>!!</code>.</p>
 <h3 id="comparing-structs"><a class="header" href="#comparing-structs">Comparing structs</a></h3>
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes
@@ -3678,8 +3795,11 @@ structs for you; some library types offer a method for it, such as
 <code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
 calling a method through a null reference crashes the program. Use <code>===</code> or
 <code>!==</code> to check whether two references name the same object, or whether one is
-null (<code>next === __null</code>). For a value that may be absent, prefer
-<a href="#optional-values"><code>Optional&lt;T&gt;</code></a>, whose type says so.</p>
+null (<code>next === __null</code>). A struct is not a condition by itself, so
+<code>if (next)</code> is an error unless the struct declares the truth test <code>!!</code> (see
+<a href="#truth-tests-and-conditions">Truth tests and conditions</a>). For a
+value that may be absent, prefer <a href="#optional-values"><code>Optional&lt;T&gt;</code></a>, whose type
+says so.</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an
@@ -5498,6 +5618,8 @@ main(): int {
     people.append(Person("grace", 45));
     var adult = find_adult(people);
     assert(adult.is_some(), "grace is an adult");
+    # An optional is a condition by itself: `if (adult)` tests is_some().
+    if (!adult) { return 1; }
     assert(adult.value().name == "grace", "value() returns the Person");
 
     # Works for types that have no null, too.
@@ -5543,14 +5665,16 @@ var count: int?;   # None
 <tr><td><code>Optional&lt;T&gt;.some(value)</code></td><td>Creates a Some optional holding <code>value</code>.</td></tr>
 <tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;()</code></td><td>Create a None optional.</td></tr>
 <tr><td><code>is_some()</code>, <code>is_none()</code></td><td>Report which kind the optional is.</td></tr>
+<tr><td><code>!!</code> (truth test)</td><td>An optional is a condition by itself: <code>if (found)</code> is <code>if (found.is_some())</code>, and <code>!found</code> is <code>found.is_none()</code>.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on a None value</code> if the optional is None.</td></tr>
 <tr><td><code>value_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the optional is None. Never panics.</td></tr>
 </tbody>
 </table>
 </div>
 <p>Use <code>value()</code> when a None would be a bug in your program, since it stops the
-program. When a missing value is an expected outcome, test with <code>is_some()</code> or
-<code>is_none()</code> first, or supply a fallback with <code>value_or</code>.</p>
+program. When a missing value is an expected outcome, test it first (<code>if (found)</code>, <code>is_some()</code> or <code>is_none()</code>), or supply a fallback with <code>value_or</code>.
+Testing the optional itself works because <code>Optional</code> declares the truth-test
+operator <code>!!</code> (see <a href="#truth-tests-and-conditions">Truth tests</a>).</p>
 <p><code>Optional&lt;T&gt;</code> works for every <code>T</code>, including types that have no null at all,
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
@@ -5561,10 +5685,11 @@ know <em>why</em>, return a <a href="#error-handling-with-result"><code>Result</
 error.</p>
 <h2 id="current-limits-1"><a class="header" href="#current-limits-1">Current limits</a></h2>
 <ul>
-<li>An optional is checked with <code>is_some()</code> or <code>is_none()</code> and read with
-<code>value()</code> or <code>value_or</code>; <code>match</code> does not work on it yet. <code>Optional</code> will
-become an <a href="#enums-and-match">enum</a> with <code>None</code> and <code>Some(value)</code> cases once enum
-cases can carry values; its methods stay the same.</li>
+<li>An optional is checked as a condition (or with <code>is_some()</code> or
+<code>is_none()</code>) and read with <code>value()</code> or <code>value_or</code>; <code>match</code> does not work
+on it yet. <code>Optional</code> will become an <a href="#enums-and-match">enum</a> with <code>None</code> and
+<code>Some(value)</code> cases once enum cases can carry values; its methods stay the
+same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>
@@ -7833,6 +7958,16 @@ main.pep:2:1: note: candidate function
     2 | f(x: short): int { return 2; }
       | ^
 </code></pre>
+<p><strong>A struct used as a condition</strong> without a truth-test operator. A struct is
+never tested for null implicitly: declare <code>!!(): bool</code> on it, or compare with
+<code>__null</code> (see <a href="#truth-tests-and-conditions">Truth tests and conditions</a>):</p>
+<pre><code class="language-text">main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+main.pep:1:8: note: 'Node' declared here
+    1 | struct Node {
+      |        ^~~~
+</code></pre>
 <p><strong>A syntax error.</strong> The parser says what it expected at the first place the
 code stopped making sense:</p>
 <pre><code class="language-text">main.pep:2:14: error: expected ')'
@@ -8384,8 +8519,9 @@ parameter types after the names and the return type last,
 <code>add(a: int, b: int): int</code>. The C-style form, <code>int add(int a, int b)</code>, is
 kept for <code>extern</code> functions, which mirror C prototypes; <code>pep-fmt</code> rewrites
 it everywhere else, including operator methods (<code>bool ==(Point other)</code>
-becomes <code>==(other: Point): bool</code>), indexers (<code>T [](ulong index)</code> becomes
-<code>[](index: ulong): T</code>) and constructor parameters.</p>
+becomes <code>==(other: Point): bool</code>, and <code>bool !!()</code> becomes <code>!!(): bool</code>),
+indexers (<code>T [](ulong index)</code> becomes <code>[](index: ulong): T</code>) and constructor
+parameters.</p>
 <p><strong>Blank lines.</strong> At most one blank line in a row. Top-level structs,
 traits, extensions and functions with a body are separated by one blank
 line.</p>
@@ -10593,7 +10729,8 @@ every type, including those that have no null, such as <code>int</code>.</p>
 <p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
 optional type that is not given a value starts as None.</p>
 <p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
-for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
+for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
+by itself (<code>if (found)</code>).</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
@@ -10611,7 +10748,7 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
         values.append(3);
         values.append(4);
         var found = find_even(values);
-        if (found.is_none()) { return 1; }
+        if (!found) { return 1; }
         return found.value() - 4;   # 0
     }
 </code></pre>
@@ -10669,6 +10806,22 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
 <ul>
 <li>true when the optional is None</li>
 </ul>
+<h4 id="operator--7"><a class="header" href="#operator--7">operator !!</a></h4>
+<pre><code class="language-pepper">!!(): bool
+</code></pre>
+<p>Reports whether this optional holds a value: the truth test, so an
+optional can stand as a condition by itself.</p>
+<p><code>if (found)</code> means <code>if (found.is_some())</code>, <code>!found</code> means
+<code>found.is_none()</code>, and the same holds in <code>while</code>, <code>&amp;&amp;</code>, <code>||</code> and
+<code>?:</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is Some</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.some(7);
+    if (found) { print(found.value()); }   # prints 7
+</code></pre>
 <h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
 <pre><code class="language-pepper">value(): T
 </code></pre>
@@ -11612,7 +11765,7 @@ removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).
         print(real.value().to_string());
     }
 </code></pre>
-<h4 id="operator--7"><a class="header" href="#operator--7">operator ==</a></h4>
+<h4 id="operator--8"><a class="header" href="#operator--8">operator ==</a></h4>
 <pre><code class="language-pepper">bool ==(Path rhs)
 </code></pre>
 <p>Returns whether two paths have exactly the same text. The comparison

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -666,6 +666,9 @@ main(): int {
 <p><code>&amp;&amp;</code> and <code>||</code> short-circuit: the right operand is evaluated only when the left
 one does not decide the result, so <code>items.count() &gt; 0 &amp;&amp; items[0] == 1</code> never
 reads <code>items[0]</code> from an empty array.</p>
+<p>Unary operators nest: <code>-~x</code> is <code>-(~x)</code>, and <code>!!x</code> is <code>!(!x)</code>, which turns a
+number into a <code>bool</code>. A struct can define its own operators, the truth test
+<code>!!</code> included (see <a href="structs.html#operators">Operators</a>).</p>
 <p><code>**</code> raises an integer to an integer power, and is right-associative:
 <code>2 ** 3 ** 2</code> is <code>2 ** 9</code>. The exponent can be any integer expression. A negative
 exponent gives the truncated real result: 1 for a base of 1, 1 or -1 for a base

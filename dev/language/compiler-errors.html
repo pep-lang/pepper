@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -349,6 +349,16 @@ main.pep:1:1: note: candidate function
 main.pep:2:1: note: candidate function
     2 | f(x: short): int { return 2; }
       | ^
+</code></pre>
+<p><strong>A struct used as a condition</strong> without a truth-test operator. A struct is
+never tested for null implicitly: declare <code>!!(): bool</code> on it, or compare with
+<code>__null</code> (see <a href="structs.html#truth-tests-and-conditions">Truth tests and conditions</a>):</p>
+<pre><code class="language-text">main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+main.pep:1:8: note: 'Node' declared here
+    1 | struct Node {
+      |        ^~~~
 </code></pre>
 <p><strong>A syntax error.</strong> The parser says what it expected at the first place the
 code stopped making sense:</p>

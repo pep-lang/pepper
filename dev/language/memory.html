@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -247,8 +247,11 @@ structs for you; some library types offer a method for it, such as
 <code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
 calling a method through a null reference crashes the program. Use <code>===</code> or
 <code>!==</code> to check whether two references name the same object, or whether one is
-null (<code>next === __null</code>). For a value that may be absent, prefer
-<a href="optionals.html"><code>Optional&lt;T&gt;</code></a>, whose type says so.</p>
+null (<code>next === __null</code>). A struct is not a condition by itself, so
+<code>if (next)</code> is an error unless the struct declares the truth test <code>!!</code> (see
+<a href="structs.html#truth-tests-and-conditions">Truth tests and conditions</a>). For a
+value that may be absent, prefer <a href="optionals.html"><code>Optional&lt;T&gt;</code></a>, whose type
+says so.</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -597,6 +597,17 @@ accepted too.</p>
         return Money(cents + other.cents);
     }
 
+    # `-a` calls `a.-()`: a unary operator takes no parameters.
+    -(): Money {
+        return Money(0 - cents);
+    }
+
+    # `a - b` calls `a.-(b)`. The unary and binary `-` overload each other,
+    # told apart by their number of parameters.
+    -(other: Money): Money {
+        return Money(cents - other.cents);
+    }
+
     # `a += b` needs its own method; it is not rewritten to `a = a + b`.
     +=(other: Money): Money {
         cents += other.cents;
@@ -639,6 +650,10 @@ main(): int {
     assert(price.cents == 250, "+ left its operands alone");
 
     assert(price &lt; total, "&lt; compares cents");
+
+    var refund = -price;
+    assert(refund.cents == -250, "unary - calls -()");
+    assert((total - price).cents == 50, "binary - calls -(other)");
 
     total += Money(25);
     assert(total.cents == 325, "+= updated total in place");
@@ -686,10 +701,103 @@ expression with a number on the left and a struct on the right, such as
 <li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) can only be declared
 in the <code>name: Type</code> form, <code>&lt;(other: V): bool</code>: in the C-style form the
 parser reads <code>bool &lt;</code> as the start of generic arguments.</li>
-<li>Unary operators (<code>-a</code>, <code>!a</code>, <code>~a</code>) cannot be overloaded yet.</li>
 </ul>
 <p>The result of an operator has the type its method returns, so with
 <code>-(other: V): int</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
+<h3 id="unary-operators"><a class="header" href="#unary-operators">Unary operators</a></h3>
+<p>A unary operator is a method with no parameters; its operand is <code>this</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operator</th><th>Declaration</th><th><code>op x</code> calls</th></tr>
+</thead>
+<tbody>
+<tr><td>Negation</td><td><code>-(): V</code></td><td><code>x.-()</code></td></tr>
+<tr><td>Bitwise complement</td><td><code>~(): V</code></td><td><code>x.~()</code></td></tr>
+<tr><td>Logical not</td><td><code>!(): bool</code></td><td><code>x.!()</code></td></tr>
+<tr><td>Truth test</td><td><code>!!(): bool</code></td><td><code>x.!!()</code> (see below)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The C-style form works here too: <code>V -()</code>, <code>bool !!()</code>. <code>!</code> and <code>!!</code> must
+return <code>bool</code> (<code>truth-test operator '!!' must return 'bool', not 'int'</code>), and
+<code>!</code>, <code>~</code> and <code>!!</code> take no parameters. <code>-a</code> on a number is unchanged. A struct
+may declare both a unary <code>-()</code> and a binary <code>-(other: V)</code>: they
+<a href="overloading.html">overload</a> each other, told apart by their number of
+parameters.</p>
+<h3 id="truth-tests-and-conditions"><a class="header" href="#truth-tests-and-conditions">Truth tests and conditions</a></h3>
+<p>A condition asks a value “true or false?”. For <code>bool</code> the answer is the value,
+for a number it is “not zero”, and for a raw pointer (<code>__ptr&lt;T&gt;</code>) or a function
+value it is “not null”. A struct answers through its truth-test operator,
+<code>!!(): bool</code>, like C++’s <code>operator bool</code>:</p>
+<pre><code class="language-pepper"># A struct that declares `!!(): bool` can be used as a condition.
+struct Budget {
+    var cents: int = 0;
+
+    construct(this.cents = 0) {}
+
+    # The truth test: `if (budget)` calls `budget.!!()`.
+    !!(): bool {
+        return cents &gt; 0;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    construct(this.text = "") {}
+}
+
+spend(budget: Budget, amount: int): int {
+    var spent = 0;
+    # A condition, an operand of `&amp;&amp;`, and the operand of `!` all call `!!`.
+    while (budget &amp;&amp; amount &gt; 0) {
+        budget.cents -= 1;
+        amount -= 1;
+        spent += 1;
+    }
+    if (!budget) {
+        print("budget used up");
+    }
+    return spent;
+}
+
+main(): int {
+    var budget = Budget(3);
+    assert(spend(budget, 2) == 2, "spent 2 of 3");
+    assert(budget ? true : false, "a ternary condition calls !! too");
+    assert(spend(budget, 5) == 1, "only 1 left");
+    assert(!!budget == false, "!!x calls the truth test");
+
+    # A struct without `!!` is not a condition: `if (label)` is an error.
+    # Compare with `__null` to ask whether a reference is set.
+    var label: Label;
+    assert(label === __null, "no Label yet");
+    label = Label("sale");
+    assert(label !== __null, "now there is one");
+    return 0;
+}
+</code></pre>
+<p>These are the boolean contexts. In each, a struct value <code>x</code> becomes <code>x.!!()</code>:</p>
+<ul>
+<li>the condition of <code>if</code>, <code>else if</code> and <code>while</code>;</li>
+<li>the condition of <code>condition ? a : b</code>;</li>
+<li>each operand of <code>&amp;&amp;</code>, <code>||</code>, <code>and</code> and <code>or</code> (unless the struct declares <code>&amp;&amp;</code>
+or <code>||</code> itself, which then takes the whole operation);</li>
+<li>the operand of <code>!</code>: without its own <code>!</code> method, <code>!x</code> is <code>!(x.!!())</code>.</li>
+</ul>
+<p><code>!!x</code> is the truth test itself: on a struct it calls <code>x.!!()</code>; on a <code>bool</code> or
+a number it is still two negations. <a href="optionals.html"><code>Optional</code></a> declares <code>!!</code>,
+so <code>if (found)</code> asks whether an optional holds a value.</p>
+<p>A struct that does not declare <code>!!</code> cannot be used as a condition at all:</p>
+<pre><code class="language-text">main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+</code></pre>
+<p>A struct value is a reference, but a condition never tests it for null. To ask
+whether a reference is set, compare it with <code>__null</code> (<code>node !== __null</code>), or
+better, use an <a href="optionals.html"><code>Optional</code></a> for a value that may be missing. A trait value is
+treated the same way: it is a condition only when its trait declares <code>!!</code>.</p>
 <h3 id="comparing-structs"><a class="header" href="#comparing-structs">Comparing structs</a></h3>
 <p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
 only when both refer to the same object, exactly like <code>a === b</code>. The same goes

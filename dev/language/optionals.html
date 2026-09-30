@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -223,6 +223,8 @@ main(): int {
     people.append(Person("grace", 45));
     var adult = find_adult(people);
     assert(adult.is_some(), "grace is an adult");
+    # An optional is a condition by itself: `if (adult)` tests is_some().
+    if (!adult) { return 1; }
     assert(adult.value().name == "grace", "value() returns the Person");
 
     # Works for types that have no null, too.
@@ -268,14 +270,16 @@ var count: int?;   # None
 <tr><td><code>Optional&lt;T&gt;.some(value)</code></td><td>Creates a Some optional holding <code>value</code>.</td></tr>
 <tr><td><code>Optional&lt;T&gt;.none()</code>, <code>Optional&lt;T&gt;()</code></td><td>Create a None optional.</td></tr>
 <tr><td><code>is_some()</code>, <code>is_none()</code></td><td>Report which kind the optional is.</td></tr>
+<tr><td><code>!!</code> (truth test)</td><td>An optional is a condition by itself: <code>if (found)</code> is <code>if (found.is_some())</code>, and <code>!found</code> is <code>found.is_none()</code>.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Optional.value on a None value</code> if the optional is None.</td></tr>
 <tr><td><code>value_or(fallback)</code></td><td>Returns the value, or <code>fallback</code> if the optional is None. Never panics.</td></tr>
 </tbody>
 </table>
 </div>
 <p>Use <code>value()</code> when a None would be a bug in your program, since it stops the
-program. When a missing value is an expected outcome, test with <code>is_some()</code> or
-<code>is_none()</code> first, or supply a fallback with <code>value_or</code>.</p>
+program. When a missing value is an expected outcome, test it first (<code>if (found)</code>, <code>is_some()</code> or <code>is_none()</code>), or supply a fallback with <code>value_or</code>.
+Testing the optional itself works because <code>Optional</code> declares the truth-test
+operator <code>!!</code> (see <a href="structs.html#truth-tests-and-conditions">Truth tests</a>).</p>
 <p><code>Optional&lt;T&gt;</code> works for every <code>T</code>, including types that have no null at all,
 such as <code>int</code> or <code>ulong</code>. For a struct type, a Some optional holds a
 reference to the object, like any other struct slot (see
@@ -286,10 +290,11 @@ know <em>why</em>, return a <a href="results.html"><code>Result</code></a> inste
 error.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>An optional is checked with <code>is_some()</code> or <code>is_none()</code> and read with
-<code>value()</code> or <code>value_or</code>; <code>match</code> does not work on it yet. <code>Optional</code> will
-become an <a href="enums.html">enum</a> with <code>None</code> and <code>Some(value)</code> cases once enum
-cases can carry values; its methods stay the same.</li>
+<li>An optional is checked as a condition (or with <code>is_some()</code> or
+<code>is_none()</code>) and read with <code>value()</code> or <code>value_or</code>; <code>match</code> does not work
+on it yet. <code>Optional</code> will become an <a href="enums.html">enum</a> with <code>None</code> and
+<code>Some(value)</code> cases once enum cases can carry values; its methods stay the
+same.</li>
 <li>The runtime’s own APIs still use null references or default values for
 “missing” (a <code>HashMap</code> returns the default value for a missing key, for
 example).</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9e61a713.js";
+            window.path_to_searchindex_js = "../searchindex-ba5b0f46.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -196,7 +196,8 @@ every type, including those that have no null, such as <code>int</code>.</p>
 <p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
 optional type that is not given a value starts as None.</p>
 <p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
-for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
+for None, and test it with <code>is_some()</code> or <code>is_none()</code>, or as a condition
+by itself (<code>if (found)</code>).</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the value a Some optional holds</li>
@@ -214,7 +215,7 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
         values.append(3);
         values.append(4);
         var found = find_even(values);
-        if (found.is_none()) { return 1; }
+        if (!found) { return 1; }
         return found.value() - 4;   # 0
     }
 </code></pre>
@@ -272,6 +273,22 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
 <ul>
 <li>true when the optional is None</li>
 </ul>
+<h4 id="operator-"><a class="header" href="#operator-">operator !!</a></h4>
+<pre><code class="language-pepper">!!(): bool
+</code></pre>
+<p>Reports whether this optional holds a value: the truth test, so an
+optional can stand as a condition by itself.</p>
+<p><code>if (found)</code> means <code>if (found.is_some())</code>, <code>!found</code> means
+<code>found.is_none()</code>, and the same holds in <code>while</code>, <code>&amp;&amp;</code>, <code>||</code> and
+<code>?:</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the optional is Some</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.some(7);
+    if (found) { print(found.value()); }   # prints 7
+</code></pre>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
 <pre><code class="language-pepper">value(): T
 </code></pre>
