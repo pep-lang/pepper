@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
+            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -412,7 +412,8 @@ anything else. The static conveniences <code>read_bytes</code>, <code>read_to_st
 whole file by path.</p>
 <p>I/O is unbuffered: each <code>read</code> and <code>write</code> is one system call. Reads and
 writes start at the current position and move it forward; the <code>seek_*</code>
-methods move it explicitly.</p>
+methods move it explicitly. A write to a standard stream first flushes
+the output <code>print</code> has buffered, so the two never come out of order.</p>
 <p>Closing: the File’s destructor closes an owned handle when the last
 reference to the File is released, and ignores any error. Call <code>close()</code>
 to close earlier or to observe the error. The standard streams
@@ -544,7 +545,9 @@ writing end of a pipe has closed).</p>
 </code></pre>
 <p>Returns a File writing to the process’s standard output. Each call
 returns a new File on the same stream, and <code>close()</code> only marks that
-File closed: the stream stays usable. Writes are unbuffered.</p>
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what <code>print</code> has buffered, so output from <code>print</code>
+and from this File comes out in program order.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a File on standard output, named <code>&lt;stdout&gt;</code></li>
@@ -558,7 +561,8 @@ File closed: the stream stays usable. Writes are unbuffered.</p>
 </code></pre>
 <p>Returns a File writing to the process’s standard error. Each call
 returns a new File on the same stream, and <code>close()</code> only marks that
-File closed: the stream stays usable. Writes are unbuffered.</p>
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what <code>print</code> has buffered.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a File on standard error, named <code>&lt;stderr&gt;</code></li>

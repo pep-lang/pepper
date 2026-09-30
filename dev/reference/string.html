@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
+            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -557,6 +557,360 @@ operand is modified. Runs in O(size() + rhs.size()).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var greeting = "Hello, " + "world";
 </code></pre>
+<h4 id="byte_at"><a class="header" href="#byte_at">byte_at</a></h4>
+<pre><code class="language-pepper">byte_at(index: ulong): byte
+</code></pre>
+<p>Returns the byte at byte offset <code>index</code> of the UTF-8 data. O(1).</p>
+<p>The offset counts bytes, not code points, so a byte inside a
+multi-byte code point is returned as it is. Compare the result with a
+character literal (<code>s.byte_at(0) == '#'</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the byte offset, less than <code>size()</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte at <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>size()</code> (“String byte_at index out of bounds”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var s = "a=b";
+    assert(s.byte_at(1) == '=', "second byte");
+</code></pre>
+<h4 id="substr_bytes"><a class="header" href="#substr_bytes">substr_bytes</a></h4>
+<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong): String
+</code></pre>
+<p>Returns a new String of the <code>size</code> bytes starting at byte offset
+<code>start</code>. Both arguments count bytes, not code points, so offsets from
+<code>find</code> can be used directly. Runs in O(size).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the byte offset of the first byte to copy</li>
+<li><code>size</code> — the number of bytes to copy</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String that holds those bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>start + size</code> is greater than <code>size()</code> (“String substr_bytes range out of bounds”)</li>
+<li>if <code>start</code> or <code>start + size</code> falls inside a multi-byte code point (“String substr_bytes splits a code point”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var s = "key=value";
+    var eq = s.find("=") as ulong;
+    assert(s.substr_bytes(0, eq) == "key", "before '='");
+    assert(s.substr_bytes(eq + 1, s.size() - eq - 1) == "value", "after '='");
+</code></pre>
+<h4 id="compare"><a class="header" href="#compare">compare</a></h4>
+<pre><code class="language-pepper">compare(other: String): int
+</code></pre>
+<p>Compares this String with <code>other</code> byte by byte, for sorting. For
+valid UTF-8 this is code-point order; a String that is a prefix of the
+other orders first. Runs in O(min(size(), other.size())).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number when this String orders before <code>other</code>, 0 when both hold the same bytes, and a positive number when it orders after</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("apple".compare("banana") &lt; 0, "a before b");
+    assert("ab".compare("abc") &lt; 0, "a prefix orders first");
+    assert("x".compare("x") == 0, "equal");
+</code></pre>
+<h4 id="operator--5"><a class="header" href="#operator--5">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: String): bool
+</code></pre>
+<p>Returns whether this String orders before <code>other</code>, as <code>compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>compare(other) &lt; 0</code></li>
+</ul>
+<h4 id="operator--6"><a class="header" href="#operator--6">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: String): bool
+</code></pre>
+<p>Returns whether this String orders before <code>other</code> or equals it, as
+<code>compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>compare(other) &lt;= 0</code></li>
+</ul>
+<h4 id="operator--7"><a class="header" href="#operator--7">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: String): bool
+</code></pre>
+<p>Returns whether this String orders after <code>other</code>, as <code>compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>compare(other) &gt; 0</code></li>
+</ul>
+<h4 id="operator--8"><a class="header" href="#operator--8">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: String): bool
+</code></pre>
+<p>Returns whether this String orders after <code>other</code> or equals it, as
+<code>compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the String to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>compare(other) &gt;= 0</code></li>
+</ul>
+<h4 id="trim_end"><a class="header" href="#trim_end">trim_end</a></h4>
+<pre><code class="language-pepper">trim_end(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the end: spaces, tabs,
+carriage returns, line feeds, vertical tabs and form feeds (ASCII
+only). Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the trailing whitespace removed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
+    assert("  indented".trim_end() == "  indented", "leading kept");
+</code></pre>
+<h4 id="lines"><a class="header" href="#lines">lines</a></h4>
+<pre><code class="language-pepper">lines(): String[]
+</code></pre>
+<p>Splits the String into lines and returns them without their line
+endings. A line ends at <code>"\n"</code> or <code>"\r\n"</code>. A final line with no
+ending is included, but the end of the String after a final line
+ending does not start another line, so <code>"a\nb\n"</code> and <code>"a\nb"</code> both
+give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Array with one new String per line</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var lines = "first\r\nsecond\n\nfourth".lines();
+    assert(lines.count() == 4, "four lines");
+    assert(lines[1] == "second", "\\r\\n removed");
+    assert(lines[2] == "", "an empty line");
+</code></pre>
+<h4 id="repeat"><a class="header" href="#repeat">repeat</a></h4>
+<pre><code class="language-pepper">repeat(count: ulong): String
+</code></pre>
+<p>Returns a new String that holds this String <code>count</code> times in a row.
+<code>count</code> 0, or an empty String, gives an empty String. Runs in
+O(size() * count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many copies to join</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String of <code>size() * count</code> bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
+    var indent = " ".repeat(8);   # eight spaces
+</code></pre>
+<h2 id="to_string"><a class="header" href="#to_string">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: long): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
+negative.</p>
+<p><code>to_string</code> is overloaded for every integer type, so a call with any
+integer picks its own overload.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"-42"</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    assert(to_string(-42) == "-42", "negative");
+    var where = to_string(line) + ":" + to_string(column);
+</code></pre>
+<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: ulong): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"18446744073709551615"</code></li>
+</ul>
+<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: int): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
+negative.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: uint): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: short): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
+negative.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"-7"</code></li>
+</ul>
+<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: ushort): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: char): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
+negative.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"-7"</code></li>
+</ul>
+<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: byte): String
+</code></pre>
+<p>Returns the decimal text of <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="stringbuilder"><a class="header" href="#stringbuilder">StringBuilder</a></h2>
+<pre><code class="language-pepper">struct StringBuilder
+</code></pre>
+<p>Builds a String from many pieces without copying the text built so far
+on every append.</p>
+<p><code>String.append</code> grows its buffer to the exact new size, so a long run of
+appends can copy the text repeatedly. A StringBuilder doubles its buffer
+when it is full, so appending is amortized O(piece size). Call
+<code>to_string()</code> for the result; the builder can keep appending afterward.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var out = StringBuilder();
+    out.append("line ").append(to_string(3)).append("\n");
+    var text = out.to_string();   # "line 3\n"
+</code></pre>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="stringbuilder-1"><a class="header" href="#stringbuilder-1">StringBuilder()</a></h4>
+<pre><code class="language-pepper">construct(capacity: ulong = 0)
+</code></pre>
+<p>Creates an empty StringBuilder, optionally with room for <code>capacity</code>
+bytes before it has to grow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>capacity</code> — the number of bytes to allocate up front</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
+<pre><code class="language-pepper">append(text: String): StringBuilder
+</code></pre>
+<p>Appends the text of <code>text</code> and returns this builder, so calls can be
+chained. Runs in amortized O(text.size()).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the String to append; it is not modified</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this StringBuilder</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var b = StringBuilder();
+    b.append("a").append("b");   # b.to_string() == "ab"
+</code></pre>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<pre><code class="language-pepper">size(): ulong
+</code></pre>
+<p>Returns the number of bytes of UTF-8 appended so far. O(1).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the size in bytes</li>
+</ul>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<pre><code class="language-pepper">length(): ulong
+</code></pre>
+<p>Returns the number of code points appended so far. O(1).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the length in code points</li>
+</ul>
+<h4 id="empty-1"><a class="header" href="#empty-1">empty</a></h4>
+<pre><code class="language-pepper">empty(): bool
+</code></pre>
+<p>Returns whether nothing has been appended since the builder was
+created or last cleared. O(1).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>size()</code> is 0</li>
+</ul>
+<h4 id="clear"><a class="header" href="#clear">clear</a></h4>
+<pre><code class="language-pepper">clear(): void
+</code></pre>
+<p>Removes all the text and keeps the buffer for reuse. O(1).</p>
+<h4 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns a new String holding the text appended so far. The builder
+is unchanged. Runs in O(size()).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
 <h2 id="stringiterator"><a class="header" href="#stringiterator">StringIterator</a></h2>
 <pre><code class="language-pepper">struct StringIterator
 </code></pre>
@@ -572,7 +926,7 @@ default-constructed <code>StringIterator()</code> has no String to walk.</p>
         print(it.current());   # "a", then "b"
     }
 </code></pre>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>

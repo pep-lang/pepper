@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
+            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -516,6 +516,34 @@ Array of fewer than two elements is left untouched and its iterators
 stay valid; otherwise running iterators are invalidated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
+</code></pre>
+<h4 id="sort"><a class="header" href="#sort">sort</a></h4>
+<pre><code class="language-pepper">sort(compare: (T, T) =&gt; int): void
+</code></pre>
+<p>Sorts the elements in place into the order <code>compare</code> defines. The
+sort is stable: elements that compare equal keep their relative
+order.</p>
+<p><code>compare(a, b)</code> returns a negative number when <code>a</code> belongs before
+<code>b</code>, 0 when their order does not matter, and a positive number when
+<code>a</code> belongs after <code>b</code>, the convention <code>String.compare</code> follows. It is
+a merge sort: O(count log count) calls to <code>compare</code>, plus a scratch
+copy of the elements. For struct <code>T</code> the references are copied into
+the scratch Array and back, which acquires and releases them but
+leaves every count as it was. Invalidates running iterators when
+there are two or more elements.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — returns the order of its two arguments, as above</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
+    names.append("pear");
+    names.append("apple");
+    names.sort((a, b) =&gt; a.compare(b));   # ["apple", "pear"]
+    var numbers = Array&lt;int&gt;();
+    numbers.append(3);
+    numbers.append(1);
+    numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
 </code></pre>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
 <pre><code class="language-pepper">long find(T item)

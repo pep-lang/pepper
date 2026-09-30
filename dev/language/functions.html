@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
+            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -374,7 +374,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>To print several values on one line, build a <code>String</code> with <code>+</code> first.</p>
+<p>To print several values on one line, build a <code>String</code> with <code>+</code> first
+(<code>print("line " + to_string(n))</code>).</p>
+<p><code>print</code> buffers its output. Writing to standard output through
+<code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
+in the order the program wrote it, even when standard output is a pipe.</p>
 <p>A <code>float</code> or <code>double</code> prints with six digits after the decimal point, rounded:
 <code>print(0.5)</code> prints <code>0.500000</code>.</p>
 <p>For checks in your programs, the runtime also provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and

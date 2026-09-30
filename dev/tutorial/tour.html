@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
+            window.path_to_searchindex_js = "../searchindex-ba4b8478.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f6f7138.js"></script>
@@ -341,6 +341,10 @@ not need to import them:</p>
     }
     assert(total == 250, "90 + 75 + 85");
 
+    # sort orders the elements by a comparison function.
+    scores.sort((a, b) =&gt; a - b);
+    assert(scores[0] == 75 &amp;&amp; scores[2] == 90, "sorted ascending");
+
     int[] none = Array&lt;int&gt;();
     assert(none.empty(), "a new array is empty");
 
@@ -379,7 +383,8 @@ not need to import them:</p>
 <li><a href="../reference/array.html"><code>Array&lt;T&gt;</code></a> is a list that grows as you <code>append</code>.
 <code>int[]</code> is a shorter way to write the type <code>Array&lt;int&gt;</code>. Indexing is checked:
 reading past the end stops the program with an error rather than reading
-stray memory.</li>
+stray memory. <code>sort</code> takes a function that compares two elements, such as
+the closure <code>(a, b) =&gt; a - b</code>.</li>
 <li><a href="../reference/string.html"><code>String</code></a> holds UTF-8 text. <code>length()</code> counts
 characters (code points), and <code>s[i]</code> is the character at index <code>i</code>, as a
 one-character string. Strings compare by content with <code>==</code>.</li>
