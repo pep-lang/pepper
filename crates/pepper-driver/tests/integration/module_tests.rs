@@ -26,7 +26,7 @@ fn compile(test: &str, files: &[(&str, &str)]) -> Result<pepper_sema::model::Mod
 /// Write `files` under a fresh directory for `test`: top-level module folders
 /// go under `deps/`. Returns the directory.
 fn write_tree(test: &str, files: &[(&str, &str)]) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("pepper_modules_{}", test));
+    let dir = std::env::temp_dir().join(format!("pepper_modules_{}_{}", test, std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let is_module = |top: &str| files.iter().any(|(p, _)| *p == format!("{}/module.pep", top));
     // A top-level folder listed as `./name/...` is local, not a dependency.
@@ -450,7 +450,7 @@ fn a_module_that_fails_to_parse_is_reported_at_the_import() {
 #[test]
 fn an_unsaved_root_imports_its_siblings() {
     // The root is an editor buffer with no file on disk yet.
-    let dir = std::env::temp_dir().join("pepper_modules_unsaved");
+    let dir = std::env::temp_dir().join(format!("pepper_modules_unsaved_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("helper.pep"), "export seven(): int { return 7; }").unwrap();
@@ -516,7 +516,7 @@ fn an_editor_warns_on_modules_it_cannot_find() {
     // An editor knows no `-I` directories: `util`, next to `geo`, is found
     // only by the compile that passes `-I`, so the editor warns rather than
     // errs. A local module folder is always found.
-    let dir = std::env::temp_dir().join("pepper_modules_editor");
+    let dir = std::env::temp_dir().join(format!("pepper_modules_editor_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("geo/local")).unwrap();
     std::fs::create_dir_all(dir.join("util")).unwrap();

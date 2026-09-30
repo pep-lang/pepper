@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn finds_the_runtime_beside_the_executable_from_anywhere() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
-        let elsewhere = std::env::temp_dir().join("pepper_runtime_discovery");
+        let elsewhere = std::env::temp_dir().join(format!("pepper_runtime_discovery_{}", std::process::id()));
         std::fs::create_dir_all(&elsewhere).unwrap();
         let (none, _, _) = discover_from(&elsewhere, None);
         assert!(none.is_empty(), "no runtime above {}", elsewhere.display());

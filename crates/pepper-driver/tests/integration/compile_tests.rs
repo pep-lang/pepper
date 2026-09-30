@@ -191,7 +191,7 @@ main(): int {
     generator.generate(&mut module).expect("gen");
 
     // Emit obj.
-    let build_dir = std::env::temp_dir().join("pepper_link_test");
+    let build_dir = std::env::temp_dir().join(format!("pepper_link_test_{}", std::process::id()));
     std::fs::create_dir_all(&build_dir).unwrap();
     let obj_path = build_dir.join("test.o");
     let out_path = build_dir.join(if cfg!(windows) { "test_bin.exe" } else { "test_bin" });

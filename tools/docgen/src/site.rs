@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn index_keeps_every_version_and_opens_the_newest_release() {
-        let site = std::env::temp_dir().join("pepper_docgen_site_test");
+        let site = std::env::temp_dir().join(format!("pepper_docgen_site_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&site);
         for v in ["0.1.0", "0.2.0", "0.3.0-beta.1", "dev", "not-a-version"] {
             std::fs::create_dir_all(site.join(v)).unwrap();

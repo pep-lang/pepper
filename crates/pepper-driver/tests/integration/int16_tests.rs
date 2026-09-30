@@ -315,7 +315,7 @@ fn repo_root() -> PathBuf {
 /// Compile `source` to a native binary via the driver and return its path.
 fn build_binary(name: &str, source: &str) -> PathBuf {
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_int16_{name}"));
+    let dir = std::env::temp_dir().join(format!("pepper_int16_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });

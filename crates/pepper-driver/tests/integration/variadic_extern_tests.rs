@@ -41,7 +41,7 @@ fn variadic_declaration_is_variadic_in_llvm() {
 fn build_and_run(name: &str, source: &str) -> i32 {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf();
     std::env::set_current_dir(&root).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_variadic_{name}"));
+    let dir = std::env::temp_dir().join(format!("pepper_variadic_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });

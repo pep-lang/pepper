@@ -19,7 +19,7 @@ fn error_of(test: &str, source: &str) -> String {
 fn error_of_files(test: &str, source: &str, others: &[(&str, &str)]) -> String {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_diagnostic_{}", test));
+    let dir = std::env::temp_dir().join(format!("pepper_diagnostic_{}_{}", test, std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for (name, other) in others {
         std::fs::write(dir.join(name), other).unwrap();
@@ -872,7 +872,7 @@ fn deprecated_function_used_through_imports() {
     // Through a qualifier, the warning points at the name after it, and the
     // fix renames only that; an import list names the declaration too.
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join("pepper_diagnostic_deprecated_imports");
+    let dir = std::env::temp_dir().join(format!("pepper_diagnostic_deprecated_imports_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("lib.pep"),

@@ -20,7 +20,7 @@ fn repo_root() -> PathBuf {
 fn compile(test: &str, lib: &str, main: &str) -> Result<(), String> {
     // chdir so runtime discovery resolves like the CLI.
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_visibility_{}", test));
+    let dir = std::env::temp_dir().join(format!("pepper_visibility_{}_{}", test, std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("lib.pep"), lib).unwrap();
     let main_path = dir.join("main.pep");
@@ -150,7 +150,7 @@ fn runtime_file_as_entry_is_compiled_once() {
 #[test]
 fn forced_import_listed_twice_is_loaded_once() {
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join("pepper_visibility_forced_twice");
+    let dir = std::env::temp_dir().join(format!("pepper_visibility_forced_twice_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("extra.pep"), "helper(): int { return 1; }\nexport extra(): int { return helper(); }").unwrap();
     let main_path = dir.join("main.pep");

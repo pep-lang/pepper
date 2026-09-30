@@ -47,7 +47,7 @@ fn run_binary(name: &str, source: &str) -> (bool, String) {
 /// [`run_binary`] with extra environment variables for the child.
 fn run_binary_with_env(name: &str, source: &str, env: &[(&str, &str)]) -> (bool, String) {
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_audit_{name}"));
+    let dir = std::env::temp_dir().join(format!("pepper_audit_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let src_path = dir.join(format!("{name}.pep"));
     let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
@@ -69,7 +69,7 @@ fn run_binary_with_env(name: &str, source: &str, env: &[(&str, &str)]) -> (bool,
 #[allow(dead_code)]
 fn error_of(test: &str, source: &str) -> String {
     std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_audit_diagnostic_{}", test));
+    let dir = std::env::temp_dir().join(format!("pepper_audit_diagnostic_{}_{}", test, std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let main_path = dir.join("main.pep");
     std::fs::write(&main_path, source).unwrap();
