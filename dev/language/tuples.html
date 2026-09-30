@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2ecbe3ca.js";
+            window.path_to_searchindex_js = "../searchindex-3fa0b426.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -227,13 +227,16 @@ element 0 of element 1. An element that does not exist is a compile error.</li>
 instead: <code>t = (3, t.1);</code>.</li>
 <li><code>Tuple&lt;A, B&gt;</code> is another spelling of <code>(A, B)</code>, for places where a type in
 angle brackets reads better.</li>
+<li><code>(int, String)?</code> is an optional tuple, <code>Optional&lt;(int, String)&gt;</code> (see
+<a href="optionals.html">Optional values</a>).</li>
 </ul>
 <h2 id="labels"><a class="header" href="#labels">Labels</a></h2>
-<p>A tuple type can name its elements: <code>(line: int, column: int)</code>. A label is
-another name for a position, so <code>p.line</code> and <code>p.0</code> read the same element:</p>
+<p>A tuple type can name its elements: <code>(line: int, column: int)</code>, and so can a
+tuple value: <code>(line: 3, column: 7)</code>. A label is another name for a position,
+so <code>p.line</code> and <code>p.0</code> read the same element:</p>
 <pre><code class="language-pepper"># Labels name a tuple's elements.
 position(): (line: int, column: int) {
-    return (3, 7);
+    return (line: 3, column: 7);
 }
 
 struct Token {
@@ -250,6 +253,10 @@ main(): int {
     var plain: (int, int) = p;
     assert(plain.1 == 7, "same elements");
 
+    # A labeled value carries its labels into the variable's type.
+    var end = (line: 4, column: 1);
+    assert(end.line == p.line + 1, "labeled literal");
+
     var t = Token();
     t.at = (5, 6);
     assert(t.at.column == 6, "a labeled field");
@@ -262,8 +269,17 @@ an unlabeled one with the same element types are the same type, so each
 converts to the other freely.</li>
 <li>Either every element has a label or none does, and labels in one tuple must
 differ.</li>
-<li>A tuple value cannot have labels yet: write <code>(3, 7)</code> where a
-<code>(line: int, column: int)</code> is expected, not <code>(line: 3, column: 7)</code>.</li>
+<li>Labels do not pass through a type argument: <code>Optional&lt;(line: int, column: int)&gt;</code>
+is the same type as <code>Optional&lt;(int, int)&gt;</code>, so its <code>value()</code> returns an
+unlabeled tuple. Declare a labeled variable to name the elements again.</li>
+<li><code>var p = (line: 3, column: 7);</code> gives <code>p</code> the labeled type
+<code>(line: int, column: int)</code>. A labeled value takes at least two elements.</li>
+<li>A labeled value initializing or returned as a labeled type must use its
+labels in order: <code>(column: 7, line: 3)</code> where a <code>(line: int, column: int)</code>
+is expected is an error, not a swap. An unlabeled value, or a labeled one
+going to an unlabeled type, converts by position.</li>
+<li>A destructuring assignment lists places alone: <code>(a, b) = (b, a);</code>, never
+<code>(x: a, y: b) = ...</code>.</li>
 </ul>
 <h2 id="destructuring"><a class="header" href="#destructuring">Destructuring</a></h2>
 <p><code>var (a, b) = value;</code> declares one variable for each element of a tuple:</p>
@@ -394,7 +410,6 @@ element as <code>copy</code> would copy it on its own, anything thread-safe as i
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <p>These come in later phases:</p>
 <ul>
-<li>A tuple value cannot have labels (<code>(line: 3, column: 7)</code>).</li>
 <li><code>match</code> cannot match tuple patterns.</li>
 </ul>
 
