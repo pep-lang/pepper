@@ -61,7 +61,7 @@ fn at(text: &str, needle: &str, nth: usize, delta: usize) -> usize {
 }
 
 fn hover(uri: &Url, text: &str, program: &Program, offset: usize) -> String {
-    match PepperLsp::hover_at(uri, text, Some(program), offset).map(|h| h.contents) {
+    match PepperLsp::hover_at(uri, text, Some(program), sema_model_of(program).ok().as_ref(), offset).map(|h| h.contents) {
         Some(HoverContents::Markup(m)) => m.value,
         other => panic!("no hover at {}: {:?}", offset, other),
     }
@@ -70,7 +70,7 @@ fn hover(uri: &Url, text: &str, program: &Program, offset: usize) -> String {
 /// The definition at `offset`: the file it is in (folder and name) and the
 /// text at its range's start.
 fn definition(uri: &Url, text: &str, program: &Program, offset: usize) -> (String, String) {
-    let locations = PepperLsp::definition_at(uri, text, Some(program), offset).expect("a definition");
+    let locations = PepperLsp::definition_at(uri, text, Some(program), sema_model_of(program).ok().as_ref(), offset).expect("a definition");
     let loc = &locations[0];
     let path = loc.uri.to_file_path().unwrap();
     let source = std::fs::read_to_string(&path).unwrap();
@@ -271,7 +271,7 @@ fn hover_shows_doc_comments() {
 fn deprecated_new_offers_a_quick_fix() {
     let uri = Url::parse("file:///t.pep").unwrap();
     let text = "struct S {\n    int x;\n    new(this.x = 1) {}\n}\n";
-    let fixes = |text: &str, range| quick_fixes(&uri, text, &document_warnings(text, None), range);
+    let fixes = |text: &str, range| quick_fixes(&uri, text, &document_warnings(text, None, None), range);
     let actions = fixes(text, Range::new(Position::new(2, 5), Position::new(2, 5)));
     let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(action.title, "Replace `new` with `construct`");
@@ -293,7 +293,7 @@ fn deprecated_new_offers_a_quick_fix() {
 fn missing_semicolon_offers_a_quick_fix() {
     let uri = Url::parse("file:///t.pep").unwrap();
     let text = "main(): int {\n    var total = 1\n    return total;\n}\n";
-    let actions = quick_fixes(&uri, text, &document_warnings(text, None), Range::new(Position::new(1, 17), Position::new(1, 17)));
+    let actions = quick_fixes(&uri, text, &document_warnings(text, None, None), Range::new(Position::new(1, 17), Position::new(1, 17)));
     let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(action.title, "Insert ';'");
     assert_eq!(action.diagnostics.as_ref().unwrap()[0].severity, Some(DiagnosticSeverity::ERROR));
@@ -320,7 +320,7 @@ test(): int {
 #[test]
 fn deprecated_declarations_offer_quick_fixes() {
     let (uri, text, program) = load("deprecated", DEPRECATED, "main.pep");
-    let warnings = document_warnings(&text, Some(&program));
+    let warnings = document_warnings(&text, Some(&program), sema_model_of(&program).ok().as_ref());
     let messages: Vec<&str> = warnings.iter().map(|w| w.message.as_str()).collect();
     assert_eq!(messages, ["'dup' is deprecated: use 'twice' instead", "'clone' is deprecated: use 'copy' instead"]);
     // The method, found by the sema model's types.
@@ -351,7 +351,7 @@ main(): int {
 #[test]
 fn sending_a_variable_offers_move_and_copy() {
     let (uri, text, program) = load("send_named", SEND_NAMED, "main.pep");
-    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let diagnostics = fixable_diagnostics(&text, Some(&program), Some(&sema_model_of(&program)));
     let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
     assert!(error.message.starts_with("'line' is not a new value"), "{}", error.message);
     let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(6, 17), Position::new(6, 17)));
@@ -392,7 +392,7 @@ main(): int {
 #[test]
 fn cannot_copy_offers_a_copyable_skeleton() {
     let (uri, text, program) = load("not_copyable", NOT_COPYABLE, "main.pep");
-    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let diagnostics = fixable_diagnostics(&text, Some(&program), Some(&sema_model_of(&program)));
     let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
     assert_eq!(error.message, "cannot copy 'Handle', which is not trivially copyable");
     let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(9, 13), Position::new(9, 13)));
@@ -430,7 +430,7 @@ fn hover_says_when_a_function_returns_a_fresh_value() {
     let (uri, text, program) = load("fresh", FRESH, "main.pep");
     let hover_text = |needle: &str| {
         let offset = text.find(needle).unwrap();
-        match PepperLsp::hover_at(&uri, &text, Some(&program), offset).map(|h| h.contents) {
+        match PepperLsp::hover_at(&uri, &text, Some(&program), sema_model_of(&program).ok().as_ref(), offset).map(|h| h.contents) {
             Some(HoverContents::Markup(m)) => m.value,
             other => panic!("{other:?}"),
         }
@@ -708,6 +708,43 @@ fn guarded_turns_a_panic_into_none() {
     assert_eq!(guarded(|| -> i32 { panic!("a bug in one request") }), None);
 }
 
+const SHARED: &str = r#"struct Point { var x: int; }
+twice(p: Point): int { return p.x * 2; }
+main(): int {
+    var p = Point();
+    p.x = 21;
+    return twice(p);
+}
+"#;
+
+/// Every request on one text of a document reads one analysis, so the
+/// program loads and sema runs once however many requests the editor sends;
+/// an edit starts a fresh one.
+#[test]
+fn requests_on_one_text_share_one_analysis() {
+    let (uri, text, _) = load("shared_analysis", SHARED, "main.pep");
+    let (service, _) = LspService::new(PepperLsp::new);
+    let server = service.inner();
+    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
+
+    let first = server.analysis(&uri).unwrap();
+    let call = at(&text, "twice(p)", 0, 1);
+    assert!(server.diagnostics(&uri).unwrap().is_empty());
+    assert!(server.hover(&uri, call).is_some());
+    let definition = server.definition(&uri, call).expect("a definition");
+    assert_eq!(definition[0].range.start, Position::new(1, 0));
+    let sema = first.sema_model().expect("sema") as *const SemaModule;
+    let again = server.analysis(&uri).unwrap();
+    assert!(Arc::ptr_eq(&first, &again), "one text, one analysis");
+    assert_eq!(again.sema_model().unwrap() as *const SemaModule, sema, "sema runs once");
+
+    let edited = text.replace("21", "4");
+    server.docs.lock().unwrap().insert(uri.as_str().to_string(), edited.clone());
+    let fresh = server.analysis(&uri).unwrap();
+    assert!(!Arc::ptr_eq(&first, &fresh), "an edit starts a fresh analysis");
+    assert_eq!(fresh.text, edited);
+}
+
 const CONSTRAINED: &str = r#"trait Shape {
     area(): int;
 }
@@ -739,7 +776,7 @@ fn hover_shows_generic_constraints() {
 #[test]
 fn an_unconstrained_parameter_offers_to_constrain_it() {
     let (uri, text, program) = load("constraints_fix", CONSTRAINED, "main.pep");
-    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let diagnostics = fixable_diagnostics(&text, Some(&program), Some(&sema_model_of(&program)));
     let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
     assert_eq!(error.message, "'T' does not conform to trait 'Shape', required by 'T' in 'Gallery'");
     let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(14, 26), Position::new(14, 26)));
@@ -756,7 +793,7 @@ fn an_unconstrained_parameter_offers_to_constrain_it() {
 fn a_type_that_does_not_conform_offers_the_extension() {
     let main = CONSTRAINED.replace("wrap<T>", "wrap<T: Shape>");
     let (uri, text, program) = load("constraints_extend", &main, "main.pep");
-    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let diagnostics = fixable_diagnostics(&text, Some(&program), Some(&sema_model_of(&program)));
     let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
     assert_eq!(error.message, "'Circle' does not conform to trait 'Shape', required by 'T' in 'total'");
     let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(17, 17), Position::new(17, 17)));
@@ -766,4 +803,58 @@ fn a_type_that_does_not_conform_offers_the_extension() {
     let [edit] = edits.as_slice() else { panic!("{edits:?}") };
     assert_eq!(edit.range, Range::new(Position::new(6, 1), Position::new(6, 1)));
     assert_eq!(edit.new_text, "\n\nextend Circle with Shape {\n}");
+}
+
+/// An imported file that changes on disk reaches the analysis of a document
+/// that imports it once the server hears of the change, though the
+/// document's own text is unchanged.
+#[test]
+fn a_changed_import_refreshes_the_analysis() {
+    let main = "import \"util\";\nmain(): int { return twice(2); }\n";
+    let (uri, text, _) = load("changed_import", main, "main.pep");
+    let (service, _) = LspService::new(PepperLsp::new);
+    let server = service.inner();
+    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
+    let call = at(&text, "twice(2)", 0, 1);
+    assert_eq!(server.definition(&uri, call).expect("a definition")[0].range.start.line, 0);
+
+    let util = uri.to_file_path().unwrap().with_file_name("util.pep");
+    let source = std::fs::read_to_string(&util).unwrap();
+    // Unchanged files keep the analysis; the change reaches it without word
+    // from the editor.
+    let other = uri.to_file_path().unwrap().with_file_name("other.pep");
+    assert!(server.forget_analyses(std::slice::from_ref(&other), false).is_empty());
+    std::fs::write(&util, format!("# Moved down a line.\n{}", source)).unwrap();
+    assert_eq!(server.definition(&uri, call).expect("a definition")[0].range.start.line, 1);
+    // The editor's word about it drops the analysis, spelled as the editor
+    // spells the path.
+    let spelled = Url::from_file_path(&util).unwrap().to_string();
+    let spelled = match spelled.strip_prefix("file:///").and_then(|rest| rest.split_once(':')) {
+        Some((drive, rest)) if drive.len() == 1 => format!("file:///{}%3A{}", drive.to_lowercase(), rest),
+        _ => spelled,
+    };
+    let changed = Url::parse(&spelled).unwrap().to_file_path().unwrap();
+    assert_eq!(server.forget_analyses(&[changed], false), vec![uri.clone()]);
+    // A new file may change what an import resolves to.
+    server.definition(&uri, call);
+    assert_eq!(server.forget_analyses(&[other], true), vec![uri.clone()]);
+}
+
+/// An import whose file did not load (a parse error) marks the analysis:
+/// fixing that file drops it, though no loaded file changed.
+#[test]
+fn fixing_an_import_that_did_not_load_refreshes_the_analysis() {
+    let main = "import \"broken\";\nmain(): int { return 0; }\n";
+    let (uri, text, _) = load("failed_import", main, "main.pep");
+    let broken = uri.to_file_path().unwrap().with_file_name("broken.pep");
+    std::fs::write(&broken, "export f(): int { return 1 + ; }\n").unwrap();
+    let (service, _) = LspService::new(PepperLsp::new);
+    let server = service.inner();
+    server.docs.lock().unwrap().insert(uri.as_str().to_string(), text.clone());
+    let analysis = server.analysis(&uri).unwrap();
+    analysis.program().expect("the program loads without the broken file");
+    assert!(analysis.is_current());
+    std::fs::write(&broken, "export f(): int { return 1; }\n# Fixed.\n").unwrap();
+    assert!(!analysis.is_current(), "fixing the file that did not load makes the analysis stale");
+    assert_eq!(server.forget_analyses(&[broken], false), vec![uri.clone()]);
 }

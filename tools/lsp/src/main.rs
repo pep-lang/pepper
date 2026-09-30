@@ -12,8 +12,9 @@ mod imports;
 mod tests;
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use pepper_parser::ast::{self, Span};
@@ -842,6 +843,113 @@ struct PepperLsp {
     /// client's `inlayHints.implicitConversions` initialization option,
     /// on unless it says `false`.
     conversion_hints: AtomicBool,
+    /// The latest analysis of each open document, keyed by URI string.
+    analyses: Mutex<HashMap<String, Arc<Analysis>>>,
+    /// The client can watch files for the server (`workspace/
+    /// didChangeWatchedFiles` with dynamic registration).
+    watches_files: AtomicBool,
+}
+
+/// One version of a document, analyzed: the program rooted at it and that
+/// program's sema model. Each is computed once, on first use, and shared by
+/// every request on the same text. Sema takes seconds on a program that
+/// pulls in much of the runtime, and the editor asks for code actions on
+/// every cursor move and hovers on every mouse move, so recomputing it per
+/// request queues a go-to-definition behind a minute of stale work.
+struct Analysis {
+    uri: Url,
+    text: String,
+    program: OnceLock<Result<Program, String>>,
+    /// Every file the program read from disk, or found and failed to load,
+    /// with its [`file_key`] and its modification time then: the analysis
+    /// is stale once one differs.
+    read: OnceLock<Vec<(PathBuf, String, Option<SystemTime>)>>,
+    sema: OnceLock<Option<Result<SemaModule, diag::Diagnostic>>>,
+}
+
+/// When `path` was last modified; `None` when it cannot be read.
+fn modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/// A file's identity, the same however a path spells it: the editor writes
+/// a Windows drive letter in lowercase (`d:`), and the loader may keep the
+/// `\\?\D:` form `canonicalize` returns.
+fn file_key(path: &Path) -> String {
+    pepper_files::imports::path_key(path)
+}
+
+impl Analysis {
+    fn new(uri: Url, text: String) -> Self {
+        Self { uri, text, program: OnceLock::new(), read: OnceLock::new(), sema: OnceLock::new() }
+    }
+
+    /// Whether every file the program read from disk, or failed to load, is
+    /// as it was: a saved import, a runtime edit, or a change in another
+    /// editor makes it stale. Stats the files, which takes about a
+    /// millisecond. A new file that would satisfy a missing import is
+    /// noticed only through the client's file watcher.
+    fn is_current(&self) -> bool {
+        self.read.get().is_none_or(|read| read.iter().all(|(path, _, time)| modified(path) == *time))
+    }
+
+    /// Whether a change to the files `changed` (their [`file_key`]s) may
+    /// change this analysis: its program read one of them, or failed to
+    /// load it. The document's own text is the editor's, never the file's.
+    fn affected_by(&self, changed: &HashSet<String>) -> bool {
+        // Still loading: it may have read the file before the change.
+        let Some(program) = self.program.get() else { return true };
+        if program.is_err() {
+            return false;
+        }
+        self.read.get().is_some_and(|read| read.iter().any(|(_, key, _)| changed.contains(key)))
+    }
+
+    /// Every file of the program rooted at the document, loaded and linked
+    /// as the driver does: the document itself (possibly unsaved) first,
+    /// then the files its imports reach, then the runtime prelude.
+    /// Unreadable or unparseable imported files are skipped; a parse error
+    /// in the document is returned.
+    fn program(&self) -> Result<&Program, &String> {
+        self.program
+            .get_or_init(|| {
+                let path = self.uri.to_file_path().map_err(|_| "not a file uri".to_string())?;
+                let root = pepper_sema::program::Root { name: self.uri.to_string(), source: self.text.clone(), path };
+                let setup = pepper_sema::program::Setup { mode: pepper_sema::program::Mode::Lenient, ..Default::default() };
+                let program = pepper_sema::program::load_program(root, &setup)?;
+                // Each file's time, then whether it still holds what was
+                // loaded: a file saved while the program loaded has no time,
+                // so the analysis is stale at once.
+                let loaded = program.files[1..].iter().map(|f| {
+                    let path = PathBuf::from(&f.name);
+                    let time = modified(&path).filter(|_| std::fs::read_to_string(&path).is_ok_and(|s| s == f.source));
+                    (path, time)
+                });
+                // A file that did not load changes time once it is fixed.
+                let failed = program.failed.iter().map(|path| (path.clone(), modified(path)));
+                let read = loaded
+                    .chain(failed)
+                    .map(|(path, time)| {
+                        let key = file_key(&path);
+                        (path, key, time)
+                    })
+                    .collect();
+                let _ = self.read.set(read);
+                Ok(program)
+            })
+            .as_ref()
+    }
+
+    /// The program's sema model, or its semantic error; `None` when the
+    /// program did not load.
+    fn sema(&self) -> Option<&Result<SemaModule, diag::Diagnostic>> {
+        self.sema.get_or_init(|| self.program().ok().map(sema_model_of)).as_ref()
+    }
+
+    /// The sema model, when the program loaded and passed semantic analysis.
+    fn sema_model(&self) -> Option<&SemaModule> {
+        self.sema()?.as_ref().ok()
+    }
 }
 
 /// The overload a call or function value in the document resolved to, when
@@ -1062,9 +1170,10 @@ fn deprecation_warnings(program: &Program, sema: Option<&SemaModule>) -> Vec<dia
 }
 
 /// Every warning in `text`, the document `program` is rooted at (when it
-/// loaded): the parser's, then [`deprecation_warnings`]. When `text` does not
-/// parse, its parse error instead, if it carries a fix (a missing `;`).
-fn document_warnings(text: &str, program: Option<&Program>) -> Vec<diag::Diagnostic> {
+/// loaded), whose sema model is `sema` (when it passed): the parser's, then
+/// [`deprecation_warnings`]. When `text` does not parse, its parse error
+/// instead, if it carries a fix (a missing `;`).
+fn document_warnings(text: &str, program: Option<&Program>, sema: Option<&SemaModule>) -> Vec<diag::Diagnostic> {
     let module = match pepper_parser::parser::parse_source_diag(text) {
         Ok(module) => module,
         Err(error) if !error.fixes.is_empty() => return vec![error],
@@ -1072,19 +1181,22 @@ fn document_warnings(text: &str, program: Option<&Program>) -> Vec<diag::Diagnos
     };
     let mut warnings = module.warnings;
     if let Some(program) = program {
-        let sema = sema_model_of(program).ok();
-        warnings.extend(deprecation_warnings(program, sema.as_ref()));
+        warnings.extend(deprecation_warnings(program, sema));
     }
     warnings
 }
 
 /// The diagnostics of `text` (the program's document) that may carry
-/// fixes: its warnings, and `sema_error` (the program's semantic error) when
+/// fixes: its warnings, and the program's semantic error (from `sema`) when
 /// it is in the document and carries one, such as the `Copyable` skeleton
 /// for a struct that `copy` cannot copy.
-fn fixable_diagnostics(text: &str, program: Option<&Program>, sema_error: Option<&diag::Diagnostic>) -> Vec<diag::Diagnostic> {
-    let mut diagnostics = document_warnings(text, program);
-    if let Some(error) = sema_error
+fn fixable_diagnostics(
+    text: &str,
+    program: Option<&Program>,
+    sema: Option<&Result<SemaModule, diag::Diagnostic>>,
+) -> Vec<diag::Diagnostic> {
+    let mut diagnostics = document_warnings(text, program, sema.and_then(|s| s.as_ref().ok()));
+    if let Some(Err(error)) = sema
         && error.loc.is_some_and(|loc| loc.file == FileId(0))
         && !error.fixes.is_empty()
     {
@@ -1124,29 +1236,48 @@ fn quick_fixes(uri: &Url, text: &str, warnings: &[diag::Diagnostic], range: Rang
 
 impl PepperLsp {
     fn new(client: Client) -> Self {
-        Self { client, docs: Mutex::new(HashMap::new()), conversion_hints: AtomicBool::new(true) }
+        Self {
+            client,
+            docs: Mutex::new(HashMap::new()),
+            conversion_hints: AtomicBool::new(true),
+            watches_files: AtomicBool::new(false),
+            analyses: Mutex::new(HashMap::new()),
+        }
     }
 
     fn doc(&self, uri: &Url) -> Option<String> {
         self.docs.lock().unwrap().get(uri.as_str()).cloned()
     }
 
-    /// The file path behind a document URI.
-    fn doc_path(&self, uri: &Url) -> Option<PathBuf> {
-        uri.to_file_path().ok()
+    /// The analysis of the open document `uri` as it reads now: the cached
+    /// one while its text is unchanged, else a fresh one that replaces it.
+    fn analysis(&self, uri: &Url) -> Option<Arc<Analysis>> {
+        let mut analyses = self.analyses.lock().unwrap();
+        // Read under `analyses`: `did_close` removes the text before the
+        // analysis, so a document closed meanwhile is never cached again.
+        let text = self.doc(uri)?;
+        if let Some(analysis) = analyses.get(uri.as_str())
+            && analysis.text == text
+            && analysis.is_current()
+        {
+            return Some(analysis.clone());
+        }
+        let analysis = Arc::new(Analysis::new(uri.clone(), text));
+        analyses.insert(uri.as_str().to_string(), analysis.clone());
+        Some(analysis)
     }
 
-    /// Every file of the program rooted at the open document `uri`, loaded
-    /// and linked as the driver does: the document itself (possibly unsaved)
-    /// first, then the files its imports reach, then the runtime prelude.
-    /// Unreadable or unparseable imported files are skipped; a parse error in
-    /// the document is returned.
-    fn program(&self, uri: &Url) -> Result<Program, String> {
-        let text = self.doc(uri).ok_or_else(|| "document not found".to_string())?;
-        let root_path = self.doc_path(uri).ok_or_else(|| "not a file uri".to_string())?;
-        let root = pepper_sema::program::Root { name: uri.to_string(), source: text, path: root_path };
-        let setup = pepper_sema::program::Setup { mode: pepper_sema::program::Mode::Lenient, ..Default::default() };
-        pepper_sema::program::load_program(root, &setup)
+    /// Drop the cached analyses the files `changed` may change
+    /// ([`Analysis::affected_by`]), or every one when a file was created or
+    /// deleted (`added`), which can change what an import resolves to; and
+    /// return their documents.
+    fn forget_analyses(&self, changed: &[PathBuf], added: bool) -> Vec<Url> {
+        // Resolved once, before taking the lock every request needs.
+        let changed: HashSet<String> = changed.iter().map(|path| file_key(path)).collect();
+        let mut analyses = self.analyses.lock().unwrap();
+        let stale: Vec<String> =
+            analyses.iter().filter(|(_, a)| added || a.affected_by(&changed)).map(|(uri, _)| uri.clone()).collect();
+        stale.iter().filter_map(|uri| analyses.remove(uri)).map(|a| a.uri.clone()).collect()
     }
 
     /// Import errors in the program's document (`program.files[0]`),
@@ -1193,44 +1324,42 @@ impl PepperLsp {
     /// Diagnostics for `uri`: parse errors (precise) + sema errors.
     fn diagnostics(&self, uri: &Url) -> Option<Vec<Diagnostic>> {
         let mut diags = vec![];
-        let text = self.doc(uri)?;
+        let analysis = self.analysis(uri)?;
+        let text = &analysis.text;
         // A parse error, or one found after parsing (a late import, `T*`
         // outside an extern).
-        let parsed = pepper_parser::parser::parse_source_diag(&text);
+        let parsed = pepper_parser::parser::parse_source_diag(text);
         match &parsed {
-            Err(d) => diags.push(lsp_diagnostic(d, uri, &[(uri.as_str(), &text)])),
+            Err(d) => diags.push(lsp_diagnostic(d, uri, &[(uri.as_str(), text)])),
             // Warnings (deprecated syntax) come with quick fixes; see `quick_fixes`.
-            Ok(module) => diags.extend(module.warnings.iter().map(|w| lsp_diagnostic(w, uri, &[(uri.as_str(), &text)]))),
+            Ok(module) => diags.extend(module.warnings.iter().map(|w| lsp_diagnostic(w, uri, &[(uri.as_str(), text)]))),
         }
-        if parsed.is_ok() && let Ok(program) = self.program(uri) {
-            // Read and parse the program once for both the sema and
-            // visibility checks.
-            let names = program_names(&program);
-            let sema = sema_model_of(&program);
-            if let Err(d) = &sema {
+        if parsed.is_ok() && let Ok(program) = analysis.program() {
+            let names = program_names(program);
+            if let Some(Err(d)) = analysis.sema() {
                 diags.push(lsp_diagnostic(d, uri, &names));
             }
             // Uses of `[Deprecated]` declarations, with their quick fixes.
-            let deprecated = deprecation_warnings(&program, sema.as_ref().ok());
+            let deprecated = deprecation_warnings(program, analysis.sema_model());
             diags.extend(deprecated.iter().map(|w| lsp_diagnostic(w, uri, &names)));
-            diags.extend(Self::visibility_diagnostics(&program, uri));
+            diags.extend(Self::visibility_diagnostics(program, uri));
         }
         Some(diags)
     }
 
     /// Hover at `offset` in document `uri`.
     fn hover(&self, uri: &Url, offset: usize) -> Option<Hover> {
-        let text = self.doc(uri)?;
-        Self::hover_at(uri, &text, self.program(uri).ok().as_ref(), offset)
+        let analysis = self.analysis(uri)?;
+        Self::hover_at(uri, &analysis.text, analysis.program().ok(), analysis.sema_model(), offset)
     }
 
     /// Hover at `offset` in `text`, the document `uri`, which is
-    /// `program.files[0]` when its program loaded. A value an `[Implicit]`
-    /// constructor converts says so below what the hover shows for it.
-    fn hover_at(uri: &Url, text: &str, program: Option<&Program>, offset: usize) -> Option<Hover> {
-        let sema = program.and_then(|p| sema_model_of(p).ok());
-        let hover = Self::hover_expression(uri, text, program, sema.as_ref(), offset);
-        let Some(conversion) = sema.as_ref().and_then(|m| conversion_at(m, offset)) else {
+    /// `program.files[0]` when its program loaded; `sema` is that program's
+    /// model when it passed. A value an `[Implicit]` constructor converts
+    /// says so below what the hover shows for it.
+    fn hover_at(uri: &Url, text: &str, program: Option<&Program>, sema: Option<&SemaModule>, offset: usize) -> Option<Hover> {
+        let hover = Self::hover_expression(uri, text, program, sema, offset);
+        let Some(conversion) = sema.and_then(|m| conversion_at(m, offset)) else {
             return hover;
         };
         let note = conversion_note(conversion);
@@ -1404,13 +1533,14 @@ Returns a fresh value: it shares nothing with the arguments.");
 
     /// Go-to-definition at `offset`.
     fn definition(&self, uri: &Url, offset: usize) -> Option<Vec<Location>> {
-        let text = self.doc(uri)?;
-        Self::definition_at(uri, &text, self.program(uri).ok().as_ref(), offset)
+        let analysis = self.analysis(uri)?;
+        Self::definition_at(uri, &analysis.text, analysis.program().ok(), analysis.sema_model(), offset)
     }
 
     /// Go-to-definition at `offset` in `text`, the document `uri`, which is
-    /// `program.files[0]` when its program loaded.
-    fn definition_at(uri: &Url, text: &str, program: Option<&Program>, offset: usize) -> Option<Vec<Location>> {
+    /// `program.files[0]` when its program loaded; `sema` is that program's
+    /// model when it passed.
+    fn definition_at(uri: &Url, text: &str, program: Option<&Program>, sema: Option<&SemaModule>, offset: usize) -> Option<Vec<Location>> {
         let ast = parse_source(uri.as_str(), text).ok()?;
         let imported = |(_, target): (String, imports::Target)| {
             let program = program?;
@@ -1430,8 +1560,8 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
         // A name that resolved to one overload of a set goes to that member.
         if let Some(program) = program
-            && let Ok(sema) = sema_model_of(program)
-            && let Some((function, _)) = overload_at(&sema, offset)
+            && let Some(sema) = sema
+            && let Some((function, _)) = overload_at(sema, offset)
         {
             let file = function.loc.file.0 as usize;
             let f = program.files.get(file)?;
@@ -1621,6 +1751,14 @@ impl LanguageServer for PepperLsp {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
         self.conversion_hints.store(hints, Ordering::Relaxed);
+        let watches = params
+            .capabilities
+            .workspace
+            .as_ref()
+            .and_then(|w| w.did_change_watched_files.as_ref())
+            .and_then(|w| w.dynamic_registration)
+            .unwrap_or(false);
+        self.watches_files.store(watches, Ordering::Relaxed);
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 inlay_hint_provider: Some(OneOf::Left(true)),
@@ -1642,6 +1780,21 @@ impl LanguageServer for PepperLsp {
         })
     }
 
+    async fn initialized(&self, _: InitializedParams) {
+        // Cached analyses read imports from disk: ask the client, whatever
+        // editor it is, to report `.pep` files that change.
+        if self.watches_files.load(Ordering::Relaxed) {
+            let watcher = FileSystemWatcher { glob_pattern: GlobPattern::String("**/*.pep".to_string()), kind: None };
+            let options = DidChangeWatchedFilesRegistrationOptions { watchers: vec![watcher] };
+            let registration = Registration {
+                id: "pep-files".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: serde_json::to_value(options).ok(),
+            };
+            let _ = self.client.register_capability(vec![registration]).await;
+        }
+    }
+
     async fn shutdown(&self) -> LspResult<()> {
         Ok(())
     }
@@ -1660,9 +1813,25 @@ impl LanguageServer for PepperLsp {
         self.publish_diagnostics(&uri).await;
     }
 
+    /// `.pep` files changed on disk (the client watches them for the
+    /// server, see `initialized`): analyses whose programs read one, or failed to load an
+    /// import one may satisfy, are dropped (all of them when a file was
+    /// created or deleted), to be analyzed again when a request needs them.
+    /// Not here: a `git checkout` would otherwise hold every request behind
+    /// a sema run per open document. A request also notices a changed
+    /// loaded file on its own ([`Analysis::is_current`]); this covers
+    /// imports that did not load, and imports a new file resolves
+    /// differently, in clients that watch files.
+    async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
+        let changed: Vec<PathBuf> = params.changes.iter().filter_map(|c| c.uri.to_file_path().ok()).collect();
+        let added = params.changes.iter().any(|c| c.typ != FileChangeType::CHANGED);
+        self.forget_analyses(&changed, added);
+    }
+
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         self.docs.lock().unwrap().remove(uri.as_str());
+        self.analyses.lock().unwrap().remove(uri.as_str());
         self.client.publish_diagnostics(uri, vec![], None).await;
     }
 
@@ -1675,9 +1844,8 @@ impl LanguageServer for PepperLsp {
         let uri = params.text_document.uri;
         let range = params.range;
         Ok(guarded(|| {
-            let text = self.doc(&uri)?;
-            let sema = self.program(&uri).ok().and_then(|p| sema_model_of(&p).ok())?;
-            let hints = conversion_hints(&text, &sema)
+            let analysis = self.analysis(&uri)?;
+            let hints = conversion_hints(&analysis.text, analysis.sema_model()?)
                 .into_iter()
                 .filter(|h| h.position >= range.start && h.position <= range.end)
                 .collect();
@@ -1720,16 +1888,16 @@ impl LanguageServer for PepperLsp {
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
         Ok(guarded(|| {
-            let text = self.doc(&uri)?;
-            let program = self.program(&uri).ok();
-            // One semantic analysis serves both kinds of fix: those a
-            // diagnostic carries (a `Copyable` skeleton) and the missing arms
-            // of a `match`.
-            let sema_error = program.as_ref().and_then(|p| sema_model_of(p).err());
-            let diagnostics = fixable_diagnostics(&text, program.as_ref(), sema_error.as_ref());
-            let mut actions = quick_fixes(&uri, &text, &diagnostics, params.range);
-            if let (Some(program), Some(error)) = (&program, &sema_error) {
-                actions.extend(missing_arms_fix(&uri, &text, program, error, params.range));
+            // The document's one semantic analysis serves both kinds of fix:
+            // those a diagnostic carries (a `Copyable` skeleton) and the
+            // missing arms of a `match`.
+            let analysis = self.analysis(&uri)?;
+            let text = &analysis.text;
+            let program = analysis.program().ok();
+            let diagnostics = fixable_diagnostics(text, program, analysis.sema());
+            let mut actions = quick_fixes(&uri, text, &diagnostics, params.range);
+            if let (Some(program), Some(Err(error))) = (program, analysis.sema()) {
+                actions.extend(missing_arms_fix(&uri, text, program, error, params.range));
             }
             (!actions.is_empty()).then_some(actions)
         })

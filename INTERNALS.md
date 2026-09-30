@@ -1280,10 +1280,27 @@ diagnostics"). The mechanics:
   Windows' 1 MB main thread did not. Every request and `publish_diagnostics`
   computes under `guarded` (`catch_unwind`), so a panic answers that
   request with nothing instead of ending the server.
-- Document text lives in `PepperLsp.docs`. On open or change,
-  `publish_diagnostics` runs these checks:
+- Document text lives in `PepperLsp.docs`. **Every request shares one
+  analysis per text** (`PepperLsp::analysis` → `Analysis`, cached in
+  `PepperLsp.analyses` until the text changes, the document closes, or a
+  file its program read from disk changes: `Analysis::is_current` compares
+  their modification times on each lookup, and `did_change_watched_files`
+  (the server asks the client to watch `**/*.pep` in `initialized`) drops
+  the analyses a
+  change affects, including those whose imports failed to load, all of
+  them when a file is created or deleted; the next request rebuilds them.
+  Files the load found but could not read or parse (`Program::failed`)
+  are compared too; a new file that would satisfy a missing import is
+  noticed only through the watcher):
+  `Analysis::program` loads the program and `Analysis::sema` runs sema,
+  each once (`OnceLock`), so concurrent requests on the same text wait for
+  one run instead of starting their own. Sema takes seconds on a program
+  that pulls in much of the runtime, and the editor sends code actions on
+  every cursor move and hovers on every mouse move; recomputing per request
+  queued a go-to-definition behind a minute of stale work.
+- On open or change, `publish_diagnostics` runs these checks:
   1. `parse_source_diag` on the buffer (precise parse errors).
-  2. Otherwise, `program(uri)` → `load_program(Root { unsaved text },
+  2. Otherwise, `Analysis::program` → `load_program(Root { unsaved text },
      Setup { mode: Lenient })`, then `sema_model_of` (build every file, run
      the platform filters, `struct_body::apply`, and `transform_pass`
      **under `catch_unwind`**), then `visibility_diagnostics`.
@@ -1291,8 +1308,9 @@ diagnostics"). The mechanics:
      editor does not know the compile's `-I` directories.
   3. Warnings: the parser's, then `deprecation_warnings` (the program's
      `deprecation_warnings()` and the sema model's `warnings`, in the
-     document only). `code_action` recomputes them (`document_warnings`)
-     and `quick_fixes` turns each fix into a code action.
+     document only). `code_action` collects them again from the shared
+     analysis (`document_warnings`) and `quick_fixes` turns each fix into a
+     code action.
 - `lsp_diagnostic` maps a `Diagnostic` to the document. A location in
   another file appears at the top of the document, prefixed with that
   file's name. Notes become `relatedInformation`.
@@ -1307,7 +1325,7 @@ diagnostics"). The mechanics:
 - **Implicit conversions.** `convert_to_traits` records each conversion it
   inserts whose value has a location in `Module::conversions` (string
   literals carry their `Loc` for this, and the `String` constructor call
-  they become keeps it). `hover_at` runs sema once and appends a note when
+  they become keeps it). `hover_at` reads the sema model and appends a note when
   the offset is inside a converted value (`conversion_at`); `inlay_hint`
   returns `To(` / `)` around each one in the document (`conversion_hints`),
   unless the client's `inlayHints.implicitConversions` initialization option

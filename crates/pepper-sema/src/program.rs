@@ -55,6 +55,9 @@ pub struct Program {
     pub scopes: Vec<FileScope>,
     /// Unresolved imports and linking errors.
     pub errors: Vec<ModuleError>,
+    /// Files the load found but could not read or parse, and so left out
+    /// (lenient mode only): an editor watches them for a fix.
+    pub failed: Vec<PathBuf>,
 }
 
 impl Program {
@@ -361,6 +364,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
     let mut errors: Vec<ModuleError> = vec![];
     // Lenient mode: files that could not be loaded, by key -> why.
     let mut failed: HashMap<String, String> = HashMap::new();
+    let mut failed_paths: Vec<PathBuf> = vec![];
     // Module folders, looked up once per directory for this load.
     let roots = ModuleRoots::for_project(std::env::current_dir().ok().as_deref());
 
@@ -389,6 +393,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
                 Err(e) if mode == Mode::Strict => return Err(format!("cannot read {}: {}", path.display(), e)),
                 Err(e) => {
                     failed.insert(key, format!("cannot read it: {}", e));
+                    failed_paths.push(path);
                     continue;
                 }
             }
@@ -400,6 +405,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
             Err(e) if mode == Mode::Strict || files.is_empty() => return Err(e),
             Err(e) => {
                 failed.insert(key, e);
+                failed_paths.push(path);
                 continue;
             }
         };
@@ -556,7 +562,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
     let (scopes, link_errors) = link(&mut files);
     errors.extend(link_errors);
     errors.sort_by_key(|e| (e.file, e.span.start));
-    Ok(Program { files, scopes, errors })
+    Ok(Program { files, scopes, errors, failed: failed_paths })
 }
 
 fn describe_paths(paths: &[PathBuf]) -> String {
