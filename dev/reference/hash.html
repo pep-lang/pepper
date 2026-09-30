@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b802c4f.js";
+            window.path_to_searchindex_js = "../searchindex-5f5358f7.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0595f8ea.js"></script>
+        <script src="../toc-69a53c46.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -507,7 +507,7 @@ may change, and writing to them breaks the set.</p>
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 </code></pre>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
 </code></pre>
@@ -519,6 +519,20 @@ The set holds up to half its slot count before the first grow.</p>
 <ul>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
+<h4 id="hashset-2"><a class="header" href="#hashset-2">HashSet()</a></h4>
+<pre><code class="language-pepper">[Implicit] construct(items: Array&lt;K&gt;)
+</code></pre>
+<p>Creates a set holding each element of <code>items</code> once.</p>
+<p>The constructor is <code>[Implicit]</code>: an array converts to a set wherever
+a set is expected, so an array literal can initialize one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to insert; duplicates are kept once</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    HashSet&lt;String&gt; keywords = ["if", "else", "while"];
+    assert(keywords.contains("else"), "a member");
+</code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="grow-1"><a class="header" href="#grow-1">grow</a></h4>
 <pre><code class="language-pepper">void grow()
@@ -692,7 +706,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <ul>
 <li><code>HashMap.iterate</code></li>
 </ul>
-<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="hashmapiterator-1"><a class="header" href="#hashmapiterator-1">HashMapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: HashMap&lt;K, V&gt;)
 </code></pre>
@@ -743,7 +757,7 @@ panic.</p>
 <ul>
 <li><code>HashSet.iterate</code></li>
 </ul>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="hashsetiterator-1"><a class="header" href="#hashsetiterator-1">HashSetIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: HashSet&lt;K&gt;)
 </code></pre>

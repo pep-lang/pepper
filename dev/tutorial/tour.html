@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b802c4f.js";
+            window.path_to_searchindex_js = "../searchindex-5f5358f7.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0595f8ea.js"></script>
+        <script src="../toc-69a53c46.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -326,9 +326,7 @@ See <a href="../language/structs.html">Structs</a> and
 not need to import them:</p>
 <pre><code class="language-pepper">main(): int {
     # Array&lt;T&gt; is a growable list. int[] is another way to write Array&lt;int&gt;.
-    var scores = Array&lt;int&gt;();
-    scores.append(90);
-    scores.append(72);
+    var scores = [90, 72];
     scores.append(85);
     assert(scores.count() == 3, "three scores");
     assert(scores[0] == 90, "indexing starts at 0");
@@ -360,8 +358,7 @@ not need to import them:</p>
     assert(greeting[0] == "H", "s[i] is a one-character String");
 
     # HashMap&lt;K, V&gt; maps keys to values.
-    var ages = HashMap&lt;String, int&gt;();
-    ages["Ada"] = 36;
+    var ages = ["Ada": 36];
     ages.insert("Alan", 41);
     assert(ages.count() == 2, "two entries");
     assert(ages["Ada"] == 36, "look up by key");
@@ -380,6 +377,8 @@ not need to import them:</p>
 }
 </code></pre>
 <ul>
+<li><code>[90, 72]</code> and <code>["Ada": 36]</code> are <a href="../language/collection-literals.html">collection literals</a>:
+a new array and a new map.</li>
 <li><a href="../reference/array.html"><code>Array&lt;T&gt;</code></a> is a list that grows as you <code>append</code>.
 <code>int[]</code> is a shorter way to write the type <code>Array&lt;int&gt;</code>. Indexing is checked:
 reading past the end stops the program with an error rather than reading

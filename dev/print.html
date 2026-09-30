@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9b802c4f.js";
+            window.path_to_searchindex_js = "searchindex-5f5358f7.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0595f8ea.js"></script>
+        <script src="toc-69a53c46.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,7 +223,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, enums (with cases that carry values) and <code>match</code> (as a statement or a value, on enums, integers, characters and strings, with <code>is</code> tests), tuples
-and multiple return values, generics (with type
+and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
@@ -613,9 +613,7 @@ See <a href="#structs-1">Structs</a> and
 not need to import them:</p>
 <pre><code class="language-pepper">main(): int {
     # Array&lt;T&gt; is a growable list. int[] is another way to write Array&lt;int&gt;.
-    var scores = Array&lt;int&gt;();
-    scores.append(90);
-    scores.append(72);
+    var scores = [90, 72];
     scores.append(85);
     assert(scores.count() == 3, "three scores");
     assert(scores[0] == 90, "indexing starts at 0");
@@ -647,8 +645,7 @@ not need to import them:</p>
     assert(greeting[0] == "H", "s[i] is a one-character String");
 
     # HashMap&lt;K, V&gt; maps keys to values.
-    var ages = HashMap&lt;String, int&gt;();
-    ages["Ada"] = 36;
+    var ages = ["Ada": 36];
     ages.insert("Alan", 41);
     assert(ages.count() == 2, "two entries");
     assert(ages["Ada"] == 36, "look up by key");
@@ -667,6 +664,8 @@ not need to import them:</p>
 }
 </code></pre>
 <ul>
+<li><code>[90, 72]</code> and <code>["Ada": 36]</code> are <a href="#collection-literals">collection literals</a>:
+a new array and a new map.</li>
 <li><a href="#array"><code>Array&lt;T&gt;</code></a> is a list that grows as you <code>append</code>.
 <code>int[]</code> is a shorter way to write the type <code>Array&lt;int&gt;</code>. Indexing is checked:
 reading past the end stops the program with an error rather than reading
@@ -2142,6 +2141,109 @@ element as <code>copy</code> would copy it on its own, anything thread-safe as i
 <ul>
 <li><code>match</code> cannot match tuple patterns.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="collection-literals"><a class="header" href="#collection-literals">Collection literals</a></h1>
+<p>A collection literal writes an array, a map or a set in one expression:</p>
+<pre><code class="language-pepper">trait Shape {
+    area(): int;
+}
+
+struct Square {
+    int side;
+
+    construct(side: int) {
+        this.side = side;
+    }
+}
+
+extend Square with Shape {
+    area(): int {
+        return side * side;
+    }
+}
+
+total(values: long[]): long {
+    long sum = 0;
+    for (var value in values) {
+        sum += value;
+    }
+    return sum;
+}
+
+main(): int {
+    # An array literal is an Array of its elements' type.
+    var primes = [2, 3, 5, 7];
+    assert(primes.count() == 4 &amp;&amp; primes[3] == 7, "an Array&lt;int&gt;");
+
+    # A trailing comma lets a long literal put one element per line.
+    var operators = [
+        "===",
+        "!==",
+        "=&gt;",
+    ];
+    assert(operators[1] == "!==", "an Array&lt;String&gt;");
+
+    # Where an Array type is expected, the elements convert to its element type.
+    assert(total([1, 2, 3]) == 6, "an Array&lt;long&gt; argument");
+    Shape[] shapes = [Square(2), Square(3)];
+    assert(shapes[1].area() == 9, "elements convert to the trait type");
+
+    # A map literal is a HashMap; a repeated key keeps its last value.
+    var ages = ["Ada": 36, "Alan": 41];
+    assert(ages["Alan"] == 41, "a HashMap&lt;String, int&gt;");
+
+    # An array literal where a HashSet is expected makes a set.
+    HashSet&lt;String&gt; keywords = ["if", "else", "if"];
+    assert(keywords.count() == 2, "duplicates are kept once");
+
+    # [] and [:] are empty, where the type is declared.
+    long[] none = [];
+    HashMap&lt;String, int&gt; nobody = [:];
+    assert(none.empty() &amp;&amp; nobody.count() == 0, "empty collections");
+    return 0;
+}
+</code></pre>
+<h2 id="arrays"><a class="header" href="#arrays">Arrays</a></h2>
+<ul>
+<li><code>[a, b, c]</code> is a new <a href="#array"><code>Array&lt;T&gt;</code></a> holding the
+elements in order. A trailing comma is allowed: <code>[a, b, c,]</code>.</li>
+<li>With no other type to go by, <code>T</code> is the first element’s type, and every
+later element converts to it the way an argument converts to a parameter:
+<code>[1, 2]</code> is an <code>Array&lt;int&gt;</code>, and <code>[1, "a"]</code> is an error.</li>
+<li>Where an array type is expected (a declared variable, a parameter, a
+return value, an assignment), <code>T</code> is that type’s element type instead, and
+every element converts to it: <code>long[] a = [1, 2];</code>,
+<code>Shape[] s = [square, circle];</code>.</li>
+<li>Nested literals are typed the same way: <code>long[][] grid = [[1], [2, 3]];</code>.</li>
+<li><code>[]</code> is an empty array. It needs a declared type (<code>long[] none = [];</code>),
+since it has no element to take a type from:</li>
+</ul>
+<pre><code class="language-text">main.pep:2:13: error: empty array literal has no element type; declare the variable's type or write 'Array&lt;T&gt;()'
+    2 |     var a = [];
+      |             ^~
+</code></pre>
+<h2 id="maps"><a class="header" href="#maps">Maps</a></h2>
+<ul>
+<li><code>[k1: v1, k2: v2]</code> is a new <a href="#hashmap-and-hashset"><code>HashMap&lt;K, V&gt;</code></a> holding
+the entries. <code>K</code> and <code>V</code> come from the first entry, or from the
+<code>HashMap&lt;K, V&gt;</code> a declared variable, parameter or return type expects.</li>
+<li>A key written twice keeps its last value, as two <code>insert</code> calls would.</li>
+<li><code>[:]</code> is an empty map, and needs a declared type:
+<code>HashMap&lt;String, int&gt; none = [:];</code>.</li>
+</ul>
+<h2 id="sets"><a class="header" href="#sets">Sets</a></h2>
+<p>There is no separate set literal. An array literal where a
+<a href="#hashset"><code>HashSet&lt;K&gt;</code></a> is expected converts to one
+through <code>HashSet</code>’s <a href="#implicit-conversions">implicit constructor</a>,
+which keeps each element once: <code>HashSet&lt;String&gt; keywords = ["if", "else"];</code>.</p>
+<h2 id="types-of-specializations"><a class="header" href="#types-of-specializations">Types of specializations</a></h2>
+<p>A literal never changes a collection’s type after it is built:
+<code>Array&lt;int&gt;</code> and <code>Array&lt;long&gt;</code> are different types, and neither converts to
+the other.</p>
+<pre><code class="language-text">main.pep:2:21: error: cannot initialize variable 'a' of type 'Array&lt;long&gt;' with a value of type 'Array&lt;int&gt;'
+    2 |     Array&lt;long&gt; a = Array&lt;int&gt;();
+      |                     ^~~~~~~~~~
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="function-types-and-closures"><a class="header" href="#function-types-and-closures">Function types and closures</a></h1>
 <p>Functions in Pepper are values. You can store a function in a variable, a
@@ -11230,7 +11332,7 @@ may change, and writing to them breaks the set.</p>
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 </code></pre>
-<h3 id="constructor-1-1"><a class="header" href="#constructor-1-1">Constructor</a></h3>
+<h3 id="constructors-2"><a class="header" href="#constructors-2">Constructors</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
 <pre><code class="language-pepper">construct(ulong initial_capacity = 8)
 </code></pre>
@@ -11242,6 +11344,20 @@ The set holds up to half its slot count before the first grow.</p>
 <ul>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
+<h4 id="hashset-2"><a class="header" href="#hashset-2">HashSet()</a></h4>
+<pre><code class="language-pepper">[Implicit] construct(items: Array&lt;K&gt;)
+</code></pre>
+<p>Creates a set holding each element of <code>items</code> once.</p>
+<p>The constructor is <code>[Implicit]</code>: an array converts to a set wherever
+a set is expected, so an array literal can initialize one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to insert; duplicates are kept once</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    HashSet&lt;String&gt; keywords = ["if", "else", "while"];
+    assert(keywords.contains("else"), "a member");
+</code></pre>
 <h3 id="methods-1-3"><a class="header" href="#methods-1-3">Methods</a></h3>
 <h4 id="grow-1-1"><a class="header" href="#grow-1-1">grow</a></h4>
 <pre><code class="language-pepper">void grow()
@@ -11415,7 +11531,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <ul>
 <li><code>HashMap.iterate</code></li>
 </ul>
-<h3 id="constructor-2-1"><a class="header" href="#constructor-2-1">Constructor</a></h3>
+<h3 id="constructor-1-1"><a class="header" href="#constructor-1-1">Constructor</a></h3>
 <h4 id="hashmapiterator-1"><a class="header" href="#hashmapiterator-1">HashMapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: HashMap&lt;K, V&gt;)
 </code></pre>
@@ -11466,7 +11582,7 @@ panic.</p>
 <ul>
 <li><code>HashSet.iterate</code></li>
 </ul>
-<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h3 id="constructor-2-1"><a class="header" href="#constructor-2-1">Constructor</a></h3>
 <h4 id="hashsetiterator-1"><a class="header" href="#hashsetiterator-1">HashSetIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: HashSet&lt;K&gt;)
 </code></pre>
@@ -14557,7 +14673,7 @@ form is <code>address:port</code> for IPv4 and <code>[address]:port</code> for I
     var local = io.SocketAddress.parse("[::1]:443").value();
     print(local.port());   # 443
 </code></pre>
-<h3 id="constructors-2"><a class="header" href="#constructors-2">Constructors</a></h3>
+<h3 id="constructors-3"><a class="header" href="#constructors-3">Constructors</a></h3>
 <h4 id="socketaddress-1"><a class="header" href="#socketaddress-1">SocketAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
