@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-95725726.js";
+            window.path_to_searchindex_js = "../searchindex-cf018f2d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-ae7a611c.js"></script>
@@ -204,6 +204,10 @@ content.</p>
 <p>A <code>StringIterator</code> panics when the String has been changed by <code>append</code>,
 <code>+=</code>, or <code>grow</code> since the iterator was created, so modifying a String
 while a <code>for</code> loop iterates it panics.</p>
+<p>To build text from values, use an interpolated string
+(<code>$"{name}: {count:&gt;4}"</code>) or <code>String.format("{0}: {1:&gt;4}", name, count)</code>,
+a compiler intrinsic whose braces name its arguments by position (see
+the String interpolation chapter).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "héllo";
     assert(s.length() == 5, "5 code points");

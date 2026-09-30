@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-95725726.js";
+            window.path_to_searchindex_js = "searchindex-cf018f2d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae7a611c.js"></script>
@@ -229,7 +229,7 @@ traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
-<code>to_string</code> and a <code>ToString</code> trait, and <code>$"{a + b}"</code> interpolation), sortable arrays, hash
+<code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
 TCP and UDP sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
@@ -1464,8 +1464,8 @@ so may character literals and other interpolated strings. A <code>}</code> insid
 them, or inside brackets of the expression’s own, does not end it.</li>
 <li>The expression fits on <strong>one line</strong> and holds <strong>no comment</strong>: a line break
 or a <code>#</code> inside the braces is an error.</li>
-<li>There are <strong>no format specifiers</strong>: <code>{x:5}</code> is an error. Pad or format the
-value with a call instead.</li>
+<li>A <strong>format specification</strong> may follow the expression after a <code>:</code>, as in
+<code>{n:&gt;8}</code> or <code>{n:08x}</code>: see <a href="#format-specifications">below</a>.</li>
 <li><strong><code>{{</code> and <code>}}</code></strong> are a literal <code>{</code> and <code>}</code>.</li>
 <li><strong>Escapes</strong> (<code>\n</code>, <code>\t</code>, <code>\"</code>, …) work as in any
 <a href="#strings">string literal</a>.</li>
@@ -1529,6 +1529,93 @@ cannot be interpolated. A plain overload such as <code>to_string(p: Point)</code
 used either: overloads of a name do not merge across files (see
 <a href="#overloading-1">overloading</a>), so the runtime cannot see yours. Write a
 <code>to_string&lt;Point&gt;</code> override or a method instead.</p>
+<h2 id="format-specifications"><a class="header" href="#format-specifications">Format specifications</a></h2>
+<p>A <code>:</code> after the expression starts a format specification, which pads the
+value’s text or writes an integer in another base. Its parts, all optional,
+come in this order:</p>
+<pre><code class="language-text">{value:[[fill]align][+][0][width][type]}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Part</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>align</code></td><td><code>&lt;</code> left, <code>^</code> centered (leaning left), <code>&gt;</code> right. Without one, integers go to the right and everything else to the left.</td></tr>
+<tr><td><code>fill</code></td><td>The character the padding is made of, written before <code>align</code>; a space by default. It can be any character but <code>{</code>, <code>}</code>, <code>"</code>, <code>'</code> and <code>#</code>.</td></tr>
+<tr><td><code>+</code></td><td>Writes a <code>+</code> before a number that is not negative.</td></tr>
+<tr><td><code>0</code></td><td>Pads with zeros after the sign (<code>-0042</code>). It cannot be combined with <code>align</code>.</td></tr>
+<tr><td><code>width</code></td><td>The least number of characters the text takes; longer text is kept whole.</td></tr>
+<tr><td><code>type</code></td><td><code>d</code> decimal, <code>x</code> and <code>X</code> hexadecimal (lower and upper case), <code>b</code> binary, <code>o</code> octal.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># Format specifications: padding, signs and other bases after a `:`.
+main(): int {
+    var count = 42;
+    var name = "Pepper";
+
+    # Width and alignment pad any value; numbers go right by default.
+    assert($"[{count:6}]" == "[    42]", "a number goes right");
+    assert($"[{name:10}]" == "[Pepper    ]", "text goes left");
+    assert($"[{name:&gt;10}]" == "[    Pepper]", "right");
+    assert($"[{name:*^10}]" == "[**Pepper**]", "centered with a fill");
+
+    # Integers take a sign, zero padding and a base.
+    assert($"{count:+}" == "+42", "a plus sign");
+    assert($"{count:05}" == "00042", "zero padding");
+    assert($"{255:x} {255:X} {5:b} {8:o}" == "ff FF 101 10", "bases");
+    assert($"0x{255:08x}" == "0x000000ff", "padded hexadecimal");
+    assert($"{-42:x}" == "-2a", "a negative number keeps its sign");
+
+    # The `:` after the whole expression starts the specification.
+    assert($"[{count &gt; 1 ? "many" : "one":&gt;5}]" == "[ many]", "a ternary");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Padding (<code>fill</code>, <code>align</code> and <code>width</code>) works for any value that can be
+interpolated: it pads the value’s <code>to_string</code> text, counting characters,
+not bytes.</li>
+<li><code>+</code>, <code>0</code> and a <code>type</code> need an integer (of any size, signed or unsigned).
+Using one with any other value is an error at that character.</li>
+<li>A negative number keeps its sign in every base: <code>{-42:x}</code> is <code>-2a</code>, not
+the bits of its two’s complement.</li>
+<li>The <code>:</code> that starts the specification is the one after the whole
+expression, so a ternary can be formatted as it is:
+<code>{n &gt; 1 ? "many" : "one":&gt;5}</code>.</li>
+<li>There is no precision (<code>.2</code>) yet, since floating-point numbers have no
+text conversion.</li>
+</ul>
+<h2 id="formatting-by-position-stringformat"><a class="header" href="#formatting-by-position-stringformat">Formatting by position: <code>String.format</code></a></h2>
+<p><code>String.format</code> takes a string literal whose braces name its other
+arguments by position, <code>{0}</code> for the first, each with an optional format
+specification, and returns the text:</p>
+<pre><code class="language-pepper"># String.format: braces name the arguments by position.
+main(): int {
+    var a = 2;
+    var b = 3;
+    assert(String.format("{0} + {1} = {2}", a, b, a + b) == "2 + 3 = 5", "in order");
+
+    # An index can repeat or come out of order, with its own specification.
+    assert(String.format("{1} before {0}", "first", "second") == "second before first", "reordered");
+    assert(String.format("{0} is {0:x} in hex", 255) == "255 is ff in hex", "repeated");
+    assert(String.format("[{0:&gt;4}] {{literal}}", a) == "[   2] {literal}", "padding and braces");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The format must be a <strong>string literal</strong>: the compiler reads it, so an
+index out of range, an argument no brace names, or a bad specification
+is an error at compile time. <code>{{</code> and <code>}}</code> are literal braces, as in an
+interpolated string.</li>
+<li>Each argument is <strong>evaluated once</strong>, from left to right, however many
+braces name it and in whatever order.</li>
+<li>An index can repeat, to show one value twice or in two forms
+(<code>"{0} is {0:x} in hex"</code>).</li>
+<li>It is part of the compiler, not a function in the runtime: it cannot be
+stored in a variable or called through a function value.</li>
+</ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A value with no conversion is reported at its braces, with a note at its
 type:</p>
@@ -1559,16 +1646,37 @@ main.pep:3:15: note: to match this '{'
 <p>An error in the expression itself, such as a name that is not declared
 (<code>use of undeclared identifier 'x'</code>), is reported like any other, at the
 token inside the braces.</p>
+<p>A format specification’s errors are reported at the character in it that
+is wrong:</p>
+<pre><code class="language-text">main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]align][+][0][width][type]'
+    5 |     print($"{n:q}");
+      |                ^
+main.pep:5:19: error: cannot format a value of type 'String' as an integer
+    5 |     print($"{name:x}");
+      |                   ^
+</code></pre>
+<p><code>String.format</code> reports an index with no argument at the index, and an
+argument with no index at the argument:</p>
+<pre><code class="language-text">main.pep:5:31: error: argument index 2 is out of range for 2 arguments
+    5 |     print(String.format("{0} {2}", n, n));
+      |                               ^
+main.pep:5:35: error: argument 1 of 'String.format' is not used by its format string
+    5 |     print(String.format("{0}", n, n + 1));
+      |                                   ^~~~~
+</code></pre>
 <p>Changing a variable inside the braces is reported at the operator:</p>
 <pre><code class="language-text">main.pep:3:16: error: an assignment cannot appear in an interpolated string
     3 |     print($"{a += 1}");
       |                ^~
 </code></pre>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
-<p>The compiler turns <code>$"({x}, {y + 1})"</code> into <code>"(" + to_string(x) + ", " + to_string(y + 1) + ")"</code>, resolving <code>to_string</code> in the runtime rather than in
-your file. So a struct’s own <code>to_string()</code> method can interpolate its fields
-without calling itself, and the result costs what the same <code>+</code> expression
-does.</p>
+<p>The compiler turns <code>$"({x}, {y + 1})"</code> into <code>"(" + to_string(x) + ", " + to_string(y + 1) + ")"</code>, resolving <code>to_string</code> in the runtime rather than
+in your file. So a struct’s own <code>to_string()</code> method can interpolate its
+fields without calling itself, and the result costs what the same <code>+</code>
+expression does. A value with a format specification goes through a
+runtime call that pads or converts its text instead. <code>String.format</code> becomes
+the same concatenation, with its arguments bound to hidden names first when
+the braces name them out of order or more than once.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -10600,6 +10708,10 @@ content.</p>
 <p>A <code>StringIterator</code> panics when the String has been changed by <code>append</code>,
 <code>+=</code>, or <code>grow</code> since the iterator was created, so modifying a String
 while a <code>for</code> loop iterates it panics.</p>
+<p>To build text from values, use an interpolated string
+(<code>$"{name}: {count:&gt;4}"</code>) or <code>String.format("{0}: {1:&gt;4}", name, count)</code>,
+a compiler intrinsic whose braces name its arguments by position (see
+the String interpolation chapter).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "héllo";
     assert(s.length() == 5, "5 code points");
