@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8720a572.js";
+            window.path_to_searchindex_js = "searchindex-b39ddd66.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-8eb27183.js"></script>
+        <script src="toc-f308eb6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,7 +222,8 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors and methods, enums with <code>match</code>, generics (with type
+structs with constructors, destructors and methods, enums with <code>match</code>, tuples
+and multiple return values, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
@@ -1769,6 +1770,15 @@ main(): int {
 <p>Defaults work the same way for methods and constructors. Pepper has no named
 arguments: to give a later parameter a value, you pass every parameter before
 it.</p>
+<h2 id="returning-several-values"><a class="header" href="#returning-several-values">Returning several values</a></h2>
+<p>A function returns several values as a <a href="#tuples-and-multiple-return-values">tuple</a>, and the caller
+destructures it:</p>
+<pre><code class="language-pepper">divide(a: int, b: int): (int, int) {
+    return (a / b, a % b);
+}
+
+var (quotient, remainder) = divide(17, 5);
+</code></pre>
 <h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
 <p>Functions of one file can share a name when their parameter lists differ,
 and each call picks the best fit for its arguments. See
@@ -1804,6 +1814,141 @@ string literal message costs nothing when the assertion holds. See
 variable, pass to another function, or return, and a closure such as
 <code>(x: int) =&gt; x * 2</code> is a function written where it is used. See
 <a href="#function-types-and-closures">Function types and closures</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tuples-and-multiple-return-values"><a class="header" href="#tuples-and-multiple-return-values">Tuples and multiple return values</a></h1>
+<p>A <em>tuple</em> groups a fixed number of values, each of its own type, into one
+value. Its main use is returning several values from a function:</p>
+<pre><code class="language-pepper"># A function returns several values as a tuple.
+divide(a: int, b: int): (int, int) {
+    return (a / b, a % b);
+}
+
+# Elements can be of any type, and a tuple can hold another tuple.
+describe(n: int): (String, (bool, int)) {
+    return ("number", (n % 2 == 0, n * n));
+}
+
+main(): int {
+    # Read elements by position: t.0, t.1, ...
+    var t = divide(17, 5);
+    assert(t.0 == 3, "the quotient");
+    assert(t.1 == 2, "the remainder");
+
+    # Nested tuples chain: d.1.0 is element 0 of element 1.
+    var d = describe(4);
+    assert(d.0 == "number", "the name");
+    assert(d.1.0 &amp;&amp; d.1.1 == 16, "even, and its square");
+
+    # A tuple type can be written out; the literal converts to it.
+    var wide: (long, double) = (1, 2);
+    assert(wide.0 == 1 &amp;&amp; wide.1 == 2.0, "converted elements");
+    return 0;
+}
+</code></pre>
+<h2 id="tuple-types-and-values"><a class="header" href="#tuple-types-and-values">Tuple types and values</a></h2>
+<ul>
+<li>A tuple type lists its element types in parentheses: <code>(int, String)</code>,
+<code>(bool, (int, int))</code>. A tuple has at least two elements.</li>
+<li>A tuple value lists its elements the same way: <code>(a / b, a % b)</code>. The
+compiler infers its type from the elements, so <code>(1, "x")</code> is an
+<code>(int, String)</code>.</li>
+<li>Where a tuple type is expected (a declared variable, a parameter, a return
+value), each element converts to its element type, as it would on its own:
+<code>var wide: (long, double) = (1, 2);</code>.</li>
+<li><code>t.0</code>, <code>t.1</code>, … read an element by position, counting from 0. <code>t.1.0</code> is
+element 0 of element 1. An element that does not exist is a compile error.</li>
+<li>Elements are read-only. <code>t.0 = 3</code> is a compile error; build a new tuple
+instead: <code>t = (3, t.1);</code>.</li>
+</ul>
+<h2 id="destructuring"><a class="header" href="#destructuring">Destructuring</a></h2>
+<p><code>var (a, b) = value;</code> declares one variable for each element of a tuple:</p>
+<pre><code class="language-pepper">struct Point {
+    var x: int = 0;
+    var y: int = 0;
+}
+
+min_max(values: Array&lt;int&gt;): (int, int) {
+    var low = values[0];
+    var high = values[0];
+    for (var v in values) {
+        if (v &lt; low) {
+            low = v;
+        }
+        if (v &gt; high) {
+            high = v;
+        }
+    }
+    return (low, high);
+}
+
+main(): int {
+    var values = Array&lt;int&gt;();
+    values.append(4);
+    values.append(-2);
+    values.append(9);
+
+    # Destructure the result into new variables.
+    var (low, high) = min_max(values);
+    assert(low == -2 &amp;&amp; high == 9, "both ends");
+
+    # `_` skips an element; a binding may state its type.
+    var (_, top: long) = min_max(values);
+    assert(top == 9, "only the maximum");
+
+    # `const` makes every binding constant.
+    const (first, last) = (values[0], values[2]);
+    assert(first == 4 &amp;&amp; last == 9, "constants");
+
+    # Assign to existing places. The right side is evaluated first,
+    # so this swaps.
+    var a = 1;
+    var b = 2;
+    (a, b) = (b, a);
+    assert(a == 2 &amp;&amp; b == 1, "swapped");
+
+    var p = Point();
+    (p.x, p.y) = min_max(values);
+    assert(p.x == -2 &amp;&amp; p.y == 9, "fields are places too");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The number of names must match the number of elements.</li>
+<li><code>_</code> skips an element.</li>
+<li>A name may state its type, <code>var (_, top: long) = …</code>; the element converts
+to it. Without one, the variable takes the element’s type.</li>
+<li><code>const (a, b) = …</code> declares constants.</li>
+<li><code>(a, b) = value;</code> assigns to places that already exist: variables, fields
+(<code>p.x</code>) and array elements. The whole right side is evaluated before any
+assignment, so <code>(a, b) = (b, a)</code> swaps.</li>
+</ul>
+<h2 id="tuples-and-references"><a class="header" href="#tuples-and-references">Tuples and references</a></h2>
+<p>A tuple is a value, like a number. It is not an object on the heap, and
+copying it copies its elements. An element that is a
+<a href="#values-and-references">reference</a> is shared, not copied, exactly as
+if you had assigned it to a variable:</p>
+<ul>
+<li>Building a tuple from a variable adds a reference to the object; building
+it from a function result takes over that result’s reference.</li>
+<li>A tuple holds its references until it goes out of scope or is replaced,
+then releases them.</li>
+<li>Destructuring moves each element into its variable. After
+<code>var (a, b) = pair();</code>, <code>a</code> holds the only reference to its object, just as
+it would after <code>var a = make();</code>.</li>
+</ul>
+<p>A tuple is thread-safe when all its elements are, so a module-scope
+<code>const origin: (int, long) = (0, 0);</code> is allowed.</p>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<p>These come in later phases:</p>
+<ul>
+<li>Tuples cannot be generic type arguments yet (<code>Array&lt;(int, String)&gt;</code>,
+<code>HashMap&lt;String, (int, int)&gt;</code>), and there is no <code>Tuple&lt;A, B&gt;</code> spelling.</li>
+<li>Tuples cannot be compared with <code>==</code>, hashed, or passed to <code>print</code>.</li>
+<li>Elements cannot be named (<code>(line: int, column: int)</code>).</li>
+<li>Destructuring does not nest (<code>var (a, (b, c)) = …</code>) and does not work in a
+<code>for</code> loop (<code>for (var (k, v) in map)</code>).</li>
+<li><code>match</code> cannot match tuple patterns.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="function-types-and-closures"><a class="header" href="#function-types-and-closures">Function types and closures</a></h1>
 <p>Functions in Pepper are values. You can store a function in a variable, a
@@ -3395,7 +3540,8 @@ object will be destroyed and its <a href="#destructors">destructor</a> will run.
 behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p>
 <h2 id="values-and-references"><a class="header" href="#values-and-references">Values and references</a></h2>
 <p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
-one copies it, as in C.</p>
+one copies it, as in C. So is a <a href="#tuples-and-multiple-return-values">tuple</a>, whose elements are
+copied the way each element would be on its own.</p>
 <p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
 <a href="#function-types-and-closures">function values</a>, is a <em>reference</em> to an object on the
 heap. Assigning a reference, passing it to a function, or storing it in a
@@ -6308,7 +6454,8 @@ types:</p>
 <li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
 <li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
 <a href="#sharing-function-values-between-threads">Function types</a>);</li>
-<li><code>[Shared]</code> structs, and weak references to them.</li>
+<li><code>[Shared]</code> structs, and weak references to them;</li>
+<li><a href="#tuples-and-multiple-return-values">tuples</a> whose elements are all thread-safe.</li>
 </ul>
 <p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
 thread-safe, and neither is a plain function type such as <code>() =&gt; void</code>:</p>
@@ -7680,7 +7827,7 @@ out of range or a failed <code>assert</code>. These are not compiler errors: the
 prints a message and stops immediately (it aborts, so it exits with a failure
 status instead of returning from <code>main</code>). See <a href="#built-in-functions"><code>assert</code> and
 <code>panic</code></a>.</p>
-<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
 <p>The type check does not compare the type arguments of generic structs yet, so
 <code>Array&lt;int&gt; a = Array&lt;String&gt;();</code> compiles. Read such code carefully: the
 resulting program has undefined behavior.</p>

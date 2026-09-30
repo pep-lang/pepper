@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8720a572.js";
+            window.path_to_searchindex_js = "../searchindex-b39ddd66.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8eb27183.js"></script>
+        <script src="../toc-f308eb6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,7 +191,8 @@ object will be destroyed and its <a href="structs.html#destructors">destructor</
 behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p>
 <h2 id="values-and-references"><a class="header" href="#values-and-references">Values and references</a></h2>
 <p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
-one copies it, as in C.</p>
+one copies it, as in C. So is a <a href="tuples.html">tuple</a>, whose elements are
+copied the way each element would be on its own.</p>
 <p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
 <a href="function-types.html">function values</a>, is a <em>reference</em> to an object on the
 heap. Assigning a reference, passing it to a function, or storing it in a

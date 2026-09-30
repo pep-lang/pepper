@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8720a572.js";
+            window.path_to_searchindex_js = "../searchindex-b39ddd66.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8eb27183.js"></script>
+        <script src="../toc-f308eb6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -375,7 +375,8 @@ types:</p>
 <li>raw pointers (<code>__ptr&lt;T&gt;</code>) to thread-safe types;</li>
 <li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
 <a href="function-types.html#sharing-function-values-between-threads">Function types</a>);</li>
-<li><code>[Shared]</code> structs, and weak references to them.</li>
+<li><code>[Shared]</code> structs, and weak references to them;</li>
+<li><a href="tuples.html">tuples</a> whose elements are all thread-safe.</li>
 </ul>
 <p><code>String</code>, <code>Array</code> and other structs that are not <code>[Shared]</code> are not
 thread-safe, and neither is a plain function type such as <code>() =&gt; void</code>:</p>
