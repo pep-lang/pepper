@@ -4,6 +4,9 @@
 #   push to main       -> dev/      (the unreleased docs, replaced each time)
 #   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match Cargo.toml)
 #
+# A tag first runs the suite against every supported LLVM major
+# (llvm-versions.yml), as vsix.yml does, and publishes nothing unless all pass.
+#
 # Only the folder being built is replaced; every other version already on
 # gh-pages is kept, so the docs of every release stay available. versions.json
 # and index.html are regenerated from the folders present.
@@ -28,7 +31,14 @@ permissions:
   contents: write
 
 jobs:
+  llvm-versions:
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/llvm-versions.yml
+
   publish:
+    needs: llvm-versions
+    # Runs when the matrix passed, or was skipped because this is not a tag.
+    if: ${{ !cancelled() && (needs.llvm-versions.result == 'success' || needs.llvm-versions.result == 'skipped') }}
     runs-on: pepper-linux
     timeout-minutes: 30
     defaults:

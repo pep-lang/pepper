@@ -2,20 +2,25 @@
 # install, on Linux. This is how a version-specific regression gets caught.
 #
 # It runs before a release, not on every PR: CI tests only the default LLVM, and
-# the matrix was most of the runners' time. Dispatch it on the commit you are
-# about to tag, and tag only once it is green:
+# the matrix was most of the runners' time. Pushing a vX.Y.Z tag runs it as the
+# first stage of vsix.yml and docs.yml, which package and publish nothing unless
+# every major passes.
+#
+# Dispatch it by hand to check a commit before tagging it, or with
+# --ref <branch> to test a PR that touches version-specific code:
 #
 #   gh workflow run llvm-versions.yml --ref main
-#
-# Dispatching it with --ref <branch> tests a PR that touches version-specific
-# code before it merges.
 name: LLVM versions
 
 on:
   workflow_dispatch:
+  # vsix.yml and docs.yml call it on a release tag, before building anything.
+  workflow_call:
 
+# When called, github.workflow is the caller's name, so the two callers on one
+# tag run side by side rather than queueing behind each other.
 concurrency:
-  group: llvm-versions-${{ github.ref }}
+  group: llvm-versions-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:

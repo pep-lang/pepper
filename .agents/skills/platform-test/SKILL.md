@@ -14,7 +14,8 @@ description: >
 
 CI (`.github/workflows/ci.yml`) gates merges on Windows, and also runs the
 suite on Linux and macOS against the default LLVM. Other LLVM majors run only
-when `.github/workflows/llvm-versions.yml` is dispatched, before a release.
+in `.github/workflows/llvm-versions.yml`: on a release tag, before the
+extension is packaged and the docs are published, or when dispatched.
 Anything CI does not reach (another LLVM on a branch, a script, a probe of a
 runner) stays unverified until you run it there. That is what
 `.github/workflows/platform-test.yml` is for: it runs a command you choose on

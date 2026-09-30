@@ -1542,7 +1542,9 @@ there.
     changed (`*.md` other than `docs/src/SUMMARY.md` and
     `docs/src/reference/`, or `.agents/`/`.claude/`), every other job is
     skipped, and a skipped `test` counts as passing.
-- **`llvm-versions.yml`**: runs on dispatch only, before a release (`gh
+- **`llvm-versions.yml`**: runs as the first stage of `vsix.yml` and
+  `docs.yml` on a release tag, which package and publish nothing unless it
+  passes, or by dispatch (`gh
   workflow run llvm-versions.yml --ref main`). `llvm-matrix` discovers every
   supported LLVM major apt offers and `llvm-versions` runs the suite against
   each on **`pepper-linux`**.

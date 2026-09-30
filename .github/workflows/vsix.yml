@@ -15,6 +15,8 @@
 #
 # It runs only for a release (pushing a vX.Y.Z tag, the same tags that
 # publish the docs) or when dispatched by hand (`gh workflow run vsix.yml`).
+# A release tag first runs the suite against every supported LLVM major
+# (llvm-versions.yml) and builds nothing unless all pass.
 # A release tag or a dispatch on main publishes; a dispatch on any other
 # branch uploads the vsix as a run artifact instead, so a branch can be
 # tested without replacing the released extension.
@@ -43,7 +45,17 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # A release tag first runs the suite against every supported LLVM major
+  # (llvm-versions.yml); nothing is built or published unless all pass. A
+  # dispatch skips it, so a branch build stays quick.
+  llvm-versions:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/llvm-versions.yml
+
   build:
+    needs: llvm-versions
+    # Runs when the matrix passed, or was skipped because this is a dispatch.
+    if: ${{ !cancelled() && (needs.llvm-versions.result == 'success' || needs.llvm-versions.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +148,9 @@ jobs:
     permissions:
       contents: write
     needs: build
+    # Stated outright: a job whose upstream (llvm-versions) was skipped is
+    # skipped by default, even when its own needs succeeded.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     # npm ci + vsce packaging; no compilation here.
     timeout-minutes: 15
 
