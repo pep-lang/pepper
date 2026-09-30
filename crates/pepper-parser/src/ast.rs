@@ -97,6 +97,9 @@ impl TypeName {
 /// `__function<R, P1, P2>` (return type first, then the parameters).
 pub const FUNCTION_TYPE: &str = "__function";
 
+/// Internal name of a tuple type: `(A, B)` is `__tuple<A, B>`.
+pub const TUPLE_TYPE: &str = "__tuple";
+
 /// Internal name of a thread-safe function type: `shared (P1, P2) => R` is
 /// `__shared_function<R, P1, P2>`.
 pub const SHARED_FUNCTION_TYPE: &str = "__shared_function";
@@ -116,6 +119,9 @@ impl Display for TypeName {
                 _ => "",
             };
             return write!(f, "{}({}) => {}", shared, join(&self.generic_types[1..], ", "), self.generic_types[0]);
+        }
+        if self.name == TUPLE_TYPE && !self.generic_types.is_empty() {
+            return write!(f, "({})", join(&self.generic_types, ", "));
         }
         if self.generic_types.is_empty() {
             write!(f, "{}", self.name)
@@ -191,6 +197,9 @@ pub enum Expression {
     },
     /// A closure literal: `(x: int, y) => x + y` or `(x): int => { ... }`.
     Closure(Box<ClosureLiteral>),
+    /// A tuple value `(a, b, ...)`: two or more elements. On the left of `=`
+    /// it lists the places a destructuring assignment stores into.
+    Tuple { elements: Vec<Expression>, span: Span },
 }
 
 /// A closure literal. Parameters and the return type written without a type
@@ -219,7 +228,8 @@ impl Expression {
             | Expression::Index { span, .. }
             | Expression::MemberAccess { span, .. }
             | Expression::Cast { span, .. }
-            | Expression::FunctionCall { span, .. } => *span,
+            | Expression::FunctionCall { span, .. }
+            | Expression::Tuple { span, .. } => *span,
             Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
             Expression::Closure(c) => c.span,
         }
@@ -524,6 +534,25 @@ pub struct With {
     pub span: Span,
 }
 
+/// `var (a, b) = e;` or `const (a, _: int) = e;`: declares one local per
+/// element of the tuple `e`. A binding named `_` skips its element.
+#[derive(Debug, Clone)]
+pub struct Destructure {
+    /// One per element, in order: the name (`_` to skip), its span, and its
+    /// type (`auto` when not written).
+    pub bindings: Vec<DestructureBinding>,
+    pub value: Expression,
+    pub is_const: bool,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct DestructureBinding {
+    pub name: String,
+    pub name_span: Span,
+    pub type_name: TypeName,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
     /// None for a bare `return;`.
@@ -551,6 +580,7 @@ pub enum Statement {
     With(With),
     Return(ReturnStatement),
     LoopBreak(LoopBreak),
+    Destructure(Destructure),
     Match(Match),
 }
 
@@ -599,6 +629,7 @@ impl Statement {
             Statement::With(w) => w.span,
             Statement::Return(r) => r.span,
             Statement::LoopBreak(l) => l.span,
+            Statement::Destructure(d) => d.span,
             Statement::Match(m) => m.span,
         }
     }
@@ -813,6 +844,7 @@ impl Display for Expression {
                     }
                 }
             }
+            Expression::Tuple { elements, .. } => write!(f, "({})", join(elements, ", ")),
         }
     }
 }
@@ -1110,6 +1142,14 @@ impl Display for Statement {
             Statement::With(w) => write!(f, "{}", w),
             Statement::Return(r) => write!(f, "{};", r),
             Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
+            Statement::Destructure(d) => {
+                let bindings: Vec<String> = d
+                    .bindings
+                    .iter()
+                    .map(|b| if b.type_name.name == AUTO_TYPE { b.name.clone() } else { format!("{}: {}", b.name, b.type_name) })
+                    .collect();
+                write!(f, "{} ({}) = {};", if d.is_const { "const" } else { "var" }, bindings.join(", "), d.value)
+            }
             Statement::Match(m) => write!(f, "{}", m),
         }
     }

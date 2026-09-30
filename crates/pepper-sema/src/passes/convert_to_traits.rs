@@ -101,6 +101,10 @@ impl Converter {
             unwrap_string_literal(value);
             return;
         }
+        if expected.is_tuple() {
+            self.convert_tuple(value, expected, current, fallback);
+            return;
+        }
         let to_trait = traits::is_trait_type(&self.trait_defs, expected);
         if matches!(value, Expression::ToTrait { .. })
             || !(to_trait || self.implicit.contains_key(&expected.to_string()))
@@ -187,6 +191,28 @@ impl Converter {
             to: expected.clone(),
             loc,
         };
+    }
+
+    /// `value` flows into a slot of tuple type `expected`. A tuple literal
+    /// of as many elements takes the slot's type, and each element then flows
+    /// into its element's slot (`(0, square)` returned as a `(ulong, Shape)`
+    /// is `__tuple<ulong, Shape>(0, ToTrait(square))`). Any other value is
+    /// left to the type checks.
+    fn convert_tuple(&mut self, value: &mut Expression, expected: &TypeName, current: Option<&TypeName>, fallback: Loc) {
+        match value {
+            Expression::Ternary { true_expr, false_expr, .. } => {
+                self.convert_tuple(true_expr, expected, current, fallback);
+                self.convert_tuple(false_expr, expected, current, fallback);
+            }
+            Expression::FunctionCall { function, args, loc }
+                if crate::passes::tuples::is_literal(function) && args.len() == expected.tuple_elements().len() =>
+            {
+                *function = expected.to_string();
+                let loc = if loc.is_none() { fallback } else { *loc };
+                self.arguments(expected.tuple_elements(), args, current, loc);
+            }
+            _ => {}
+        }
     }
 
     /// `value` flows into a slot of struct type `expected`, which has an

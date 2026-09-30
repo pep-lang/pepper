@@ -129,6 +129,12 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
         Expression::BoolLiteral(_) => Some(TypeName::bool_()),
         Expression::IntLiteral(v) => Some(TypeName::new(crate::type_name::int_literal_type(*v))),
         Expression::FloatLiteral(_) => Some(TypeName::new("f64")),
+        Expression::Destructure { value, .. } => of(value, table, current),
+        Expression::MemberRef { lhs, name, .. }
+            if of(lhs, table, current).is_some_and(|t| t.tuple_element(name).is_some()) =>
+        {
+            of(lhs, table, current)?.tuple_element(name).cloned()
+        }
         Expression::MemberRef { lhs, name, .. } => {
             // Specialized clones keep unsubstituted annotations on bare
             // symbols (`keys` typed `K*` in `HashMap<String, int>`), and a
@@ -220,6 +226,12 @@ pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeNa
             None
         }
         Expression::ArrayIndex { ty, .. } => Some(ty.clone()),
+        Expression::FunctionCall { function, args, .. } if function == crate::type_name::TUPLE => {
+            crate::passes::tuples::literal_type(args.iter().map(|a| of(a, table, current).unwrap_or_else(TypeName::auto)))
+        }
+        Expression::FunctionCall { function, .. } if function.starts_with("__tuple<") => {
+            Some(crate::passes::gather_generics::parse_type_string(function))
+        }
         Expression::FunctionCall { function, .. } => {
             // Plain free-function call: its declared return type.
             if let Some(ty) = table.functions.get(function) {

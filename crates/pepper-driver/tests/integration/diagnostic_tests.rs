@@ -1493,6 +1493,67 @@ fn c_function_pointer_type_with_a_struct() {
     );
 }
 
+const PAIR: &str = "pair(): (int, int) {\n    return (1, 2);\n}\n";
+
+#[test]
+fn destructure_wrong_count() {
+    assert_eq!(
+        error_of(
+            "destructure_wrong_count",
+            &format!("{PAIR}main(): int {{\n    var (a, b, c) = pair();\n    return 0;\n}}\n")
+        ),
+        "main.pep:5:21: error: cannot destructure '(int, int)' into 3 values: it has 2 elements\n\
+         \x20   5 |     var (a, b, c) = pair();\n\
+         \x20     |                     ^~~~~~"
+    );
+}
+
+#[test]
+fn destructure_non_tuple() {
+    assert_eq!(
+        error_of("destructure_non_tuple", "main(): int {\n    var s = \"x\";\n    var (a, b) = s;\n    return 0;\n}\n"),
+        "main.pep:3:18: error: cannot destructure 'String': it is not a tuple\n\
+         \x20   3 |     var (a, b) = s;\n\
+         \x20     |                  ^"
+    );
+}
+
+#[test]
+fn tuple_element_is_immutable() {
+    assert_eq!(
+        error_of(
+            "tuple_element_is_immutable",
+            &format!("{PAIR}main(): int {{\n    var t = pair();\n    t.0 = 3;\n    return 0;\n}}\n")
+        ),
+        "main.pep:6:7: error: cannot assign to element 0 of tuple '(int, int)': tuple elements are immutable\n\
+         \x20   6 |     t.0 = 3;\n\
+         \x20     |       ^"
+    );
+}
+
+#[test]
+fn tuple_element_out_of_range() {
+    assert_eq!(
+        error_of(
+            "tuple_element_out_of_range",
+            &format!("{PAIR}main(): int {{\n    var t = pair();\n    return t.2;\n}}\n")
+        ),
+        "main.pep:6:14: error: no member named '2' in '(int, int)': its elements are '0' to '1'\n\
+         \x20   6 |     return t.2;\n\
+         \x20     |              ^"
+    );
+}
+
+#[test]
+fn tuple_element_type_mismatch() {
+    assert_eq!(
+        error_of("tuple_element_type_mismatch", "main(): int {\n    var t: (int, String) = (1, 2);\n    return 0;\n}\n"),
+        "main.pep:2:28: error: cannot pass a value of type 'i32' as element 1 of '(int, String)', which has type 'String'\n\
+         \x20   2 |     var t: (int, String) = (1, 2);\n\
+         \x20     |                            ^~~~~~"
+    );
+}
+
 #[test]
 fn match_missing_cases() {
     assert_eq!(

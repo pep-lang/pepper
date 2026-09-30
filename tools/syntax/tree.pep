@@ -113,6 +113,11 @@ export const node_closure = 44;
 export const node_closure_parameters = 45;
 ## `name [: TYPE]`
 export const node_closure_parameter = 46;
+## `(var | const) CLOSURE_PARAMETERS = expression ;`, a destructuring
+## declaration such as `var (a, b: long, _) = f();`.
+export const node_destructure = 60;
+## `( expression, expression, ... )`, a tuple literal.
+export const node_tuple = 61;
 ## `[attribute]... [export] enum Name [GENERIC_PARAMETERS] [: TYPE] MEMBERS`,
 ## whose members are its `ENUM_CASE`s, then its methods.
 export const node_enum = 47;

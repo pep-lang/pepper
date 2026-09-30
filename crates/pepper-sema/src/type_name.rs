@@ -38,6 +38,9 @@ pub const SHARED_FUNCTION: &str = "__shared_function";
 pub const EXTERN_FUNCTION: &str = "__extern_function";
 /// `__weak<T>`: a weak reference to a struct `T` (`std::weak_ptr<T>`).
 pub const WEAK: &str = "__weak";
+/// Internal name of tuple types: `(A, B)` is `__tuple<A, B>`, a value of
+/// its elements (see `passes::tuples`).
+pub const TUPLE: &str = "__tuple";
 
 /// Integral-type alias set from `TypeName.cpp:23-45`.
 pub static INTEGRAL_TYPES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
@@ -187,6 +190,22 @@ impl TypeName {
         ty
     }
 
+    /// A tuple type `(A, B, ...)`, spelled `__tuple<A, B, ...>`.
+    pub fn is_tuple(&self) -> bool {
+        self.name == TUPLE && self.sub_types.len() >= 2
+    }
+
+    /// The element types of a tuple type; empty for any other type.
+    pub fn tuple_elements(&self) -> &[TypeName] {
+        if self.is_tuple() { &self.sub_types } else { &[] }
+    }
+
+    /// The type of element `name` (`"0"`, `"1"`, ...) of a tuple type.
+    pub fn tuple_element(&self, name: &str) -> Option<&TypeName> {
+        let index: usize = name.parse().ok()?;
+        self.tuple_elements().get(index)
+    }
+
     /// A weak reference type `__weak<T>`.
     pub fn is_weak(&self) -> bool {
         self.name == WEAK && self.sub_types.len() == 1
@@ -227,6 +246,10 @@ impl TypeName {
                 ""
             };
             return format!("{}({}) => {}", shared, params.join(", "), self.sub_types[0].display());
+        }
+        if self.is_tuple() {
+            let elements: Vec<String> = self.sub_types.iter().map(|t| t.display()).collect();
+            return format!("({})", elements.join(", "));
         }
         if self.is_generic() {
             let subs: Vec<String> = self.sub_types.iter().map(|t| t.display()).collect();

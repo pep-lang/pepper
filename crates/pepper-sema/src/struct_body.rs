@@ -106,7 +106,10 @@ pub(crate) fn zero_for(ty: &TypeName) -> Expression {
     if let Some(default) = crate::enums::default_expression(ty) {
         return default;
     }
-    if ty.is_pointer() || ty.is_struct() {
+    // A tuple is a value: its zero holds a zero of each element.
+    if ty.is_tuple() {
+        Expression::Default(ty.clone())
+    } else if ty.is_pointer() || ty.is_struct() {
         Expression::PointerLiteral
     } else if matches!(ty.name.as_str(), "f32" | "float" | "f64" | "double") {
         Expression::FloatLiteral(0.0)

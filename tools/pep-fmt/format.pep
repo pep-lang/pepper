@@ -342,6 +342,7 @@ export struct Formatter {
         if (kind == syntax.node_return
             or kind == syntax.node_jump
             or kind == syntax.node_expression_statement
+            or kind == syntax.node_destructure
             or kind == syntax.node_empty) {
             return _simple_statement(item);
         }
@@ -1003,6 +1004,9 @@ export struct Formatter {
         }
         if (kind == syntax.node_call) {
             return concat().add(_expression(item.child(0))).add(_delimited(item.child(1), false));
+        }
+        if (kind == syntax.node_tuple) {
+            return _delimited(item, false);
         }
         if (kind == syntax.node_member
             or kind == syntax.node_index

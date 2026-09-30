@@ -69,6 +69,13 @@ pub struct CodeGenerator<'ctx> {
     pub structs: HashMap<String, StructDesc<'ctx>>,
     /// Traits used as types, by type name.
     pub traits: HashMap<String, TraitDesc>,
+    /// Tuple types (`__tuple<A, B>`), by type name: the sema type name of
+    /// each element. A tuple value is a literal LLVM struct of its elements,
+    /// held by value (see `types::Types::register_tuple`).
+    tuples: HashMap<String, Vec<String>>,
+    /// Tuple type names in registration order: an element tuple comes before
+    /// the tuples that hold it.
+    tuple_order: Vec<String>,
     /// function name → FunctionValue (methods under mangled `Struct.name` keys).
     pub functions: HashMap<String, FunctionValue<'ctx>>,
     /// free-function name → return-type sema string (for receiver typing of
@@ -138,6 +145,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             types: types::Types::new(context),
             structs: HashMap::new(),
             traits: HashMap::new(),
+            tuples: HashMap::new(),
+            tuple_order: Vec::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
             param_defaults: HashMap::new(),
@@ -215,7 +224,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let traits = by_name(trait_names.iter().map(|t| t.as_str()).collect(), sort);
         for &idx in &structs {
             let st = &module.structs[idx];
-            if st.ty.is_generic() && st.name == st.ty.name {
+            if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
                 continue;
             }
             self.types.ensure_opaque(&st.name);
@@ -223,6 +232,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Trait types are values of their own layout; a field may hold one.
         for &idx in &traits {
             self.types.register_trait(&module.trait_types[idx].ty.to_string());
+        }
+        // So are tuples: a struct field or another tuple may hold one.
+        for &idx in &structs {
+            if module.structs[idx].ty.is_tuple() {
+                let ty = pepper_sema::passes::gather_generics::parse_type_string(&module.structs[idx].name);
+                self.register_tuple(&ty)?;
+            }
         }
         for &idx in &structs {
             self.instantiate_struct(&module.structs[idx])?;
@@ -249,6 +265,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         for &idx in &traits {
             self.instantiate_trait(&module.trait_types[idx])?;
+        }
+        for name in self.tuple_order.clone() {
+            self.emit_tuple_refcount_thunk(&name, "__acquire")?;
+            self.emit_tuple_refcount_thunk(&name, "__release")?;
         }
 
         // File-scope globals: LLVM globals + (if any initializer needs it) a
@@ -378,6 +398,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     );
                 }
                 BasicTypeEnum::ArrayType(at) => global.set_initializer(&at.const_zero()),
+                BasicTypeEnum::StructType(st) => global.set_initializer(&st.const_zero()),
                 _ => {}
             }
             if let Some(default) = &var.default {
@@ -616,8 +637,9 @@ impl<'ctx> CodeGenerator<'ctx> {
     fn instantiate_struct_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
         // Generic struct bases are abstract: skip `Name<...>` instances and
         // generic bases (ty 'Array<T>'); specializations were cloned with
-        // concrete names by sema.
-        if st.ty.is_generic() && st.name == st.ty.name {
+        // concrete names by sema. A tuple is a value, not an object: its
+        // struct only tells sema its elements (`register_tuple`).
+        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
 
@@ -631,8 +653,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             // pointer. Laying the struct out inline would make a field of
             // the struct's own type (or a cycle through other structs) an
             // infinitely sized body.
+            // A tuple field is a value, laid out inline.
             let ty = match ty {
-                BasicTypeEnum::StructType(_) => self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => {
+                    self.context.ptr_type(inkwell::AddressSpace::default()).into()
+                }
                 other => other,
             };
             field_types.push(ty);
@@ -675,7 +700,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn instantiate_methods_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
-        if st.ty.is_generic() && st.name == st.ty.name {
+        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
         let struct_name = st.name.clone();
@@ -693,7 +718,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .get(&struct_name)
                     .ok_or_else(|| format!("unknown this type {}", struct_name))?;
                 let this_ptr_ty = match this_ty {
-                    BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                    ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => BasicTypeEnum::PointerType(
                         self.context.ptr_type(inkwell::AddressSpace::default()),
                     ),
                     other => other,
@@ -704,7 +729,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));                self.locate(&ty, param.type_loc);                let ty = ty?;
                 // Struct-typed params are pointers (C++ ref semantics).
                 let ty = match ty {
-                    BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                    ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => BasicTypeEnum::PointerType(
                         self.context.ptr_type(inkwell::AddressSpace::default()),
                     ),
                     other => other,
@@ -841,7 +866,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             let ty = self.types.get(&param.ty.to_string()).ok_or_else(|| format!("unknown type name '{}'", param.ty));            self.locate(&ty, param.type_loc);            let ty = ty?;
             // Struct-typed params are pointers (C++ ref semantics).
             let ty = match ty {
-                BasicTypeEnum::StructType(_) => BasicTypeEnum::PointerType(
+                ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => BasicTypeEnum::PointerType(
                     self.context.ptr_type(inkwell::AddressSpace::default()),
                 ),
                 other => other,
@@ -905,7 +930,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Ctor instantiation: declare the function so call sites can bind it
     fn instantiate_ctor(&mut self, st: &StructDef) -> Result<(), String> {
-        if st.ty.is_generic() && st.name == st.ty.name {
+        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
         self.instantiate_function(&self.patched_ctor(st))
@@ -953,16 +978,19 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     /// Whether a sema type name is a reference: a struct or a trait value.
-    /// References are acquired on copy and released on scope exit.
+    /// References are acquired on copy and released on scope exit. A tuple
+    /// counts as one: copying it acquires its elements, and dropping it
+    /// releases them (its `__acquire`/`__release` thunks).
     fn is_reference_name(&self, name: &str) -> bool {
-        self.structs.contains_key(name) || self.is_trait_name(name)
+        self.structs.contains_key(name) || self.is_trait_name(name) || self.tuples.contains_key(name)
     }
 
     /// The LLVM type a reference of sema type `name` is stored as: a pointer
-    /// for a struct, `[2 x ptr]` for a trait value.
+    /// for a struct, `[2 x ptr]` for a trait value, the elements for a tuple.
     fn reference_value_type(&self, name: &str) -> BasicTypeEnum<'ctx> {
         match self.types.get(name) {
             Some(ty @ BasicTypeEnum::ArrayType(_)) if self.types.is_trait(name) => ty,
+            Some(ty @ BasicTypeEnum::StructType(_)) if self.tuples.contains_key(name) => ty,
             _ => self
                 .context
                 .ptr_type(inkwell::AddressSpace::default())
@@ -985,6 +1013,131 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .into_pointer_value()),
             other => Err(format!("expected a reference, got {:?}", other)),
         }
+    }
+
+    // ── Tuples ──────────────────────────────────────────────────────────────
+    //
+    // A tuple `(A, B)` (`__tuple<A, B>`) is a literal struct `{A', B'}` of
+    // its elements' slot types (a struct element is its pointer), held by
+    // value like a `std::tuple` of `shared_ptr`s. Its `__acquire` and
+    // `__release` are thunks that step each reference element, so every
+    // refcount path that works by `<Type>.<member>` name (copies, scope
+    // exits, stores, temporaries) works on tuples unchanged.
+
+    /// Register tuple type `ty` (and any tuple among its elements) with
+    /// `Types`, in dependency order.
+    fn register_tuple(&mut self, ty: &TypeName) -> Result<(), String> {
+        let name = ty.to_string();
+        if self.tuples.contains_key(&name) {
+            return Ok(());
+        }
+        let mut slots = vec![];
+        let mut elements = vec![];
+        for element in ty.tuple_elements() {
+            let element = pepper_sema::passes::gather_generics::parse_type_string(&element.to_string());
+            if element.is_tuple() {
+                self.register_tuple(&element)?;
+            }
+            let element_name = element.to_string();
+            let slot = match self.types.get(&element_name) {
+                Some(t) if types::is_object(&t) => self.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                Some(t) => t,
+                None => return Err(format!("unknown type name '{}'", element.display())),
+            };
+            slots.push(slot);
+            elements.push(element_name);
+        }
+        self.types.register_tuple(&name, &slots);
+        self.tuples.insert(name.clone(), elements);
+        self.tuple_order.push(name);
+        Ok(())
+    }
+
+    /// `Tuple.__acquire(value)` / `Tuple.__release(value)`: step each
+    /// reference element of the tuple, first to last.
+    fn emit_tuple_refcount_thunk(&mut self, tuple: &str, member: &str) -> Result<(), String> {
+        let ty = self.types.get(tuple).ok_or_else(|| format!("unknown tuple type {}", tuple))?;
+        let name = format!("{}.{}", tuple, member);
+        let thunk = self.module.add_function(
+            &name,
+            self.context.void_type().fn_type(&[ty.into()], false),
+            Some(inkwell::module::Linkage::Private),
+        );
+        self.functions.insert(name, thunk);
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(thunk, "entry");
+        self.builder.position_at_end(entry);
+        let value = thunk.get_nth_param(0).expect("tuple").into_struct_value();
+        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        for (index, element) in elements.iter().enumerate() {
+            if !self.is_reference_name(element) {
+                continue;
+            }
+            let item = self
+                .builder
+                .build_extract_value(value, index as u32, "element")
+                .map_err(|e| e.to_string())?;
+            self.call_function(&format!("{}.{}", element, member), vec![item])?;
+        }
+        self.builder.build_return(None).map_err(|e| e.to_string())?;
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(())
+    }
+
+    /// `(tuple local, element index)` when `expr` is `__tuple_N.k`, a
+    /// destructuring binding's read of its hidden tuple.
+    fn destructured_element(&self, expr: &Expression) -> Option<(String, u32)> {
+        let Expression::MemberRef { lhs, name, .. } = expr else { return None };
+        let Expression::SymbolRef { id, .. } = lhs.as_ref() else { return None };
+        if !id.starts_with("__tuple_") {
+            return None;
+        }
+        Some((id.clone(), name.parse().ok()?))
+    }
+
+    /// A tuple literal: the call of tuple type `tuple`'s constructor. Each
+    /// element is copied in (an lvalue read acquires) or moved in (an owned
+    /// rvalue keeps its reference), as `std::make_tuple` would; the result
+    /// is an owned rvalue holding one reference to each element.
+    fn codegen_tuple(&mut self, tuple: &str, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
+        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let ty = match self.types.get(tuple) {
+            Some(BasicTypeEnum::StructType(st)) => st,
+            _ => return Err(format!("unknown tuple type {}", tuple)),
+        };
+        if args.len() != elements.len() {
+            return Err(format!("tuple '{}' has {} elements, but {} were given", tuple, elements.len(), args.len()));
+        }
+        let mut value = ty.get_undef();
+        for (index, (arg, element)) in args.iter().zip(&elements).enumerate() {
+            let item = self.codegen_expr(arg)?;
+            if self.is_reference_name(element) && self.is_lvalue_read(arg) {
+                self.acquire_ref(element, item)?;
+            }
+            let item = if matches!(item, BasicValueEnum::IntValue(_) | BasicValueEnum::FloatValue(_)) && llvm_ops::is_numeric_type(element) {
+                let source = self.numeric_source_name(arg, &item);
+                let coerced = llvm_ops::coerce(self.context, &self.builder, item, &source, element);
+                // `coerce` works in C's promoted types; fit the slot exactly.
+                match (coerced, ty.get_field_type_at_index(index as u32)) {
+                    (BasicValueEnum::IntValue(v), Some(BasicTypeEnum::IntType(it))) if v.get_type() != it => self
+                        .builder
+                        .build_int_cast(v, it, "element")
+                        .map_err(|e| e.to_string())?
+                        .into(),
+                    (other, _) => other,
+                }
+            } else {
+                item
+            };
+            value = self
+                .builder
+                .build_insert_value(value, item, index as u32, "tuple")
+                .map_err(|e| e.to_string())?
+                .into_struct_value();
+        }
+        Ok(value.into())
     }
 
     /// Load vtable slot `slot` of trait value `value`.
@@ -1302,6 +1455,12 @@ impl<'ctx> CodeGenerator<'ctx> {
                 ty_name
             ));
         }
+        if self.tuples.contains_key(ty_name) {
+            return Err(format!(
+                "atomic operations on tuple type '{}' are not supported",
+                pepper_sema::passes::gather_generics::parse_type_string(ty_name).display()
+            ));
+        }
         Ok(())
     }
 
@@ -1343,7 +1502,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     }
 
     fn codegen_struct_unlocated(&mut self, st: &StructDef) -> Result<(), String> {
-        if st.ty.is_generic() && st.name == st.ty.name {
+        if (st.ty.is_generic() && st.name == st.ty.name) || st.ty.is_tuple() {
             return Ok(());
         }
         // The ctor lives in module.structs[i].constructor, not
@@ -1382,7 +1541,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         // The LLVM return type (struct returns are pointers).
         let ret_ty = self.types.get(&function.ty.to_string());
         let llvm_ret_ty = ret_ty.map(|ty| match ty {
-            BasicTypeEnum::StructType(_) => {
+            ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => {
                 BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
             }
             other => other,
@@ -1401,6 +1560,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicTypeEnum::FloatType(ft) => BasicValueEnum::FloatValue(ft.const_zero()),
                 BasicTypeEnum::PointerType(pt) => BasicValueEnum::PointerValue(pt.const_null()),
                 BasicTypeEnum::ArrayType(at) => BasicValueEnum::ArrayValue(at.const_zero()),
+                BasicTypeEnum::StructType(st) => BasicValueEnum::StructValue(st.const_zero()),
                 other => return Err(format!("unsupported retval type {:?}", other)),
             };
             self.builder
@@ -1763,7 +1923,22 @@ impl<'ctx> CodeGenerator<'ctx> {
             // excluded: their result already carries its creation ref — the
             // callee's `return this` / return site acquired it, exactly as
             // `make_shared` hands out a refcount-1 shared_ptr.
-            if is_struct_ref && self.is_lvalue_read(default) {
+            // A destructuring binding (`var (a, b) = f();` binds
+            // `var a = __tuple_N.0`) moves its element out of the hidden
+            // tuple, as a C++ structured binding names the element in place:
+            // the element slot is cleared, so `a` holds the only reference.
+            let moved = if is_struct_ref { self.destructured_element(default) } else { None };
+            if let Some((tuple, index)) = &moved {
+                let (slot, tuple_ty) = self.frame.find_local(tuple).map(|a| (a.ptr, a.llvm_ty)).ok_or("unknown tuple")?;
+                let Some(BasicTypeEnum::StructType(st)) = tuple_ty else { return Err("destructured value is not a tuple".into()) };
+                let held = self.builder.build_load(st, slot, "tuple").map_err(|e| e.to_string())?.into_struct_value();
+                let zero = st.get_field_type_at_index(*index).map(|t| t.const_zero()).ok_or("bad tuple index")?;
+                let cleared = self
+                    .builder
+                    .build_insert_value(held, zero, *index, "moved")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_store(slot, cleared).map_err(|e| e.to_string())?;
+            } else if is_struct_ref && self.is_lvalue_read(default) {
                 self.acquire_ref(&var.ty.to_string(), value)?;
             }
             // Integer literals codegen as i32; adjust into the alloca's width
@@ -2157,6 +2332,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .frame
                 .find_local("this")
                 .map(|a| a.ty.to_string()),
+            // A tuple literal has its tuple's type.
+            Expression::FunctionCall { function, .. } if self.tuples.contains_key(function) => Some(function.clone()),
             Expression::FunctionCall { function, .. } => {
                 // Free functions first (their declared return type), then
                 // ctor-style calls `Name<...>(...)` resolve to Name<...>.
@@ -2171,6 +2348,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Expression::MemberRef { lhs, name, .. } => {
                 let struct_name = self.struct_name_of(lhs)?;
+                if let Some(elements) = self.tuples.get(&struct_name) {
+                    return elements.get(name.parse::<usize>().ok()?).cloned();
+                }
                 self.structs
                     .get(&struct_name)?
                     .fields
@@ -2275,7 +2455,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             .value_sema_type(expr)?
             .trim_end_matches('*')
             .to_string();
-        if self.structs.contains_key(&ty) || self.is_trait_name(&ty) {
+        if self.structs.contains_key(&ty) || self.is_trait_name(&ty) || self.tuples.contains_key(&ty) {
             return Some(ty);
         }
         ty.split('<')
@@ -2523,7 +2703,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// stays the element type.
     fn index_value_type(&self, receiver: &Expression) -> BasicTypeEnum<'ctx> {
         let elem = self.index_element_type(receiver);
-        if matches!(elem, BasicTypeEnum::StructType(_)) {
+        if types::is_object(&elem) {
             return self.context.ptr_type(inkwell::AddressSpace::default()).into();
         }
         elem
@@ -2621,7 +2801,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// struct's own ABI size (which need not be a pointer multiple). Matches
     /// the SizeOf branch below, which sizes the allocation.
     fn slot_stride(&self, elem: BasicTypeEnum<'ctx>) -> BasicTypeEnum<'ctx> {
-        if matches!(elem, BasicTypeEnum::StructType(_)) {
+        if types::is_object(&elem) {
             return self.context.ptr_type(inkwell::AddressSpace::default()).into();
         }
         elem
@@ -2680,6 +2860,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         };
         let field_ty = self.types.get(&field_ty_name);
         let value_ty = match field_ty {
+            Some(ty @ BasicTypeEnum::StructType(_)) if self.tuples.contains_key(&field_ty_name) => ty,
             Some(BasicTypeEnum::StructType(_)) => {
                 BasicTypeEnum::PointerType(self.context.ptr_type(inkwell::AddressSpace::default()))
             }
@@ -2707,6 +2888,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         source: &Expression,
     ) -> Result<(), String> {
         let old = self.builder.build_load(value_ty, gep, "oldref").map_err(|e| e.to_string())?;
+        // A tuple has no identity to compare: acquiring its new elements
+        // before releasing the old ones makes self-assignment safe, as
+        // `std::tuple`'s element-wise `operator=` is.
+        if self.tuples.contains_key(ty_name) {
+            self.call_function(&format!("{}.{}", ty_name, "__acquire"), vec![new_val])?;
+            self.call_function(&format!("{}.{}", ty_name, "__release"), vec![old])?;
+            return Ok(());
+        }
         let i64 = self.context.i64_type();
         // A trait value is the same reference when it is the same object.
         let old_object = self.object_pointer(old)?;
@@ -2801,6 +2990,24 @@ impl<'ctx> CodeGenerator<'ctx> {
                 addr.load(&self.builder)
                     .ok_or_else(|| "load this failed".to_string())
             }
+            Expression::MemberRef { lhs, name, .. }
+                if self.struct_name_of(lhs).is_some_and(|t| self.tuples.contains_key(&t)) =>
+            {
+                // A tuple element: extract it from the tuple value. An
+                // owned-rvalue tuple (`f().0`) is a temporary released at the
+                // end of the full expression, like a struct receiver.
+                let index: u32 = name.parse().map_err(|_| format!("no member named '{}' in a tuple", name))?;
+                let lhs_temp = self.owned_temp_type(lhs);
+                let tuple = self.codegen_expr(lhs)?;
+                let element = self
+                    .builder
+                    .build_extract_value(tuple.into_struct_value(), index, name)
+                    .map_err(|e| e.to_string())?;
+                if let Some(ty) = lhs_temp {
+                    self.deferred_temps.push((tuple, ty));
+                }
+                Ok(element)
+            }
             Expression::MemberRef { lhs, name, .. } => {
                 // Load lhs (this pointer), then StructGEP (Struct.cpp:60-70).
                 // The struct name comes from the lhs's static type, not the
@@ -2836,7 +3043,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // pointer), exactly like struct locals and params — load the
                 // stored pointer, not the slot address.
                 let value = match field_ty {
-                    BasicTypeEnum::StructType(_) => self
+                    ty @ BasicTypeEnum::StructType(_) if types::is_object(&ty) => self
                         .builder
                         .build_load(self.context.ptr_type(inkwell::AddressSpace::default()), gep, name)
                         .map_err(|e| e.to_string())?,
@@ -2949,6 +3156,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         BasicTypeEnum::IntType(it) => it.const_zero().into(),
                         BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                         BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+                        BasicTypeEnum::StructType(st) if st.get_name().is_none() => st.const_zero().into(),
                         BasicTypeEnum::StructType(_) => self
                             .context
                             .ptr_type(inkwell::AddressSpace::default())
@@ -3016,7 +3224,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // A trait value reads its object's head, which every struct
                 // lays out first: index it as a bare u32.
                 let struct_ty: BasicTypeEnum<'ctx> = match self.types.get(&ty.to_string()) {
-                    Some(BasicTypeEnum::StructType(sct)) => sct.into(),
+                    Some(BasicTypeEnum::StructType(sct)) if sct.get_name().is_some() => sct.into(),
                     Some(BasicTypeEnum::ArrayType(_)) if self.is_trait_name(&ty.to_string()) => {
                         self.context.i32_type().into()
                     }
@@ -3060,7 +3268,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let i64 = self.context.i64_type();
                 let seed = i64.const_int(0xcbf29ce484222325, false);
                 let lowered = self.types.get(&ty.to_string());
-                let is_reference = matches!(lowered, Some(BasicTypeEnum::StructType(_)))
+                let is_reference = lowered.is_some_and(|t| types::is_object(&t))
                     || self.is_trait_name(&ty.to_string());
                 match lowered {
                     Some(_) if is_reference => {
@@ -3335,6 +3543,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             // lower_with_blocks replaces every one before codegen.
             Expression::WithEntered(_) => {
                 Err("internal error: unlowered 'with' condition".to_string())
+            }
+            // tuples::lower_destructures replaces every one before codegen.
+            Expression::Destructure { .. } => {
+                Err("internal error: unlowered destructuring".to_string())
             }
             Expression::MatchArm(_) => Err("internal error: unlowered 'match' arm".to_string()),
             // Only a var default in well-formed models (codegen_var_def).
@@ -3690,6 +3902,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicTypeEnum::IntType(it) => it.const_zero().into(),
                     BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
                     BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+                    BasicTypeEnum::StructType(st) if st.get_name().is_none() => st.const_zero().into(),
                     BasicTypeEnum::StructType(_) => self
                         .context
                         .ptr_type(inkwell::AddressSpace::default())
@@ -3701,6 +3914,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 return Ok(any);
             }
             return Ok(self.context.i32_type().const_zero().into());
+        }
+        if self.tuples.contains_key(name) {
+            return self.codegen_tuple(name, args);
         }
         // Constructor call `Name<...>(ctor_args)`: specializations are
         // registered under their full name (`Array<int>`); fall back to the
@@ -3766,7 +3982,7 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// references are pointers.
     fn abi_type(&self, ty: &str) -> Result<BasicTypeEnum<'ctx>, String> {
         match self.types.get(ty) {
-            Some(BasicTypeEnum::StructType(_)) => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).into()),
+            Some(ty @ BasicTypeEnum::StructType(_)) if types::is_object(&ty) => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).into()),
             Some(other) => Ok(other),
             None => Err(format!("unknown type {}", ty)),
         }
@@ -4613,6 +4829,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .find_local("this")
                 .cloned()
                 .ok_or_else(|| "no this".to_string()),
+            Expression::MemberRef { lhs, .. } if self.struct_name_of(lhs).is_some_and(|t| self.tuples.contains_key(&t)) => {
+                Err("tuple elements are immutable".to_string())
+            }
             Expression::MemberRef { lhs, name, .. } => {
                 let struct_name = self.struct_name_of(lhs).unwrap_or_default();
                 // An owned-rvalue receiver (`f().x = v`) is a temporary: its
@@ -5039,10 +5258,12 @@ fn llvm_fn_type<'ctx>(
         BasicTypeEnum::PointerType(pt) => pt.fn_type(&param_meta, varargs),
         // Struct-typed returns are pointers (C++ ref semantics: functions
         // return `this` as a pointer).
-        BasicTypeEnum::StructType(sct) => sct
+        BasicTypeEnum::StructType(sct) if sct.get_name().is_some() => sct
             .get_context()
             .ptr_type(inkwell::AddressSpace::default())
             .fn_type(&param_meta, varargs),
+        // A tuple returns its elements by value.
+        BasicTypeEnum::StructType(sct) => sct.fn_type(&param_meta, varargs),
         BasicTypeEnum::VectorType(vt) => vt.fn_type(&param_meta, varargs),
         BasicTypeEnum::ScalableVectorType(vt) => vt.fn_type(&param_meta, varargs),
     }

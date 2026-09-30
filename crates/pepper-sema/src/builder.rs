@@ -223,6 +223,14 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 loc: loc(target.span()),
             })
         }
+        // `(a, b)`: a call of the tuple constructor, whose type
+        // `resolve_implicit_types` spells out once the elements' types are
+        // known (`__tuple<int, String>(a, b)`).
+        ast::Expression::Tuple { elements, span } => Ok(Expression::FunctionCall {
+            function: crate::type_name::TUPLE.to_string(),
+            args: elements.iter().map(expression).collect::<Result<Vec<_>, _>>()?,
+            loc: loc(*span),
+        }),
         ast::Expression::Closure(c) => Ok(Expression::ClosureLiteral(Box::new(ClosureLiteral {
             parameters: c.parameters.iter().map(|p| variable_def(p, Kind::Param)).collect::<Result<Vec<_>, _>>()?,
             ty: type_name_from(&c.return_type),
@@ -272,16 +280,31 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
 }
 
 fn block(block: &ast::Block) -> Result<Block, Diagnostic> {
-    Ok(Block {
-        name: String::new(),
-        items: block.statements.iter().map(statement).collect::<Result<Vec<_>, _>>()?,
-        attributes: block.attributes.clone(),
-    })
+    let mut items = vec![];
+    for stmt in &block.statements {
+        match stmt {
+            // A destructuring declaration's locals belong to the enclosing
+            // block, so it lowers to several statements in place.
+            ast::Statement::Destructure(d) => items.extend(destructure(d)?),
+            _ => items.push(statement(stmt)?),
+        }
+    }
+    Ok(Block { name: String::new(), items, attributes: block.attributes.clone() })
 }
 
 fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
     match stmt {
+        ast::Statement::Expression(ast::Expression::Binary { lhs, op, rhs, span })
+            if op == "=" && matches!(lhs.as_ref(), ast::Expression::Tuple { .. }) =>
+        {
+            destructuring_assignment(lhs, rhs, *span)
+        }
         ast::Statement::Expression(expr) => Ok(Statement::Expression(expression(expr)?)),
+        ast::Statement::Destructure(d) => Ok(Statement::Block(Block {
+            name: String::new(),
+            items: destructure(d)?,
+            attributes: vec![],
+        })),
         ast::Statement::Block(inner) => Ok(Statement::Block(block(inner)?)),
         ast::Statement::Declaration(decl) => Ok(Statement::Declaration(declaration(decl)?)),
         ast::Statement::Branch(branch) => Ok(Statement::Branch(Branch {
@@ -309,7 +332,109 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
     }
 }
 
+/// The hidden local holding the tuple a destructuring reads:
+/// `var __tuple_N = Destructure(value, count);`.
+fn hidden_tuple(value: &ast::Expression, count: usize) -> Result<(VariableDef, String, Loc), Diagnostic> {
+    let n = TUPLES.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    });
+    let name = format!("__tuple_{}", n);
+    let at = loc(value.span());
+    let hidden = VariableDef {
+        name: name.clone(),
+        ty: TypeName::auto(),
+        default: Some(Expression::Destructure { value: Box::new(expression(value)?), count, loc: at }),
+        hidden: true,
+        kind: Kind::Variable,
+        attributes: vec![],
+        loc: at,
+        type_loc: Loc::NONE,
+        is_const: false,
+    };
+    Ok((hidden, name, at))
+}
+
+/// Element `index` of the hidden tuple local `tuple`, located at `at`.
+fn tuple_element(tuple: &str, index: usize, at: Loc) -> Expression {
+    Expression::MemberRef {
+        lhs: Box::new(Expression::SymbolRef { id: tuple.to_string(), ty: TypeName::auto(), loc: at }),
+        name: index.to_string(),
+        loc: at,
+    }
+}
+
+/// Lower `var (a, b: T, _) = value;` to
+///
+/// ```text
+/// var __tuple_N = <Destructure(value, 3)>;
+/// var a = __tuple_N.0;
+/// var b: T = __tuple_N.1;
+/// ```
+///
+/// This is C++'s `auto [a, b, _] = value;`: codegen moves each element into
+/// its binding (`destructured_element`), and the hidden local keeps only the
+/// skipped ones until scope exit.
+/// `tuples::lower_destructures` checks the count once the type is known.
+fn destructure(d: &ast::Destructure) -> Result<Vec<Statement>, Diagnostic> {
+    let (hidden, tuple, _) = hidden_tuple(&d.value, d.bindings.len())?;
+    let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
+    for (index, binding) in d.bindings.iter().enumerate() {
+        if binding.name == "_" {
+            continue;
+        }
+        let at = loc(binding.name_span);
+        items.push(Statement::Declaration(Declaration::Variable(VariableDef {
+            name: binding.name.clone(),
+            ty: type_name_from(&binding.type_name),
+            default: Some(tuple_element(&tuple, index, at)),
+            hidden: false,
+            kind: Kind::Variable,
+            attributes: vec![],
+            loc: at,
+            type_loc: if binding.type_name.span.is_empty() { Loc::NONE } else { loc(binding.type_name.span) },
+            is_const: d.is_const,
+        })));
+    }
+    Ok(items)
+}
+
+/// Lower `(a, b.f, _) = value;` to
+///
+/// ```text
+/// {
+///     var __tuple_N = <Destructure(value, 3)>;
+///     a = __tuple_N.0;
+///     b.f = __tuple_N.1;
+/// }
+/// ```
+///
+/// This is C++'s `std::tie(a, b.f, std::ignore) = value;`: the whole right
+/// side is evaluated first, so `(a, b) = (b, a)` swaps, and each store is an
+/// ordinary assignment.
+fn destructuring_assignment(lhs: &ast::Expression, rhs: &ast::Expression, span: ast::Span) -> Result<Statement, Diagnostic> {
+    let ast::Expression::Tuple { elements, .. } = lhs else { unreachable!("checked by the caller") };
+    let (hidden, tuple, _) = hidden_tuple(rhs, elements.len())?;
+    let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
+    for (index, place) in elements.iter().enumerate() {
+        if matches!(place, ast::Expression::SymbolRef { id, .. } if id == "_") {
+            continue;
+        }
+        let at = loc(place.span());
+        items.push(Statement::Expression(Expression::Binary {
+            op: BinaryOp::Assign,
+            lhs: Box::new(expression(place)?),
+            rhs: Box::new(tuple_element(&tuple, index, at)),
+            loc: loc(span),
+        }));
+    }
+    Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
+}
+
 thread_local! {
+    /// Numbers each destructuring's hidden tuple local.
+    static TUPLES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Numbers each lowered `for` loop's hidden iterator local.
     static FOR_LOOPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Numbers each lowered `with` block's hidden locals.
@@ -322,6 +447,7 @@ thread_local! {
 pub(crate) fn reset_counters() {
     FOR_LOOPS.with(|c| c.set(0));
     WITH_BLOCKS.with(|c| c.set(0));
+    TUPLES.with(|c| c.set(0));
     MATCHES.with(|c| c.set(0));
 }
 

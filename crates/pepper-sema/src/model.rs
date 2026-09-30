@@ -358,6 +358,16 @@ pub enum Expression {
     /// once types are known: a null test for a struct or pointer value, no
     /// branch at all otherwise. Never reaches codegen.
     WithEntered(Box<Expression>),
+    /// The tuple a destructuring (`var (a, b) = value;`, `(a, b) = value;`)
+    /// reads, with the number of places it names: the builder emits it only
+    /// as the default of the hidden `__tuple_N` local.
+    /// `tuples::lower_destructures` checks that `value` is a tuple of `count`
+    /// elements and replaces the node with `value`. Never reaches codegen.
+    Destructure {
+        value: Box<Expression>,
+        count: usize,
+        loc: Loc,
+    },
     /// One arm's test in a lowered `match`: `subject` (the hidden
     /// `__match_N` local) is one of `patterns`. The builder lowers `match`
     /// to an `if`/`else` chain of these; `enums::lower_matches` replaces
@@ -398,6 +408,7 @@ impl Expression {
             | Expression::MethodCall { loc, .. }
             | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. }
+            | Expression::Destructure { loc, .. }
             | Expression::StringLiteral { loc, .. } => *loc,
             Expression::ClosureLiteral(c) => c.loc,
             _ => Loc::NONE,

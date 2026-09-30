@@ -188,6 +188,12 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 while (i < size and is_hex_digit(data[i])) {
                     i += 1;
                 }
+            } else if (start > 0 and data[start - 1] == '.') {
+                # A tuple element after `.` is digits only: `t.0.1` is two
+                # accesses, as the compiler reads it.
+                while (i < size and is_digit(data[i])) {
+                    i += 1;
+                }
             } else {
                 while (i < size and is_digit(data[i])) {
                     i += 1;

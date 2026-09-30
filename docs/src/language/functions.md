@@ -119,6 +119,19 @@ Defaults work the same way for methods and constructors. Pepper has no named
 arguments: to give a later parameter a value, you pass every parameter before
 it.
 
+## Returning several values
+
+A function returns several values as a [tuple](tuples.md), and the caller
+destructures it:
+
+```pepper
+divide(a: int, b: int): (int, int) {
+    return (a / b, a % b);
+}
+
+var (quotient, remainder) = divide(17, 5);
+```
+
 ## Overloading
 
 Functions of one file can share a name when their parameter lists differ,

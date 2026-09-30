@@ -15,6 +15,17 @@ pub struct Types<'ctx> {
     /// passed and stored by value. An array rather than a struct type keeps
     /// it apart from struct references, which lower to pointers.
     trait_types: HashMap<String, BasicTypeEnum<'ctx>>,
+    /// Tuple types (`__tuple<A, B>`): a literal (unnamed) struct of the
+    /// elements' slot types, passed and stored by value. Every struct
+    /// reference type is a named struct, so `is_object` tells them apart.
+    tuple_types: HashMap<String, StructType<'ctx>>,
+}
+
+/// Whether an LLVM type lowered from a Pepper type is a struct object, which
+/// values reference through a pointer: a named struct. A tuple is an
+/// unnamed (literal) struct, which values hold directly.
+pub fn is_object(ty: &BasicTypeEnum<'_>) -> bool {
+    matches!(ty, BasicTypeEnum::StructType(st) if st.get_name().is_some())
 }
 
 /// Integral-type aliases (same set as sema `TypeName::IntegralTypes`).
@@ -51,6 +62,7 @@ impl<'ctx> Types<'ctx> {
             context,
             struct_types: HashMap::new(),
             trait_types: HashMap::new(),
+            tuple_types: HashMap::new(),
         }
     }
 
@@ -59,6 +71,9 @@ impl<'ctx> Types<'ctx> {
     pub fn get(&self, name: &str) -> Option<BasicTypeEnum<'ctx>> {
         if let Some(ty) = self.trait_types.get(name) {
             return Some(*ty);
+        }
+        if let Some(ty) = self.tuple_types.get(name) {
+            return Some(BasicTypeEnum::StructType(*ty));
         }
         if let Some(st) = self.struct_types.get(name) {
             return Some(BasicTypeEnum::StructType(*st));
@@ -81,6 +96,17 @@ impl<'ctx> Types<'ctx> {
     /// Whether `name` is a registered trait type.
     pub fn is_trait(&self, name: &str) -> bool {
         self.trait_types.contains_key(name)
+    }
+
+    /// Register a tuple type: a literal struct of its elements' slot types.
+    pub fn register_tuple(&mut self, name: &str, elements: &[BasicTypeEnum<'ctx>]) {
+        let ty = self.context.struct_type(elements, false);
+        self.tuple_types.insert(name.to_string(), ty);
+    }
+
+    /// Whether `name` is a registered tuple type.
+    pub fn is_tuple(&self, name: &str) -> bool {
+        self.tuple_types.contains_key(name)
     }
 
     /// Metadata variant of [`Types::get`].

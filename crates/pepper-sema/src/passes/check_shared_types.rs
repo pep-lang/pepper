@@ -10,8 +10,8 @@
 //!   `Atomic<T>`, not by assigning fields); and
 //! - of a thread-safe type: a primitive, a raw pointer to a thread-safe type
 //!   (`__ptr<void>` included: what raw memory holds is the code's own
-//!   responsibility), a `shared` function type, a `[Shared]` struct, or a
-//!   weak reference to one.
+//!   responsibility), a `shared` function type, a `[Shared]` struct, a
+//!   weak reference to one, or a tuple of thread-safe types.
 //!
 //! Every other struct is not thread-safe, and neither is a plain function
 //! type (`(P...) => R`): its counts are plain and a closure of that type may
@@ -67,6 +67,11 @@ pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<
     }
     if let Some(target) = ty.weak_target() {
         return unsafe_part_in(target, safe);
+    }
+    // A tuple is its elements, held by value.
+    let parsed = parse_type_string(&name);
+    if parsed.is_tuple() {
+        return parsed.tuple_elements().iter().find_map(|e| unsafe_part_in(e, safe));
     }
     if safe.0.contains(&name) {
         return None;

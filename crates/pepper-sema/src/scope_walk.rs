@@ -387,6 +387,18 @@ macro_rules! scope_walker {
                         }
                     }
                     Statement::LoopBreak(_) => {}
+                    Statement::Destructure(d) => {
+                        // The value is evaluated before the bindings exist;
+                        // they belong to the enclosing block.
+                        self.visit_expression(&$($m)? d.value);
+                        for b in &$($m)? d.bindings {
+                            self.visit_type_name(&$($m)? b.type_name);
+                            let marked = self.visit_binding(&b.type_name, None);
+                            if b.name != "_" {
+                                self.scopes_mut().bind_value(&b.name, marked);
+                            }
+                        }
+                    }
                     Statement::Match(m) => {
                         self.visit_expression(&$($m)? m.value);
                         for arm in &$($m)? m.arms {
@@ -456,6 +468,11 @@ macro_rules! scope_walker {
                         self.visit_type_name(&$($m)? c.return_type);
                         self.walk_block(&$($m)? c.body);
                         self.scopes_mut().pop();
+                    }
+                    Expression::Tuple { elements, .. } => {
+                        for e in elements {
+                            self.visit_expression(e);
+                        }
                     }
                 }
             }

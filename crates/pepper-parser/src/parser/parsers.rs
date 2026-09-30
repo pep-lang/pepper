@@ -440,8 +440,41 @@ fn optional_suffix_in_probe(after: &str) -> bool {
 /// aliases, generic substitution and specialization treat it like any other
 /// generic type. `=>` is right-associative: `(int) => (int) => int` returns a
 /// function. A parenthesized list not followed by `=>` is not a type.
+///
+/// Without the `=>`, a list of two or more types is a tuple type `(A, B)`,
+/// lowered to `__tuple<A, B>`.
 fn function_type_name(input: &mut &str) -> Result<TypeName> {
-    function_type_of(input, type_name)
+    let before = *input;
+    let start = pos(input);
+    match function_type_of(input, type_name) {
+        Err(ErrMode::Backtrack(_)) => {}
+        other => return other,
+    }
+    // Not a function type: try `(A, B, ...)`.
+    *input = &input[1..];
+    let mut elements = vec![];
+    loop {
+        ws(input)?;
+        match type_name(input) {
+            Ok(ty) => elements.push(ty),
+            Err(_) => {
+                *input = before;
+                return Err(bt(input));
+            }
+        }
+        ws(input)?;
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with(')') && elements.len() >= 2 {
+            *input = &input[1..];
+            break;
+        }
+        *input = before;
+        return Err(bt(input));
+    }
+    Ok(TypeName { name: TUPLE_TYPE.to_string(), generic_types: elements, span: Span { start, end: pos(input) } })
 }
 
 /// A function type whose parameter and return types `element` parses (C
@@ -991,10 +1024,24 @@ fn atom(input: &mut &str) -> Result<Expression> {
             Err(ErrMode::Backtrack(_)) => {}
             Err(e) => return Err(e),
         }
+        let start = pos(input);
         *input = &input[1..];
         ws(input)?;
         let expr = expression(input)?;
         ws(input)?;
+        // `(a, b, ...)`: a tuple.
+        if input.starts_with(',') {
+            let mut elements = vec![expr];
+            while input.starts_with(',') {
+                *input = &input[1..];
+                ws(input)?;
+                elements.push(expression(input)?);
+                ws(input)?;
+            }
+            if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
+            *input = &input[1..];
+            return Ok(Expression::Tuple { elements, span: Span { start, end: pos(input) } });
+        }
         if !input.starts_with(')') { return Err(cut_expecting(input, "')'")); }
         *input = &input[1..];
         return Ok(expr);
@@ -1010,6 +1057,16 @@ fn postfix(input: &mut &str) -> Result<Expression> {
         if input.starts_with('.') {
             *input = &input[1..];
             ws(input)?;
+            // `t.0`: a tuple element. Only digits, so `t.0.1` is two accesses.
+            if input.starts_with(|c: char| c.is_ascii_digit()) {
+                let digits = input.len() - input.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+                let name = input[..digits].to_string();
+                let name_span = Span { start: pos(input), end: pos(input) + digits };
+                *input = &input[digits..];
+                let start = expr.span().start;
+                expr = Expression::MemberAccess { lhs: Box::new(expr), name, name_span, span: Span { start, end: pos(input) } };
+                continue;
+            }
             let name_start: &str = input;
             let mut name = identifier(input).inspect_err(|_| expected(input, "member name"))?;
             let name_span = Span { start: pos(input) - name.len(), end: pos(input) };
@@ -1798,6 +1855,59 @@ fn return_statement(input: &mut &str) -> Result<ReturnStatement> {
     Ok(ReturnStatement { expr: Some(expr), span: Span { start, end } })
 }
 
+/// `var (a, b: T, _) = e` or `const (...) = e`. Returns `None` (consuming
+/// nothing) unless `var`/`const` is followed by `(`.
+fn destructure(input: &mut &str) -> Result<Option<Destructure>> {
+    let start = pos(input);
+    let is_const = keyword(&mut { *input }, "const");
+    if !is_const && !keyword(&mut { *input }, "var") {
+        return Ok(None);
+    }
+    let mut rest = &input[if is_const { 5 } else { 3 }..];
+    ws(&mut rest)?;
+    if !rest.starts_with('(') {
+        return Ok(None);
+    }
+    *input = &rest[1..];
+    let mut bindings = vec![];
+    loop {
+        ws(input)?;
+        let name_start = pos(input);
+        let name = identifier(input).inspect_err(|_| expected(input, "identifier"))?;
+        let name_span = Span { start: name_start, end: pos(input) };
+        ws(input)?;
+        let mut ty = TypeName::auto();
+        if input.starts_with(':') {
+            *input = &input[1..];
+            ws(input)?;
+            ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
+            ws(input)?;
+        }
+        bindings.push(DestructureBinding { name, name_span, type_name: ty });
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with(')') {
+            *input = &input[1..];
+            break;
+        }
+        return Err(cut_expecting(input, "')'"));
+    }
+    ws(input)?;
+    if !input.starts_with('=') || input.starts_with("==") {
+        return Err(cut_expecting(input, "'='"));
+    }
+    *input = &input[1..];
+    ws(input)?;
+    let value = expression(input)?;
+    let span = Span { start, end: pos(input) };
+    if !decl_boundary(input) {
+        return Err(cut_expecting(input, "';'"));
+    }
+    Ok(Some(Destructure { bindings, value, is_const, span }))
+}
+
 /// After a `TypeName name` style declaration the next token must end the
 /// statement (`;`, `}`, or end of input); otherwise it was an expression all
 /// along. While a missing `;` is only deprecated, a line break also ends the
@@ -1852,6 +1962,10 @@ fn statement(input: &mut &str) -> Result<Statement> {
         let start = pos(input);
         *input = &input[8..];
         return Ok(Statement::LoopBreak(LoopBreak { kind: LoopBreakKind::Continue, span: Span { start, end: pos(input) } }));
+    }
+    // `var (a, b) = e;` / `const (a, b) = e;`: destructuring.
+    if let Some(d) = destructure(input)? {
+        return Ok(Statement::Destructure(d));
     }
     // Variable declaration: `var`/`const` prefix OR `TypeName name = value` form.
     // Keywords are matched as whole words, so a type or module qualifier that
@@ -3475,6 +3589,12 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
         }
         Statement::Return(r) => r.expr.as_ref().map_or(Ok(()), ptr_check_expr),
         Statement::LoopBreak(_) => Ok(()),
+        Statement::Destructure(d) => {
+            for b in &d.bindings {
+                ptr_check_type(&b.type_name)?;
+            }
+            ptr_check_expr(&d.value)
+        }
         Statement::Match(m) => {
             ptr_check_expr(&m.value)?;
             m.arms.iter().try_for_each(|arm| ptr_check_block(&arm.body))?;
@@ -3513,6 +3633,7 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
             ptr_check_type(&c.return_type)?;
             ptr_check_block(&c.body)
         }
+        Expression::Tuple { elements, .. } => elements.iter().try_for_each(ptr_check_expr),
     }
 }
 

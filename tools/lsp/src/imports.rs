@@ -208,6 +208,11 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
             .or_else(|| w.else_block.as_ref().and_then(|e| in_block(e, offset))),
         ast::Statement::Return(r) => r.expr.as_ref().and_then(|e| in_expression_types(e, offset)),
         ast::Statement::LoopBreak(_) => None,
+        ast::Statement::Destructure(d) => d
+            .bindings
+            .iter()
+            .find_map(|b| in_type_name(&b.type_name, offset))
+            .or_else(|| in_expression_types(&d.value, offset)),
         ast::Statement::Match(m) => in_expression_types(&m.value, offset)
             .or_else(|| {
                 m.arms.iter().find_map(|arm| {
@@ -244,6 +249,7 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
             .find_map(|p| in_variable(p, offset))
             .or_else(|| in_type_name(&c.return_type, offset))
             .or_else(|| in_block(&c.body, offset)),
+        ast::Expression::Tuple { elements, .. } => elements.iter().find_map(|e| in_expression_types(e, offset)),
         ast::Expression::Literal { .. } | ast::Expression::SymbolRef { .. } => None,
     }
 }

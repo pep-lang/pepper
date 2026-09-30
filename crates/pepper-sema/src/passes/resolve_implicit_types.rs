@@ -263,10 +263,20 @@ impl<'t> Scopes<'t> {
 /// Best-effort type of an expression (port of `typeOfExpr`).
 fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&TypeName>) -> TypeName {
     match expr {
+        Expression::Destructure { value, .. } => type_of_expr(value, scopes, current_struct),
+        // A tuple literal before its type is spelled out: the tuple of its
+        // elements' types, once they are all known.
+        Expression::FunctionCall { function, args, .. } if function == crate::type_name::TUPLE => {
+            crate::passes::tuples::literal_type(args.iter().map(|a| type_of_expr(a, scopes, current_struct)))
+                .unwrap_or_else(TypeName::auto)
+        }
         Expression::MemberRef { lhs, name, .. } => {
             let lhs_type = type_of_expr(lhs, scopes, current_struct);
             if lhs_type.is_empty() || lhs_type.is_auto() {
                 return TypeName::auto();
+            }
+            if let Some(element) = lhs_type.tuple_element(name) {
+                return element.clone();
             }
             for fields in scopes.field_tables(&lhs_type.to_string()) {
                 if let Some(field) = fields.iter().find(|f| &f.name == name) {
@@ -394,6 +404,9 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::StringLiteral { .. } => TypeName::new("String"),
         Expression::PointerLiteral => TypeName::void_ptr(),
         // Constructor-style call `Name<...>(...)` resolves to Name<...>.
+        Expression::FunctionCall { function, .. } if function.starts_with("__tuple<") => {
+            crate::passes::gather_generics::parse_type_string(function)
+        }
         Expression::FunctionCall { function, args, .. } => {
             // A call through a local, parameter or field of function type.
             if let Some((_, ty)) = scopes.value_callee(function, current_struct) {
@@ -915,6 +928,14 @@ fn resolve_expression(
         resolve_overload(e, scopes, current);
         resolve_method_overload(e, scopes, current);
         infer_type_arguments(e, scopes, current);
+        // `(a, b)`: spell out its tuple type once the elements' are known.
+        if let Expression::FunctionCall { function, args, .. } = e {
+            if function == crate::type_name::TUPLE {
+                if let Some(ty) = crate::passes::tuples::literal_type(args.iter().map(|a| type_of_expr(a, scopes, current))) {
+                    *function = ty.to_string();
+                }
+            }
+        }
         // Calls through function values: `f(x)` on a local, parameter,
         // global or field of function type, and `obj.callback(x)`.
         if let Expression::FunctionCall { function, args, .. } = e {

@@ -333,6 +333,18 @@ with no extension, and `module_name()` is the output's stem.
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
     (Expression::WithEntered(x)) { body } else { other }`. The model has no
     `with` statement; `lower_with_blocks` resolves the condition.
+  - A tuple literal `(a, b)` becomes `FunctionCall { function: "__tuple" }`;
+    `resolve_implicit_types` renames it to its type (`__tuple<int, String>`)
+    once its arguments are typed. The tuple type `(A, B)` is
+    `TypeName { name: "__tuple", sub_types }` (`type_name::TUPLE`,
+    `is_tuple`), displayed as `(A, B)`; `t.0` is a `MemberRef` named `"0"`.
+  - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
+    with `Expression::Destructure { value: e, count }` followed by
+    `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block
+    (`destructure`). `(a, p.x) = e;` becomes a block holding the hidden
+    local and one assignment per place (`destructuring_assignment`), so the
+    right side is evaluated first. `tuples::lower_destructures` checks the
+    count and removes the `Destructure` node.
   - An `enum` is an `ast::StructDecl` whose `enumeration` is set, so
     linking, visibility, exports and name mangling treat it as a struct.
     `enum_def` builds an `EnumDef` in `module.enums` instead (cases with
@@ -377,7 +389,7 @@ with no extension, and `module_name()` is the output's stem.
   `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
-  `ForIterator`, `WithEntered`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
+  `ForIterator`, `WithEntered`, `Destructure`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
   `MethodAddress`, `CallPointer`), and `Statement`. Each node that names something has a
   `Loc`; `Expression::loc()` returns it (`Loc::NONE` for literals and
   synthesized nodes).
@@ -472,7 +484,7 @@ several passes run more than once on purpose.
 | --- | --- | --- |
 | 0 | `enums::resolve_enum_cases` (`enums.rs`) | Installs `module.enums` in the thread-local enum registry (`enums::install`; `struct_body::apply` and codegen install it too), which `TypeName::is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums::stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
-| 2 | `synthesize_function_types` (`function_types.rs`) | Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
+| 2 | `synthesize_function_types` (`function_types.rs`) | Each tuple type `__tuple<A, B>` becomes a synthesized struct (`tuples::tuple_struct`) with const fields `"0"`, `"1"`, … and a constructor taking the elements, so every pass that types fields, constructor arguments and member reads handles tuples unchanged; codegen emits no object for it (§4.3). Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`weak_types.rs`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
 | 4 | `overloads::name_overloads` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`) (`gather_generics::concrete_overrides`). Then groups each file's free functions by name: a name with several is an overload set, whose members become `name$1`, `name$2`, ... (after any namespace: `f@ns$1`; `namespace::demangle` strips both), recorded in `module.overload_sets`. Reports a redefinition, a difference only in return type, and an overloaded `extern`, and attaches an override of an overloaded generic to the member with its arity (`f$2<Point>`). Each struct's same-name methods (operators included) are renamed the same way (`add$1`, `+$2`), recorded in `module.method_overload_sets`; specializations copy the renamed members, and a static and an instance method may not share a name. A trait's same-name methods are renamed the same way, each its own vtable slot (`overloads::group_methods` serves structs, traits, and `apply_extensions`). `StructTable` and `convert_member_refs` also answer to a member's set name, so `a + b` and a bare `add(x)` in a method still find the set. |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call. The raw literal stays a `char*` global. |
@@ -499,6 +511,7 @@ several passes run more than once on purpose.
 | final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`StructDef::implicit_from`) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. A string literal (the `String(raw, size, length)` call `convert_string_literals` made, matched by the literal's loc) flowing into a `char`, `u8`, or `void` pointer slot is unwrapped back to its raw literal, in each arm of a ternary too. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). A C function pointer slot takes only the same C function pointer type (`extern_flows_into`, with a hint saying what converts), and a C function pointer converts only to `void*`. An extern call's arguments are checked here only for its function-typed parameters; codegen checks the rest. It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
+| final | `tuples::lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 | final | `enums::lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` and checks each `match` (`MatchSite`): the subject must be an enum, a pattern's qualifier must name it, each case is handled once, and every case must be handled unless there is an `else` (`match on 'E' does not handle ...`, at the keyword, with a note per missing case). An `else` after every case is a warning in `module.warnings`. `check_function_types` keeps enums apart from integers and from each other (`Kind::Enum`). |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
@@ -518,7 +531,7 @@ thread-local that keeps only the **first** diagnostic of a run. Other
 per-run state is thread-local too: `apply_extensions::reset_applied` runs at
 the start of each `transform_pass`, and `platform::SIMULATED_HOST` is set
 only inside `with_simulated_host`. The counters that number synthesized
-names (the builder's `FOR_LOOPS` and `WITH_BLOCKS`, closure structs'
+names (the builder's `FOR_LOOPS`, `WITH_BLOCKS` and `TUPLES`, closure structs'
 `CLOSURES`, `resolve_operators`' `INDEX_TEMPORARIES`) restart at the start
 of every `load_program` (`pepper_sema::reset_program_counters`). This lets
 tests compile concurrently on separate threads.
@@ -681,6 +694,34 @@ value is a struct reference with its concrete type erased, like a
   `__address`/`__refcount` read the object. Array slots of a trait type are
   16 bytes, which `_pep_move_ref`/`_pep_swap_refs` move whole.
 
+### 4.3 Tuples (`passes/tuples.rs`, codegen `register_tuple`)
+
+A tuple is a value, like a `std::tuple` of `shared_ptr`s: no allocation, one
+reference held per reference element.
+
+- **Representation.** `register_tuple` maps `__tuple<A, B>` to a literal
+  (unnamed) LLVM struct of its elements' slot types (a struct element is its
+  pointer, a trait element its `[2 x ptr]`). Named LLVM structs are objects
+  used through pointers; `types::is_object` tells the two apart, so
+  parameters, returns, slots and array strides keep a tuple by value. The
+  sema tuple struct gets no object layout, constructor or methods.
+- **Refcounts.** `is_reference_name` includes tuples, and
+  `emit_tuple_refcount_thunk` emits `Tuple.__acquire`/`Tuple.__release`,
+  which step each reference element. So every §5 path (copies, scope exits,
+  stores, temporaries, fields, the destructor's field releases) works on
+  tuples by type name. `store_refcount_ops` skips the identity test for a
+  tuple: acquiring the new elements before releasing the old ones makes
+  self-assignment safe.
+- **Literals.** `codegen_tuple` builds the aggregate with `insertvalue`: an
+  lvalue-read element is acquired, an owned rvalue moves in, and numbers
+  convert to the element type.
+- **Element reads.** `t.0` is an `extractvalue`; an owned-rvalue tuple
+  (`f().0`) goes on `deferred_temps`.
+- **Destructuring** moves: `var a = __tuple_N.k` (`destructured_element`)
+  takes element `k` without acquiring and clears it in the hidden tuple, so
+  the binding holds the only reference, as a C++ structured binding would;
+  `_` elements stay in the hidden tuple until its scope exits.
+
 ### 4.1 Object emission, linking, running (`driver/src/lib.rs`, `linker.rs`)
 
 `run` emits one object per compilation unit through `objects` (see
@@ -768,6 +809,7 @@ are null-safe.
 | Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves. |
 | `return` | An lvalue read is acquired before `release_all_scopes`. A call result moves. |
 | Discarded temporary | `Statement::Expression` releases `owned_temp_type(expr)`. Arguments that are owned rvalues are released after the call (`owned_arg_temps` in `codegen_call`). The receiver of `f().x` or `f()[i]` goes on `deferred_temps` and is released at the end of the full expression by `flush_deferred_temps`. Ternary arms use `codegen_expr_in_arm`. |
+| Tuples | Same rules, same call sites: `Tuple.__acquire`/`Tuple.__release` step each reference element (§4.3). A destructuring binding moves its element out of the hidden tuple. |
 | Trait values | Same rules, same call sites: `Trait.__acquire`/`Trait.__release` are thunks into the vtable (§4.2), so the concrete type's `__release`, and at zero its `__dtor`, run. `ToTrait` does no refcount work of its own: converting an lvalue read acquires as the read would, and an owned rvalue moves. |
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
 | Closures | `MakeClosure` is an owned rvalue like the constructor call it wraps (`make_shared`): each captured value is a constructor argument, acquired into its field. The value's type is the function type, so every other row applies through `__function<…>.__acquire`/`__release`. At zero, the function type's `__dtor` calls `__destroy`, the closure's `__dtor`, whose `release_field_refs` releases the captures. |

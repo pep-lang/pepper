@@ -114,7 +114,8 @@ The compiler checks every `[Shared]` struct:
   - raw pointers (`__ptr<T>`) to thread-safe types;
   - `shared` function types, such as `shared () => void` (see
     [Function types](function-types.md#sharing-function-values-between-threads));
-  - `[Shared]` structs, and weak references to them.
+  - `[Shared]` structs, and weak references to them;
+  - [tuples](tuples.md) whose elements are all thread-safe.
 
   `String`, `Array` and other structs that are not `[Shared]` are not
   thread-safe, and neither is a plain function type such as `() => void`:

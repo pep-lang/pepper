@@ -234,6 +234,14 @@ fn pep_fmt_keeps_character_literals_as_written() {
 }
 
 #[test]
+fn pep_fmt_spaces_tuples_and_destructuring() {
+    assert_formats(
+        "pair():(int,(String,long)) {\n    return (1,(\"x\",2));\n}\n\nmain(): int {\n    var (a,b:(String,long))=pair();\n    const (_ ,c)=( b.1 ,a );\n    (a,c)=(c,a);\n    return pair().1.1+b.1;\n}\n",
+        "pair(): (int, (String, long)) {\n    return (1, (\"x\", 2));\n}\n\nmain(): int {\n    var (a, b: (String, long)) = pair();\n    const (_, c) = (b.1, a);\n    (a, c) = (c, a);\n    return pair().1.1 + b.1;\n}\n",
+    );
+}
+
+#[test]
 fn pep_fmt_reads_optional_types_and_keeps_ternaries() {
     assert_formats(
         "struct S {\n    Token?  leaf;\n}\nf(x:int?):Array<int?> {\n    Node? a=x;\n    c ? d : e;\n    var g=h?i:j;\n    return k;\n}\n",

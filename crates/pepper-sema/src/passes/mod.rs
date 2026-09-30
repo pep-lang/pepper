@@ -34,6 +34,7 @@ pub mod generic_methods;
 pub mod type_arguments;
 pub mod convert_to_traits;
 pub mod shared_functions;
+pub mod tuples;
 pub mod copies;
 
 use apply_extensions::apply_extensions;
@@ -136,6 +137,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
     step!(convert_print_calls(module));
     step!(resolve_resolvables(module, true));
+    // Destructurings, once the tuples they read are typed.
+    step!(tuples::lower_destructures(module));
     // Types inferred by the final resolve (e.g. `var f = square;`).
     step!(synthesize_function_types(module));
     step!(closures::check_closures(module));
@@ -260,6 +263,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             }
         }
         Expression::ForIterator(source) | Expression::WithEntered(source) => walk_expression(source, f),
+        Expression::Destructure { value, .. } => walk_expression(value, f),
         Expression::MatchArm(test) => walk_expression(&mut test.subject, f),
         Expression::ClosureLiteral(closure) => walk_block(&mut closure.body, f),
         Expression::MakeClosure { value, .. } => walk_expression(value, f),
@@ -328,7 +332,9 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
             children.extend(args.iter_mut());
             children
         }
-        Expression::MakeClosure { value, .. } | Expression::ToTrait { value, .. } => vec![value.as_mut()],
+        Expression::MakeClosure { value, .. }
+        | Expression::ToTrait { value, .. }
+        | Expression::Destructure { value, .. } => vec![value.as_mut()],
     }
 }
 

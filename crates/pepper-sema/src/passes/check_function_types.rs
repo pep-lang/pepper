@@ -140,6 +140,12 @@ impl<'a> Checker<'a> {
         current: Option<&TypeName>,
         slot: &Slot,
     ) {
+        // A tuple is a value, never a null reference.
+        if matches!(value, Expression::PointerLiteral) && expected.is_tuple() {
+            let message = (slot.mismatch)(&pepper_spelling(expected), "__null");
+            self.report(message, value, slot);
+            return;
+        }
         // Raw buffer reads (`Data[i]`) carry no reliable static type.
         if matches!(
             value,
@@ -182,6 +188,9 @@ impl<'a> Checker<'a> {
             // Different structs; type arguments are not compared, since
             // defaults (`Result<int>` is `Result<int, Error>`) and
             // aliases may spell one specialization two ways.
+            // Tuples have no defaults or aliases of their own: the element
+            // types must match (`(int, String)` is not `(long, String)`).
+            (Kind::Struct, Kind::Struct) if expected.is_tuple() || actual.is_tuple() => canonical(expected) != canonical(&actual),
             (Kind::Struct, Kind::Struct) => canonical(expected).name != canonical(&actual).name,
             (Kind::Pointer, Kind::Pointer) => false,
             // Integers and pointers mix in C interop (`__null`, handles).
@@ -368,7 +377,13 @@ impl<'a> Checker<'a> {
             return Some((format!("argument {{}} of '{}'", function), e.parameters.iter().map(|p| p.ty.clone()).collect()));
         }
         let st = self.module.structs.iter().find(|s| s.name == function)?;
-        Some((format!("argument {{}} of '{}'", function), st.constructor.parameters.iter().map(|p| p.ty.clone()).collect()))
+        // A tuple literal's arguments are its elements, numbered as `t.0`.
+        let label = if st.ty.is_tuple() {
+            format!("element {{}} of '{}'", st.ty.display())
+        } else {
+            format!("argument {{}} of '{}'", function)
+        };
+        Some((label, st.constructor.parameters.iter().map(|p| p.ty.clone()).collect()))
     }
 
     fn parameters_of_method(&self, this_type: &TypeName, method: &str) -> Option<Vec<TypeName>> {
@@ -392,7 +407,8 @@ impl<'a> Checker<'a> {
         checked: impl Fn(&TypeName) -> bool,
     ) {
         for (idx, (param, arg)) in params.iter().zip(args).enumerate().filter(|(_, (param, _))| checked(param)) {
-            let what = || label.replace("{}", &(idx + 1).to_string());
+            let number = if label.starts_with("element ") { idx } else { idx + 1 };
+            let what = || label.replace("{}", &number.to_string());
             let mismatch = |expected: &str, actual: &str| format!("cannot pass a value of type '{}' as {}, which has type '{}'", actual, what(), expected);
             self.flows_into(arg, param, current, &Slot { what: &what, mismatch: &mismatch, fallback: call });
         }

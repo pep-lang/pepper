@@ -98,6 +98,10 @@ pub fn synthesize_function_types(module: &mut Module) {
         if module.structs.iter().any(|st| st.name == name) {
             continue;
         }
+        if ty.is_tuple() {
+            module.structs.push(crate::passes::tuples::tuple_struct(&ty));
+            continue;
+        }
         if let Some(target) = ty.weak_target() {
             // Only a concrete struct target: `__weak<T>` inside a generic
             // base waits for its specializations.
@@ -125,7 +129,7 @@ fn collect(ty: &TypeName, found: &mut Vec<TypeName>, seen: &mut HashSet<String>)
     if let Some(pointee) = ty.name.strip_suffix('*') {
         collect(&TypeName::new(pointee), found, seen);
     }
-    if (ty.is_function_type() || ty.is_weak()) && !ty.contains_auto() && seen.insert(ty.to_string()) {
+    if (ty.is_function_type() || ty.is_weak() || ty.is_tuple()) && !ty.contains_auto() && seen.insert(ty.to_string()) {
         found.push(ty.clone());
     }
 }

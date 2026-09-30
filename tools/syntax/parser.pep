@@ -119,6 +119,7 @@ operator_method_names(): HashSet<String> {
 ##     re-exports and `extern` functions
 export ends_in_semicolon(kind: int): bool {
     return kind == node_variable
+        or kind == node_destructure
         or kind == node_type_alias
         or kind == node_expression_statement
         or kind == node_return
@@ -362,9 +363,12 @@ struct Parser {
             or after.is("=");
     }
 
-    # `( TYPE, ... ) => TYPE`, added to `node`.
+    # `( TYPE, ... ) => TYPE`, added to `node`, or a tuple type
+    # `( TYPE, TYPE, ... )`: the compiler reads a tuple where `=>` is missing
+    # after two or more types.
     _function_type(node: Node) {
         _take(node);
+        int types = 0;
         while (true) {
             if (_at(")")) {
                 _take(node);
@@ -374,6 +378,7 @@ struct Parser {
             if (_failed) {
                 return;
             }
+            types += 1;
             if (_at(",")) {
                 _take(node);
                 continue;
@@ -385,7 +390,12 @@ struct Parser {
             _fail("expected ')'");
             return;
         }
+        ulong position = _position;
         if (!_at("=>")) {
+            if (types >= 2) {
+                _restore(position);
+                return;
+            }
             _fail("expected '=>'");
             return;
         }
@@ -652,6 +662,12 @@ struct Parser {
                 var node = Node(node_member);
                 node.add(operand);
                 _take(node);
+                # A tuple element, `t.0`.
+                if (_peek().kind == token_number) {
+                    _take(node);
+                    operand = node;
+                    continue;
+                }
                 _expect_name(node, "member name");
                 if (_failed) {
                     return node;
@@ -734,6 +750,17 @@ struct Parser {
             node.add(_expression());
             if (_failed) {
                 return node;
+            }
+            # `(a, b)`: a comma makes it a tuple literal.
+            if (_at(",")) {
+                node.kind = node_tuple;
+                while (_at(",")) {
+                    _take(node);
+                    node.add(_expression());
+                    if (_failed) {
+                        return node;
+                    }
+                }
             }
             _expect(node, ")");
             return node;
@@ -978,6 +1005,9 @@ struct Parser {
             _take(node);
             return node;
         }
+        if ((_at_word("var") or _at_word("const")) and _peek_at(1).is("(")) {
+            return _destructure();
+        }
         var token = _peek();
         bool declaration = token.is_word("var")
             or token.is_word("const")
@@ -1175,6 +1205,46 @@ struct Parser {
     # A line break counts only while a missing `;` is merely deprecated.
     _declaration_boundary(): bool {
         return _at_end() or _at(";") or _at("}") or _peek().newlines_before > 0;
+    }
+
+    # `(var | const) (name [: Type], ...) = value`.
+    _destructure(): Node {
+        var node = Node(node_destructure);
+        _take(node);
+        var bindings = Node(node_closure_parameters);
+        _take(bindings);
+        while (true) {
+            if (!_at_name()) {
+                _fail("expected variable name");
+                return node;
+            }
+            var binding = Node(node_closure_parameter);
+            _take(binding);
+            if (_at(":")) {
+                _take(binding);
+                binding.add(_type_name());
+                if (_failed) {
+                    return node;
+                }
+            }
+            bindings.add(binding);
+            if (_at(",")) {
+                _take(bindings);
+                continue;
+            }
+            _expect(bindings, ")");
+            if (_failed) {
+                return node;
+            }
+            break;
+        }
+        node.add(bindings);
+        _expect(node, "=");
+        if (_failed) {
+            return node;
+        }
+        node.add(_expression());
+        return node;
     }
 
     # `var name`, `const name` or `Type name`, then `[: Type] [= value]`.
