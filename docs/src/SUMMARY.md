@@ -47,6 +47,7 @@
 - [Overview](reference/README.md)
 <!-- reference:start -->
   - [Built-in functions](reference/internals.md)
+  - [Arguments and exit](reference/process.md)
   - [String](reference/string.md)
   - [Array](reference/array.md)
   - [HashMap and HashSet](reference/hash.md)

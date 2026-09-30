@@ -16,6 +16,7 @@ use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_do
 /// A file not named here is listed after these, titled by its path.
 const PAGES: &[(&str, &str)] = &[
     ("internals.pep", "Built-in functions"),
+    ("process.pep", "Arguments and exit"),
     ("string.pep", "String"),
     ("array.pep", "Array"),
     ("hash.pep", "HashMap and HashSet"),

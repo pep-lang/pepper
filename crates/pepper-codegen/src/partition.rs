@@ -144,16 +144,20 @@ fn respell<'ctx>(module: &Module<'ctx>, value: GlobalValue<'ctx>, defined: &Hash
     }
 }
 
-/// The linker spelling of a Pepper symbol. A name of letters, digits, `_`
-/// and `.` is its own spelling (`main`, `Point.length`); any other name is
-/// `_P` followed by the name with `_` doubled and every other byte written
-/// as `_` and two hex digits (`Array<int>.count` is
+/// The linker spelling of a Pepper symbol. `main`, and a member name of
+/// letters, digits, `_` and `.` (`Point.length`), is its own spelling; any
+/// other name is `_P` followed by the name with `_` doubled and every other
+/// byte written as `_` and two hex digits (`Array<int>.count` is
 /// `_PArray_3cint_3e.count`), so every spelling names one symbol and no
-/// linker reads a `@` as a symbol version. A plain name that starts with
-/// `_P` is escaped too, so it cannot collide with an escaped one.
+/// linker reads a `@` as a symbol version. A free function or global is
+/// escaped even when plain (`exit` is `_Pexit`): a C library defines names
+/// like `exit` and `read` too, and a statically linked C runtime (Windows)
+/// would see two definitions. A dotted name cannot be a C symbol. A plain
+/// name that starts with `_P` is escaped too, so it cannot collide with an
+/// escaped one.
 pub fn symbol_name(name: &str) -> String {
     let plain = name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'.');
-    if plain && !name.starts_with("_P") {
+    if name == "main" || (plain && name.contains('.') && !name.starts_with("_P")) {
         return name.to_string();
     }
     let mut out = String::from("_P");
@@ -179,6 +183,8 @@ mod tests {
         assert_eq!(symbol_name("helper@io/file"), "_Phelper_40io_2ffile");
         assert_eq!(symbol_name("a_b@x"), "_Pa__b_40x");
         assert_eq!(symbol_name("_Pfoo"), "_P__Pfoo");
+        assert_eq!(symbol_name("exit"), "_Pexit");
+        assert_eq!(symbol_name("_pep_malloc"), "_P__pep__malloc");
         assert_ne!(symbol_name("a_40"), symbol_name("a@"));
     }
 }

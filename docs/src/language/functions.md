@@ -34,7 +34,8 @@ consistently. The first form is the one used throughout this book.
 - **Order does not matter.** A function can call functions declared later in
   the file, and can call itself.
 - **The program starts at `main`.** `main(): int` returns the process's exit
-  code; return 0 for success.
+  code; return 0 for success. See
+  [Command-line arguments and exit](#command-line-arguments-and-exit).
 - **Calls must match the declaration.** Passing the wrong number of arguments
   is a compile error:
 
@@ -168,6 +169,22 @@ message)`, which stops the program with `message` when `condition` is false, and
 (`assert(n > 0, name + " must be positive")`), or a C string, which a string
 literal picks, so a literal message builds nothing when the assertion holds. See
 [Built-in functions](../reference/internals.md).
+
+## Command-line arguments and exit
+
+`arguments()` returns the program's command-line arguments as an
+`Array<String>`: element 0 is the program as it was started, and the
+arguments typed after it follow in order. `exit(code)` ends the program at
+once with status `code`, from anywhere, after flushing what was printed.
+
+```pepper
+{{#include ../../examples/functions-arguments.pep}}
+```
+
+`exit` skips everything that would run on the way out of `main`: locals are
+not released and destructors do not run. Prefer returning from `main`, and
+keep `exit` for ending from deep inside a call. See
+[Arguments and exit](../reference/process.md).
 
 ## Functions as values
 

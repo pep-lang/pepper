@@ -273,3 +273,59 @@ fn pep_fmt_reads_optional_types_and_keeps_ternaries() {
         "struct S {\n    Token? leaf;\n}\n\nf(x: int?): Array<int?> {\n    Node? a = x;\n    c ? d : e;\n    var g = h ? i : j;\n    return k;\n}\n",
     );
 }
+
+/// Runs pep-fmt with `arguments` in `directory`: (exit code, stdout, stderr).
+fn run_in(directory: &Path, arguments: &[&str]) -> (i32, String, String) {
+    let output = Command::new(pep_fmt()).args(arguments).current_dir(directory).output().expect("run pep-fmt");
+    let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace("\r\n", "\n");
+    (output.status.code().unwrap_or(-1), text(&output.stdout), text(&output.stderr))
+}
+
+#[test]
+fn pep_fmt_checks_and_rewrites_files_and_directories() {
+    let root = std::env::temp_dir().join(format!("pepper_pep_fmt_files_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("src").join("nested")).unwrap();
+    std::fs::create_dir_all(root.join("src").join(".cache")).unwrap();
+    let messy = "main(): int {\nreturn 0;\n}\n";
+    let tidy = "main(): int {\n    return 0;\n}\n";
+    std::fs::write(root.join("src").join("b.pep"), messy).unwrap();
+    std::fs::write(root.join("src").join("a.pep"), tidy).unwrap();
+    std::fs::write(root.join("src").join("nested").join("c.pep"), messy).unwrap();
+    std::fs::write(root.join("src").join(".cache").join("skipped.pep"), "not pepper (").unwrap();
+    std::fs::write(root.join("src").join("notes.txt"), messy).unwrap();
+    let separator = std::path::MAIN_SEPARATOR;
+
+    // A file argument prints its formatted text.
+    assert_eq!(run_in(&root, &["src/b.pep"]), (0, tidy.to_string(), String::new()));
+    // --check lists what would change, in name order, and changes nothing.
+    let listed = format!("src{separator}b.pep\nsrc{separator}nested{separator}c.pep\n");
+    assert_eq!(run_in(&root, &["--check", "src"]), (1, listed, String::new()));
+    assert_eq!(std::fs::read_to_string(root.join("src").join("b.pep")).unwrap(), messy);
+    // -w rewrites them; afterwards --check is clean.
+    assert_eq!(run_in(&root, &["-w", "src"]), (0, String::new(), String::new()));
+    assert_eq!(std::fs::read_to_string(root.join("src").join("nested").join("c.pep")).unwrap(), tidy);
+    assert_eq!(std::fs::read_to_string(root.join("src").join("notes.txt")).unwrap(), messy);
+    assert_eq!(run_in(&root, &["--check", "src"]), (0, String::new(), String::new()));
+
+    // A syntax error names the file and leaves it alone.
+    std::fs::write(root.join("broken.pep"), "g(: int {}\n").unwrap();
+    assert_eq!(run_in(&root, &["-w", "broken.pep"]), (1, String::new(), "broken.pep:1:3: error: expected a type\n".to_string()));
+    assert_eq!(std::fs::read_to_string(root.join("broken.pep")).unwrap(), "g(: int {}\n");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn pep_fmt_rejects_bad_usage() {
+    let directory = std::env::temp_dir();
+    let (code, _, error) = run_in(&directory, &["--frobnicate"]);
+    assert_eq!(code, 2);
+    assert!(error.starts_with("pep-fmt: error: unknown option '--frobnicate'\nusage: pep-fmt"), "{error}");
+    let (code, _, error) = run_in(&directory, &["-w"]);
+    assert_eq!(code, 2);
+    assert!(error.starts_with("pep-fmt: error: -w and --check need files\n"), "{error}");
+    let (code, usage, _) = run_in(&directory, &["-h"]);
+    assert_eq!(code, 0);
+    assert!(usage.starts_with("usage: pep-fmt [-w] [--check] [FILE | DIRECTORY]..."), "{usage}");
+}

@@ -71,7 +71,7 @@ is_big(node: syntax.Node): bool {
 }
 
 # Orders two Strings by their bytes: negative, zero or positive.
-compare_text(a: String, b: String): int {
+export compare_text(a: String, b: String): int {
     var left = a.c_str();
     var right = b.c_str();
     ulong i = 0;

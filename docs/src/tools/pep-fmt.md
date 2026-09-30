@@ -16,19 +16,33 @@ Build it with the compiler, with the `tools` folder on the import path:
 pepper -I tools tools/pep-fmt/main.pep -o pep-fmt
 ```
 
-It reads a source file on standard input and writes the formatted file to
-standard output:
+Give it files or directories, like `gofmt`:
 
 ```bash
-pep-fmt < main.pep > formatted.pep
+pep-fmt main.pep            # print the formatted file to standard output
+pep-fmt -w main.pep src/    # rewrite each file that is not formatted
+pep-fmt --check src/        # list each file that is not formatted
+pep-fmt < main.pep          # no files: standard input to standard output
 ```
 
-If the file does not parse, `pep-fmt` writes nothing to standard output,
-prints the first syntax error to standard error, and exits with status 1:
+A directory stands for every `.pep` file under it, in name order, skipping
+directories whose names start with `.` (such as `.git` and the `.pep` build
+cache). `-w` rewrites only the files whose formatting changes. `--check`
+changes nothing, prints the path of each file that `-w` would rewrite, and
+exits with status 1 if there is one, which suits a CI step. The two can be
+combined.
+
+If a file does not parse, `pep-fmt` leaves it untouched, prints the first
+syntax error to standard error, and exits with status 1 after the other
+files. Standard input is named `<stdin>`:
 
 ```text
-<stdin>:2:14: error: expected ')'
+main.pep:2:14: error: expected ')'
 ```
+
+A file that cannot be read or written also exits with status 1, and an
+unknown option exits with status 2 after printing the usage (`pep-fmt -h`
+prints it too).
 
 ## The style
 

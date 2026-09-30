@@ -265,17 +265,17 @@ automatically.
 `pep-fmt` formats Pepper source in the one standard style, like `gofmt`. It
 is written in Pepper (`tools/pep-fmt`), on top of a Pepper syntax library
 (`tools/syntax`) that other tools can reuse. Build it with the compiler, with
-`tools/` on the import path, then pipe a file through it:
+`tools/` on the import path, then run it on files or directories:
 
 ```bash
 cargo run --release -- -I tools tools/pep-fmt/main.pep -o pep-fmt    # pep-fmt.exe on Windows
-./pep-fmt < file.pep > formatted.pep
+./pep-fmt -w src/          # rewrite files that are not formatted
+./pep-fmt --check src/     # list them instead; exits with 1 if there are any
+./pep-fmt < file.pep       # no files: standard input to standard output
 ```
 
-It reads standard input and writes standard output (there are no
-command-line arguments yet). On a syntax error it prints a clang-style
-`<stdin>:line:column: error: ...` to standard error, writes nothing to
-standard output, and exits with 1. The style it applies is described in the
+On a syntax error it prints a clang-style `file.pep:line:column: error: ...`
+to standard error, leaves that file untouched, and exits with 1. The style it applies is described in the
 book's [Formatting with pep-fmt](docs/src/tools/pep-fmt.md) chapter.
 
 ## VS Code extension from any branch

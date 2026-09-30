@@ -49,6 +49,7 @@ mod optional_tests;
 mod param_default_tests;
 mod pep_fmt_tests;
 mod platform_tests;
+mod process_tests;
 mod ptr_syntax_tests;
 mod result_tests;
 mod runtime_docs_tests;

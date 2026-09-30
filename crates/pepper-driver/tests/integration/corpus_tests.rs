@@ -72,6 +72,9 @@ fn compile_and_run(name: &str, entry: &Path) -> Result<std::process::ExitStatus,
     let obj_path = build_dir.join("corpus.o");
     let out_path = build_dir.join(if cfg!(windows) { "corpus_bin.exe" } else { "corpus_bin" });
 
+    // Fix linkage and linker spellings as every driver build does (a plain
+    // Pepper name such as `exit` must not reach the linker as C's symbol).
+    pepper_codegen::partition::finish(&generator.module, &generator.owners)?;
     let machine = pepper_codegen::target::host_machine().unwrap();
     machine
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)

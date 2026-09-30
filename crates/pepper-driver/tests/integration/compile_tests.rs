@@ -196,6 +196,8 @@ main(): int {
     let obj_path = build_dir.join("test.o");
     let out_path = build_dir.join(if cfg!(windows) { "test_bin.exe" } else { "test_bin" });
 
+    // Fix linkage and linker spellings as every driver build does.
+    pepper_codegen::partition::finish(&generator.module, &generator.owners).expect("finish");
     let machine = pepper_codegen::target::host_machine().unwrap();
     machine
         .write_to_file(&generator.module, inkwell::targets::FileType::Object, &obj_path)

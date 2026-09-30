@@ -78,10 +78,13 @@ clang: error: linker command failed with exit code 1 (use -v to see invocation)
 
 The object the linker names is the one for the file that made the call, in
 `.pep/build/<name>.units/`. Symbols of your own functions appear as the
-compiler spells them for the linker: a name that is not just letters, digits,
-`_` and `.` is written `_P` followed by the name with other characters as
-`_` and two hex digits, so `Array<int>.count` appears as
-`_PArray_3cint_3e.count`. `extern` functions keep their C names.
+compiler spells them for the linker: `main` and a method such as
+`Point.length` keep their names, and any other name is written `_P` followed
+by the name with `_` doubled and other characters as `_` and two hex digits,
+so a function `parse` appears as `_Pparse` and `Array<int>.count` as
+`_PArray_3cint_3e.count`. That way a Pepper function never collides with a C
+library function of the same name, such as `exit`. `extern` functions keep
+their C names.
 
 To fix it, check the spelling of the extern against the C function (or use
 [`[LinkName]`](c-interop.md#binding-to-a-different-symbol-name) when the names

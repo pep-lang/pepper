@@ -851,9 +851,12 @@ object from `.pep/cache` without generating any code.
   `main`); unowned definitions become `linkonce_odr` in a comdat (no comdat
   on Mach-O), except private helpers other than function objects and
   thunks; `globaldce` drops unused ones; private string constants are
-  renumbered; and `symbol_name` respells every Pepper symbol that is not
-  plain (`Array<int>.count` → `_PArray_3cint_3e.count`, `helper@io/file` →
-  `_Phelper_40io_2ffile`). Externs keep their C names. The whole-program
+  renumbered; and `symbol_name` respells every Pepper symbol except `main`
+  and plain member names (`Point.length`): `Array<int>.count` →
+  `_PArray_3cint_3e.count`, `helper@io/file` → `_Phelper_40io_2ffile`, and
+  a free function or global even when plain (`exit` → `_Pexit`), so no
+  Pepper name collides with the C library's (Windows links its C runtime
+  statically). Externs keep their C names. The whole-program
   path (JIT tests, `--emit-llvm`) is unchanged: it keeps readable names and
   gives private names internal linkage.
 - **Unit inputs** (`Program::unit_inputs`): the files a unit's code can
@@ -992,6 +995,7 @@ diagnostics"). The mechanics:
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. `[Shared]`, so its `T` must be thread-safe. |
 | `copy.pep` | `copy<T>`, the `Copyable<T>` trait and `Copies` (original-to-copy addresses, deferred weak fixes). `Copies.copy<T>` is the `__copy<T>` intrinsic that `passes/copies.rs` lowers. `String`, `Array`, `HashMap` and `HashSet` implement `Copyable` with a `copy(Copies)` method; `io.File` is `[NotCopyable]`. |
+| `process.pep` | `arguments()` and `exit(code)`. The C `main` the compiler emits takes no `argc`/`argv`, so `arguments()` asks the platform: `/proc/self/cmdline` on Linux, `_NSGetArgc`/`_NSGetArgv` on macOS, `__p___argc`/`__p___argv` on Windows. `exit` flushes the C streams and calls `_Exit`, since the exported name takes C `exit`'s. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
 | `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`, and the `[Isolated]` `ThreadLocalGuard<T>` that `enter()` returns for `with` access), `cpus.pep` (`logical_cpus`, `physical_cpus`), the synchronization types in `mutex.pep` (`Mutex<T>`, `MutexGuard<T>`, `Condition<T>`), `once.pep` (`Once`, `Lazy<T>`) and `channel.pep` (`Channel<T>`, `ChannelIterator<T>`), and the platform layer in `sys_posix.pep` (pthreads and pthread mutexes and condition variables, `clock_gettime`, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `SRWLOCK` and `CONDITION_VARIABLE`, `GetTickCount64`, `GetLogicalProcessorInformationEx`). The synchronization types are `[Shared]`: platform locks live in fixed heap blocks (`const __ptr<void>`), and state that changes lives in raw heap slots read and written only under the lock. `Lazy` stores its value behind a `const __ptr<T>` field, so `check_shared_types` accepts only a thread-safe `T`. `Mutex` accepts any struct `T` (its slot is a `__ptr<void>`): its `MutexGuard<T>` is `[Isolated]`, so `check_confinement` keeps the locked value apart from the rest of the program, and its constructor and `replace` take `[Sending]` values and store `copy(value)`, made before locking and dropped under the lock. `Channel` accepts any `T`: its buffer is a `__ptr<__ptr<void>>`, and `send` copies each value with `copy` before locking. A Mutex records its holder's OS thread id (`_async_sys_os_thread`) to panic on a re-lock and to check `Condition.wait`'s caller. |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
