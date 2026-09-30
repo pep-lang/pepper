@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-408da3b1.js";
+            window.path_to_searchindex_js = "../searchindex-fed2b4f5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f308eb6b.js"></script>
@@ -232,6 +232,9 @@ main(): int {
     assert(perimeter(3, 4) == 14, "2 x (3 + 4)");
     assert(factorial(20) == 2432902008176640000, "20!");
     assert(is_even(10), "declared after main, still callable");
+    # An argument converts to its parameter's type as assignment does:
+    # a double passed to an int parameter truncates toward zero.
+    assert(area(2.9, 3) == 6, "2.9 becomes 2");
 
     log("starting");
     log("done");
@@ -302,9 +305,11 @@ new object to the parameter does not affect the caller’s variable.
 <a href="memory.html">Memory and reference counting</a> describes exactly how references are
 counted when you pass them.</p>
 <p>Arguments convert to the parameter’s type the same way assignment does, so you
-can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected, and a <code>String</code> where
-a struct with an <a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a>
-from <code>String</code> (such as <code>io.Path</code>) is expected.</p>
+can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected, a <code>double</code> where an
+<code>int</code> is expected (it truncates toward zero, like <code>int n = 2.7;</code>), and a
+<code>String</code> where a struct with an
+<a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a> from <code>String</code> (such
+as <code>io.Path</code>) is expected.</p>
 <h2 id="default-parameter-values"><a class="header" href="#default-parameter-values">Default parameter values</a></h2>
 <p>A parameter can have a default value, written <code>= value</code> after its type. A call
 that leaves the argument out gets the default. Put parameters with defaults at
