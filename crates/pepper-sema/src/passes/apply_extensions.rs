@@ -115,14 +115,14 @@ fn check_signature(
         let mut ty = ty.clone();
         substitute(&mut ty, type_map);
         // A method declared without a return type returns nothing.
-        if ty.to_string() == crate::type_name::AUTO {
+        if ty.is_auto() {
             TypeName::void()
         } else {
             ty
         }
     };
     let actual = |ty: &TypeName| {
-        if ty.to_string() == crate::type_name::AUTO {
+        if ty.is_auto() {
             TypeName::void()
         } else {
             ty.clone()

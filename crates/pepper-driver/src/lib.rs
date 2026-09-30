@@ -36,6 +36,28 @@ pub fn report_warnings(rendered: &str) {
     }
 }
 
+/// Prints how long each compile stage took, for `-T time`: one line per
+/// stage on stderr, `time: <stage> <ms>`.
+pub(crate) struct StageTimer {
+    enabled: bool,
+    last: std::time::Instant,
+}
+
+impl StageTimer {
+    pub(crate) fn new(enabled: bool) -> Self {
+        StageTimer { enabled, last: std::time::Instant::now() }
+    }
+
+    /// Report the time since the previous stage ended as `name`.
+    pub(crate) fn stage(&mut self, name: &str) {
+        if self.enabled {
+            let now = std::time::Instant::now();
+            eprintln!("time: {:<16} {:>9.3} ms", name, (now - self.last).as_secs_f64() * 1000.0);
+            self.last = now;
+        }
+    }
+}
+
 /// Run the compile pipeline and act per the options: `--emit-ast` dumps the
 /// AST, `--emit-llvm` writes IR, otherwise emit obj and link.
 pub fn run(options: Options) -> Result<i32, String> {
@@ -50,10 +72,12 @@ pub fn run(options: Options) -> Result<i32, String> {
     }
 
     let mut sema_module = compiler::compile(&options, &module_name)?;
+    let mut timer = StageTimer::new(options.tracing("time"));
     let link_libraries = link_libraries(&sema_module);
     let ctx = inkwell::context::Context::create();
     let mut generator = CodeGenerator::new(&ctx, &module_name);
     generator.generate(&mut sema_module).map_err(|d| sema_module.sources.render(&d))?;
+    timer.stage("codegen");
 
     let build_dir = options.effective_build_dir();
     std::fs::create_dir_all(&build_dir).map_err(|e| format!("cannot create build dir: {}", e))?;
@@ -77,6 +101,7 @@ pub fn run(options: Options) -> Result<i32, String> {
             &obj_path,
         )
         .map_err(|e| format!("obj emission failed: {}", e))?;
+    timer.stage("object emission");
 
     // Discover runtime libs for linking.
     let (_sources, runtime_libs, _dirs) = runtime::discover();
@@ -96,6 +121,7 @@ pub fn run(options: Options) -> Result<i32, String> {
     libraries.extend(link_libraries);
 
     linker::link(&[obj_path], &out_path, &libraries, &library_dirs)?;
+    timer.stage("link");
 
     Ok(0)
 }

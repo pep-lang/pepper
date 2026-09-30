@@ -301,6 +301,12 @@ thread_local! {
     static WITH_BLOCKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+/// Restart hidden-local numbering (see `crate::reset_program_counters`).
+pub(crate) fn reset_counters() {
+    FOR_LOOPS.with(|c| c.set(0));
+    WITH_BLOCKS.with(|c| c.set(0));
+}
+
 /// Lower `for (var x in source) body` to
 ///
 /// ```text

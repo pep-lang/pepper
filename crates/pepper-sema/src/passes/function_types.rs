@@ -42,7 +42,7 @@ pub const STATIC_REFCOUNT: i64 = 1 << 30;
 /// The function type of a free function: `(params) => return`.
 pub fn signature(function: &FunctionDef) -> TypeName {
     // A function declared without a return type returns nothing.
-    let ret = if function.ty.to_string() == crate::type_name::AUTO { TypeName::void() } else { function.ty.clone() };
+    let ret = if function.ty.is_auto() { TypeName::void() } else { function.ty.clone() };
     TypeName::function_type(ret, function.parameters.iter().map(|p| p.ty.clone()).collect())
 }
 

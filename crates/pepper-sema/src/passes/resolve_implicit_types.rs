@@ -2,26 +2,120 @@
 //! and unresolved symbol-ref types via scoped lookup.
 
 use crate::model::*;
+use crate::passes::type_arguments::GenericSignature;
 use crate::type_name::TypeName;
+use std::collections::{HashMap, HashSet};
 
-struct Scopes {
+/// Program-wide lookup tables: built once per run of the pass and shared,
+/// by reference, by every function's scopes. Where a name is declared twice,
+/// the first declaration wins, as in the scans these maps replace.
+struct Tables {
+    /// Struct field tables: struct type string → fields.
+    structs: Vec<(String, Vec<VariableDef>)>,
+    /// Struct type string → its positions in `structs`, in order.
+    struct_index: HashMap<String, Vec<usize>>,
+    /// Struct type strings, and their base names (before any `<`).
+    struct_names: HashSet<String>,
+    struct_bases: HashSet<String>,
+    /// Struct method tables: struct type string → (method name, return type).
+    methods: Vec<(String, Vec<(String, TypeName)>)>,
+    /// Struct type string → its positions in `methods`, in order.
+    method_index: HashMap<String, Vec<usize>>,
+    /// Free-function and extern name → return type.
+    functions: HashMap<String, TypeName>,
+    /// Free functions usable as values: name → function type.
+    function_types: HashMap<String, TypeName>,
+    /// Generic methods: struct type string → (method name → declaration).
+    generic_methods: HashMap<String, Vec<(String, GenericSignature)>>,
+    /// Generic free functions: name → declaration.
+    generic_functions: HashMap<String, GenericSignature>,
+    /// Global variables: name → type (visible from every scope).
+    globals: HashMap<String, TypeName>,
+    /// Struct declared name → its type.
+    struct_types: HashMap<String, TypeName>,
+}
+
+/// Insert `(key, value)` pairs, keeping the first value of a repeated key.
+fn first_wins<V>(pairs: impl IntoIterator<Item = (String, V)>) -> HashMap<String, V> {
+    let mut map = HashMap::new();
+    for (key, value) in pairs {
+        map.entry(key).or_insert(value);
+    }
+    map
+}
+
+/// Positions of each key in `entries`, in order.
+fn index_of<V>(entries: &[(String, V)]) -> HashMap<String, Vec<usize>> {
+    let mut index: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, (key, _)) in entries.iter().enumerate() {
+        index.entry(key.clone()).or_default().push(i);
+    }
+    index
+}
+
+impl Tables {
+    fn of(module: &Module) -> Self {
+        let structs: Vec<(String, Vec<VariableDef>)> =
+            module.structs.iter().map(|st| (st.ty.to_string(), st.field_members.clone())).collect();
+        let methods: Vec<(String, Vec<(String, TypeName)>)> = module
+            .structs
+            .iter()
+            .map(|st| (st.ty.to_string(), st.method_members.iter().map(|m| (m.name.clone(), m.ty.clone())).collect()))
+            .collect();
+        let generic_methods = module
+            .structs
+            .iter()
+            .filter(|st| !st.generic_methods.is_empty())
+            .map(|st| {
+                let methods = st.generic_methods.iter().map(|m| (m.name.clone(), GenericSignature::of(m))).collect();
+                (st.ty.to_string(), methods)
+            })
+            .collect();
+        let functions = first_wins(
+            module
+                .functions
+                .iter()
+                .map(|f| (f.name.clone(), f.ty.clone()))
+                .chain(module.externs.iter().map(|e| (e.name.clone(), e.ty.clone()))),
+        );
+        let generic_functions = first_wins(
+            module.functions.iter().filter(|f| f.is_generic_func).map(|f| (f.name.clone(), GenericSignature::of(f))),
+        );
+        Tables {
+            struct_index: index_of(&structs),
+            struct_names: structs.iter().map(|(ty, _)| ty.clone()).collect(),
+            struct_bases: structs.iter().map(|(ty, _)| ty.split('<').next().unwrap_or(ty).to_string()).collect(),
+            structs,
+            method_index: index_of(&methods),
+            methods,
+            functions,
+            function_types: first_wins(crate::passes::function_types::referenceable_functions(module)),
+            generic_methods,
+            generic_functions,
+            globals: first_wins(module.globals.iter().map(|v| (v.name.clone(), v.ty.clone()))),
+            struct_types: first_wins(module.structs.iter().map(|s| (s.name.clone(), s.ty.clone()))),
+        }
+    }
+}
+
+/// The struct whose methods are being resolved: its fields with resolved
+/// types, and its methods. It stands in for the struct's entries in
+/// `Tables`.
+struct Own {
+    name: String,
+    fields: Vec<VariableDef>,
+    methods: Vec<(String, TypeName)>,
+}
+
+struct Scopes<'t> {
+    tables: &'t Tables,
+    own: Option<Own>,
     /// (name, params) per scope; index 0 = globals.
     names: Vec<String>,
     params: Vec<Vec<VariableDef>>,
-    /// Local symbols per scope: name → type.
+    /// Local symbols per scope: name → type. Scope 0 holds only what the
+    /// global initializers declare after `tables.globals`.
     symbols: Vec<Vec<(String, TypeName)>>,
-    /// Struct field tables: struct type string → fields.
-    structs: Vec<(String, Vec<VariableDef>)>,
-    /// Struct method tables: struct type string → (method name, return type).
-    methods: Vec<(String, Vec<(String, TypeName)>)>,
-    /// Free-function and extern name → return type.
-    functions: Vec<(String, TypeName)>,
-    /// Free functions usable as values: name → function type.
-    function_types: Vec<(String, TypeName)>,
-    /// Generic methods: struct type string → (method name → declaration).
-    generic_methods: std::rc::Rc<std::collections::HashMap<String, Vec<(String, crate::passes::type_arguments::GenericSignature)>>>,
-    /// Generic free functions: name → declaration.
-    generic_functions: Vec<(String, crate::passes::type_arguments::GenericSignature)>,
     /// While walking a function with no declared return type: the types of
     /// its `return <value>` statements.
     returns: Option<Vec<TypeName>>,
@@ -31,18 +125,14 @@ struct Scopes {
     generic_base: bool,
 }
 
-impl Scopes {
-    fn new() -> Self {
+impl<'t> Scopes<'t> {
+    fn new(tables: &'t Tables) -> Self {
         Scopes {
+            tables,
+            own: None,
             names: vec!["Globals".to_string()],
             params: vec![vec![]],
             symbols: vec![vec![]],
-            structs: vec![],
-            methods: vec![],
-            functions: vec![],
-            function_types: vec![],
-            generic_functions: vec![],
-            generic_methods: Default::default(),
             returns: None,
             generic_base: false,
         }
@@ -61,14 +151,15 @@ impl Scopes {
     }
 
     fn find_symbol(&self, name: &str) -> Option<TypeName> {
-        for scope in self.symbols.iter().rev() {
-            for (sym, ty) in scope {
-                if sym == name {
-                    return Some(ty.clone());
-                }
+        for scope in self.symbols[1..].iter().rev() {
+            if let Some((_, ty)) = scope.iter().find(|(sym, _)| sym == name) {
+                return Some(ty.clone());
             }
         }
-        None
+        if let Some(ty) = self.tables.globals.get(name) {
+            return Some(ty.clone());
+        }
+        self.symbols[0].iter().find(|(sym, _)| sym == name).map(|(_, ty)| ty.clone())
     }
 
     fn find_param(&self, name: &str) -> Option<TypeName> {
@@ -82,32 +173,43 @@ impl Scopes {
         None
     }
 
+    /// The field tables of struct type `key`, in order.
+    fn field_tables<'a>(&'a self, key: &str) -> impl Iterator<Item = &'a [VariableDef]> + 'a {
+        let own = self.own.as_ref().filter(|own| own.name == key);
+        let shared = if own.is_some() { None } else { self.tables.struct_index.get(key) };
+        own.map(|own| own.fields.as_slice())
+            .into_iter()
+            .chain(shared.into_iter().flatten().map(|&i| self.tables.structs[i].1.as_slice()))
+    }
+
+    /// The method tables of struct type `key`, in order.
+    fn method_tables<'a>(&'a self, key: &str) -> impl Iterator<Item = &'a [(String, TypeName)]> + 'a {
+        let own = self.own.as_ref().filter(|own| own.name == key);
+        let shared = if own.is_some() { None } else { self.tables.method_index.get(key) };
+        own.map(|own| own.methods.as_slice())
+            .into_iter()
+            .chain(shared.into_iter().flatten().map(|&i| self.tables.methods[i].1.as_slice()))
+    }
+
     /// Declared type of field `name` on struct type `ty`.
     fn field_type(&self, ty: &TypeName, name: &str) -> Option<TypeName> {
         let key = ty.to_string();
-        self.structs
-            .iter()
-            .find(|(t, _)| *t == key)
-            .and_then(|(_, fields)| fields.iter().find(|f| f.name == name))
-            .map(|f| f.ty.clone())
+        self.field_tables(&key).next().and_then(|fields| fields.iter().find(|f| f.name == name)).map(|f| f.ty.clone())
     }
 
     /// Declared return type of method `name` on struct type `ty`.
     fn method_return(&self, ty: &TypeName, name: &str) -> Option<TypeName> {
         let key = ty.to_string();
-        self.methods
-            .iter()
-            .find(|(t, _)| *t == key)
-            .and_then(|(_, methods)| methods.iter().find(|(m, _)| m == name))
+        self.method_tables(&key)
+            .next()
+            .and_then(|methods| methods.iter().find(|(m, _)| m == name))
             .map(|(_, ret)| ret.clone())
     }
 
     /// Whether struct type `ty` declares a method `name`.
     fn has_method(&self, ty: &TypeName, name: &str) -> bool {
         let key = ty.to_string();
-        self.methods
-            .iter()
-            .any(|(t, methods)| *t == key && methods.iter().any(|(m, _)| m == name))
+        self.method_tables(&key).any(|methods| methods.iter().any(|(m, _)| m == name))
     }
 
     /// Function type of the free function `name`, when a bare `name` in
@@ -122,7 +224,7 @@ impl Scopes {
                 return None;
             }
         }
-        self.function_types.iter().find(|(n, _)| n == name).map(|(_, ty)| ty.clone())
+        self.tables.function_types.get(name).cloned()
     }
 
     /// When a call `name(args)` calls through a function value rather than a
@@ -149,16 +251,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
     match expr {
         Expression::MemberRef { lhs, name, .. } => {
             let lhs_type = type_of_expr(lhs, scopes, current_struct);
-            if lhs_type.is_empty() || lhs_type.to_string() == crate::type_name::AUTO {
+            if lhs_type.is_empty() || lhs_type.is_auto() {
                 return TypeName::auto();
             }
-            for (ty, fields) in &scopes.structs {
-                if *ty == lhs_type.to_string() {
-                    for field in fields {
-                        if &field.name == name {
-                            return field.ty.clone();
-                        }
-                    }
+            for fields in scopes.field_tables(&lhs_type.to_string()) {
+                if let Some(field) = fields.iter().find(|f| &f.name == name) {
+                    return field.ty.clone();
                 }
             }
             TypeName::auto()
@@ -179,10 +277,8 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 return ty;
             }
             // The symbol may be the name of a struct.
-            for (ty, _) in &scopes.structs {
-                if ty == id {
-                    return TypeName::new(id);
-                }
+            if scopes.tables.struct_names.contains(id.as_str()) {
+                return TypeName::new(id);
             }
             // A free function used as a value.
             if let Some(ty) = scopes.function_value(id, current_struct) {
@@ -205,15 +301,13 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         }
         Expression::MethodCall { this, method, .. } => {
             let this_type = type_of_expr(this, scopes, current_struct);
-            if this_type.is_empty() || this_type.to_string() == crate::type_name::AUTO {
+            if this_type.is_empty() || this_type.is_auto() {
                 return TypeName::auto();
             }
             // Return type of the method, if the struct is known.
-            for (ty, methods) in &scopes.methods {
-                if *ty == this_type.to_string() {
-                    if let Some((_, ret)) = methods.iter().find(|(m, _)| m == method) {
-                        return ret.clone();
-                    }
+            for methods in scopes.method_tables(&this_type.to_string()) {
+                if let Some((_, ret)) = methods.iter().find(|(m, _)| m == method) {
+                    return ret.clone();
                 }
             }
             // `obj.callback(x)` calls through a field of function type.
@@ -226,10 +320,10 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // itself (an Iterator). Unknown until the source's struct is known.
         Expression::ForIterator(source) => {
             let source_type = type_of_expr(source, scopes, current_struct);
-            if source_type.is_empty() || source_type.to_string() == crate::type_name::AUTO {
+            if source_type.is_empty() || source_type.is_auto() {
                 return TypeName::auto();
             }
-            let Some((_, methods)) = scopes.methods.iter().find(|(ty, _)| *ty == source_type.to_string()) else {
+            let Some(methods) = scopes.method_tables(&source_type.to_string()).next() else {
                 return TypeName::auto();
             };
             match methods.iter().find(|(m, _)| m == "iterate") {
@@ -260,7 +354,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 // i32); otherwise the lhs type (pointer arithmetic stays a
                 // pointer). Auto when the lhs is unknown.
                 let lhs_ty = type_of_expr(lhs, scopes, current_struct);
-                if lhs_ty.is_empty() || lhs_ty.to_string() == crate::type_name::AUTO {
+                if lhs_ty.is_empty() || lhs_ty.is_auto() {
                     TypeName::auto()
                 } else if let Some(ret) = scopes.method_return(&lhs_ty, &op.op_name()) {
                     // An operator overload (`a + b` → `a.+(b)`) has its
@@ -292,7 +386,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // method `read` wins over an extern `read`.
             if let Some(st) = current_struct {
                 let own = st.to_string();
-                if let Some((_, methods)) = scopes.methods.iter().find(|(ty, _)| *ty == own) {
+                if let Some(methods) = scopes.method_tables(&own).next() {
                     if let Some((_, ret)) = methods.iter().find(|(m, _)| m == function) {
                         return ret.clone();
                     }
@@ -300,12 +394,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             }
             // A generic function called without type arguments has no type
             // until they are inferred (`infer_type_arguments`).
-            if !function.contains('<') && scopes.generic_functions.iter().any(|(n, _)| n == function) {
+            if !function.contains('<') && scopes.tables.generic_functions.contains_key(function.as_str()) {
                 return TypeName::auto();
             }
             // Specialized call `name<args>`: the instance (not the base)
             // carries the substituted return type.
-            if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == function) {
+            if let Some(ty) = scopes.tables.functions.get(function.as_str()) {
                 return ty.clone();
             }
             let name = function.split('<').next().unwrap_or(function).trim();
@@ -333,9 +427,9 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
             // A generic call spelled with its arguments (`twice<int>(f)`)
             // before it is specialized: the base's return type with the
             // arguments substituted.
-            if let Some((_, signature)) = scopes.generic_functions.iter().find(|(n, _)| n == name) {
+            if let Some(signature) = scopes.tables.generic_functions.get(name) {
                 let params: Vec<String> = signature.params.iter().map(|p| p.name.clone()).collect();
-                if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
+                if let Some(ty) = scopes.tables.functions.get(name) {
                     let args = crate::passes::gather_generics::parse_type_string(function).sub_types;
                     if !args.is_empty() {
                         let map: Vec<(String, TypeName)> = params.iter().cloned().zip(args).collect();
@@ -346,15 +440,12 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 }
             }
             // Plain free-function call: its declared return type.
-            if let Some((_, ty)) = scopes.functions.iter().find(|(n, _)| n == name) {
+            if let Some(ty) = scopes.tables.functions.get(name) {
                 return ty.clone();
             }
             // Constructor-style call `Name<...>(...)` resolves to Name<...>.
-            for (ty, _) in &scopes.structs {
-                let base = ty.split('<').next().unwrap_or(ty);
-                if base == name {
-                    return crate::passes::gather_generics::parse_type_string(function);
-                }
+            if scopes.tables.struct_bases.contains(name) {
+                return crate::passes::gather_generics::parse_type_string(function);
             }
             TypeName::auto()
         }
@@ -374,7 +465,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         // and are typed as method calls on the next run.
         Expression::Index { lhs, .. } | Expression::ArrayIndex { lhs, .. } => {
             if let Expression::ArrayIndex { ty, .. } = expr {
-                if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                if !ty.is_empty() && !ty.is_auto() {
                     return ty.clone();
                 }
             }
@@ -421,7 +512,7 @@ pub fn resolve_implicit_types(module: &mut Module) {
 /// Whether `function`'s return type is inferred from its returns: it
 /// declares none and is not an unspecialized generic.
 fn infers_return(function: &FunctionDef) -> bool {
-    function.ty.to_string() == crate::type_name::AUTO && function.generic_params.is_empty()
+    function.ty.is_auto() && function.generic_params.is_empty()
 }
 
 /// Give `function` the type its returns agree on: `void` when it returns no
@@ -435,7 +526,7 @@ fn finish_return_inference(function: &mut FunctionDef, scopes: &mut Scopes) -> b
         // `main` is the process entry point: falling off its end exits 0.
         TypeName::new(if function.name == "main" && function.parent.is_none() { "int" } else { "void" })
     } else {
-        match returns.into_iter().find(|t| !t.is_empty() && t.to_string() != crate::type_name::AUTO) {
+        match returns.into_iter().find(|t| !t.is_empty() && !t.is_auto()) {
             Some(ty) => ty,
             None => return false,
         }
@@ -448,123 +539,37 @@ fn finish_return_inference(function: &mut FunctionDef, scopes: &mut Scopes) -> b
 /// inferred.
 fn resolve_once(module: &mut Module) -> bool {
     let mut inferred = false;
-    // Struct field table.
-    let struct_fields: Vec<(String, Vec<VariableDef>)> = module
-        .structs
-        .iter()
-        .map(|st| {
-            (
-                st.ty.to_string(),
-                st.field_members.clone(),
-            )
-        })
-        .collect();
-    // Struct method table: return type per method name.
-    let generic_methods: std::rc::Rc<std::collections::HashMap<String, Vec<(String, crate::passes::type_arguments::GenericSignature)>>> =
-        std::rc::Rc::new(
-            module
-                .structs
-                .iter()
-                .filter(|st| !st.generic_methods.is_empty())
-                .map(|st| {
-                    let methods = st
-                        .generic_methods
-                        .iter()
-                        .map(|m| (m.name.clone(), crate::passes::type_arguments::GenericSignature::of(m)))
-                        .collect();
-                    (st.ty.to_string(), methods)
-                })
-                .collect(),
-        );
-    let struct_methods: Vec<(String, Vec<(String, TypeName)>)> = module
-        .structs
-        .iter()
-        .map(|st| {
-            (
-                st.ty.to_string(),
-                st.method_members
-                    .iter()
-                    .map(|m| (m.name.clone(), m.ty.clone()))
-                    .collect(),
-            )
-        })
-        .collect();
-    // Free-function and extern return types.
-    let mut function_returns: Vec<(String, TypeName)> = module
-        .functions
-        .iter()
-        .map(|f| (f.name.clone(), f.ty.clone()))
-        .collect();
-    for e in &module.externs {
-        function_returns.push((e.name.clone(), e.ty.clone()));
-    }
-
-    let generic_functions: Vec<(String, crate::passes::type_arguments::GenericSignature)> = module
-        .functions
-        .iter()
-        .filter(|f| f.is_generic_func)
-        .map(|f| (f.name.clone(), crate::passes::type_arguments::GenericSignature::of(f)))
-        .collect();
-
-    // Free functions usable as values (`var f = square;`).
-    let function_values = crate::passes::function_types::referenceable_functions(module);
-
-    // Global variables are visible from every scope (C++ global scope).
-    let global_symbols: Vec<(String, TypeName)> = module
-        .globals
-        .iter()
-        .map(|v| (v.name.clone(), v.ty.clone()))
-        .collect();
+    let tables = Tables::of(module);
 
     // Structs first (methods see field types).
-    let struct_pairs: Vec<(String, TypeName)> = module
-        .structs
-        .iter()
-        .map(|s| (s.name.clone(), s.ty.clone()))
-        .collect();
     for st in &mut module.structs {
         let current_struct = st.ty.clone();
-        let mut scopes = Scopes::new();
-        scopes.structs = struct_fields.clone();
-        scopes.methods = struct_methods.clone();
-        scopes.functions = function_returns.clone();
-        scopes.function_types = function_values.clone();
-        scopes.generic_functions = generic_functions.clone();
-        scopes.generic_methods = generic_methods.clone();
-        scopes.symbols[0].extend(global_symbols.iter().cloned());
+        let mut scopes = Scopes::new(&tables);
         // A generic base (`Box` of `Box<T>`), not a specialization.
         scopes.generic_base = st.ty.is_generic() && st.name == st.ty.name;
 
         // Resolve field types with defaults.
         for field in &mut st.field_members {
-            if field.ty.to_string() == crate::type_name::AUTO {
+            if field.ty.is_auto() {
                 if let Some(default) = &field.default {
                     let ty = type_of_expr(default, &scopes, Some(&current_struct));
-                    if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                    if !ty.is_empty() && !ty.is_auto() {
                         field.ty = ty;
                     }
                 }
             }
         }
 
-        // Rebuild field table with resolved types for method bodies.
-        // Other structs stay in the tables: a method body may call another
-        // struct's methods or constructor (`var p = other.parent()`,
-        // `var a = Array<int>()`), and those must type too. The current
-        // struct's entry goes first so its resolved field types win.
-        let current_name = current_struct.to_string();
-        let mut own_structs = vec![(current_name.clone(), st.field_members.clone())];
-        own_structs.extend(struct_fields.iter().filter(|(n, _)| *n != current_name).cloned());
-        scopes.structs = own_structs;
-        let mut own_methods = vec![(
-            current_name.clone(),
-            st.method_members
-                .iter()
-                .map(|m| (m.name.clone(), m.ty.clone()))
-                .collect(),
-        )];
-        own_methods.extend(struct_methods.iter().filter(|(n, _)| *n != current_name).cloned());
-        scopes.methods = own_methods;
+        // Method bodies see this struct's resolved field types and its
+        // methods in place of its table entries. Other structs stay in the
+        // tables: a method body may call another struct's methods or
+        // constructor (`var p = other.parent()`, `var a = Array<int>()`),
+        // and those must type too.
+        scopes.own = Some(Own {
+            name: current_struct.to_string(),
+            fields: st.field_members.clone(),
+            methods: st.method_members.iter().map(|m| (m.name.clone(), m.ty.clone())).collect(),
+        });
 
         // Constructor body.
         resolve_parameter_defaults(&mut st.constructor.parameters, &mut scopes, &Some(current_struct.clone()));
@@ -577,21 +582,11 @@ fn resolve_once(module: &mut Module) -> bool {
 
         // Methods.
         for method in &mut st.method_members {
-            let parent = method.parent.clone();
-            let method_struct = match &parent {
+            let method_struct = match &method.parent {
                 // A specialization's methods keep the base's name as their
                 // parent (`Box` in `Box<int>`): they belong to this struct.
                 Some(name) if *name == current_struct.name => current_struct.clone(),
-                Some(name) => {
-                    // Find the struct by declared name (snapshot avoids the
-                    // double borrow of module.structs).
-                    let pairs: Vec<(String, TypeName)> = struct_pairs.clone();
-                    pairs
-                        .into_iter()
-                        .find(|(sname, _)| sname == name)
-                        .map(|(_, ty)| ty)
-                        .unwrap_or_else(|| current_struct.clone())
-                }
+                Some(name) => tables.struct_types.get(name).cloned().unwrap_or_else(|| current_struct.clone()),
                 None => current_struct.clone(),
             };
             resolve_parameter_defaults(&mut method.parameters, &mut scopes, &Some(method_struct.clone()));
@@ -612,14 +607,7 @@ fn resolve_once(module: &mut Module) -> bool {
     for function in &mut module.functions {
         let returns = infers_return(function).then(Vec::new);
         if let Some(body) = &mut function.body {
-            let mut scopes = Scopes::new();
-            scopes.structs = struct_fields.clone();
-            scopes.methods = struct_methods.clone();
-            scopes.functions = function_returns.clone();
-            scopes.function_types = function_values.clone();
-            scopes.generic_functions = generic_functions.clone();
-        scopes.generic_methods = generic_methods.clone();
-            scopes.symbols[0].extend(global_symbols.iter().cloned());
+            let mut scopes = Scopes::new(&tables);
             scopes.generic_base = function.is_generic_func;
             resolve_parameter_defaults(&mut function.parameters, &mut scopes, &None);
             scopes.returns = returns;
@@ -632,19 +620,12 @@ fn resolve_once(module: &mut Module) -> bool {
     }
 
     // Global variables: one shared scope so later globals see earlier ones.
-    let mut scopes = Scopes::new();
-    scopes.structs = struct_fields.clone();
-    scopes.methods = struct_methods.clone();
-    scopes.functions = function_returns.clone();
-    scopes.function_types = function_values.clone();
-    scopes.generic_functions = generic_functions.clone();
-        scopes.generic_methods = generic_methods.clone();
-    scopes.symbols[0].extend(global_symbols.iter().cloned());
+    let mut scopes = Scopes::new(&tables);
     for var in &mut module.globals {
-        if var.ty.to_string() == crate::type_name::AUTO {
+        if var.ty.is_auto() {
             if let Some(default) = &var.default {
                 let ty = type_of_expr(default, &scopes, None);
-                if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                if !ty.is_empty() && !ty.is_auto() {
                     var.ty = ty;
                 }
             }
@@ -683,10 +664,10 @@ fn resolve_statement(stmt: &mut Statement, scopes: &mut Scopes, current_struct: 
         }
         Statement::Declaration(Declaration::Variable(var)) => {
             // Record the local symbol; resolve `auto` from the default value.
-            if var.ty.to_string() == crate::type_name::AUTO {
+            if var.ty.is_auto() {
                 if let Some(default) = &var.default {
                     let ty = type_of_expr(default, scopes, current_struct.as_ref());
-                    if !ty.is_empty() && ty.to_string() != crate::type_name::AUTO {
+                    if !ty.is_empty() && !ty.is_auto() {
                         var.ty = ty;
                     }
                 }
@@ -750,7 +731,7 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
             return;
         }
         let key = owner.to_string();
-        let Some(methods) = scopes.generic_methods.get(key.trim_end_matches('*')) else { return };
+        let Some(methods) = scopes.tables.generic_methods.get(key.trim_end_matches('*')) else { return };
         let Some((_, signature)) = methods.iter().find(|(n, _)| n == method) else { return };
         let types = argument_types(args, scopes, current);
         if let Some(type_args) = signature.infer(&types) {
@@ -767,7 +748,7 @@ fn infer_type_arguments(e: &mut Expression, scopes: &Scopes, current: Option<&Ty
     if current.is_some_and(|st| scopes.has_method(st, function) || scopes.field_type(st, function).is_some()) {
         return;
     }
-    let Some((_, signature)) = scopes.generic_functions.iter().find(|(n, _)| n == function) else { return };
+    let Some(signature) = scopes.tables.generic_functions.get(function.as_str()) else { return };
     let types = argument_types(args, scopes, current);
     if let Some(type_args) = signature.infer(&types) {
         *function = crate::passes::type_arguments::specialization(function, type_args);
@@ -817,7 +798,7 @@ fn resolve_expression(
         }
         // A bare free-function name in value position is a function value.
         if let Expression::SymbolRef { id, ty, .. } = e {
-            if ty.to_string() == crate::type_name::AUTO && id != "this" {
+            if ty.is_auto() && id != "this" {
                 if let Some(fn_ty) = scopes.function_value(id, current) {
                     *e = Expression::FunctionRef { function: id.clone(), ty: fn_ty };
                     return;
@@ -825,7 +806,7 @@ fn resolve_expression(
             }
         }
         if let Expression::SymbolRef { id, ty, loc } = e {
-            if ty.to_string() == crate::type_name::AUTO && id != "this" {
+            if ty.is_auto() && id != "this" {
                 let resolved = if let Some(st) = current_struct {
                     type_of_expr(&Expression::SymbolRef {
                         id: id.clone(),
@@ -843,7 +824,7 @@ fn resolve_expression(
                         None,
                     )
                 };
-                if !resolved.is_empty() && resolved.to_string() != crate::type_name::AUTO {
+                if !resolved.is_empty() && !resolved.is_auto() {
                     *ty = resolved;
                 }
             }

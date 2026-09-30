@@ -214,6 +214,7 @@ cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout
 cargo run -- tests/hello.pep --emit-llvm    # emit IR to .pep/build/hello.ll
 cargo run -- tests/hello.pep                # compile + link -> ./hello
 cargo run -- tests/hello.pep -o hello.exe   # choose the output name
+cargo run -- tests/hello.pep -T time       # print each compile stage's time
 ```
 
 The compiler produces an executable; it does not run it for you. With no `-o`

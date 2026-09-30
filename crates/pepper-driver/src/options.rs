@@ -49,7 +49,9 @@ pub struct Options {
     #[arg(long = "emit-ast")]
     pub emit_ast: bool,
 
-    /// Enable a trace channel (codegen|ast|parser|ir|debuginfo|link).
+    /// Enable a trace channel. `time` prints how long each compile stage
+    /// took; the others (codegen|ast|parser|ir|debuginfo|link) are accepted
+    /// and ignored.
     #[arg(short = 'T', value_name = "CHAN")]
     pub trace: Vec<String>,
 
@@ -69,6 +71,11 @@ impl Options {
         self.build_dir
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".pep").join("build"))
+    }
+
+    /// Whether trace channel `channel` (`-T channel`, or `--Tall`) is on.
+    pub fn tracing(&self, channel: &str) -> bool {
+        self.trace_all || self.trace.iter().any(|c| c == channel)
     }
 
     /// Output path: `-o` or $CWD/<primary source stem>.

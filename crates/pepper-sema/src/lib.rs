@@ -24,3 +24,13 @@ pub use type_name::TypeName;
 pub use visibility::{check_visibility, SourceFile, VisibilityError, VisibilityErrorKind};
 pub use modules::{FileScope, ModuleError, ProgramFile};
 pub use pepper_parser::namespace;
+
+/// Restart the thread-local counters that number synthesized names (hidden
+/// `for`/`with` locals, closure structs, index temporaries), so a program
+/// compiles to the same names, and the same symbols, however many programs
+/// the thread compiled before. `program::load_program` calls it.
+pub fn reset_program_counters() {
+    builder::reset_counters();
+    passes::closures::reset_counter();
+    passes::resolve_operators::reset_counter();
+}

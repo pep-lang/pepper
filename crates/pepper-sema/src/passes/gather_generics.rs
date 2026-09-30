@@ -4,13 +4,13 @@ use crate::model::{Block, Declaration, Expression, Module, Statement};
 use crate::passes::walk_function;
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 pub fn gather_generics(module: &mut Module) {
     concrete_overrides(module);
     let symbols = SymbolTable::build(module);
-    let mut functions: HashSet<String> = HashSet::new();
-    let mut structs: HashSet<String> = HashSet::new();
+    let mut functions: BTreeSet<String> = BTreeSet::new();
+    let mut structs: BTreeSet<String> = BTreeSet::new();
 
     // Walk struct bodies for generic calls and TypeLiteral-based generics.
     for st in &mut module.structs {
@@ -306,7 +306,7 @@ pub fn parse_type_string(s: &str) -> TypeName {
 /// parameter collection above.
 fn gather_local_declarations(
     block: &Block,
-    structs: &mut HashSet<String>,
+    structs: &mut BTreeSet<String>,
     params: &[TypeName],
 ) {
     for stmt in &block.items {

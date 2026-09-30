@@ -93,7 +93,10 @@ The CLI produces an executable and never runs it. Tests usually stop after
 `Options` is a clap derive struct. Only these options take effect:
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-o`, `--build`, `--emit-llvm`, `--emit-ast`, and
-`--no-runtime`. `-g`, `-v`, `-T`, and `--Tall` are parsed and ignored.
+`--no-runtime`, and `-T time` (or `--Tall`), which prints each stage's
+time on stderr (`StageTimer` in `driver/src/lib.rs`: load and parse, check
+and build, sema passes, codegen, object emission, link). `-g`, `-v`, and the
+other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `output_path()` defaults to `<cwd>/<entry stem>`
 with no extension, and `module_name()` is the output's stem.
 
@@ -453,9 +456,28 @@ Error reporting inside passes goes through `crate::errors::report(diag)`, a
 thread-local that keeps only the **first** diagnostic of a run. Other
 per-run state is thread-local too: `apply_extensions::reset_applied` runs at
 the start of each `transform_pass`, and `platform::SIMULATED_HOST` is set
-only inside `with_simulated_host`. The builder's `FOR_LOOPS` and
-`WITH_BLOCKS` counters are never reset; they only keep hidden local names
-unique. This lets tests compile concurrently on separate threads.
+only inside `with_simulated_host`. The counters that number synthesized
+names (the builder's `FOR_LOOPS` and `WITH_BLOCKS`, closure structs'
+`CLOSURES`, `resolve_operators`' `INDEX_TEMPORARIES`) restart at the start
+of every `load_program` (`pepper_sema::reset_program_counters`). This lets
+tests compile concurrently on separate threads.
+
+**Output is deterministic**: the same program compiles to the same IR and
+object bytes on any thread, after any other programs, in any process. So
+never let a `HashMap`/`HashSet` iteration order decide what is emitted or in
+what order (`gather_generics` collects specializations in `BTreeSet`s),
+and never number synthesized names with a process-wide or never-reset
+counter. `determinism_tests.rs` compiles every docs example twice, in
+opposite orders across threads, and compares the IR. The planned build
+cache, which reuses per-file objects, depends on this.
+
+`resolve_implicit_types` builds its program-wide lookup tables (`Tables`:
+struct fields and methods, function return types, function values,
+generic signatures, globals) once per call, as hash maps, and every
+function's `Scopes` borrows them; the struct being resolved overrides its
+own entries through `Scopes::own`. Before this it cloned and linearly
+scanned vectors of every table per function, which was most of sema's
+time. `TypeName::is_auto` tests for `auto` without building a string.
 
 ---
 
@@ -816,6 +838,7 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
 | Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
 | Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
+| Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 
@@ -1048,5 +1071,5 @@ compiles the code but cannot run it. Run it for real with the
   (`errors::report`).
 - **Specialization fixpoint is capped at 16 rounds.** A type that nests
   itself through generics stops there instead of looping forever.
-- **Unused CLI flags**: `-g`, `-v`, `-T`, `--Tall`; `--MSVC` returns an
+- **Unused CLI flags**: `-g`, `-v`, and `-T` channels other than `time`; `--MSVC` returns an
   error. Only the first source file is compiled.

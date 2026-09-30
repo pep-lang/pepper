@@ -17,14 +17,20 @@ pub type Compiled = SemaModule;
 /// Load, link, and visibility-check the program rooted at `entry_source`,
 /// then merge every file into one sema module.
 pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaModule, String> {
+    let program = load(options, entry_source)?;
+    merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))
+}
+
+/// Load and link the program rooted at `entry_source` with the options'
+/// search paths, forced imports and runtime.
+fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &options.forced_imports,
         runtime: !options.no_runtime,
         ..Setup::default()
     };
-    let program = program::load_program(Root::from_file(entry_source)?, &setup)?;
-    merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))
+    program::load_program(Root::from_file(entry_source)?, &setup)
 }
 
 /// Check `program` and merge its files, in load order, into one module. The
@@ -85,12 +91,17 @@ pub fn compile(
         .first()
         .ok_or_else(|| "no source files".to_string())?;
 
-    let mut module = compile_sources(options, entry_source)?;
+    let mut timer = crate::StageTimer::new(options.tracing("time"));
+    let program = load(options, entry_source)?;
+    timer.stage("load and parse");
+    let mut module = merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))?;
+    timer.stage("check and build");
     // Warnings print whether or not the passes succeed, as clang prints
     // them beside errors.
     let result = run_passes(&mut module);
     crate::report_warnings(&module.render_warnings());
     result?;
+    timer.stage("sema passes");
     Ok(module)
 }
 

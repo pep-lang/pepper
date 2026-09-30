@@ -53,8 +53,15 @@ pub const THIS_FIELD: &str = "__this";
 pub const CLOSURE_PREFIX: &str = "__closure_";
 
 thread_local! {
-    /// Numbers the closure structs; never reset, it only keeps names unique.
+    /// Numbers the closure structs; reset for each program
+    /// (`crate::reset_program_counters`) so their names, which become
+    /// symbols, do not depend on what the thread compiled before.
     static CLOSURES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Restart closure numbering (see `crate::reset_program_counters`).
+pub(crate) fn reset_counter() {
+    CLOSURES.with(|c| c.set(0));
 }
 
 /// Whether `name` (a struct name or type string) is a synthesized closure.
@@ -757,7 +764,7 @@ fn apply_learned(st: &mut StructDef, learned: &Learned) -> bool {
         }
     }
     if let Some(ret) = expected.function_return() {
-        if call.ty.to_string() == type_name::AUTO && !ret.contains_auto() {
+        if call.ty.is_auto() && !ret.contains_auto() {
             call.ty = ret.clone();
             changed = true;
         }

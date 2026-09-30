@@ -248,15 +248,11 @@ fn operator_name(input: &mut &str) -> Result<String> {
 
 fn ws(input: &mut &str) -> Result<()> {
     loop {
-        let before = *input;
+        // Compare lengths, not contents: `input` only ever shrinks from the
+        // front, and a content comparison scans the rest of the file.
+        let before = input.len();
         // skip whitespace chars
-        while let Some(c) = input.chars().next() {
-            if c.is_whitespace() {
-                *input = &input[1..];
-            } else {
-                break;
-            }
-        }
+        *input = input.trim_start();
         // skip # comment to end of line
         if input.starts_with('#') {
             match input.find('\n') {
@@ -264,7 +260,7 @@ fn ws(input: &mut &str) -> Result<()> {
                 None => *input = "",
             }
         }
-        if *input == before { break; }
+        if input.len() == before { break; }
     }
     Ok(())
 }

@@ -257,7 +257,7 @@ impl<'a> Checker<'a> {
             // error: unsubstituted generic parameters and unresolved types
             // are left to codegen.
             let known = actual.is_integral() || self.module.structs.iter().any(|s| s.name == actual.to_string());
-            if !known || actual.to_string() == crate::type_name::AUTO || actual.is_pointer() {
+            if !known || actual.is_auto() || actual.is_pointer() {
                 return;
             }
             let message = format!("{} expects a function of type '{}', but was given a value of type '{}'", (slot.what)(), expected.display(), actual.display());
@@ -296,7 +296,7 @@ impl<'a> Checker<'a> {
         if !actual.is_weak() && !expected.is_weak() {
             return false;
         }
-        if actual.to_string() == crate::type_name::AUTO || expected.to_string() == crate::type_name::AUTO || same_type(&actual, &expected) {
+        if actual.is_auto() || expected.is_auto() || same_type(&actual, &expected) {
             return true;
         }
         let hint = match (expected.weak_target(), actual.weak_target()) {

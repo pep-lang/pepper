@@ -224,13 +224,29 @@ impl TypeName {
 
     /// `name<sub, sub>` for generics; `name` otherwise (matches `TypeName::to_string`).
     pub fn to_string(&self) -> String {
-        let generic_types = if self.is_generic() {
-            let subs: Vec<String> = self.sub_types.iter().map(|t| t.to_string()).collect();
-            format!("<{}>", subs.join(", "))
-        } else {
-            String::new()
-        };
-        format!("{}{}", self.name, generic_types)
+        let mut out = String::with_capacity(self.name.len());
+        self.write_to(&mut out);
+        out
+    }
+
+    fn write_to(&self, out: &mut String) {
+        out.push_str(&self.name);
+        if self.is_generic() {
+            out.push('<');
+            for (i, sub) in self.sub_types.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                sub.write_to(out);
+            }
+            out.push('>');
+        }
+    }
+
+    /// Whether this is exactly `auto` (a type not inferred yet); same as
+    /// `to_string() == AUTO`, without building the string.
+    pub fn is_auto(&self) -> bool {
+        self.name == AUTO && !self.is_generic()
     }
 
     /// Recursive generic parameter substitution (port of `Specializer::replace`).
@@ -253,7 +269,7 @@ impl TypeName {
 
 impl Display for TypeName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        f.write_str(&self.to_string())
     }
 }
 

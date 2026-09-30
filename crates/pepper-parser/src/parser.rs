@@ -103,6 +103,14 @@ mod tests {
     }
 
     #[test]
+    fn unicode_whitespace_between_tokens() {
+        // U+00A0 and U+2003 are whitespace two and three bytes long; skipping
+        // them one byte at a time used to split the character and panic.
+        let src = "f():\u{a0}int {\u{2003}return 1; }\n";
+        super::parse_source("t.pep", src).expect("Unicode whitespace separates tokens");
+    }
+
+    #[test]
     fn c_pointer_syntax_allowed_in_extern() {
         let src = "extern void* memcpy(void* dst, char* src, ulong n);\n\
                    extern int** table(int*** p);\n\

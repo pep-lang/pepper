@@ -106,7 +106,7 @@ impl StructTable {
 pub(crate) fn of(expr: &Expression, table: &StructTable, current: Option<&TypeName>) -> Option<TypeName> {
     match expr {
         Expression::SymbolRef { ty, .. } => {
-            if ty.is_empty() || ty.to_string() == crate::type_name::AUTO {
+            if ty.is_empty() || ty.is_auto() {
                 None
             } else {
                 Some(ty.clone())

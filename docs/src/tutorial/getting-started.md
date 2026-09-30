@@ -156,6 +156,7 @@ program abnormally. For example, `value()` on a failed `Result` prints
 | `--emit-llvm` | Also write the generated LLVM IR to the build directory, as `<name>.ll`. |
 | `--emit-ast` | Parse only, and print the syntax tree instead of compiling. |
 | `-v` | Print what the compiler is doing. |
+| `-T time` | Print how long each stage of the compile took. |
 | `--help` | List every option. |
 
 A program can span several files: pass the entry file, and the compiler finds

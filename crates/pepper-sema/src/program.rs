@@ -180,6 +180,7 @@ impl Default for Setup<'_> {
 /// and test harnesses all do: discover the runtime, build the search paths,
 /// resolve forced imports into the prelude, then [`load`].
 pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
+    crate::reset_program_counters();
     let (runtime_sources, _libs, runtime_dirs) =
         if setup.runtime { pepper_files::runtime::discover() } else { (vec![], vec![], vec![]) };
     if setup.runtime && setup.mode == Mode::Strict && runtime_sources.is_empty() {

@@ -251,10 +251,11 @@ fn compound_index_assign(
         args: vec![(**index).clone()],
         loc,
     };
-    // No source locations in the model; a process-wide counter keeps the
-    // name unique across functions.
-    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let tmp_name = format!("_idx_tmp_{}", COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+    let tmp_name = format!("_idx_tmp_{}", INDEX_TEMPORARIES.with(|c| {
+        let n = c.get();
+        c.set(n + 1);
+        n
+    }));
     let elem_ty = static_type::of(&get_call, table, current).unwrap_or_else(TypeName::auto);
     let tmp = VariableDef {
         ty: elem_ty,
@@ -329,3 +330,13 @@ fn is_raw_buffer_field(expr: &Expression, table: &StructTable, current: Option<&
         .is_some_and(|ty| ty.to_string().ends_with('*'))
 }
 
+thread_local! {
+    /// Numbers the temporaries of compound index assignments; reset for each
+    /// program (`crate::reset_program_counters`) so output is deterministic.
+    static INDEX_TEMPORARIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Restart temporary numbering (see `crate::reset_program_counters`).
+pub(crate) fn reset_counter() {
+    INDEX_TEMPORARIES.with(|c| c.set(0));
+}

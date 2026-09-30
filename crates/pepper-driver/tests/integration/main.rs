@@ -19,6 +19,7 @@ mod audit_fixes_tests;
 mod closure_tests;
 mod compile_tests;
 mod corpus_tests;
+mod determinism_tests;
 mod diagnostic_tests;
 mod docs_examples_tests;
 mod edge_case_tests;

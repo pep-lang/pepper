@@ -91,14 +91,14 @@ fn lower_block(block: &mut Block, types: &Types) {
     // the scope's struct what `enter()` returns. A method declared without
     // a return type (`enter() { ... }`) returns nothing.
     let mut ty = value.ty.clone();
-    if ty.to_string() == type_name::AUTO
+    if ty.is_auto()
         && let Some(returns) = types.enter_types.get(&scope.ty.to_string())
     {
-        ty = if returns.to_string() == type_name::AUTO { TypeName::void() } else { returns.clone() };
+        ty = if returns.is_auto() { TypeName::void() } else { returns.clone() };
     }
     let at = value.loc;
     let name = value.name.clone();
-    if ty.to_string() == type_name::AUTO {
+    if ty.is_auto() {
         report(Diagnostic::error("cannot determine the type 'enter()' returns in this 'with' block").at(at));
         return;
     }

@@ -77,7 +77,7 @@ impl GenericSignature {
     }
 
     fn unify(&self, pattern: &TypeName, actual: &TypeName, bindings: &mut HashMap<String, TypeName>) {
-        if actual.to_string() == crate::type_name::AUTO {
+        if actual.is_auto() {
             return;
         }
         if pattern.sub_types.is_empty() && self.is_param(&pattern.name) {

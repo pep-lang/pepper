@@ -81,7 +81,7 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 if globals.contains(id) {
                     return;
                 }
-                if ty.is_empty() || ty.to_string() == crate::type_name::AUTO {
+                if ty.is_empty() || ty.is_auto() {
                     crate::errors::report(
                         Diagnostic::error(format!("use of undeclared identifier '{}' in a method of '{}'", id, struct_name))
                             .at(*loc),
