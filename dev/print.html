@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5f5358f7.js";
+            window.path_to_searchindex_js = "searchindex-f8fbc384.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-69a53c46.js"></script>
+        <script src="toc-458d6a6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -228,8 +228,8 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
-<code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>
-and <code>to_string</code> for integers), sortable arrays, hash
+<code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
+<code>to_string</code> and a <code>ToString</code> trait, and <code>$"{name}"</code> interpolation), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, file-system access,
 TCP and UDP sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
@@ -1067,6 +1067,9 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>An interpolated string puts variables’ text into a string literal:
+<code>$"line {line}: {message}"</code>. <a href="#string-interpolation">String interpolation</a> covers
+which values it accepts.</p>
 <p>A backslash in a string literal starts an escape sequence, as in C and Rust:</p>
 <div class="table-wrapper">
 <table>
@@ -1418,6 +1421,123 @@ of -1, and 0 otherwise (<code>2 ** -1</code> is 0).</p>
 </ol>
 <p>As in C, <code>&amp;</code> binds more loosely than <code>==</code>, so write <code>(flags &amp; mask) == mask</code>
 with the parentheses.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="string-interpolation"><a class="header" href="#string-interpolation">String interpolation</a></h1>
+<p>An interpolated string is a string literal with a <code>$</code> before its opening
+quote. Inside it, a variable’s name in braces, <code>{name}</code>, is replaced by that
+variable’s text:</p>
+<pre><code class="language-pepper"># Interpolated strings: `$"..."` with variable names in braces.
+main(): int {
+    var name = "Pepper";
+    var count = 3;
+    var ready = true;
+
+    # Each {name} is replaced by that variable's text.
+    var line = $"{name} has {count} items, ready: {ready}";
+    assert(line == "Pepper has 3 items, ready: true", "integers, bool and String");
+
+    # Doubled braces are literal braces; escapes work as in any string.
+    assert($"{{count}} = {count}" == "{count} = 3", "literal braces");
+    assert($"tab\t{count}\n" == "tab\t3\n", "escapes");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong><code>{name}</code></strong> names a local, a parameter, a global, or (inside a method) a
+field. Only a name fits between the braces: no spaces, member accesses
+(<code>{p.x}</code>), calls or other expressions. Store the value in a variable first.</li>
+<li><strong><code>{{</code> and <code>}}</code></strong> are a literal <code>{</code> and <code>}</code>.</li>
+<li><strong>Escapes</strong> (<code>\n</code>, <code>\t</code>, <code>\"</code>, …) work as in any
+<a href="#strings">string literal</a>.</li>
+<li>The result is a new <code>String</code>. An interpolated string with no names is an
+ordinary string.</li>
+</ul>
+<h2 id="which-values-can-be-interpolated"><a class="header" href="#which-values-can-be-interpolated">Which values can be interpolated</a></h2>
+<p>Each value is converted with <code>to_string(value)</code>, so it can be:</p>
+<ul>
+<li>an integer of any size, signed or unsigned, which gives its decimal text;</li>
+<li>a <code>bool</code>, which gives <code>true</code> or <code>false</code>;</li>
+<li>a <code>String</code>, which is used as it is;</li>
+<li>a value whose type has a <code>to_string(): String</code> method, such as a struct
+that implements the runtime’s <code>ToString</code> trait, or a value of type
+<code>ToString</code> itself;</li>
+<li>a value whose type has a <code>to_string&lt;T&gt;</code> override. Like <code>hash&lt;Point&gt;</code> (see
+<a href="#overriding-a-generic-function-for-one-type">overriding a generic function</a>), an override applies to the whole program, so
+it serves types that have no <code>to_string()</code> method of their own.</li>
+</ul>
+<pre><code class="language-pepper"># A struct is interpolated through its to_string() method.
+struct Point {
+    var x: int = 0;
+    var y: int = 0;
+    construct(this.x = 0, this.y = 0) {}
+}
+
+extend Point with ToString {
+    to_string(): String {
+        # Inside a method, fields are names too.
+        return $"({x}, {y})";
+    }
+}
+
+# A type without the method gets a to_string&lt;T&gt; override instead.
+struct Celsius {
+    var degrees: int = 0;
+    construct(this.degrees = 0) {}
+}
+
+to_string&lt;Celsius&gt;(value: Celsius): String {
+    var degrees = value.degrees;
+    return $"{degrees} C";
+}
+
+main(): int {
+    var start = Point(1, 2);
+    var reading = Celsius(21);
+    assert($"from {start}" == "from (1, 2)", "ToString");
+    assert($"it is {reading}" == "it is 21 C", "override");
+
+    # A trait value converts through the value's own method.
+    var shown: ToString = start;
+    assert($"{shown}" == "(1, 2)", "trait value");
+    return 0;
+}
+</code></pre>
+<p><code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement <code>ToString</code>. An enum is
+interpolated through a <code>to_string()</code> method it declares (<code>return name();</code>
+gives the case’s name).</p>
+<p>Floating-point numbers have no text conversion yet, so a <code>float</code> or <code>double</code>
+cannot be interpolated. A plain overload such as <code>to_string(p: Point)</code> is not
+used either: overloads of a name do not merge across files (see
+<a href="#overloading-1">overloading</a>), so the runtime cannot see yours. Write a
+<code>to_string&lt;Point&gt;</code> override or a method instead.</p>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>A value with no conversion is reported at its braces, with a note at its
+type:</p>
+<pre><code class="language-text">main.pep:5:17: error: cannot interpolate a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload
+    5 |     print($"f = {f}");
+      |                 ^~~
+main.pep:1:8: note: declare 'to_string(): String' in 'Foo', or implement 'ToString' with 'extend Foo with ToString'
+    1 | struct Foo {}
+      |        ^~~
+</code></pre>
+<p>A lone brace is an error, since doubling it is how to write one:</p>
+<pre><code class="language-text">main.pep:2:15: error: unmatched '}' in interpolated string; write '}}' for a literal '}'
+    2 |     print($"a } b");
+      |               ^
+main.pep:3:17: error: expected '}'
+    3 |     print($"a {x b");
+      |                 ^
+main.pep:3:15: note: to match this '{'
+    3 |     print($"a {x b");
+      |               ^
+</code></pre>
+<p>A name that is not declared is reported like any other
+(<code>use of undeclared identifier 'x'</code>), at the name inside the braces.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>The compiler turns <code>$"({x}, {y})"</code> into <code>"(" + to_string(x) + ", " + to_string(y) + ")"</code>, resolving <code>to_string</code> in the runtime rather than in
+your file. So a struct’s own <code>to_string()</code> method can interpolate its fields
+without calling itself, and the result costs what the same <code>+</code> expression
+does.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="statements-and-semicolons"><a class="header" href="#statements-and-semicolons">Statements and semicolons</a></h1>
 <p>Every simple statement ends with a <code>;</code>: a variable declaration, an
@@ -1863,7 +1983,8 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>To print several values on one line, build a <code>String</code> with <code>+</code> first
+<p>To print several values on one line, build a <code>String</code> first, with an
+<a href="#string-interpolation">interpolated string</a> (<code>print($"line {n}")</code>) or <code>+</code>
 (<code>print("line " + to_string(n))</code>).</p>
 <p><code>print</code> buffers its output. Writing to standard output through
 <code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
@@ -5254,6 +5375,8 @@ types; the type implements each with the method whose parameter types
 match (see <a href="#extensions-and-traits">Overloading</a>).</li>
 <li>The methods in the extension are ordinary methods of the struct, so you
 call them on a <code>Square</code> as usual.</li>
+<li>The runtime declares traits too. <code>ToString</code> (<code>to_string(): String</code>) makes
+a type usable in an <a href="#string-interpolation">interpolated string</a>.</li>
 </ul>
 <p>The compiler checks that the type has every method the trait declares, either
 in the extension or in the struct itself. A missing method is an error at the
@@ -8027,7 +8150,7 @@ datagram beyond <code>max</code> bytes is lost.</li>
 datagrams from anyone else are dropped.</li>
 <li><code>set_broadcast(true)</code> allows sending to a broadcast address.</li>
 </ul>
-<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<h2 id="errors-1"><a class="header" href="#errors-1">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
 <div class="table-wrapper">
@@ -10034,6 +10157,16 @@ operand is modified. Runs in O(size() + rhs.size()).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var greeting = "Hello, " + "world";
 </code></pre>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns this String, so a String is <code>ToString</code> and can be
+interpolated (<code>$"name: {name}"</code>). The result is the same object, not
+a copy. O(1).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this String</li>
+</ul>
 <h4 id="byte_at"><a class="header" href="#byte_at">byte_at</a></h4>
 <pre><code class="language-pepper">byte_at(index: ulong): byte
 </code></pre>
@@ -10202,7 +10335,7 @@ O(size() * count).</p>
 <pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
     var indent = " ".repeat(8);   # eight spaces
 </code></pre>
-<h2 id="to_string"><a class="header" href="#to_string">to_string</a></h2>
+<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: long): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -10221,7 +10354,7 @@ integer picks its own overload.</p>
 <pre><code class="language-pepper">    assert(to_string(-42) == "-42", "negative");
     var where = to_string(line) + ":" + to_string(column);
 </code></pre>
-<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
+<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ulong): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -10233,7 +10366,7 @@ integer picks its own overload.</p>
 <ul>
 <li>a new String such as <code>"18446744073709551615"</code></li>
 </ul>
-<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
+<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: int): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -10246,7 +10379,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
+<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: uint): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -10258,7 +10391,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
+<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: short): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -10271,7 +10404,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
+<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ushort): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -10283,7 +10416,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
+<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: char): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -10296,7 +10429,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
+<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: byte): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -10307,6 +10440,86 @@ negative.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: bool): String
+</code></pre>
+<p>Returns <code>"true"</code> or <code>"false"</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String, <code>"true"</code> or <code>"false"</code></li>
+</ul>
+<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
+</code></pre>
+<p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
+overload for any type that is <code>ToString</code>.</p>
+<p>Declare a concrete override for a type that has no <code>to_string()</code> method
+of its own, or whose interpolated text should differ from it; like
+<code>hash&lt;Point&gt;</code>, an override is used by the whole program, including
+interpolated strings.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code>; it must have a <code>to_string()</code> method unless an override <code>to_string&lt;T&gt;</code> exists</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the String that <code>value.to_string()</code> returns</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    to_string&lt;Point&gt;(value: Point): String {
+        var x = value.x;
+        var y = value.y;
+        return $"({x}, {y})";
+    }
+</code></pre>
+<h2 id="tostring"><a class="header" href="#tostring">ToString</a></h2>
+<pre><code class="language-pepper">trait ToString
+</code></pre>
+<p>Something with a text form: a <code>to_string()</code> method returning a String.</p>
+<p>An interpolated string (<code>$"total: {total}"</code>) converts each value it names
+with <code>to_string(value)</code>, so a struct that implements <code>ToString</code> can be
+interpolated, as can the integers, <code>bool</code>, and <code>String</code>, which have
+<code>to_string</code> overloads. <code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement
+it.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    extend Point with ToString {
+        to_string(): String {
+            return $"({x}, {y})";
+        }
+    }
+
+    var p = Point(1, 2);
+    assert($"p = {p}" == "p = (1, 2)", "interpolated");
+</code></pre>
+<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
+<h4 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the text of this value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a String</li>
 </ul>
 <h2 id="stringbuilder"><a class="header" href="#stringbuilder">StringBuilder</a></h2>
 <pre><code class="language-pepper">struct StringBuilder
@@ -10332,7 +10545,7 @@ bytes before it has to grow.</p>
 <ul>
 <li><code>capacity</code> — the number of bytes to allocate up front</li>
 </ul>
-<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
+<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
 <h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
@@ -10379,7 +10592,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">clear(): void
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h4>
+<h4 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
@@ -10403,7 +10616,7 @@ default-constructed <code>StringIterator()</code> has no String to walk.</p>
         print(it.current());   # "a", then "b"
     }
 </code></pre>
-<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
@@ -10494,7 +10707,7 @@ would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count() == 0, a.capacity() == 16
 </code></pre>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
 <pre><code class="language-pepper">ArrayIterator&lt;T&gt; iterate()
 </code></pre>
@@ -11114,7 +11327,7 @@ three arrays of that many slots.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="grow-2"><a class="header" href="#grow-2">grow</a></h4>
 <pre><code class="language-pepper">void grow()
 </code></pre>
@@ -11672,7 +11885,7 @@ which a <code>for</code> loop drives through the trait.</p>
         return total;
     }
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
@@ -11915,7 +12128,7 @@ has nothing to bind.</p>
         return open;   # 0: the session was destroyed at the end of the block
     }
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
 <pre><code class="language-pepper">T enter()
 </code></pre>
@@ -11981,7 +12194,7 @@ freely.</p>
 <ul>
 <li><code>target</code> — the object to point at; a null reference makes a weak reference that is always expired</li>
 </ul>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="expired"><a class="header" href="#expired">expired</a></h4>
 <pre><code class="language-pepper">bool expired()
 </code></pre>
@@ -12104,7 +12317,7 @@ default (zero for a POD type, null for a struct type).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">bool is_ok()
 </code></pre>
@@ -12249,7 +12462,7 @@ by itself (<code>if (found)</code>).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var nothing = Optional&lt;String&gt;.none();
 </code></pre>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
 <h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
 <pre><code class="language-pepper">is_some(): bool
 </code></pre>
@@ -12361,7 +12574,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 <pre><code class="language-pepper">    var a = Atomic&lt;int&gt;(41);
     var p = Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">T load()
 </code></pre>
@@ -12743,7 +12956,7 @@ between (including one that allocates) may overwrite the code.</p>
 <ul>
 <li>an error holding the current <code>errno</code> / <code>GetLastError()</code> code and its message</li>
 </ul>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">bool is_not_found()
 </code></pre>
@@ -12987,8 +13200,8 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <ul>
 <li>the index of the extension’s dot, or <code>name.size</code> when the name has no extension (including the empty name)</li>
 </ul>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
-<h4 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h4>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h4 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h4>
 <pre><code class="language-pepper">String to_string()
 </code></pre>
 <p>Returns the path’s text, the same String the Path holds, not a copy.</p>
@@ -13389,7 +13602,7 @@ sharing read, write and delete access with other openers.</p>
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">OpenOptions read(bool v)
 </code></pre>
@@ -14209,7 +14422,7 @@ junctions included), which is not followed.</p>
 </code></pre>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
 </code></pre>
@@ -14569,7 +14782,7 @@ accepted.</p>
 <pre><code class="language-pepper">    var r = IpAddress.parse("10.0.0.300");
     print(r.is_err());   # true: 300 is out of range
 </code></pre>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
 <pre><code class="language-pepper">is_v4(): bool
 </code></pre>
@@ -14616,7 +14829,7 @@ IPv6.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
 </code></pre>
-<h4 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h4>
+<h4 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the address as text: dotted decimal for IPv4, the RFC 5952
@@ -14859,7 +15072,7 @@ fails. Use <code>TcpListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
 </ul>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -15420,7 +15633,7 @@ cannot be joined.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">ThreadId id()
 </code></pre>
@@ -15523,7 +15736,7 @@ so destroy one only after the threads that used it have exited.</p>
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
 <pre><code class="language-pepper">T get()
 </code></pre>
@@ -15735,7 +15948,7 @@ threads.</p>
 <pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
     var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">bool send([Move] T value)
 </code></pre>
@@ -15968,7 +16181,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
 <pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
 </code></pre>
@@ -16254,7 +16467,7 @@ threads.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">void call(ThreadBody body)
 </code></pre>
@@ -16463,7 +16676,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">T copy(Copies copies)
 </code></pre>

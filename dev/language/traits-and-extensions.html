@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5f5358f7.js";
+            window.path_to_searchindex_js = "../searchindex-f8fbc384.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-69a53c46.js"></script>
+        <script src="../toc-458d6a6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -349,6 +349,8 @@ types; the type implements each with the method whose parameter types
 match (see <a href="overloading.html#extensions-and-traits">Overloading</a>).</li>
 <li>The methods in the extension are ordinary methods of the struct, so you
 call them on a <code>Square</code> as usual.</li>
+<li>The runtime declares traits too. <code>ToString</code> (<code>to_string(): String</code>) makes
+a type usable in an <a href="interpolation.html">interpolated string</a>.</li>
 </ul>
 <p>The compiler checks that the type has every method the trait declares, either
 in the extension or in the struct itself. A missing method is an error at the

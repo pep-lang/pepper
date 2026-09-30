@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5f5358f7.js";
+            window.path_to_searchindex_js = "../searchindex-f8fbc384.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-69a53c46.js"></script>
+        <script src="../toc-458d6a6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -557,6 +557,16 @@ operand is modified. Runs in O(size() + rhs.size()).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var greeting = "Hello, " + "world";
 </code></pre>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns this String, so a String is <code>ToString</code> and can be
+interpolated (<code>$"name: {name}"</code>). The result is the same object, not
+a copy. O(1).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this String</li>
+</ul>
 <h4 id="byte_at"><a class="header" href="#byte_at">byte_at</a></h4>
 <pre><code class="language-pepper">byte_at(index: ulong): byte
 </code></pre>
@@ -725,7 +735,7 @@ O(size() * count).</p>
 <pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
     var indent = " ".repeat(8);   # eight spaces
 </code></pre>
-<h2 id="to_string"><a class="header" href="#to_string">to_string</a></h2>
+<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: long): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -744,7 +754,7 @@ integer picks its own overload.</p>
 <pre><code class="language-pepper">    assert(to_string(-42) == "-42", "negative");
     var where = to_string(line) + ":" + to_string(column);
 </code></pre>
-<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
+<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ulong): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -756,7 +766,7 @@ integer picks its own overload.</p>
 <ul>
 <li>a new String such as <code>"18446744073709551615"</code></li>
 </ul>
-<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
+<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: int): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -769,7 +779,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
+<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: uint): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -781,7 +791,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
+<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: short): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -794,7 +804,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
+<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ushort): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -806,7 +816,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
+<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: char): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -819,7 +829,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
+<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: byte): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -830,6 +840,86 @@ negative.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
+</ul>
+<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
+<pre><code class="language-pepper">to_string(value: bool): String
+</code></pre>
+<p>Returns <code>"true"</code> or <code>"false"</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String, <code>"true"</code> or <code>"false"</code></li>
+</ul>
+<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
+</code></pre>
+<p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
+overload for any type that is <code>ToString</code>.</p>
+<p>Declare a concrete override for a type that has no <code>to_string()</code> method
+of its own, or whose interpolated text should differ from it; like
+<code>hash&lt;Point&gt;</code>, an override is used by the whole program, including
+interpolated strings.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code>; it must have a <code>to_string()</code> method unless an override <code>to_string&lt;T&gt;</code> exists</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the String that <code>value.to_string()</code> returns</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    to_string&lt;Point&gt;(value: Point): String {
+        var x = value.x;
+        var y = value.y;
+        return $"({x}, {y})";
+    }
+</code></pre>
+<h2 id="tostring"><a class="header" href="#tostring">ToString</a></h2>
+<pre><code class="language-pepper">trait ToString
+</code></pre>
+<p>Something with a text form: a <code>to_string()</code> method returning a String.</p>
+<p>An interpolated string (<code>$"total: {total}"</code>) converts each value it names
+with <code>to_string(value)</code>, so a struct that implements <code>ToString</code> can be
+interpolated, as can the integers, <code>bool</code>, and <code>String</code>, which have
+<code>to_string</code> overloads. <code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement
+it.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    struct Point {
+        var x: int = 0;
+        var y: int = 0;
+        construct(this.x = 0, this.y = 0) {}
+    }
+
+    extend Point with ToString {
+        to_string(): String {
+            return $"({x}, {y})";
+        }
+    }
+
+    var p = Point(1, 2);
+    assert($"p = {p}" == "p = (1, 2)", "interpolated");
+</code></pre>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the text of this value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a String</li>
 </ul>
 <h2 id="stringbuilder"><a class="header" href="#stringbuilder">StringBuilder</a></h2>
 <pre><code class="language-pepper">struct StringBuilder
@@ -855,7 +945,7 @@ bytes before it has to grow.</p>
 <ul>
 <li><code>capacity</code> — the number of bytes to allocate up front</li>
 </ul>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
@@ -902,7 +992,7 @@ created or last cleared. O(1).</p>
 <pre><code class="language-pepper">clear(): void
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h4>
+<h4 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
@@ -926,7 +1016,7 @@ default-constructed <code>StringIterator()</code> has no String to walk.</p>
         print(it.current());   # "a", then "b"
     }
 </code></pre>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>

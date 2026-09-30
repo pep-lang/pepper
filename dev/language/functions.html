@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5f5358f7.js";
+            window.path_to_searchindex_js = "../searchindex-f8fbc384.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-69a53c46.js"></script>
+        <script src="../toc-458d6a6b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -375,7 +375,8 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>To print several values on one line, build a <code>String</code> with <code>+</code> first
+<p>To print several values on one line, build a <code>String</code> first, with an
+<a href="interpolation.html">interpolated string</a> (<code>print($"line {n}")</code>) or <code>+</code>
 (<code>print("line " + to_string(n))</code>).</p>
 <p><code>print</code> buffers its output. Writing to standard output through
 <code>io.File.stdout()</code> flushes that buffer first, so text from the two comes out
