@@ -478,6 +478,14 @@ export struct Array<T> {
         }
     }
 
+    # An array literal `[a, b, c]` is built as
+    # `_array_literal(a)._literal_append(b)._literal_append(c)`: each step
+    # appends and returns the same Array.
+    _literal_append(item: T): Array<T> {
+        append(item);
+        return this;
+    }
+
     static _min(a: ulong, b: ulong): ulong {
         if (a < b) {
             return a;
@@ -704,6 +712,14 @@ export struct ArrayIterator<T> {
         assert(_index < _source._size, "ArrayIterator.current() past the end");
         return _source[_index];
     }
+}
+
+# The start of an array literal: a new Array holding `first`, whose type
+# gives the literal's element type (see `_literal_append`).
+export _array_literal<T>(first: T): Array<T> {
+    var result = Array<T>();
+    result.append(first);
+    return result;
 }
 
 extend ArrayIterator<T> with Iterator<T> {}

@@ -303,6 +303,14 @@ export struct HashMap<K, V> {
         return _find_slot(key) >= 0;
     }
 
+    # A map literal `[k1: v1, k2: v2]` is built as
+    # `_map_literal(k1, v1)._literal_insert(k2, v2)`: each step inserts
+    # (a repeated key keeps the last value) and returns the same map.
+    _literal_insert(key: K, value: V): HashMap<K, V> {
+        insert(key, value);
+        return this;
+    }
+
     ## Maps `key` to `value`, adding a new entry or overwriting the value of
     ## an existing one.
     ##
@@ -512,6 +520,28 @@ export struct HashSet<K> {
     ##
     ## @param initial_capacity the minimum number of slots in the table
     construct(ulong initial_capacity = 8) {
+        _init(initial_capacity);
+    }
+
+    ## Creates a set holding each element of `items` once.
+    ##
+    ## The constructor is `[Implicit]`: an array converts to a set wherever
+    ## a set is expected, so an array literal can initialize one.
+    ##
+    ## @param items the elements to insert; duplicates are kept once
+    ## @example
+    ##     HashSet<String> keywords = ["if", "else", "while"];
+    ##     assert(keywords.contains("else"), "a member");
+    [Implicit]
+    construct(items: Array<K>) {
+        _init(items.count() * 2);
+        for (var item in items) {
+            insert(item);
+        }
+    }
+
+    # Sets up an empty table of at least `initial_capacity` slots.
+    _init(initial_capacity: ulong): void {
         ulong cap = 8;
         while (cap < initial_capacity) {
             cap = cap * 2;
@@ -919,6 +949,14 @@ export struct HashSetIterator<K> {
         assert(_started and _index < _source._capacity, "HashSetIterator.current() without a member");
         return _source._keys._data[_index];
     }
+}
+
+# The start of a map literal: a new map holding `key: value`, whose types
+# give the literal's key and value types (see `HashMap._literal_insert`).
+export _map_literal<K, V>(key: K, value: V): HashMap<K, V> {
+    var result = HashMap<K, V>();
+    result.insert(key, value);
+    return result;
 }
 
 extend HashSetIterator<K> with Iterator<K> {}

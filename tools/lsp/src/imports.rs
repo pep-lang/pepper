@@ -251,7 +251,12 @@ fn in_expression_types(expr: &ast::Expression, offset: usize) -> Option<&ast::Ty
             .find_map(|p| in_variable(p, offset))
             .or_else(|| in_type_name(&c.return_type, offset))
             .or_else(|| in_block(&c.body, offset)),
-        ast::Expression::Tuple { elements, .. } => elements.iter().find_map(|e| in_expression_types(e, offset)),
+        ast::Expression::Tuple { elements, .. } | ast::Expression::ArrayLiteral { elements, .. } => {
+            elements.iter().find_map(|e| in_expression_types(e, offset))
+        }
+        ast::Expression::MapLiteral { entries, .. } => entries
+            .iter()
+            .find_map(|(key, value)| in_expression_types(key, offset).or_else(|| in_expression_types(value, offset))),
         ast::Expression::Match(m) => in_expression_types(&m.value, offset)
             .or_else(|| {
                 m.arms.iter().find_map(|arm| {

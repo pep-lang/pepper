@@ -2417,3 +2417,54 @@ fn match_expression_and_is_errors_point_at_the_token() {
          \x20     |                        ^"
     );
 }
+
+#[test]
+fn array_literal_element_mismatch() {
+    assert_eq!(
+        error_of("array_literal_element", "main(): int {\n    var a = [1, \"a\"];\n    return 0;\n}\n"),
+        "main.pep:2:17: error: array literal element has type 'String', but the first element's type is 'i32'\n\
+         \x20   2 |     var a = [1, \"a\"];\n\
+         \x20     |                 ^~~"
+    );
+}
+
+#[test]
+fn map_literal_value_mismatch() {
+    assert_eq!(
+        error_of("map_literal_value", "main(): int {\n    var m = [\"a\": 1, \"b\": \"c\"];\n    return 0;\n}\n"),
+        "main.pep:2:27: error: map literal value has type 'String', but the first value's type is 'i32'\n\
+         \x20   2 |     var m = [\"a\": 1, \"b\": \"c\"];\n\
+         \x20     |                           ^~~"
+    );
+}
+
+#[test]
+fn empty_array_literal_needs_a_type() {
+    assert_eq!(
+        error_of("empty_array_literal", "main(): int {\n    var a = [];\n    return 0;\n}\n"),
+        "main.pep:2:13: error: empty array literal has no element type; declare the variable's type or write 'Array<T>()'\n\
+         \x20   2 |     var a = [];\n\
+         \x20     |             ^~"
+    );
+}
+
+#[test]
+fn empty_map_literal_needs_a_type() {
+    assert_eq!(
+        error_of("empty_map_literal", "main(): int {\n    var m = [:];\n    return 0;\n}\n"),
+        "main.pep:2:13: error: empty map literal has no key or value type; declare the variable's type or write 'HashMap<K, V>()'\n\
+         \x20   2 |     var m = [:];\n\
+         \x20     |             ^~~"
+    );
+}
+
+/// Two specializations of one generic struct are different types.
+#[test]
+fn different_specializations_do_not_convert() {
+    assert_eq!(
+        error_of("specialization_mismatch", "main(): int {\n    Array<long> a = Array<int>();\n    return 0;\n}\n"),
+        "main.pep:2:21: error: cannot initialize variable 'a' of type 'Array<long>' with a value of type 'Array<int>'\n\
+         \x20   2 |     Array<long> a = Array<int>();\n\
+         \x20     |                     ^~~~~~~~~~"
+    );
+}

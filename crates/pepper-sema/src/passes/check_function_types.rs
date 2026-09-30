@@ -103,6 +103,12 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `ty` or one of its type arguments names a generic parameter
+    /// of the base being checked.
+    fn mentions_unbound(&self, ty: &TypeName) -> bool {
+        self.unbound.iter().any(|p| *p == ty.name) || ty.sub_types.iter().any(|t| self.mentions_unbound(t))
+    }
+
     /// What a type certainly is, or `None` when unknown here (unresolved,
     /// a generic parameter, a function).
     fn kind_of(&self, ty: &TypeName) -> Option<Kind> {
@@ -191,7 +197,20 @@ impl<'a> Checker<'a> {
             // Tuples have no defaults or aliases of their own: the element
             // types must match (`(int, String)` is not `(long, String)`).
             (Kind::Struct, Kind::Struct) if expected.is_tuple() || actual.is_tuple() => canonical(expected) != canonical(&actual),
-            (Kind::Struct, Kind::Struct) => canonical(expected).name != canonical(&actual).name,
+            // Two specializations of one generic struct differ when their
+            // type arguments do (`Array<int>` is not `Array<long>`), unless
+            // one is spelled with fewer arguments (defaults) or not yet
+            // concrete.
+            (Kind::Struct, Kind::Struct) => {
+                let (expected, actual) = (canonical(expected), canonical(&actual));
+                expected.name != actual.name
+                    || (expected.sub_types.len() == actual.sub_types.len()
+                        && !expected.contains_auto()
+                        && !actual.contains_auto()
+                        && !self.mentions_unbound(&expected)
+                        && !self.mentions_unbound(&actual)
+                        && expected != actual)
+            }
             (Kind::Pointer, Kind::Pointer) => false,
             // Integers and pointers mix in C interop (`__null`, handles).
             (Kind::Pointer, Kind::Numeric) | (Kind::Numeric, Kind::Pointer) => false,
@@ -417,7 +436,21 @@ impl<'a> Checker<'a> {
         for (idx, (param, arg)) in params.iter().zip(args).enumerate().filter(|(_, (param, _))| checked(param)) {
             let number = if label.starts_with("element ") { idx } else { idx + 1 };
             let what = || label.replace("{}", &number.to_string());
-            let mismatch = |expected: &str, actual: &str| format!("cannot pass a value of type '{}' as {}, which has type '{}'", actual, what(), expected);
+            // An array or map literal's later elements are arguments of the
+            // `_literal_append` or `_literal_insert` its builder chains (see
+            // `builder.rs`).
+            let array_literal = label == "argument {} of '_literal_append'";
+            let map_literal = label == "argument {} of '_literal_insert'";
+            let part = if idx == 0 { "key" } else { "value" };
+            let mismatch = |expected: &str, actual: &str| {
+                if array_literal {
+                    format!("array literal element has type '{}', but the first element's type is '{}'", actual, expected)
+                } else if map_literal {
+                    format!("map literal {} has type '{}', but the first {}'s type is '{}'", part, actual, part, expected)
+                } else {
+                    format!("cannot pass a value of type '{}' as {}, which has type '{}'", actual, what(), expected)
+                }
+            };
             self.flows_into(arg, param, current, &Slot { what: &what, mismatch: &mismatch, fallback: call });
         }
     }

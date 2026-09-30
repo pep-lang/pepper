@@ -645,6 +645,11 @@ fn resolve_once(module: &mut Module) -> bool {
                     }
                 }
             }
+            // A default calling an overloaded constructor or function
+            // (`HashSet<String> names = HashSet<String>();`) picks its member.
+            if let Some(default) = &mut field.default {
+                crate::passes::walk_expression(default, &mut |e| resolve_overload(e, &scopes, Some(&current_struct)));
+            }
         }
 
         // Method bodies see this struct's resolved field types and its

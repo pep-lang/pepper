@@ -49,7 +49,7 @@ Pepper runs on Windows (x64), Linux (x64) and macOS (arm64).
 
 Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors and methods, enums (with cases that carry values) and `match` (as a statement or a value, on enums, integers, characters and strings, with `is` tests), tuples
-and multiple return values, generics (with type
+and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules (with `export * from` re-exports), `Result`-based error handling, `Optional` values, iteration (with `map` and

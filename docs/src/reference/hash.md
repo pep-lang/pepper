@@ -409,7 +409,7 @@ may change, and writing to them breaks the set.
     assert(seen.count() == 2, "two members");
 ```
 
-### Constructor
+### Constructors
 
 #### HashSet()
 
@@ -425,6 +425,26 @@ The set holds up to half its slot count before the first grow.
 
 **Parameters**
 - `initial_capacity` — the minimum number of slots in the table
+
+#### HashSet()
+
+```pepper
+[Implicit] construct(items: Array<K>)
+```
+
+Creates a set holding each element of `items` once.
+
+The constructor is `[Implicit]`: an array converts to a set wherever
+a set is expected, so an array literal can initialize one.
+
+**Parameters**
+- `items` — the elements to insert; duplicates are kept once
+
+**Example**
+```pepper
+    HashSet<String> keywords = ["if", "else", "while"];
+    assert(keywords.contains("else"), "a member");
+```
 
 ### Methods
 

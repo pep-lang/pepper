@@ -321,6 +321,8 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
                 loc: loc(*span),
             })
         }
+        ast::Expression::ArrayLiteral { elements, span } => array_literal(elements, *span, None),
+        ast::Expression::MapLiteral { entries, span } => map_literal(entries, *span, None),
         ast::Expression::Match(m) => match_expression(m),
         ast::Expression::Is { value, pattern, keyword_span, .. } => is_expression(value, pattern, *keyword_span),
         ast::Expression::Closure(c) => Ok(Expression::ClosureLiteral(Box::new(ClosureLiteral {
@@ -332,6 +334,104 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
         }))),
     }
 }
+/// `[a, b, c]` is `_array_literal(a)._literal_append(b)._literal_append(c)`
+/// (runtime/array.pep). The element type is `element` when the literal
+/// initializes a variable declared as an `Array` or `HashSet`
+/// (`long[] a = [1, 2]`), else the first element's type, inferred like any
+/// generic call's; each later element converts to it. A literal flowing into
+/// any other `Array` slot is retyped by `convert_to_traits`.
+fn array_literal(elements: &[ast::Expression], span: ast::Span, element: Option<&TypeName>) -> Result<Expression, Diagnostic> {
+    let Some((first, rest)) = elements.split_first() else {
+        return match element {
+            Some(ty) => Ok(Expression::FunctionCall { function: format!("Array<{}>", ty), args: vec![], loc: loc(span) }),
+            None => Err(Diagnostic::error(
+                "empty array literal has no element type; declare the variable's type or write 'Array<T>()'",
+            )
+            .at(loc(span))),
+        };
+    };
+    let function = match element {
+        Some(ty) => format!("_array_literal<{}>", ty),
+        None => "_array_literal".to_string(),
+    };
+    let mut result = Expression::FunctionCall { function, args: vec![typed_expression(first, element)?], loc: loc(span) };
+    for item in rest {
+        result = Expression::MethodCall {
+            this: Box::new(result),
+            method: "_literal_append".to_string(),
+            args: vec![typed_expression(item, element)?],
+            loc: loc(span),
+        };
+    }
+    Ok(result)
+}
+
+/// `[k1: v1, k2: v2]` is `_map_literal(k1, v1)._literal_insert(k2, v2)`
+/// (runtime/hash.pep), typed like an array literal: by the declared
+/// `HashMap<K, V>` when there is one (`types`), else by the first entry.
+fn map_literal(
+    entries: &[(ast::Expression, ast::Expression)],
+    span: ast::Span,
+    types: Option<(&TypeName, &TypeName)>,
+) -> Result<Expression, Diagnostic> {
+    let Some(((first_key, first_value), rest)) = entries.split_first() else {
+        return match types {
+            Some((key, value)) => Ok(Expression::FunctionCall {
+                function: format!("HashMap<{}, {}>", key, value),
+                args: vec![],
+                loc: loc(span),
+            }),
+            None => Err(Diagnostic::error(
+                "empty map literal has no key or value type; declare the variable's type or write 'HashMap<K, V>()'",
+            )
+            .at(loc(span))),
+        };
+    };
+    let function = match types {
+        Some((key, value)) => format!("_map_literal<{}, {}>", key, value),
+        None => "_map_literal".to_string(),
+    };
+    let (key_type, value_type) = (types.map(|t| t.0), types.map(|t| t.1));
+    let entry = |key: &ast::Expression, value: &ast::Expression| -> Result<Vec<Expression>, Diagnostic> {
+        Ok(vec![typed_expression(key, key_type)?, typed_expression(value, value_type)?])
+    };
+    let mut result = Expression::FunctionCall { function, args: entry(first_key, first_value)?, loc: loc(span) };
+    for (key, value) in rest {
+        result = Expression::MethodCall {
+            this: Box::new(result),
+            method: "_literal_insert".to_string(),
+            args: entry(key, value)?,
+            loc: loc(span),
+        };
+    }
+    Ok(result)
+}
+
+/// `expr` initializing a slot of type `ty`: a collection literal takes its
+/// types from it (`long[][] a = [[1], [2]]`).
+fn typed_expression(expr: &ast::Expression, ty: Option<&TypeName>) -> Result<Expression, Diagnostic> {
+    match (expr, ty) {
+        (ast::Expression::ArrayLiteral { elements, span }, Some(ty)) if literal_element(ty).is_some() => {
+            array_literal(elements, *span, literal_element(ty))
+        }
+        (ast::Expression::MapLiteral { entries, span }, Some(ty)) if map_types(ty).is_some() => {
+            map_literal(entries, *span, map_types(ty))
+        }
+        _ => expression(expr),
+    }
+}
+
+/// The element type an array literal takes in a slot of type `ty`: the `T`
+/// of `Array<T>`, or the `K` of `HashSet<K>` (which converts from an array).
+fn literal_element(ty: &TypeName) -> Option<&TypeName> {
+    ((ty.name == "Array" || ty.name == "HashSet") && ty.sub_types.len() == 1).then(|| &ty.sub_types[0])
+}
+
+/// The key and value types of `HashMap<K, V>`.
+fn map_types(ty: &TypeName) -> Option<(&TypeName, &TypeName)> {
+    (ty.name == "HashMap" && ty.sub_types.len() == 2).then(|| (&ty.sub_types[0], &ty.sub_types[1]))
+}
+
 /// Check the form of a `[Deprecated(...)]` among `attributes`, on a
 /// declaration that may be deprecated.
 fn check_deprecation(attributes: &[ast::Attribute]) -> Result<(), Diagnostic> {
@@ -355,7 +455,8 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
     if let Some(value) = &decl.default_value {
         check_literal_labels(&decl.type_name, value)?;
     }
-    let mut default = decl.default_value.as_ref().map(expression).transpose()?;
+    // `long[] a = [1, 2]`: the declared type types a collection literal.
+    let mut default = decl.default_value.as_ref().map(|value| typed_expression(value, Some(&ty))).transpose()?;
     // An optional slot (`Token? leaf;`, `var n: int?;`) starts as None, not
     // null: it gets the default `Optional<T>()`.
     if default.is_none() && kind != Kind::Param && ty.name == "Optional" && ty.sub_types.len() == 1 {

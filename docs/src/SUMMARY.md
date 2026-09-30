@@ -14,6 +14,7 @@
 - [Control flow](language/control-flow.md)
 - [Functions](language/functions.md)
 - [Tuples and multiple return values](language/tuples.md)
+- [Collection literals](language/collection-literals.md)
 - [Function types and closures](language/function-types.md)
 - [Overloading](language/overloading.md)
 - [Structs](language/structs.md)

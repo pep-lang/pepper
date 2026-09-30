@@ -216,6 +216,12 @@ pub enum Expression {
     /// `labels` is empty, or names every element (`(line: 3, column: 7)`),
     /// each with the span of its label.
     Tuple { elements: Vec<Expression>, labels: Vec<(String, Span)>, span: Span },
+    /// An array literal `[a, b, ...]`: an `Array<T>` of the elements, where
+    /// `T` is the first element's type.
+    ArrayLiteral { elements: Vec<Expression>, span: Span },
+    /// A map literal `[k: v, ...]` (`[:]` when empty): a `HashMap<K, V>` of
+    /// the entries, where `K` and `V` are the first entry's types.
+    MapLiteral { entries: Vec<(Expression, Expression)>, span: Span },
     /// `match (value) { pattern, ... => value, ... else => value }`: a
     /// `match` that produces a value.
     Match(Box<MatchExpression>),
@@ -277,6 +283,8 @@ impl Expression {
             | Expression::Cast { span, .. }
             | Expression::FunctionCall { span, .. }
             | Expression::Tuple { span, .. }
+            | Expression::ArrayLiteral { span, .. }
+            | Expression::MapLiteral { span, .. }
             | Expression::Is { span, .. } => *span,
             Expression::TypeLiteral(t) | Expression::SizeOf(t) => t.span,
             Expression::Closure(c) => c.span,
@@ -935,6 +943,12 @@ impl Display for Expression {
                 write!(f, "({})", parts.join(", "))
             }
             Expression::Tuple { elements, .. } => write!(f, "({})", join(elements, ", ")),
+            Expression::ArrayLiteral { elements, .. } => write!(f, "[{}]", join(elements, ", ")),
+            Expression::MapLiteral { entries, .. } if entries.is_empty() => write!(f, "[:]"),
+            Expression::MapLiteral { entries, .. } => {
+                let entries: Vec<String> = entries.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
+                write!(f, "[{}]", entries.join(", "))
+            }
             Expression::Match(m) => {
                 write!(f, "match ({}) {{", m.value)?;
                 for arm in &m.arms {

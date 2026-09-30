@@ -1,8 +1,6 @@
 main(): int {
     # Array<T> is a growable list. int[] is another way to write Array<int>.
-    var scores = Array<int>();
-    scores.append(90);
-    scores.append(72);
+    var scores = [90, 72];
     scores.append(85);
     assert(scores.count() == 3, "three scores");
     assert(scores[0] == 90, "indexing starts at 0");
@@ -34,8 +32,7 @@ main(): int {
     assert(greeting[0] == "H", "s[i] is a one-character String");
 
     # HashMap<K, V> maps keys to values.
-    var ages = HashMap<String, int>();
-    ages["Ada"] = 36;
+    var ages = ["Ada": 36];
     ages.insert("Alan", 41);
     assert(ages.count() == 2, "two entries");
     assert(ages["Ada"] == 36, "look up by key");

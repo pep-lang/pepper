@@ -109,6 +109,18 @@ impl Converter {
             self.convert_tuple(value, expected, current, fallback);
             return;
         }
+        if let Some(element) = array_element(expected)
+            && is_array_literal(value)
+        {
+            self.convert_array_literal(value, expected, &element, current, fallback);
+            return;
+        }
+        if let Some((key, map_value)) = map_types(expected)
+            && is_map_literal(value)
+        {
+            self.convert_map_literal(value, expected, &key, &map_value, current, fallback);
+            return;
+        }
         let to_trait = traits::is_trait_type(&self.trait_defs, expected);
         if matches!(value, Expression::ToTrait { .. })
             || !(to_trait || self.implicit.contains_key(&expected.to_string()))
@@ -219,6 +231,61 @@ impl Converter {
         }
     }
 
+    /// An array literal flowing into a slot of type `expected`, an
+    /// `Array<element>`: the literal is built as that type, from `Array<element>()`
+    /// rather than from its first element, so its elements convert to
+    /// `element` (`long[] a = [1, 2]`, `Shape[] s = [circle, square]`).
+    fn convert_array_literal(
+        &mut self,
+        value: &mut Expression,
+        expected: &TypeName,
+        element: &TypeName,
+        current: Option<&TypeName>,
+        fallback: Loc,
+    ) {
+        let literal = std::mem::replace(value, Expression::PointerLiteral);
+        let (arguments, loc) = literal_arguments(literal);
+        let mut elements: Vec<Expression> = arguments.into_iter().flatten().collect();
+        let loc = if loc.is_none() { fallback } else { loc };
+        let mut result = Expression::FunctionCall { function: expected.to_string(), args: vec![], loc };
+        for item in &mut elements {
+            self.convert(item, element, current, loc);
+        }
+        for item in elements {
+            result = Expression::MethodCall {
+                this: Box::new(result),
+                method: "_literal_append".to_string(),
+                args: vec![item],
+                loc,
+            };
+        }
+        *value = result;
+    }
+
+    /// A map literal flowing into a slot of type `expected`, a
+    /// `HashMap<key, value>`: built from `HashMap<key, value>()`, as
+    /// `convert_array_literal` does for arrays.
+    fn convert_map_literal(
+        &mut self,
+        value: &mut Expression,
+        expected: &TypeName,
+        key: &TypeName,
+        map_value: &TypeName,
+        current: Option<&TypeName>,
+        fallback: Loc,
+    ) {
+        let literal = std::mem::replace(value, Expression::PointerLiteral);
+        let (entries, loc) = literal_arguments(literal);
+        let loc = if loc.is_none() { fallback } else { loc };
+        let mut result = Expression::FunctionCall { function: expected.to_string(), args: vec![], loc };
+        for mut entry in entries {
+            self.convert(&mut entry[0], key, current, loc);
+            self.convert(&mut entry[1], map_value, current, loc);
+            result = Expression::MethodCall { this: Box::new(result), method: "_literal_insert".to_string(), args: entry, loc };
+        }
+        *value = result;
+    }
+
     /// `value` flows into a slot of struct type `expected`, which has an
     /// `[Implicit]` constructor: call it when the value is not already an
     /// `expected` and fits the constructor's parameter.
@@ -275,6 +342,10 @@ impl Converter {
     /// Whether `value`, of type `actual`, reaches `to` exactly or by
     /// promotion: the conversions an implicit constructor's argument may take.
     fn fits(&self, value: &Expression, actual: &TypeName, to: &TypeName) -> bool {
+        // An array literal becomes whatever `Array` it flows into.
+        if is_array_literal(value) && array_element(to).is_some() {
+            return true;
+        }
         let canonical = crate::passes::check_function_types::canonical;
         let (from_c, to_c) = (canonical(actual), canonical(to));
         if from_c == to_c {
@@ -761,4 +832,53 @@ pub fn convert_to_traits(module: &mut Module) {
     trait_types.sort_by_key(|t| t.ty.to_string());
     module.trait_types = trait_types;
     module.conversions = converter.conversions;
+}
+
+/// The element type of an `Array<T>` slot.
+fn array_element(ty: &TypeName) -> Option<TypeName> {
+    let parsed = crate::passes::gather_generics::parse_type_string(&ty.to_string());
+    (parsed.name == "Array" && parsed.sub_types.len() == 1).then(|| parsed.sub_types[0].clone())
+}
+
+/// The key and value types of a `HashMap<K, V>` slot.
+fn map_types(ty: &TypeName) -> Option<(TypeName, TypeName)> {
+    let parsed = crate::passes::gather_generics::parse_type_string(&ty.to_string());
+    (parsed.name == "HashMap" && parsed.sub_types.len() == 2).then(|| (parsed.sub_types[0].clone(), parsed.sub_types[1].clone()))
+}
+
+/// Whether `value` is an array literal as the builder lowers it:
+/// `_array_literal(a)._literal_append(b)...` (see `builder.rs`).
+fn is_array_literal(value: &Expression) -> bool {
+    is_literal(value, "_array_literal", "_literal_append", 1)
+}
+
+/// Whether `value` is a map literal as the builder lowers it:
+/// `_map_literal(k, v)._literal_insert(k2, v2)...` (see `builder.rs`).
+fn is_map_literal(value: &Expression) -> bool {
+    is_literal(value, "_map_literal", "_literal_insert", 2)
+}
+
+fn is_literal(value: &Expression, start: &str, step: &str, arity: usize) -> bool {
+    match value {
+        Expression::MethodCall { this, method, .. } if method == step => is_literal(this, start, step, arity),
+        Expression::FunctionCall { function, args, .. } => {
+            args.len() == arity
+                && (function == start || function.strip_prefix(start).is_some_and(|rest| rest.starts_with('<')))
+        }
+        _ => false,
+    }
+}
+
+/// The arguments of each step of a collection literal, in order (one
+/// element, or a key and a value), and the literal's location.
+fn literal_arguments(value: Expression) -> (Vec<Vec<Expression>>, Loc) {
+    match value {
+        Expression::MethodCall { this, args, .. } => {
+            let (mut steps, loc) = literal_arguments(*this);
+            steps.push(args);
+            (steps, loc)
+        }
+        Expression::FunctionCall { args, loc, .. } => (vec![args], loc),
+        _ => unreachable!("checked by is_array_literal or is_map_literal"),
+    }
 }

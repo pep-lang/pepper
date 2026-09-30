@@ -483,9 +483,15 @@ macro_rules! scope_walker {
                         self.walk_block(&$($m)? c.body);
                         self.scopes_mut().pop();
                     }
-                    Expression::Tuple { elements, .. } => {
+                    Expression::Tuple { elements, .. } | Expression::ArrayLiteral { elements, .. } => {
                         for e in elements {
                             self.visit_expression(e);
+                        }
+                    }
+                    Expression::MapLiteral { entries, .. } => {
+                        for (key, value) in entries {
+                            self.visit_expression(key);
+                            self.visit_expression(value);
                         }
                     }
                     Expression::Match(m) => {

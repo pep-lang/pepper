@@ -127,6 +127,12 @@ export enum NodeKind {
     ## `name : expression`, a labeled element of a tuple literal such as
     ## `(line: 3, column: 7)`.
     TupleElement,
+    ## `[ expression, ... ]`, an array literal; a trailing `,` is kept.
+    Array,
+    ## `[ MAP_ENTRY, ... ]`, a map literal, or `[ : ]` when empty.
+    Map,
+    ## `expression : expression`, one entry of a map literal.
+    MapEntry,
     ## `[attribute]... [export] enum Name [GENERIC_PARAMETERS] [: TYPE] MEMBERS`,
     ## whose members are its `ENUM_CASE`s, then its methods.
     Enum,

@@ -20,6 +20,7 @@ mod build_cache_tests;
 mod c_callback_tests;
 mod character_literal_tests;
 mod closure_tests;
+mod collection_literal_tests;
 mod compile_tests;
 mod copy_tests;
 mod corpus_tests;

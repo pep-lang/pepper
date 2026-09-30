@@ -805,7 +805,55 @@ struct Parser {
             _expect(node, ")");
             return node;
         }
+        if (_at("[")) {
+            return _collection_literal();
+        }
         return _primary();
+    }
+
+    # `[a, b]`, an array literal, or `[k: v]` / `[:]`, a map literal: a `:`
+    # after the first element makes it a map.
+    _collection_literal(): Node {
+        var node = Node(NodeKind.Array);
+        _take(node);
+        if (_at(":")) {
+            node.kind = NodeKind.Map;
+            _take(node);
+            _expect(node, "]");
+            return node;
+        }
+        while (!_at("]")) {
+            var item = _expression();
+            if (_failed) {
+                node.add(item);
+                return node;
+            }
+            if (node.count() == 1 and _at(":")) {
+                node.kind = NodeKind.Map;
+            }
+            if (node.kind == NodeKind.Map) {
+                var entry = Node(NodeKind.MapEntry);
+                entry.add(item);
+                _expect(entry, ":");
+                if (_failed) {
+                    node.add(entry);
+                    return node;
+                }
+                entry.add(_expression());
+                node.add(entry);
+                if (_failed) {
+                    return node;
+                }
+            } else {
+                node.add(item);
+            }
+            if (!_at(",")) {
+                break;
+            }
+            _take(node);
+        }
+        _expect(node, "]");
+        return node;
     }
 
     _at_tuple_label(): bool {

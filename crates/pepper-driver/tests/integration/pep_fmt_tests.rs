@@ -389,3 +389,11 @@ fn pep_fmt_formats_match_expressions_is_tests_and_literal_patterns() {
         "f(d: Doc): int {\n    var w = match (d) {\n        Text(t, u) => t.length(),\n        Line => 1,\n        else => 0\n    };\n    match (n) {\n        -1, 2 => { return 1; }\n        \"a\" => { return 2; }\n        else => { return 3; }\n    }\n    if (d is Text(a, _)) { return 1; }\n    return w;\n}\n",
     );
 }
+
+#[test]
+fn pep_fmt_spaces_collection_literals() {
+    assert_formats(
+        "main(): int {\n    var a = [1,2 , 3];\n    var m = [\"a\" :1, \"b\":[2]];\n    HashMap<String, int> e = [ : ];\n    return 0;\n}\n",
+        "main(): int {\n    var a = [1, 2, 3];\n    var m = [\"a\": 1, \"b\": [2]];\n    HashMap<String, int> e = [:];\n    return 0;\n}\n",
+    );
+}

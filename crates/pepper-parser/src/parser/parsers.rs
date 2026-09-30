@@ -1116,7 +1116,60 @@ fn atom(input: &mut &str) -> Result<Expression> {
         *input = &input[1..];
         return Ok(expr);
     }
+    if input.starts_with('[') {
+        return array_literal(input);
+    }
     primary_expression(input)
+}
+
+/// `[a, b, ...]`, an array literal, or `[k: v, ...]`, a map literal (`[:]`
+/// is an empty map). A trailing comma is allowed, so a long literal can put
+/// one element per line.
+fn array_literal(input: &mut &str) -> Result<Expression> {
+    let start = pos(input);
+    *input = &input[1..];
+    ws(input)?;
+    if input.starts_with(':') {
+        *input = &input[1..];
+        ws(input)?;
+        if !input.starts_with(']') { return Err(cut_expecting(input, "']'")); }
+        *input = &input[1..];
+        return Ok(Expression::MapLiteral { entries: vec![], span: Span { start, end: pos(input) } });
+    }
+    let mut elements = vec![];
+    let mut entries = vec![];
+    // Decided by the first element: a ':' after it makes a map.
+    let mut is_map = false;
+    while !input.starts_with(']') {
+        let first = elements.is_empty() && entries.is_empty();
+        let item = expression(input)?;
+        ws(input)?;
+        if first {
+            is_map = input.starts_with(':');
+        }
+        if is_map {
+            if !input.starts_with(':') { return Err(cut_expecting(input, "':'")); }
+            *input = &input[1..];
+            ws(input)?;
+            let value = expression(input)?;
+            ws(input)?;
+            entries.push((item, value));
+        } else {
+            elements.push(item);
+        }
+        if input.starts_with(',') {
+            *input = &input[1..];
+            ws(input)?;
+        } else if !input.starts_with(']') {
+            return Err(cut_expecting(input, "']'"));
+        }
+    }
+    *input = &input[1..];
+    let span = Span { start, end: pos(input) };
+    if is_map {
+        return Ok(Expression::MapLiteral { entries, span });
+    }
+    Ok(Expression::ArrayLiteral { elements, span })
 }
 
 fn postfix(input: &mut &str) -> Result<Expression> {
@@ -3856,7 +3909,12 @@ fn ptr_check_expr(e: &Expression) -> std::result::Result<(), PostParseError> {
             ptr_check_type(&c.return_type)?;
             ptr_check_block(&c.body)
         }
-        Expression::Tuple { elements, .. } => elements.iter().try_for_each(ptr_check_expr),
+        Expression::Tuple { elements, .. } | Expression::ArrayLiteral { elements, .. } => {
+            elements.iter().try_for_each(ptr_check_expr)
+        }
+        Expression::MapLiteral { entries, .. } => {
+            entries.iter().try_for_each(|(key, value)| ptr_check_expr(key).and_then(|_| ptr_check_expr(value)))
+        }
         Expression::Match(m) => {
             ptr_check_expr(&m.value)?;
             m.arms.iter().try_for_each(|arm| ptr_check_expr(&arm.value))?;

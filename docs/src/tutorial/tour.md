@@ -67,6 +67,8 @@ not need to import them:
 {{#include ../../examples/tutorial-tour-collections.pep}}
 ```
 
+- `[90, 72]` and `["Ada": 36]` are [collection literals](../language/collection-literals.md):
+  a new array and a new map.
 - [`Array<T>`](../reference/array.md) is a list that grows as you `append`.
   `int[]` is a shorter way to write the type `Array<int>`. Indexing is checked:
   reading past the end stops the program with an error rather than reading

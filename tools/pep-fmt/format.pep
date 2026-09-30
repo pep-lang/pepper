@@ -1218,8 +1218,16 @@ export struct Formatter {
                 }
                 return _parts(item);
             }
-            Tuple => {
+            Tuple, Array, Map => {
                 return _delimited(item, false);
+            }
+            MapEntry => {
+                # `"key": value`
+                return concat()
+                    .add(_expression(item.child(0)))
+                    .add(_leaf(item.child(1)))
+                    .add(text(" "))
+                    .add(_expression(item.child(2)));
             }
             TupleElement => {
                 # `line: 3`

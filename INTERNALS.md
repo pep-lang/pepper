@@ -353,6 +353,20 @@ with no extension, and `module_name()` is the output's stem.
     `type_of_expr` gives an inferred `var` the labeled type
     (`labeled_literal_type`) before the rename drops the labels; the builder's
     `check_literal_labels` rejects labels that differ from a declared type's.
+  - An array literal `[a, b, c]` becomes the chain
+    `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
+    literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,
+    v2)` (`array_literal`, `map_literal`; the helpers are in
+    `runtime/array.pep` and `runtime/hash.pep`). With no other type, the
+    generic start function infers the element types from the first entry.
+    A variable declared as `Array<T>`, `HashSet<T>` or `HashMap<K, V>`
+    types its literal in the builder (`typed_expression`), which also lets
+    `[]` and `[:]` build an empty collection. Any other typed slot
+    (argument, return, assignment) is handled by
+    `convert_to_traits::convert_array_literal` / `convert_map_literal`,
+    which rebuild the chain from `Array<T>()` / `HashMap<K, V>()` and
+    convert each element to the slot's element type. A `HashSet` slot takes
+    an array through its `[Implicit]` constructor.
   - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
     with `Expression::Destructure { value: e, count }` followed by
     `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block
