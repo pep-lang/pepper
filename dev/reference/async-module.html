@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-288db992.js";
+            window.path_to_searchindex_js = "../searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -195,7 +195,7 @@
 <li><a href="async-channel.html">Channel</a>: <code>Channel&lt;T&gt;</code>, a queue that carries values between threads, and its <code>ChannelIterator&lt;T&gt;</code></li>
 <li><a href="async-mutex.html">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="async-once.html">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
-<li><a href="async-task.html">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code> and cancellation, for many tasks taking turns on one thread</li>
+<li><a href="async-task.html">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on one thread and parking on sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as

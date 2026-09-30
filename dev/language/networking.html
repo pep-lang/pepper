@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-288db992.js";
+            window.path_to_searchindex_js = "../searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -183,11 +183,10 @@
                     <main>
                         <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
 <p>The <code>io</code> module has TCP and UDP sockets, IP and socket addresses, and host
-name lookup. Every call blocks the calling thread until it completes, like
-<code>File</code>. To serve several connections at once, give each one its own
-<a href="threads.html">thread</a>. <a href="tasks.html">Tasks</a> exist, but a socket call in a task
-still blocks the whole thread; parking only the task is planned (see
-<a href="#current-status">Current status</a>).</p>
+name lookup. In a plain program every call blocks the calling thread until
+it completes, like <code>File</code>. To serve several connections at once, give each
+one its own <a href="threads.html">thread</a>, or its own <a href="tasks.html#sockets">task</a>: in a
+task, a call that has to wait parks only that task.</p>
 <h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
 <p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
 address and a port:</p>
@@ -346,11 +345,9 @@ away. On Windows it does not, because there that option would let another
 program take over the port.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li>Every call blocks its thread. There are no timeouts, no non-blocking mode,
-and no way to wait on several sockets at once yet. The event loop’s next
-step (drivers over epoll, kqueue, IOCP and io_uring) will park the calling
-<a href="tasks.html">task</a> instead of blocking the thread, with no change to this
-API.</li>
+<li>Outside a task every call blocks its thread, with no timeout. In a task
+a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
+limits how long it may wait.</li>
 <li>Unix domain sockets and TLS are not supported yet.</li>
 <li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>

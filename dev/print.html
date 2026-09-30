@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-288db992.js";
+            window.path_to_searchindex_js = "searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b64c440f.js"></script>
@@ -231,7 +231,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, and <code>$"{name}"</code> interpolation), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on one thread), file-system access,
+that take turns on one thread, parking on sockets and timeouts), file-system access,
 TCP and UDP sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
@@ -8039,7 +8039,9 @@ has its own small stack, and tasks take turns: one runs until it waits (for
 a timer, for another task, or by yielding), and then another runs. This is
 the model of Go’s goroutines and of libuv or tokio event loops, without
 <code>async</code>/<code>await</code>: a function that waits looks like any other function, and
-any function can wait, however deep in the call stack.</p>
+any function can wait, however deep in the call stack. A socket call that
+has to wait parks only its task, so one thread can serve thousands of
+connections.</p>
 <p>Tasks live in the <code>async</code> module:</p>
 <pre><code class="language-pepper">import async;
 
@@ -8112,11 +8114,118 @@ main(): int {
 <p>Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 <code>yield_now()</code> now and then.</p>
+<h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
+<p>A socket call in a task that would have to wait (for a connection, for data,
+or for room to send) parks the task and lets the others run until the
+socket is ready. The socket API is the same one a plain program uses; only
+the waiting differs:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+# Echoes everything a client sends until it closes the connection.
+serve(stream: io.TcpStream) {
+    var buffer = Array&lt;u8&gt;();
+    while (true) {
+        var r = stream.read(buffer, 4096);   # parks this task until data arrives
+        if (r.is_err() || r.value() == 0) {
+            return;
+        }
+        stream.write_all(buffer);
+        buffer.clear();
+    }
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var address = listener.local_address().value();
+        var clients = 10;
+
+        # The server: one task per connection, all on this thread.
+        async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                async.Task&lt;void&gt;.spawn_local(() =&gt; { serve(stream); });
+            }
+        });
+
+        # The clients, as tasks on the same thread.
+        var replies = Array&lt;async.Task&lt;ulong&gt;&gt;();
+        var i = 0;
+        while (i &lt; clients) {
+            var k = i;
+            replies.append(async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+                var stream = io.TcpStream.connect(address).value();
+                var message = $"hello from {k}";
+                stream.write_string(message);
+                var buffer = Array&lt;u8&gt;();
+                stream.read_exact(buffer, message.size());
+                return buffer.count();
+            }));
+            i = i + 1;
+        }
+        for (var reply in replies) {
+            assert(reply.join().value() &gt; 0, "the server echoed the message");
+        }
+    });
+    return 0;
+}
+</code></pre>
+<p>Outside a task, the same calls block the thread as before.</p>
+<p>On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
+and on Windows with WSAPoll.
+When no task is ready to run, it blocks in the driver until a socket is
+ready or the next timer is due; while tasks are running, it also checks the
+sockets every few dozen tasks, so a busy task cannot starve the network.</p>
+<h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
+<p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
+block may take:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+
+        # Nobody connects, so the accept gives up after 50 milliseconds.
+        with (var deadline = async.timeout(50)) {
+            var accepted = listener.accept();
+            assert(accepted.is_err() &amp;&amp; accepted.error().is_timed_out(), "accept timed out");
+            assert(deadline.is_expired(), "the limit has passed");
+        }
+
+        # A join gives up too; the task itself carries on until cancelled.
+        var slow = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            async.sleep(1000000);
+            return 42;
+        });
+        with (async.timeout(20)) {
+            var result = slow.join();
+            assert(result.error().is_timed_out(), "join timed out");
+        }
+        slow.cancel();
+    });
+    return 0;
+}
+</code></pre>
+<p>Once the limit passes, a socket call that has to wait fails with an
+<code>IoError</code> for which <code>is_timed_out()</code> holds, <code>join</code> fails with a <code>TaskError</code>
+for which <code>is_timed_out()</code> holds (the task it waited for carries on), and
+<code>sleep</code> returns early. Code that does not wait is never interrupted. The
+limit ends with the block. Timeouts nest, and an inner one cannot extend an
+outer one. <code>deadline.is_expired()</code> says whether the limit has passed.
+<code>timeout</code> panics outside a task.</p>
 <h2 id="cancelling"><a class="header" href="#cancelling">Cancelling</a></h2>
 <p><code>task.cancel()</code> asks a task to stop. Nothing stops it by force: from then on
 <code>async.is_cancelled()</code> is true inside it, <code>sleep</code> returns at once, and
 <code>join</code> on it fails with a <code>TaskError</code> whose <code>is_cancelled()</code> is true. A
-task waiting in <code>join</code> returns the same error when it is cancelled itself.
+task waiting in <code>join</code> returns the same error when it is cancelled itself,
+and a socket call waiting in a cancelled task fails with an <code>IoError</code> whose
+<code>is_cancelled()</code> is true.
 When the first task of a <code>run</code> returns, every task still running is
 cancelled, and <code>run</code> waits for each to finish:</p>
 <pre><code class="language-pepper">import async;
@@ -8160,9 +8269,10 @@ program as a thread would. Stacks are reused for later tasks.</p>
 <li>A runtime runs on one thread: <code>spawn_local</code> is the only way to start a
 task. Tasks that run on several threads at once, and <code>run_blocking</code> for
 work that would block the thread, are planned.</li>
-<li>Sockets and files still block the whole thread when called in a task.
-Making them park only the calling task, over epoll, kqueue, IOCP and
-io_uring, is the next step, along with timeouts (<code>async.timeout</code>).</li>
+<li>On Windows, the runtime waits on sockets with WSAPoll, which looks at
+every waiting socket on each poll; an I/O completion port driver that
+scales to many connections is next. Files block the thread on every
+platform. io_uring on Linux comes later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 <li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
@@ -8172,11 +8282,10 @@ every task on it, when called in a task. Use <code>async.sleep</code> in tasks.<
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
 <p>The <code>io</code> module has TCP and UDP sockets, IP and socket addresses, and host
-name lookup. Every call blocks the calling thread until it completes, like
-<code>File</code>. To serve several connections at once, give each one its own
-<a href="#threads-and-shared-data">thread</a>. <a href="#tasks">Tasks</a> exist, but a socket call in a task
-still blocks the whole thread; parking only the task is planned (see
-<a href="#current-status-2">Current status</a>).</p>
+name lookup. In a plain program every call blocks the calling thread until
+it completes, like <code>File</code>. To serve several connections at once, give each
+one its own <a href="#threads-and-shared-data">thread</a>, or its own <a href="#sockets">task</a>: in a
+task, a call that has to wait parks only that task.</p>
 <h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
 <p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
 address and a port:</p>
@@ -8335,16 +8444,14 @@ away. On Windows it does not, because there that option would let another
 program take over the port.</p>
 <h2 id="current-status-2"><a class="header" href="#current-status-2">Current status</a></h2>
 <ul>
-<li>Every call blocks its thread. There are no timeouts, no non-blocking mode,
-and no way to wait on several sockets at once yet. The event loop’s next
-step (drivers over epoll, kqueue, IOCP and io_uring) will park the calling
-<a href="#tasks">task</a> instead of blocking the thread, with no change to this
-API.</li>
+<li>Outside a task every call blocks its thread, with no timeout. In a task
+a call parks only the task, and <a href="#timeouts"><code>async.timeout</code></a>
+limits how long it may wait.</li>
 <li>Unix domain sockets and TLS are not supported yet.</li>
 <li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>
 <p>The reference pages for <a href="#network-addresses">addresses</a> and
-<a href="#sockets">sockets</a> document every method.</p>
+<a href="#sockets-1">sockets</a> document every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -12918,7 +13025,7 @@ the program when it runs.</p>
 <li><a href="#file">File</a>: opening, reading, and writing files, and whole-file helpers</li>
 <li><a href="#directory">Directory</a>: listing, creating, and removing directories</li>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
-<li><a href="#sockets">Sockets</a>: <code>TcpListener</code>, <code>TcpStream</code>, and <code>UdpSocket</code></li>
+<li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>TcpStream</code>, and <code>UdpSocket</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -13263,11 +13370,23 @@ address that is not one of this machine’s, or connecting to port 0.</p>
 <pre><code class="language-pepper">is_timed_out(): bool
 </code></pre>
 <p>Returns whether an operation gave up because the peer did not answer
-in time, such as a connection attempt to an unreachable host.</p>
+in time, such as a connection attempt to an unreachable host, or
+because an <code>async.timeout</code> scope around it expired.</p>
 <p>Matches <code>ETIMEDOUT</code> on POSIX and <code>WSAETIMEDOUT</code> on Windows.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the operation timed out</li>
+</ul>
+<h4 id="is_cancelled"><a class="header" href="#is_cancelled">is_cancelled</a></h4>
+<pre><code class="language-pepper">is_cancelled(): bool
+</code></pre>
+<p>Returns whether an operation stopped because the task waiting for it
+was cancelled (see <code>async.Task.cancel</code>).</p>
+<p>Matches <code>ECANCELED</code> on POSIX, and <code>ERROR_OPERATION_ABORTED</code> or
+<code>ERROR_CANCELLED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when cancellation ended the operation</li>
 </ul>
 <h2 id="ioresult"><a class="header" href="#ioresult">IoResult</a></h2>
 <pre><code class="language-pepper">type IoResult&lt;T&gt; = Result&lt;T, IoError&gt;
@@ -15184,7 +15303,7 @@ most once.</p>
     }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/socket.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="sockets"><a class="header" href="#sockets">Sockets</a></h1>
+<h1 id="sockets-1"><a class="header" href="#sockets-1">Sockets</a></h1>
 <p>TCP and UDP sockets: <code>TcpListener</code> accepts connections, <code>TcpStream</code> is
 one connection, <code>UdpSocket</code> sends and receives datagrams.</p>
 <p>Every call blocks the calling thread until it completes. Addresses are
@@ -15642,7 +15761,7 @@ chose when it was bound to port 0.</p>
 <li><a href="#asyncchannelpep">Channel</a>: <code>Channel&lt;T&gt;</code>, a queue that carries values between threads, and its <code>ChannelIterator&lt;T&gt;</code></li>
 <li><a href="#asyncmutexpep">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="#asynconcepep">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
-<li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code> and cancellation, for many tasks taking turns on one thread</li>
+<li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on one thread and parking on sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
@@ -16054,7 +16173,7 @@ small stack, switching only where they wait.</p>
 <p><code>run(body)</code> turns the calling thread into a worker and runs <code>body</code> as its
 first task. A task starts others with <code>Task&lt;T&gt;.spawn_local</code>, and gives
 the thread to the others whenever it waits: <code>sleep</code>, <code>yield_now</code>, and
-<code>Task.join</code>. Nothing preempts a task, so a task that computes for a long
+<code>Task.join</code>, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
 time without waiting keeps every other task on its worker waiting too.</p>
 <p>A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
@@ -16079,14 +16198,22 @@ function called in a task can wait without being marked in any way.</p>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
 <h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
-<h4 id="is_cancelled"><a class="header" href="#is_cancelled">is_cancelled</a></h4>
+<h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
-<p>Returns whether the task was cancelled, or the task waiting for it was
-(the only reason so far).</p>
+<p>Returns whether the task was cancelled, or the task waiting for it was.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when cancellation ended the wait</li>
+</ul>
+<h4 id="is_timed_out-1"><a class="header" href="#is_timed_out-1">is_timed_out</a></h4>
+<pre><code class="language-pepper">is_timed_out(): bool
+</code></pre>
+<p>Returns whether a <code>timeout</code> around the <code>join</code> expired before the task
+finished. The task itself carries on.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when a timeout ended the wait</li>
 </ul>
 <h2 id="runtimeoptions"><a class="header" href="#runtimeoptions">RuntimeOptions</a></h2>
 <pre><code class="language-pepper">struct RuntimeOptions
@@ -16173,7 +16300,7 @@ task can, since it stays on this thread.</p>
 meanwhile.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the body’s result, or a <code>TaskError</code> if the task was cancelled before it finished or the task calling <code>join</code> was cancelled while it waited</li>
+<li>the body’s result, or a <code>TaskError</code> if the task was cancelled before it finished, the task calling <code>join</code> was cancelled while it waited, or a <code>timeout</code> around the <code>join</code> expired first</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -16245,12 +16372,13 @@ nothing outside a task.</p>
 <pre><code class="language-pepper">sleep(milliseconds: ulong)
 </code></pre>
 <p>Waits at least <code>milliseconds</code>. In a task, other tasks run meanwhile, and
-a cancelled task returns at once; outside one, the thread sleeps.</p>
+a cancelled task returns at once, as does one whose <code>timeout</code> expires
+first; outside a task, the thread sleeps.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>milliseconds</code> — how long to wait</li>
 </ul>
-<h2 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h2>
+<h2 id="is_cancelled-1-1"><a class="header" href="#is_cancelled-1-1">is_cancelled</a></h2>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
 <p>Returns whether the running task has been cancelled (see <code>Task.cancel</code>),
@@ -16259,6 +16387,78 @@ so a long computation can stop early. False outside a task.</p>
 <ul>
 <li>true when the running task was asked to stop</li>
 </ul>
+<h2 id="deadline"><a class="header" href="#deadline">Deadline</a></h2>
+<pre><code class="language-pepper">struct Deadline
+</code></pre>
+<p>A time limit on the waits inside a <code>with</code> block, made by <code>timeout</code>.</p>
+<p>While the block runs, a socket call that has to wait fails with an
+<code>IoError</code> for which <code>is_timed_out()</code> holds once the limit passes,
+<code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
+and <code>sleep</code> returns early. Code that does not wait is never interrupted.
+Timeouts nest: an inner one cannot extend an outer one.</p>
+<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
+<pre><code class="language-pepper">construct(milliseconds: ulong)
+</code></pre>
+<p>Creates a limit <code>milliseconds</code> from now. Use <code>timeout</code> instead.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long from now the limit passes</li>
+</ul>
+<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
+<h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
+<pre><code class="language-pepper">enter(): Deadline
+</code></pre>
+<p>Starts applying the limit to the running task; a <code>with</code> block calls
+it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this deadline</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside a task</li>
+</ul>
+<h4 id="exit-4"><a class="header" href="#exit-4">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Stops applying the limit; the end of the <code>with</code> block calls it.</p>
+<h4 id="is_expired"><a class="header" href="#is_expired">is_expired</a></h4>
+<pre><code class="language-pepper">is_expired(): bool
+</code></pre>
+<p>Returns whether the limit has passed.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once the time is up</li>
+</ul>
+<h2 id="timeout"><a class="header" href="#timeout">timeout</a></h2>
+<pre><code class="language-pepper">timeout(milliseconds: ulong): Deadline
+</code></pre>
+<p>Returns a time limit for a <code>with</code> block: the waits inside it give up
+<code>milliseconds</code> from now (see <code>Deadline</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long the block’s waits may take in all</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the limit, for a <code>with</code> header</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            with (var deadline = async.timeout(50)) {
+                var accepted = listener.accept();   # nobody connects
+                assert(accepted.error().is_timed_out(), "timed out");
+            }
+        });
+        return 0;
+    }
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asyncchannelpep"><a class="header" href="#asyncchannelpep">async/channel.pep</a></h1>
 <p>Channels: <code>Channel&lt;T&gt;</code> carries values from threads that send to threads
@@ -16689,7 +16889,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
 <h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
-<h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
+<h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
 <p>Returns the Mutex’s value, for the <code>with</code> header to bind.</p>
@@ -16698,7 +16898,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
 </ul>
-<h4 id="exit-4"><a class="header" href="#exit-4">exit</a></h4>
+<h4 id="exit-5"><a class="header" href="#exit-5">exit</a></h4>
 <pre><code class="language-pepper">exit()
 </code></pre>
 <p>Unlocks the Mutex if the guard holds it. The destructor calls it;

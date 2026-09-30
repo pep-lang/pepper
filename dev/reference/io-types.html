@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-288db992.js";
+            window.path_to_searchindex_js = "../searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -511,11 +511,23 @@ address that is not one of this machine’s, or connecting to port 0.</p>
 <pre><code class="language-pepper">is_timed_out(): bool
 </code></pre>
 <p>Returns whether an operation gave up because the peer did not answer
-in time, such as a connection attempt to an unreachable host.</p>
+in time, such as a connection attempt to an unreachable host, or
+because an <code>async.timeout</code> scope around it expired.</p>
 <p>Matches <code>ETIMEDOUT</code> on POSIX and <code>WSAETIMEDOUT</code> on Windows.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the operation timed out</li>
+</ul>
+<h4 id="is_cancelled"><a class="header" href="#is_cancelled">is_cancelled</a></h4>
+<pre><code class="language-pepper">is_cancelled(): bool
+</code></pre>
+<p>Returns whether an operation stopped because the task waiting for it
+was cancelled (see <code>async.Task.cancel</code>).</p>
+<p>Matches <code>ECANCELED</code> on POSIX, and <code>ERROR_OPERATION_ABORTED</code> or
+<code>ERROR_CANCELLED</code> on Windows.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when cancellation ended the operation</li>
 </ul>
 <h2 id="ioresult"><a class="header" href="#ioresult">IoResult</a></h2>
 <pre><code class="language-pepper">type IoResult&lt;T&gt; = Result&lt;T, IoError&gt;

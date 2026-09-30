@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-288db992.js";
+            window.path_to_searchindex_js = "../searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -188,7 +188,7 @@ small stack, switching only where they wait.</p>
 <p><code>run(body)</code> turns the calling thread into a worker and runs <code>body</code> as its
 first task. A task starts others with <code>Task&lt;T&gt;.spawn_local</code>, and gives
 the thread to the others whenever it waits: <code>sleep</code>, <code>yield_now</code>, and
-<code>Task.join</code>. Nothing preempts a task, so a task that computes for a long
+<code>Task.join</code>, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
 time without waiting keeps every other task on its worker waiting too.</p>
 <p>A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
@@ -216,11 +216,19 @@ function called in a task can wait without being marked in any way.</p>
 <h4 id="is_cancelled"><a class="header" href="#is_cancelled">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
-<p>Returns whether the task was cancelled, or the task waiting for it was
-(the only reason so far).</p>
+<p>Returns whether the task was cancelled, or the task waiting for it was.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when cancellation ended the wait</li>
+</ul>
+<h4 id="is_timed_out"><a class="header" href="#is_timed_out">is_timed_out</a></h4>
+<pre><code class="language-pepper">is_timed_out(): bool
+</code></pre>
+<p>Returns whether a <code>timeout</code> around the <code>join</code> expired before the task
+finished. The task itself carries on.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when a timeout ended the wait</li>
 </ul>
 <h2 id="runtimeoptions"><a class="header" href="#runtimeoptions">RuntimeOptions</a></h2>
 <pre><code class="language-pepper">struct RuntimeOptions
@@ -307,7 +315,7 @@ task can, since it stays on this thread.</p>
 meanwhile.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the body’s result, or a <code>TaskError</code> if the task was cancelled before it finished or the task calling <code>join</code> was cancelled while it waited</li>
+<li>the body’s result, or a <code>TaskError</code> if the task was cancelled before it finished, the task calling <code>join</code> was cancelled while it waited, or a <code>timeout</code> around the <code>join</code> expired first</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -379,7 +387,8 @@ nothing outside a task.</p>
 <pre><code class="language-pepper">sleep(milliseconds: ulong)
 </code></pre>
 <p>Waits at least <code>milliseconds</code>. In a task, other tasks run meanwhile, and
-a cancelled task returns at once; outside one, the thread sleeps.</p>
+a cancelled task returns at once, as does one whose <code>timeout</code> expires
+first; outside a task, the thread sleeps.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>milliseconds</code> — how long to wait</li>
@@ -393,6 +402,78 @@ so a long computation can stop early. False outside a task.</p>
 <ul>
 <li>true when the running task was asked to stop</li>
 </ul>
+<h2 id="deadline"><a class="header" href="#deadline">Deadline</a></h2>
+<pre><code class="language-pepper">struct Deadline
+</code></pre>
+<p>A time limit on the waits inside a <code>with</code> block, made by <code>timeout</code>.</p>
+<p>While the block runs, a socket call that has to wait fails with an
+<code>IoError</code> for which <code>is_timed_out()</code> holds once the limit passes,
+<code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
+and <code>sleep</code> returns early. Code that does not wait is never interrupted.
+Timeouts nest: an inner one cannot extend an outer one.</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
+<pre><code class="language-pepper">construct(milliseconds: ulong)
+</code></pre>
+<p>Creates a limit <code>milliseconds</code> from now. Use <code>timeout</code> instead.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long from now the limit passes</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">enter(): Deadline
+</code></pre>
+<p>Starts applying the limit to the running task; a <code>with</code> block calls
+it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this deadline</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside a task</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Stops applying the limit; the end of the <code>with</code> block calls it.</p>
+<h4 id="is_expired"><a class="header" href="#is_expired">is_expired</a></h4>
+<pre><code class="language-pepper">is_expired(): bool
+</code></pre>
+<p>Returns whether the limit has passed.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once the time is up</li>
+</ul>
+<h2 id="timeout"><a class="header" href="#timeout">timeout</a></h2>
+<pre><code class="language-pepper">timeout(milliseconds: ulong): Deadline
+</code></pre>
+<p>Returns a time limit for a <code>with</code> block: the waits inside it give up
+<code>milliseconds</code> from now (see <code>Deadline</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long the block’s waits may take in all</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the limit, for a <code>with</code> header</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            with (var deadline = async.timeout(50)) {
+                var accepted = listener.accept();   # nobody connects
+                assert(accepted.error().is_timed_out(), "timed out");
+            }
+        });
+        return 0;
+    }
+</code></pre>
 
                     </main>
 

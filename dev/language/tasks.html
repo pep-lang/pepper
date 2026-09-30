@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-288db992.js";
+            window.path_to_searchindex_js = "../searchindex-f5841309.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -187,7 +187,9 @@ has its own small stack, and tasks take turns: one runs until it waits (for
 a timer, for another task, or by yielding), and then another runs. This is
 the model of Go’s goroutines and of libuv or tokio event loops, without
 <code>async</code>/<code>await</code>: a function that waits looks like any other function, and
-any function can wait, however deep in the call stack.</p>
+any function can wait, however deep in the call stack. A socket call that
+has to wait parks only its task, so one thread can serve thousands of
+connections.</p>
 <p>Tasks live in the <code>async</code> module:</p>
 <pre><code class="language-pepper">import async;
 
@@ -260,11 +262,118 @@ main(): int {
 <p>Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 <code>yield_now()</code> now and then.</p>
+<h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
+<p>A socket call in a task that would have to wait (for a connection, for data,
+or for room to send) parks the task and lets the others run until the
+socket is ready. The socket API is the same one a plain program uses; only
+the waiting differs:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+# Echoes everything a client sends until it closes the connection.
+serve(stream: io.TcpStream) {
+    var buffer = Array&lt;u8&gt;();
+    while (true) {
+        var r = stream.read(buffer, 4096);   # parks this task until data arrives
+        if (r.is_err() || r.value() == 0) {
+            return;
+        }
+        stream.write_all(buffer);
+        buffer.clear();
+    }
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var address = listener.local_address().value();
+        var clients = 10;
+
+        # The server: one task per connection, all on this thread.
+        async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                async.Task&lt;void&gt;.spawn_local(() =&gt; { serve(stream); });
+            }
+        });
+
+        # The clients, as tasks on the same thread.
+        var replies = Array&lt;async.Task&lt;ulong&gt;&gt;();
+        var i = 0;
+        while (i &lt; clients) {
+            var k = i;
+            replies.append(async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+                var stream = io.TcpStream.connect(address).value();
+                var message = $"hello from {k}";
+                stream.write_string(message);
+                var buffer = Array&lt;u8&gt;();
+                stream.read_exact(buffer, message.size());
+                return buffer.count();
+            }));
+            i = i + 1;
+        }
+        for (var reply in replies) {
+            assert(reply.join().value() &gt; 0, "the server echoed the message");
+        }
+    });
+    return 0;
+}
+</code></pre>
+<p>Outside a task, the same calls block the thread as before.</p>
+<p>On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
+and on Windows with WSAPoll.
+When no task is ready to run, it blocks in the driver until a socket is
+ready or the next timer is due; while tasks are running, it also checks the
+sockets every few dozen tasks, so a busy task cannot starve the network.</p>
+<h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
+<p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
+block may take:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+
+        # Nobody connects, so the accept gives up after 50 milliseconds.
+        with (var deadline = async.timeout(50)) {
+            var accepted = listener.accept();
+            assert(accepted.is_err() &amp;&amp; accepted.error().is_timed_out(), "accept timed out");
+            assert(deadline.is_expired(), "the limit has passed");
+        }
+
+        # A join gives up too; the task itself carries on until cancelled.
+        var slow = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            async.sleep(1000000);
+            return 42;
+        });
+        with (async.timeout(20)) {
+            var result = slow.join();
+            assert(result.error().is_timed_out(), "join timed out");
+        }
+        slow.cancel();
+    });
+    return 0;
+}
+</code></pre>
+<p>Once the limit passes, a socket call that has to wait fails with an
+<code>IoError</code> for which <code>is_timed_out()</code> holds, <code>join</code> fails with a <code>TaskError</code>
+for which <code>is_timed_out()</code> holds (the task it waited for carries on), and
+<code>sleep</code> returns early. Code that does not wait is never interrupted. The
+limit ends with the block. Timeouts nest, and an inner one cannot extend an
+outer one. <code>deadline.is_expired()</code> says whether the limit has passed.
+<code>timeout</code> panics outside a task.</p>
 <h2 id="cancelling"><a class="header" href="#cancelling">Cancelling</a></h2>
 <p><code>task.cancel()</code> asks a task to stop. Nothing stops it by force: from then on
 <code>async.is_cancelled()</code> is true inside it, <code>sleep</code> returns at once, and
 <code>join</code> on it fails with a <code>TaskError</code> whose <code>is_cancelled()</code> is true. A
-task waiting in <code>join</code> returns the same error when it is cancelled itself.
+task waiting in <code>join</code> returns the same error when it is cancelled itself,
+and a socket call waiting in a cancelled task fails with an <code>IoError</code> whose
+<code>is_cancelled()</code> is true.
 When the first task of a <code>run</code> returns, every task still running is
 cancelled, and <code>run</code> waits for each to finish:</p>
 <pre><code class="language-pepper">import async;
@@ -308,9 +417,10 @@ program as a thread would. Stacks are reused for later tasks.</p>
 <li>A runtime runs on one thread: <code>spawn_local</code> is the only way to start a
 task. Tasks that run on several threads at once, and <code>run_blocking</code> for
 work that would block the thread, are planned.</li>
-<li>Sockets and files still block the whole thread when called in a task.
-Making them park only the calling task, over epoll, kqueue, IOCP and
-io_uring, is the next step, along with timeouts (<code>async.timeout</code>).</li>
+<li>On Windows, the runtime waits on sockets with WSAPoll, which looks at
+every waiting socket on each poll; an I/O completion port driver that
+scales to many connections is next. Files block the thread on every
+platform. io_uring on Linux comes later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 <li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
