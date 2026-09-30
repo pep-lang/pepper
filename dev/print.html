@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-38530942.js";
+            window.path_to_searchindex_js = "searchindex-eaea7ecf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-cf0312c8.js"></script>
@@ -384,10 +384,12 @@ ln -s /path/to/pepper/runtime .pep/runtime
 <p>The compiler also writes intermediate files to <code>.pep/build/</code> under the
 directory you run it from, and keeps a build cache in <code>.pep/cache/</code>: each file
 of the program (and the standard library) is compiled to its own object, and
-on the next build a file whose sources and imports did not change reuses its
-object without being compiled or checked again. A file that compiled with
-warnings is checked again, so its warnings print on every build. Deleting
-<code>.pep/cache/</code> is always safe.</p>
+on the next build a file whose sources did not change reuses its object
+without being compiled or checked again, as long as what its imports declare
+did not change either: editing a function’s body recompiles that file alone,
+while changing a signature also recompiles the files that import it. A file
+that compiled with warnings is checked again, so its warnings print on every
+build. Deleting <code>.pep/cache/</code> is always safe.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
 a message, and the source line with a caret under the exact token to fix.
@@ -425,7 +427,7 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>--emit-ast</code></td><td>Parse only, and print the syntax tree instead of compiling.</td></tr>
 <tr><td><code>-v</code></td><td>Print what the compiler is doing.</td></tr>
 <tr><td><code>-T time</code></td><td>Print how long each stage of the compile took.</td></tr>
-<tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (sources unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
+<tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (its sources, and its imports’ declarations, unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
 <tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
 <tr><td><code>--verify-cache</code></td><td>Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file’s code (for testing the compiler; also <code>PEPPER_CACHE_VERIFY=1</code>).</td></tr>
