@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
+            window.path_to_searchindex_js = "../searchindex-30aecd96.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -251,8 +251,9 @@ main(): int {
 </code></pre>
 <ul>
 <li><code>var f = square;</code> infers <code>f</code>’s type, <code>(int) =&gt; int</code>, from the function.
-An <a href="overloading.html#overloaded-functions-as-values">overloaded</a> name needs
-a declared type instead, which picks the member.</li>
+An <a href="overloading.html#overloaded-functions-as-values">overloaded</a> name, or
+an overloaded method (<code>p.move</code>), needs a declared type instead, which
+picks the member.</li>
 <li>A function-typed variable can be reassigned to any function of the same type.</li>
 <li>A parameter of function type, such as <code>f: (int) =&gt; int</code>, lets the caller pass
 in the behavior. Generic functions can take function parameters too.</li>

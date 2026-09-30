@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
+            window.path_to_searchindex_js = "../searchindex-30aecd96.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -561,6 +561,8 @@ parameter or local with the same name as a field hides the field; use
 references, the caller sees the change.</li>
 <li>Calling a method does not copy the object or add a reference to it. The
 result of a method call is a new reference, like any function result.</li>
+<li>Several methods can share a name when their parameters differ; each call
+picks the best fit (see <a href="overloading.html#methods-and-operators">Overloading</a>).</li>
 </ul>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <p>A method marked <code>static</code> belongs to the type rather than to one object. It has
@@ -667,6 +669,9 @@ can be any type. These binary operators can be defined:</p>
 </div>
 <p>Keep these rules in mind:</p>
 <ul>
+<li>An operator can be declared once per right-operand type (<code>+(Money)</code> and
+<code>+(int)</code>), and <code>a + b</code> picks by <code>b</code>’s type, as for any
+<a href="overloading.html#methods-and-operators">overloaded</a> method.</li>
 <li>Each operator is its own method, with one exception: when a struct defines
 <code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. <code>+=</code> is not rewritten to
 <code>a = a + b</code>; define each one you want to use.</li>

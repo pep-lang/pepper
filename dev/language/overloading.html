@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6002d0c.js";
+            window.path_to_searchindex_js = "../searchindex-30aecd96.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-432e2c46.js"></script>
@@ -212,8 +212,10 @@ main(): int {
 }
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
-member of it. Only free functions overload so far: methods, constructors and
-operators do not (see <a href="#what-is-not-supported-yet">What is not supported yet</a>).</p>
+member of it. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
+set too, and so are its static methods and its operators. Constructors and
+extension methods do not overload yet (see
+<a href="#what-is-not-supported-yet">What is not supported yet</a>).</p>
 <h2 id="declaring-overloads"><a class="header" href="#declaring-overloads">Declaring overloads</a></h2>
 <ul>
 <li>
@@ -343,6 +345,74 @@ so <code>label&lt;String&gt;</code> above calls <code>kind(s: String)</code>.</p
 <p>An <a href="generics.html#overriding-a-generic-function-for-one-type">override</a> such
 as <code>describe&lt;Point&gt;(p: Point)</code> belongs to the generic member with the same
 number of type parameters and parameters; it is not a member itself.</p>
+<h2 id="methods-and-operators"><a class="header" href="#methods-and-operators">Methods and operators</a></h2>
+<p>A struct’s methods of one name are an overload set, and a call picks among
+them the same way, whether it is written <code>m.add(x)</code>, <code>this.add(x)</code>, or
+<code>add(x)</code> inside a method. Static methods overload among themselves
+(<code>Money.of(250)</code>), and operators are methods, so <code>+(Money)</code> and <code>+(int)</code> can
+coexist:</p>
+<pre><code class="language-pepper"># Overloaded methods, static methods and operators.
+
+struct Money {
+    var cents: long;
+
+    construct(long cents = 0) {
+        this.cents = cents;
+    }
+
+    # Methods of one name in a struct overload like free functions.
+    add(other: Money): Money { return Money(cents + other.cents); }
+    add(dollars: int, cents: int): Money { return Money(this.cents + dollars * 100 + cents); }
+
+    # Static methods overload among themselves.
+    static of(cents: long): Money { return Money(cents); }
+    static of(text: String): Money { return Money(text.size() as long); }
+
+    # Operators are methods, so they overload by operand type too.
+    +(other: Money): Money { return add(other); }
+    +(more: int): Money { return Money(cents + more); }
+}
+
+main(): int {
+    var a = Money.of(250);
+    var b = a.add(1, 5);                  # add(int, int)
+    assert(b.cents == 355, "two ints");
+    assert(a.add(b).cents == 605, "a Money");
+
+    var c = a + b + 10;                   # +(Money), then +(int)
+    assert(c.cents == 615, "operators");
+    assert(Money.of("four").cents == 4, "static of(String)");
+
+    # A method used as a value takes the member its type names.
+    var plus: (Money) =&gt; Money = a.add;
+    assert(plus(a).cents == 500, "method value");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>A static method and an instance method may not share a name</strong>, since a
+bare <code>of(x)</code> inside a method could mean either:</p>
+<pre><code class="language-text">main.pep:3:12: error: static method 'get' cannot share its name with an instance method of 'S'
+    3 |     static get(x: String): int { return 2; }
+      |            ^~~
+main.pep:2:5: note: previous declaration is here
+    2 |     get(x: int): int { return 1; }
+      |     ^~~
+</code></pre>
+</li>
+<li>
+<p><strong>In a generic struct</strong>, each specialization resolves its own calls: in
+<code>Holder&lt;int&gt;</code>, <code>has(x: T)</code> takes an <code>int</code>. Two members that become the
+same after substitution (<code>has(x: T)</code> and <code>has(x: String)</code> in
+<code>Holder&lt;String&gt;</code>) are only an error when a call cannot tell them apart.</p>
+</li>
+<li>
+<p><strong>A method as a value</strong> (<code>m.add</code>, <code>Money.of</code>) picks its member from the
+expected function type, like a free function below; without one the
+error is <code>cannot infer the type of 'f' from overloaded method 'Money.add'</code>.</p>
+</li>
+</ul>
 <h2 id="overloaded-functions-as-values"><a class="header" href="#overloaded-functions-as-values">Overloaded functions as values</a></h2>
 <p>The name of an overload set, written without a call, is a value only where
 the expected function type picks one member exactly: a typed variable, an
@@ -392,10 +462,12 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
 <h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
 <ul>
-<li><strong>Methods, constructors and operators</strong> do not overload: a struct has one
-method of each name and one constructor. Use default arguments, a
-<a href="structs.html#static-methods">static method</a> for each alternative, or a free
-function.</li>
+<li><strong>Constructors</strong> do not overload: a struct has one constructor. Use
+default arguments, or a <a href="structs.html#static-methods">static method</a> for each
+alternative.</li>
+<li><strong>Extension methods</strong> do not join a struct’s overload set: an extension
+method with the name of one of the struct’s methods is not a new member.</li>
+<li><strong>Unary operators</strong> cannot be declared at all yet.</li>
 <li><strong><code>extern</code> functions</strong> do not overload.</li>
 <li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name
 hide an imported set of that name.</li>
