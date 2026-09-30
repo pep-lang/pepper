@@ -105,13 +105,17 @@ export struct RuntimeOptions {
     var _backend: Backend;
     # How many workers, or 0 for one per logical CPU.
     var _workers: ulong;
+    # The most threads `run_blocking` may start.
+    var _blocking_threads: ulong;
 
     ## Creates the default options: one worker per logical CPU, 256 KiB of
-    ## stack per task, and the system's best I/O backend.
+    ## stack per task, the system's best I/O backend, and up to 64 threads
+    ## for `run_blocking`.
     construct() {
         this._stack_size = 262144;
         this._backend = Backend.Automatic;
         this._workers = 0;
+        this._blocking_threads = 64;
     }
 
     ## Sets how many workers (threads that run tasks) the runtime has. The
@@ -126,6 +130,20 @@ export struct RuntimeOptions {
     workers(count: ulong): RuntimeOptions {
         assert(count > 0, "RuntimeOptions.workers: 0 workers");
         this._workers = count;
+        return this;
+    }
+
+    ## Sets how many threads `run_blocking` may start. The runtime starts
+    ## them one at a time, when a blocking call finds none idle, and keeps
+    ## them until `run_with` returns. Once there are `count`, further calls
+    ## wait for one of them to be free. The default is 64.
+    ##
+    ## @param count the most threads for blocking calls
+    ## @returns these options
+    ## @panics if `count` is 0
+    blocking_threads(count: ulong): RuntimeOptions {
+        assert(count > 0, "RuntimeOptions.blocking_threads: 0 threads");
+        this._blocking_threads = count;
         return this;
     }
 
@@ -259,6 +277,9 @@ struct _Worker {
     var _io_waiting: ulong;
     # Tasks run since the driver was last polled.
     var _since_poll: ulong;
+    # The `run_blocking` threads this worker started, joined when the
+    # runtime ends.
+    var _pool: Array<Thread>;
 
     construct(runtime: _Runtime, index: ulong, stack_size: ulong, backend: Backend) {
         this._index = index;
@@ -276,6 +297,7 @@ struct _Worker {
         this._timers = Array<_Timer>();
         this._tasks = Array<_TaskCore>();
         this._idle = Array<__ptr<void>>();
+        this._pool = Array<Thread>();
         this._stack_size = stack_size;
         this._next_id = 1;
         this._timer_sequence = 1;
@@ -296,14 +318,30 @@ struct _Worker {
         this._next_id = this._next_id + 1;
         core._proxy = true;
         core._finished = false;
+        core._on_complete = () => {};
         this._remote.insert(core._id, core);
         return core;
     }
 
-    # Takes the next task from `spawn` off the shared queue and makes it
-    # ready here; false if there is none.
+    # Hands a body from `run_blocking` to the pool, starting a pool thread
+    # when none is idle.
+    _start_blocking(job: _SharedTask) {
+        var runtime = this._runtime;
+        if (runtime._block(job)) {
+            this._pool.append(Thread.spawn(() => {
+                _async_blocking_main(runtime);
+            }, "async blocking"));
+        }
+    }
+
+    # Takes the next task pinned to this worker, or else the next task from
+    # `spawn` off the shared queue, and makes it ready here; false if there
+    # is none.
     _take_shared(): bool {
-        var next = this._runtime._queue.try_receive();
+        var next = this._inbox._pinned.try_receive();
+        if (next.is_err()) {
+            next = this._runtime._queue.try_receive();
+        }
         if (next.is_err()) {
             return false;
         }
@@ -369,7 +407,8 @@ struct _Worker {
         var wait = timeout;
         this._inbox._sleeping.store(1);
         this._inbox._notified.store(0);
-        if (this._inbox._messages.count() > 0 || this._runtime._queue.count() > 0) {
+        var pending = this._inbox._messages.count() + this._inbox._pinned.count() + this._runtime._queue.count();
+        if (pending > 0) {
             wait = 0;
         }
         if (!this._stopping && this._runtime._stopping.load() != 0) {
@@ -512,6 +551,17 @@ struct _Worker {
             this._wake(core);
         }
         tasks.clear();
+    }
+
+    # Wakes the tasks waiting on `handle` and forgets them.
+    _drop_waits(handle: io.SocketHandle) {
+        var key = handle as ulong;
+        if (this._waits.contains(key)) {
+            var waits = this._waits.get(key);
+            this._wake_all(waits._readers);
+            this._wake_all(waits._writers);
+            this._waits.remove(key);
+        }
     }
 
     # Runs one ready task until it waits or finishes.
@@ -686,12 +736,22 @@ extend _Worker with io._IoWaiter {
 
     _forget(handle: io.SocketHandle) {
         this._driver._forget(handle);
+        this._drop_waits(handle);
+    }
+
+    _release(handle: io.SocketHandle) {
+        this._driver._release(handle);
+        this._drop_waits(handle);
+    }
+
+    _release_idle(handle: io.SocketHandle) {
         var key = handle as ulong;
         if (this._waits.contains(key)) {
             var waits = this._waits.get(key);
-            this._wake_all(waits._readers);
-            this._wake_all(waits._writers);
-            this._waits.remove(key);
+            if (waits._readers.count() == 0 && waits._writers.count() == 0) {
+                this._driver._release(handle);
+                this._waits.remove(key);
+            }
         }
     }
 }
@@ -917,7 +977,7 @@ export run_with(options: RuntimeOptions, body: () => void) {
     if (count == 0) {
         count = logical_cpus();
     }
-    var runtime = _Runtime(count);
+    var runtime = _Runtime(count, options._blocking_threads);
     var stack_size = options._stack_size;
     var backend = options._backend;
     var threads = Array<Thread>();
@@ -949,7 +1009,13 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
         first = Optional<_TaskCore>.some(worker._spawn(body));
     }
     worker._run(first);
-    runtime._leave();
+    runtime._leave(worker._inbox);
+    # Every blocking call has returned: no task is left to wait for one.
+    runtime._blocking.close();
+    for (var thread in worker._pool) {
+        thread.join();
+    }
+    worker._pool.clear();
     io._io_clear_waiter();
     _async_fiber_key_set(_async_worker_key, __null);
     slot[0] = __default<_Worker>();
@@ -1004,12 +1070,137 @@ export spawn<T>(body: shared () => T): Task<T> {
             return result._take();
         });
     };
-    var shared = _SharedTask(() => {
+    _async_push(worker, proxy, () => {
         result._run(body);
-    }, worker._index, proxy._id);
-    proxy._shared = Optional<_SharedTask>.some(shared);
-    worker._runtime._push(shared);
+    }, 0);
     return task;
+}
+
+# Queues `run` as the task that `proxy`, a stand-in on `worker`, stands for:
+# on the shared queue (`worker_plus_one` 0) or pinned to the worker whose
+# index is `worker_plus_one - 1`.
+_async_push(worker: _Worker, proxy: _TaskCore, run: shared () => void, worker_plus_one: ulong) {
+    var shared = _SharedTask(run, worker._index, proxy._id);
+    proxy._shared = Optional<_SharedTask>.some(shared);
+    if (worker_plus_one == 0) {
+        worker._runtime._push(shared);
+    } else {
+        worker._runtime._push_to(worker_plus_one - 1, shared);
+    }
+}
+
+## Starts one task on every worker, each running `body`, and returns them in
+## worker order. Use it to give each worker its own copy of a loop, such as
+## a server's accept loop on an `io.SharedTcpListener`, so that every worker
+## takes part. Each task runs on its own worker, the calling task's worker
+## included; they are otherwise like tasks from `spawn`, and `body` must be
+## a `shared` function.
+##
+## @param body the code each worker runs
+## @returns one task per worker, the first on the first worker
+## @panics outside `run`
+## @example
+##     import async;
+##     import io;
+##
+##     main(): int {
+##         async.run(() => {
+##             var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+##             var loops = async.spawn_on_each_worker(() => {
+##                 while (true) {
+##                     var accepted = listener.accept();
+##                     if (accepted.is_err()) {
+##                         return;
+##                     }
+##                     var (stream, peer) = accepted.value();
+##                     async.Task<void>.spawn_local(() => {
+##                         stream.write_string("hello");
+##                     });
+##                 }
+##             });
+##             for (var loop in loops) {
+##                 loop.join();
+##             }
+##         });
+##         return 0;
+##     }
+export spawn_on_each_worker(body: shared () => void): Array<Task<void>> {
+    assert(_async_on_worker(), "async.spawn_on_each_worker: not inside async.run");
+    var worker = _async_worker();
+    var tasks = Array<Task<void>>();
+    var i: ulong = 0;
+    while (i < worker._runtime._count) {
+        var proxy = worker._new_proxy();
+        tasks.append(Task<void>(proxy));
+        _async_push(worker, proxy, body, i + 1);
+        i = i + 1;
+    }
+    return tasks;
+}
+
+## Runs `body` on a separate thread and returns what it returns, parking
+## the calling task meanwhile so the worker keeps running other tasks. Use it
+## for work that would otherwise hold the worker up: a call that blocks in
+## the operating system (reading a file, resolving a host name, a C library
+## that waits) or a long computation.
+##
+## The runtime keeps a pool of threads for these calls, started as needed up
+## to `RuntimeOptions.blocking_threads`. `body` runs on one of them, so it
+## must be a `shared` function and `T` must be thread-safe, as for `spawn`.
+## On a pool thread, sockets block the thread, and `sleep` and the other task
+## functions behave as outside `run`.
+##
+## `body` always runs to the end: cancelling the calling task, or a `timeout`
+## around the call expiring, takes effect once `run_blocking` has returned.
+## Outside a task, `run_blocking` just calls `body`.
+##
+## @typeParam T the type of the body's result, which must be thread-safe;
+##   `void` when there is none
+## @param body the blocking code
+## @returns what `body` returns
+## @example
+##     import async;
+##
+##     main(): int {
+##         async.run(() => {
+##             var ticker = async.Task<void>.spawn_local(() => {
+##                 async.sleep(10);
+##                 print("the worker kept running");
+##             });
+##             var answer = async.run_blocking<int>(() => {
+##                 async.Thread.sleep(50);   # blocks a pool thread, not the worker
+##                 return 42;
+##             });
+##             print(answer);
+##             ticker.join();
+##         });
+##         return 0;
+##     }
+export run_blocking<T>(body: shared () => T): T {
+    var result = _TaskResult<T>();
+    if (!_async_on_worker() || !_async_worker()._running) {
+        result._run(body);
+        return result._value[0];
+    }
+    var worker = _async_worker();
+    var me = worker._current;
+    var proxy = worker._new_proxy();
+    worker._start_blocking(_SharedTask(() => {
+        result._run(body);
+    }, worker._index, proxy._id));
+    # Neither a cancel nor a deadline ends the wait: the body is running and
+    # holds `result`.
+    var deadline = me._deadline;
+    me._deadline = 0;
+    proxy._joiners.append(me);
+    while (!proxy._finished) {
+        worker._park();
+    }
+    me._deadline = deadline;
+    # Read the slot rather than call `_take()`: `return` of a call is
+    # rejected for `T = void`. The slot keeps its reference until `result`
+    # goes, as a copy would.
+    return result._value[0];
 }
 
 ## Lets every other ready task run before the calling task continues. Does

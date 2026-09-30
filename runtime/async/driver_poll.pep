@@ -140,6 +140,8 @@ extend _PollDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {}
 
+    _release(handle: io.SocketHandle) {}
+
     _doorbell(): _Doorbell {
         return _Doorbell(_DOORBELL_POLL, this._ring_descriptor, __null, this._ring_address);
     }

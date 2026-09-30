@@ -57,6 +57,30 @@ the next task that no worker has started yet. A task that computes without
 waiting still holds up the other tasks on its own worker (not the other
 workers), so a long computation should call `yield_now()` now and then.
 
+`async.spawn_on_each_worker(body)` starts one task per worker, each on its
+own worker, and returns them in worker order. It is how a server runs an
+accept loop on every worker (see [Sockets](#sockets)).
+
+## Blocking calls
+
+Some work would hold a worker up: a call that blocks in the operating system
+(reading a file, a C library that waits) or a long computation.
+`async.run_blocking<T>(body)` runs `body` on a separate thread and parks
+the calling task until it returns, so the worker keeps running its other
+tasks meanwhile:
+
+```pepper
+{{#include ../../examples/tasks-blocking.pep}}
+```
+
+The runtime keeps a pool of threads for these calls. It starts one when a
+call finds none idle, up to `RuntimeOptions().blocking_threads(count)` (64
+by default); past that, calls wait for a free one. As for `spawn`, `body`
+must be a `shared` function and `T` must be thread-safe. `body` always runs
+to the end: cancelling the task, or a `timeout` around the call, takes
+effect once the call has returned. Outside a task, `run_blocking` just
+calls `body`.
+
 ## Waiting
 
 `async.sleep(milliseconds)` puts a task to sleep and runs the others
@@ -86,6 +110,34 @@ the waiting differs:
 Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with `spawn_local` can share
 it, and each spawned task makes its own.
+
+### Accepting on every worker
+
+An `io.SharedTcpListener` is a listening socket that any thread can accept
+on. Give each worker an accept loop with `spawn_on_each_worker`; each
+connection goes to one of the waiting workers, and the stream it returns
+belongs to that worker:
+
+```pepper
+{{#include ../../examples/tasks-accept.pep}}
+```
+
+The listener has no `close()`, since other workers may be waiting on it.
+It closes when the last reference goes: here, once `run` has cancelled the
+loops.
+
+### Moving a stream to another worker
+
+`stream.into_transfer()` moves a connection out of a `TcpStream` into an
+`io.SocketTransfer`, a thread-safe token that a `shared` function can
+capture or a `Channel` can carry, and `io.TcpStream.adopt(transfer)` takes
+it out again on the receiving worker. The old stream is closed afterwards,
+only the first `adopt` gets the connection, and a token no one adopts
+closes the connection when it goes:
+
+```pepper
+{{#include ../../examples/tasks-transfer.pep}}
+```
 
 When no task is ready to run, a worker blocks until a socket is ready, the
 next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
@@ -158,14 +210,12 @@ Each worker has its own ready queue, timers and backend. Workers talk
 through a queue of messages each (a spawned task finished, or was
 cancelled) and a *doorbell* that ends a worker's wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
-completion with IOCP, and a pipe (a loopback UDP socket on Windows) with
-`poll()`.
+completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
+a second socket sends to) with `poll()`. `run_blocking`'s pool threads are
+plain threads that report back through the same messages.
 
 ## Current status
 
-- `run_blocking`, which runs work that would block the thread on a pool of
-  threads while the task waits, is planned, as are listeners that accept on
-  every worker and handing a socket to another worker.
 - Files block the thread on every platform. io_uring on Linux, and
   asynchronous files, come later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is

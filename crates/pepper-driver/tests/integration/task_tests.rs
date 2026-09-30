@@ -522,8 +522,203 @@ main(): int {
 }
 "##;
 
+const BLOCKING_PROGRAM: &str = r##"
+import async;
+import io;
+
+const inside = Atomic<long>(0);
+const most = Atomic<long>(0);
+const finished = Atomic<long>(0);
+const ticks = Atomic<long>(0);
+const served = Atomic<long>(0);
+
+# Blocks its thread for `milliseconds`, counting how many run at once.
+block_for(milliseconds: ulong): long {
+    var now = inside.fetch_add(1) + 1;
+    var seen = most.load();
+    while (now > seen && !most.compare_exchange(seen, now)) {
+        seen = most.load();
+    }
+    async.Thread.sleep(milliseconds);
+    inside.fetch_sub(1);
+    finished.fetch_add(1);
+    return milliseconds as long;
+}
+
+# Runs `count` blocking calls from as many tasks at once.
+block_many(count: int) {
+    var tasks = Array<async.Task<long>>();
+    var i = 0;
+    while (i < count) {
+        tasks.append(async.Task<long>.spawn_local(() => {
+            return async.run_blocking<long>(() => { return block_for(30); });
+        }));
+        i = i + 1;
+    }
+    for (var t in tasks) {
+        assert(t.join().value() == 30, "each blocking call returns its value");
+    }
+}
+
+main(): int {
+    async.Thread.current();
+    var before = _pep_live_allocs();
+
+    # One worker: it keeps running tasks while a pool thread blocks.
+    async.run_with(async.RuntimeOptions().workers(1), () => {
+        var ticker = async.Task<void>.spawn_local(() => {
+            while (ticks.load() < 5) {
+                async.sleep(2);
+                ticks.fetch_add(1);
+            }
+        });
+        assert(async.run_blocking<long>(() => { return block_for(100); }) == 100, "a value comes back");
+        assert(ticks.load() > 0, "the worker ran other tasks meanwhile");
+        ticker.join();
+
+        async.run_blocking<void>(() => { block_for(1); });
+
+        # Blocking inside a blocking call just calls the body.
+        var nested = async.run_blocking<long>(() => {
+            return async.run_blocking<long>(() => { return 3 as long; });
+        });
+        assert(nested == 3, "nested blocking call");
+
+        # Neither a cancel nor a timeout cuts the body short.
+        var cancelled = async.Task<long>.spawn_local(() => {
+            return async.run_blocking<long>(() => { return block_for(40); });
+        });
+        async.sleep(5);
+        cancelled.cancel();
+        assert(cancelled.join().error().is_cancelled(), "the task still reports the cancel");
+        with (var deadline = async.timeout(5)) {
+            assert(async.run_blocking<long>(() => { return block_for(40); }) == 40, "the body outlives the timeout");
+        }
+
+        # Calls run in parallel on the pool.
+        most.store(0);
+        block_many(8);
+        assert(most.load() >= 2, "blocking calls overlap");
+    });
+
+    # The pool never grows past its limit.
+    most.store(0);
+    async.run_with(async.RuntimeOptions().workers(2).blocking_threads(1), () => {
+        block_many(4);
+    });
+    assert(most.load() == 1, "one blocking thread at a time");
+
+    # `run` waits for a blocking call still running when the first task
+    # returns.
+    finished.store(0);
+    async.run_with(async.RuntimeOptions().workers(2), () => {
+        async.Task<long>.spawn_local(() => {
+            return async.run_blocking<long>(() => { return block_for(50); });
+        });
+        async.yield_now();
+    });
+    assert(finished.load() == 1, "the blocking call finished before run returned");
+
+    # Outside a task the body just runs.
+    assert(async.run_blocking<int>(() => { return 5; }) == 5, "outside run");
+
+    # Streams move between workers.
+    async.run_with(async.RuntimeOptions().workers(3), () => {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+        var client = async.spawn<long>(() => {
+            var total: long = 0;
+            var i = 0;
+            while (i < 6) {
+                var stream = io.TcpStream.connect_host("127.0.0.1", port).value();
+                # The last server closes without reading, so the peer may
+                # see a reset rather than an end.
+                stream.write_string("ping");
+                var reply = Array<u8>();
+                while (true) {
+                    var got = stream.read(reply, 64);
+                    if (got.is_err() || got.value() == 0) {
+                        break;
+                    }
+                }
+                total = total + reply.count() as long;
+                i = i + 1;
+            }
+            return total;
+        });
+        var handlers = Array<async.Task<void>>();
+        var i = 0;
+        while (i < 6) {
+            var (stream, peer) = listener.accept().value();
+            var transfer = stream.into_transfer();
+            assert(!stream.is_open(), "the stream gives its socket up");
+            i = i + 1;
+            if (i == 6) {
+                # Never adopted: closing the token closes the connection.
+                continue;
+            }
+            handlers.append(async.spawn<void>(() => {
+                var mine = io.TcpStream.adopt(transfer).value();
+                var buffer = Array<u8>();
+                mine.read_exact(buffer, 4).value();
+                mine.write_string("pong!").value();
+                assert(io.TcpStream.adopt(transfer).is_err(), "a token is adopted once");
+            }));
+        }
+        for (var handler in handlers) {
+            handler.join();
+        }
+        assert(client.join().value() == 25, "five replies, then a closed connection");
+        assert(io.TcpStream.adopt(io.TcpStream().into_transfer()).is_err(), "a closed stream has nothing to move");
+    });
+
+    # Every worker accepts on one shared listener.
+    async.run_with(async.RuntimeOptions().workers(4), () => {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+        var threads = async.Channel<ulong>();
+        var loops = async.spawn_on_each_worker(() => {
+            threads.send(async.Thread.current().id());
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
+                }
+                var (stream, peer) = accepted.value();
+                served.fetch_add(1);
+                stream.write_string("hi").value();
+            }
+        });
+        assert(loops.count() == 4, "one loop per worker");
+        var i = 0;
+        while (i < 20) {
+            var client = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array<u8>();
+            while (client.read(reply, 64).value() > 0) {
+            }
+            assert(reply.count() == 2, "served");
+            i = i + 1;
+        }
+        var seen = Array<ulong>();
+        while (seen.count() < 4) {
+            var id = threads.receive().value();
+            for (var other in seen) {
+                assert(other != id, "each loop on its own worker");
+            }
+            seen.append(id);
+        }
+        # Returning cancels the loops; the last one closes the listener.
+    });
+    assert(served.load() == 20, "every connection accepted once");
+
+    assert(_pep_live_allocs() == before, "a run frees everything it allocated");
+    print("ok");
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM)]
 }
 
 #[test]
@@ -567,6 +762,17 @@ fn spawned_tasks_run_on_any_worker() {
 fn spawned_tasks_run_on_any_worker_with_poll() {
     let source = SPAWN_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
     assert_runs("task_spawn_poll", &source);
+}
+
+#[test]
+fn blocking_calls_and_shared_sockets() {
+    assert_runs("task_blocking", BLOCKING_PROGRAM);
+}
+
+#[test]
+fn blocking_calls_and_shared_sockets_with_poll() {
+    let source = BLOCKING_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
+    assert_runs("task_blocking_poll", &source);
 }
 
 #[test]

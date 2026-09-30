@@ -10,8 +10,9 @@
 #   tasks from `spawn` that no worker has started yet, and the stop flag.
 # - `_Inbox`, one per worker: messages from other workers (a
 #   `Channel<ulong>` of `id * 4 + kind`: a task spawned here finished
-#   elsewhere, or a task running here was cancelled elsewhere), and the
-#   worker's doorbell, which ends its wait in the driver.
+#   elsewhere, or a task running here was cancelled elsewhere), tasks from
+#   `spawn_on_each_worker` that must run on this worker, and the worker's
+#   doorbell, which ends its wait in the driver.
 # - `_SharedTask`, one per `spawn`: the body, where to report when it
 #   finishes (the spawning worker and the stand-in task there that `join`
 #   waits on), which worker runs it once one does, and its cancel flag.
@@ -29,6 +30,13 @@
 # the inbox first and then rings the doorbell unless `_notified` was already
 # set; a ring is remembered until the next wait. So a message is either seen
 # by that last look or ends the wait.
+#
+# Blocking calls: `run_blocking` hands its body to a pool of plain threads
+# that the runtime starts as needed, up to `RuntimeOptions.blocking_threads`,
+# and parks the calling task. A pool thread runs the body and sends the
+# calling worker a `_MESSAGE_COMPLETE` for the task's stand-in, as a worker
+# running a spawned task does. Pool threads wait for more work until the
+# runtime ends.
 #
 # Stopping: when the first task returns, its worker sets `_stopping` and
 # rings every worker. Each worker cancels its tasks, keeps running until
@@ -51,6 +59,8 @@ export const _MESSAGE_CANCEL: ulong = 1;
 export struct _Inbox {
     # `id * 4 + kind` (a `_MESSAGE_*` kind) for each message.
     const _messages: Channel<ulong>;
+    # Spawned tasks that must run on this worker.
+    const _pinned: Channel<_SharedTask>;
     # 1 once the doorbell was rung since the worker last prepared to block.
     const _notified: Atomic<int>;
     # 1 while the worker is about to block or blocks in its driver.
@@ -59,6 +69,7 @@ export struct _Inbox {
 
     construct(doorbell: _Doorbell) {
         _messages = Channel<ulong>();
+        _pinned = Channel<_SharedTask>();
         _notified = Atomic<int>(0);
         _sleeping = Atomic<int>(0);
         _doorbell = doorbell;
@@ -158,8 +169,15 @@ export struct _Runtime {
     const _stopping: Atomic<int>;
     # How many workers are still running tasks.
     const _active: Atomic<ulong>;
+    # Bodies from `run_blocking` for the pool threads.
+    const _blocking: Channel<_SharedTask>;
+    # How many pool threads are waiting for a body, and how many there are,
+    # at most `_blocking_limit`.
+    const _blocking_idle: Atomic<ulong>;
+    const _blocking_threads: Atomic<ulong>;
+    const _blocking_limit: ulong;
 
-    construct(count: ulong) {
+    construct(count: ulong, blocking_limit: ulong) {
         _count = count;
         _inboxes = _pep_malloc(count * 8);
         _async_zero(_inboxes, count * 8);
@@ -167,6 +185,10 @@ export struct _Runtime {
         _queue = Channel<_SharedTask>();
         _stopping = Atomic<int>(0);
         _active = Atomic<ulong>(count);
+        _blocking = Channel<_SharedTask>();
+        _blocking_idle = Atomic<ulong>(0);
+        _blocking_threads = Atomic<ulong>(0);
+        _blocking_limit = blocking_limit;
     }
 
     destruct {
@@ -206,6 +228,13 @@ export struct _Runtime {
         }
     }
 
+    # Queues a spawned task that must run on worker `index`, and wakes it.
+    _push_to(index: ulong, task: _SharedTask) {
+        var inbox = _inboxes[index];
+        inbox._pinned.send(task);
+        inbox._ring();
+    }
+
     # Tells every worker to stop.
     _stop() {
         _stopping.store(1);
@@ -216,12 +245,60 @@ export struct _Runtime {
         }
     }
 
-    # A worker has run its last task: waits until every worker has.
-    _leave() {
+    # Queues a body from `run_blocking` for the pool. Returns true when no
+    # pool thread is idle and there is room for another, which the caller
+    # then starts (see `_async_blocking_main`).
+    _block(job: _SharedTask): bool {
+        _blocking.send(job);
+        while (true) {
+            var idle = _blocking_idle.load();
+            if (idle == 0) {
+                break;
+            }
+            if (_blocking_idle.compare_exchange(idle, idle - 1)) {
+                return false;
+            }
+        }
+        while (true) {
+            var started = _blocking_threads.load();
+            if (started >= _blocking_limit) {
+                return false;
+            }
+            if (_blocking_threads.compare_exchange(started, started + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    # A worker has run its last task: waits until every worker has. A task
+    # pinned to it meanwhile (by a worker still running) goes to the shared
+    # queue, where a running worker takes it.
+    _leave(inbox: _Inbox) {
         _active.fetch_sub(1);
         while (_active.load() > 0) {
-            _async_sys_sleep(1);
+            var late = inbox._pinned.try_receive();
+            if (late.is_ok()) {
+                _push(late.value());
+            } else {
+                _async_sys_sleep(1);
+            }
         }
+    }
+}
+
+# The loop of a pool thread: runs bodies from `run_blocking` and reports
+# each to the worker that queued it, until the runtime closes the queue.
+export _async_blocking_main(runtime: _Runtime) {
+    while (true) {
+        var next = runtime._blocking.receive();
+        if (next.is_err()) {
+            return;
+        }
+        var job = next.value();
+        job._body();
+        runtime._inbox(job._owner)._send(job._proxy, _MESSAGE_COMPLETE);
+        runtime._blocking_idle.fetch_add(1);
     }
 }
 

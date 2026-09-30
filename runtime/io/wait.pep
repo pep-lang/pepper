@@ -47,6 +47,15 @@ export trait _IoWaiter {
     # `handle` is about to be closed: forget it, and wake any task waiting
     # on it.
     _forget(handle: SocketHandle);
+
+    # `handle` stays open but is moving to another thread: stop watching
+    # it, and wake any task waiting on it.
+    _release(handle: SocketHandle);
+
+    # Stops watching `handle` if no task on this thread waits on it. For a
+    # socket several threads wait on, which may be closed on any of them
+    # (see `SharedTcpListener`): a thread watches it only while it waits.
+    _release_idle(handle: SocketHandle);
 }
 
 # One more than the key whose value is a malloc'd slot holding this
@@ -110,6 +119,22 @@ export _io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
         }
     }
     return _io_sys_socket_poll(h, interest);
+}
+
+# Tells this thread's waiter that `h` is moving to another thread.
+export _io_socket_release(h: SocketHandle) {
+    var slot = _io_waiter_slot();
+    if (slot != __null) {
+        slot[0]._release(h);
+    }
+}
+
+# Tells this thread's waiter to stop watching `h` unless a task waits on it.
+export _io_socket_release_idle(h: SocketHandle) {
+    var slot = _io_waiter_slot();
+    if (slot != __null) {
+        slot[0]._release_idle(h);
+    }
 }
 
 # Tells this thread's waiter that `h` is about to be closed.

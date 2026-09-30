@@ -98,7 +98,11 @@ the process. The write returns an error instead.
 A socket closes when the last reference to it goes, like a `File`, and
 `close()` closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a [channel](threads.md#channels) to another
-thread. Use it on the thread that made it.
+thread. Use it on the thread that made it, or move it: `into_transfer()`
+turns a `TcpStream` into a thread-safe `SocketTransfer` that
+`TcpStream.adopt` takes on another thread, and a `SharedTcpListener` is a
+listener any thread can accept on (see
+[Tasks](tasks.md#accepting-on-every-worker)).
 
 On POSIX a listener sets `SO_REUSEADDR`, so a server can restart right
 away. On Windows it does not, because there that option would let another

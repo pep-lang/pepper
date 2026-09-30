@@ -123,6 +123,107 @@ Connections already accepted stay open.
 **Returns**
 - an Ok result on success or when already closed; the platform error when closing fails
 
+## SharedTcpListener
+
+```pepper
+[Shared] struct SharedTcpListener
+```
+
+A TCP listening socket that any thread can accept connections on: the
+thread-safe counterpart of `TcpListener`, for servers that accept on every
+worker of `async.run` at once (see `async.spawn_on_each_worker`). Each
+connection goes to one of the threads waiting in `accept`, and the stream
+it returns belongs to that thread.
+
+A `shared` function may capture it. There is no `close()`, since another
+thread may be waiting on it: the socket closes when the last reference
+goes, which, for accept loops in tasks, is once `async.run` has cancelled
+them (`accept` then fails and the loop returns).
+
+**See also**
+- `TcpListener`
+
+**Example**
+```pepper
+    import async;
+    import io;
+
+    main(): int {
+        async.run(() => {
+            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+            async.spawn_on_each_worker(() => {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    var (stream, peer) = accepted.value();
+                    stream.write_string("hello");
+                }
+            });
+        });
+        return 0;
+    }
+```
+
+### Constructor
+
+#### SharedTcpListener()
+
+```pepper
+construct(handle: SocketHandle)
+```
+
+Wraps a listening socket. Use `SharedTcpListener.bind`.
+
+**Parameters**
+- `handle` — the listening socket, or an invalid handle for none
+
+### Static methods
+
+#### bind
+
+```pepper
+static bind(address: SocketAddress): IoResult<SharedTcpListener>
+```
+
+Opens a TCP socket bound to `address` and starts listening on it, as
+`TcpListener.bind` does.
+
+**Parameters**
+- `address` — the local address to listen on (port 0 for any free port)
+
+**Returns**
+- the listening socket, or the errors `TcpListener.bind` returns
+
+### Methods
+
+#### accept
+
+```pepper
+accept(): IoResult<(TcpStream, SocketAddress)>
+```
+
+Waits for the next incoming connection and returns it, as
+`TcpListener.accept` does. Several threads may wait at once; each
+connection wakes one of them (or, on some systems, several, and the
+rest keep waiting).
+
+**Returns**
+- the connected stream, owned by the calling thread, and the peer's address; an error when the waiting task is cancelled, or another platform error
+
+#### local_address
+
+```pepper
+local_address(): IoResult<SocketAddress>
+```
+
+Returns the address the listener is bound to, with the port the
+system chose when it was bound to port 0.
+
+**Returns**
+- the local address, or a platform error
+
 ## TcpStream
 
 ```pepper
@@ -212,6 +313,22 @@ addresses that accepts, trying them in order.
         print("nothing is listening on 8080");
     }
 ```
+
+#### adopt
+
+```pepper
+static adopt(transfer: SocketTransfer): IoResult<TcpStream>
+```
+
+Takes the connection out of `transfer` (see `into_transfer`) into a
+new stream on the calling thread. Only the first `adopt` of a token
+gets the connection.
+
+**Parameters**
+- `transfer` — the token from `into_transfer`
+
+**Returns**
+- the stream; an error when the token is empty (already adopted, or made from a closed stream)
 
 ### Methods
 
@@ -363,6 +480,39 @@ Returns the peer's address.
 **Returns**
 - the peer's address; an error when the stream is closed, or another platform error
 
+#### into_transfer
+
+```pepper
+into_transfer(): SocketTransfer
+```
+
+Moves the connection out of this stream, into a token another thread
+can take it from with `TcpStream.adopt`. The stream is closed
+afterwards (`is_open()` is false), and a task waiting on it on this
+worker wakes with an error.
+
+Inside `async.run` a socket belongs to the worker that uses it; this
+is how a task hands a connection to a task on another worker, such as
+one started with `async.spawn`.
+
+**Returns**
+- the token; for a closed stream, one that `adopt` fails on
+
+**Example**
+```pepper
+    import async;
+    import io;
+
+    serve(listener: io.TcpListener) {
+        var (stream, peer) = listener.accept().value();
+        var transfer = stream.into_transfer();
+        async.spawn<void>(() => {
+            var mine = io.TcpStream.adopt(transfer).value();
+            mine.write_string("hello from another worker");
+        });
+    }
+```
+
 #### close
 
 ```pepper
@@ -373,6 +523,32 @@ Closes the connection now. Closing a closed stream does nothing.
 
 **Returns**
 - an Ok result on success or when already closed; the platform error when closing fails
+
+## SocketTransfer
+
+```pepper
+[Shared] struct SocketTransfer
+```
+
+A TCP connection on its way from one thread to another: made by
+`TcpStream.into_transfer`, taken by `TcpStream.adopt`. Unlike a
+`TcpStream`, it is thread-safe, so a `shared` function (a body for
+`async.spawn` or `Thread.spawn`) can capture it and a `Channel` can carry
+it. If no one adopts it, the connection is closed when the last
+reference goes.
+
+### Constructor
+
+#### SocketTransfer()
+
+```pepper
+construct(handle: SocketHandle)
+```
+
+Wraps a socket handle. `TcpStream.into_transfer` makes these; use it.
+
+**Parameters**
+- `handle` — the socket, or an invalid handle for an empty token
 
 ## UdpSocket
 

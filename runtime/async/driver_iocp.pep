@@ -224,6 +224,12 @@ extend _IocpDriver with _Driver {
         }
     }
 
+    # AFD polls do not tie the socket to this port, so dropping the pending
+    # ones is all a move needs.
+    _release(handle: io.SocketHandle) {
+        this._forget(handle);
+    }
+
     _doorbell(): _Doorbell {
         return _Doorbell(_DOORBELL_IOCP, 0, this._port, __null);
     }

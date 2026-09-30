@@ -101,6 +101,16 @@ extend _KqueueDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {}
 
+    _release(handle: io.SocketHandle) {
+        __ptr<u8> changes = _pep_malloc(64);
+        _async_kqueue_change(changes, 0, handle, _KQUEUE_FILTER_READ);
+        _async_kqueue_change(changes, 1, handle, _KQUEUE_FILTER_WRITE);
+        ((changes + 10) as __ptr<u16>)[0] = 2;  # EV_DELETE
+        ((changes + 42) as __ptr<u16>)[0] = 2;
+        _async_kqueue_call(this._queue, changes, 2, __null, 0, -1);
+        _pep_free(changes);
+    }
+
     _doorbell(): _Doorbell {
         return _Doorbell(_DOORBELL_KQUEUE, this._queue, __null, __null);
     }

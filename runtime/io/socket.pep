@@ -15,6 +15,7 @@ import "socket_windows";
 import "sys_posix";
 import "sys_windows";
 import "types";
+import "wait";
 
 # The listen backlog: how many connections the system queues before
 # `accept` takes them (the system may cap it lower).
@@ -219,6 +220,114 @@ export struct TcpListener {
         var h = _handle;
         _handle = _io_sys_socket_invalid();
         return _io_sys_socket_close(h);
+    }
+}
+
+## A TCP listening socket that any thread can accept connections on: the
+## thread-safe counterpart of `TcpListener`, for servers that accept on every
+## worker of `async.run` at once (see `async.spawn_on_each_worker`). Each
+## connection goes to one of the threads waiting in `accept`, and the stream
+## it returns belongs to that thread.
+##
+## A `shared` function may capture it. There is no `close()`, since another
+## thread may be waiting on it: the socket closes when the last reference
+## goes, which, for accept loops in tasks, is once `async.run` has cancelled
+## them (`accept` then fails and the loop returns).
+##
+## @example
+##     import async;
+##     import io;
+##
+##     main(): int {
+##         async.run(() => {
+##             var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+##             async.spawn_on_each_worker(() => {
+##                 while (true) {
+##                     var accepted = listener.accept();
+##                     if (accepted.is_err()) {
+##                         return;
+##                     }
+##                     var (stream, peer) = accepted.value();
+##                     stream.write_string("hello");
+##                 }
+##             });
+##         });
+##         return 0;
+##     }
+## @see TcpListener
+[Shared]
+export struct SharedTcpListener {
+    # The socket (`SocketHandle` widened to `long`; -1 for none).
+    const _handle: long;
+
+    ## Wraps a listening socket. Use `SharedTcpListener.bind`.
+    ##
+    ## @param handle the listening socket, or an invalid handle for none
+    construct(handle: SocketHandle) {
+        _handle = handle as long;
+    }
+
+    ## Closes the socket when the last reference goes.
+    destruct {
+        var h = _handle as SocketHandle;
+        if (_io_sys_socket_valid(h)) {
+            _io_sys_socket_close(h);
+        }
+    }
+
+    ## Opens a TCP socket bound to `address` and starts listening on it, as
+    ## `TcpListener.bind` does.
+    ##
+    ## @param address the local address to listen on (port 0 for any free
+    ##   port)
+    ## @returns the listening socket, or the errors `TcpListener.bind`
+    ##   returns
+    static bind(address: SocketAddress): IoResult<SharedTcpListener> {
+        var bound = TcpListener.bind(address);
+        if (bound.is_err()) {
+            return IoResult<SharedTcpListener>.err(bound.error());
+        }
+        var listener = bound.value();
+        var h = listener._handle;
+        listener._handle = _io_sys_socket_invalid();
+        return IoResult<SharedTcpListener>.ok(SharedTcpListener(h));
+    }
+
+    ## Waits for the next incoming connection and returns it, as
+    ## `TcpListener.accept` does. Several threads may wait at once; each
+    ## connection wakes one of them (or, on some systems, several, and the
+    ## rest keep waiting).
+    ##
+    ## @returns the connected stream, owned by the calling thread, and the
+    ##   peer's address; an error when the waiting task is cancelled, or
+    ##   another platform error
+    accept(): IoResult<(TcpStream, SocketAddress)> {
+        var h = _handle as SocketHandle;
+        if (!_io_sys_socket_valid(h)) {
+            return IoResult<(TcpStream, SocketAddress)>.err(_io_socket_closed_error());
+        }
+        var accepted = _io_sys_socket_accept(h);
+        # Another thread may close the socket once this one stops using it.
+        _io_socket_release_idle(h);
+        if (accepted.is_err()) {
+            return IoResult<(TcpStream, SocketAddress)>.err(accepted.error());
+        }
+        var (handle, peer) = accepted.value();
+        var stream = TcpStream();
+        stream._handle = handle;
+        return IoResult<(TcpStream, SocketAddress)>.ok((stream, peer));
+    }
+
+    ## Returns the address the listener is bound to, with the port the
+    ## system chose when it was bound to port 0.
+    ##
+    ## @returns the local address, or a platform error
+    local_address(): IoResult<SocketAddress> {
+        var h = _handle as SocketHandle;
+        if (!_io_sys_socket_valid(h)) {
+            return IoResult<SocketAddress>.err(_io_socket_closed_error());
+        }
+        return _io_sys_socket_local_address(h);
     }
 }
 
@@ -491,6 +600,54 @@ export struct TcpStream {
         return _io_sys_socket_peer_address(_handle);
     }
 
+    ## Moves the connection out of this stream, into a token another thread
+    ## can take it from with `TcpStream.adopt`. The stream is closed
+    ## afterwards (`is_open()` is false), and a task waiting on it on this
+    ## worker wakes with an error.
+    ##
+    ## Inside `async.run` a socket belongs to the worker that uses it; this
+    ## is how a task hands a connection to a task on another worker, such as
+    ## one started with `async.spawn`.
+    ##
+    ## @returns the token; for a closed stream, one that `adopt` fails on
+    ## @example
+    ##     import async;
+    ##     import io;
+    ##
+    ##     serve(listener: io.TcpListener) {
+    ##         var (stream, peer) = listener.accept().value();
+    ##         var transfer = stream.into_transfer();
+    ##         async.spawn<void>(() => {
+    ##             var mine = io.TcpStream.adopt(transfer).value();
+    ##             mine.write_string("hello from another worker");
+    ##         });
+    ##     }
+    into_transfer(): SocketTransfer {
+        var h = _handle;
+        _handle = _io_sys_socket_invalid();
+        if (_io_sys_socket_valid(h)) {
+            _io_socket_release(h);
+        }
+        return SocketTransfer(h);
+    }
+
+    ## Takes the connection out of `transfer` (see `into_transfer`) into a
+    ## new stream on the calling thread. Only the first `adopt` of a token
+    ## gets the connection.
+    ##
+    ## @param transfer the token from `into_transfer`
+    ## @returns the stream; an error when the token is empty (already
+    ##   adopted, or made from a closed stream)
+    static adopt(transfer: SocketTransfer): IoResult<TcpStream> {
+        var h = transfer._take();
+        if (!_io_sys_socket_valid(h)) {
+            return IoResult<TcpStream>.err(_io_socket_closed_error());
+        }
+        var stream = TcpStream();
+        stream._handle = h;
+        return IoResult<TcpStream>.ok(stream);
+    }
+
     ## Closes the connection now. Closing a closed stream does nothing.
     ##
     ## @returns an Ok result on success or when already closed; the platform
@@ -502,6 +659,39 @@ export struct TcpStream {
         var h = _handle;
         _handle = _io_sys_socket_invalid();
         return _io_sys_socket_close(h);
+    }
+}
+
+## A TCP connection on its way from one thread to another: made by
+## `TcpStream.into_transfer`, taken by `TcpStream.adopt`. Unlike a
+## `TcpStream`, it is thread-safe, so a `shared` function (a body for
+## `async.spawn` or `Thread.spawn`) can capture it and a `Channel` can carry
+## it. If no one adopts it, the connection is closed when the last
+## reference goes.
+[Shared]
+export struct SocketTransfer {
+    # The socket as a number (`SocketHandle` widened to `long`), or -1 once
+    # taken; `INVALID_SOCKET` on Windows is -1 too.
+    const _handle: Atomic<long>;
+
+    ## Wraps a socket handle. `TcpStream.into_transfer` makes these; use it.
+    ##
+    ## @param handle the socket, or an invalid handle for an empty token
+    construct(handle: SocketHandle) {
+        _handle = Atomic<long>(handle as long);
+    }
+
+    ## Closes the connection if no one adopted it.
+    destruct {
+        var h = _take();
+        if (_io_sys_socket_valid(h)) {
+            _io_sys_socket_close(h);
+        }
+    }
+
+    # Takes the handle out, leaving the token empty.
+    _take(): SocketHandle {
+        return _handle.exchange(-1) as SocketHandle;
     }
 }
 

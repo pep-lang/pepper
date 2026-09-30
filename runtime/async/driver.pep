@@ -62,6 +62,10 @@ export trait _Driver {
     # `handle` is about to be closed.
     _forget(handle: io.SocketHandle);
 
+    # `handle` stays open but moves to another worker (see
+    # `io.TcpStream.into_transfer`): stops watching it.
+    _release(handle: io.SocketHandle);
+
     # The doorbell that ends this driver's waits early, from any thread.
     _doorbell(): _Doorbell;
 

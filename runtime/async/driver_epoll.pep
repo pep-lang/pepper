@@ -110,6 +110,10 @@ extend _EpollDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {}
 
+    _release(handle: io.SocketHandle) {
+        _async_epoll_remove(this._epoll, handle);
+    }
+
     _doorbell(): _Doorbell {
         return _Doorbell(_DOORBELL_EVENTFD, this._bell, __null, __null);
     }
@@ -147,6 +151,14 @@ _async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     var rc = epoll_ctl(epoll as int, 1, handle, event);  # EPOLL_CTL_ADD
     _pep_free(event);
     return rc == 0;
+}
+
+# Stops watching `handle`.
+[Target(OS(Linux))]
+_async_epoll_remove(epoll: long, handle: io.SocketHandle) {
+    __ptr<u8> event = _pep_malloc(16);          # ignored, but not null for kernels before 2.6.9
+    epoll_ctl(epoll as int, 2, handle, event);  # EPOLL_CTL_DEL
+    _pep_free(event);
 }
 
 # A non-blocking eventfd watched by `epoll` under the doorbell key, or -1.
@@ -246,6 +258,9 @@ _async_epoll_events(): __ptr<u8> {
 _async_epoll_add(epoll: long, handle: io.SocketHandle): bool {
     return false;
 }
+
+[Target(!OS(Linux))]
+_async_epoll_remove(epoll: long, handle: io.SocketHandle) {}
 
 [Target(!OS(Linux))]
 _async_epoll_wait(epoll: long, events: __ptr<u8>, timeout: long): ulong {

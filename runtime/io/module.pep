@@ -11,7 +11,7 @@
 ## - [File](io-file.md): opening, reading, and writing files, and whole-file helpers
 ## - [Directory](io-directory.md): listing, creating, and removing directories
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
-## - [Sockets](io-socket.md): `TcpListener`, `TcpStream`, and `UdpSocket`
+## - [Sockets](io-socket.md): `TcpListener`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 ## - [Errors and platform types](io-types.md): `IoError`, `IoResult`, and handle types
 ##
 ## @example
@@ -59,7 +59,9 @@ export SocketAddress;
 export resolve;
 
 export TcpListener;
+export SharedTcpListener;
 export TcpStream;
+export SocketTransfer;
 export UdpSocket;
 
 # For the async module's task runtime only (see wait.pep); not public API.

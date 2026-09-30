@@ -12,7 +12,7 @@
 ## - [Channel](async-channel.md): `Channel<T>`, a queue that carries values between threads, and its `ChannelIterator<T>`
 ## - [Mutex](async-mutex.md): `Mutex<T>`, the `MutexGuard<T>` a `with` block holds, and `Condition<T>`
 ## - [Once](async-once.md): `Once`, which runs a function once, and `Lazy<T>`, a value built on first use
-## - [Tasks](async-task.md): `run`, `Task<T>`, `spawn`, `sleep`, `yield_now`, `timeout` and cancellation, for many tasks taking turns on a few worker threads and parking on sockets
+## - [Tasks](async-task.md): `run`, `Task<T>`, `spawn`, `spawn_on_each_worker`, `run_blocking`, `sleep`, `yield_now`, `timeout` and cancellation, for many tasks taking turns on a few worker threads and parking on sockets
 ## - [I/O backends](async-driver.md): `Backend`, how a runtime waits for sockets
 ##
 ## Only thread-safe values can be shared between threads: numbers, `shared`
@@ -83,6 +83,8 @@ export RuntimeOptions;
 export run;
 export run_with;
 export spawn;
+export run_blocking;
+export spawn_on_each_worker;
 export yield_now;
 export sleep;
 export is_cancelled;

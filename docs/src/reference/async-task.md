@@ -92,7 +92,8 @@ construct()
 ```
 
 Creates the default options: one worker per logical CPU, 256 KiB of
-stack per task, and the system's best I/O backend.
+stack per task, the system's best I/O backend, and up to 64 threads
+for `run_blocking`.
 
 ### Methods
 
@@ -110,6 +111,26 @@ from `spawn` run on whichever worker is free. The default is
 
 **Parameters**
 - `count` — the number of workers
+
+**Returns**
+- these options
+
+**Panics**
+- if `count` is 0
+
+#### blocking_threads
+
+```pepper
+blocking_threads(count: ulong): RuntimeOptions
+```
+
+Sets how many threads `run_blocking` may start. The runtime starts
+them one at a time, when a blocking call finds none idle, and keeps
+them until `run_with` returns. Once there are `count`, further calls
+wait for one of them to be free. The default is 64.
+
+**Parameters**
+- `count` — the most threads for blocking calls
 
 **Returns**
 - these options
@@ -352,6 +373,108 @@ cancelling work as for `spawn_local`.
             var low = async.spawn<long>(() => { return sum(0, 500000); });
             var high = async.spawn<long>(() => { return sum(500000, 1000000); });
             print(low.join().value() + high.join().value());   # 499999500000
+        });
+        return 0;
+    }
+```
+
+## spawn_on_each_worker
+
+```pepper
+spawn_on_each_worker(body: shared () => void): Array<Task<void>>
+```
+
+Starts one task on every worker, each running `body`, and returns them in
+worker order. Use it to give each worker its own copy of a loop, such as
+a server's accept loop on an `io.SharedTcpListener`, so that every worker
+takes part. Each task runs on its own worker, the calling task's worker
+included; they are otherwise like tasks from `spawn`, and `body` must be
+a `shared` function.
+
+**Parameters**
+- `body` — the code each worker runs
+
+**Returns**
+- one task per worker, the first on the first worker
+
+**Panics**
+- outside `run`
+
+**Example**
+```pepper
+    import async;
+    import io;
+
+    main(): int {
+        async.run(() => {
+            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+            var loops = async.spawn_on_each_worker(() => {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    var (stream, peer) = accepted.value();
+                    async.Task<void>.spawn_local(() => {
+                        stream.write_string("hello");
+                    });
+                }
+            });
+            for (var loop in loops) {
+                loop.join();
+            }
+        });
+        return 0;
+    }
+```
+
+## run_blocking
+
+```pepper
+run_blocking<T>(body: shared () => T): T
+```
+
+Runs `body` on a separate thread and returns what it returns, parking
+the calling task meanwhile so the worker keeps running other tasks. Use it
+for work that would otherwise hold the worker up: a call that blocks in
+the operating system (reading a file, resolving a host name, a C library
+that waits) or a long computation.
+
+The runtime keeps a pool of threads for these calls, started as needed up
+to `RuntimeOptions.blocking_threads`. `body` runs on one of them, so it
+must be a `shared` function and `T` must be thread-safe, as for `spawn`.
+On a pool thread, sockets block the thread, and `sleep` and the other task
+functions behave as outside `run`.
+
+`body` always runs to the end: cancelling the calling task, or a `timeout`
+around the call expiring, takes effect once `run_blocking` has returned.
+Outside a task, `run_blocking` just calls `body`.
+
+**Type parameters**
+- `T` — the type of the body's result, which must be thread-safe; `void` when there is none
+
+**Parameters**
+- `body` — the blocking code
+
+**Returns**
+- what `body` returns
+
+**Example**
+```pepper
+    import async;
+
+    main(): int {
+        async.run(() => {
+            var ticker = async.Task<void>.spawn_local(() => {
+                async.sleep(10);
+                print("the worker kept running");
+            });
+            var answer = async.run_blocking<int>(() => {
+                async.Thread.sleep(50);   # blocks a pool thread, not the worker
+                return 42;
+            });
+            print(answer);
+            ticker.join();
         });
         return 0;
     }
