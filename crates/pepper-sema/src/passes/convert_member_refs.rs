@@ -129,7 +129,12 @@ pub fn convert_member_refs(module: &mut Module) {
                 .filter(|f| f.kind == Kind::Field)
                 .cloned()
                 .collect();
-            let methods: Vec<String> = st.method_members.iter().map(|m| m.name.clone()).collect();
+            // An overloaded method is also called by its set's name.
+            let methods: Vec<String> = st
+                .method_members
+                .iter()
+                .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
+                .collect();
             (fields, methods)
         };
         let st_name = module.structs[st_idx].name.clone();

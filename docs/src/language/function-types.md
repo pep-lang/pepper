@@ -36,8 +36,9 @@ function's type. Calling a function value calls the function:
 ```
 
 - `var f = square;` infers `f`'s type, `(int) => int`, from the function.
-  An [overloaded](overloading.md#overloaded-functions-as-values) name needs
-  a declared type instead, which picks the member.
+  An [overloaded](overloading.md#overloaded-functions-as-values) name, or
+  an overloaded method (`p.move`), needs a declared type instead, which
+  picks the member.
 - A function-typed variable can be reassigned to any function of the same type.
 - A parameter of function type, such as `f: (int) => int`, lets the caller pass
   in the behavior. Generic functions can take function parameters too.

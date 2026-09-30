@@ -9,8 +9,10 @@ best:
 ```
 
 The functions of one name in one file are an **overload set**, and each is a
-member of it. Only free functions overload so far: methods, constructors and
-operators do not (see [What is not supported yet](#what-is-not-supported-yet)).
+member of it. [Methods](#methods-and-operators) of one name in a struct are a
+set too, and so are its static methods and its operators. Constructors and
+extension methods do not overload yet (see
+[What is not supported yet](#what-is-not-supported-yet)).
 
 ## Declaring overloads
 
@@ -121,6 +123,38 @@ An [override](generics.md#overriding-a-generic-function-for-one-type) such
 as `describe<Point>(p: Point)` belongs to the generic member with the same
 number of type parameters and parameters; it is not a member itself.
 
+## Methods and operators
+
+A struct's methods of one name are an overload set, and a call picks among
+them the same way, whether it is written `m.add(x)`, `this.add(x)`, or
+`add(x)` inside a method. Static methods overload among themselves
+(`Money.of(250)`), and operators are methods, so `+(Money)` and `+(int)` can
+coexist:
+
+```pepper
+{{#include ../../examples/overloading-methods.pep}}
+```
+
+- **A static method and an instance method may not share a name**, since a
+  bare `of(x)` inside a method could mean either:
+
+  ```text
+  main.pep:3:12: error: static method 'get' cannot share its name with an instance method of 'S'
+      3 |     static get(x: String): int { return 2; }
+        |            ^~~
+  main.pep:2:5: note: previous declaration is here
+      2 |     get(x: int): int { return 1; }
+        |     ^~~
+  ```
+
+- **In a generic struct**, each specialization resolves its own calls: in
+  `Holder<int>`, `has(x: T)` takes an `int`. Two members that become the
+  same after substitution (`has(x: T)` and `has(x: String)` in
+  `Holder<String>`) are only an error when a call cannot tell them apart.
+- **A method as a value** (`m.add`, `Money.of`) picks its member from the
+  expected function type, like a free function below; without one the
+  error is `cannot infer the type of 'f' from overloaded method 'Money.add'`.
+
 ## Overloaded functions as values
 
 The name of an overload set, written without a call, is a value only where
@@ -156,10 +190,12 @@ An expected type that matches no member is `address of overloaded function
 
 ## What is not supported yet
 
-- **Methods, constructors and operators** do not overload: a struct has one
-  method of each name and one constructor. Use default arguments, a
-  [static method](structs.md#static-methods) for each alternative, or a free
-  function.
+- **Constructors** do not overload: a struct has one constructor. Use
+  default arguments, or a [static method](structs.md#static-methods) for each
+  alternative.
+- **Extension methods** do not join a struct's overload set: an extension
+  method with the name of one of the struct's methods is not a new member.
+- **Unary operators** cannot be declared at all yet.
 - **`extern` functions** do not overload.
 - **Overloads across files** do not merge: a file's own functions of a name
   hide an imported set of that name.

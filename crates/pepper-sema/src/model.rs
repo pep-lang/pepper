@@ -775,6 +775,10 @@ pub struct Module {
     /// its members' names (`scale$1`, `scale$2`) in declaration order.
     /// Filled by `overloads::name_overloads`.
     pub overload_sets: std::collections::BTreeMap<String, Vec<String>>,
+    /// Overloaded methods: struct name → set name (`get`, `+`) → its
+    /// members' names (`get$1`, `get$2`). A specialization's methods keep
+    /// their base's member names. Filled by `overloads::name_overloads`.
+    pub method_overload_sets: std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<String>>>,
     /// Each call or function value that named an overload set: its callee's
     /// location and the member it resolved to, for the language server.
     pub call_targets: Vec<(Loc, String)>,

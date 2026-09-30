@@ -34,7 +34,12 @@ impl StructTable {
                     .iter()
                     .map(|f| (f.name.clone(), f.ty.clone()))
                     .collect(),
-                methods: st.method_members.iter().map(|m| m.name.clone()).collect(),
+                // An overloaded method also answers to its set's name (`+`).
+                methods: st
+                    .method_members
+                    .iter()
+                    .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
+                    .collect(),
                 returns: st
                     .method_members
                     .iter()

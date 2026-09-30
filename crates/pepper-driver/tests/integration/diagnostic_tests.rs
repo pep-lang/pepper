@@ -1344,3 +1344,38 @@ fn c_function_pointer_type_with_a_struct() {
          \x20     |            ^~~~~~~~~~~~~~~~~~~~~~"
     );
 }
+
+#[test]
+fn overloaded_method_diagnostics() {
+    let main = "struct S {\n    get(x: long): int { return 1; }\n    get(x: short): int { return 2; }\n}\nmain(): int { var s = S(); return s.get(1); }\n";
+    assert_eq!(
+        error_of("method_overload_ambiguous", main),
+        "main.pep:5:37: error: call to 'get' is ambiguous\n\
+         \x20   5 | main(): int { var s = S(); return s.get(1); }\n\
+         \x20     |                                     ^~~\n\
+         main.pep:2:5: note: candidate function\n\
+         \x20   2 |     get(x: long): int { return 1; }\n\
+         \x20     |     ^~~\n\
+         main.pep:3:5: note: candidate function\n\
+         \x20   3 |     get(x: short): int { return 2; }\n\
+         \x20     |     ^~~"
+    );
+
+    let main = "struct S {\n    get(x: int): int { return 1; }\n    static get(x: String): int { return 2; }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("method_overload_static", main),
+        "main.pep:3:12: error: static method 'get' cannot share its name with an instance method of 'S'\n\
+         \x20   3 |     static get(x: String): int { return 2; }\n\
+         \x20     |            ^~~\n\
+         main.pep:2:5: note: previous declaration is here\n\
+         \x20   2 |     get(x: int): int { return 1; }\n\
+         \x20     |     ^~~"
+    );
+
+    let redefinition = error_of("method_overload_redefinition", "struct S {\n    get(x: int): int { return 1; }\n    get(y: int): int { return 2; }\n}\nmain(): int { return 0; }\n");
+    assert!(redefinition.starts_with("main.pep:3:5: error: redefinition of 'get'\n"), "{}", redefinition);
+
+    let main = "struct S {\n    get(x: int): int { return 1; }\n    get(x: String): int { return 2; }\n}\nmain(): int {\n    var s = S();\n    var g = s.get;\n    return 0;\n}\n";
+    let value = error_of("method_overload_value", main);
+    assert!(value.starts_with("main.pep:7:15: error: cannot infer the type of 'g' from overloaded method 'S.get'\n"), "{}", value);
+}

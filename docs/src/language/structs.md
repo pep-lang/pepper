@@ -196,6 +196,8 @@ a dot, `v.length_squared()`, and inside it `this` refers to that object.
   references, the caller sees the change.
 - Calling a method does not copy the object or add a reference to it. The
   result of a method call is a new reference, like any function result.
+- Several methods can share a name when their parameters differ; each call
+  picks the best fit (see [Overloading](overloading.md#methods-and-operators)).
 
 ### Static methods
 
@@ -229,6 +231,9 @@ can be any type. These binary operators can be defined:
 
 Keep these rules in mind:
 
+- An operator can be declared once per right-operand type (`+(Money)` and
+  `+(int)`), and `a + b` picks by `b`'s type, as for any
+  [overloaded](overloading.md#methods-and-operators) method.
 - Each operator is its own method, with one exception: when a struct defines
   `==` but not `!=`, `a != b` means `!(a == b)`. `+=` is not rewritten to
   `a = a + b`; define each one you want to use.

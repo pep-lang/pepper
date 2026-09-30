@@ -220,7 +220,10 @@ impl<'t> Scopes<'t> {
     /// Whether struct type `ty` declares a method `name`.
     fn has_method(&self, ty: &TypeName, name: &str) -> bool {
         let key = ty.to_string();
-        self.method_tables(&key).any(|methods| methods.iter().any(|(m, _)| m == name))
+        // An overloaded method is declared under its members' names.
+        self.method_tables(&key).any(|methods| {
+            methods.iter().any(|(m, _)| m == name || crate::passes::overloads::set_name(m) == name)
+        })
     }
 
     /// Function type of the free function `name`, when a bare `name` in
@@ -310,10 +313,15 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 TypeName::auto()
             }
         }
-        Expression::MethodCall { this, method, .. } => {
+        Expression::MethodCall { this, method, args, .. } => {
             let this_type = type_of_expr(this, scopes, current_struct);
             if this_type.is_empty() || this_type.is_auto() {
                 return TypeName::auto();
+            }
+            if scopes.overloads.is_method_set(&this_type, method) {
+                return select_method_overload(&this_type, method, args, scopes, current_struct)
+                    .map(|c| c.ret)
+                    .unwrap_or_else(TypeName::auto);
             }
             // Return type of the method, if the struct is known.
             for methods in scopes.method_tables(&this_type.to_string()) {
@@ -842,6 +850,45 @@ fn resolve_overload(e: &mut Expression, scopes: &Scopes, current: Option<&TypeNa
     scopes.resolved.borrow_mut().push((*loc, choice.callee));
 }
 
+/// Resolve `receiver.method(args)` against the method overload set of the
+/// receiver's struct, when it names one and its arguments decide.
+fn select_method_overload(
+    receiver: &TypeName,
+    method: &str,
+    args: &[Expression],
+    scopes: &Scopes,
+    current: Option<&TypeName>,
+) -> Option<crate::passes::overloads::Choice> {
+    let infos: Vec<crate::passes::overloads::ArgInfo> = args
+        .iter()
+        .map(|arg| crate::passes::overloads::arg_info(arg, &scopes.overloads, Some(type_of_expr(arg, scopes, current))))
+        .collect();
+    let mentions_unbound = |t: &TypeName| scopes.unbound.iter().any(|p| t.mentions(p));
+    if mentions_unbound(receiver) || infos.iter().any(|i| i.ty.as_ref().is_some_and(mentions_unbound)) {
+        return None;
+    }
+    match scopes.overloads.select_method(receiver, method, &infos) {
+        crate::passes::overloads::Outcome::Chosen(choice) => Some(choice),
+        _ => None,
+    }
+}
+
+/// Rewrite a call of an overloaded method to the member its arguments
+/// select.
+fn resolve_method_overload(e: &mut Expression, scopes: &Scopes, current: Option<&TypeName>) {
+    let Expression::MethodCall { this, method, args, loc } = e else { return };
+    if scopes.overloads.is_empty() {
+        return;
+    }
+    let receiver = type_of_expr(this, scopes, current);
+    if receiver.is_empty() || receiver.contains_auto() || !scopes.overloads.is_method_set(&receiver, method) {
+        return;
+    }
+    let Some(choice) = select_method_overload(&receiver, method, args, scopes, current) else { return };
+    crate::passes::overloads::apply_choice(method, args, &choice);
+    scopes.resolved.borrow_mut().push((*loc, crate::passes::overloads::method_target(&receiver, &choice.callee)));
+}
+
 /// What each argument's type says about a generic call's type arguments.
 fn argument_types(args: &[Expression], scopes: &Scopes, current: Option<&TypeName>) -> Vec<Option<TypeName>> {
     args.iter()
@@ -865,6 +912,7 @@ fn resolve_expression(
     crate::passes::walk_expression(expr, &mut |e: &mut Expression| {
         let current = current_struct.as_ref();
         resolve_overload(e, scopes, current);
+        resolve_method_overload(e, scopes, current);
         infer_type_arguments(e, scopes, current);
         // Calls through function values: `f(x)` on a local, parameter,
         // global or field of function type, and `obj.callback(x)`.

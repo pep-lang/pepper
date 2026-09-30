@@ -574,6 +574,14 @@ fn overload_at(sema: &SemaModule, offset: usize) -> Option<(&FunctionDef, usize)
         .iter()
         .filter(|(loc, _)| loc.file == FileId(0) && loc.span.start <= offset && offset <= loc.span.end)
         .min_by_key(|(loc, _)| loc.span.end - loc.span.start)?;
+    // A method is `Struct.member` (`Point.move$2`).
+    if let Some((owner, method)) = callee.rsplit_once('.') {
+        let st = sema.structs.iter().find(|s| s.ty.to_string() == owner)?;
+        let function = st.method_members.iter().find(|m| m.name == method)?;
+        let set = pepper_sema::passes::overloads::set_name(method);
+        let others = st.method_members.iter().filter(|m| pepper_sema::passes::overloads::set_name(&m.name) == set).count() - 1;
+        return Some((function, others));
+    }
     // A generic member's call names its specialization (`f$2<int>`).
     let member = callee.split_once('<').map_or(callee.as_str(), |(base, _)| base);
     let function = sema.functions.iter().find(|f| f.name == member)?;
@@ -590,18 +598,29 @@ fn overload_hover(program: &Program, function: &FunctionDef, others: usize) -> S
         n => format!(" (+{} overloads)", n),
     };
     let file = function.loc.file.0 as usize;
-    // The member as its file declares it, parameter names included.
-    let signature = program
-        .files
-        .get(file)
-        .and_then(|f| {
-            f.module.declarations.iter().find_map(|d| match d {
-                ast::Declaration::Function(f) if f.name_span == function.loc.span => Some(function_signature(f)),
-                _ => None,
-            })
+    // The member as its file declares it (a free function, or a method of a
+    // struct or extension), parameter names included, and its doc comment.
+    let declared = program.files.get(file).and_then(|f| {
+        f.module.declarations.iter().find_map(|d| {
+            let methods: &[ast::FunctionDecl] = match d {
+                ast::Declaration::Function(g) if g.name_span == function.loc.span => {
+                    return Some((function_signature(g), g.attributes.iter().map(|a| a.span.start).chain([g.span.start]).min()));
+                }
+                ast::Declaration::Struct(s) => &s.methods,
+                ast::Declaration::Extend(e) => &e.methods,
+                _ => return None,
+            };
+            let m = methods.iter().find(|m| m.name_span == function.loc.span)?;
+            // A method's span starts after its name.
+            Some((function_signature(m), m.attributes.iter().map(|a| a.span.start).chain([m.span.start, m.name_span.start]).min()))
         })
-        .unwrap_or_else(|| function.ty.to_string());
-    with_doc(format!("`{}` — `{}`{}", name, signature, more), declaration_doc_at(program, file, function.loc.span))
+    });
+    let signature = declared.as_ref().map(|(s, _)| s.clone()).unwrap_or_else(|| function.ty.to_string());
+    let doc = declared.and_then(|(_, start)| {
+        let source = &program.files.get(file)?.source;
+        Some(pepper_parser::doc::doc_comment_before(source, start?)?.to_markdown())
+    });
+    with_doc(format!("`{}` — `{}`{}", name, signature, more), doc)
 }
 
 /// The implicit conversions of the document (`program.files[0]`), in

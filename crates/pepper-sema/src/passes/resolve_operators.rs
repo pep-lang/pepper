@@ -12,6 +12,8 @@ pub fn resolve_operators(module: &mut Module) {
     // Struct table for overload gating. Built before any mutation so the
     // per-struct walks and the free-function walk share one immutable view.
     let table = StructTable::build(module);
+    let overloads = crate::passes::overloads::Overloads::build(module);
+    let mut targets: Vec<(Loc, String)> = vec![];
 
     for st_idx in 0..module.structs.len() {
         // Abstract generic bases (`Array<T>`) have no concrete bodies to
@@ -31,18 +33,18 @@ pub fn resolve_operators(module: &mut Module) {
         let current = module.structs[st_idx].ty.clone();
         let st = &mut module.structs[st_idx];
         if let Some(body) = &mut st.constructor.body {
-            resolve_body(body, &table, Some(&current));
+            targets.extend(resolve_body(body, &table, &overloads, Some(&current)));
         }
         for method in &mut st.method_members {
             if let Some(body) = &mut method.body {
-                resolve_body(body, &table, Some(&current));
+                targets.extend(resolve_body(body, &table, &overloads, Some(&current)));
             }
         }
     }
 
     for function in &mut module.functions {
         if let Some(body) = &mut function.body {
-            resolve_body(body, &table, None);
+            targets.extend(resolve_body(body, &table, &overloads, None));
         }
     }
 
@@ -56,7 +58,7 @@ pub fn resolve_operators(module: &mut Module) {
                 items: vec![Statement::Expression(default)],
                 attributes: vec![],
             };
-            resolve_body(&mut block, &table, None);
+            targets.extend(resolve_body(&mut block, &table, &overloads, None));
             if !block.items.is_empty() {
                 var.default = match block.items.remove(0) {
                     Statement::Expression(expr) => Some(expr),
@@ -67,9 +69,38 @@ pub fn resolve_operators(module: &mut Module) {
             }
         }
     }
+    module.call_targets.extend(targets);
 }
 
-fn resolve_body(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
+fn resolve_body(
+    body: &mut Block,
+    table: &StructTable,
+    overloads: &crate::passes::overloads::Overloads,
+    current: Option<&TypeName>,
+) -> Vec<(Loc, String)> {
+    dispatch_operators(body, table, current);
+    let mut targets = vec![];
+    // An overloaded operator names its set (`+`); pick the member. Nested
+    // calls type from the inside out, so repeat while that settles more.
+    if !overloads.is_empty() {
+        for _ in 0..4 {
+            let mut changed = false;
+            crate::passes::walk_block(body, &mut |expr: &mut Expression| {
+                if let Expression::MethodCall { method, .. } = expr {
+                    let before = method.clone();
+                    targets.extend(crate::passes::overloads::resolve_method_call(expr, overloads, table, current));
+                    changed |= matches!(expr, Expression::MethodCall { method, .. } if *method != before);
+                }
+            });
+            if !changed {
+                break;
+            }
+        }
+    }
+    targets
+}
+
+fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
     // Compound assign through an index (`x[y] += z`) expands to the C++
     // reference's tmp/get/set sequence before the walk: a bare `__index_set`
     // rewrite would drop the read-modify-write. The expansion splices one

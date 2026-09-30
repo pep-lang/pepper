@@ -412,3 +412,28 @@ fn definition_of_an_overloaded_call_is_the_chosen_member() {
     let (_, rest) = definition(&uri, &text, &program, at(&text, "scale(4)", 0, 2));
     assert!(rest.starts_with("scale(x: int)"), "{}", rest);
 }
+
+const OVERLOADED_METHODS: &str = r#"struct Meter {
+    var n: int;
+    ## Adds a whole number.
+    add(x: int): int { return n + x; }
+    ## Adds a fraction.
+    add(x: double): double { return 0.5; }
+}
+
+main(): int {
+    var m = Meter();
+    var a = m.add(2.5);
+    return m.add(1);
+}
+"#;
+
+#[test]
+fn hover_and_definition_of_an_overloaded_method_call() {
+    let (uri, text, program) = load("method_overloads", OVERLOADED_METHODS, "main.pep");
+    let fraction = hover(&uri, &text, &program, at(&text, "add(2.5)", 0, 1));
+    assert!(fraction.starts_with("`add` — `add(x: double): double` (+1 overload)"), "{}", fraction);
+    assert!(fraction.contains("Adds a fraction."), "{}", fraction);
+    let (_, rest) = definition(&uri, &text, &program, at(&text, "add(1)", 0, 1));
+    assert!(rest.starts_with("add(x: int)"), "{}", rest);
+}

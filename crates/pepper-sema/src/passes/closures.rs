@@ -918,7 +918,7 @@ impl Table {
 /// Call `visit(creation, expected type, current struct)` for every
 /// `MakeClosure`, with the type of the slot it flows into when known.
 fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
-    sites_in_module(module, table, &mut |_, expr, expected, current| visit(expr, expected, current));
+    sites_in_module(module, table, true, &mut |_, expr, expected, current| visit(expr, expected, current));
 }
 
 /// Call `visit(expression, expected type, current struct)` for every
@@ -926,22 +926,24 @@ fn for_each_closure_site(module: &Module, table: &Table, visit: &mut impl FnMut(
 /// known (a typed variable, a parameter, a return, an assignment).
 pub(crate) fn for_each_site(module: &Module, visit: &mut impl FnMut(&Expression, Option<&TypeName>, Option<&TypeName>)) {
     let table = Table::build(module);
-    sites_in_module(module, &table, &mut |_, expr, expected, current| visit(expr, expected, current));
+    sites_in_module(module, &table, true, &mut |_, expr, expected, current| visit(expr, expected, current));
 }
 
-/// Like [`for_each_site`], also passing the name of the function or struct
-/// the expression is in (`None` for a global's initializer).
-pub(crate) fn for_each_site_in(
+/// Every expression site in `module`, with its owner, expected type and
+/// enclosing struct. Skips the extensions' own copies of their methods:
+/// only the copies `apply_extensions` put in each struct are resolved.
+pub(crate) fn for_each_applied_site_in(
     module: &Module,
     visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
     let table = Table::build(module);
-    sites_in_module(module, &table, visit);
+    sites_in_module(module, &table, false, visit);
 }
 
 fn sites_in_module(
     module: &Module,
     table: &Table,
+    extensions: bool,
     visit: &mut impl FnMut(Option<&str>, &Expression, Option<&TypeName>, Option<&TypeName>),
 ) {
     for st in &module.structs {
@@ -961,7 +963,7 @@ fn sites_in_module(
         let owner = Some(function.name.as_str());
         sites_in_function(function, table, None, &mut |expr, expected, current| visit(owner, expr, expected, current));
     }
-    for ext in &module.extensions {
+    for ext in module.extensions.iter().filter(|_| extensions) {
         for method in &ext.methods {
             let owner = Some(ext.target.name.as_str());
             sites_in_function(method, table, Some(&ext.target), &mut |expr, expected, current| visit(owner, expr, expected, current));

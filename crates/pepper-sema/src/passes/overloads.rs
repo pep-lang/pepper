@@ -148,6 +148,9 @@ pub fn name_overloads(module: &mut Module) {
         }
     }
 
+    if !name_method_overloads(module) {
+        return;
+    }
     for ((_, name), members) in groups {
         if members.len() < 2 {
             continue;
@@ -161,6 +164,71 @@ pub fn name_overloads(module: &mut Module) {
         module.overload_sets.insert(name, names);
     }
     attach_overrides(module);
+}
+
+/// Check each struct's same-name methods and rename the members of every
+/// method overload set (`get$1`, `get$2`), recording them in
+/// `module.method_overload_sets`. Returns false after reporting an error.
+fn name_method_overloads(module: &mut Module) -> bool {
+    for st in &mut module.structs {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (i, method) in st.method_members.iter().enumerate() {
+            groups.entry(method.name.clone()).or_default().push(i);
+        }
+        let mut sets = BTreeMap::new();
+        for (name, members) in groups {
+            if members.len() < 2 {
+                continue;
+            }
+            let first = &st.method_members[members[0]];
+            // Inside a method a bare `open(p)` could mean either kind.
+            if let Some(&other) = members.iter().find(|&&i| st.method_members[i].is_static != first.is_static) {
+                let (static_one, instance) = if first.is_static { (first, &st.method_members[other]) } else { (&st.method_members[other], first) };
+                let later = if static_one.loc.span.start > instance.loc.span.start { static_one } else { instance };
+                let earlier = if std::ptr::eq(later, static_one) { instance } else { static_one };
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "static method '{}' cannot share its name with an instance method of '{}'",
+                        name,
+                        demangle_name(&st.name)
+                    ))
+                    .at(later.loc)
+                    .with_note("previous declaration is here", Some(earlier.loc)),
+                );
+                return false;
+            }
+            for (j, &later) in members.iter().enumerate() {
+                let method = &st.method_members[later];
+                let key = parameter_key(method);
+                let Some(&earlier) = members[..j].iter().find(|&&i| parameter_key(&st.method_members[i]) == key) else {
+                    continue;
+                };
+                let previous = &st.method_members[earlier];
+                let diagnostic = if return_key(previous) == return_key(method) {
+                    Diagnostic::error(format!("redefinition of '{}'", name))
+                        .at(method.loc)
+                        .with_note("previous definition is here", Some(previous.loc))
+                } else {
+                    Diagnostic::error("functions that differ only in their return type cannot be overloaded")
+                        .at(method.loc)
+                        .with_note("previous declaration is here", Some(previous.loc))
+                };
+                crate::errors::report(diagnostic);
+                return false;
+            }
+            let mut names = vec![];
+            for (ordinal, i) in members.into_iter().enumerate() {
+                let member = format!("{}{}{}", name, MEMBER_SEPARATOR, ordinal + 1);
+                st.method_members[i].name = member.clone();
+                names.push(member);
+            }
+            sets.insert(name, names);
+        }
+        if !sets.is_empty() {
+            module.method_overload_sets.insert(st.name.clone(), sets);
+        }
+    }
+    true
 }
 
 /// A concrete override of an overloaded generic (`hash<Point>` with two
@@ -322,6 +390,8 @@ struct Viable {
 #[derive(Default)]
 pub struct Overloads {
     sets: HashMap<String, Vec<Member>>,
+    /// Method overload sets: struct type → set name → members.
+    methods: HashMap<String, HashMap<String, Vec<Member>>>,
     /// Struct type → the parameter type of its `[Implicit]` constructor.
     implicit: HashMap<String, TypeName>,
     /// Struct name → the traits it declares.
@@ -390,8 +460,22 @@ fn promotes(from: &str, to: &str) -> bool {
 
 impl Overloads {
     pub fn build(module: &Module) -> Self {
-        if module.overload_sets.is_empty() {
+        if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
             return Overloads::default();
+        }
+        let mut methods: HashMap<String, HashMap<String, Vec<Member>>> = HashMap::new();
+        for st in &module.structs {
+            for method in &st.method_members {
+                let set = set_name(&method.name);
+                if set != method.name {
+                    methods
+                        .entry(canonical(&st.ty).to_string())
+                        .or_default()
+                        .entry(set.to_string())
+                        .or_default()
+                        .push(Member::of(method));
+                }
+            }
         }
         let functions: HashMap<&str, &FunctionDef> = module.functions.iter().map(|f| (f.name.as_str(), f)).collect();
         let sets = module
@@ -416,7 +500,7 @@ impl Overloads {
             conforms.entry(ext.target.to_string()).or_default().extend(ext.traits.iter().cloned());
         }
         let traits = module.traits.iter().map(|t| t.name.clone()).collect();
-        Overloads { sets, implicit, conforms, traits }
+        Overloads { sets, methods, implicit, conforms, traits }
     }
 
     /// Whether `name` names an overload set.
@@ -425,7 +509,7 @@ impl Overloads {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sets.is_empty()
+        self.sets.is_empty() && self.methods.is_empty()
     }
 
     /// The function types of a set's non-generic members.
@@ -527,10 +611,45 @@ impl Overloads {
     /// Resolve a call to `set` with `args`; `explicit` holds type arguments
     /// the call spells (`f<int>(x)`).
     pub fn select(&self, set: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
-        let Some(members) = self.sets.get(set) else {
-            return Outcome::Pending;
-        };
-        let name = demangle_name(set);
+        match self.sets.get(set) {
+            Some(members) => self.select_in(members, demangle_name(set), explicit, args),
+            None => Outcome::Pending,
+        }
+    }
+
+    /// Resolve a call of method `set` on a receiver of type `receiver`.
+    pub fn select_method(&self, receiver: &TypeName, set: &str, args: &[ArgInfo]) -> Outcome {
+        match self.method_set(receiver, set) {
+            Some(members) => self.select_in(members, set, None, args),
+            None => Outcome::Pending,
+        }
+    }
+
+    /// The members of method set `set` of `receiver`'s struct.
+    fn method_set(&self, receiver: &TypeName, set: &str) -> Option<&Vec<Member>> {
+        self.methods.get(&canonical(receiver).to_string())?.get(set)
+    }
+
+    /// Whether `set` names a method overload set of `receiver`'s struct.
+    pub fn is_method_set(&self, receiver: &TypeName, set: &str) -> bool {
+        self.method_set(receiver, set).is_some()
+    }
+
+    /// The member of method set `set` of `receiver`'s struct whose function
+    /// type (without `this`) is exactly `expected`.
+    pub fn method_member_for(&self, receiver: &TypeName, set: &str, expected: &TypeName) -> Option<String> {
+        let want = canonical(expected);
+        let mut found = self.method_set(receiver, set)?.iter().filter(|m| canonical(&m.signature()) == want);
+        let first = found.next()?;
+        found.next().is_none().then(|| first.name.clone())
+    }
+
+    /// `candidate function` notes, one per member of method set `set`.
+    pub fn method_candidate_notes(&self, receiver: &TypeName, set: &str) -> Vec<(String, Loc)> {
+        self.method_set(receiver, set).map(|ms| ms.iter().map(|m| ("candidate function".to_string(), m.loc)).collect()).unwrap_or_default()
+    }
+
+    fn select_in(&self, members: &[Member], name: &str, explicit: Option<&[TypeName]>, args: &[ArgInfo]) -> Outcome {
         let count = args.len();
         let arity_fits = |m: &Member| count >= m.required && count <= m.params.len();
         let pending = args.iter().any(ArgInfo::unknown);
@@ -689,30 +808,74 @@ pub fn apply_choice(function: &mut String, args: &mut [Expression], choice: &Cho
     }
 }
 
+/// How `module.call_targets` names method `member` of `receiver`'s struct:
+/// `Point.move$2`.
+pub fn method_target(receiver: &TypeName, member: &str) -> String {
+    format!("{}.{}", receiver, member)
+}
+
+/// Rewrite `expr`, a call of an overloaded method (an operator that
+/// `resolve_operators` just turned into a method call), to the member its
+/// arguments select, typing them with `static_type`.
+pub(crate) fn resolve_method_call(
+    expr: &mut Expression,
+    overloads: &Overloads,
+    table: &crate::static_type::StructTable,
+    current: Option<&TypeName>,
+) -> Option<(Loc, String)> {
+    let Expression::MethodCall { this, method, args, loc } = expr else { return None };
+    let receiver = crate::static_type::of(this, table, current)?;
+    if !overloads.is_method_set(&receiver, method) {
+        return None;
+    }
+    let infos: Vec<ArgInfo> =
+        args.iter().map(|arg| arg_info(arg, overloads, crate::static_type::of(arg, table, current))).collect();
+    let Outcome::Chosen(choice) = overloads.select_method(&receiver, method, &infos) else { return None };
+    apply_choice(method, args, &choice);
+    Some((*loc, method_target(&receiver, &choice.callee)))
+}
+
 /// Bind each overloaded name used as a value to the member whose function
 /// type is the type of the slot it flows into (`var f: (int) => int =
 /// scale;`). Runs in `resolve_implicit_types`' loop; returns whether it
 /// bound any.
 pub fn bind_function_values(module: &mut Module) -> bool {
-    if module.overload_sets.is_empty() {
+    if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
         return false;
     }
     let overloads = Overloads::build(module);
+    let table = crate::static_type::StructTable::build(module);
     let mut bound: HashMap<(String, Loc), (String, TypeName)> = HashMap::new();
-    crate::passes::closures::for_each_site(module, &mut |expr, expected, _| {
-        if let (Expression::SymbolRef { id, ty, loc }, Some(expected)) = (expr, expected) {
-            if ty.contains_auto() && overloads.is_set(id) && expected.is_function_type() && !expected.contains_auto() {
+    // Methods (`p.get`, `S.make`) by name and location: the member's name.
+    let mut methods: HashMap<(String, Loc), (TypeName, String)> = HashMap::new();
+    crate::passes::closures::for_each_site(module, &mut |expr, expected, current| {
+        let Some(expected) = expected.filter(|t| t.is_function_type() && !t.contains_auto()) else { return };
+        match expr {
+            Expression::SymbolRef { id, ty, loc } if ty.contains_auto() && overloads.is_set(id) => {
                 if let Some(member) = overloads.member_for(id, expected) {
                     bound.insert((id.clone(), *loc), member);
                 }
             }
+            Expression::MemberRef { lhs, name, loc } => {
+                let Some(receiver) = crate::static_type::of(lhs, &table, current) else { return };
+                if let Some(member) = overloads.method_member_for(&receiver, name, expected) {
+                    methods.insert((name.clone(), *loc), (receiver, member));
+                }
+            }
+            _ => {}
         }
     });
-    if bound.is_empty() {
+    if bound.is_empty() && methods.is_empty() {
         return false;
     }
     let mut targets = vec![];
     crate::passes::closures::for_each_expression_mut(module, &mut |e| {
+        if let Expression::MemberRef { name, loc, .. } = e {
+            if let Some((receiver, member)) = methods.get(&(name.clone(), *loc)) {
+                targets.push((*loc, method_target(receiver, member)));
+                *name = member.clone();
+            }
+        }
         if let Expression::SymbolRef { id, loc, .. } = e {
             if let Some((member, ty)) = bound.get(&(id.clone(), *loc)) {
                 targets.push((*loc, member.clone()));
@@ -729,7 +892,7 @@ pub fn bind_function_values(module: &mut Module) -> bool {
 /// final (see the module docs). Generic bases are skipped: their
 /// specializations are checked.
 pub fn check_overloads(module: &Module) {
-    if module.overload_sets.is_empty() {
+    if module.overload_sets.is_empty() && module.method_overload_sets.is_empty() {
         return;
     }
     let overloads = Overloads::build(module);
@@ -750,7 +913,9 @@ pub fn check_overloads(module: &Module) {
         .map(|f| f.name.clone())
         .chain(module.structs.iter().filter(|s| !s.generic_params.is_empty() && s.name == s.ty.name).map(|s| s.name.clone()))
         .collect();
-    crate::passes::closures::for_each_site_in(module, &mut |owner, expr, expected, current| {
+    // An extension's own copy of a method is never resolved; its copy in
+    // the struct is.
+    crate::passes::closures::for_each_applied_site_in(module, &mut |owner, expr, expected, current| {
         if owner.is_some_and(|o| generic_bases.contains(o)) {
             return;
         }
@@ -780,6 +945,58 @@ pub fn check_overloads(module: &Module) {
                 };
                 let mut diagnostic = Diagnostic::error(failure.message).at(*loc);
                 for (note, at) in failure.notes {
+                    diagnostic = diagnostic.with_note(note, Some(at));
+                }
+                report(diagnostic);
+            }
+            Expression::MethodCall { this, method, args, loc } => {
+                let Some(receiver) = crate::static_type::of(this, &table, current) else { return };
+                if !overloads.is_method_set(&receiver, method) {
+                    return;
+                }
+                let infos: Vec<ArgInfo> = args
+                    .iter()
+                    .map(|arg| arg_info(arg, &overloads, crate::static_type::of(arg, &table, current)))
+                    .collect();
+                let failure = match overloads.select_method(&receiver, method, &infos) {
+                    Outcome::Failed(failure) => failure,
+                    Outcome::Pending | Outcome::Chosen(_) => {
+                        let unknown = infos.iter().position(ArgInfo::unknown).unwrap_or(0);
+                        Failure {
+                            message: format!(
+                                "cannot choose an overload of '{}': the type of its {} argument is unknown",
+                                method,
+                                ordinal(unknown + 1)
+                            ),
+                            notes: overloads.method_candidate_notes(&receiver, method),
+                        }
+                    }
+                };
+                let mut diagnostic = Diagnostic::error(failure.message).at(*loc);
+                for (note, at) in failure.notes {
+                    diagnostic = diagnostic.with_note(note, Some(at));
+                }
+                report(diagnostic);
+            }
+            Expression::MemberRef { lhs, name, loc } => {
+                let Some(receiver) = crate::static_type::of(lhs, &table, current) else { return };
+                if !overloads.is_method_set(&receiver, name) {
+                    return;
+                }
+                let spelled = format!("{}.{}", receiver.display(), name);
+                let mut diagnostic = if let Some(var) = untyped_vars.get(loc) {
+                    Diagnostic::error(format!("cannot infer the type of '{}' from overloaded method '{}'", var, spelled))
+                } else if let Some(expected) = expected.filter(|t| t.is_function_type()) {
+                    Diagnostic::error(format!(
+                        "address of overloaded method '{}' does not match required type '{}'",
+                        spelled,
+                        expected.display()
+                    ))
+                } else {
+                    Diagnostic::error(format!("reference to overloaded method '{}' could not be resolved", spelled))
+                }
+                .at(*loc);
+                for (note, at) in overloads.method_candidate_notes(&receiver, name) {
                     diagnostic = diagnostic.with_note(note, Some(at));
                 }
                 report(diagnostic);
@@ -848,10 +1065,15 @@ pub fn arg_info(arg: &Expression, overloads: &Overloads, ty: Option<TypeName>) -
 fn untyped_function_values(module: &Module, overloads: &Overloads) -> HashMap<Loc, String> {
     let mut found = HashMap::new();
     let mut visit = |var: &VariableDef| {
-        if let Some(Expression::SymbolRef { id, loc, .. }) = &var.default {
-            if var.ty.contains_auto() && overloads.is_set(id) {
+        match &var.default {
+            Some(Expression::SymbolRef { id, loc, .. }) if var.ty.contains_auto() && overloads.is_set(id) => {
                 found.insert(*loc, var.name.clone());
             }
+            // A method set is checked where the value is reported.
+            Some(Expression::MemberRef { loc, .. }) if var.ty.contains_auto() => {
+                found.insert(*loc, var.name.clone());
+            }
+            _ => {}
         }
     };
     fn walk(block: &Block, visit: &mut impl FnMut(&VariableDef)) {

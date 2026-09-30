@@ -297,3 +297,113 @@ test(): int { return helper(1) * 10 + helper("x"); }
 "#;
     assert_eq!(value(source), 12);
 }
+
+#[test]
+fn method_calls_pick_the_member_their_arguments_match() {
+    let source = r#"
+struct Meter {
+    int n;
+    construct(int v) { n = v; }
+    add(x: int): int { return n + x; }
+    add(x: int, y: int): int { return n + x + y; }
+    add(s: String): int { return 100; }
+    # A bare call and a call on `this` resolve too.
+    total(): int { return add(1) + this.add(1, 2); }
+}
+test(): int {
+    var m = Meter(5);
+    return m.add(2) * 1000 + m.add("x") + m.total();
+}
+"#;
+    // 7 * 1000 + 100 + (6 + 8)
+    assert_eq!(value(source), 7114);
+}
+
+#[test]
+fn static_methods_overload_apart_from_instance_methods() {
+    let source = r#"
+struct Meter {
+    int n;
+    construct(int v) { n = v; }
+    static of(x: int): Meter { return Meter(x); }
+    static of(s: String): Meter { return Meter(s.size() as int); }
+}
+test(): int { return Meter.of(3).n * 10 + Meter.of("abcd").n; }
+"#;
+    assert_eq!(value(source), 34);
+}
+
+#[test]
+fn operators_overload_by_operand_type() {
+    let source = r#"
+struct Money {
+    int cents;
+    construct(int c) { cents = c; }
+    Money +(Money other) { return Money(cents + other.cents); }
+    Money +(int more) { return Money(cents + more); }
+    bool ==(Money other) { return cents == other.cents; }
+    bool ==(int c) { return cents == c; }
+}
+test(): int {
+    var a = Money(5);
+    var b = (a + a) + 1;
+    if (!(b == 11) || b != Money(11) || !(a == a)) { return -1; }
+    return b.cents;
+}
+"#;
+    assert_eq!(value(source), 11);
+}
+
+#[test]
+fn generic_struct_methods_overload_per_specialization() {
+    let source = r#"
+struct Holder<T> {
+    T v;
+    construct(T value) { v = value; }
+    has(x: T): int { return 1; }
+    has(x: String): int { return 2; }
+    both(): int { return has(v) * 10 + has("s"); }
+}
+test(): int { var h = Holder<int>(3); return h.both() * 10 + h.has(4); }
+"#;
+    assert_eq!(value(source), 121);
+}
+
+#[test]
+fn an_overloaded_method_value_takes_the_member_its_slot_names() {
+    let source = r#"
+struct Meter {
+    int n;
+    construct(int v) { n = v; }
+    get(x: int): int { return n + x; }
+    get(s: String): int { return 100; }
+    static make(x: int): Meter { return Meter(x); }
+    static make(s: String): Meter { return Meter(7); }
+}
+apply(f: (int) => int, x: int): int { return f(x); }
+test(): int {
+    var m = Meter(1);
+    var f: (int) => int = m.get;
+    var make: (String) => Meter = Meter.make;
+    return f(2) * 100 + apply(m.get, 5) * 10 + make("x").n;
+}
+"#;
+    assert_eq!(value(source), 367);
+}
+
+#[test]
+fn an_extension_method_calls_an_overloaded_method() {
+    let source = r#"
+struct Meter {
+    int n;
+    construct(int v) { n = v; }
+    add(x: int): int { return n + x; }
+    add(s: String): int { return 100; }
+}
+extend Meter {
+    total(): int { return add(1) + this.add("s"); }
+}
+test(): int { var m = Meter(5); return m.total(); }
+"#;
+    assert_eq!(value(source), 106);
+}
