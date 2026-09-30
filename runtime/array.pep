@@ -477,6 +477,33 @@ export struct Array<T> {
         return result;
     }
 
+    ## Returns a deep copy: a new Array holding a copy of each element, made
+    ## with `copies.copy`. This is how `copy(value)` copies an Array (the
+    ## `Copyable<Array<T>>` implementation); call `copy(array)` rather than
+    ## this method.
+    ##
+    ## Unlike `clone()`, which shares struct elements, the result shares no
+    ## element that is not thread-safe with this Array. An element that
+    ## appears twice is copied once. Runs in O(count) plus the cost of
+    ## copying the elements.
+    ##
+    ## @param copies the objects copied so far
+    ## @returns the copy
+    ## @example
+    ##     var names = Array<String>();
+    ##     names.append("ada");
+    ##     var copied = copy(names);   # calls this method
+    Array<T> copy(Copies copies) {
+        Array<T> made = Array<T>(_size);
+        copies.register<Array<T>>(this, made);
+        ulong i = 0;
+        while (i < _size) {
+            made.append(copies.copy<T>(_data[i]));
+            i = i + 1;
+        }
+        return made;
+    }
+
     ## Reports whether both Arrays have the same count and pairwise equal
     ## elements, compared with `==` as `find` does.
     ##
@@ -601,3 +628,5 @@ export struct ArrayIterator<T> {
 }
 
 extend ArrayIterator<T> with Iterator<T> {}
+
+extend Array<T> with Copyable<Array<T>> {}

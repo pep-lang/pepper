@@ -479,7 +479,7 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
         Expression::RefCount(..) | Expression::CountStep { .. } => TypeName::new("u32"),
         Expression::FunctionPointer { .. } => TypeName::new("void*"),
         Expression::Weak(op, ty, _) => op.result(ty),
-        Expression::AtomicLoad(ty, _) => ty.clone(),
+        Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) => ty.clone(),
         Expression::AtomicStore(..) => TypeName::new("void"),
         Expression::AtomicCmpXchg(..) => TypeName::new("bool"),
         Expression::AtomicFetch(_, ty, _, _) => ty.clone(),

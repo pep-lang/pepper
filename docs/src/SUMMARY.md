@@ -66,6 +66,7 @@
     - [async/channel.pep](reference/async-channel.md)
     - [async/mutex.pep](reference/async-mutex.md)
     - [async/once.pep](reference/async-once.md)
+  - [copy.pep](reference/copy.md)
 <!-- reference:end -->
 
 # Contributing

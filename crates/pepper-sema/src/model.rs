@@ -243,6 +243,12 @@ pub enum Expression {
     SizeOf(TypeName),
     IsPod(TypeName),
     Default(TypeName),
+    /// A new object of struct `T` with every field zero (null for a
+    /// reference) and both head counts 1, made without running `T`'s
+    /// constructor. Like a constructor's result, it is an owned rvalue
+    /// carrying one reference. Only in the `__copy` methods that
+    /// `passes::copies` synthesizes.
+    Allocate(TypeName),
     /// `__refcount<T>(t)`: the reference count of object `t` (0 for POD T).
     RefCount(TypeName, Box<Expression>),
     /// `__address<T>(v)`: the pointer address of object `v` (identity

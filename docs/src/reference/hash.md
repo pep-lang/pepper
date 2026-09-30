@@ -202,6 +202,27 @@ void clear()
 Removes every entry and releases the map's references to their keys
 and values. The table keeps its capacity. Runs in O(capacity).
 
+#### copy
+
+```pepper
+HashMap<K, V> copy(Copies copies)
+```
+
+Returns a deep copy: a new map holding a copy of each key and value,
+made with `copies.copy`. This is how `copy(value)` copies a HashMap
+(the `Copyable<HashMap<K, V>>` implementation); call `copy(map)`
+rather than this method.
+
+The copied keys are hashed again, so a map keyed by struct identity
+finds its entries under the copied keys. Runs in O(capacity) plus the
+cost of copying the entries.
+
+**Parameters**
+- `copies` — the objects copied so far
+
+**Returns**
+- the copy
+
 #### contains
 
 ```pepper
@@ -536,3 +557,24 @@ A set stores only keys, so `value` is ignored.
 
 **Returns**
 - `key` (the argument, not an existing equal member), the value of the assignment expression
+
+#### copy
+
+```pepper
+HashSet<K> copy(Copies copies)
+```
+
+Returns a deep copy: a new set holding a copy of each element, made
+with `copies.copy`. This is how `copy(value)` copies a HashSet (the
+`Copyable<HashSet<K>>` implementation); call `copy(set)` rather than
+this method.
+
+The copied elements are hashed again, so a set of structs compared by
+identity finds the copied elements. Runs in O(capacity) plus the cost
+of copying the elements.
+
+**Parameters**
+- `copies` — the objects copied so far
+
+**Returns**
+- the copy

@@ -18,10 +18,10 @@ Like `io`, `async` is a module: bring it in with `import async` (and write
 
 Only thread-safe values can be shared between threads: numbers, `shared`
 function values (such as a thread's body), and `[Shared]` structs such as
-`Atomic<T>`, `Thread`, `ThreadLocal<T>`, `Channel<T>` and `Mutex<T>`. The
-synchronization types carry and guard thread-safe values only, so
-`Channel<String>` is a compile error. See the language guide's Threads
-chapter.
+`Atomic<T>`, `Thread`, `ThreadLocal<T>`, `Channel<T>` and `Mutex<T>`. Any
+other value crosses threads as a copy: `Channel.send` copies what it sends
+with `copy`. `Mutex<T>` and `Lazy<T>` hold thread-safe values only. See the
+language guide's Threads chapter.
 
 **Example**
 ```pepper

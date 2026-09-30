@@ -34,6 +34,7 @@ pub mod generic_methods;
 pub mod type_arguments;
 pub mod convert_to_traits;
 pub mod shared_functions;
+pub mod copies;
 
 use apply_extensions::apply_extensions;
 use convert_member_refs::convert_member_refs;
@@ -108,7 +109,13 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             step!(resolve_implicit_types(module));
         }
         let methods_added = generic_methods::specialize_methods(module);
-        if (module.structs.len(), module.functions.len()) == before && !methods_added {
+        // `copy` of a type whose specialization just appeared: its `_pep_copy`
+        // methods call `copies.copy<F>` for each field, specialized next round.
+        let copies_added = copies::synthesize_copies(module);
+        if let Some(error) = crate::errors::take() {
+            return Err(error);
+        }
+        if (module.structs.len(), module.functions.len()) == before && !methods_added && !copies_added {
             break;
         }
     }
@@ -217,7 +224,7 @@ pub fn walk_expression(expr: &mut Expression, f: &mut impl FnMut(&mut Expression
             walk_expression(lhs, f);
             walk_expression(rhs, f);
         }
-        Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) => {}
+        Expression::SizeOf(_) | Expression::IsPod(_) | Expression::Default(_) | Expression::Allocate(_) => {}
         Expression::CountStep { .. } | Expression::FunctionPointer { .. } => {}
         Expression::RefCount(_, arg) | Expression::Address(_, arg) | Expression::Weak(_, _, arg) => walk_expression(arg, f),
         Expression::AtomicLoad(_, arg) => walk_expression(arg, f),
@@ -281,6 +288,7 @@ pub fn children_mut(expr: &mut Expression) -> Vec<&mut Expression> {
         | Expression::SizeOf(_)
         | Expression::IsPod(_)
         | Expression::Default(_)
+        | Expression::Allocate(_)
         | Expression::FunctionRef { .. }
         | Expression::MethodAddress(_)
         | Expression::CountStep { .. }

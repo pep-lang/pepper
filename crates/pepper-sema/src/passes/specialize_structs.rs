@@ -248,6 +248,7 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             Expression::ArrayIndex { ty, .. }
             | Expression::IsPod(ty)
             | Expression::Default(ty)
+            | Expression::Allocate(ty)
             | Expression::Cast { ty, .. } => substitute(ty, type_map),
             Expression::RefCount(ty, _) | Expression::Weak(_, ty, _) => substitute(ty, type_map),
             Expression::Address(ty, _) => substitute(ty, type_map),
@@ -270,6 +271,15 @@ fn substitute_expression(expr: &mut Expression, type_map: &[(String, TypeName)])
             let mut parsed = crate::passes::gather_generics::parse_type_string(function);
             substitute(&mut parsed, type_map);
             *function = parsed.to_string();
+        }
+        // A generic method call spelled with its type arguments
+        // (`copies.copy<T>(v)`).
+        if let Expression::MethodCall { method, .. } = e
+            && method.contains('<')
+        {
+            let mut parsed = crate::passes::gather_generics::parse_type_string(method);
+            substitute(&mut parsed, type_map);
+            *method = parsed.to_string();
         }
         // A constructor's `__init_<field>` parameter is typed like its field
         // (`T`, `(T) => T`) when `finish` synthesizes it, and a symbol of a

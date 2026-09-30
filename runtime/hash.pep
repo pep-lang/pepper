@@ -266,6 +266,30 @@ export struct HashMap<K, V> {
         _tombstones = 0;
     }
 
+    ## Returns a deep copy: a new map holding a copy of each key and value,
+    ## made with `copies.copy`. This is how `copy(value)` copies a HashMap
+    ## (the `Copyable<HashMap<K, V>>` implementation); call `copy(map)`
+    ## rather than this method.
+    ##
+    ## The copied keys are hashed again, so a map keyed by struct identity
+    ## finds its entries under the copied keys. Runs in O(capacity) plus the
+    ## cost of copying the entries.
+    ##
+    ## @param copies the objects copied so far
+    ## @returns the copy
+    HashMap<K, V> copy(Copies copies) {
+        HashMap<K, V> made = HashMap<K, V>(_capacity);
+        copies.register<HashMap<K, V>>(this, made);
+        ulong i = 0;
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                made.insert(copies.copy<K>(_keys._data[i]), copies.copy<V>(_values._data[i]));
+            }
+            i = i + 1;
+        }
+        return made;
+    }
+
     ## Returns whether the map has an entry for `key`. Expected O(1).
     ##
     ## @param key the key to look up
@@ -700,6 +724,30 @@ export struct HashSet<K> {
         return key;
     }
 
+    ## Returns a deep copy: a new set holding a copy of each element, made
+    ## with `copies.copy`. This is how `copy(value)` copies a HashSet (the
+    ## `Copyable<HashSet<K>>` implementation); call `copy(set)` rather than
+    ## this method.
+    ##
+    ## The copied elements are hashed again, so a set of structs compared by
+    ## identity finds the copied elements. Runs in O(capacity) plus the cost
+    ## of copying the elements.
+    ##
+    ## @param copies the objects copied so far
+    ## @returns the copy
+    HashSet<K> copy(Copies copies) {
+        HashSet<K> made = HashSet<K>(_capacity);
+        copies.register<HashSet<K>>(this, made);
+        ulong i = 0;
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                made.insert(copies.copy<K>(_keys._data[i]));
+            }
+            i = i + 1;
+        }
+        return made;
+    }
+
     # No explicit slot loop here: each occupied slot holds exactly one ref
     # (acquired on insert), and the keys Array's destructor nulls every slot
     # (Size == capacity), releasing it exactly once. The field release that
@@ -708,3 +756,7 @@ export struct HashSet<K> {
     destruct {
     }
 }
+
+extend HashMap<K, V> with Copyable<HashMap<K, V>> {}
+
+extend HashSet<K> with Copyable<HashSet<K>> {}

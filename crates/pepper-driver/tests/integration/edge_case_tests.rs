@@ -1452,6 +1452,58 @@ test(): int {
 }
 
 #[test]
+fn trait_argument_naming_the_implementing_generic() {
+    // `Twin<T>` with its `T` bound to `Box<T>`: substituting the trait's `T`
+    // must not recurse into the `T` of the argument.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+trait Twin<T> {
+    T twin();
+}
+struct Box<T> {
+    T value;
+    Box<T> twin() { return this; }
+}
+extend Box<T> with Twin<Box<T>> {}
+test(): int {
+    var b = Box<int>();
+    b.value = 4;
+    return b.twin().value - 4;
+}
+"#
+        ),
+        0
+    );
+}
+
+#[test]
+fn generic_method_call_with_type_arguments_in_generic_code() {
+    // `holder.same<T>(v)` inside a generic function is specialized with the
+    // function's type argument.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct Holder {
+    int unused;
+    same<T>(value: T): T {
+        return value;
+    }
+}
+pass<T>(value: T): T {
+    var holder = Holder();
+    return holder.same<T>(value);
+}
+test(): int {
+    return pass<int>(5) - 5;
+}
+"#
+        ),
+        0
+    );
+}
+
+#[test]
 fn constructor_parameter_named_size() {
     // The constructor's allocation size is a hidden local; a parameter the
     // user names `size` must not be shadowed by it.

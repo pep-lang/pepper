@@ -81,7 +81,7 @@ pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<
 
 /// Where the program names type `spec` (a variable, field or parameter
 /// type, or a constructor call), for errors about a specialization.
-fn use_site(module: &Module, spec: &str) -> Option<Loc> {
+pub(crate) fn use_site(module: &Module, spec: &str) -> Option<Loc> {
     fn var_loc(var: &VariableDef, spec: &str) -> Option<Loc> {
         let mentions = |ty: &TypeName| -> bool {
             fn walk(ty: &TypeName, spec: &str) -> bool {

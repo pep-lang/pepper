@@ -733,7 +733,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             if self.unit.is_none() {
                 set_private_linkage(fn_value.as_global_value(), &mangled);
             }
-            self.own(&mangled, if method.loc.is_none() { st.loc } else { method.loc });
+            // A method copy synthesizes on demand exists only in programs
+            // that copy the struct, so it is shared, not owned by its file.
+            if !pepper_sema::passes::copies::is_synthesized_method(&method.name) {
+                self.own(&mangled, if method.loc.is_none() { st.loc } else { method.loc });
+            }
             self.functions.insert(mangled.clone(), fn_value);
             self.param_defaults.insert(
                 mangled.clone(),
@@ -2253,7 +2257,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::Weak(op, ty, _) => Some(op.result(ty).to_string()),
             Expression::CountStep { .. } => Some("u32".to_string()),
             Expression::FunctionPointer { .. } => Some("void*".to_string()),
-            Expression::AtomicLoad(ty, _) => Some(ty.to_string()),
+            Expression::AtomicLoad(ty, _) | Expression::Allocate(ty) => Some(ty.to_string()),
             Expression::AtomicStore(..) => Some("void".to_string()),
             Expression::AtomicCmpXchg(..) => Some("bool".to_string()),
             Expression::AtomicFetch(_, ty, _, _) => Some(ty.to_string()),
@@ -2356,6 +2360,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.is_struct_ref_name(&Some(op.result(ty).to_string()))
             }
             Expression::AtomicLoad(ty, _) => self.is_struct_ref_name(&Some(ty.to_string())),
+            // A new object owns its one reference, like a constructor result.
+            Expression::Allocate(ty) => self.is_struct_ref_name(&Some(ty.to_string())),
             // An atomic fetch returns the old slot occupant (struct T): the
             // return site acquires it, so the result is an owned rvalue.
             Expression::AtomicFetch(_, ty, _, _) => self.is_struct_ref_name(&Some(ty.to_string())),
@@ -2914,6 +2920,21 @@ impl<'ctx> CodeGenerator<'ctx> {
             Expression::IsPod(_) => {
                 // __is_pod<T>: false for structs (the only corpus use).
                 Ok(self.context.bool_type().const_int(0, false).into())
+            }
+            Expression::Allocate(ty) => {
+                // A zeroed object of the struct's ABI size, both head counts
+                // 1: the reference it hands out, and the weak reference all
+                // strong ones hold together (see `struct_body`).
+                let name = ty.to_string();
+                let size = self.structs.get(&name).map(|d| d.size).ok_or_else(|| format!("cannot allocate unknown struct '{}'", name))?;
+                let size = self.context.i64_type().const_int(size, false);
+                let object = self.call_function("_pep_malloc", vec![size.into()])?.into_pointer_value();
+                let one = self.context.i32_type().const_int(1, false);
+                for field in [sema::CountField::Strong, sema::CountField::Weak] {
+                    let count = self.head_count_ptr(object, field)?;
+                    self.builder.build_store(count, one).map_err(|e| e.to_string())?;
+                }
+                Ok(object.into())
             }
             Expression::Default(ty) => {
                 // __default<T>: the type's zero value — 0 for numerics, a null

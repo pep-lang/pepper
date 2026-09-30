@@ -105,6 +105,7 @@ pub(crate) fn replace_expr_types(expr: &mut Expression, type_map: &[(String, Typ
             Expression::ArrayIndex { ty, .. }
             | Expression::IsPod(ty)
             | Expression::Default(ty)
+            | Expression::Allocate(ty)
             | Expression::Cast { ty, .. } => crate::type_name::replace_map(ty, type_map),
             Expression::RefCount(ty, _) | Expression::Weak(_, ty, _) => crate::type_name::replace_map(ty, type_map),
             Expression::Address(ty, _) => crate::type_name::replace_map(ty, type_map),
@@ -122,8 +123,11 @@ pub(crate) fn replace_expr_types(expr: &mut Expression, type_map: &[(String, Typ
             }
             _ => {}
         }
-        // Generic calls inside bodies (`__address<T>(v)` → `__address<int>(v)`).
-        if let Expression::FunctionCall { function, .. } = e {
+        // Generic calls inside bodies (`__address<T>(v)` → `__address<int>(v)`,
+        // `copies.copy<T>(v)` → `copies.copy<int>(v)`).
+        if let Expression::FunctionCall { function, .. } | Expression::MethodCall { method: function, .. } = e
+            && function.contains('<')
+        {
             let mut parsed = crate::passes::gather_generics::parse_type_string(function);
             crate::type_name::replace_map(&mut parsed, type_map);
             *function = parsed.to_string();

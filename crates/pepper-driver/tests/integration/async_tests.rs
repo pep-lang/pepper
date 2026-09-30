@@ -960,6 +960,89 @@ main(): int {
 }
 "#;
 
+/// `Channel<T>` for a `T` that is not thread-safe: `send` copies, so the
+/// receiver owns a value the sender cannot change or release; many
+/// producers and consumers exchange Strings and Arrays; and nothing leaks.
+const CHANNEL_COPY_PROGRAM: &str = r#"
+import async;
+
+struct Order {
+    String customer;
+    Array<String> items;
+    construct(this.customer = "") {
+        items = Array<String>();
+    }
+}
+
+const orders = async.Channel<Order>(8);
+const received_items = Atomic<long>(0);
+const received_letters = Atomic<long>(0);
+const first = async.Channel<String>();
+
+produce() {
+    var i = 0;
+    while (i < 500) {
+        var order = Order("ada");
+        order.items.append("tea");
+        order.items.append("cake");
+        orders.send(order);
+        # Changing the original after sending does not reach the receiver.
+        order.items.append("extra");
+        order.customer.append("!");
+        i = i + 1;
+    }
+}
+
+consume() {
+    for (var order in orders) {
+        assert(order.customer == "ada", "the copy was taken before the change");
+        received_items.fetch_add(order.items.count() as long);
+        for (var item in order.items) {
+            received_letters.fetch_add(item.length() as long);
+        }
+    }
+}
+
+exchange() {
+    var producers = Array<async.Thread>();
+    var consumers = Array<async.Thread>();
+    var i = 0;
+    while (i < 3) {
+        producers.append(async.Thread.spawn(produce));
+        consumers.append(async.Thread.spawn(consume));
+        i = i + 1;
+    }
+    for (var p in producers) {
+        p.join();
+    }
+    orders.close();
+    for (var c in consumers) {
+        c.join();
+    }
+    assert(received_items.load() == 3 * 500 * 2, "every item arrived once");
+    assert(received_letters.load() == 3 * 500 * 7, "and unchanged");
+}
+
+main(): int {
+    var line = "hello";
+    first.send(line);
+    line.append(" world");
+    assert(first.receive().value() == "hello", "a String is sent as a copy");
+
+    # Warm up the main thread's lazily made Thread (join() asks for it).
+    async.Thread.current();
+    var before = _pep_live_allocs();
+    exchange();
+    assert(_pep_live_allocs() == before, "sending copies leaks nothing");
+    return 0;
+}
+"#;
+
+#[test]
+fn channels_copy_values_that_are_not_thread_safe() {
+    assert_runs("channel_copy", CHANNEL_COPY_PROGRAM);
+}
+
 #[test]
 fn mutex_locks() {
     assert_runs("mutex", MUTEX_PROGRAM);
@@ -1009,6 +1092,7 @@ fn all_programs() -> Vec<(&'static str, &'static str)> {
         ("condition", CONDITION_PROGRAM),
         ("once", ONCE_PROGRAM),
         ("channel", CHANNEL_PROGRAM),
+        ("channel_copy", CHANNEL_COPY_PROGRAM),
     ]
 }
 
@@ -1042,7 +1126,7 @@ fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), Stri
             return Err(format!("IR does not reference {expect}"));
         }
         // The sync programs also reach that platform's locks and timed waits.
-        if ["mutex", "condition", "once", "channel"].contains(&name) {
+        if ["mutex", "condition", "once", "channel", "channel_copy"].contains(&name) {
             let expect: &[&str] = match os {
                 "windows" => &["@AcquireSRWLockExclusive(", "@SleepConditionVariableSRW("],
                 "macos" => &["@pthread_mutex_lock(", "@pthread_cond_timedwait_relative_np("],

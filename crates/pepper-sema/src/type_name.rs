@@ -296,7 +296,10 @@ impl TypeName {
     /// pointer is matched on the exact pointee and re-emitted with the stars.
     pub fn replace(&mut self, param_name: &str, type_arg: &TypeName) {
         if self.name == param_name {
+            // Done: the argument may itself name a parameter spelled the
+            // same (`Twin<T>` with `T` = `Box<T>`), which is not this one.
             *self = type_arg.clone();
+            return;
         } else if let Some(pointee) = self.name.strip_suffix('*') {
             if pointee == param_name {
                 let stars = &self.name[pointee.len()..];

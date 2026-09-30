@@ -825,3 +825,42 @@ test(): int {{
     assert_eq!(code, 0);
     assert_eq!(delta, 0, "Once and Lazy, built or not, must free everything");
 }
+
+#[test]
+fn census_copy_of_a_graph() {
+    // A cycle, an object referenced twice, and a weak reference out of the
+    // copied value: the copy and the original both free everything.
+    let (code, delta) = compile_jit_census(
+        r#"
+struct Node {
+    int value;
+    Node next;
+    Node other;
+    __weak<Node> back;
+    Array<String> names;
+    construct(this.value = 0) {
+        names = Array<String>();
+        names.append("n");
+    }
+}
+
+test(): int {
+    var outside = Node(9);
+    var a = Node(1);
+    var b = Node(2);
+    a.next = b;
+    a.other = b;
+    b.next = a;
+    b.back = __weak_from<Node>(outside);
+    var c = copy(a);
+    if (c.next !== c.other || c.next.next !== c) { return 1; }
+    if (!__weak_expired<Node>(c.next.back)) { return 2; }
+    a.next = __null;
+    b.next = __null;
+    c.next.next = __null;
+    return 0;
+}"#,
+    );
+    assert_eq!(code, 0);
+    assert_eq!(delta, 0, "copying a graph must net zero once both are dropped");
+}

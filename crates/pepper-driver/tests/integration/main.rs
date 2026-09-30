@@ -21,6 +21,7 @@ mod c_callback_tests;
 mod character_literal_tests;
 mod closure_tests;
 mod compile_tests;
+mod copy_tests;
 mod corpus_tests;
 mod determinism_tests;
 mod diagnostic_tests;

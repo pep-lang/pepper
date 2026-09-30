@@ -476,7 +476,7 @@ several passes run more than once on purpose.
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
 | 16 | `convert_member_refs` | In methods, a bare field becomes `this.field` and a bare call becomes a method call (parameters are exempt). In a trait's default method copied into a struct (`FunctionDef::trait_default`, set by `apply_extensions`), only the trait's methods count and no fields. |
 | 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`BinaryOp::identity_as_equality`), addresses for references. |
-| loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions`, `specialize_methods` | Repeats until the counts of structs, functions and methods stop growing (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. |
+| loop ≤16× | `gather_generics`, `specialize_structs`, `specialize_functions`, `specialize_methods`, `copies::synthesize_copies` | Repeats until the counts of structs, functions and methods stop growing and no copy was synthesized (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. `synthesize_copies` (`copies.rs`) serves `copy(value)`: it checks every copy the program asks for (a `copy<T>` call outside a `Copyable` method) through everything it reaches and reports `cannot copy 'X' because it contains 'Y', ...` at the request (a `Channel<T>` is found through `check_shared_types::use_site`), with a note per field hop and, for a struct with a destructor or a raw pointer field, a `Copyable<T>` skeleton note and `Fix` that inserts it after the struct. It then lowers each concrete `__copy<T>(value, copies)` (the body of `Copies.copy<T>`) to `value` for a thread-safe `T`, to `copies._copy_object<T>(value)` for a struct, which calls the struct's `_pep_copy` method, or to a panicking `_pep_copy_failed<T>` for a type nothing asks to copy. It gives each such struct `_pep_copy`: `this.copy(copies)` when the struct implements `Copyable<T>` (has `copy(Copies)`), else a field-by-field copy that allocates with `Expression::Allocate` (no constructor), registers the copy before copying fields (cycles), copies thread-safe fields as they are and others with `copies.copy<F>`, and defers weak fields to a `_pep_fix_weak` method run by `Copies._finish`. `[NotCopyable("why")]` on a struct forbids copying it. |
 | then | `convert_intrinsics`, `resolve_resolvables`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
 | final | `reference_functions` (`function_references.rs`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
@@ -556,9 +556,11 @@ How the language lowers:
 
 - **Structs are references.** A struct-typed local, field, parameter, or
   return value is an LLVM pointer to a heap object allocated with
-  `_pep_malloc` (zeroed). `sizeof(StructType)` is pointer-sized, because a
-  struct occupies a pointer-sized slot. The object's ABI size is used only
-  inside the constructor.
+  `_pep_malloc` (zeroed). `sizeof(StructType)` is
+  pointer-sized, because a struct occupies a pointer-sized slot. The
+  object's ABI size is used only inside the constructor and by
+  `Expression::Allocate` (the synthesized copies' allocation: zeroed, both
+  head counts 1, an owned rvalue like a constructor result).
 - **Types** (`types.rs`): `Types::get(name)` maps primitive aliases (`int`
   and `i32`, `ulong` and `u64`, `char` and `i8`, …) to LLVM types. Any
   `T*` maps to an opaque pointer. Registered structs map to their struct
@@ -699,8 +701,11 @@ per **compilation unit**, and an unchanged unit's object comes from
 - **Owners.** While instantiating, `CodeGenerator::own` records the file of
   every symbol a declaration defines (`owners`): methods, constructors,
   functions, globals, and each file's global initializer
-  `__pep_init@<namespace>`. Instantiations (a name with `<`) and code with no
-  location have no owner.
+  `__pep_init@<namespace>`. Instantiations (a name with `<`), the
+  `_pep_copy`/`_pep_fix_weak` methods `copy` synthesizes on demand
+  (`copies::is_synthesized_method`: a program has them only for the types
+  it copies, so owning them would make a unit's object depend on the
+  program), and code with no location have no owner.
 - **Per-unit codegen.** With `CodeGenerator::unit` set (`UnitFilter`),
   `generate` declares everything in name order (so a unit's module does not
   depend on load order), defines only globals and initializers of the unit's
@@ -830,8 +835,9 @@ diagnostics"). The mechanics:
 | `weak.pep` | `Weak<T>` over `__weak<T>`; implements `Scoped<T>` (`enter()` upgrades). |
 | `result.pep` | `Error`, `None`, `Result<TValue, TError=Error>`. |
 | `atomic.pep` | `Atomic<T>` over the `__atomic_*` intrinsics. `[Shared]`, so its `T` must be thread-safe. |
+| `copy.pep` | `copy<T>`, the `Copyable<T>` trait and `Copies` (original-to-copy addresses, deferred weak fixes). `Copies.copy<T>` is the `__copy<T>` intrinsic that `passes/copies.rs` lowers. `String`, `Array`, `HashMap` and `HashSet` implement `Copyable` with a `copy(Copies)` method; `io.File` is `[NotCopyable]`. |
 | `io/` | The `io` module (`import io`): `module.pep` re-exports the public API. `types.pep`, `path.pep`, `file.pep`, and `directory.pep` implement it, and `sys_posix.pep`/`sys_windows.pep` hold the platform layer. |
-| `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`), `cpus.pep` (`logical_cpus`, `physical_cpus`), the synchronization types in `mutex.pep` (`Mutex<T>`, `MutexGuard<T>`, `Condition<T>`), `once.pep` (`Once`, `Lazy<T>`) and `channel.pep` (`Channel<T>`, `ChannelIterator<T>`), and the platform layer in `sys_posix.pep` (pthreads and pthread mutexes and condition variables, `clock_gettime`, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `SRWLOCK` and `CONDITION_VARIABLE`, `GetTickCount64`, `GetLogicalProcessorInformationEx`). The synchronization types are `[Shared]`: platform locks live in fixed heap blocks (`const __ptr<void>`), and state that changes lives in raw heap slots read and written only under the lock. Each stores its values behind a `const __ptr<T>` (or `__ptr<__ptr<T>>`) field, so `check_shared_types` accepts only a thread-safe `T` (`Channel<String>` is an error), with no compiler support. A Mutex records its holder's OS thread id (`_async_sys_os_thread`) to panic on a re-lock and to check `Condition.wait`'s caller. |
+| `async/` | The `async` module (`import async`): `thread.pep` (`Thread`, `ThreadId`, `ThreadBody`, the `_async_thread_main` entry point passed to the OS with `__function_pointer`), `thread_local.pep` (`ThreadLocal<T>` over OS thread-local keys whose destructor is its static `_release_slot`), `cpus.pep` (`logical_cpus`, `physical_cpus`), the synchronization types in `mutex.pep` (`Mutex<T>`, `MutexGuard<T>`, `Condition<T>`), `once.pep` (`Once`, `Lazy<T>`) and `channel.pep` (`Channel<T>`, `ChannelIterator<T>`), and the platform layer in `sys_posix.pep` (pthreads and pthread mutexes and condition variables, `clock_gettime`, `sysconf`, sysfs topology through `io`, `sysctlbyname`) and `sys_windows.pep` (`CreateThread`, `FlsAlloc`, `SRWLOCK` and `CONDITION_VARIABLE`, `GetTickCount64`, `GetLogicalProcessorInformationEx`). The synchronization types are `[Shared]`: platform locks live in fixed heap blocks (`const __ptr<void>`), and state that changes lives in raw heap slots read and written only under the lock. `Mutex` and `Lazy` store their values behind a `const __ptr<T>` field, so `check_shared_types` accepts only a thread-safe `T`, with no compiler support. `Channel` accepts any `T`: its buffer is a `__ptr<__ptr<void>>`, and `send` copies each value with `copy` before locking. A Mutex records its holder's OS thread id (`_async_sys_os_thread`) to panic on a re-lock and to check `Condition.wait`'s caller. |
 | `msvc.bat` | A vcvarsall helper left over from the old MSVC link path. |
 
 - **Loading.** Every top-level `runtime/*.pep` is a prelude file. Its
@@ -1230,10 +1236,12 @@ there.
   (see `crates/pepper-codegen/Cargo.toml`).
 - Some passes leave unresolved nodes for codegen to report as
   `unknown …`.
-- **Sync types hold thread-safe values only.** `Channel<T>`, `Mutex<T>` and
-  `Lazy<T>` rely on `check_shared_types` to reject a non-thread-safe `T`.
-  A `String` crosses threads only once `send` copies values and the compiler
-  confines what a `with` block over a lock may let escape (both planned).
+- **Sync types.** `Mutex<T>` and `Lazy<T>` rely on `check_shared_types` to
+  reject a non-thread-safe `T`, until the compiler confines what a `with`
+  block over a lock may let escape. `Channel<T>` takes any `T` that `copy`
+  can copy: its buffer field is `__ptr<__ptr<void>>`, and `send` copies
+  before locking and drops its own reference under the lock.
+- **`copy` of a trait value** is an error: it needs a vtable slot.
 - **Only the first sema error is reported** per compile
   (`errors::report`).
 - **Specialization fixpoint is capped at 16 rounds.** A type that nests

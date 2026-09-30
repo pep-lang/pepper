@@ -10,11 +10,16 @@
 #   for a struct `T`). An unbounded channel replaces the buffer with one
 #   twice the size when it fills.
 #
-# `Buffer` is a `__ptr<__ptr<T>>`: a `[Shared]` struct's pointer field must
-# point at a thread-safe type, so `check_shared_types` accepts only a
-# thread-safe `T` (`Channel<String>` is a compile error). A thread-safe
-# value's counts are atomic, so the sender and the receiver may both hold
-# references to it. A later phase copies other values on `send`.
+# `Buffer` is a `__ptr<__ptr<void>>`, so `check_shared_types` accepts any
+# `T`; the methods view the buffer as `T` slots. A value that is not
+# thread-safe counts its references plainly, so no two threads may ever
+# touch its counts. `send` therefore copies the value with `copy` first, on
+# the sending thread and before locking, then, under the lock, stores the
+# copy in its slot and drops its own reference to it, so after unlocking
+# only the slot references the copy. `receive` takes the value out of its
+# slot under the lock the same way. Every count step on a copy happens on
+# the sender before it unlocks or on the receiver after it locks. A
+# thread-safe value is not copied (`copy` returns it); its counts are atomic.
 #
 # Senders wait on `NotFull` (bounded channels only) and receivers on
 # `NotEmpty`; `close` wakes both.
@@ -34,14 +39,19 @@ import "sys_windows";
 ## or the threads that use it does not. `for (var v in channel)` receives
 ## until the channel is closed and empty.
 ##
-## `T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-## type such as `ThreadBody`), and is passed by reference; `Channel<String>` is
-## a compile error.
+## `send` copies each value with `copy`, so the receiver gets a value that
+## nothing on the sending thread references: a `String` or an `Array` can be
+## sent, and changing the original afterwards does not affect what was sent.
+## A thread-safe value (a number, a `[Shared]` struct, a `shared` function
+## value such as a `ThreadBody`) is not copied but passed by reference. A
+## type that `copy` cannot copy (a struct with a destructor or a raw pointer
+## field that does not implement `Copyable<T>`, a plain function value, a
+## trait value) is a compile error where the `Channel` is named.
 ##
 ## A Channel is `[Shared]`: keep it in a module-scope variable or pass it to
 ## threads.
 ##
-## @typeParam T the type of the values carried, which must be thread-safe
+## @typeParam T the type of the values carried
 ## @example
 ##     import async;
 ##
@@ -82,8 +92,9 @@ export struct Channel<T> {
     ## the buffer, and 1 once closed. Read and written only under `Lock`.
     const State: __ptr<ulong>;
 
-    ## Holds the ring buffer of values. Read and written only under `Lock`.
-    const Buffer: __ptr<__ptr<T>>;
+    ## Holds the ring buffer of values (`T` slots). Read and written only
+    ## under `Lock`.
+    const Buffer: __ptr<__ptr<void>>;
 
     ## Creates an open, empty channel.
     ##
@@ -100,18 +111,21 @@ export struct Channel<T> {
         State = _pep_malloc(4 * sizeof<ulong>());
         var slots = capacity > 0 ? capacity : 16;
         State[2] = slots;
-        Buffer = _pep_malloc(sizeof<__ptr<T>>());
+        Buffer = _pep_malloc(sizeof<__ptr<void>>());
         Buffer[0] = _pep_malloc(slots * sizeof<T>());
     }
 
     destruct {
-        # Release the values still queued.
-        __ptr<T> buffer = Buffer[0];
+        # Release the values still queued, under the lock the senders stored
+        # them under.
+        _async_sys_mutex_lock(Lock);
+        __ptr<T> buffer = this._slots();
         var i: ulong = 0;
         while (i < State[1]) {
             buffer[(State[0] + i) % State[2]] = __default<T>();
             i = i + 1;
         }
+        _async_sys_mutex_unlock(Lock);
         _pep_free(buffer);
         _pep_free(Buffer);
         _pep_free(State);
@@ -120,34 +134,46 @@ export struct Channel<T> {
         _async_sys_mutex_destroy(Lock);
     }
 
-    ## Queues `value`, first waiting while a bounded channel is full.
+    ## Queues a copy of `value`, first waiting while a bounded channel is
+    ## full.
+    ##
+    ## The copy is made with `copy` before waiting, so the value can be
+    ## changed or dropped as soon as `send` returns; a thread-safe value is
+    ## queued itself.
     ##
     ## @param value the value to send
-    ## @returns true if the value was queued, false if the channel is closed (the value is dropped)
+    ## @returns true if the value was queued, false if the channel is closed (the copy is dropped)
     ## @example
-    ##     if (!results.send(42)) {
-    ##         print("nobody is listening any more\n");
-    ##     }
+    ##     var line = "hello";
+    ##     lines.send(line);
+    ##     line.append(" again");   # the receiver still gets "hello"
     bool send(T value) {
+        var copied = copy<T>(value);
         _async_sys_mutex_lock(Lock);
         while (Capacity > 0 && State[1] == Capacity && State[3] == 0) {
             _async_sys_condition_wait(NotFull, Lock);
         }
-        var queued = this._push(value);
+        var queued = this._push(copied);
+        # Drop this thread's reference before unlocking: the slot now holds
+        # the only one.
+        copied = __default<T>();
         _async_sys_mutex_unlock(Lock);
         return queued;
     }
 
-    ## Queues `value` only if there is room right now, without waiting.
+    ## Queues a copy of `value` only if there is room right now, without
+    ## waiting. The copy is made even when it is not queued.
     ##
     ## @param value the value to send
     ## @returns true if the value was queued, false if the channel is full or closed
     bool try_send(T value) {
+        var copied = copy<T>(value);
         _async_sys_mutex_lock(Lock);
         var queued = false;
         if (Capacity == 0 || State[1] < Capacity) {
-            queued = this._push(value);
+            queued = this._push(copied);
         }
+        copied = __default<T>();
         _async_sys_mutex_unlock(Lock);
         return queued;
     }
@@ -258,7 +284,7 @@ export struct Channel<T> {
         if (State[1] == State[2]) {
             this._grow();
         }
-        __ptr<T> buffer = Buffer[0];
+        __ptr<T> buffer = this._slots();
         buffer[(State[0] + State[1]) % State[2]] = value;
         State[1] = State[1] + 1;
         _async_sys_condition_notify_one(NotEmpty);
@@ -274,7 +300,7 @@ export struct Channel<T> {
             }
             return Result<T>.err(Error("no value is waiting"));
         }
-        __ptr<T> buffer = Buffer[0];
+        __ptr<T> buffer = this._slots();
         var head = State[0];
         var received = Result<T>.ok(buffer[head]);
         buffer[head] = __default<T>();
@@ -284,10 +310,16 @@ export struct Channel<T> {
         return received;
     }
 
+    # The ring buffer, as `T` slots.
+    __ptr<T> _slots() {
+        __ptr<void> raw = Buffer[0];
+        return raw;
+    }
+
     # Moves the queued values, in order, into a buffer twice the size. The
     # caller holds the lock.
     void _grow() {
-        __ptr<T> old = Buffer[0];
+        __ptr<T> old = this._slots();
         var slots = State[2];
         __ptr<T> grown = _pep_malloc(2 * slots * sizeof<T>());
         var i: ulong = 0;

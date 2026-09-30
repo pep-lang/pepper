@@ -136,6 +136,68 @@ Function values follow the same split: a plain function type such as
 [`shared` function type](function-types.md#sharing-function-values-between-threads)
 such as `shared () => void` has atomic counts.
 
+## Copying a value with copy
+
+`copy(value)` makes a copy of a value that shares no object that is not
+thread-safe with the original, so the copy can go to another thread. A
+[channel](threads.md#channels) copies every value it is sent this way.
+
+```pepper
+var names = Array<String>();
+names.append("ada");
+var copied = copy(names);
+copied[0].append(" lovelace");   # names[0] is still "ada"
+```
+
+- Every struct object the value reaches is copied once. An object referenced
+  twice is copied once and stays shared inside the copy, and a cycle becomes
+  the same cycle among the copies.
+- Thread-safe objects are not copied: a `[Shared]` struct or a `shared`
+  function value in the original is the same object in the copy. For a
+  thread-safe value, `copy` returns the value itself.
+- A weak reference to an object that was copied points at its copy. A weak
+  reference to an object outside the copied value becomes null.
+- A struct is copied field by field, without running its constructor.
+
+A struct with a destructor or a raw pointer (`__ptr<T>`) field is not
+**trivially copyable**: copying its fields would share what it owns, such as
+a buffer it frees. Such a struct says how to copy itself by implementing
+`Copyable<T>`, with a `copy(Copies copies)` method that builds the copy and
+copies each value it holds with `copies.copy(value)`. `String`, `Array`,
+`HashMap` and `HashSet` implement it. `String.copy()` also copies a single
+String; it replaces the deprecated `clone()`. `Array.clone()` is unchanged: it
+copies the Array but shares its elements.
+
+Copying a value that reaches a struct that is not trivially copyable and does
+not implement `Copyable<T>` is an error at the `copy` call. It names the
+struct, shows each field on the way to it, says why it cannot be copied, and
+shows a `Copyable<T>` to fill in (the editor offers to insert it):
+
+```text
+main.pep:14:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable
+   14 |     var c = copy(log);
+      |             ^~~~
+main.pep:9:5: note: 'Log' reaches it through field 'out'
+    9 |     Handle out;
+      |     ^~~~~~
+main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would release what it owns twice
+    1 | struct Handle {
+      |        ^~~~~~
+note: implement 'Copyable<Handle>' to say how to copy it:
+    extend Handle with Copyable<Handle> {
+        Handle copy(Copies copies) {
+            # Build the copy; copy each struct field with copies.copy(field).
+            panic("copying 'Handle' is not implemented");
+            return this;
+        }
+    }
+```
+
+Some types cannot be copied at all: an `io.File` owns an operating-system
+handle, so the error says to send its path instead. A plain function value
+cannot be copied, because it may capture anything; declare it `shared`. A
+trait value cannot be copied yet.
+
 ## Summary
 
 | Code | What happens to references |
@@ -147,4 +209,5 @@ such as `shared () => void` has atomic counts.
 | `a.method()` | No change: `this` refers to `a`'s object. |
 | `make();` (result unused) | The result is released at the end of the statement. |
 | `var w = Weak<T>(a);` | No change to `a`'s count; `w` does not keep the object alive. |
+| `var c = copy(a);` | `c` refers to new objects; `a`'s count does not change. |
 | end of a block | Every local declared in the block releases its reference. |

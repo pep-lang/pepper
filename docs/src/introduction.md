@@ -72,8 +72,9 @@ Some that you will meet quickly:
   can be [overloaded](language/overloading.md); constructors cannot yet.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, which the compiler checks,
-  closure captures included. Channels, mutexes, `Once` and `Lazy` carry and
-  guard thread-safe values only, so a `String` cannot cross threads yet (see
+  closure captures included. A channel copies what it is sent with `copy`,
+  so a `String` or an `Array` crosses threads that way; mutexes and `Lazy`
+  hold thread-safe values only, and a trait value cannot be copied yet (see
   [threads](language/threads.md#limitations)).
 - Reference counting does not reclaim cycles on its own: two objects that
   refer to each other are never freed. Break the cycle with a

@@ -255,13 +255,13 @@ export struct Path {
     ##     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
     Path join(Path other) {
         if (other._value.size() == 0) {
-            return Path(_value.clone());
+            return Path(_value.copy());
         }
         if (_value.size() == 0 || other.is_absolute() || other.has_root_or_prefix()) {
-            return Path(other._value.clone());
+            return Path(other._value.copy());
         }
         var p = _value.c_str() as __ptr<u8>;
-        var s = _value.clone();
+        var s = _value.copy();
         if (!_io_path_is_sep(_io_byte(p, _value.size(), _value.size() - 1))) {
             s.append(_io_path_separator());
         }
@@ -417,7 +417,7 @@ export struct Path {
     Path with_extension(String ext) {
         var name = file_name();
         if (name.size() == 0) {
-            return Path(_value.clone());
+            return Path(_value.copy());
         }
         var e = _io_path_trimmed_end(_value);
         var start = _io_path_name_start(_value, e);

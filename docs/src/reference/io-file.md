@@ -299,7 +299,7 @@ normally obtained from a query such as `File.metadata()`.
 ## File
 
 ```pepper
-struct File
+[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")] struct File
 ```
 
 An open file, or a standard stream, read and written through its

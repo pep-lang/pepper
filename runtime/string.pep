@@ -15,7 +15,7 @@ extern void memcpy(void* dest, void* src, ulong n);
 ##
 ## A String is a reference type: `var b = a;` shares one object, so
 ## `append`, `+=`, and `grow` are visible through every reference. Use
-## `clone()` or `+` for an independent copy. Equality (`==`) compares
+## `copy()` or `+` for an independent copy. Equality (`==`) compares
 ## content.
 ##
 ## A `StringIterator` panics when the String has been changed by `append`,
@@ -44,7 +44,7 @@ export struct String {
     ulong _size;
     ## A modification counter, incremented by `append` and `grow`. A
     ## `StringIterator` compares it to detect modification during iteration.
-    ## `clone()` starts the copy at 0.
+    ## `copy()` starts the copy at 0.
     ulong _version;
 
     ## Creates a String by copying `size` bytes of `data` into a new
@@ -276,9 +276,26 @@ export struct String {
     ## Returns a new String with the same content and its own buffer, so
     ## later changes to either String do not affect the other. Runs in O(size()).
     ##
+    ## This is also how `copy(value)` copies a String (the `Copyable<String>`
+    ## implementation), which passes `copies`.
+    ##
+    ## @param copies the objects copied so far, when `copy(value)` calls it; a String holds no other objects, so it is not used
     ## @returns an independent copy of this String
-    String clone() {
+    ## @example
+    ##     var a = "abc";
+    ##     var b = a.copy();
+    ##     b.append("d");   # a is still "abc"
+    String copy(Copies copies = __null) {
         return String(_data, _size, _length);
+    }
+
+    ## Deprecated: use `copy` instead. Returns a new String with the same
+    ## content and its own buffer.
+    ##
+    ## @returns an independent copy of this String
+    [Deprecated("use 'copy' instead", "copy")]
+    String clone() {
+        return this.copy();
     }
 
     ## Returns the **byte offset** of the first occurrence of `needle`, or -1
@@ -389,7 +406,7 @@ export struct String {
     ## @example
     ##     var greeting = "Hello, " + "world";
     String +(String rhs) {
-        String result = clone();
+        String result = this.copy();
         result.append(rhs);
         return result;
     }
@@ -464,3 +481,5 @@ export struct StringIterator {
 }
 
 extend StringIterator with Iterator<String> {}
+
+extend String with Copyable<String> {}

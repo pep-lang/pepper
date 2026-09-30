@@ -583,22 +583,156 @@ fn shared_generic_argument_not_thread_safe() {
     assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
 }
 
+/// The first semantic error of `source` (as `main.pep`, with the runtime),
+/// as a `Diagnostic`, for checking its fixes.
+fn sema_error_of(source: &str) -> pepper_driver::parser_diagnostic::Diagnostic {
+    std::env::set_current_dir(repo_root()).unwrap();
+    let program = pepper_driver::compiler::load_with_runtime("main.pep", source).expect("load");
+    let mut module = pepper_driver::compiler::merge(&program).expect("merge");
+    pepper_sema::apply_platform_filters(&mut module).expect("platform");
+    pepper_sema::struct_body::apply(&mut module).expect("struct bodies");
+    pepper_sema::transform_pass(&mut module).expect_err("expected a semantic error")
+}
+
+const HANDLE_LOG: &str = "struct Handle {\n    int fd;\n    destruct {\n        fd = -1;\n    }\n}\n\nstruct Log {\n    Handle out;\n}\n\nmain(): int {\n    var log = Log();\n    var c = copy(log);\n    return 0;\n}\n";
+
 #[test]
-fn channel_of_non_thread_safe_type() {
-    // Until values are copied on send, a Channel carries only thread-safe
-    // values; the buffer field's `__ptr<__ptr<T>>` makes that the existing
-    // shared-struct check.
-    let error = error_of("channel_of_string", "import async;\n\nmain(): int {\n    var lines = async.Channel<String>(8);\n    return 0;\n}\n");
+fn cannot_copy_a_struct_with_a_destructor() {
+    // At the `copy` call, a note for the field on the way, the reason at the
+    // struct, and the `Copyable` skeleton.
+    assert_eq!(
+        error_of("cannot_copy_destructor", HANDLE_LOG),
+        "main.pep:14:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable\n\
+         \x20  14 |     var c = copy(log);\n\
+         \x20     |             ^~~~\n\
+         main.pep:9:5: note: 'Log' reaches it through field 'out'\n\
+         \x20   9 |     Handle out;\n\
+         \x20     |     ^~~~~~\n\
+         main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would release what it owns twice\n\
+         \x20   1 | struct Handle {\n\
+         \x20     |        ^~~~~~\n\
+         note: implement 'Copyable<Handle>' to say how to copy it:\n\
+         \x20   extend Handle with Copyable<Handle> {\n\
+         \x20       Handle copy(Copies copies) {\n\
+         \x20           # Build the copy; copy each struct field with copies.copy(field).\n\
+         \x20           panic(\"copying 'Handle' is not implemented\");\n\
+         \x20           return this;\n\
+         \x20       }\n\
+         \x20   }"
+    );
+}
+
+#[test]
+fn cannot_copy_offers_a_copyable_skeleton_fix() {
+    // The fix inserts the skeleton after the struct's closing brace.
+    let error = sema_error_of(HANDLE_LOG);
+    let [fix] = error.fixes.as_slice() else { panic!("{:?}", error.fixes) };
+    assert_eq!(fix.message, "Implement Copyable<Handle>");
+    let [edit] = fix.edits.as_slice() else { panic!("{:?}", fix.edits) };
+    assert_eq!(edit.loc.file, pepper_driver::parser_diagnostic::FileId(0));
+    let end = HANDLE_LOG.find("}\n\nstruct Log").unwrap() + 1;
+    assert_eq!((edit.loc.span.start, edit.loc.span.end), (end, end));
+    assert!(edit.replacement.starts_with("\n\nextend Handle with Copyable<Handle> {\n    Handle copy(Copies copies) {\n"), "{}", edit.replacement);
+}
+
+#[test]
+fn cannot_copy_a_struct_with_a_raw_pointer() {
+    assert_eq!(
+        error_of(
+            "cannot_copy_raw_pointer",
+            "struct Buffer {\n    __ptr<u8> data;\n}\n\nmain(): int {\n    var b = Buffer();\n    var c = copy(b);\n    return 0;\n}\n"
+        )
+        .split("\nnote: implement")
+        .next()
+        .unwrap(),
+        "main.pep:7:13: error: cannot copy 'Buffer', which is not trivially copyable\n\
+         \x20   7 |     var c = copy(b);\n\
+         \x20     |             ^~~~\n\
+         main.pep:2:5: note: 'Buffer' has raw pointer field 'data' of type '__ptr<u8>'\n\
+         \x20   2 |     __ptr<u8> data;\n\
+         \x20     |     ^~~~~~~~~"
+    );
+}
+
+#[test]
+fn cannot_copy_shows_each_field_on_the_way() {
+    let error = error_of(
+        "cannot_copy_two_hops",
+        "struct Handle {\n    int fd;\n    destruct {\n        fd = -1;\n    }\n}\n\nstruct Sink {\n    Handle out;\n}\n\nstruct Log {\n    Sink sink;\n}\n\nmain(): int {\n    var c = copy(Log());\n    return 0;\n}\n",
+    );
+    assert!(error.starts_with("main.pep:17:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable\n"), "{error}");
+    let log_hop = error.find("main.pep:13:5: note: 'Log' reaches it through field 'sink'").expect(&error);
+    let sink_hop = error.find("main.pep:9:5: note: 'Sink' reaches it through field 'out'").expect(&error);
+    assert!(log_hop < sink_hop, "{error}");
+}
+
+#[test]
+fn cannot_copy_a_runtime_type_that_forbids_it() {
+    // Through an Array in a Channel, whose `send` copies: at the Channel,
+    // and the runtime's reason instead of a skeleton.
+    let error = error_of(
+        "cannot_copy_file",
+        "import io;\nimport async;\n\nstruct Log {\n    io.File out;\n}\n\nmain(): int {\n    var lines = async.Channel<Array<Log>>();\n    return 0;\n}\n",
+    );
     assert!(
         error.starts_with(
-            "main.pep:4:17: error: shared struct 'Channel<String>' requires thread-safe type arguments; 'String' is not thread-safe\n\
-             \x20   4 |     var lines = async.Channel<String>(8);\n\
-             \x20     |                 ^~~~~~~~~~~~~~~~~~~~~\n"
+            "main.pep:9:17: error: cannot copy 'Array<Log>' because it contains 'File', which cannot be copied\n\
+             \x20   9 |     var lines = async.Channel<Array<Log>>();\n\
+             \x20     |                 ^~~~~~~~~~~~~~~~~~~~~~~~~\n\
+             note: 'Array<Log>' copies its values of type 'Log'\n\
+             main.pep:5:5: note: 'Log' reaches it through field 'out'\n"
         ),
         "{error}"
     );
-    assert!(error.contains("note: required by field 'Buffer' declared here"), "{error}");
-    assert!(error.contains("note: 'String' is not declared [Shared]"), "{error}");
+    assert!(error.contains("note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread"), "{error}");
+    assert!(!error.contains("implement 'Copyable"), "{error}");
+}
+
+#[test]
+fn cannot_copy_a_trait_value_yet() {
+    assert_eq!(
+        error_of(
+            "cannot_copy_trait",
+            "trait Shape {\n    int area();\n}\n\nmain(): int {\n    var shapes = Array<Shape>();\n    var c = copy(shapes);\n    return 0;\n}\n"
+        ),
+        "main.pep:7:13: error: cannot copy 'Array<Shape>' because it contains 'Shape', which is a trait value\n\
+         \x20   7 |     var c = copy(shapes);\n\
+         \x20     |             ^~~~\n\
+         note: 'Array<Shape>' copies its values of type 'Shape'\n\
+         note: copying a trait value is not supported yet; copy the struct before converting it to 'Shape'"
+    );
+}
+
+#[test]
+fn cannot_copy_a_plain_function_value() {
+    assert_eq!(
+        error_of(
+            "cannot_copy_function",
+            "struct Job {\n    () => void run;\n}\n\nmain(): int {\n    var c = copy(Job());\n    return 0;\n}\n"
+        ),
+        "main.pep:6:13: error: cannot copy 'Job' because it contains '() => void', which is a plain function value\n\
+         \x20   6 |     var c = copy(Job());\n\
+         \x20     |             ^~~~\n\
+         main.pep:2:5: note: 'Job' reaches it through field 'run'\n\
+         \x20   2 |     () => void run;\n\
+         \x20     |     ^~~~~~~~~~\n\
+         note: a plain function value may capture values that are not thread-safe; declare the type 'shared () => void' to pass it by reference"
+    );
+}
+
+#[test]
+fn string_clone_is_deprecated() {
+    let source = "main(): int {\n    var a = \"abc\";\n    var b = a.clone();\n    return 0;\n}\n";
+    let rendered = warnings_of(source);
+    assert!(
+        rendered.starts_with(
+            "main.pep:3:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]\n\
+             \x20   3 |     var b = a.clone();\n\
+             \x20     |               ^~~~~\n\
+             \x20     |               copy\n"
+        ),
+        "{rendered}"
+    );
 }
 
 #[test]

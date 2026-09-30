@@ -223,17 +223,29 @@ receive, with any number of each, like a Go channel:
 - `count()` and `is_closed()` report the channel's state, which other
   threads may change right after.
 
-`T` must be thread-safe, because the sender and the receiver both hold the
-value: numbers, `[Shared]` structs, and `shared` function values such as a
-`ThreadBody`, which makes a channel a work queue. A `Channel<String>` is a
-compile error for now (see [Limitations](#limitations)):
+`send` [copies](memory.md#copying-a-value-with-copy) each value with
+`copy`, so the receiver gets a value that nothing on the sending thread
+references. A `String`, an `Array` or a struct of them can be sent, and
+changing the original after `send` does not change what was sent:
+
+```pepper
+{{#include ../../examples/threads-copy.pep}}
+```
+
+A thread-safe value (a number, a `[Shared]` struct, a `shared` function value
+such as a `ThreadBody`) is not copied but passed by reference, which makes a
+channel of `ThreadBody` values a work queue. A type that `copy` cannot copy
+is an error where the `Channel` is named:
 
 ```text
-main.pep:4:17: error: shared struct 'Channel<String>' requires thread-safe type arguments; 'String' is not thread-safe
-    4 |     var lines = async.Channel<String>(8);
-      |                 ^~~~~~~~~~~~~~~~~~~~~
-runtime/async/channel.pep:86:19: note: required by field 'Buffer' declared here
-runtime/string.pep:35:15: note: 'String' is not declared [Shared]
+main.pep:9:17: error: cannot copy 'Array<Log>' because it contains 'File', which cannot be copied
+    9 |     var lines = async.Channel<Array<Log>>();
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~
+note: 'Array<Log>' copies its values of type 'Log'
+main.pep:5:5: note: 'Log' reaches it through field 'out'
+    5 |     io.File out;
+      |     ^~~~~~~
+runtime/io/file.pep:244:15: note: 'File' owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread
 ```
 
 The [Channel reference](../reference/async-channel.md) documents every
@@ -261,7 +273,7 @@ reach the value is a [`with` block](scopes.md):
 - A `panic` while a Mutex is held ends the program, so a Mutex is never left
   "poisoned".
 
-`T` must be thread-safe, as for a channel. A Mutex is for keeping several
+`T` must be thread-safe for now (see [Limitations](#limitations)). A Mutex is for keeping several
 changes together, such as two `Atomic` fields of a `[Shared]` struct that
 must move as a unit, or state behind a raw pointer. For one number,
 `Atomic<T>` is simpler.
@@ -308,8 +320,11 @@ The [Once reference](../reference/async-once.md) has the details.
 
 ## Limitations
 
-- `Channel<T>`, `Mutex<T>` and `Lazy<T>` hold only thread-safe values for
-  now, so a `String` or an `Array` cannot cross threads through them yet.
+- `Mutex<T>` and `Lazy<T>` hold only thread-safe values for now, so a
+  `String` or an `Array` crosses threads only through a `Channel`, which
+  copies it.
+- `copy` cannot copy a trait value yet, so a `Channel` of a trait type, or of
+  an `Array` of one, is an error.
 - There is no reader-writer lock, no `select` over several channels, and no
   barrier or semaphore. A Mutex is not re-entrant.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,

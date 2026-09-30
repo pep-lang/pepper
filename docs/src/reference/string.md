@@ -23,7 +23,7 @@ Two measures describe a String, and each API says which one it uses:
 
 A String is a reference type: `var b = a;` shares one object, so
 `append`, `+=`, and `grow` are visible through every reference. Use
-`clone()` or `+` for an independent copy. Equality (`==`) compares
+`copy()` or `+` for an independent copy. Equality (`==`) compares
 content.
 
 A `StringIterator` panics when the String has been changed by `append`,
@@ -291,14 +291,39 @@ pass it to C. C functions stop at the first NUL byte in the content.
 **Returns**
 - the String's NUL-terminated byte buffer, or `__null`
 
-#### clone
+#### copy
 
 ```pepper
-String clone()
+String copy(Copies copies = __null)
 ```
 
 Returns a new String with the same content and its own buffer, so
 later changes to either String do not affect the other. Runs in O(size()).
+
+This is also how `copy(value)` copies a String (the `Copyable<String>`
+implementation), which passes `copies`.
+
+**Parameters**
+- `copies` — the objects copied so far, when `copy(value)` calls it; a String holds no other objects, so it is not used
+
+**Returns**
+- an independent copy of this String
+
+**Example**
+```pepper
+    var a = "abc";
+    var b = a.copy();
+    b.append("d");   # a is still "abc"
+```
+
+#### clone
+
+```pepper
+[Deprecated("use 'copy' instead", "copy")] String clone()
+```
+
+Deprecated: use `copy` instead. Returns a new String with the same
+content and its own buffer.
 
 **Returns**
 - an independent copy of this String

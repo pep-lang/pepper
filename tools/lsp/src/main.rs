@@ -973,8 +973,23 @@ fn document_warnings(text: &str, program: Option<&Program>) -> Vec<diag::Diagnos
     warnings
 }
 
-/// The quick fixes for `warnings` in `text` (the document `uri`) whose
-/// range overlaps `range`: one code action per suggested fix.
+/// The diagnostics of `text` (the program's document) that may carry
+/// fixes: its warnings, and `sema_error` (the program's semantic error) when
+/// it is in the document and carries one, such as the `Copyable` skeleton
+/// for a struct that `copy` cannot copy.
+fn fixable_diagnostics(text: &str, program: Option<&Program>, sema_error: Option<&diag::Diagnostic>) -> Vec<diag::Diagnostic> {
+    let mut diagnostics = document_warnings(text, program);
+    if let Some(error) = sema_error
+        && error.loc.is_some_and(|loc| loc.file == FileId(0))
+        && !error.fixes.is_empty()
+    {
+        diagnostics.push(error.clone());
+    }
+    diagnostics
+}
+
+/// The quick fixes for `warnings` (and errors) in `text`, the document
+/// `uri`, whose range overlaps `range`: one code action per suggested fix.
 fn quick_fixes(uri: &Url, text: &str, warnings: &[diag::Diagnostic], range: Range) -> Vec<CodeActionOrCommand> {
     let overlaps = |r: &Range| r.start <= range.end && range.start <= r.end;
     let mut actions = vec![];
@@ -1581,12 +1596,14 @@ impl LanguageServer for PepperLsp {
         let uri = params.text_document.uri;
         let Some(text) = self.doc(&uri) else { return Ok(None) };
         let program = self.program(&uri).ok();
-        let warnings = document_warnings(&text, program.as_ref());
-        let mut actions = quick_fixes(&uri, &text, &warnings, params.range);
-        if let Some(program) = &program
-            && let Err(error) = sema_model_of(program)
-        {
-            actions.extend(missing_arms_fix(&uri, &text, program, &error, params.range));
+        // One semantic analysis serves both kinds of fix: those a
+        // diagnostic carries (a `Copyable` skeleton) and the missing arms of
+        // a `match`.
+        let sema_error = program.as_ref().and_then(|p| sema_model_of(p).err());
+        let diagnostics = fixable_diagnostics(&text, program.as_ref(), sema_error.as_ref());
+        let mut actions = quick_fixes(&uri, &text, &diagnostics, params.range);
+        if let (Some(program), Some(error)) = (&program, &sema_error) {
+            actions.extend(missing_arms_fix(&uri, &text, program, error, params.range));
         }
         Ok((!actions.is_empty()).then_some(actions))
     }

@@ -240,6 +240,7 @@ export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> 
 ##     f.write_string("hello");
 ##     f.close();
 ##     var text = File.read_to_string(Path("out.txt")).value();   # "hello"
+[NotCopyable("owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread")]
 export struct File {
     ## The platform handle: a file descriptor on POSIX (-1 when closed), a
     ## `HANDLE` on Windows (null when closed).

@@ -325,6 +325,39 @@ fn deprecated_declarations_offer_quick_fixes() {
     assert_eq!(action.title, "Replace 'dup' with 'twice'");
 }
 
+const NOT_COPYABLE: &str = r#"struct Handle {
+    int fd;
+    destruct {
+        fd = -1;
+    }
+}
+
+main(): int {
+    var h = Handle();
+    var c = copy(h);
+    return 0;
+}
+"#;
+
+#[test]
+fn cannot_copy_offers_a_copyable_skeleton() {
+    let (uri, text, program) = load("not_copyable", NOT_COPYABLE, "main.pep");
+    let diagnostics = fixable_diagnostics(&text, Some(&program), sema_model_of(&program).err().as_ref());
+    let [error] = diagnostics.as_slice() else { panic!("{diagnostics:?}") };
+    assert_eq!(error.message, "cannot copy 'Handle', which is not trivially copyable");
+    let actions = quick_fixes(&uri, &text, &diagnostics, Range::new(Position::new(9, 13), Position::new(9, 13)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Implement Copyable<Handle>");
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    let [edit] = edits.as_slice() else { panic!("{edits:?}") };
+    // Inserted after the struct's closing brace.
+    assert_eq!(edit.range, Range::new(Position::new(5, 1), Position::new(5, 1)));
+    assert!(edit.new_text.starts_with("
+
+extend Handle with Copyable<Handle> {
+    Handle copy(Copies copies) {"), "{}", edit.new_text);
+}
+
 const CONVERTED: &str = r#"struct Name {
     var text: String;
     [Implicit]

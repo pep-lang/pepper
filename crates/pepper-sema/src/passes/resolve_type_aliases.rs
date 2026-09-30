@@ -258,7 +258,7 @@ fn subst_expr(expr: &mut Expression, aliases: &HashMap<String, &TypeAliasDef>, v
             subst_expr(lhs, aliases, values);
             subst_expr(rhs, aliases, values);
         }
-        Expression::SizeOf(ty) | Expression::IsPod(ty) | Expression::Default(ty) => subst(ty, aliases),
+        Expression::SizeOf(ty) | Expression::IsPod(ty) | Expression::Default(ty) | Expression::Allocate(ty) => subst(ty, aliases),
         Expression::CountStep { .. } => {}
         Expression::FunctionPointer { owner, .. } => {
             if let Some(owner) = owner {

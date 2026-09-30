@@ -25,15 +25,20 @@ left and then get an error. Only `close()` closes a channel; dropping it
 or the threads that use it does not. `for (var v in channel)` receives
 until the channel is closed and empty.
 
-`T` must be thread-safe (a number, a `[Shared]` struct, a `shared` function
-type such as `ThreadBody`), and is passed by reference; `Channel<String>` is
-a compile error.
+`send` copies each value with `copy`, so the receiver gets a value that
+nothing on the sending thread references: a `String` or an `Array` can be
+sent, and changing the original afterwards does not affect what was sent.
+A thread-safe value (a number, a `[Shared]` struct, a `shared` function
+value such as a `ThreadBody`) is not copied but passed by reference. A
+type that `copy` cannot copy (a struct with a destructor or a raw pointer
+field that does not implement `Copyable<T>`, a plain function value, a
+trait value) is a compile error where the `Channel` is named.
 
 A Channel is `[Shared]`: keep it in a module-scope variable or pass it to
 threads.
 
 **Type parameters**
-- `T` — the type of the values carried, which must be thread-safe
+- `T` — the type of the values carried
 
 **Example**
 ```pepper
@@ -106,10 +111,11 @@ the buffer, and 1 once closed. Read and written only under `Lock`.
 #### Buffer
 
 ```pepper
-const Buffer: __ptr<__ptr<T>>
+const Buffer: __ptr<__ptr<void>>
 ```
 
-Holds the ring buffer of values. Read and written only under `Lock`.
+Holds the ring buffer of values (`T` slots). Read and written only
+under `Lock`.
 
 ### Constructor
 
@@ -141,19 +147,24 @@ Creates an open, empty channel.
 bool send(T value)
 ```
 
-Queues `value`, first waiting while a bounded channel is full.
+Queues a copy of `value`, first waiting while a bounded channel is
+full.
+
+The copy is made with `copy` before waiting, so the value can be
+changed or dropped as soon as `send` returns; a thread-safe value is
+queued itself.
 
 **Parameters**
 - `value` — the value to send
 
 **Returns**
-- true if the value was queued, false if the channel is closed (the value is dropped)
+- true if the value was queued, false if the channel is closed (the copy is dropped)
 
 **Example**
 ```pepper
-    if (!results.send(42)) {
-        print("nobody is listening any more\n");
-    }
+    var line = "hello";
+    lines.send(line);
+    line.append(" again");   # the receiver still gets "hello"
 ```
 
 #### try_send
@@ -162,7 +173,8 @@ Queues `value`, first waiting while a bounded channel is full.
 bool try_send(T value)
 ```
 
-Queues `value` only if there is room right now, without waiting.
+Queues a copy of `value` only if there is room right now, without
+waiting. The copy is made even when it is not queued.
 
 **Parameters**
 - `value` — the value to send

@@ -8,10 +8,12 @@
 //!
 //! - a symbol with an owner ([`crate::CodeGenerator::owners`]: a declaration
 //!   of some file) is defined only in its file's unit;
-//! - every other body (instantiations such as `Array<int>.append`, and code
-//!   without a source location) is defined in each unit that calls it, and
-//!   becomes `linkonce_odr`, in a comdat where the object format has them,
-//!   so the linker keeps one copy, the way C++ emits templates;
+//! - every other body (instantiations such as `Array<int>.append`, the
+//!   `_pep_copy` and `_pep_fix_weak` methods that `copy` synthesizes on
+//!   demand, and code without a source location) is defined in each unit
+//!   that calls it, and becomes `linkonce_odr`, in a comdat where the
+//!   object format has them, so the linker keeps one copy, the way C++
+//!   emits templates;
 //! - each file's global initializer is defined in its unit, and only the
 //!   program module (`unit: None`) defines `__pep_global_init` and
 //!   `llvm.global_ctors`, which call them in initialization order.
