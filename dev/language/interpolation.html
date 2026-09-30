@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3cfbdd55.js";
+            window.path_to_searchindex_js = "../searchindex-95725726.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-ae7a611c.js"></script>
@@ -208,11 +208,14 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li><strong><code>{expression}</code></strong> holds any expression but an assignment: a name (a
-local, a parameter, a global, or inside a method a field), a member access
-(<code>{p.x}</code>), a call (<code>{f(x)}</code>), an index (<code>{items[0]}</code>), arithmetic
-(<code>{a + b}</code>), or a ternary (<code>{a &gt; b ? a : b}</code>). Spaces around it are
-ignored.</li>
+<li><strong><code>{expression}</code></strong> holds an expression: a name (a local, a parameter, a
+global, or inside a method a field), a member access (<code>{p.x}</code>), a call
+(<code>{f(x)}</code>), an index (<code>{items[0]}</code>), arithmetic (<code>{a + b}</code>), or a ternary
+(<code>{a &gt; b ? a : b}</code>). Spaces around it are ignored.</li>
+<li>The expression <strong>changes no variable</strong>: an assignment (<code>=</code>, <code>+=</code>, …),
+<code>++</code> or <code>--</code> anywhere in it is an error, even inside a call’s arguments
+(<code>{f(a = 3)}</code>). Only a closure’s body, which does not run in place, may
+hold one. A function it calls may still have effects of its own.</li>
 <li><strong>String literals</strong> may appear inside the braces (<code>{greet("you")}</code>), and
 so may character literals and other interpolated strings. A <code>}</code> inside
 them, or inside brackets of the expression’s own, does not end it.</li>
@@ -313,6 +316,11 @@ main.pep:3:15: note: to match this '{'
 <p>An error in the expression itself, such as a name that is not declared
 (<code>use of undeclared identifier 'x'</code>), is reported like any other, at the
 token inside the braces.</p>
+<p>Changing a variable inside the braces is reported at the operator:</p>
+<pre><code class="language-text">main.pep:3:16: error: an assignment cannot appear in an interpolated string
+    3 |     print($"{a += 1}");
+      |                ^~
+</code></pre>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
 <p>The compiler turns <code>$"({x}, {y + 1})"</code> into <code>"(" + to_string(x) + ", " + to_string(y + 1) + ")"</code>, resolving <code>to_string</code> in the runtime rather than in
 your file. So a struct’s own <code>to_string()</code> method can interpolate its fields
