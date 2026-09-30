@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d8154ca3.js";
+            window.path_to_searchindex_js = "../searchindex-4ed78ace.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -277,7 +277,8 @@ ln -s /path/to/pepper/runtime .pep/runtime
 directory you run it from, and keeps a build cache in <code>.pep/cache/</code>: each file
 of the program (and the standard library) is compiled to its own object, and
 on the next build a file whose sources and imports did not change reuses its
-object without being compiled again. Deleting
+object without being compiled or checked again. A file that compiled with
+warnings is checked again, so its warnings print on every build. Deleting
 <code>.pep/cache/</code> is always safe.</p>
 <h2 id="when-something-is-wrong"><a class="header" href="#when-something-is-wrong">When something is wrong</a></h2>
 <p>The compiler reports errors the way clang does: the file, line and column,
@@ -319,7 +320,8 @@ program abnormally. For example, <code>value()</code> on a failed <code>Result</
 <tr><td><code>-T cache</code></td><td>Print how the build cache supplied each object: <code>hit</code> (sources unchanged), <code>hit (same code)</code> (recompiled, same code), or <code>miss</code>.</td></tr>
 <tr><td><code>--no-cache</code></td><td>Compile everything without reading or writing the build cache.</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Keep the build cache in <code>&lt;dir&gt;</code> instead of <code>.pep/cache/</code> (also <code>PEPPER_CACHE_DIR</code>).</td></tr>
-<tr><td><code>--verify-cache</code></td><td>Compile cache hits anyway and fail if their code differs from the cached object (for testing the compiler; also <code>PEPPER_CACHE_VERIFY=1</code>).</td></tr>
+<tr><td><code>--verify-cache</code></td><td>Compile cache hits anyway and fail if their code differs from the cached object, or if skipping their bodies changes another file’s code (for testing the compiler; also <code>PEPPER_CACHE_VERIFY=1</code>).</td></tr>
+<tr><td><code>--no-verify-cache</code></td><td>Do not verify the cache, even with <code>PEPPER_CACHE_VERIFY</code> set.</td></tr>
 <tr><td><code>--help</code></td><td>List every option.</td></tr>
 </tbody>
 </table>
