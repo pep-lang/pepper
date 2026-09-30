@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6c7bdca.js";
+            window.path_to_searchindex_js = "../searchindex-5f72b0da.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6d9ca794.js"></script>
+        <script src="../toc-423bbc47.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,6 +198,7 @@ threads.</p>
 <li><a href="async-mutex.html">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="async-once.html">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
 <li><a href="async-task.html">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>spawn</code>, <code>spawn_on_each_worker</code>, <code>run_blocking</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on a few worker threads and parking on sockets</li>
+<li><a href="async-task_local.html">TaskLocal</a>: a variable with a separate value in every task, and its <code>TaskLocalGuard&lt;T&gt;</code></li>
 <li><a href="async-driver.html">I/O backends</a>: <code>Backend</code>, how a runtime waits for sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>

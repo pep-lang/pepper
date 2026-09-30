@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6c7bdca.js";
+            window.path_to_searchindex_js = "../searchindex-5f72b0da.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6d9ca794.js"></script>
+        <script src="../toc-423bbc47.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -416,6 +416,61 @@ would only wait again; <code>wait_for</code> returns when its own time runs out.
 its task on every channel at once, and a cancel or <code>timeout</code> ends its
 wait with an error. <code>Condition.wait_while</code> parks like <code>wait</code>.</li>
 <li>Outside a task they block the thread, as before.</li>
+</ul>
+<h2 id="task-local-values"><a class="header" href="#task-local-values">Task-local values</a></h2>
+<p>A <code>TaskLocal&lt;T&gt;</code> is a variable with a separate value in every task, as a
+<a href="threads.html#per-thread-values-with-threadlocal"><code>ThreadLocal&lt;T&gt;</code></a> has one
+per thread. Tasks that take turns on one worker share its thread, so only a
+<code>TaskLocal</code> can tell them apart:</p>
+<pre><code class="language-pepper">import async;
+
+# The id of the request the running task is handling.
+const request_id = async.TaskLocal&lt;long&gt;();
+
+# Deep in the call chain, without the id passed down as a parameter.
+current_request(): long {
+    return request_id.get();
+}
+
+main(): int {
+    # One worker: the three tasks take turns on one thread, so a
+    # ThreadLocal could not tell them apart.
+    async.run_with(
+        async.RuntimeOptions().workers(1),
+        () =&gt; {
+            var tasks = Array&lt;async.Task&lt;bool&gt;&gt;();
+            for (var id in [1, 2, 3]) {
+                tasks.append(
+                    async.Task&lt;bool&gt;.spawn_local(
+                        () =&gt; {
+                            request_id.set(id);
+                            async.yield_now();  # the other tasks set their ids meanwhile
+                            return current_request() == id;
+                        }
+                    )
+                );
+            }
+            for (var task in tasks) {
+                assert(task.join().value(), "each task sees its own id");
+            }
+            # This task never set one.
+            assert(!request_id.is_set(), "a task starts with no value");
+        }
+    );
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>set(value)</code> stores the calling task’s value and <code>get()</code> returns it (the
+default of <code>T</code>, zero or null, until the task sets one). <code>is_set()</code> and
+<code>clear()</code> work as on a <code>ThreadLocal</code>.</li>
+<li>A task starts with no value, even one started by a task that has one,
+and its values are released when it finishes.</li>
+<li>Code outside any task (before <code>async.run</code>, or on a plain <code>Thread</code>) has
+one value per thread, like a <code>ThreadLocal</code>.</li>
+<li>For a <code>T</code> that is not thread-safe, such as a <code>String</code>, reach the value
+with <code>with (var value = local.enter()) { ... }</code>, as for a <code>ThreadLocal</code>;
+<code>get()</code> is then a compile error.</li>
 </ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
 <p>A socket call in a task that would have to wait (for a connection, for data,

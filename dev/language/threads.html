@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e6c7bdca.js";
+            window.path_to_searchindex_js = "../searchindex-5f72b0da.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6d9ca794.js"></script>
+        <script src="../toc-423bbc47.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -329,6 +329,8 @@ Mutex’s (see <a href="#what-a-lock-body-may-do">What a lock body may do</a>):<
 locked value in a thread-local, and a later <code>get()</code> would hand it out after
 the lock was released. The
 <a href="../reference/async-thread_local.html">ThreadLocal reference</a> has the details.</p>
+<p>Tasks that take turns on one worker thread share its <code>ThreadLocal</code> values;
+a <a href="tasks.html#task-local-values"><code>TaskLocal&lt;T&gt;</code></a> gives each task its own.</p>
 <h2 id="what-threads-can-share"><a class="header" href="#what-threads-can-share">What threads can share</a></h2>
 <p>Every struct value is a counted reference (see
 <a href="memory.html">Memory and reference counting</a>). Updating a count from two

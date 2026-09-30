@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e6c7bdca.js";
+            window.path_to_searchindex_js = "searchindex-5f72b0da.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6d9ca794.js"></script>
+        <script src="toc-423bbc47.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -7561,6 +7561,8 @@ Mutex’s (see <a href="#what-a-lock-body-may-do">What a lock body may do</a>):<
 locked value in a thread-local, and a later <code>get()</code> would hand it out after
 the lock was released. The
 <a href="#threadlocal">ThreadLocal reference</a> has the details.</p>
+<p>Tasks that take turns on one worker thread share its <code>ThreadLocal</code> values;
+a <a href="#task-local-values"><code>TaskLocal&lt;T&gt;</code></a> gives each task its own.</p>
 <h2 id="what-threads-can-share"><a class="header" href="#what-threads-can-share">What threads can share</a></h2>
 <p>Every struct value is a counted reference (see
 <a href="#memory-and-reference-counting">Memory and reference counting</a>). Updating a count from two
@@ -8664,6 +8666,61 @@ would only wait again; <code>wait_for</code> returns when its own time runs out.
 its task on every channel at once, and a cancel or <code>timeout</code> ends its
 wait with an error. <code>Condition.wait_while</code> parks like <code>wait</code>.</li>
 <li>Outside a task they block the thread, as before.</li>
+</ul>
+<h2 id="task-local-values"><a class="header" href="#task-local-values">Task-local values</a></h2>
+<p>A <code>TaskLocal&lt;T&gt;</code> is a variable with a separate value in every task, as a
+<a href="#per-thread-values-with-threadlocal"><code>ThreadLocal&lt;T&gt;</code></a> has one
+per thread. Tasks that take turns on one worker share its thread, so only a
+<code>TaskLocal</code> can tell them apart:</p>
+<pre><code class="language-pepper">import async;
+
+# The id of the request the running task is handling.
+const request_id = async.TaskLocal&lt;long&gt;();
+
+# Deep in the call chain, without the id passed down as a parameter.
+current_request(): long {
+    return request_id.get();
+}
+
+main(): int {
+    # One worker: the three tasks take turns on one thread, so a
+    # ThreadLocal could not tell them apart.
+    async.run_with(
+        async.RuntimeOptions().workers(1),
+        () =&gt; {
+            var tasks = Array&lt;async.Task&lt;bool&gt;&gt;();
+            for (var id in [1, 2, 3]) {
+                tasks.append(
+                    async.Task&lt;bool&gt;.spawn_local(
+                        () =&gt; {
+                            request_id.set(id);
+                            async.yield_now();  # the other tasks set their ids meanwhile
+                            return current_request() == id;
+                        }
+                    )
+                );
+            }
+            for (var task in tasks) {
+                assert(task.join().value(), "each task sees its own id");
+            }
+            # This task never set one.
+            assert(!request_id.is_set(), "a task starts with no value");
+        }
+    );
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>set(value)</code> stores the calling task’s value and <code>get()</code> returns it (the
+default of <code>T</code>, zero or null, until the task sets one). <code>is_set()</code> and
+<code>clear()</code> work as on a <code>ThreadLocal</code>.</li>
+<li>A task starts with no value, even one started by a task that has one,
+and its values are released when it finishes.</li>
+<li>Code outside any task (before <code>async.run</code>, or on a plain <code>Thread</code>) has
+one value per thread, like a <code>ThreadLocal</code>.</li>
+<li>For a <code>T</code> that is not thread-safe, such as a <code>String</code>, reach the value
+with <code>with (var value = local.enter()) { ... }</code>, as for a <code>ThreadLocal</code>;
+<code>get()</code> is then a compile error.</li>
 </ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
 <p>A socket call in a task that would have to wait (for a connection, for data,
@@ -16452,6 +16509,7 @@ threads.</p>
 <li><a href="#asyncmutexpep">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="#asynconcepep">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
 <li><a href="#tasks-1">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>spawn</code>, <code>spawn_on_each_worker</code>, <code>run_blocking</code>, <code>sleep</code>, <code>yield_now</code>, <code>timeout</code> and cancellation, for many tasks taking turns on a few worker threads and parking on sockets</li>
+<li><a href="#asynctask_localpep">TaskLocal</a>: a variable with a separate value in every task, and its <code>TaskLocalGuard&lt;T&gt;</code></li>
 <li><a href="#io-backends">I/O backends</a>: <code>Backend</code>, how a runtime waits for sockets</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
@@ -18468,6 +18526,171 @@ arrives.</p>
 <ul>
 <li>the value, turned into an <code>E</code>; or an error if none is waiting, or once every channel is closed and empty</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/task_local.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="asynctask_localpep"><a class="header" href="#asynctask_localpep">async/task_local.pep</a></h1>
+<p>Per-task values: <code>TaskLocal&lt;T&gt;</code> gives every task its own copy of a
+variable.</p>
+<p>Source: <code>runtime/async/task_local.pep</code></p>
+<h2 id="tasklocal"><a class="header" href="#tasklocal">TaskLocal</a></h2>
+<pre><code class="language-pepper">[Shared] struct TaskLocal&lt;T&gt;
+</code></pre>
+<p>A variable with a separate value in every task, the task counterpart of
+<code>ThreadLocal&lt;T&gt;</code>.</p>
+<p>Each task that calls <code>set</code> stores its own value, which is released when
+the task finishes. A task starts with no value, including one started by
+a task that has one: values are not inherited. Tasks that take turns on
+one worker thread each see their own value, which a <code>ThreadLocal</code> cannot
+give them.</p>
+<p>Code that does not run in a task (before <code>async.run</code>, or on a plain
+<code>Thread</code>) has one value per thread, as with a <code>ThreadLocal</code>.</p>
+<p>For a thread-safe <code>T</code> (a number, a <code>[Shared]</code> struct), <code>get</code> returns the
+calling task’s value (the default of <code>T</code>, zero or null, until it sets
+one). For any other <code>T</code>, such as a <code>String</code>, the value is reached through
+a <code>with</code> block, <code>with (var value = local.enter()) { ... }</code>, and <code>get</code> is a
+compile error; <code>set</code> then takes a new value (a constructor call, a string
+literal, <code>copy(x)</code>).</p>
+<p>A <code>TaskLocal</code> is <code>[Shared]</code>, so one object can be used from every task
+and thread; it is usually a module-scope variable. Destroying one
+releases only the caller’s value, so destroy it only after the tasks that
+used it have finished.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-task value</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>ThreadLocal</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+
+    const request_id = async.TaskLocal&lt;long&gt;();
+
+    handle(id: long) {
+        request_id.set(id);
+        async.yield_now();   # the other tasks run meanwhile
+        assert(request_id.get() == id, "still this task's id");
+    }
+
+    main(): int {
+        async.run(() =&gt; {
+            var tasks = Array&lt;async.Task&lt;void&gt;&gt;();
+            for (var id in [1, 2, 3]) {
+                tasks.append(async.spawn&lt;void&gt;(() =&gt; {
+                    handle(id);
+                }));
+            }
+            for (var task in tasks) {
+                task.join();
+            }
+        });
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h4 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a task-local variable. No task has a value yet.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system has no thread-local keys left</li>
+</ul>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
+<pre><code class="language-pepper">get(): T
+</code></pre>
+<p>Returns the calling task’s value.</p>
+<p>For a struct <code>T</code> the caller gets its own reference. Only for a
+thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var value = local.enter())</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value this task last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
+</ul>
+<h4 id="set-1"><a class="header" href="#set-1">set</a></h4>
+<pre><code class="language-pepper">set([Move] value: T)
+</code></pre>
+<p>Stores <code>value</code> as the calling task’s value, replacing (and, for a
+struct <code>T</code>, releasing) the one it held. Other tasks’ values are not
+affected.</p>
+<p>For a <code>T</code> that is not thread-safe, <code>value</code> must be a new value (a
+constructor call, a string literal, <code>copy(x)</code>), which the compiler
+checks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value for this task</li>
+</ul>
+<h4 id="enter-5"><a class="header" href="#enter-5">enter</a></h4>
+<pre><code class="language-pepper">enter(): TaskLocalGuard&lt;T&gt;
+</code></pre>
+<p>Returns the guard that a <code>with</code> block enters to reach the calling
+task’s value: <code>with (var value = local.enter()) { ... }</code>. The body
+runs with the value bound; the <code>else</code> block runs when this task has
+no value (for a struct <code>T</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns this task’s value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    const trail = async.TaskLocal&lt;Array&lt;String&gt;&gt;();
+
+    note(step: String) {
+        if (!trail.is_set()) {
+            trail.set(Array&lt;String&gt;());
+        }
+        with (var steps = trail.enter()) {
+            steps.append(step.copy());
+        }
+    }
+</code></pre>
+<h4 id="is_set-1"><a class="header" href="#is_set-1">is_set</a></h4>
+<pre><code class="language-pepper">is_set(): bool
+</code></pre>
+<p>Reports whether the calling task has stored a value since it started
+or last called <code>clear()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if this task has a value</li>
+</ul>
+<h4 id="clear-4"><a class="header" href="#clear-4">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes the calling task’s value, releasing it for a struct <code>T</code>.
+<code>get()</code> returns the default of <code>T</code> afterwards.</p>
+<h2 id="tasklocalguard"><a class="header" href="#tasklocalguard">TaskLocalGuard</a></h2>
+<pre><code class="language-pepper">[Isolated] struct TaskLocalGuard&lt;T&gt;
+</code></pre>
+<p>The access to a task’s <code>TaskLocal&lt;T&gt;</code> value that a <code>with</code> block holds:
+<code>enter()</code> returns the value. Get one from <code>TaskLocal.enter()</code>.</p>
+<p>A guard is <code>[Isolated]</code>: it can only be the scope of a <code>with</code> header, and
+the compiler checks the block with the confinement rule (see <code>Mutex</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-task value</li>
+</ul>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
+<pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
+</code></pre>
+<p>Creates the guard for the calling task’s value of <code>local</code>; the same as
+<code>local.enter()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>local</code> — the task-local variable</li>
+</ul>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
+<pre><code class="language-pepper">enter(): T
+</code></pre>
+<p>Returns the calling task’s value, for the <code>with</code> header to bind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this task’s value, or the default of <code>T</code> (null for a struct) when it has none</li>
+</ul>
+<h4 id="exit-6"><a class="header" href="#exit-6">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Does nothing: the value stays with the task.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/copy.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="copypep"><a class="header" href="#copypep">copy.pep</a></h1>
 <p>Deep copies: <code>copy(value)</code> makes a copy that shares no object that is
@@ -18579,7 +18802,7 @@ already made, so objects referenced twice stay shared.</p>
 
     extend Buffer with Copyable&lt;Buffer&gt; {}
 </code></pre>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="copy-1-2"><a class="header" href="#copy-1-2">copy</a></h4>
 <pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
@@ -18603,12 +18826,12 @@ cycle leads back to the copy.</p>
 objects referenced twice stay shared inside the copy, and cycles end.</p>
 <p><code>copy(value)</code> makes one and passes it to every <code>Copyable&lt;T&gt;</code>
 implementation it calls; programs do not create their own.</p>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="copies-1"><a class="header" href="#copies-1">Copies()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of copies.</p>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
 <h4 id="copy-2-1"><a class="header" href="#copy-2-1">copy</a></h4>
 <pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
@@ -18687,7 +18910,7 @@ on Windows).</p>
         stream.write_string("hello");
     }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -18706,7 +18929,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -18774,7 +18997,7 @@ goes. The socket file stays.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h3 id="constructor-1-12"><a class="header" href="#constructor-1-12">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
 <pre><code class="language-pepper">construct(handle: SocketHandle)
 </code></pre>
@@ -18797,7 +19020,7 @@ goes. The socket file stays.</p>
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
