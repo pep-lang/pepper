@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6e862b0d.js";
+            window.path_to_searchindex_js = "searchindex-4b91f40c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-845c075c.js"></script>
@@ -1110,7 +1110,7 @@ main(): int {
     assert(hits == 0, "numbers start at zero");
 
     # 'const' declares a name that should not be reassigned.
-    const LIMIT = 3;
+    const limit = 3;
 
     record(100);
     record(250);
@@ -1121,7 +1121,7 @@ main(): int {
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 &amp;&amp; scale == 1.5, "floating point");
     assert(ready &amp;&amp; name == "Pepper", "bool and String");
-    assert(offset &gt; 4000000000 &amp;&amp; LIMIT == 3, "long and const");
+    assert(offset &gt; 4000000000 &amp;&amp; limit == 3, "long and const");
     return 0;
 }
 </code></pre>
@@ -1140,16 +1140,16 @@ arithmetic produces under C’s rules (see <a href="#arithmetic-follows-c">Arith
 <code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
-<pre><code class="language-pepper">const LIMIT = 3;
-const RATIO: double = 0.5;
+<pre><code class="language-pepper">const limit = 3;
+const ratio: double = 0.5;
 </code></pre>
 <p>Assigning to a <code>const</code>, with <code>=</code>, a compound assignment, <code>++</code> or <code>--</code>, is an
 error:</p>
-<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'LIMIT'
-    5 |     LIMIT = 4;
+<pre><code class="language-text">main.pep:5:5: error: cannot assign to const variable 'limit'
+    5 |     limit = 4;
       |     ^~~~~
-main.pep:1:7: note: 'LIMIT' declared const here
-    1 | const LIMIT = 3;
+main.pep:1:7: note: 'limit' declared const here
+    1 | const limit = 3;
       |       ^~~~~
 </code></pre>
 <h3 id="module-level-variables"><a class="header" href="#module-level-variables">Module-level variables</a></h3>
@@ -7751,8 +7751,8 @@ contribute should too.</p>
 <tr><td>Generic parameters</td><td>one capital letter, or <code>PascalCase</code></td><td><code>T</code>, <code>K</code>, <code>V</code>, <code>TValue</code>, <code>TError</code></td></tr>
 <tr><td>Data members (fields)</td><td><code>snake_case</code></td><td><code>unit_name</code>, <code>is_file</code></td></tr>
 <tr><td>Methods and free functions</td><td><code>snake_case</code></td><td><code>append</code>, <code>remove_at</code>, <code>read_to_string</code></td></tr>
-<tr><td>Parameters and local variables</td><td><code>snake_case</code></td><td><code>capacity</code>, <code>best_so_far</code></td></tr>
-<tr><td>Module-scope variables</td><td><code>snake_case</code></td><td><code>max_requests</code></td></tr>
+<tr><td>Parameters and local variables, <code>const</code> included</td><td><code>snake_case</code></td><td><code>capacity</code>, <code>best_so_far</code></td></tr>
+<tr><td>Module-scope variables and constants</td><td><code>snake_case</code></td><td><code>max_requests</code>, <code>line_width</code></td></tr>
 <tr><td>Private data members and methods</td><td><code>_</code> then <code>snake_case</code></td><td><code>_readings</code>, <code>_is_empty</code></td></tr>
 </tbody>
 </table>
@@ -7834,7 +7834,9 @@ apart.</p>
 <h2 id="members-functions-and-variables"><a class="header" href="#members-functions-and-variables">Members, functions, and variables</a></h2>
 <p>Everything else a program names is <code>snake_case</code>: lowercase words joined by
 underscores. That covers a struct’s data members, its methods, free
-functions, parameters, local variables, and module-scope variables.</p>
+functions, parameters, local variables, and module-scope variables.
+A <code>const</code> is no exception: write <code>const line_width = 120;</code>, not
+<code>LINE_WIDTH</code>. Pepper has no <code>SCREAMING_CASE</code>.</p>
 <p>Spell words out. A name is read far more often than it is typed, so prefer
 <code>iterate</code>, <code>index</code>, and <code>directory</code> to <code>iter</code>, <code>idx</code>, and <code>dir</code>. Keep an
 abbreviation only when it is the usual name for the thing, such as <code>io</code> or
