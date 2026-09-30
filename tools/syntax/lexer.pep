@@ -48,55 +48,55 @@ is_hex_digit(c: int): bool {
 # The punctuation the lexer recognizes, longest first so the first match is
 # the longest. `>` never starts a longer token (see TokenKind.Punctuation).
 punctuation_table(): String[] {
-    var table = Array<String>();
-    table.append("===");
-    table.append("!==");
-    table.append("<<=");
-    table.append("...");
-    table.append("==");
-    table.append("!=");
-    table.append("<=");
-    table.append("+=");
-    table.append("-=");
-    table.append("*=");
-    table.append("/=");
-    table.append("%=");
-    table.append("++");
-    table.append("--");
-    table.append("<<");
-    table.append("**");
-    table.append("&&");
-    table.append("||");
-    table.append("&=");
-    table.append("|=");
-    table.append("^=");
-    table.append("=>");
-    table.append("+");
-    table.append("-");
-    table.append("*");
-    table.append("/");
-    table.append("%");
-    table.append("<");
-    table.append(">");
-    table.append("&");
-    table.append("|");
-    table.append("^");
-    table.append("!");
-    table.append("~");
-    table.append("=");
-    table.append("(");
-    table.append(")");
-    table.append("[");
-    table.append("]");
-    table.append("{");
-    table.append("}");
-    table.append(",");
-    table.append(";");
-    table.append(":");
-    table.append(".");
-    table.append("?");
-    table.append("@");
-    return table;
+    return [
+        "===",
+        "!==",
+        "<<=",
+        "...",
+        "==",
+        "!=",
+        "<=",
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "%=",
+        "++",
+        "--",
+        "<<",
+        "**",
+        "&&",
+        "||",
+        "&=",
+        "|=",
+        "^=",
+        "=>",
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        "<",
+        ">",
+        "&",
+        "|",
+        "^",
+        "!",
+        "~",
+        "=",
+        "(",
+        ")",
+        "[",
+        "]",
+        "{",
+        "}",
+        ",",
+        ";",
+        ":",
+        ".",
+        "?",
+        "@"
+    ];
 }
 
 # Whether the bytes of `text` occur in `data` at `offset`.

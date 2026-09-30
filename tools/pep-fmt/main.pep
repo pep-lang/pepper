@@ -143,7 +143,7 @@ format_or_report(name: String, source: String): String {
         var line = syntax.line_of(source, error.offset);
         var column = syntax.column_of(source, error.offset);
         File.stderr().write_all(
-            name + ":" + number_text(line) + ":" + number_text(column) + ": error: " + error.message + "\n"
+            name + ":" + to_string(line) + ":" + to_string(column) + ": error: " + error.message + "\n"
         );
         return __null;
     }
@@ -170,15 +170,7 @@ collect_sources(directory: Path, files: Array<Path>): bool {
     }
     var entries = listed.value();
     # Listing order depends on the file system: sort for stable output.
-    ulong i = 1;
-    while (i < entries.count()) {
-        ulong j = i;
-        while (j > 0 and compare_text(entries[j - 1].name, entries[j].name) > 0) {
-            entries.swap(j - 1, j);
-            j -= 1;
-        }
-        i += 1;
-    }
+    entries.sort((a, b) => a.name.compare(b.name));
     var succeeded = true;
     for (var entry in entries) {
         if (entry.is_directory and !entry.is_symlink) {
@@ -190,23 +182,4 @@ collect_sources(directory: Path, files: Array<Path>): bool {
         }
     }
     return succeeded;
-}
-
-# The decimal digits of `value`. The runtime has no number formatting yet.
-number_text(value: ulong): String {
-    if (value == 0) {
-        return "0";
-    }
-    var digits = Array<String>();
-    var remaining = value;
-    while (remaining > 0) {
-        var digit = remaining % 10;
-        digits.append("0123456789".substr(digit, 1));
-        remaining = remaining / 10;
-    }
-    var result = "";
-    while (!digits.empty()) {
-        result += digits.pop();
-    }
-    return result;
 }

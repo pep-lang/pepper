@@ -74,28 +74,6 @@ is_big(node: syntax.Node): bool {
     return false;
 }
 
-# Orders two Strings by their bytes: negative, zero or positive.
-export compare_text(a: String, b: String): int {
-    var left = a.c_str();
-    var right = b.c_str();
-    ulong i = 0;
-    while (i < a.size() and i < b.size()) {
-        int x = left[i];
-        int y = right[i];
-        if (x != y) {
-            return x - y;
-        }
-        i += 1;
-    }
-    if (a.size() < b.size()) {
-        return -1;
-    }
-    if (a.size() > b.size()) {
-        return 1;
-    }
-    return 0;
-}
-
 # Whether `node` is a bare `void`, with no comments to keep, which a
 # function's signature leaves out.
 is_void(node: syntax.Node): bool {
@@ -170,13 +148,16 @@ sort_imports(items: syntax.Node[]) {
             first.leading_comments = Array<syntax.Comment>();
             first.newlines_before = 1;
             first.newlines_after_comments = 0;
-            ulong i = start + 1;
+            var group = Array<syntax.Node>();
+            ulong i = start;
             while (i < end) {
-                ulong j = i;
-                while (j > start and compare_text(import_key(items[j - 1]), import_key(items[j])) > 0) {
-                    items.swap(j - 1, j);
-                    j -= 1;
-                }
+                group.append(items[i]);
+                i += 1;
+            }
+            group.sort((a, b) => import_key(a).compare(import_key(b)));
+            i = start;
+            while (i < end) {
+                items[i] = group[i - start];
                 i += 1;
             }
             var new_first = items[start].first_token();
@@ -1389,24 +1370,7 @@ called_members(item: syntax.Node): int {
 ## @param newline the line ending to write, `"\n"` or `"\r\n"`
 ## @returns the final text
 export align_trailing_comments(printed: String, newline: String): String {
-    var lines = Array<String>();
-    var data = printed.c_str();
-    ulong start = 0;
-    ulong i = 0;
-    while (i < printed.size()) {
-        if (data[i] == '\n') {
-            if (i > start) {
-                lines.append(String(data + start, i - start));
-            } else {
-                lines.append("");
-            }
-            start = i + 1;
-        }
-        i += 1;
-    }
-    if (start < printed.size()) {
-        lines.append(String(data + start, printed.size() - start));
-    }
+    var lines = printed.lines();
     var codes = Array<String>();
     var comments = Array<String>();
     for (var entry in lines) {
@@ -1415,25 +1379,16 @@ export align_trailing_comments(printed: String, newline: String): String {
             codes.append(entry);
             comments.append("");
         } else {
-            var bytes = entry.c_str();
-            var code = "";
-            if (mark > 0) {
-                code = trim_end(String(bytes, mark as ulong));
-            }
             ulong after = mark as ulong + 1;
-            codes.append(code);
-            comments.append(String(bytes + after, entry.size() - after));
+            codes.append(entry.substr_bytes(0, mark as ulong).trim_end());
+            comments.append(entry.substr_bytes(after, entry.size() - after));
         }
     }
-    var result = "";
+    var result = StringBuilder();
     ulong index = 0;
     while (index < lines.count()) {
         if (comments[index].empty() or codes[index].empty()) {
-            result += codes[index];
-            if (!comments[index].empty()) {
-                result += comments[index];
-            }
-            result += newline;
+            result.append(codes[index]).append(comments[index]).append(newline);
             index += 1;
             continue;
         }
@@ -1448,18 +1403,11 @@ export align_trailing_comments(printed: String, newline: String): String {
         column += 2;
         while (index < end) {
             var code = codes[index];
-            result += code;
-            ulong pad = code.length();
-            while (pad < column) {
-                result += " ";
-                pad += 1;
-            }
-            result += comments[index];
-            result += newline;
+            result.append(code).append(" ".repeat(column - code.length())).append(comments[index]).append(newline);
             index += 1;
         }
     }
-    return result;
+    return result.to_string();
 }
 
 ## Formats Pepper source text in the standard style.
@@ -1476,7 +1424,7 @@ export format_source(source: String): Result<String, syntax.SyntaxError> {
     }
     var newline = "\n";
     long first_break = source.find("\n");
-    if (first_break > 0 and source.c_str()[(first_break - 1) as ulong] == '\r') {
+    if (first_break > 0 and source.byte_at((first_break - 1) as ulong) == '\r') {
         newline = "\r\n";
     }
     var layout = Formatter(source).format(tree.value());

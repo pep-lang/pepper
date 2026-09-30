@@ -187,16 +187,6 @@ struct Frame {
     construct(this.indent = 0, this.mode = Mode.Flat, this.item = __null, this.in_rest = false) {}
 }
 
-spaces(count: int): String {
-    var result = "";
-    int i = 0;
-    while (i < count) {
-        result += " ";
-        i += 1;
-    }
-    return result;
-}
-
 # Whether `item`, printed flat from `column` at `indent`, keeps every line
 # within `width`, including the rest of the line after it (from `rest`, whose
 # frames are printed last to first) up to the next line break.
@@ -274,8 +264,8 @@ fits(item: Doc, indent: int, column: int, width: int, rest: Frame[]): bool {
 ## @returns the printed text
 export render(document: Doc, width: int): String {
     var lines = Array<String>();
-    var current = "";
-    var suffix = "";
+    var current = StringBuilder();
+    var suffix = StringBuilder();
     int column = 0;
     var stack = Array<Frame>();
     stack.append(Frame(0, Mode.Break, document));
@@ -285,7 +275,7 @@ export render(document: Doc, width: int): String {
         var breaks = false;
         match (doc.kind) {
             Text => {
-                current += doc.text;
+                current.append(doc.text);
                 column += doc.text.length() as int;
             }
             Concat, Indent => {
@@ -329,7 +319,7 @@ export render(document: Doc, width: int): String {
             }
             Line => {
                 if (frame.mode == Mode.Flat) {
-                    current += " ";
+                    current.append(" ");
                     column += 1;
                 } else {
                     breaks = true;
@@ -342,45 +332,24 @@ export render(document: Doc, width: int): String {
                 breaks = true;
             }
             LineSuffix => {
-                suffix += doc.text;
+                suffix.append(doc.text);
             }
             BreakParent => {}
         }
         if (breaks) {
-            if (!suffix.empty()) {
-                current += suffix;
-                suffix = "";
-            }
-            lines.append(current);
-            current = spaces(frame.indent);
+            current.append(suffix.to_string());
+            suffix.clear();
+            lines.append(current.to_string());
+            current.clear();
+            current.append(" ".repeat(frame.indent as ulong));
             column = frame.indent;
         }
     }
-    current += suffix;
-    lines.append(current);
-    var result = "";
+    current.append(suffix.to_string());
+    lines.append(current.to_string());
+    var result = StringBuilder();
     for (var printed in lines) {
-        result += trim_end(printed);
-        result += "\n";
+        result.append(printed.trim_end()).append("\n");
     }
-    return result;
-}
-
-## Returns `value` without trailing spaces.
-##
-## @param value the text to trim
-## @returns the text up to its last non-space byte
-export trim_end(value: String): String {
-    var data = value.c_str();
-    ulong end = value.size();
-    while (end > 0 and data[end - 1] == ' ') {
-        end -= 1;
-    }
-    if (end == value.size()) {
-        return value;
-    }
-    if (end == 0) {
-        return "";
-    }
-    return String(data, end);
+    return result.to_string();
 }

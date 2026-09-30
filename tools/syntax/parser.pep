@@ -12,103 +12,103 @@ import "tree";
 
 # The words `identifier()` in the compiler refuses as names.
 reserved_words(): HashSet<String> {
-    var words = HashSet<String>();
-    words.insert("import");
-    words.insert("struct");
-    words.insert("var");
-    words.insert("const");
-    words.insert("if");
-    words.insert("else");
-    words.insert("while");
-    words.insert("for");
-    words.insert("return");
-    words.insert("extern");
-    words.insert("and");
-    words.insert("or");
-    words.insert("new");
-    words.insert("construct");
-    words.insert("destruct");
-    words.insert("static");
-    words.insert("sizeof");
-    words.insert("true");
-    words.insert("false");
-    words.insert("trait");
-    words.insert("extend");
-    words.insert("type");
-    words.insert("export");
-    words.insert("with");
-    words.insert("enum");
-    words.insert("match");
-    return words;
+    return [
+        "import",
+        "struct",
+        "var",
+        "const",
+        "if",
+        "else",
+        "while",
+        "for",
+        "return",
+        "extern",
+        "and",
+        "or",
+        "new",
+        "construct",
+        "destruct",
+        "static",
+        "sizeof",
+        "true",
+        "false",
+        "trait",
+        "extend",
+        "type",
+        "export",
+        "with",
+        "enum",
+        "match"
+    ];
 }
 
 # The words that stop a statement from being read as a `Type name`
 # declaration (the list in the compiler's `statement()`).
 statement_keywords(): HashSet<String> {
-    var words = HashSet<String>();
-    words.insert("if");
-    words.insert("while");
-    words.insert("return");
-    words.insert("break");
-    words.insert("continue");
-    words.insert("struct");
-    words.insert("extern");
-    words.insert("import");
-    words.insert("true");
-    words.insert("false");
-    words.insert("sizeof");
-    words.insert("and");
-    words.insert("or");
-    words.insert("new");
-    words.insert("construct");
-    words.insert("destruct");
-    words.insert("static");
-    words.insert("trait");
-    words.insert("extend");
-    words.insert("with");
-    words.insert("enum");
-    words.insert("match");
-    return words;
+    return [
+        "if",
+        "while",
+        "return",
+        "break",
+        "continue",
+        "struct",
+        "extern",
+        "import",
+        "true",
+        "false",
+        "sizeof",
+        "and",
+        "or",
+        "new",
+        "construct",
+        "destruct",
+        "static",
+        "trait",
+        "extend",
+        "with",
+        "enum",
+        "match"
+    ];
 }
 
 # The operators a method may be named after, as `bool ==(T other)`.
 operator_method_names(): HashSet<String> {
-    var names = HashSet<String>();
-    names.insert("<<=");
-    names.insert(">>=");
-    names.insert("==");
-    names.insert("!=");
-    names.insert("!!");
-    names.insert("<=");
-    names.insert(">=");
-    names.insert("+=");
-    names.insert("-=");
-    names.insert("*=");
-    names.insert("/=");
-    names.insert("%=");
-    names.insert("++");
-    names.insert("--");
-    names.insert("<<");
-    names.insert(">>");
-    names.insert("**");
-    names.insert("&&");
-    names.insert("||");
-    names.insert("&=");
-    names.insert("|=");
-    names.insert("^=");
-    names.insert("+");
-    names.insert("-");
-    names.insert("*");
-    names.insert("/");
-    names.insert("%");
-    names.insert("<");
-    names.insert(">");
-    names.insert("&");
-    names.insert("|");
-    names.insert("^");
-    names.insert("!");
-    names.insert("~");
-    return names;
+    return [
+        "<<=",
+        ">>=",
+        "==",
+        "!=",
+        "!!",
+        "<=",
+        ">=",
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "%=",
+        "++",
+        "--",
+        "<<",
+        ">>",
+        "**",
+        "&&",
+        "||",
+        "&=",
+        "|=",
+        "^=",
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        "<",
+        ">",
+        "&",
+        "|",
+        "^",
+        "!",
+        "~"
+    ];
 }
 
 # Whether a node of `kind` ends in `;` (rather than in a block).
