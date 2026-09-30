@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-67fee795.js";
+            window.path_to_searchindex_js = "../searchindex-3c6abd7d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-816bb96a.js"></script>
+        <script src="../toc-8d108977.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -291,6 +291,7 @@ the code it replaces:</p>
 </thead>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
+<tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -331,6 +332,18 @@ prints.</p>
 <pre><code class="language-text">main.pep:3:12: error: too many arguments to 'f': expected at most 2, have 3
     3 |     return f(1, 2, 3) + f();
       |            ^
+</code></pre>
+<p><strong>A call no overload fits, or that two fit equally well.</strong> Each note is a
+candidate, and says why it does not fit (see <a href="overloading.html">Overloading</a>):</p>
+<pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
+    3 | main(): int { return f(1); }
+      |                      ^
+main.pep:1:1: note: candidate function
+    1 | f(x: long): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function
+    2 | f(x: short): int { return 2; }
+      | ^
 </code></pre>
 <p><strong>A syntax error.</strong> The parser says what it expected at the first place the
 code stopped making sense:</p>

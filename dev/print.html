@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-67fee795.js";
+            window.path_to_searchindex_js = "searchindex-3c6abd7d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-816bb96a.js"></script>
+        <script src="toc-8d108977.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -240,8 +240,9 @@ can be stored, passed and called through a function type such as
 <a href="#function-types-and-closures">function types and closures</a>).</li>
 <li>A constructor marked <code>[Implicit]</code> converts a value into its struct
 wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
-(see <a href="#implicit-conversions">implicit conversions</a>).
-There is no function or method overloading yet.</li>
+(see <a href="#implicit-conversions">implicit conversions</a>).</li>
+<li>Free functions can be <a href="#overloading-1">overloaded</a>; methods,
+constructors and operators cannot yet.</li>
 <li>Generic parameters cannot require a trait yet (no <code>&lt;T: Shape&gt;</code>).</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. Channels, mutexes, <code>Once</code> and <code>Lazy</code> carry and
@@ -1639,6 +1640,10 @@ main(): int {
 <p>Defaults work the same way for methods and constructors. Pepper has no named
 arguments: to give a later parameter a value, you pass every parameter before
 it.</p>
+<h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
+<p>Functions of one file can share a name when their parameter lists differ,
+and each call picks the best fit for its arguments. See
+<a href="#overloading-1">Overloading</a>.</p>
 <h2 id="generic-functions"><a class="header" href="#generic-functions">Generic functions</a></h2>
 <p>A function can take type parameters in angle brackets after its name, such as
 <code>first&lt;T&gt;(items: T[]): T</code>. <a href="#generics">Generics</a> covers them.</p>
@@ -1740,7 +1745,9 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li><code>var f = square;</code> infers <code>f</code>’s type, <code>(int) =&gt; int</code>, from the function.</li>
+<li><code>var f = square;</code> infers <code>f</code>’s type, <code>(int) =&gt; int</code>, from the function.
+An <a href="#overloaded-functions-as-values">overloaded</a> name needs
+a declared type instead, which picks the member.</li>
 <li>A function-typed variable can be reassigned to any function of the same type.</li>
 <li>A parameter of function type, such as <code>f: (int) =&gt; int</code>, lets the caller pass
 in the behavior. Generic functions can take function parameters too.</li>
@@ -2215,6 +2222,226 @@ the struct yet.</li>
 nothing; see <a href="#passing-a-pepper-function-to-c">Calling C</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="overloading-1"><a class="header" href="#overloading-1">Overloading</a></h1>
+<p>Several free functions in one file can share a name when their parameter
+lists differ. Each call picks the one whose parameters fit its arguments
+best:</p>
+<pre><code class="language-pepper"># Overloaded free functions: one name, several parameter lists.
+
+import io;
+
+describe(n: long): String { return "a number"; }
+describe(x: double): String { return "a fraction"; }
+describe(s: String): String { return "some text"; }
+describe(s: String, times: int): String { return "text, repeated"; }
+
+# An exact match beats a widening, which beats a conversion; an
+# `[Implicit]` constructor comes last.
+size(p: io.Path): int { return 1; }
+size(n: long): int { return 2; }
+
+main(): int {
+    var small: int = 7;
+    assert(describe(small) == "a number", "int widens to long");
+    assert(describe(2.5) == "a fraction", "exact match");
+    assert(describe("hi") == "some text", "a literal promotes to String");
+    assert(describe("hi", 3) == "text, repeated", "picked by argument count");
+
+    assert(size(4) == 2, "an integer literal fits a long");
+    assert(size("notes.txt") == 1, "only io.Path takes a String, by its [Implicit] constructor");
+    return 0;
+}
+</code></pre>
+<p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
+member of it. Only free functions overload so far: methods, constructors and
+operators do not (see <a href="#what-is-not-supported-yet-1">What is not supported yet</a>).</p>
+<h2 id="declaring-overloads"><a class="header" href="#declaring-overloads">Declaring overloads</a></h2>
+<ul>
+<li>
+<p><strong>The parameter lists must differ</strong> in the number or the types of the
+parameters. Parameter names and default values do not count, and neither
+does the return type:</p>
+<pre><code class="language-text">main.pep:2:1: error: functions that differ only in their return type cannot be overloaded
+    2 | f(x: int): long { return 2; }
+      | ^
+main.pep:1:1: note: previous declaration is here
+    1 | f(x: int): int { return 1; }
+      | ^
+</code></pre>
+<p>Two functions with the same parameter types and the same return type are
+a <code>redefinition of 'f'</code>.</p>
+</li>
+<li>
+<p><strong>One file, one set.</strong> A file’s own functions hide an imported function of
+the same name, as before; overloads do not merge across files.</p>
+</li>
+<li>
+<p><strong>One visibility per set.</strong> The members are all exported or all private,
+so a set is imported or hidden as a whole:</p>
+<pre><code class="language-text">util.pep:2:1: error: overloads of 'scale' must all be exported or all be private
+    2 | scale(x: double): double { return x * 3.0; }
+      | ^~~~~
+util.pep:1:8: note: other overload declared here
+    1 | export scale(x: int): int { return x * 2; }
+      |        ^~~~~
+</code></pre>
+<p>Importing the name (<code>import [scale] from util</code>, or the whole file) brings
+every member, and <code>import [scale as grow]</code> renames the whole set.</p>
+</li>
+<li>
+<p><strong><code>extern</code> functions do not overload</strong>: a C function has one symbol. Wrap
+it in a Pepper function to give it company.</p>
+</li>
+</ul>
+<h2 id="how-a-call-picks-a-member"><a class="header" href="#how-a-call-picks-a-member">How a call picks a member</a></h2>
+<p>A member is <strong>viable</strong> when the call has between its required and total
+number of parameters and each argument converts to its parameter. For each
+argument, the conversion has a rank, best first:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rank</th><th>What converts</th></tr>
+</thead>
+<tbody>
+<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code></td></tr>
+<tr><td>promotion</td><td>an integer widening that loses nothing (<code>int</code> to <code>long</code>, <code>u8</code> to <code>int</code>; the narrower target ranks better, so a <code>short</code> picks <code>int</code> over <code>long</code>), <code>float</code> to <code>double</code>, an integer literal to any integer type it fits, a struct to a <a href="#traits-as-types">trait it declares</a>, <code>__null</code> to a reference, a string literal to <code>String</code></td></tr>
+<tr><td>conversion</td><td>any other numeric conversion (<code>bool</code> included), and pointer conversions</td></tr>
+<tr><td>implicit constructor</td><td>a value to a struct whose <a href="#implicit-conversions"><code>[Implicit]</code> constructor</a> takes it</td></tr>
+</tbody>
+</table>
+</div>
+<p>One viable member is <strong>better</strong> than another when none of its arguments
+ranks worse and at least one ranks better, as in C++. The call picks the
+member that is better than every other viable one. When there is none, the
+call is an error that lists the candidates:</p>
+<pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
+    3 | main(): int { return f(1); }
+      |                      ^
+main.pep:1:1: note: candidate function
+    1 | f(x: long): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function
+    2 | f(x: short): int { return 2; }
+      | ^
+</code></pre>
+<p>An integer literal fits every integer type that holds its value equally
+well, so <code>f(1)</code> above is ambiguous; an <code>int</code> member would take it exactly.
+Two widenings to types of the same width (a <code>ushort</code> to <code>long</code> and <code>ulong</code>)
+are ambiguous too; convert the argument yourself (<code>f(n as long)</code>). When no
+member is viable, each note says why:</p>
+<pre><code class="language-text">main.pep:5:12: error: no matching function for call to 'f'
+    5 |     return f(s);
+      |            ^
+main.pep:1:1: note: candidate function not viable: no known conversion from 'String' to 'int' for 1st argument
+    1 | f(x: int): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function not viable: requires 2 arguments, but 1 was provided
+    2 | f(x: int, y: int): int { return 2; }
+      | ^
+</code></pre>
+<p>The member picked decides the call’s type, so <code>var x = half(9.0);</code> is a
+<code>double</code> when <code>half(x: double): double</code> is picked. In the editor, hovering
+the call shows the member it picked and how many others the set has, and
+go-to-definition goes to that member.</p>
+<h2 id="generic-members"><a class="header" href="#generic-members">Generic members</a></h2>
+<p>A set can mix generic and non-generic members. A generic member is viable
+when its type arguments can be inferred from the call, and ranks as an exact
+match for the arguments that inferred them. When a generic and a non-generic
+member tie, the non-generic one wins. Writing type arguments
+(<code>describe&lt;int&gt;(7)</code>) considers only the generic members:</p>
+<pre><code class="language-pepper"># Generic and non-generic overloads, and overloads called from generic code.
+
+# A non-generic overload wins a tie with a generic one.
+describe&lt;T&gt;(value: T): String { return "something"; }
+describe(value: int): String { return "an int"; }
+
+# Generic overloads can differ in their number of parameters.
+last&lt;T&gt;(a: T): T { return a; }
+last&lt;T&gt;(a: T, b: T): T { return b; }
+
+kind(n: int): String { return "number"; }
+kind(s: String): String { return "text"; }
+
+# Each specialization resolves `kind` for its own `T`.
+label&lt;T&gt;(value: T): String { return kind(value); }
+
+main(): int {
+    assert(describe(7) == "an int", "non-generic wins the tie");
+    assert(describe(1.5) == "something", "only the generic fits");
+    assert(describe&lt;int&gt;(7) == "something", "type arguments pick generic overloads");
+
+    assert(last(1) == 1, "one argument");
+    assert(last(1, 2) == 2, "two arguments");
+
+    assert(label(3) == "number", "label&lt;int&gt; calls kind(int)");
+    assert(label("x") == "text", "label&lt;String&gt; calls kind(String)");
+    return 0;
+}
+</code></pre>
+<p>A call inside a generic function or a generic struct’s method whose argument
+types depend on a type parameter is resolved again for each specialization,
+so <code>label&lt;String&gt;</code> above calls <code>kind(s: String)</code>.</p>
+<p>An <a href="#overriding-a-generic-function-for-one-type">override</a> such
+as <code>describe&lt;Point&gt;(p: Point)</code> belongs to the generic member with the same
+number of type parameters and parameters; it is not a member itself.</p>
+<h2 id="overloaded-functions-as-values"><a class="header" href="#overloaded-functions-as-values">Overloaded functions as values</a></h2>
+<p>The name of an overload set, written without a call, is a value only where
+the expected function type picks one member exactly: a typed variable, an
+argument, a <code>return</code> from a function with a declared return type, or an
+assignment. A closure whose parameters have no types, passed to an
+overloaded function, picks the member whose function parameter has its
+number of parameters:</p>
+<pre><code class="language-pepper"># An overloaded function used as a value, and closures passed to overloads.
+
+twice(n: int): int { return n * 2; }
+twice(s: String): String { return s + s; }
+
+apply(f: (int) =&gt; int, n: int): int { return f(n); }
+
+# Overloads that differ in the type of a function parameter.
+run(f: (int) =&gt; int): int { return f(10); }
+run(f: (int, int) =&gt; int): int { return f(10, 20); }
+
+main(): int {
+    # The declared type picks the overload.
+    var doubler: (int) =&gt; int = twice;
+    assert(doubler(4) == 8, "twice(int)");
+
+    # So does the parameter it is passed to.
+    assert(apply(twice, 5) == 10, "twice(int) again");
+
+    # A closure without parameter types picks the overload of its arity.
+    assert(run((a) =&gt; a + 1) == 11, "one parameter");
+    assert(run((a, b) =&gt; a + b) == 30, "two parameters");
+    return 0;
+}
+</code></pre>
+<p>Without an expected type, the compiler asks for one:</p>
+<pre><code class="language-text">main.pep:4:13: error: cannot infer the type of 'g' from overloaded function 'f'
+    4 |     var g = f;
+      |             ^
+main.pep:1:1: note: candidate function
+    1 | f(x: int): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function
+    2 | f(x: long): int { return 2; }
+      | ^
+main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
+    4 |     var g = f;
+      |             ^
+</code></pre>
+<p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
+<h2 id="what-is-not-supported-yet-1"><a class="header" href="#what-is-not-supported-yet-1">What is not supported yet</a></h2>
+<ul>
+<li><strong>Methods, constructors and operators</strong> do not overload: a struct has one
+method of each name and one constructor. Use default arguments, a
+<a href="#static-methods">static method</a> for each alternative, or a free
+function.</li>
+<li><strong><code>extern</code> functions</strong> do not overload.</li>
+<li><strong>Overloads across files</strong> do not merge: a file’s own functions of a name
+hide an imported set of that name.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="structs-1"><a class="header" href="#structs-1">Structs</a></h1>
 <p>A struct groups related values into one named type, and gives that type
 behavior through methods. Pepper has no classes and no inheritance: a struct
@@ -2335,8 +2562,8 @@ use is not accepted in a constructor yet.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
 <li>A struct has at most one constructor, and declaring a second is an error
-(<code>redefinition of the constructor of 'S'</code>). Pepper has no constructor
-overloading: use default arguments, or a <a href="#static-methods">static method</a>
+(<code>redefinition of the constructor of 'S'</code>). Constructors do not
+<a href="#overloading-1">overload</a> yet: use default arguments, or a <a href="#static-methods">static method</a>
 for each alternative way to build the object. Likewise, a struct has at
 most one destructor.</li>
 </ul>
@@ -2419,6 +2646,9 @@ a smaller integer to a larger one, an integer literal that fits, <code>float</co
 <code>double</code>, or a struct to a <a href="#traits-as-types">trait it declares</a>.
 Conversions never chain: if <code>Tag</code> converts from <code>Name</code> and <code>Name</code> from
 <code>String</code>, a <code>String</code> does not become a <code>Tag</code>.</li>
+<li><strong>Overloads prefer anything else.</strong> Among <a href="#overloading-1">overloads</a>,
+a member that takes the value as it is, or by any other conversion, beats
+one that needs an <code>[Implicit]</code> constructor.</li>
 <li><strong>Each conversion is a constructor call</strong>, so it allocates a new object.
 The VS Code extension shows the call as an inlay hint around the converted
 value, and hovering the value names the constructor.
@@ -3278,9 +3508,12 @@ type parameters (its own, an imported one, or the standard library’s);
 otherwise a struct’s name is just the name of a type parameter. The generic
 may be spelled by any name the file has for it (<code>show&lt;Point&gt;</code> after
 <code>import [describe as show]</code>). A type argument must name a struct, not a type
-alias or a trait. Declaring a generic and another function of the same name in one file is an
-error, since it usually means an override whose type argument the file
-cannot see, or of a generic the file’s own function of that name hides.</p>
+alias or a trait. A generic and another function of the same name in one
+file are <a href="#generic-members">overloads</a>, unless they have the
+same parameters, or the generic’s type parameters all name structs the file
+can see without a generic of that name to override: either is an error,
+since it usually means an override whose type argument the file cannot see,
+or of a generic the file’s own function of that name hides.</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="#extending-generic-structs">extension</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -6510,6 +6743,7 @@ the code it replaces:</p>
 </thead>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
+<tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -6550,6 +6784,18 @@ prints.</p>
 <pre><code class="language-text">main.pep:3:12: error: too many arguments to 'f': expected at most 2, have 3
     3 |     return f(1, 2, 3) + f();
       |            ^
+</code></pre>
+<p><strong>A call no overload fits, or that two fit equally well.</strong> Each note is a
+candidate, and says why it does not fit (see <a href="#overloading-1">Overloading</a>):</p>
+<pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
+    3 | main(): int { return f(1); }
+      |                      ^
+main.pep:1:1: note: candidate function
+    1 | f(x: long): int { return 1; }
+      | ^
+main.pep:2:1: note: candidate function
+    2 | f(x: short): int { return 2; }
+      | ^
 </code></pre>
 <p><strong>A syntax error.</strong> The parser says what it expected at the first place the
 code stopped making sense:</p>
