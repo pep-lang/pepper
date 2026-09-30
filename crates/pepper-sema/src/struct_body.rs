@@ -306,6 +306,13 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
     for field in &st.field_members {
         let value = match &field.default {
             Some(d) => d.clone(),
+            // A field typed by a bare type parameter (`T _value;`) has no
+            // known zero until specialization: `__default<T>` becomes `0`
+            // for `Optional<int>` and null for `Optional<Point>`. A null
+            // literal here would store a pointer into an `int` slot.
+            None if st.ty.sub_types.iter().any(|p| p.name == field.ty.name) && field.ty.sub_types.is_empty() => {
+                Expression::Default(field.ty.clone())
+            }
             None => zero_for(&field.ty),
         };
         items.push(Statement::Expression(Expression::Binary {
