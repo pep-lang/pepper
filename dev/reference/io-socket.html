@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-024482db.js";
+            window.path_to_searchindex_js = "../searchindex-e6c7bdca.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ed0801d1.js"></script>
+        <script src="../toc-6d9ca794.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -596,9 +596,10 @@ one started with <code>async.spawn</code>.</p>
 <h2 id="sockettransfer"><a class="header" href="#sockettransfer">SocketTransfer</a></h2>
 <pre><code class="language-pepper">[Shared] struct SocketTransfer
 </code></pre>
-<p>A TCP connection on its way from one thread to another: made by
-<code>TcpStream.into_transfer</code>, taken by <code>TcpStream.adopt</code>. Unlike a
-<code>TcpStream</code>, it is thread-safe, so a <code>shared</code> function (a body for
+<p>A connection on its way from one thread to another: made by
+<code>TcpStream.into_transfer</code> (or <code>UnixStream.into_transfer</code>), taken by
+<code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>, for a Unix domain connection).
+Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body for
 <code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.</p>

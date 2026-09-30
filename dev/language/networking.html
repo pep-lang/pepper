@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-024482db.js";
+            window.path_to_searchindex_js = "../searchindex-e6c7bdca.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ed0801d1.js"></script>
+        <script src="../toc-6d9ca794.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,7 +182,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
-<p>The <code>io</code> module has TCP and UDP sockets, IP and socket addresses, and host
+<p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket addresses, and host
 name lookup. In a plain program every call blocks the calling thread until
 it completes, like <code>File</code>. To serve several connections at once, give each
 one its own <a href="threads.html">thread</a>, or its own <a href="tasks.html#sockets">task</a>: in a
@@ -315,6 +315,54 @@ datagram beyond <code>max</code> bytes is lost.</li>
 datagrams from anyone else are dropped.</li>
 <li><code>set_broadcast(true)</code> allows sending to a broadcast address.</li>
 </ul>
+<h2 id="unix-domain-sockets"><a class="header" href="#unix-domain-sockets">Unix domain sockets</a></h2>
+<p>A Unix domain socket connects processes on the same machine through a path
+in the file system instead of an IP address and port. <code>UnixListener</code> and
+<code>UnixStream</code> work like <code>TcpListener</code> and <code>TcpStream</code>:</p>
+<pre><code class="language-pepper">import io;
+
+# A server and a client over a Unix domain socket, taking turns on one
+# thread, as in the TCP example.
+main(): int {
+    var path = io.Directory.temp().join("pepper-networking-unix.sock");
+    # Binding fails if the socket file is still there from an earlier run.
+    io.File.remove(path);
+    var listener = io.UnixListener.bind(path).value();
+
+    var client = io.UnixStream.connect(path).value();
+    var server = listener.accept().value();
+
+    assert(client.write_string("ping").is_ok(), "send the request");
+    var request = Array&lt;u8&gt;();
+    assert(server.read_exact(request, 4).is_ok(), "read the request");
+    server.write_string("pong");
+    var reply = Array&lt;u8&gt;();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+
+    # Closing the listener leaves the socket file; remove it when done.
+    listener.close();
+    assert(io.File.remove(path).is_ok(), "remove the socket file");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UnixListener.bind(path)</code> creates a socket file at <code>path</code> and listens on
+it. Binding fails with <code>is_address_in_use()</code> if a file is already there,
+and closing the listener does not remove the file, so a server removes it
+with <code>File.remove</code> before binding and when it is done.</li>
+<li><code>UnixStream.connect(path)</code> connects to it. It fails with <code>is_not_found()</code>
+when there is no socket file, and with <code>is_connection_refused()</code> when the
+file is there but nothing listens on it.</li>
+<li><code>accept()</code> returns just the stream: the client’s end has no path.</li>
+<li>Reading, writing, <code>shutdown_write()</code>, <code>into_transfer()</code> and <code>adopt</code> are
+the same as on a <code>TcpStream</code>, and <code>SharedUnixListener</code> is the counterpart
+of <code>SharedTcpListener</code>.</li>
+<li>A path holds at most 107 bytes (103 on macOS); a longer or empty one
+fails with <code>is_invalid_input()</code>.</li>
+</ul>
+<p>Only stream sockets are supported, since Windows (10 version 1803 and later)
+has no Unix datagram sockets.</p>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
@@ -329,7 +377,7 @@ datagrams from anyone else are dropped.</li>
 <tr><td><code>is_address_in_use()</code></td><td>another socket already has the address and port</td></tr>
 <tr><td><code>is_address_not_available()</code></td><td>the IP address is not one of this machine’s</td></tr>
 <tr><td><code>is_timed_out()</code></td><td>the peer never answered</td></tr>
-<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name</td></tr>
+<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name, or <code>UnixStream.connect</code> found no socket file</td></tr>
 </tbody>
 </table>
 </div>
@@ -340,8 +388,8 @@ the process. The write returns an error instead.</p>
 <code>close()</code> closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a <a href="threads.html#channels">channel</a> to another
 thread. Use it on the thread that made it, or move it: <code>into_transfer()</code>
-turns a <code>TcpStream</code> into a thread-safe <code>SocketTransfer</code> that
-<code>TcpStream.adopt</code> takes on another thread, and a <code>SharedTcpListener</code> is a
+turns a <code>TcpStream</code> (or a <code>UnixStream</code>) into a thread-safe <code>SocketTransfer</code>
+that <code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>) takes on another thread, and a <code>SharedTcpListener</code> is a
 listener any thread can accept on (see
 <a href="tasks.html#accepting-on-every-worker">Tasks</a>).</p>
 <p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
@@ -352,11 +400,12 @@ program take over the port.</p>
 <li>Outside a task every call blocks its thread, with no timeout. In a task
 a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
-<li>Unix domain sockets and TLS are not supported yet.</li>
+<li>TLS is not supported yet, nor Unix datagram sockets.</li>
 <li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>
-<p>The reference pages for <a href="../reference/io-address.html">addresses</a> and
-<a href="../reference/io-socket.html">sockets</a> document every method.</p>
+<p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
+<a href="../reference/io-socket.html">sockets</a> and
+<a href="../reference/io-unix.html">Unix domain sockets</a> document every method.</p>
 
                     </main>
 

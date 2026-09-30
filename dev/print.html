@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-024482db.js";
+            window.path_to_searchindex_js = "searchindex-e6c7bdca.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ed0801d1.js"></script>
+        <script src="toc-6d9ca794.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -232,7 +232,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
-TCP and UDP sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
+TCP, UDP and Unix domain sockets, and command-line arguments (<code>main(args: String[])</code>). That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter, is
 itself written in Pepper.
 Some that you will meet quickly:</p>
@@ -8950,7 +8950,7 @@ built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 <p>The <a href="#tasks-1">reference page</a> documents every function.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
-<p>The <code>io</code> module has TCP and UDP sockets, IP and socket addresses, and host
+<p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket addresses, and host
 name lookup. In a plain program every call blocks the calling thread until
 it completes, like <code>File</code>. To serve several connections at once, give each
 one its own <a href="#threads-and-shared-data">thread</a>, or its own <a href="#sockets">task</a>: in a
@@ -9083,6 +9083,54 @@ datagram beyond <code>max</code> bytes is lost.</li>
 datagrams from anyone else are dropped.</li>
 <li><code>set_broadcast(true)</code> allows sending to a broadcast address.</li>
 </ul>
+<h2 id="unix-domain-sockets"><a class="header" href="#unix-domain-sockets">Unix domain sockets</a></h2>
+<p>A Unix domain socket connects processes on the same machine through a path
+in the file system instead of an IP address and port. <code>UnixListener</code> and
+<code>UnixStream</code> work like <code>TcpListener</code> and <code>TcpStream</code>:</p>
+<pre><code class="language-pepper">import io;
+
+# A server and a client over a Unix domain socket, taking turns on one
+# thread, as in the TCP example.
+main(): int {
+    var path = io.Directory.temp().join("pepper-networking-unix.sock");
+    # Binding fails if the socket file is still there from an earlier run.
+    io.File.remove(path);
+    var listener = io.UnixListener.bind(path).value();
+
+    var client = io.UnixStream.connect(path).value();
+    var server = listener.accept().value();
+
+    assert(client.write_string("ping").is_ok(), "send the request");
+    var request = Array&lt;u8&gt;();
+    assert(server.read_exact(request, 4).is_ok(), "read the request");
+    server.write_string("pong");
+    var reply = Array&lt;u8&gt;();
+    assert(client.read_exact(reply, 4).is_ok(), "read the reply");
+    assert(reply[0] == 'p' &amp;&amp; reply[1] == 'o', "the reply is pong");
+
+    # Closing the listener leaves the socket file; remove it when done.
+    listener.close();
+    assert(io.File.remove(path).is_ok(), "remove the socket file");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UnixListener.bind(path)</code> creates a socket file at <code>path</code> and listens on
+it. Binding fails with <code>is_address_in_use()</code> if a file is already there,
+and closing the listener does not remove the file, so a server removes it
+with <code>File.remove</code> before binding and when it is done.</li>
+<li><code>UnixStream.connect(path)</code> connects to it. It fails with <code>is_not_found()</code>
+when there is no socket file, and with <code>is_connection_refused()</code> when the
+file is there but nothing listens on it.</li>
+<li><code>accept()</code> returns just the stream: the client’s end has no path.</li>
+<li>Reading, writing, <code>shutdown_write()</code>, <code>into_transfer()</code> and <code>adopt</code> are
+the same as on a <code>TcpStream</code>, and <code>SharedUnixListener</code> is the counterpart
+of <code>SharedTcpListener</code>.</li>
+<li>A path holds at most 107 bytes (103 on macOS); a longer or empty one
+fails with <code>is_invalid_input()</code>.</li>
+</ul>
+<p>Only stream sockets are supported, since Windows (10 version 1803 and later)
+has no Unix datagram sockets.</p>
 <h2 id="errors-1"><a class="header" href="#errors-1">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
@@ -9097,7 +9145,7 @@ datagrams from anyone else are dropped.</li>
 <tr><td><code>is_address_in_use()</code></td><td>another socket already has the address and port</td></tr>
 <tr><td><code>is_address_not_available()</code></td><td>the IP address is not one of this machine’s</td></tr>
 <tr><td><code>is_timed_out()</code></td><td>the peer never answered</td></tr>
-<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name</td></tr>
+<tr><td><code>is_not_found()</code></td><td><code>resolve</code> found no address for the name, or <code>UnixStream.connect</code> found no socket file</td></tr>
 </tbody>
 </table>
 </div>
@@ -9108,8 +9156,8 @@ the process. The write returns an error instead.</p>
 <code>close()</code> closes it earlier and reports any error. A socket cannot be
 copied, so it cannot go through a <a href="#channels">channel</a> to another
 thread. Use it on the thread that made it, or move it: <code>into_transfer()</code>
-turns a <code>TcpStream</code> into a thread-safe <code>SocketTransfer</code> that
-<code>TcpStream.adopt</code> takes on another thread, and a <code>SharedTcpListener</code> is a
+turns a <code>TcpStream</code> (or a <code>UnixStream</code>) into a thread-safe <code>SocketTransfer</code>
+that <code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>) takes on another thread, and a <code>SharedTcpListener</code> is a
 listener any thread can accept on (see
 <a href="#accepting-on-every-worker">Tasks</a>).</p>
 <p>On POSIX a listener sets <code>SO_REUSEADDR</code>, so a server can restart right
@@ -9120,11 +9168,12 @@ program take over the port.</p>
 <li>Outside a task every call blocks its thread, with no timeout. In a task
 a call parks only the task, and <a href="#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
-<li>Unix domain sockets and TLS are not supported yet.</li>
+<li>TLS is not supported yet, nor Unix datagram sockets.</li>
 <li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>
-<p>The reference pages for <a href="#network-addresses">addresses</a> and
-<a href="#sockets-1">sockets</a> document every method.</p>
+<p>The reference pages for <a href="#network-addresses">addresses</a>,
+<a href="#sockets-1">sockets</a> and
+<a href="#iounixpep">Unix domain sockets</a> document every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
@@ -13523,6 +13572,7 @@ is used.</p>
 <li><a href="#directory">Directory</a>: listing, creating, and removing directories</li>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
+<li><a href="#iounixpep">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
 <li><a href="#errors-and-platform-types">Errors and platform types</a>: <code>IoError</code>, <code>IoResult</code>, and handle types</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -16214,9 +16264,10 @@ one started with <code>async.spawn</code>.</p>
 <h2 id="sockettransfer"><a class="header" href="#sockettransfer">SocketTransfer</a></h2>
 <pre><code class="language-pepper">[Shared] struct SocketTransfer
 </code></pre>
-<p>A TCP connection on its way from one thread to another: made by
-<code>TcpStream.into_transfer</code>, taken by <code>TcpStream.adopt</code>. Unlike a
-<code>TcpStream</code>, it is thread-safe, so a <code>shared</code> function (a body for
+<p>A connection on its way from one thread to another: made by
+<code>TcpStream.into_transfer</code> (or <code>UnixStream.into_transfer</code>), taken by
+<code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>, for a Unix domain connection).
+Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body for
 <code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
 it. If no one adopts it, the connection is closed when the last
 reference goes.</p>
@@ -18595,6 +18646,332 @@ copying the values it holds when one of them may lead back to it.</p>
 <ul>
 <li><code>original</code> — the object being copied</li>
 <li><code>made</code> — its copy</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/unix.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="iounixpep"><a class="header" href="#iounixpep">io/unix.pep</a></h1>
+<p>Unix domain sockets: <code>UnixListener</code> accepts connections on a path in the
+file system, <code>UnixStream</code> is one connection.</p>
+<p>They work like <code>TcpListener</code> and <code>TcpStream</code>, for processes on the same
+machine: a path names the socket instead of an IP address and a port.
+Linux, macOS and Windows (10 version 1803 and later) all have them; only
+stream sockets are supported.</p>
+<p>Binding creates a socket file at the path, and closing the listener does
+not remove it: remove it with <code>File.remove</code> when the server is done, and
+before binding again, since binding to a path that exists fails with
+<code>is_address_in_use()</code>.</p>
+<p>Source: <code>runtime/io/unix.pep</code></p>
+<h2 id="unixlistener"><a class="header" href="#unixlistener">UnixListener</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct UnixListener
+</code></pre>
+<p>A Unix domain socket that listens for connections on a path.</p>
+<p><code>UnixListener.bind</code> creates the socket file and listens on it; each
+<code>accept()</code> waits for the next connection and returns it as a
+<code>UnixStream</code>.</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Neither removes the socket
+file. Every operation on a closed listener fails with an error no
+<code>IoError</code> predicate identifies (<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code>
+on Windows).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>UnixStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var path = io.Directory.temp().join("server.sock");
+    io.File.remove(path);   # left over from an earlier run
+    var listener = io.UnixListener.bind(path).value();
+    while (true) {
+        var stream = listener.accept().value();
+        stream.write_string("hello");
+    }
+</code></pre>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed listener: <code>is_open()</code> is false and every operation
+fails. Use <code>UnixListener.bind</code> to get an open one.</p>
+<h3 id="static-methods-12"><a class="header" href="#static-methods-12">Static methods</a></h3>
+<h4 id="bind-3"><a class="header" href="#bind-3">bind</a></h4>
+<pre><code class="language-pepper">static bind(path: Path): IoResult&lt;UnixListener&gt;
+</code></pre>
+<p>Creates a Unix domain socket at <code>path</code> and starts listening on it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — where to create the socket file: at most 107 bytes (103 on macOS)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
+</ul>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the listener is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>UnixListener()</code> never bound</li>
+</ul>
+<h4 id="path-5"><a class="header" href="#path-5">path</a></h4>
+<pre><code class="language-pepper">path(): Path
+</code></pre>
+<p>Returns the path the listener was bound to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the path given to <code>bind</code>; an empty path for a <code>UnixListener()</code> never bound</li>
+</ul>
+<h4 id="accept-2"><a class="header" href="#accept-2">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; an error when the listener is closed, or another platform error</li>
+</ul>
+<h4 id="close-4"><a class="header" href="#close-4">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the listener now. Closing a closed listener does nothing.
+Connections already accepted stay open, and the socket file stays.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="sharedunixlistener"><a class="header" href="#sharedunixlistener">SharedUnixListener</a></h2>
+<pre><code class="language-pepper">[Shared] struct SharedUnixListener
+</code></pre>
+<p>A Unix domain listening socket that any thread can accept connections on:
+the thread-safe counterpart of <code>UnixListener</code>, as <code>SharedTcpListener</code> is
+of <code>TcpListener</code>. Each connection goes to one of the threads waiting in
+<code>accept</code>, and the stream it returns belongs to that thread.</p>
+<p>A <code>shared</code> function may capture it. There is no <code>close()</code>, since another
+thread may be waiting on it: the socket closes when the last reference
+goes. The socket file stays.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>UnixListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import async;
+    import io;
+
+    main(): int {
+        async.run(() =&gt; {
+            var listener = io.SharedUnixListener.bind(io.Path("/tmp/server.sock")).value();
+            async.spawn_on_each_worker(() =&gt; {
+                while (true) {
+                    var accepted = listener.accept();
+                    if (accepted.is_err()) {
+                        return;
+                    }
+                    accepted.value().write_string("hello");
+                }
+            });
+        });
+        return 0;
+    }
+</code></pre>
+<h3 id="constructor-1-11"><a class="header" href="#constructor-1-11">Constructor</a></h3>
+<h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
+<pre><code class="language-pepper">construct(handle: SocketHandle)
+</code></pre>
+<p>Wraps a listening socket. Use <code>SharedUnixListener.bind</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the listening socket, or an invalid handle for none</li>
+</ul>
+<h3 id="static-methods-1-3"><a class="header" href="#static-methods-1-3">Static methods</a></h3>
+<h4 id="bind-1-1"><a class="header" href="#bind-1-1">bind</a></h4>
+<pre><code class="language-pepper">static bind(path: Path): IoResult&lt;SharedUnixListener&gt;
+</code></pre>
+<p>Creates a Unix domain socket at <code>path</code> and starts listening on it, as
+<code>UnixListener.bind</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — where to create the socket file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
+</ul>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it, as
+<code>UnixListener.accept</code> does. Several threads may wait at once; each
+connection wakes one of them (or, on some systems, several, and the
+rest keep waiting).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream, owned by the calling thread; an error when the waiting task is cancelled, or another platform error</li>
+</ul>
+<h2 id="unixstream"><a class="header" href="#unixstream">UnixStream</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct UnixStream
+</code></pre>
+<p>A Unix domain stream connection: a reliable, ordered stream of bytes in
+both directions between two processes (or threads) on this machine.</p>
+<p>Get one from <code>UnixStream.connect</code> or <code>UnixListener.accept</code>. Reading and
+writing work exactly as on a <code>TcpStream</code>: <code>read</code> appends what has arrived
+and returns 0 once the peer has closed its side, <code>write</code> may send part of
+the data, and <code>read_exact</code> and <code>write_all</code> loop until done. Sending never
+raises <code>SIGPIPE</code>; writing to a connection the peer has closed fails with
+<code>is_connection_reset()</code> (or a broken-pipe error no predicate matches, on
+some systems).</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed stream fails with an error no <code>IoError</code> predicate identifies.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>UnixListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    import io;
+
+    var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
+    stream.write_string("ping");
+    var reply = Array&lt;u8&gt;();
+    stream.read_exact(reply, 4).value();
+</code></pre>
+<h3 id="constructor-2-6"><a class="header" href="#constructor-2-6">Constructor</a></h3>
+<h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed stream: <code>is_open()</code> is false and every operation
+fails. Use <code>UnixStream.connect</code> or <code>UnixListener.accept</code> to get an
+open one.</p>
+<h3 id="static-methods-2-2"><a class="header" href="#static-methods-2-2">Static methods</a></h3>
+<h4 id="connect-2"><a class="header" href="#connect-2">connect</a></h4>
+<pre><code class="language-pepper">static connect(path: Path): IoResult&lt;UnixStream&gt;
+</code></pre>
+<p>Connects to the listener at <code>path</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the socket file a <code>UnixListener</code> is bound to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; an error with <code>is_not_found()</code> when no file exists at <code>path</code>, <code>is_connection_refused()</code> when the file is there but nothing listens on it, <code>is_invalid_input()</code> when the path is empty or too long, or another platform error</li>
+</ul>
+<h4 id="adopt-1"><a class="header" href="#adopt-1">adopt</a></h4>
+<pre><code class="language-pepper">static adopt(transfer: SocketTransfer): IoResult&lt;UnixStream&gt;
+</code></pre>
+<p>Takes the connection out of <code>transfer</code> (see <code>into_transfer</code>) into a
+new stream on the calling thread. Only the first <code>adopt</code> of a token
+gets the connection.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transfer</code> — the token from <code>into_transfer</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
+</ul>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the stream is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>UnixStream()</code> never connected</li>
+</ul>
+<h4 id="read-3"><a class="header" href="#read-3">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until data arrives, then appends up to <code>max</code> bytes of it to
+<code>buffer</code> with a single system call, like <code>TcpStream.read</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 once the peer has closed its side of the connection; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="read_exact-1"><a class="header" href="#read_exact-1">read_exact</a></h4>
+<pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Reads until exactly <code>count</code> more bytes are appended to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>count</code> — the number of bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>count</code> bytes are appended; an error when the peer closes the connection first (“connection closed after n of count bytes”), or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
+</ul>
+<h4 id="write-3"><a class="header" href="#write-3">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends bytes from <code>data</code> with a single system call, waiting until the
+system can take at least some of them. The send may be partial; use
+<code>write_all</code> to send everything.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent, which may be less than <code>data.count()</code>; an error when the peer has closed the connection, when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="write_all-3"><a class="header" href="#write_all-3">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of <code>data</code>, repeating the send until every byte is sent.
+If an error occurs part of <code>data</code> may already have been sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="write_string-2"><a class="header" href="#write_string-2">write_string</a></h4>
+<pre><code class="language-pepper">write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all</code> does. No
+newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="shutdown_write-1"><a class="header" href="#shutdown_write-1">shutdown_write</a></h4>
+<pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the sending side of the connection: the peer’s reads return 0
+once it has read everything sent before. This side can still read.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="into_transfer-1"><a class="header" href="#into_transfer-1">into_transfer</a></h4>
+<pre><code class="language-pepper">into_transfer(): SocketTransfer
+</code></pre>
+<p>Moves the connection out of this stream, into a token another thread
+can take it from with <code>UnixStream.adopt</code>, as
+<code>TcpStream.into_transfer</code> does. The stream is closed afterwards.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the token; for a closed stream, one that <code>adopt</code> fails on</li>
+</ul>
+<h4 id="close-1-2"><a class="header" href="#close-1-2">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the connection now. Closing a closed stream does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
