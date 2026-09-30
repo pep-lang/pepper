@@ -622,6 +622,10 @@ type Program = pepper_sema::program::Program;
 /// build are skipped. Locations carry the file's index in `program`.
 fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
     let mut module = SemaModule { linked: true, ..SemaModule::default() };
+    // Indexed like the files, as the passes that read source text expect.
+    for file in &program.files {
+        module.sources.add(&file.name, &file.source);
+    }
     for (i, file) in program.files.iter().enumerate().skip(1) {
         if let Ok(m) = pepper_sema::builder::build_file(&file.module, FileId(i as u32)) {
             module.merge(m);
@@ -706,13 +710,37 @@ fn lsp_diagnostic(d: &diag::Diagnostic, uri: &Url, program: &[(&str, &str)]) -> 
     }
 }
 
-/// The quick fixes for the warnings in `text` (the document `uri`) whose
-/// range overlaps `range`: one code action per suggested fix.
-fn quick_fixes(uri: &Url, text: &str, range: Range) -> Vec<CodeActionOrCommand> {
+/// Uses of deprecated declarations in the program's document
+/// (`program.files[0]`): the top-level names the program's check finds, then
+/// the fields and methods `sema` (its model, when the passes succeeded)
+/// found.
+fn deprecation_warnings(program: &Program, sema: Option<&SemaModule>) -> Vec<diag::Diagnostic> {
+    let in_document = |d: &diag::Diagnostic| d.loc.is_some_and(|l| l.file.0 == 0);
+    let mut warnings: Vec<diag::Diagnostic> = program.deprecation_warnings().into_iter().filter(in_document).collect();
+    if let Some(module) = sema {
+        warnings.extend(module.warnings.iter().filter(|d| in_document(d)).cloned());
+    }
+    warnings
+}
+
+/// Every warning in `text`, the document `program` is rooted at (when it
+/// loaded): the parser's, then [`deprecation_warnings`].
+fn document_warnings(text: &str, program: Option<&Program>) -> Vec<diag::Diagnostic> {
     let Ok(module) = pepper_parser::parser::parse_source_diag(text) else { return vec![] };
+    let mut warnings = module.warnings;
+    if let Some(program) = program {
+        let sema = sema_model_of(program).ok();
+        warnings.extend(deprecation_warnings(program, sema.as_ref()));
+    }
+    warnings
+}
+
+/// The quick fixes for `warnings` in `text` (the document `uri`) whose
+/// range overlaps `range`: one code action per suggested fix.
+fn quick_fixes(uri: &Url, text: &str, warnings: &[diag::Diagnostic], range: Range) -> Vec<CodeActionOrCommand> {
     let overlaps = |r: &Range| r.start <= range.end && range.start <= r.end;
     let mut actions = vec![];
-    for warning in &module.warnings {
+    for warning in warnings {
         let lsp = lsp_diagnostic(warning, uri, &[(uri.as_str(), text)]);
         if !overlaps(&lsp.range) {
             continue;
@@ -812,9 +840,14 @@ impl PepperLsp {
         if parsed.is_ok() && let Ok(program) = self.program(uri) {
             // Read and parse the program once for both the sema and
             // visibility checks.
-            if let Err(d) = sema_model_of(&program) {
-                diags.push(lsp_diagnostic(&d, uri, &program_names(&program)));
+            let names = program_names(&program);
+            let sema = sema_model_of(&program);
+            if let Err(d) = &sema {
+                diags.push(lsp_diagnostic(d, uri, &names));
             }
+            // Uses of `[Deprecated]` declarations, with their quick fixes.
+            let deprecated = deprecation_warnings(&program, sema.as_ref().ok());
+            diags.extend(deprecated.iter().map(|w| lsp_diagnostic(w, uri, &names)));
             diags.extend(Self::visibility_diagnostics(&program, uri));
         }
         self.client.publish_diagnostics(uri.clone(), diags, None).await;
@@ -1271,7 +1304,9 @@ impl LanguageServer for PepperLsp {
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
         let Some(text) = self.doc(&uri) else { return Ok(None) };
-        let actions = quick_fixes(&uri, &text, params.range);
+        let program = self.program(&uri).ok();
+        let warnings = document_warnings(&text, program.as_ref());
+        let actions = quick_fixes(&uri, &text, &warnings, params.range);
         Ok((!actions.is_empty()).then_some(actions))
     }
 

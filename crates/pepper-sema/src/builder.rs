@@ -225,7 +225,24 @@ fn expression(expr: &ast::Expression) -> Result<Expression, Diagnostic> {
         }))),
     }
 }
+/// Check the form of a `[Deprecated(...)]` among `attributes`, on a
+/// declaration that may be deprecated.
+fn check_deprecation(attributes: &[ast::Attribute]) -> Result<(), Diagnostic> {
+    crate::deprecation::deprecation_of(attributes)
+        .map(|_| ())
+        .map_err(|e| Diagnostic::error(e.message).at(loc(e.span)))
+}
+
+/// Reject a `[Deprecated]` on `what`, which no code refers to by name.
+fn reject_deprecation(attributes: &[ast::Attribute], what: &str) -> Result<(), Diagnostic> {
+    match attributes.iter().find(|a| crate::deprecation::is_deprecation(a)) {
+        Some(a) => Err(Diagnostic::error(format!("'Deprecated' cannot be applied to {what}")).at(loc(a.span))),
+        None => Ok(()),
+    }
+}
+
 fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
+    check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
     Ok(VariableDef {
         name: decl.name.clone(),
@@ -491,6 +508,7 @@ fn check_implicit_constructor(decl: &ast::StructDecl, ctor: &ast::FunctionDecl) 
 
 /// A function or struct member, with no check on its attributes.
 fn member_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
+    check_deprecation(&decl.attributes)?;
     let parameters: Vec<VariableDef> = decl
         .parameters
         .iter()
@@ -541,6 +559,7 @@ fn declaration(decl: &ast::Declaration) -> Result<Declaration, Diagnostic> {
     }
 }
 fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
+    check_deprecation(&t.attributes)?;
     reject_implicit(&t.attributes)?;
     Ok(TraitDef {
         name: t.name.clone(),
@@ -552,6 +571,7 @@ fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
 }
 
 fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
+    reject_deprecation(&e.attributes, "an extension; deprecate its methods instead")?;
     reject_implicit(&e.attributes)?;
     Ok(ExtensionDef {
         target: type_name_from(&e.target),
@@ -566,8 +586,10 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
 /// Build a `StructDef` from an AST struct declaration, including constructor
 /// and destructor shells (filled in by `struct_body::finish`).
 fn struct_def(decl: &ast::StructDecl) -> Result<StructDef, Diagnostic> {
+    check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
     if let Some(body) = &decl.destructor {
+        reject_deprecation(&body.attributes, "a destructor")?;
         reject_implicit(&body.attributes)?;
     }
     let generic_params: Vec<GenericParam> = decl.generic_params.iter().map(generic_param_from).collect();
@@ -718,6 +740,7 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
             }
             ast::Declaration::Function(f) => {
                 if f.external {
+                    check_deprecation(&f.attributes)?;
                     reject_implicit(&f.attributes)?;
                     out.externs.push(ExternDef {
                         name: f.name.clone(),
@@ -738,16 +761,17 @@ fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
             ast::Declaration::Struct(s) => out.structs.push(struct_def(s)?),
             ast::Declaration::Trait(t) => out.traits.push(trait_def(t)?),
             ast::Declaration::Extend(e) => out.extensions.push(extension_def(e)?),
-            ast::Declaration::TypeAlias(t) => out.type_aliases.push({
+            ast::Declaration::TypeAlias(t) => {
+                check_deprecation(&t.attributes)?;
                 reject_implicit(&t.attributes)?;
-                TypeAliasDef {
-                name: t.name.clone(),
-                generic_params: t.generic_params.iter().map(generic_param_from).collect(),
-                target: type_name_from(&t.target),
-                attributes: t.attributes.clone(),
-                loc: loc(t.name_span),
-                }
-            }),
+                out.type_aliases.push(TypeAliasDef {
+                    name: t.name.clone(),
+                    generic_params: t.generic_params.iter().map(generic_param_from).collect(),
+                    target: type_name_from(&t.target),
+                    attributes: t.attributes.clone(),
+                    loc: loc(t.name_span),
+                })
+            }
         }
     }
     Ok(out)

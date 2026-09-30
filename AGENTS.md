@@ -267,6 +267,12 @@ T remove_at(ulong index) { ... }
   that file's page in the reference.
 - Keep implementation notes that only matter to maintainers in `#` comments
   inside the body; the doc comment is the API contract.
+- **Deprecating** a public API: put `[Deprecated("use 'x' instead", "x")]`
+  between its doc comment and the declaration, and start the description
+  with "Deprecated: use `x` instead." (the reference shows the attribute
+  only inside the signature). Every use outside a deprecated declaration
+  then warns, in every program, so migrate the runtime's own uses in the
+  same PR.
 - **Enforced**: `crates/pepper-driver/tests/runtime_docs_tests.rs` runs
   `pepper_parser::doc::check_documented` over every `.pep` file under
   `runtime/` and fails with a clang-style error for each public declaration

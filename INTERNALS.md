@@ -28,7 +28,7 @@ names and the pass order come from that implementation.
 | `src/main.rs`, `src/lib.rs` | The `pepper` CLI binary: parses `Options`, calls `pepper_driver::run`, prints errors (colored on a TTY unless `NO_COLOR`). The lib only re-exports the parser for `tests/parser_corpus.rs`. |
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
-| `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
+| `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `target.rs`). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
@@ -66,9 +66,10 @@ compiler::compile → compile_sources                               (driver/src/
                                   private names (helper@io/file) → FileScope
   compiler::merge
     Program::check                linking errors, then visibility::check_visibility
+    Program::warnings             parser warnings + deprecation::check_uses → module.warnings
     builder::build_file(i)        AST → sema model, locations carry FileId(i)
     Module::merge                 all files into ONE sema Module (names already unique)
-  compiler::run_passes
+  compiler::run_passes (then print module.warnings, sorted, even on error)
     apply_platform_filters        drop [Target(...)] that is false on the host
     struct_body::apply            resolve_type_aliases; __refcount, ctor, dtor,
                                   __acquire/__release bodies
@@ -174,17 +175,20 @@ with no extension, and `module_name()` is the output's stem.
   a module it imports, whose exported extensions it may use; `load` records
   each file's `module_root` for this). Errors are `ModuleError { file, span, message,
   unresolved }`.
-- **`scope_walk.rs`** is the traversal linking and visibility share: it
+- **`scope_walk.rs`** is the traversal linking, visibility, and the
+  deprecation check share: it
   tracks the names bound at each point (parameters, locals, generic
   parameters, the members of the struct being defined or extended), which
   hide top-level names. The `scope_walker!` macro writes it once as two
   traits, `ScopeWalkMut` (linking's `Rewriter`, which rewrites the AST) and
   `ScopeWalk` (visibility's `Checker`, which only reads it); each pass
   implements the hooks for references, member names, type names, visible
-  members, and `extend` parameters. In `extend Box<T>`, a name equal to
-  `Box`'s own parameter at that position is always the parameter, even when
-  the program also declares a struct `T` (a runtime `extend ArrayIterator<T>`
-  must not see a user's `struct T`).
+  members, and `extend` parameters. `enter_declaration`/`exit_declaration`
+  bracket every declaration (and field, and function body) with its
+  attributes. In `extend Box<T>`, a name equal to `Box`'s own parameter at
+  that position is always the parameter, even when the program also declares
+  a struct `T` (a runtime `extend ArrayIterator<T>` must not see a user's
+  `struct T`).
 - **`Program::check`** reports link errors first and then
   `visibility::check_visibility`. That check covers private symbols (a
   reference linking left unrenamed is matched against other files' mangled
@@ -433,6 +437,7 @@ several passes run more than once on purpose.
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
+| final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type::of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures::inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
 
 Shared helpers in `passes/mod.rs` are `walk_block`, `walk_statement`,
 `walk_expression`, `walk_function`, `walk_global`, and
@@ -659,11 +664,29 @@ diagnostics"). The mechanics:
   `.at(loc(span))`, passes through `errors::report`, codegen through
   `Err(String)` plus `locate`, and linking through `ModuleError` and
   `VisibilityError`, each with a `to_diagnostic` method.
-- Warnings exist only as deprecations: `Diagnostic::deprecated(what,
-  instead, loc, fix)` builds a warning with the code `deprecated` and a
-  `Fix` whose `Edit`s replace source spans. The renderer prints the fix under
-  the caret, and the language server offers it as a quick fix. The book
-  lists current deprecations in `docs/src/language/compiler-errors.md`.
+- Warnings exist only as deprecations, and never stop a compile. Every
+  one has the code `deprecated`, and may carry a `Fix` whose `Edit`s replace
+  source spans; the renderer prints the fix under the caret, and the
+  language server offers it as a quick fix. There are two kinds:
+  - Deprecated syntax: the parser's `deprecated_syntax` builds
+    `Diagnostic::deprecated(what, instead, loc, fix)` (always with a fix)
+    into `ast::Module::warnings`. The book lists these in
+    `docs/src/language/compiler-errors.md`.
+  - Uses of a declaration marked `[Deprecated("message", "replacement")]`
+    (`crates/pepper-sema/src/deprecation.rs`):
+    `Diagnostic::deprecated_declaration(name, message, loc)` plus a note at
+    the declaration and, with a replacement, a fix renaming the use. The
+    builder validates the attribute (`deprecation_of`; errors at the
+    attribute or argument). `deprecation::check_uses` walks the linked ASTs
+    (a `ScopeWalk`) for top-level names, as values and types and in import
+    lists; `passes::check_deprecated_members` finds member uses on the
+    model, which knows receiver types.
+- How warnings flow: `Program::warnings()` is the parser's warnings plus
+  `check_uses`; `compiler::merge` seeds `module.warnings` with them, the
+  passes append the member warnings, and `compiler::compile` prints
+  `module.render_warnings()` (sorted by location) after the passes, whether
+  or not they failed. The LSP publishes the ones located in the open
+  document (`deprecation_warnings` in `tools/lsp/src/main.rs`).
 
 ---
 
@@ -731,6 +754,10 @@ diagnostics"). The mechanics:
      **under `catch_unwind`**), then `visibility_diagnostics`.
      Unresolved-module imports are downgraded to warnings because the
      editor does not know the compile's `-I` directories.
+  3. Warnings: the parser's, then `deprecation_warnings` (the program's
+     `deprecation_warnings()` and the sema model's `warnings`, in the
+     document only). `code_action` recomputes them (`document_warnings`)
+     and `quick_fixes` turns each fix into a code action.
 - `lsp_diagnostic` maps a `Diagnostic` to the document. A location in
   another file appears at the top of the document, prefixed with that
   file's name. Notes become `relatedInformation`.
@@ -894,6 +921,8 @@ applies:
 - `[LinkName("sym")]` → `ExternDef::link_name`, used by
   `instantiate_extern`
 - `[Target(...)]` → `passes/platform.rs`
+- `[Deprecated("message", "replacement")]` → `deprecation.rs` (checked by
+  the builder, read by `check_uses` and `check_deprecated_members`)
 - `[Shared]` → `StructDef::is_shared`
 - `[Implicit]` → `StructDef::implicit_from`, checked in `builder.rs` and
   applied by `convert_to_traits`

@@ -771,6 +771,11 @@ pub struct Module {
     /// The files locations point into, for rendering diagnostics. Filled by
     /// whoever loads the files (see `build_file`); `merge` leaves it alone.
     pub sources: pepper_parser::diagnostic::SourceMap,
+    /// Warnings found while compiling: those the driver carried over from
+    /// the loaded program (`Program::warnings`), then the uses of
+    /// deprecated members `check_deprecated_members` found. `merge` leaves
+    /// it alone.
+    pub warnings: Vec<Diagnostic>,
     /// Built from files module linking processed, which decided which
     /// generic functions are concrete overrides and marked them
     /// (`GenericParam::is_argument`): sema follows those marks alone.
@@ -778,6 +783,14 @@ pub struct Module {
 }
 
 impl Module {
+    /// [`Module::warnings`] in source order, rendered clang-style against
+    /// [`Module::sources`]; empty when there are none.
+    pub fn render_warnings(&self) -> String {
+        let mut warnings: Vec<&Diagnostic> = self.warnings.iter().collect();
+        warnings.sort_by_key(|w| w.loc.map(|l| (l.file.0, l.span.start)));
+        warnings.iter().map(|w| self.sources.render(w)).collect::<Vec<_>>().join("\n")
+    }
+
     pub fn merge(&mut self, other: Module) {
         self.imports.extend(other.imports);
         self.structs.extend(other.structs);

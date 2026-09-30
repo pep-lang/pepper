@@ -663,6 +663,291 @@ fn method_of_this_stored_in_a_field() {
     );
 }
 
+// ── [Deprecated] ─────────────────────────────────────────────────────────────
+
+/// Compile `source` as `main.pep` with the runtime and return the module,
+/// whose warnings hold every deprecation warning of the compile.
+fn compiled(source: &str) -> pepper_driver::compiler::Compiled {
+    std::env::set_current_dir(repo_root()).unwrap();
+    pepper_driver::compiler::compile_with_runtime("main.pep", source).expect("compile")
+}
+
+/// The rendered warnings of compiling `source` as `main.pep`.
+fn warnings_of(source: &str) -> String {
+    compiled(source).render_warnings()
+}
+
+#[test]
+fn deprecated_function_warns_with_a_fix_and_still_compiles() {
+    let source = "[Deprecated(\"use 'twice' instead\", \"twice\")]\n\
+                  dup(x: int): int { return x * 2; }\n\
+                  twice(x: int): int { return x * 2; }\n\
+                  test(): int {\n    return dup(21);\n}\n";
+    let mut module = compiled(source);
+    assert_eq!(
+        module.render_warnings(),
+        "main.pep:5:12: warning: 'dup' is deprecated: use 'twice' instead [deprecated]\n\
+         \x20   5 |     return dup(21);\n\
+         \x20     |            ^~~\n\
+         \x20     |            twice\n\
+         main.pep:2:1: note: 'dup' declared here\n\
+         \x20   2 | dup(x: int): int { return x * 2; }\n\
+         \x20     | ^~~"
+    );
+    let [warning] = module.warnings.as_slice() else { panic!("{:?}", module.warnings) };
+    assert_eq!(warning.fixes[0].message, "Replace 'dup' with 'twice'");
+    let [edit] = warning.fixes[0].edits.as_slice() else { panic!("{:?}", warning.fixes) };
+    assert_eq!(edit.replacement, "twice");
+    assert_eq!(&source[edit.loc.span.start..edit.loc.span.end], "dup");
+    assert_eq!(edit.loc.file, pepper_driver::parser_diagnostic::FileId(0));
+
+    let ctx = inkwell::context::Context::create();
+    assert_eq!(CodeGenerator::new(&ctx, "main").jit_execute(&mut module, "test").expect("jit"), 42);
+}
+
+#[test]
+fn deprecated_method_warns_at_the_method_name() {
+    let source = "struct Counter {\n\
+                  \x20   int value;\n\
+                  \x20   [Deprecated(\"use 'copy' instead\", \"copy\")]\n\
+                  \x20   clone(): Counter { return this.copy(); }\n\
+                  \x20   copy(): Counter { var c = Counter(); c.value = value; return c; }\n\
+                  }\n\
+                  test(): int {\n    var a = Counter();\n    var b = a.clone();\n    return b.value;\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:9:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]\n\
+         \x20   9 |     var b = a.clone();\n\
+         \x20     |               ^~~~~\n\
+         \x20     |               copy\n\
+         main.pep:4:5: note: 'clone' declared here\n\
+         \x20   4 |     clone(): Counter { return this.copy(); }\n\
+         \x20     |     ^~~~~"
+    );
+}
+
+#[test]
+fn deprecated_generic_method_warns_at_each_use() {
+    let source = "struct Holder {\n\
+                  \x20   int value;\n\
+                  \x20   [Deprecated(\"use 'get' instead\")]\n\
+                  \x20   pick<U>(U other): int { return value; }\n\
+                  }\n\
+                  test(): int {\n    var h = Holder();\n    return h.pick(1) + h.pick(2.0);\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:8:14: warning: 'pick' is deprecated: use 'get' instead [deprecated]\n\
+         \x20   8 |     return h.pick(1) + h.pick(2.0);\n\
+         \x20     |              ^~~~\n\
+         main.pep:4:5: note: 'pick' declared here\n\
+         \x20   4 |     pick<U>(U other): int { return value; }\n\
+         \x20     |     ^~~~\n\
+         main.pep:8:26: warning: 'pick' is deprecated: use 'get' instead [deprecated]\n\
+         \x20   8 |     return h.pick(1) + h.pick(2.0);\n\
+         \x20     |                          ^~~~\n\
+         main.pep:4:5: note: 'pick' declared here\n\
+         \x20   4 |     pick<U>(U other): int { return value; }\n\
+         \x20     |     ^~~~"
+    );
+}
+
+#[test]
+fn deprecated_struct_warns_at_each_use_of_its_name() {
+    let source = "[Deprecated(\"use 'Point' instead\")]\n\
+                  struct OldPoint { int x; }\n\
+                  test(): int {\n    var p: OldPoint = OldPoint();\n    return p.x;\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:4:12: warning: 'OldPoint' is deprecated: use 'Point' instead [deprecated]\n\
+         \x20   4 |     var p: OldPoint = OldPoint();\n\
+         \x20     |            ^~~~~~~~\n\
+         main.pep:2:8: note: 'OldPoint' declared here\n\
+         \x20   2 | struct OldPoint { int x; }\n\
+         \x20     |        ^~~~~~~~\n\
+         main.pep:4:23: warning: 'OldPoint' is deprecated: use 'Point' instead [deprecated]\n\
+         \x20   4 |     var p: OldPoint = OldPoint();\n\
+         \x20     |                       ^~~~~~~~\n\
+         main.pep:2:8: note: 'OldPoint' declared here\n\
+         \x20   2 | struct OldPoint { int x; }\n\
+         \x20     |        ^~~~~~~~"
+    );
+}
+
+#[test]
+fn deprecated_field_warns_at_every_access() {
+    // Through a value, and bare inside the struct's own method.
+    let source = "struct Counter {\n\
+                  \x20   [Deprecated(\"read 'value' instead\", \"value\")]\n\
+                  \x20   int count;\n\
+                  \x20   int value;\n\
+                  \x20   total(): int { return count + value; }\n\
+                  }\n\
+                  test(): int {\n    var c = Counter();\n    c.count = 2;\n    return c.total();\n}\n";
+    let rendered = warnings_of(source);
+    let headers: Vec<&str> = rendered.lines().filter(|l| l.contains(": warning: ")).collect();
+    assert_eq!(
+        headers,
+        [
+            "main.pep:5:27: warning: 'count' is deprecated: read 'value' instead [deprecated]",
+            "main.pep:9:7: warning: 'count' is deprecated: read 'value' instead [deprecated]",
+        ]
+    );
+    assert!(rendered.contains("    9 |     c.count = 2;\n      |       ^~~~~\n      |       value\n"), "{rendered}");
+    assert!(rendered.contains("main.pep:3:9: note: 'count' declared here"), "{rendered}");
+}
+
+#[test]
+fn deprecated_variable_and_constructor() {
+    // An empty message leaves just "is deprecated"; a deprecated
+    // constructor is reported at the struct name that constructs.
+    let source = "[Deprecated(\"\")]\n\
+                  const limit = 3;\n\
+                  struct Box {\n\
+                  \x20   int value;\n\
+                  \x20   [Deprecated(\"use 'make_box' instead\")]\n\
+                  \x20   construct(int v) { value = v; }\n\
+                  }\n\
+                  test(): int {\n    var b = Box(limit);\n    return b.value;\n}\n";
+    assert_eq!(
+        warnings_of(source),
+        "main.pep:9:13: warning: 'Box' is deprecated: use 'make_box' instead [deprecated]\n\
+         \x20   9 |     var b = Box(limit);\n\
+         \x20     |             ^~~\n\
+         main.pep:6:5: note: 'Box' declared here\n\
+         \x20   6 |     construct(int v) { value = v; }\n\
+         \x20     |     ^~~~~~~~~\n\
+         main.pep:9:17: warning: 'limit' is deprecated [deprecated]\n\
+         \x20   9 |     var b = Box(limit);\n\
+         \x20     |                 ^~~~~\n\
+         main.pep:2:7: note: 'limit' declared here\n\
+         \x20   2 | const limit = 3;\n\
+         \x20     |       ^~~~~"
+    );
+}
+
+#[test]
+fn no_deprecation_warning_inside_deprecated_declarations() {
+    // Nor in a closure written inside one, nor at the declarations
+    // themselves, nor anywhere in the runtime.
+    let source = "[Deprecated(\"old\")]\n\
+                  const limit = 3;\n\
+                  [Deprecated(\"old\")]\n\
+                  helper(): int { return limit; }\n\
+                  [Deprecated(\"old\")]\n\
+                  struct Legacy {\n\
+                  \x20   [Deprecated(\"old\")]\n\
+                  \x20   int count;\n\
+                  \x20   get(): int { return count + helper(); }\n\
+                  }\n\
+                  struct Current {\n\
+                  \x20   [Deprecated(\"old\")]\n\
+                  \x20   old(): int { var l = Legacy(); return l.get() + helper(); }\n\
+                  }\n\
+                  [Deprecated(\"old\")]\n\
+                  legacy(): int { var c = Current(); var f = () => c.old(); return f() + helper(); }\n\
+                  test(): int { return 0; }\n";
+    assert_eq!(warnings_of(source), "");
+}
+
+#[test]
+fn deprecated_function_used_through_imports() {
+    // Through a qualifier, the warning points at the name after it, and the
+    // fix renames only that; an import list names the declaration too.
+    std::env::set_current_dir(repo_root()).unwrap();
+    let dir = std::env::temp_dir().join("pepper_diagnostic_deprecated_imports");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("lib.pep"),
+        "[Deprecated(\"use 'fresh' instead\", \"fresh\")]\nexport stale(): int { return 1; }\nexport fresh(): int { return 1; }\n",
+    )
+    .unwrap();
+    let main_path = dir.join("main.pep");
+    std::fs::write(&main_path, "import \"lib\" as l;\nimport [stale] from \"lib\";\nmain(): int {\n    return l.stale() + stale();\n}\n")
+        .unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", main_path.to_str().unwrap()]);
+    let module = pepper_driver::compiler::compile(&options, "main").expect("compile");
+    let rendered = module.render_warnings().replace(&format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR), "");
+    let headers: Vec<&str> = rendered.lines().filter(|l| l.contains(": warning: ") || l.contains(": note: ")).collect();
+    assert_eq!(
+        headers,
+        [
+            "main.pep:2:9: warning: 'stale' is deprecated: use 'fresh' instead [deprecated]",
+            "lib.pep:2:8: note: 'stale' declared here",
+            "main.pep:4:14: warning: 'stale' is deprecated: use 'fresh' instead [deprecated]",
+            "lib.pep:2:8: note: 'stale' declared here",
+            "main.pep:4:24: warning: 'stale' is deprecated: use 'fresh' instead [deprecated]",
+            "lib.pep:2:8: note: 'stale' declared here",
+        ]
+    );
+    assert!(rendered.contains("    4 |     return l.stale() + stale();\n      |              ^~~~~\n      |              fresh\n"), "{rendered}");
+}
+
+#[test]
+fn malformed_deprecated_attributes() {
+    let message = "'Deprecated' expects a message string: [Deprecated(\"message\")]";
+    let cases = [
+        ("bare", "[Deprecated]\nf() {}\n", format!("main.pep:1:1: error: {message}")),
+        ("no_arguments", "[Deprecated()]\nf() {}\n", format!("main.pep:1:1: error: {message}")),
+        ("not_a_string", "[Deprecated(3)]\nf() {}\n", format!("main.pep:1:13: error: {message}")),
+        (
+            "replacement_not_a_string",
+            "[Deprecated(\"old\", 3)]\nf() {}\n",
+            "main.pep:1:20: error: 'Deprecated' expects the replacement as a string: [Deprecated(\"message\", \"replacement\")]".to_string(),
+        ),
+        ("replacement_not_a_name", "[Deprecated(\"old\", \"a b\")]\nf() {}\n", "main.pep:1:20: error: the replacement 'a b' is not a name".to_string()),
+        (
+            "too_many",
+            "[Deprecated(\"old\", \"g\", \"h\")]\nf() {}\n",
+            "main.pep:1:25: error: too many arguments to 'Deprecated': expected at most 2, have 3".to_string(),
+        ),
+        ("duplicate", "[Deprecated(\"a\")]\n[Deprecated(\"b\")]\nf() {}\n", "main.pep:2:1: error: duplicate 'Deprecated' attribute".to_string()),
+        (
+            "extension",
+            "struct S { int x; }\n[Deprecated(\"old\")]\nextend S { m() {} }\n",
+            "main.pep:2:1: error: 'Deprecated' cannot be applied to an extension; deprecate its methods instead".to_string(),
+        ),
+        (
+            "destructor",
+            "struct S {\n    int x;\n    [Deprecated(\"old\")]\n    destruct {}\n}\n",
+            "main.pep:3:5: error: 'Deprecated' cannot be applied to a destructor".to_string(),
+        ),
+    ];
+    for (name, prefix, expected) in cases {
+        let source = format!("{prefix}main(): int {{ return 0; }}\n");
+        let error = error_of(&format!("deprecated_{name}"), &source);
+        assert_eq!(error.lines().next(), Some(expected.as_str()), "{name}: {error}");
+    }
+    // The whole rendering, for one: the caret covers the attribute.
+    assert_eq!(
+        error_of("deprecated_rendered", "[Deprecated]\nf() {}\nmain(): int { return 0; }\n"),
+        format!("main.pep:1:1: error: {message}\n\
+                 \x20   1 | [Deprecated]\n\
+                 \x20     | ^~~~~~~~~~~~")
+    );
+}
+
+#[test]
+fn deprecated_extension_method_of_a_generic_struct() {
+    // Each use once, however many specializations share its location.
+    let source = "struct Box<T> { T value; }\n\
+                  extend Box<T> {\n\
+                  \x20   [Deprecated(\"use 'get' instead\", \"get\")]\n\
+                  \x20   peek(): T { return value; }\n\
+                  \x20   get(): T { return value; }\n\
+                  }\n\
+                  twice<T>(b: Box<T>): T { return b.peek(); }\n\
+                  test(): int {\n    var a = Box<int>();\n    var s = Box<long>();\n    return a.peek() + twice(a) + (twice(s) as int);\n}\n";
+    let rendered = warnings_of(source);
+    let headers: Vec<&str> = rendered.lines().filter(|l| l.contains(": warning: ")).collect();
+    assert_eq!(
+        headers,
+        [
+            "main.pep:7:35: warning: 'peek' is deprecated: use 'get' instead [deprecated]",
+            "main.pep:11:14: warning: 'peek' is deprecated: use 'get' instead [deprecated]",
+        ]
+    );
+}
+
 #[test]
 fn void_pointer_is_not_a_struct() {
     // A struct may pass as `void*`, but no pointer is a struct reference.

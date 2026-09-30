@@ -29,6 +29,7 @@
 - [Platform selection](language/platform-selection.md)
 - [Linking](language/linking.md)
 - [Compiler errors](language/compiler-errors.md)
+- [Deprecation](language/deprecation.md)
 - [Documentation comments](language/doc-comments.md)
 
 # Standard library reference

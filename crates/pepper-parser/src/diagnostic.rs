@@ -21,8 +21,18 @@
 //!       |     construct
 //! ```
 //!
-//! Deprecations are reported through [`Diagnostic::deprecated`], always
-//! with the fix that migrates the code.
+//! Deprecated syntax is reported through [`Diagnostic::deprecated`], always
+//! with the fix that migrates the code. A use of a declaration marked
+//! `[Deprecated("message")]` is reported through
+//! [`Diagnostic::deprecated_declaration`], with a fix when the attribute
+//! names a replacement:
+//!
+//! ```text
+//! main.pep:4:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]
+//!     4 |     var b = a.clone();
+//!       |               ^~~~~
+//!       |               copy
+//! ```
 //!
 //! A diagnostic points into a file through a [`Loc`]: a [`FileId`] plus a
 //! byte [`Span`]. Whoever loaded the files owns the [`SourceMap`] that turns
@@ -139,6 +149,21 @@ impl Diagnostic {
     /// migrates the code; a deprecation always comes with one.
     pub fn deprecated(what: &str, instead: &str, loc: Loc, fix: Fix) -> Self {
         let mut d = Self::warning(format!("{what} is deprecated; {instead}")).at(loc).with_fix(fix);
+        d.code = Some(DEPRECATED);
+        d
+    }
+
+    /// A warning that the declaration `name`, used at `loc`, is marked
+    /// `[Deprecated(message)]`: `'name' is deprecated: message`, or just
+    /// `'name' is deprecated` when the message is empty. The caller attaches
+    /// a fix when the attribute names a replacement.
+    pub fn deprecated_declaration(name: &str, message: &str, loc: Loc) -> Self {
+        let text = if message.is_empty() {
+            format!("'{name}' is deprecated")
+        } else {
+            format!("'{name}' is deprecated: {message}")
+        };
+        let mut d = Self::warning(text).at(loc);
         d.code = Some(DEPRECATED);
         d
     }

@@ -25,6 +25,7 @@ pub mod platform;
 pub mod function_types;
 pub mod check_function_types;
 pub mod check_bindings;
+pub mod check_deprecated_members;
 pub mod lower_with_blocks;
 pub mod weak_types;
 pub mod closures;
@@ -137,6 +138,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(check_shared_types::check_shared_types(module));
     // `with` conditions need the final types of `enter()`.
     step!(lower_with_blocks(module));
+    // Warnings only: uses of deprecated fields and methods, by final type.
+    step!(check_deprecated_members::check_deprecated_members(module));
     Ok(())
 }
 

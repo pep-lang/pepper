@@ -84,15 +84,31 @@ On a terminal, errors are colored like clang's. Set the `NO_COLOR` environment
 variable to turn colors off. Output that goes to a file or a pipe is never
 colored.
 
-Warnings do not stop the build. Besides the linker's own warnings, which the
-compiler passes through (see [Linking](linking.md)), the only warnings today
-are deprecations.
+Warnings do not stop the build, and the compiler prints them whether or not
+it also finds an error. Besides the linker's own warnings, which the compiler
+passes through (see [Linking](linking.md)), the only warnings today are
+deprecations.
 
 ## Deprecations
 
-Syntax on its way out keeps compiling for a while, with a warning that names
-its replacement and shows the fix under the code it replaces. The language
-server offers the same fix as a quick fix.
+A use of a declaration marked `[Deprecated("message")]` warns at the name,
+with the message and a note at the declaration. When the attribute names a
+replacement, the warning shows the rename under the code, and the language
+server offers it as a quick fix. See [Deprecation](deprecation.md).
+
+```text
+main.pep:9:15: warning: 'clone' is deprecated: use 'copy' instead [deprecated]
+    9 |     var b = a.clone();
+      |               ^~~~~
+      |               copy
+main.pep:4:5: note: 'clone' declared here
+    4 |     clone(): Counter { return this.copy(); }
+      |     ^~~~~
+```
+
+Syntax of the language itself that is on its way out keeps compiling for a
+while too, with a warning that names its replacement and shows the fix under
+the code it replaces:
 
 ```text
 main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]

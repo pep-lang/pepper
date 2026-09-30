@@ -250,7 +250,8 @@ fn hover_shows_doc_comments() {
 fn deprecated_new_offers_a_quick_fix() {
     let uri = Url::parse("file:///t.pep").unwrap();
     let text = "struct S {\n    int x;\n    new(this.x = 1) {}\n}\n";
-    let actions = quick_fixes(&uri, text, Range::new(Position::new(2, 5), Position::new(2, 5)));
+    let fixes = |text: &str, range| quick_fixes(&uri, text, &document_warnings(text, None), range);
+    let actions = fixes(text, Range::new(Position::new(2, 5), Position::new(2, 5)));
     let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
     assert_eq!(action.title, "Replace `new` with `construct`");
     assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
@@ -263,8 +264,44 @@ fn deprecated_new_offers_a_quick_fix() {
         new_text: "construct".to_string(),
     }]);
     // Nothing to fix away from the warning, or once it is fixed.
-    assert!(quick_fixes(&uri, text, Range::new(Position::new(0, 0), Position::new(0, 1))).is_empty());
-    assert!(quick_fixes(&uri, &text.replace("new(", "construct("), Range::new(Position::new(2, 5), Position::new(2, 5))).is_empty());
+    assert!(fixes(text, Range::new(Position::new(0, 0), Position::new(0, 1))).is_empty());
+    assert!(fixes(&text.replace("new(", "construct("), Range::new(Position::new(2, 5), Position::new(2, 5))).is_empty());
+}
+
+const DEPRECATED: &str = r#"struct Counter {
+    int value;
+    [Deprecated("use 'copy' instead", "copy")]
+    clone(): Counter { return this; }
+    copy(): Counter { return this; }
+}
+[Deprecated("use 'twice' instead", "twice")]
+dup(x: int): int { return x * 2; }
+twice(x: int): int { return x * 2; }
+test(): int {
+    var c = Counter();
+    var d = c.clone();
+    return dup(d.value);
+}
+"#;
+
+#[test]
+fn deprecated_declarations_offer_quick_fixes() {
+    let (uri, text, program) = load("deprecated", DEPRECATED, "main.pep");
+    let warnings = document_warnings(&text, Some(&program));
+    let messages: Vec<&str> = warnings.iter().map(|w| w.message.as_str()).collect();
+    assert_eq!(messages, ["'dup' is deprecated: use 'twice' instead", "'clone' is deprecated: use 'copy' instead"]);
+    // The method, found by the sema model's types.
+    let actions = quick_fixes(&uri, &text, &warnings, Range::new(Position::new(11, 16), Position::new(11, 16)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Replace 'clone' with 'copy'");
+    let diagnostic = &action.diagnostics.as_ref().unwrap()[0];
+    assert_eq!(diagnostic.tags, Some(vec![DiagnosticTag::DEPRECATED]));
+    let edits = &action.edit.as_ref().unwrap().changes.as_ref().unwrap()[&uri];
+    assert_eq!(edits, &vec![TextEdit { range: Range::new(Position::new(11, 14), Position::new(11, 19)), new_text: "copy".to_string() }]);
+    // The function, found on the linked AST.
+    let actions = quick_fixes(&uri, &text, &warnings, Range::new(Position::new(12, 12), Position::new(12, 12)));
+    let [CodeActionOrCommand::CodeAction(action)] = actions.as_slice() else { panic!("{actions:?}") };
+    assert_eq!(action.title, "Replace 'dup' with 'twice'");
 }
 
 const CONVERTED: &str = r#"struct Name {

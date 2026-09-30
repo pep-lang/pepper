@@ -1,21 +1,25 @@
-//! The scope walk module linking and the visibility check share: one
+//! The scope walk that module linking, the visibility check, and the
+//! deprecation check share: one
 //! traversal of a file's AST that tracks the names bound locally at each
 //! point (parameters, locals, generic parameters, and the members of the
 //! struct being defined or extended), which hide top-level names.
 //!
-//! Linking rewrites the AST as it walks, and the visibility check only reads
-//! it, so the walk is written once and instantiated twice by
+//! Linking rewrites the AST as it walks, and the checks only read it, so the walk is written once and instantiated twice by
 //! `scope_walker!`: [`ScopeWalkMut`] over `&mut` nodes and [`ScopeWalk`]
 //! over `&` nodes. Each pass implements the hooks: what a reference, a
 //! member name, or a type name means to it, and which struct members and
 //! `extend` parameters are in scope.
+//!
+//! The deprecation check (`crate::deprecation`) reads it as well, and uses
+//! the `enter_declaration`/`exit_declaration` hooks to know when it is
+//! inside a declaration marked `[Deprecated]`.
 //!
 //! What platform selection drops is never compiled, so the walk skips it: a
 //! function or block whose `[Target(...)]` is false. Constructors and
 //! destructors are always walked, since platform selection never drops them.
 
 use crate::passes::platform::keep;
-use pepper_parser::ast::{Block, Declaration, Expression, FunctionDecl, GenericParam, Span, Statement, TypeName};
+use pepper_parser::ast::{Attribute, Block, Declaration, Expression, FunctionDecl, GenericParam, Span, Statement, TypeName};
 use std::collections::HashSet;
 
 /// One level of names bound inside a declaration.
@@ -168,6 +172,15 @@ macro_rules! scope_walker {
                 self.walk_expression(expr);
             }
 
+            /// Entering a declaration (a top-level or local one, a field,
+            /// a function or method) that carries `attributes`; each call
+            /// is paired with an [`exit_declaration`](Self::exit_declaration).
+            fn enter_declaration(&mut self, _attributes: &[Attribute]) {}
+
+            /// Leaving the declaration the matching `enter_declaration`
+            /// entered.
+            fn exit_declaration(&mut self) {}
+
             /// `name` is bound locally where a value is expected.
             fn is_local(&self, name: &str) -> bool {
                 self.scopes().is_local(name, |st, n| self.is_member(st, n))
@@ -180,6 +193,7 @@ macro_rules! scope_walker {
             }
 
             fn walk_declaration(&mut self, decl: &$($m)? Declaration) {
+                self.enter_declaration(decl.attributes());
                 match decl {
                     Declaration::Variable(v) => {
                         self.visit_type_name(&$($m)? v.type_name);
@@ -194,10 +208,12 @@ macro_rules! scope_walker {
                         self.push_generics(&$($m)? s.generic_params);
                         self.scopes_mut().push(Scope::Members(s.name.clone()));
                         for field in &$($m)? s.fields {
+                            self.enter_declaration(&field.attributes);
                             self.visit_type_name(&$($m)? field.type_name);
                             if let Some(e) = &$($m)? field.default_value {
                                 self.visit_expression(e);
                             }
+                            self.exit_declaration();
                         }
                         // Platform selection never drops a constructor or
                         // destructor, whatever its attributes.
@@ -254,6 +270,7 @@ macro_rules! scope_walker {
                         self.scopes_mut().pop();
                     }
                 }
+                self.exit_declaration();
             }
 
             /// A function, unless platform selection drops it.
@@ -264,6 +281,7 @@ macro_rules! scope_walker {
             }
 
             fn walk_function_body(&mut self, f: &$($m)? FunctionDecl) {
+                self.enter_declaration(&f.attributes);
                 if self.visit_function_generics(f) {
                     self.scopes_mut().push(Scope::Generics(HashSet::new()));
                 } else {
@@ -284,6 +302,7 @@ macro_rules! scope_walker {
                 }
                 self.scopes_mut().pop();
                 self.scopes_mut().pop();
+                self.exit_declaration();
             }
 
             /// A block, unless platform selection drops it.

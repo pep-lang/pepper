@@ -67,8 +67,23 @@ impl Program {
     }
 
     /// Warnings the parser found in every file (deprecated syntax, ...),
-    /// their locations and fixes pointing at the file they came from.
+    /// their locations and fixes pointing at the file they came from, then
+    /// [`Program::deprecation_warnings`].
     pub fn warnings(&self) -> Vec<Diagnostic> {
+        let mut out = self.parser_warnings();
+        out.extend(self.deprecation_warnings());
+        out
+    }
+
+    /// Uses of top-level declarations marked `[Deprecated]` (see
+    /// [`crate::deprecation`]). Uses of deprecated members are found later,
+    /// by the sema passes, in `Module::warnings`.
+    pub fn deprecation_warnings(&self) -> Vec<Diagnostic> {
+        crate::deprecation::check_uses(&self.files, &self.scopes)
+    }
+
+    /// The warnings the parser found in every file, relocated to it.
+    pub fn parser_warnings(&self) -> Vec<Diagnostic> {
         let mut out = vec![];
         for (i, f) in self.files.iter().enumerate() {
             let file = FileId(i as u32);

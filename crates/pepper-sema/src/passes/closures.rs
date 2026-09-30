@@ -552,9 +552,12 @@ pub fn lift_closures(module: &mut Module) {
 
     let plain = Context::default();
     for function in &mut module.functions {
+        let before = lifted.len();
         lift_function(function, &plain, &mut lifted);
+        inherit_deprecation(&[&function.attributes], &mut lifted[before..]);
     }
     for (st, ctx) in module.structs.iter_mut().zip(&struct_contexts) {
+        let before = lifted.len();
         for field in &mut st.field_members {
             if let Some(default) = &mut field.default {
                 lift_default(default, ctx, &mut lifted);
@@ -562,13 +565,18 @@ pub fn lift_closures(module: &mut Module) {
         }
         lift_function(&mut st.constructor, ctx, &mut lifted);
         lift_function(&mut st.destructor, ctx, &mut lifted);
+        inherit_deprecation(&[&st.attributes, &st.constructor.attributes], &mut lifted[before..]);
         for method in st.method_members.iter_mut().chain(st.generic_methods.iter_mut()) {
+            let before = lifted.len();
             lift_function(method, ctx, &mut lifted);
+            inherit_deprecation(&[&st.attributes, &method.attributes], &mut lifted[before..]);
         }
     }
     for (ext, ctx) in module.extensions.iter_mut().zip(&extension_contexts) {
         for method in &mut ext.methods {
+            let before = lifted.len();
             lift_function(method, ctx, &mut lifted);
+            inherit_deprecation(&[&method.attributes], &mut lifted[before..]);
         }
     }
     for tr in &mut module.traits {
@@ -579,7 +587,9 @@ pub fn lift_closures(module: &mut Module) {
             ..Context::default()
         };
         for method in &mut tr.methods {
+            let before = lifted.len();
             lift_function(method, &ctx, &mut lifted);
+            inherit_deprecation(&[&tr.attributes, &method.attributes], &mut lifted[before..]);
         }
     }
     for var in &mut module.globals {
@@ -588,6 +598,20 @@ pub fn lift_closures(module: &mut Module) {
         }
     }
     module.structs.extend(lifted);
+}
+
+/// A closure lifted out of a declaration marked `[Deprecated]` (any of
+/// `attributes`, the declaration's and its enclosing struct's) is still
+/// inside it: its `__call` carries the attribute, so the deprecation check
+/// does not report the uses in its body.
+fn inherit_deprecation(attributes: &[&Vec<pepper_parser::ast::Attribute>], lifted: &mut [StructDef]) {
+    let found = attributes.iter().flat_map(|a| a.iter()).find(|a| crate::deprecation::is_deprecation(a));
+    let Some(deprecated) = found else { return };
+    for st in lifted {
+        for method in &mut st.method_members {
+            method.attributes.push(deprecated.clone());
+        }
+    }
 }
 
 // ── Type inference ────────────────────────────────────────────────────────────

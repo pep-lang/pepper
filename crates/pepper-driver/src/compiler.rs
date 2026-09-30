@@ -24,17 +24,16 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
         ..Setup::default()
     };
     let program = program::load_program(Root::from_file(entry_source)?, &setup)?;
-    crate::report_warnings(&program.render_warnings());
-    merge(&program)
+    merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))
 }
 
 /// Check `program` and merge its files, in load order, into one module. The
-/// module's source map holds every file, so `FileId(i)` is `program.files[i]`.
-/// Its globals are in initialization order (see
-/// [`Program::initialization_order`]).
+/// module's source map holds every file, so `FileId(i)` is `program.files[i]`,
+/// and its warnings start with the program's (`Program::warnings`). Its
+/// globals are in initialization order (see [`Program::initialization_order`]).
 pub fn merge(program: &Program) -> Result<SemaModule, String> {
     program.check()?;
-    let mut module = SemaModule { linked: true, ..SemaModule::default() };
+    let mut module = SemaModule { warnings: program.warnings(), linked: true, ..SemaModule::default() };
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
     }
@@ -87,7 +86,11 @@ pub fn compile(
         .ok_or_else(|| "no source files".to_string())?;
 
     let mut module = compile_sources(options, entry_source)?;
-    run_passes(&mut module)?;
+    // Warnings print whether or not the passes succeed, as clang prints
+    // them beside errors.
+    let result = run_passes(&mut module);
+    crate::report_warnings(&module.render_warnings());
+    result?;
     Ok(module)
 }
 
