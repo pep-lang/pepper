@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7a53d71d.js";
+            window.path_to_searchindex_js = "../searchindex-8720a572.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ed73c7.js"></script>
+        <script src="../toc-8eb27183.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,16 +223,23 @@ report_values(
     an_argument_so_long_that_the_whole_list_no_longer_fits_on_one_line_even_after_moving_it_down_one
 );
 </code></pre>
-<p>A long condition breaks after an operator:</p>
-<pre><code class="language-pepper">if (first_condition_that_is_long(value) and second_condition_that_is_long(value) or
-    third_condition_that_is_long(value)) {
+<p>A long expression breaks before each operator, and a chain of three or more
+method calls that does not fit breaks before each <code>.</code>:</p>
+<pre><code class="language-pepper">if (first_condition_that_is_long(value) and second_condition_that_is_long(value)
+    or third_condition_that_is_long(value)) {
     run();
 }
+total = first_value_that_is_long_enough
+    + second_value_that_is_long_enough
+    + third_value_that_is_long_and_longer_still;
+var count = words
+    .iterate()
+    .filter((w) =&gt; w.length() &gt; 4)
+    .map((w) =&gt; w.length() * 2)
+    .count_them_all();
 </code></pre>
-<p>A Pepper expression ends at a line break that directly follows a complete
-operand, so <code>pep-fmt</code> never breaks a line before an operator or before the
-<code>.</code> of a method call. Comments and string literals are never reflowed, so a
-line can stay longer than 120 columns when it has nowhere to break.</p>
+<p>Comments and string literals are never reflowed, so a line can stay longer
+than 120 columns when it has nowhere to break.</p>
 <p><strong>Attributes</strong> go one per line, each on its own line above the declaration:</p>
 <pre><code class="language-pepper">[Target(OS(Linux))]
 [Deprecated("use 'open' instead", "open")]
@@ -258,8 +265,10 @@ var average = 0.0;  # total / count
 <p><strong>Imports</strong> that are next to each other (no blank line or comment between
 them) are sorted: modules first (<code>import io;</code>), then files of this module
 (<code>import "util";</code>), each by name.</p>
-<p><strong>Kept as written:</strong> semicolons (the grammar lets a line break end a
-statement, and <code>pep-fmt</code> neither adds nor removes them), parentheses around
+<p><strong>Semicolons</strong> are added where a statement or declaration leaves its <code>;</code>
+out (see <a href="../language/statements.html">Statements and semicolons</a>); none are
+removed.</p>
+<p><strong>Kept as written:</strong> parentheses around
 conditions (<code>if x</code> and <code>if (x)</code> are both fine), fields declared either way
 (<code>int x;</code> or <code>var x: int;</code>), and the file’s line endings (<code>\n</code> or <code>\r\n</code>).</p>
 
