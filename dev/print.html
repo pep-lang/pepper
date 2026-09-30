@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eacce21c.js";
+            window.path_to_searchindex_js = "searchindex-6552cb4f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-432e2c46.js"></script>
@@ -225,7 +225,7 @@ server, so editors such as VS Code show Pepper’s errors as you type.</p>
 structs with constructors, destructors and methods, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules, <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
+closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, channels and mutexes, and file-system access. That is enough to write real
@@ -5169,7 +5169,8 @@ deps/geometry/shapes.pep:3:8: note: declared here
       |        ^~~~
 </code></pre>
 <h2 id="imports-come-first"><a class="header" href="#imports-come-first">Imports come first</a></h2>
-<p>Every import comes before all of a file’s declarations and re-exports:</p>
+<p>Every import, and every <code>export ... from</code>, comes before all of a file’s declarations
+and <code>export name</code> re-exports:</p>
 <pre><code class="language-pepper">main(): int { return 0; }
 import geometry;
 </code></pre>
@@ -5277,6 +5278,69 @@ example, users of <code>geometry</code> can call <code>g.rect_area</code>, but n
     2 | main(): int { return geometry.area(1, 2); }
       |                      ^~~~~~~~~~~~~
 </code></pre>
+<h3 id="re-exporting-a-whole-file-or-module"><a class="header" href="#re-exporting-a-whole-file-or-module">Re-exporting a whole file or module</a></h3>
+<p>A <code>module.pep</code> that only passes on its files’ exports would repeat every name.
+<code>export ... from</code> passes them on in one line, in the same shapes as the
+<code>import ... from</code> forms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>What importers get</th></tr>
+</thead>
+<tbody>
+<tr><td><code>export * from "rect";</code></td><td>Every export of <code>rect.pep</code>, each under its own name.</td></tr>
+<tr><td><code>export * from geometry;</code></td><td>Every export of the module <code>geometry</code>.</td></tr>
+<tr><td><code>export [perimeter as outline, Side] from "measure";</code></td><td>Only the listed exports, each under its own name or the one after <code>as</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># The shapes module: its interface is its files' exports, passed on whole or
+# by name.
+export * from "rect";                               # every export of rect.pep
+export [perimeter as outline, Side] from "measure"; # two, one renamed
+</code></pre>
+<pre><code class="language-pepper">import "shapes";
+
+main(): int {
+    var r = make_rect(3, 4);
+    assert(area(r) == 12, "from export * of rect.pep");
+    assert(outline(r) == 14, "from the export list, renamed");
+
+    var s = Side();
+    s.length = 5;
+    assert(s.length == 5, "a struct from the export list");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>It re-exports; it doesn’t import.</strong> <code>export * from "rect";</code> makes no name
+visible in the file that contains it. A file that also uses those names
+imports them as usual, with <code>import "rect";</code>.</p>
+</li>
+<li>
+<p><strong>Only exports travel.</strong> Private declarations stay behind, and extensions
+stay visible only as they always are.</p>
+</li>
+<li>
+<p><strong>Collisions are errors.</strong> If two re-exports, or a re-export and one of the
+file’s own exports, publish one name for different declarations, the
+compiler reports it at the <code>export ... from</code> that adds the second one. List the names you want instead, or
+rename one with <code>as</code>:</p>
+<pre><code class="language-text">shapes/module.pep:2:1: error: 'area' is exported twice by module 'shapes'
+    2 | export * from "measure";
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+shapes/module.pep:1:1: note: also exported here
+    1 | export * from "rect";
+      | ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p>Like imports, <code>export ... from</code> lines come before every declaration and
+take attributes such as <code>[Target(...)]</code>. A deprecated declaration stays
+deprecated through every re-export.</p>
+</li>
+</ul>
 <h3 id="a-modules-files-stay-inside-it"><a class="header" href="#a-modules-files-stay-inside-it">A module’s files stay inside it</a></h3>
 <p>A string import from a file of a module must name a file of the same module,
 or a module folder. Reaching into another module’s files, or out of your own
@@ -5364,6 +5428,7 @@ through different qualifiers. See <a href="#each-file-has-its-own-namespace">Eac
 elsewhere (see <a href="#platform-selection">Platform selection</a>):</p>
 <pre><code class="language-pepper">[Target(OS(Linux))] import linux;
 [Target(OS(Linux))] export linux_open as open;
+[Target(OS(Windows))] export * from "windows";
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="atomics"><a class="header" href="#atomics">Atomics</a></h1>
@@ -7104,8 +7169,8 @@ Otherwise leave it out and explain the change in the message.</p>
 <li>a use inside a declaration that is deprecated too, including the methods of
 a deprecated struct and closures written inside a deprecated function, so
 old code can keep calling old code without noise</li>
-<li>a re-export, <code>export name as other</code>, which passes the name on without using
-it</li>
+<li>a re-export, <code>export name as other</code> or <code>export [name] from source</code>, which
+passes the name on without using it</li>
 </ul>
 <h2 id="mistakes-in-the-attribute"><a class="header" href="#mistakes-in-the-attribute">Mistakes in the attribute</a></h2>
 <p>A malformed attribute is an error at the attribute:</p>
