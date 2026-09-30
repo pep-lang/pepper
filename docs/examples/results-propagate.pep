@@ -1,9 +1,9 @@
 # A custom error type: any type can be the second type argument.
 struct ParseError {
-    String Input;
-    int Position;
+    String input;
+    int position;
 
-    construct(this.Input = "", this.Position = 0) {}
+    construct(this.input = "", this.position = 0) {}
 }
 
 digit_value(String c): int {
@@ -53,7 +53,7 @@ check_total(String a, String b, int limit): Result<void> {
     var sum = add_numbers(a, b);
     if (sum.is_err()) {
         var e = sum.error();
-        return Result<void>.err(Error("bad number '" + e.Input + "'"));
+        return Result<void>.err(Error("bad number '" + e.input + "'"));
     }
     if (sum.value() > limit) {
         return Result<void>.err(Error("total is over the limit"));
@@ -67,8 +67,8 @@ main(): int {
 
     var bad = add_numbers("40", "4x2");
     assert(bad.is_err(), "the second number is bad");
-    assert(bad.error().Input == "4x2", "the error names the input");
-    assert(bad.error().Position == 1, "and where it went wrong");
+    assert(bad.error().input == "4x2", "the error names the input");
+    assert(bad.error().position == 1, "and where it went wrong");
 
     assert(check_total("1", "2", 10).is_ok(), "3 is within the limit");
     var over = check_total("10", "20", 10);

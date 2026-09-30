@@ -235,19 +235,19 @@ fn custom_iterator_is_driven_directly() {
     assert_runs_clean(
         r#"
 struct Countdown {
-    int Remaining;
-    int Now;
-    construct(this.Remaining = 0) {}
+    int remaining;
+    int now;
+    construct(this.remaining = 0) {}
     bool next() {
-        if (Remaining == 0) {
+        if (remaining == 0) {
             return false;
         }
-        Now = Remaining;
-        Remaining = Remaining - 1;
+        now = remaining;
+        remaining = remaining - 1;
         return true;
     }
     int current() {
-        return Now;
+        return now;
     }
 }
 extend Countdown with Iterator<int> {}
@@ -276,24 +276,24 @@ fn custom_iterable_hands_out_an_iterator() {
     assert_runs_clean(
         r#"
 struct Evens {
-    int Limit;
-    construct(this.Limit = 0) {}
+    int limit;
+    construct(this.limit = 0) {}
     EvensIterator iterate() {
         var it = EvensIterator();
-        it.Limit = Limit;
-        it.Now = -2;
+        it.limit = limit;
+        it.now = -2;
         return it;
     }
 }
 struct EvensIterator {
-    int Limit;
-    int Now;
+    int limit;
+    int now;
     bool next() {
-        Now = Now + 2;
-        return Now < Limit;
+        now = now + 2;
+        return now < limit;
     }
     int current() {
-        return Now;
+        return now;
     }
 }
 
@@ -314,13 +314,13 @@ fn iterates_a_field_inside_a_method() {
     assert_runs_clean(&format!(
         r#"{ITEM}
 struct Bag {{
-    Array<Item> Items;
+    Array<Item> items;
     construct() {{
-        Items = Array<Item>();
+        items = Array<Item>();
     }}
     int total() {{
         var sum = 0;
-        for (var it in Items) {{
+        for (var it in items) {{
             sum = sum + it.v;
         }}
         return sum;
@@ -328,8 +328,8 @@ struct Bag {{
 }}
 test(): int {{
     var bag = Bag();
-    bag.Items.append(Item(40));
-    bag.Items.append(Item(2));
+    bag.items.append(Item(40));
+    bag.items.append(Item(2));
     return bag.total() - 42;
 }}
 "#

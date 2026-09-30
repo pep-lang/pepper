@@ -4,11 +4,11 @@ import async;
 # until there is a pie, or until the bakery closes.
 [Shared]
 struct Bakery {
-    const Pies: Atomic<long>;
-    const Closed: Atomic<int>;
+    const pies: Atomic<long>;
+    const closed: Atomic<int>;
     construct() {
-        Pies = Atomic<long>(0);
-        Closed = Atomic<int>(0);
+        pies = Atomic<long>(0);
+        closed = Atomic<int>(0);
     }
 }
 
@@ -21,13 +21,13 @@ eat() {
         with (var b = bakery.lock()) {
             # Wait in a loop: a wakeup can be spurious, and another eater
             # may take the pie first.
-            while (b.Pies.load() == 0 && b.Closed.load() == 0) {
+            while (b.pies.load() == 0 && b.closed.load() == 0) {
                 changed.wait();   # unlocks, sleeps, locks again
             }
-            if (b.Pies.load() == 0) {
+            if (b.pies.load() == 0) {
                 return;   # closed and nothing left; the block unlocks
             }
-            b.Pies.fetch_sub(1);
+            b.pies.fetch_sub(1);
         }
         eaten.fetch_add(1);
     }
@@ -43,13 +43,13 @@ main(): int {
     i = 0;
     while (i < 50) {
         with (var b = bakery.lock()) {
-            b.Pies.fetch_add(1);
+            b.pies.fetch_add(1);
             changed.notify_one();
         }
         i = i + 1;
     }
     with (var b = bakery.lock()) {
-        b.Closed.store(1);
+        b.closed.store(1);
         changed.notify_all();
     }
     for (var eater in eaters) {

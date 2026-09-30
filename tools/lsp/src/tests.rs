@@ -229,15 +229,15 @@ fn a_local_hides_a_qualifier() {
 const DOCUMENTED: &str = r#"## A counter.
 struct Counter {
     ## How many so far.
-    int Count;
+    int count;
 
     ## Adds `by` to the count.
     ##
     ## @param by the amount to add
     ## @returns the new count
     int add(int by) {
-        Count = Count + by;
-        return Count;
+        count = count + by;
+        return count;
     }
 }
 
@@ -250,7 +250,7 @@ double_it(x: int): int { return x * 2; }
 test(): int {
     Counter c = Counter();
     c.add(1);
-    return double_it(c.Count);
+    return double_it(c.count);
 }
 "#;
 
@@ -263,7 +263,7 @@ fn hover_shows_doc_comments() {
     assert!(call.contains("**Returns**\n- twice `x`"), "{}", call);
     let method = hover(&uri, &text, &program, at(&text, "c.add", 0, 3));
     assert!(method.contains("Adds `by` to the count."), "{}", method);
-    let field = hover(&uri, &text, &program, at(&text, "c.Count", 0, 3));
+    let field = hover(&uri, &text, &program, at(&text, "c.count", 0, 3));
     assert!(field.contains("How many so far."), "{}", field);
 }
 

@@ -387,27 +387,27 @@ test(): int {
 /// `Iterable<int>` declares as `Iterator<int>`.
 const EVENS: &str = r#"
 struct Evens {
-    int Limit;
-    construct(this.Limit = 0) {}
+    int limit;
+    construct(this.limit = 0) {}
 
     EvensIterator iterate() {
         var it = EvensIterator();
-        it.Limit = Limit;
-        it.Now = -2;
+        it.limit = limit;
+        it.now = -2;
         return it;
     }
 }
 
 struct EvensIterator {
-    int Limit;
-    int Now;
+    int limit;
+    int now;
 
     bool next() {
-        Now = Now + 2;
-        return Now < Limit;
+        now = now + 2;
+        return now < limit;
     }
 
-    int current() { return Now; }
+    int current() { return now; }
 }
 
 extend EvensIterator with Iterator<int> {}

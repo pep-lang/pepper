@@ -4,11 +4,11 @@ import async;
 # may see it in neither account. A Mutex makes the pair of updates one step.
 [Shared]
 struct Accounts {
-    const Checking: Atomic<long>;
-    const Savings: Atomic<long>;
+    const checking: Atomic<long>;
+    const savings: Atomic<long>;
     construct(long checking = 0, long savings = 0) {
-        Checking = Atomic<long>(checking);
-        Savings = Atomic<long>(savings);
+        this.checking = Atomic<long>(checking);
+        this.savings = Atomic<long>(savings);
     }
 }
 
@@ -19,8 +19,8 @@ move_to_savings() {
     var i = 0;
     while (i < 1000) {
         with (var a = accounts.lock()) {
-            a.Checking.fetch_sub(1);
-            a.Savings.fetch_add(1);
+            a.checking.fetch_sub(1);
+            a.savings.fetch_add(1);
         }   # unlocked here, on every path out of the block
         i = i + 1;
     }
@@ -30,7 +30,7 @@ audit() {
     var i = 0;
     while (i < 1000) {
         with (var a = accounts.lock()) {
-            if (a.Checking.load() + a.Savings.load() != 1000) {
+            if (a.checking.load() + a.savings.load() != 1000) {
                 bad_totals.fetch_add(1);
             }
         }
@@ -48,7 +48,7 @@ main(): int {
     # try_lock does not wait: the body runs if the lock was free, and the
     # else block runs if another thread held it.
     with (var a = accounts.try_lock()) {
-        assert(a.Savings.load() == 1000, "everything was moved");
+        assert(a.savings.load() == 1000, "everything was moved");
     } else {
         assert(false, "no other thread holds the lock now");
     }

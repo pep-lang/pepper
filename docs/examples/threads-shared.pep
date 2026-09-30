@@ -4,9 +4,9 @@ import async;
 # thread-safe.
 [Shared]
 struct Settings {
-    const Port: int;
-    const Retries: int;
-    construct(this.Port = 0, this.Retries = 0) {}
+    const port: int;
+    const retries: int;
+    construct(this.port = 0, this.retries = 0) {}
 }
 
 # Atomic<T> of a [Shared] struct: threads read the current settings, and one
@@ -16,7 +16,7 @@ const seen = Atomic<long>(0);
 
 read_settings() {
     var settings = current.load();
-    seen.fetch_add(settings.Port);
+    seen.fetch_add(settings.port);
 }
 
 main(): int {
@@ -32,6 +32,6 @@ main(): int {
     assert(seen.load() == 4 * 8080, "every reader saw the settings");
 
     current.store(Settings(9090, 5));
-    assert(current.load().Port == 9090, "replaced");
+    assert(current.load().port == 9090, "replaced");
     return 0;
 }

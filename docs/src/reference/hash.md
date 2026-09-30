@@ -91,9 +91,7 @@ removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while `count()`
 stays small.
 
-There is no iterator, and entries have no defined order. The lowercase
-fields and the `find_slot` and `grow` methods are the table's internal
-state: they are public but may change, and writing to them breaks the map.
+There is no iterator, and entries have no defined order.
 
 **Type parameters**
 - `K` — the key type; hashed with `hash<K>` and compared with `==`
@@ -109,63 +107,6 @@ state: they are public but may change, and writing to them breaks the map.
     assert(ages.remove("alan"), "removed");
     assert(ages.count() == 1, "one entry left");
 ```
-
-### Fields
-
-#### keys
-
-```pepper
-Array<K> keys
-```
-
-The key of each slot; only slots whose `state` is 2 hold a live key,
-the rest hold the default of `K`. Internal: its count equals
-`capacity` rather than the entry count, and `grow` replaces it.
-
-#### values
-
-```pepper
-Array<V> values
-```
-
-The value of each slot, parallel to `keys`; only occupied slots hold a
-live value. Internal: `grow` replaces it.
-
-#### state
-
-```pepper
-Array<int> state
-```
-
-The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-entry that still extends probe sequences), 2 is occupied. Internal.
-
-#### capacity
-
-```pepper
-ulong capacity
-```
-
-The number of slots in the table: always a power of two and at least
-8. Internal; read it with `cap()`.
-
-#### size
-
-```pepper
-int size
-```
-
-The number of live entries. Internal; read it with `count()`.
-
-#### tombstones
-
-```pepper
-int tombstones
-```
-
-The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or `grow` or `clear` resets them.
-Internal.
 
 ### Constructor
 
@@ -193,27 +134,6 @@ three arrays of that many slots.
 
 ### Methods
 
-#### find_slot
-
-```pepper
-long find_slot(K key)
-```
-
-Returns the slot index that holds `key`, or -1 when `key` is absent.
-
-Probes from the key's hash and stops at the first empty slot.
-Tombstones are skipped, so removed keys do not cut probe sequences
-short. Expected O(1), worst case O(capacity).
-
-Internal: the index is only valid until the next `insert`, `grow`,
-or `clear`. Use `contains` or `get` instead.
-
-**Parameters**
-- `key` — the key to look up
-
-**Returns**
-- the index of the slot that holds `key` in `keys` and `values`, or -1 when `key` is absent
-
 #### grow
 
 ```pepper
@@ -223,9 +143,8 @@ void grow()
 Doubles the table and reinserts every entry, dropping all tombstones.
 
 `insert` calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the `keys`, `values`,
-and `state` arrays and moves entries to new slots, so it invalidates
-slot indices from `find_slot`. Reference counts are unchanged overall:
+costs memory. Runs in O(capacity). It replaces the table's arrays and
+moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.
 
 #### count
@@ -250,10 +169,10 @@ Returns whether the map has no entries. O(1).
 **Returns**
 - true when `count()` is 0
 
-#### cap
+#### capacity
 
 ```pepper
-ulong cap()
+ulong capacity()
 ```
 
 Returns the number of slots in the table, a power of two and at least 8.
@@ -261,6 +180,18 @@ The map grows before its entries and tombstones reach half of it. O(1).
 
 **Returns**
 - the current slot count
+
+#### cap
+
+```pepper
+[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+```
+
+Deprecated: use `capacity` instead. Returns the number of slots in
+the table.
+
+**Returns**
+- the same as `capacity()`
 
 #### clear
 
@@ -416,7 +347,7 @@ destroyed.
 Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
 (members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the `find_slot`
+members have no defined order. The lowercase fields and the `_find_slot`
 and `grow` methods are the table's internal state: they are public but
 may change, and writing to them breaks the set.
 
@@ -432,54 +363,6 @@ may change, and writing to them breaks the set.
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 ```
-
-### Fields
-
-#### keys
-
-```pepper
-Array<K> keys
-```
-
-The element of each slot; only slots whose `state` is 2 hold a live
-member, the rest hold the default of `K`. Internal: its count equals
-`capacity` rather than the member count, and `grow` replaces it.
-
-#### state
-
-```pepper
-Array<int> state
-```
-
-The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
-member that still extends probe sequences), 2 is occupied. Internal.
-
-#### capacity
-
-```pepper
-ulong capacity
-```
-
-The number of slots in the table: always a power of two and at least
-8. Internal; read it with `cap()`.
-
-#### size
-
-```pepper
-int size
-```
-
-The number of members. Internal; read it with `count()`.
-
-#### tombstones
-
-```pepper
-int tombstones
-```
-
-The number of tombstone slots. They count toward the grow threshold
-until an insert reuses them or `grow` or `clear` resets them.
-Internal.
 
 ### Constructor
 
@@ -500,27 +383,6 @@ The set holds up to half its slot count before the first grow.
 
 ### Methods
 
-#### find_slot
-
-```pepper
-long find_slot(K key)
-```
-
-Returns the slot index that holds `key`, or -1 when `key` is not a
-member.
-
-Probes from the key's hash and stops at the first empty slot,
-skipping tombstones. Expected O(1), worst case O(capacity).
-
-Internal: the index is only valid until the next `insert`, `grow`, or
-`clear`. Use `contains` instead.
-
-**Parameters**
-- `key` — the element to look up
-
-**Returns**
-- the index of the slot that holds `key` in `keys`, or -1 when `key` is not a member
-
 #### grow
 
 ```pepper
@@ -530,9 +392,8 @@ void grow()
 Doubles the table and reinserts every member, dropping all tombstones.
 
 `insert` calls it automatically. Calling it directly is safe but only
-costs memory. Runs in O(capacity). It replaces the `keys` and `state`
-arrays and moves members to new slots, so it invalidates slot indices
-from `find_slot`.
+costs memory. Runs in O(capacity). It replaces the table's arrays and
+moves members to new slots.
 
 #### count
 
@@ -556,10 +417,10 @@ Returns whether the set has no members. O(1).
 **Returns**
 - true when `count()` is 0
 
-#### cap
+#### capacity
 
 ```pepper
-ulong cap()
+ulong capacity()
 ```
 
 Returns the number of slots in the table, a power of two and at least 8.
@@ -567,6 +428,18 @@ O(1).
 
 **Returns**
 - the current slot count
+
+#### cap
+
+```pepper
+[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+```
+
+Deprecated: use `capacity` instead. Returns the number of slots in
+the table.
+
+**Returns**
+- the same as `capacity()`
 
 #### clear
 
@@ -618,7 +491,7 @@ bool remove(K key)
 
 Removes `key` from the set, releasing the set's reference to the
 member. Does nothing when `key` is not a member. The slot becomes a
-tombstone (see `tombstones`). Expected O(1).
+tombstone (see `_tombstones`). Expected O(1).
 
 **Parameters**
 - `key` — the element to remove

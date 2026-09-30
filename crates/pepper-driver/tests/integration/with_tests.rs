@@ -22,9 +22,9 @@ const entered = Atomic<int>(0);
 const exited = Atomic<int>(0);
 
 struct Session {
-    int Id = 0;
+    int id = 0;
 
-    construct(this.Id = 0) {}
+    construct(this.id = 0) {}
 
     destruct {
         this.exit();
@@ -50,7 +50,7 @@ fn with_binds_enter_and_exits_at_block_end() {
 test(): int {
     var id = 0;
     with (var s = Session(7)) {
-        id = s.Id;
+        id = s.id;
         if (exited.load() != 0) { return -1; }
     }
     if (id != 7) { return -2; }
@@ -71,7 +71,7 @@ fn with_exits_once_on_every_path() {
         r#"
 early(): int {
     with (var s = Session(1)) {
-        return s.Id;
+        return s.id;
     }
     return 0;
 }
@@ -110,9 +110,9 @@ struct Node {
 }
 
 struct Maybe {
-    Node Target;
-    construct(Node target) { Target = target; }
-    Node enter() { return Target; }
+    Node _target;
+    construct(Node target) { _target = target; }
+    Node enter() { return _target; }
     exit() {}
 }
 
@@ -260,17 +260,17 @@ struct Node {
 }
 
 struct Holder<T> {
-    T Target;
-    construct(T target) { Target = target; }
-    T enter() { return Target; }
+    T _target;
+    construct(T target) { _target = target; }
+    T enter() { return _target; }
     exit() {}
 }
 
 struct Tree {
-    Holder<Node> Parent;
-    construct(Node parent) { Parent = Holder<Node>(parent); }
+    Holder<Node> _parent;
+    construct(Node parent) { _parent = Holder<Node>(parent); }
     int parent_value() {
-        with (var p = Parent) {
+        with (var p = _parent) {
             return p.value;
         } else {
             return -1;

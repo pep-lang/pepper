@@ -123,6 +123,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `io.Path.join_str(String)` | `io.Path.join(Path)`, which accepts a `String` |
 | `io.Path.is_dir()` | `io.Path.is_directory()` |
 | `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
+| `HashMap.cap()`, `HashSet.cap()` | `capacity()` |
 
 ## Errors in the editor
 

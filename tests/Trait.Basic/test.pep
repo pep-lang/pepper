@@ -1,6 +1,6 @@
 
 trait XGetter {
-    int getX();
+    int get_x();
 }
 
 struct Test {
@@ -10,10 +10,10 @@ struct Test {
 }
 
 extend Test with XGetter {
-    int getX() { return x; }
+    int get_x() { return x; }
 }
 
 main(): int {
     var t = Test();
-    return t.getX();
+    return t.get_x();
 }

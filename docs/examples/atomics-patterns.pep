@@ -2,8 +2,8 @@
 # fields are const and thread-safe.
 [Shared]
 struct Config {
-    const Version: int;
-    construct(this.Version = 0) {}
+    const version: int;
+    construct(this.version = 0) {}
 }
 
 # A module-scope Atomic that every function can share.
@@ -37,16 +37,16 @@ main(): int {
     # An Atomic can hold a struct reference.
     var first = Config(1);
     var current = Atomic<Config>(first);
-    assert(current.load().Version == 1, "load returns the reference");
+    assert(current.load().version == 1, "load returns the reference");
 
     # compare_exchange compares references: the same object, not equal contents.
     var lookalike = Config(1);
     var second = Config(2);
     assert(!current.compare_exchange(lookalike, second), "a different object");
     assert(current.compare_exchange(first, second), "the same object");
-    assert(current.load().Version == 2, "swapped");
+    assert(current.load().version == 2, "swapped");
 
     var old = current.exchange(first);
-    assert(old.Version == 2, "exchange hands back the old reference");
+    assert(old.version == 2, "exchange hands back the old reference");
     return 0;
 }

@@ -95,11 +95,11 @@ fn weak_field_breaks_a_cycle() {
 const freed = Atomic<int>(0);
 
 struct Child {
-    __weak<Parent> Parent;
+    __weak<Parent> parent;
     construct() {}
     destruct { freed.fetch_add(1); }
     int parent_value() {
-        var p = __weak_upgrade<Parent>(Parent);
+        var p = __weak_upgrade<Parent>(parent);
         if (p == __null) { return -1; }
         return p.value;
     }
@@ -107,7 +107,7 @@ struct Child {
 
 struct Parent {
     int value = 42;
-    Child Child;
+    Child child;
     construct() {}
     destruct { freed.fetch_add(10); }
 }
@@ -117,8 +117,8 @@ test(): int {
     {
         var p = Parent();
         var c = Child();
-        c.Parent = __weak_from<Parent>(p);
-        p.Child = c;
+        c.parent = __weak_from<Parent>(p);
+        p.child = c;
         if (c.parent_value() != 42) { return -1; }
     }
     if (freed.load() != 11) { return -2; }
@@ -134,7 +134,7 @@ fn weak_to_self_released_in_destructor() {
 const ran = Atomic<int>(0);
 
 struct Self {
-    __weak<Self> Me;
+    __weak<Self> me;
     construct() {}
     destruct { ran.fetch_add(1); }
 }
@@ -143,7 +143,7 @@ test(): int {
     var before = _pep_live_allocs();
     {
         var s = Self();
-        s.Me = __weak_from<Self>(s);
+        s.me = __weak_from<Self>(s);
     }
     if (ran.load() != 1) { return -1; }
     return (_pep_live_allocs() - before) as int;
@@ -248,17 +248,17 @@ const freed = Atomic<int>(0);
 
 struct Parent {
     String name;
-    Child Kid;
+    Child kid;
     construct(String name) { this.name = name; }
     destruct { freed.fetch_add(1); }
 }
 
 struct Child {
-    Weak<Parent> Owner;
-    construct(Parent owner) { Owner = Weak<Parent>(owner); }
+    Weak<Parent> owner;
+    construct(Parent owner) { this.owner = Weak<Parent>(owner); }
     destruct { freed.fetch_add(1); }
     int owner_length() {
-        with (var parent = Owner) {
+        with (var parent = this.owner) {
             return parent.name.length() as int;
         } else {
             return -1;
@@ -272,14 +272,14 @@ test(): int {
     Child orphan = __null;
     {
         var p = Parent("ada");
-        p.Kid = Child(p);
-        if (p.Kid.owner_length() != 3) { return -1; }
-        if (p.Kid.Owner.expired()) { return -2; }
-        orphan = p.Kid;
+        p.kid = Child(p);
+        if (p.kid.owner_length() != 3) { return -1; }
+        if (p.kid.owner.expired()) { return -2; }
+        orphan = p.kid;
     }
     # The cycle is broken: the parent is gone, the child lives on in orphan.
     if (freed.load() != 1) { return -3; }
-    if (!orphan.Owner.expired()) { return -4; }
+    if (!orphan.owner.expired()) { return -4; }
     if (orphan.owner_length() != -1) { return -5; }
     orphan = __null;
     if (freed.load() != 2) { return -6; }

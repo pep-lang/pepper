@@ -11,9 +11,9 @@ add_one() {
 # A [Shared] struct's fields must be thread-safe: a function field is shared.
 [Shared]
 struct Task {
-    const Weight: long;
-    const Run: shared (long) => void;
-    construct(this.Weight = 1, this.Run = (n: long) => {}) {}
+    const weight: long;
+    const run: shared (long) => void;
+    construct(this.weight = 1, this.run = (n: long) => {}) {}
 }
 
 # A plain function type takes any function of the same signature.
@@ -29,7 +29,7 @@ main(): int {
 
     # A thread body is a shared () => void. This closure captures a
     # [Shared] struct.
-    var worker = async.Thread.spawn(() => { task.Run(task.Weight); });
+    var worker = async.Thread.spawn(() => { task.run(task.weight); });
     var other = async.Thread.spawn(add_one);
     worker.join();
     other.join();

@@ -734,8 +734,8 @@ import async;
 
 [Shared]
 struct Label {
-    const Id: int;
-    construct(this.Id = 0) {}
+    const id: int;
+    construct(this.id = 0) {}
 }
 "#;
 
@@ -745,8 +745,8 @@ fn census_mutex_lock_exit_paths() {
         r#"{LABEL}
 int returns(async.Mutex<Label> m) {{
     with (var label = m.lock()) {{
-        var local = Label(label.Id + 1);
-        return local.Id;
+        var local = Label(label.id + 1);
+        return local.id;
     }}
     return -1;
 }}
@@ -788,9 +788,9 @@ test(): int {{
         i = i + 1;
     }}
     var first = c.receive();
-    if (first.value().Id != 0) {{ return 1; }}
+    if (first.value().id != 0) {{ return 1; }}
     for (var label in c.iterate()) {{
-        if (label.Id == 10) {{ break; }}
+        if (label.id == 10) {{ break; }}
     }}
     var bounded = async.Channel<Label>(2);
     bounded.send(Label(1));
@@ -817,7 +817,7 @@ test(): int {{
     var once = async.Once();
     once.call(nothing);
     var lazy = async.Lazy<Label>(make);
-    if (lazy.get().Id != 7) {{ return 1; }}
+    if (lazy.get().id != 7) {{ return 1; }}
     var unused = async.Lazy<Label>(make);
     return 0;
 }}"#

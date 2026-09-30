@@ -1,21 +1,21 @@
 # An iterator: next() advances, current() returns the element.
 struct Countdown {
-    int Remaining;
-    int Now;
+    int remaining;
+    int now;
 
-    construct(this.Remaining = 0) {}
+    construct(this.remaining = 0) {}
 
     bool next() {
-        if (Remaining == 0) {
+        if (remaining == 0) {
             return false;
         }
-        Now = Remaining;
-        Remaining = Remaining - 1;
+        now = remaining;
+        remaining = remaining - 1;
         return true;
     }
 
     int current() {
-        return Now;
+        return now;
     }
 }
 
@@ -24,29 +24,29 @@ extend Countdown with Iterator<int> {}
 
 # An iterable: iterate() hands out a fresh iterator for each loop.
 struct Evens {
-    int Limit;
+    int limit;
 
-    construct(this.Limit = 0) {}
+    construct(this.limit = 0) {}
 
     EvensIterator iterate() {
         var it = EvensIterator();
-        it.Limit = Limit;
-        it.Now = -2;
+        it.limit = limit;
+        it.now = -2;
         return it;
     }
 }
 
 struct EvensIterator {
-    int Limit;
-    int Now;
+    int limit;
+    int now;
 
     bool next() {
-        Now = Now + 2;
-        return Now < Limit;
+        now = now + 2;
+        return now < limit;
     }
 
     int current() {
-        return Now;
+        return now;
     }
 }
 

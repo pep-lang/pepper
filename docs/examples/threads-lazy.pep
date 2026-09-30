@@ -2,8 +2,8 @@ import async;
 
 [Shared]
 struct Settings {
-    const Workers: long;
-    construct(this.Workers = 1) {}
+    const workers: long;
+    construct(this.workers = 1) {}
 }
 
 const builds = Atomic<long>(0);
@@ -26,7 +26,7 @@ initialize() {
 
 work() {
     setup.call(initialize);
-    assert(settings.get().Workers >= 1, "every thread sees the settings");
+    assert(settings.get().workers >= 1, "every thread sees the settings");
 }
 
 main(): int {

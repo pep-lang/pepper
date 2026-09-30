@@ -144,7 +144,7 @@ test(): int {
         i = i + 1;
     }
     if (m.count() != 25) { return -2; }
-    if (m.cap() < 64) { return -3; }
+    if (m.capacity() < 64) { return -3; }
     var j = 0;
     while (j < 25) {
         if (m[j] != j * 10) { return -4; }

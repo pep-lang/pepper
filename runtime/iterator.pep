@@ -30,22 +30,22 @@
 ## @typeParam T the type of the elements produced
 ## @example
 ##     struct Countdown {
-##         int Remaining;
-##         int Now;
+##         int remaining;
+##         int now;
 ##
-##         new(this.Remaining = 0) {}
+##         construct(this.remaining = 0) {}
 ##
 ##         bool next() {
-##             if (Remaining == 0) {
+##             if (remaining == 0) {
 ##                 return false;
 ##             }
-##             Now = Remaining;
-##             Remaining = Remaining - 1;
+##             now = remaining;
+##             remaining = remaining - 1;
 ##             return true;
 ##         }
 ##
 ##         int current() {
-##             return Now;
+##             return now;
 ##         }
 ##     }
 ##

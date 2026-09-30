@@ -77,9 +77,7 @@ export hash<String>(String value): u64 {
 ## removals of different keys) can keep growing it even while `count()`
 ## stays small.
 ##
-## There is no iterator, and entries have no defined order. The lowercase
-## fields and the `find_slot` and `grow` methods are the table's internal
-## state: they are public but may change, and writing to them breaks the map.
+## There is no iterator, and entries have no defined order.
 ##
 ## @typeParam K the key type; hashed with `hash<K>` and compared with `==`
 ## @typeParam V the value type
@@ -92,25 +90,25 @@ export hash<String>(String value): u64 {
 ##     assert(ages.remove("alan"), "removed");
 ##     assert(ages.count() == 1, "one entry left");
 export struct HashMap<K, V> {
-    ## The key of each slot; only slots whose `state` is 2 hold a live key,
+    ## The key of each slot; only slots whose `_state` is 2 hold a live key,
     ## the rest hold the default of `K`. Internal: its count equals
-    ## `capacity` rather than the entry count, and `grow` replaces it.
-    Array<K> keys;
-    ## The value of each slot, parallel to `keys`; only occupied slots hold a
+    ## `_capacity` rather than the entry count, and `grow` replaces it.
+    Array<K> _keys;
+    ## The value of each slot, parallel to `_keys`; only occupied slots hold a
     ## live value. Internal: `grow` replaces it.
-    Array<V> values;
+    Array<V> _values;
     ## The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
     ## entry that still extends probe sequences), 2 is occupied. Internal.
-    Array<int> state;
+    Array<int> _state;
     ## The number of slots in the table: always a power of two and at least
-    ## 8. Internal; read it with `cap()`.
-    ulong capacity;
+    ## 8. Internal; read it with `capacity()`.
+    ulong _capacity;
     ## The number of live entries. Internal; read it with `count()`.
-    int size;
+    int _size;
     ## The number of tombstone slots. They count toward the grow threshold
     ## until an insert reuses them or `grow` or `clear` resets them.
     ## Internal.
-    int tombstones;
+    int _tombstones;
 
     ## Creates an empty map whose table has room for at least
     ## `initial_capacity` slots.
@@ -128,15 +126,15 @@ export struct HashMap<K, V> {
         while (cap < initial_capacity) {
             cap = cap * 2;
         }
-        capacity = cap;
-        size = 0;
-        tombstones = 0;
-        keys = Array<K>(cap);
-        values = Array<V>(cap);
-        state = Array<int>(cap);
-        keys._size = cap;
-        values._size = cap;
-        state._size = cap;
+        _capacity = cap;
+        _size = 0;
+        _tombstones = 0;
+        _keys = Array<K>(cap);
+        _values = Array<V>(cap);
+        _state = Array<int>(cap);
+        _keys._size = cap;
+        _values._size = cap;
+        _state._size = cap;
     }
 
     ## Returns the slot index that holds `key`, or -1 when `key` is absent.
@@ -149,18 +147,18 @@ export struct HashMap<K, V> {
     ## or `clear`. Use `contains` or `get` instead.
     ##
     ## @param key the key to look up
-    ## @returns the index of the slot that holds `key` in `keys` and `values`,
+    ## @returns the index of the slot that holds `key` in `_keys` and `_values`,
     ##   or -1 when `key` is absent
-    long find_slot(K key) {
-        ulong mask = capacity - 1;
+    long _find_slot(K key) {
+        ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
         ulong i = 0;
-        while (i < capacity) {
+        while (i < _capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state._data[idx];
+            int st = _state._data[idx];
             if (st == 2) {
-                if (keys._data[idx] == key) {
+                if (_keys._data[idx] == key) {
                     return idx;
                 }
             } else {
@@ -176,16 +174,15 @@ export struct HashMap<K, V> {
     ## Doubles the table and reinserts every entry, dropping all tombstones.
     ##
     ## `insert` calls it automatically. Calling it directly is safe but only
-    ## costs memory. Runs in O(capacity). It replaces the `keys`, `values`,
-    ## and `state` arrays and moves entries to new slots, so it invalidates
-    ## slot indices from `find_slot`. Reference counts are unchanged overall:
+    ## costs memory. Runs in O(capacity). It replaces the table's arrays and
+    ## moves entries to new slots. Reference counts are unchanged overall:
     ## each entry is acquired by the new arrays and released by the old ones.
     void grow() {
         # Reinsertion goes through Array store semantics (acquire), so the
         # outgoing arrays can be dropped from the fields right after: the
         # field store releases them, their Size == capacity makes the
         # destructor visit every slot, and the buffer is freed.
-        ulong new_cap = capacity * 2;
+        ulong new_cap = _capacity * 2;
         Array<K> new_keys = Array<K>(new_cap);
         Array<V> new_values = Array<V>(new_cap);
         Array<int> new_state = Array<int>(new_cap);
@@ -194,10 +191,10 @@ export struct HashMap<K, V> {
         new_state._size = new_cap;
         ulong mask = new_cap - 1;
         ulong i = 0;
-        while (i < capacity) {
-            if (state._data[i] == 2) {
-                K k = keys._data[i];
-                V v = values._data[i];
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                K k = _keys._data[i];
+                V v = _values._data[i];
                 ulong h = hash<K>(k);
                 ulong start = h & mask;
                 ulong probe = 0;
@@ -215,49 +212,58 @@ export struct HashMap<K, V> {
             }
             i = i + 1;
         }
-        keys = new_keys;
-        values = new_values;
-        state = new_state;
-        capacity = new_cap;
-        tombstones = 0;
+        _keys = new_keys;
+        _values = new_values;
+        _state = new_state;
+        _capacity = new_cap;
+        _tombstones = 0;
     }
 
     ## Returns the number of entries in the map. O(1).
     ##
     ## @returns the number of live key-value pairs
     int count() {
-        return size;
+        return _size;
     }
 
     ## Returns whether the map has no entries. O(1).
     ##
     ## @returns true when `count()` is 0
     bool empty() {
-        return size == 0;
+        return _size == 0;
     }
 
     ## Returns the number of slots in the table, a power of two and at least 8.
     ## The map grows before its entries and tombstones reach half of it. O(1).
     ##
     ## @returns the current slot count
+    ulong capacity() {
+        return _capacity;
+    }
+
+    ## Deprecated: use `capacity` instead. Returns the number of slots in
+    ## the table.
+    ##
+    ## @returns the same as `capacity()`
+    [Deprecated("use 'capacity' instead", "capacity")]
     ulong cap() {
-        return capacity;
+        return capacity();
     }
 
     ## Removes every entry and releases the map's references to their keys
     ## and values. The table keeps its capacity. Runs in O(capacity).
     void clear() {
         ulong i = 0;
-        while (i < capacity) {
-            if (state._data[i] == 2) {
-                keys._data[i] = __default<K>();
-                values._data[i] = __default<V>();
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                _keys._data[i] = __default<K>();
+                _values._data[i] = __default<V>();
             }
-            state._data[i] = 0;
+            _state._data[i] = 0;
             i = i + 1;
         }
-        size = 0;
-        tombstones = 0;
+        _size = 0;
+        _tombstones = 0;
     }
 
     ## Returns whether the map has an entry for `key`. Expected O(1).
@@ -265,7 +271,7 @@ export struct HashMap<K, V> {
     ## @param key the key to look up
     ## @returns true when `key` is present
     bool contains(K key) {
-        return find_slot(key) >= 0;
+        return _find_slot(key) >= 0;
     }
 
     ## Maps `key` to `value`, adding a new entry or overwriting the value of
@@ -285,9 +291,9 @@ export struct HashMap<K, V> {
     ##     m.insert(1, 10);   # true: added
     ##     m.insert(1, 20);   # false: overwritten; m.get(1) == 20
     bool insert(K key, V value) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot >= 0) {
-            values._data[slot] = value;
+            _values._data[slot] = value;
             return false;
         }
         # Grow when occupied + tombstone slots reach half the table so the
@@ -296,25 +302,25 @@ export struct HashMap<K, V> {
         # key is not among them (find_slot missed), so it must be placed by
         # the main path below — exactly once. Returning here would lose it;
         # falling through to a second find + insert would double-acquire.
-        if ((size + tombstones) * 2 + 1 >= capacity) {
+        if ((_size + _tombstones) * 2 + 1 >= _capacity) {
             grow();
         }
-        ulong mask = capacity - 1;
+        ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
         ulong i = 0;
-        while (i < capacity) {
+        while (i < _capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state._data[idx];
+            int st = _state._data[idx];
             if (st == 0 || st == 1) {
-                keys._data[idx] = key;
-                values._data[idx] = value;
-                state._data[idx] = 2;
+                _keys._data[idx] = key;
+                _values._data[idx] = value;
+                _state._data[idx] = 2;
                 # Claiming a tombstone slot empties it again.
                 if (st == 1) {
-                    tombstones = tombstones - 1;
+                    _tombstones = _tombstones - 1;
                 }
-                size = size + 1;
+                _size = _size + 1;
                 return true;
             }
             i = i + 1;
@@ -336,9 +342,9 @@ export struct HashMap<K, V> {
     ## @param key the key to look up
     ## @returns the value for `key`, or the default of `V` when absent
     V get(K key) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot >= 0) {
-            return values._data[slot];
+            return _values._data[slot];
         }
         return __default<V>();
     }
@@ -353,15 +359,15 @@ export struct HashMap<K, V> {
     ## @param key the key to remove
     ## @returns true when `key` was present and removed, false when absent
     bool remove(K key) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot < 0) {
             return false;
         }
-        keys._data[slot] = __default<K>();
-        values._data[slot] = __default<V>();
-        state._data[slot] = 1;
-        size = size - 1;
-        tombstones = tombstones + 1;
+        _keys._data[slot] = __default<K>();
+        _values._data[slot] = __default<V>();
+        _state._data[slot] = 1;
+        _size = _size - 1;
+        _tombstones = _tombstones + 1;
         return true;
     }
 
@@ -417,7 +423,7 @@ export struct HashMap<K, V> {
 ## Membership tests, inserts, and removals take expected O(1) time. The
 ## table doubles before an insert of a new element would fill half of it
 ## (members plus tombstones), and it never shrinks. There is no iterator, and
-## members have no defined order. The lowercase fields and the `find_slot`
+## members have no defined order. The lowercase fields and the `_find_slot`
 ## and `grow` methods are the table's internal state: they are public but
 ## may change, and writing to them breaks the set.
 ##
@@ -430,22 +436,22 @@ export struct HashMap<K, V> {
 ##     assert(!seen.insert("a"), "already a member");
 ##     assert(seen.count() == 2, "two members");
 export struct HashSet<K> {
-    ## The element of each slot; only slots whose `state` is 2 hold a live
+    ## The element of each slot; only slots whose `_state` is 2 hold a live
     ## member, the rest hold the default of `K`. Internal: its count equals
-    ## `capacity` rather than the member count, and `grow` replaces it.
-    Array<K> keys;
+    ## `_capacity` rather than the member count, and `grow` replaces it.
+    Array<K> _keys;
     ## The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
     ## member that still extends probe sequences), 2 is occupied. Internal.
-    Array<int> state;
+    Array<int> _state;
     ## The number of slots in the table: always a power of two and at least
-    ## 8. Internal; read it with `cap()`.
-    ulong capacity;
+    ## 8. Internal; read it with `capacity()`.
+    ulong _capacity;
     ## The number of members. Internal; read it with `count()`.
-    int size;
+    int _size;
     ## The number of tombstone slots. They count toward the grow threshold
     ## until an insert reuses them or `grow` or `clear` resets them.
     ## Internal.
-    int tombstones;
+    int _tombstones;
 
     ## Creates an empty set whose table has room for at least
     ## `initial_capacity` slots.
@@ -459,13 +465,13 @@ export struct HashSet<K> {
         while (cap < initial_capacity) {
             cap = cap * 2;
         }
-        capacity = cap;
-        size = 0;
-        tombstones = 0;
-        keys = Array<K>(cap);
-        state = Array<int>(cap);
-        keys._size = cap;
-        state._size = cap;
+        _capacity = cap;
+        _size = 0;
+        _tombstones = 0;
+        _keys = Array<K>(cap);
+        _state = Array<int>(cap);
+        _keys._size = cap;
+        _state._size = cap;
     }
 
     ## Returns the slot index that holds `key`, or -1 when `key` is not a
@@ -478,18 +484,18 @@ export struct HashSet<K> {
     ## `clear`. Use `contains` instead.
     ##
     ## @param key the element to look up
-    ## @returns the index of the slot that holds `key` in `keys`, or -1 when
+    ## @returns the index of the slot that holds `key` in `_keys`, or -1 when
     ##   `key` is not a member
-    long find_slot(K key) {
-        ulong mask = capacity - 1;
+    long _find_slot(K key) {
+        ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
         ulong i = 0;
-        while (i < capacity) {
+        while (i < _capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state._data[idx];
+            int st = _state._data[idx];
             if (st == 2) {
-                if (keys._data[idx] == key) {
+                if (_keys._data[idx] == key) {
                     return idx;
                 }
             } else {
@@ -505,23 +511,22 @@ export struct HashSet<K> {
     ## Doubles the table and reinserts every member, dropping all tombstones.
     ##
     ## `insert` calls it automatically. Calling it directly is safe but only
-    ## costs memory. Runs in O(capacity). It replaces the `keys` and `state`
-    ## arrays and moves members to new slots, so it invalidates slot indices
-    ## from `find_slot`.
+    ## costs memory. Runs in O(capacity). It replaces the table's arrays and
+    ## moves members to new slots.
     void grow() {
         # Dropping the old arrays from the fields releases them (field stores
         # transfer ownership), and their Size == capacity makes the
         # destructor visit every slot.
-        ulong new_cap = capacity * 2;
+        ulong new_cap = _capacity * 2;
         Array<K> new_keys = Array<K>(new_cap);
         Array<int> new_state = Array<int>(new_cap);
         new_keys._size = new_cap;
         new_state._size = new_cap;
         ulong mask = new_cap - 1;
         ulong i = 0;
-        while (i < capacity) {
-            if (state._data[i] == 2) {
-                K k = keys._data[i];
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                K k = _keys._data[i];
                 ulong h = hash<K>(k);
                 ulong start = h & mask;
                 ulong probe = 0;
@@ -538,47 +543,56 @@ export struct HashSet<K> {
             }
             i = i + 1;
         }
-        keys = new_keys;
-        state = new_state;
-        capacity = new_cap;
-        tombstones = 0;
+        _keys = new_keys;
+        _state = new_state;
+        _capacity = new_cap;
+        _tombstones = 0;
     }
 
     ## Returns the number of members in the set. O(1).
     ##
     ## @returns the number of members
     int count() {
-        return size;
+        return _size;
     }
 
     ## Returns whether the set has no members. O(1).
     ##
     ## @returns true when `count()` is 0
     bool empty() {
-        return size == 0;
+        return _size == 0;
     }
 
     ## Returns the number of slots in the table, a power of two and at least 8.
     ## O(1).
     ##
     ## @returns the current slot count
+    ulong capacity() {
+        return _capacity;
+    }
+
+    ## Deprecated: use `capacity` instead. Returns the number of slots in
+    ## the table.
+    ##
+    ## @returns the same as `capacity()`
+    [Deprecated("use 'capacity' instead", "capacity")]
     ulong cap() {
-        return capacity;
+        return capacity();
     }
 
     ## Removes every member and releases the set's references to them. The
     ## table keeps its capacity. Runs in O(capacity).
     void clear() {
         ulong i = 0;
-        while (i < capacity) {
-            if (state._data[i] == 2) {
-                keys._data[i] = __default<K>();
+        while (i < _capacity) {
+            if (_state._data[i] == 2) {
+                _keys._data[i] = __default<K>();
             }
-            state._data[i] = 0;
+            _state._data[i] = 0;
             i = i + 1;
         }
-        size = 0;
-        tombstones = 0;
+        _size = 0;
+        _tombstones = 0;
     }
 
     ## Returns whether `key` is a member of the set. Expected O(1).
@@ -586,7 +600,7 @@ export struct HashSet<K> {
     ## @param key the element to look up
     ## @returns true when `key` is a member
     bool contains(K key) {
-        return find_slot(key) >= 0;
+        return _find_slot(key) >= 0;
     }
 
     ## Adds `key` to the set if it is not already a member.
@@ -599,7 +613,7 @@ export struct HashSet<K> {
     ## @param key the element to add
     ## @returns true when `key` was added, false when it was already a member
     bool insert(K key) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot >= 0) {
             return false;
         }
@@ -609,24 +623,24 @@ export struct HashSet<K> {
         # key is not among them (find_slot missed), so it must be placed by
         # the main path below — exactly once. Returning here would lose it;
         # falling through to a second find + insert would double-acquire.
-        if ((size + tombstones) * 2 + 1 >= capacity) {
+        if ((_size + _tombstones) * 2 + 1 >= _capacity) {
             grow();
         }
-        ulong mask = capacity - 1;
+        ulong mask = _capacity - 1;
         ulong h = hash<K>(key);
         ulong start = h & mask;
         ulong i = 0;
-        while (i < capacity) {
+        while (i < _capacity) {
             ulong idx = (start + i * (i + 1) / 2) & mask;
-            int st = state._data[idx];
+            int st = _state._data[idx];
             if (st == 0 || st == 1) {
-                keys._data[idx] = key;
-                state._data[idx] = 2;
+                _keys._data[idx] = key;
+                _state._data[idx] = 2;
                 # Claiming a tombstone slot empties it again.
                 if (st == 1) {
-                    tombstones = tombstones - 1;
+                    _tombstones = _tombstones - 1;
                 }
-                size = size + 1;
+                _size = _size + 1;
                 return true;
             }
             i = i + 1;
@@ -638,19 +652,19 @@ export struct HashSet<K> {
 
     ## Removes `key` from the set, releasing the set's reference to the
     ## member. Does nothing when `key` is not a member. The slot becomes a
-    ## tombstone (see `tombstones`). Expected O(1).
+    ## tombstone (see `_tombstones`). Expected O(1).
     ##
     ## @param key the element to remove
     ## @returns true when `key` was a member and was removed, false otherwise
     bool remove(K key) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot < 0) {
             return false;
         }
-        keys._data[slot] = __default<K>();
-        state._data[slot] = 1;
-        size = size - 1;
-        tombstones = tombstones + 1;
+        _keys._data[slot] = __default<K>();
+        _state._data[slot] = 1;
+        _size = _size - 1;
+        _tombstones = _tombstones + 1;
         return true;
     }
 
@@ -665,9 +679,9 @@ export struct HashSet<K> {
     ## @param key the element to look up
     ## @returns the stored member equal to `key`, or the default of `K`
     K [](K key) {
-        long slot = find_slot(key);
+        long slot = _find_slot(key);
         if (slot >= 0) {
-            return keys._data[slot];
+            return _keys._data[slot];
         }
         return __default<K>();
     }

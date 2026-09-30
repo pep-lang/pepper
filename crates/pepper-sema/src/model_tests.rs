@@ -277,8 +277,8 @@ fn type_alias_chain_expands() {
         r#"
 [Shared]
 struct Box<T> {
-    const Value: T;
-    construct(T value) { Value = value; }
+    const value: T;
+    construct(T value) { this.value = value; }
 }
 type A = B;
 type B = Box<int>;

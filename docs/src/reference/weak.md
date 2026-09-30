@@ -33,15 +33,15 @@ freely.
 **Example**
 ```pepper
     struct Child {
-        Weak<Parent> Owner;
+        Weak<Parent> owner;
 
         construct(Parent owner) {
-            Owner = Weak<Parent>(owner);
+            this.owner = Weak<Parent>(owner);
         }
 
         String owner_name() {
-            with (var parent = Owner) {
-                return parent.Name;
+            with (var parent = this.owner) {
+                return parent.name;
             } else {
                 return "(gone)";
             }
