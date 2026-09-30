@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9db0f184.js";
+            window.path_to_searchindex_js = "../searchindex-286f519f.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-458d6a6b.js"></script>
+        <script src="../toc-b64c440f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,7 @@
                         <!-- Generated from runtime/async/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-async-module"><a class="header" href="#the-async-module">The async module</a></h1>
 <p>Threads and concurrency, modeled on Rust’s <code>std::thread</code> and C++
-<code>std::thread</code>.</p>
+<code>std::thread</code>, and tasks: green threads that take turns on one thread.</p>
 <p>Like <code>io</code>, <code>async</code> is a module: bring it in with <code>import async</code> (and write
 <code>async.Thread</code>, <code>async.logical_cpus()</code>) or import names directly with
 <code>import [Thread, ThreadLocal] from async</code>.</p>
@@ -195,6 +195,7 @@
 <li><a href="async-channel.html">Channel</a>: <code>Channel&lt;T&gt;</code>, a queue that carries values between threads, and its <code>ChannelIterator&lt;T&gt;</code></li>
 <li><a href="async-mutex.html">Mutex</a>: <code>Mutex&lt;T&gt;</code>, the <code>MutexGuard&lt;T&gt;</code> a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code></li>
 <li><a href="async-once.html">Once</a>: <code>Once</code>, which runs a function once, and <code>Lazy&lt;T&gt;</code>, a value built on first use</li>
+<li><a href="async-task.html">Tasks</a>: <code>run</code>, <code>Task&lt;T&gt;</code>, <code>sleep</code>, <code>yield_now</code> and cancellation, for many tasks taking turns on one thread</li>
 </ul>
 <p>Only thread-safe values can be shared between threads: numbers, <code>shared</code>
 function values (such as a thread’s body), and <code>[Shared]</code> structs such as
