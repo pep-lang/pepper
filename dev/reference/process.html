@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ed78ace.js";
+            window.path_to_searchindex_js = "../searchindex-9b802c4f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -194,17 +194,20 @@ arguments typed after it follow in order, as the shell passed them: a
 quoted argument with spaces is one element. Each call builds a new array.</p>
 <p>On Windows the arguments are in the process’s ANSI code page, so text
 outside it is not preserved.</p>
+<p><code>main</code> receives the same array when it is declared
+<code>main(args: String[]): int</code>; <code>arguments()</code> reads it anywhere else.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the program name followed by its arguments</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    main(): int {
-        var parts = arguments();
-        if (parts.count() &gt; 1) {
-            print(parts[1]);
+<pre><code class="language-pepper">    verbose(): bool {
+        for (var argument in arguments()) {
+            if (argument == "-v") {
+                return true;
+            }
         }
-        return 0;
+        return false;
     }
 </code></pre>
 <h2 id="exit"><a class="header" href="#exit">exit</a></h2>

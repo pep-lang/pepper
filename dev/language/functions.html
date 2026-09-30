@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ed78ace.js";
+            window.path_to_searchindex_js = "../searchindex-9b802c4f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-0595f8ea.js"></script>
@@ -253,7 +253,8 @@ the file, and can call itself.</p>
 </li>
 <li>
 <p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process’s exit
-code; return 0 for success. See
+code; return 0 for success. To receive the command-line arguments, declare
+it <code>main(args: String[]): int</code> instead. See
 <a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
 </li>
 <li>
@@ -388,20 +389,24 @@ in the order the program wrote it, even when standard output is a pipe.</p>
 literal picks, so a literal message builds nothing when the assertion holds. See
 <a href="../reference/internals.html">Built-in functions</a>.</p>
 <h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
-<p><code>arguments()</code> returns the program’s command-line arguments as an
-<code>Array&lt;String&gt;</code>: element 0 is the program as it was started, and the
-arguments typed after it follow in order. <code>exit(code)</code> ends the program at
-once with status <code>code</code>, from anywhere, after flushing what was printed.</p>
-<pre><code class="language-pepper"># arguments() holds the program name, then each command-line argument.
-main(): int {
-    var parts = arguments();
-    if (parts.count() &gt; 2) {
+<p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program’s command-line arguments: element 0 is
+the program as it was started, and the arguments typed after it follow in
+order. Declare the parameter only when the program reads it, as a Windows
+console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
+parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
+<p>Elsewhere, <code>arguments()</code> returns the same array, so code outside <code>main</code> can
+read the arguments without having them passed down. <code>exit(code)</code> ends the
+program at once with status <code>code</code>, from anywhere, after flushing what was
+printed.</p>
+<pre><code class="language-pepper"># args holds the program name, then each command-line argument.
+main(args: String[]): int {
+    if (args.count() &gt; 2) {
         print("usage: greet [NAME]");
         exit(2);  # ends the program here, with status 2
     }
     var name = "world";
-    if (parts.count() == 2) {
-        name = parts[1];
+    if (args.count() == 2) {
+        name = args[1];
     }
     print("Hello, " + name + "!");
     return 0;
