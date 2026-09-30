@@ -234,13 +234,13 @@ impl<'t> Scopes<'t> {
     fn value_callee(&self, name: &str, current_struct: Option<&TypeName>) -> Option<(Expression, TypeName)> {
         let local = self.find_param(name).or_else(|| self.find_symbol(name));
         if let Some(ty) = local {
-            return ty.is_function_type().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty));
+            return ty.is_callable().then(|| (Expression::SymbolRef { id: name.to_string(), ty: ty.clone(), loc: Loc::NONE }, ty));
         }
         let st = current_struct?;
         if self.has_method(st, name) {
             return None;
         }
-        let ty = self.field_type(st, name).filter(|t| t.is_function_type())?;
+        let ty = self.field_type(st, name).filter(|t| t.is_callable())?;
         let callee = Expression::MemberRef { lhs: Box::new(Expression::ThisRef), name: name.to_string(), loc: Loc::NONE };
         Some((callee, ty))
     }
@@ -789,7 +789,7 @@ fn resolve_expression(
         if let Expression::MethodCall { this, method, args, loc } = e {
             let this_type = type_of_expr(this, scopes, current);
             if !scopes.has_method(&this_type, method)
-                && scopes.field_type(&this_type, method).is_some_and(|t| t.is_function_type())
+                && scopes.field_type(&this_type, method).is_some_and(|t| t.is_callable())
             {
                 let callee = Expression::MemberRef { lhs: std::mem::replace(this, Box::new(Expression::ThisRef)), name: method.clone(), loc: *loc };
                 *e = Expression::Invoke { callee: Box::new(callee), args: std::mem::take(args) };
@@ -797,10 +797,10 @@ fn resolve_expression(
             }
         }
         // A bare free-function name in value position is a function value.
-        if let Expression::SymbolRef { id, ty, .. } = e {
+        if let Expression::SymbolRef { id, ty, loc } = e {
             if ty.is_auto() && id != "this" {
                 if let Some(fn_ty) = scopes.function_value(id, current) {
-                    *e = Expression::FunctionRef { function: id.clone(), ty: fn_ty };
+                    *e = Expression::FunctionRef { function: id.clone(), ty: fn_ty, loc: *loc };
                     return;
                 }
             }

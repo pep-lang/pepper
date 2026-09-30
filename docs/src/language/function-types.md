@@ -300,5 +300,6 @@ atomic, like a `[Shared]` struct's (see
   write `this.norm`.
 - **Closures in trait default methods** cannot use `this` or the members of
   the struct yet.
-- **C callbacks.** A closure cannot be passed to a C function that expects a
-  function pointer.
+- **Closures that capture values as C callbacks.** A C function pointer
+  (`extern (P) => R`) takes a named function or a closure that captures
+  nothing; see [Calling C](c-interop.md#passing-a-pepper-function-to-c).

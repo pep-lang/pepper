@@ -308,6 +308,8 @@ pub enum Expression {
     FunctionRef {
         function: String,
         ty: TypeName,
+        /// Location of the function's name.
+        loc: Loc,
     },
     /// Call through a function value: `f(x)`, `obj.callback(x)`,
     /// `make_adder(1)(2)`. `callee` evaluates to a function object.
@@ -379,6 +381,7 @@ impl Expression {
             | Expression::ArrayIndex { loc, .. }
             | Expression::FunctionCall { loc, .. }
             | Expression::FunctionPointer { loc, .. }
+            | Expression::FunctionRef { loc, .. }
             | Expression::MethodCall { loc, .. }
             | Expression::MakeClosure { loc, .. }
             | Expression::ToTrait { loc, .. }

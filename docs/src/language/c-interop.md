@@ -171,25 +171,57 @@ types.
 
 ## Passing a Pepper function to C
 
-A Pepper [function value](function-types.md) is a Pepper object, not a C
-function pointer. To hand a function to C as a callback, such as the
-comparison function of `qsort`, take its address with
-`__function_pointer(name)`. The result is a `__ptr<void>`:
+A Pepper [function value](function-types.md) is a reference-counted object,
+not a C function pointer. For C, Pepper has a separate type,
+`extern (P...) => R`: the address of a function that C calls with the C
+calling convention. Declare a callback parameter of a C function with it,
+and pass a named function, or a closure that captures nothing:
 
 ```pepper
 {{#include ../../examples/c-callbacks.pep}}
 ```
 
-- The argument must name a free function, or a static method of the struct
-  whose method uses it. Inside a generic struct the static method is the one
-  for the current type arguments, which is how `ThreadLocal<T>` gives the
-  operating system a destructor for its `T`.
-- C calls the function with the C calling convention, so give it
-  C-compatible parameter and return types: numbers and `__ptr<T>`. C knows
-  nothing of reference counts, so a struct parameter or return value would
-  not be counted correctly.
-- A name that is not a function is reported as
-  `use of undeclared identifier`.
+- **What converts.** A named free function, a static method
+  (`Order.descending`), or a closure literal that captures nothing, whose
+  parameter and return types match the C function pointer type exactly. A
+  closure literal takes its parameter types from the type, as it does from
+  any function type.
+- **Nothing captured.** C calls the function with its arguments alone, so a
+  closure that captures a value, or a bound method (`p.get`), cannot
+  convert:
+
+  ```text
+  main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) => int' captures 'bias'; a C function pointer cannot hold captured values
+      4 |     qsort(_pep_malloc(4), 0, 4, (a, b) => bias);
+        |                                           ^~~~
+  main.pep:3:9: note: pass what the callback needs through the C function's context argument instead
+      3 |     var bias = 1;
+        |         ^~~~
+  ```
+
+  Most C APIs that take a callback also take a `void*` context argument that
+  they hand back to it; pass what the callback needs through that.
+  A function value held in a variable does not convert either, since it may
+  be a closure.
+- **C types only.** C knows nothing of reference counts, so the parameter
+  and return types must be numbers, `bool`, pointers, or other C function
+  pointer types. A struct is an error:
+  `C function pointer type 'extern (String) => int' cannot use 'String'; C passes only numbers, 'bool' and pointers`.
+  Write pointers as `void*` in an `extern` declaration and as `__ptr<void>`
+  elsewhere, as for any pointer.
+- **A value like a number.** A C function pointer has no reference count.
+  Store it in a variable, field or module-scope `const`, return it, pass it
+  to other threads, or call it: `compare(a, b)` calls through it with the C
+  calling convention. Calling a null one (from C) panics. It converts to
+  `void*` but not to a Pepper function type; wrap it in a closure that calls
+  it, `(x) => f(x)`, to use it as one.
+
+`__function_pointer(name)` also gives a function's address, as an untyped
+`__ptr<void>`. It takes a free function, or a static method of the struct
+whose method uses it. Inside a generic struct the static method is the one
+for the current type arguments, which is how `ThreadLocal<T>` gives the
+operating system a destructor for its `T`. Prefer a C function pointer type
+where the signature is known, since the compiler then checks it.
 
 ## Binding to a different symbol name
 

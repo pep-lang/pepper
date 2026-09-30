@@ -241,6 +241,9 @@ impl<'a> Checker<'a> {
         if self.weak_flows_into(value, expected, current, slot) {
             return;
         }
+        if self.extern_flows_into(value, expected, current, slot) {
+            return;
+        }
         if !expected.is_function_type() {
             self.value_flows_into(value, expected, current, slot);
             return;
@@ -309,9 +312,54 @@ impl<'a> Checker<'a> {
         true
     }
 
+    /// A C function pointer (`extern (P...) => R`) holds a bare address:
+    /// only a value of the same C function pointer type fills one
+    /// (`shared_functions` converted the named functions and closures
+    /// that can be), and one converts to nothing but `void*`. Returns true
+    /// when either side is a C function pointer.
+    fn extern_flows_into(&mut self, value: &Expression, expected: &TypeName, current: Option<&TypeName>, slot: &Slot) -> bool {
+        let parse = |ty: &TypeName| {
+            let s = ty.to_string();
+            if s.starts_with("__extern_function<") && s.ends_with('>') { crate::passes::gather_generics::parse_type_string(&s) } else { ty.clone() }
+        };
+        let expected = parse(expected);
+        if matches!(value, Expression::PointerLiteral) {
+            return expected.is_extern_function_type();
+        }
+        let Some(actual) = static_type::of(value, &self.table, current).map(|t| parse(&t)) else {
+            return expected.is_extern_function_type();
+        };
+        if !actual.is_extern_function_type() && !expected.is_extern_function_type() {
+            return false;
+        }
+        if actual.to_string() == crate::type_name::AUTO || same_type(&actual, &expected) {
+            return true;
+        }
+        if actual.is_extern_function_type() && canonical(&expected).to_string() == crate::type_name::VOID_PTR {
+            return true;
+        }
+        let hint = if expected.is_extern_function_type() && actual.is_function_type() {
+            if matches!(value, Expression::FunctionRef { .. } | Expression::MakeClosure { .. }) {
+                "; the parameter and return types must match exactly"
+            } else {
+                "; only a named function or a closure that captures nothing converts to a C function pointer"
+            }
+        } else if actual.is_extern_function_type() && expected.is_function_type() {
+            "; wrap it in a closure that calls it"
+        } else {
+            ""
+        };
+        let message = (slot.mismatch)(&expected.display(), &actual.display()) + hint;
+        self.report(message, value, slot);
+        true
+    }
+
     fn parameters_of_call(&self, function: &str) -> Option<(String, Vec<TypeName>)> {
         if let Some(f) = self.module.functions.iter().find(|f| f.name == function && !f.is_generic_func) {
             return Some((format!("argument {{}} of '{}'", function), f.parameters.iter().map(|p| p.ty.clone()).collect()));
+        }
+        if let Some(e) = self.module.externs.iter().find(|e| e.name == function) {
+            return Some((format!("argument {{}} of '{}'", function), e.parameters.iter().map(|p| p.ty.clone()).collect()));
         }
         let st = self.module.structs.iter().find(|s| s.name == function)?;
         Some((format!("argument {{}} of '{}'", function), st.constructor.parameters.iter().map(|p| p.ty.clone()).collect()))
@@ -325,7 +373,19 @@ impl<'a> Checker<'a> {
     }
 
     fn check_arguments(&mut self, label: &str, params: &[TypeName], args: &[Expression], current: Option<&TypeName>, call: Loc) {
-        for (idx, (param, arg)) in params.iter().zip(args).enumerate() {
+        self.check_arguments_where(label, params, args, current, call, |_| true);
+    }
+
+    fn check_arguments_where(
+        &mut self,
+        label: &str,
+        params: &[TypeName],
+        args: &[Expression],
+        current: Option<&TypeName>,
+        call: Loc,
+        checked: impl Fn(&TypeName) -> bool,
+    ) {
+        for (idx, (param, arg)) in params.iter().zip(args).enumerate().filter(|(_, (param, _))| checked(param)) {
             let what = || label.replace("{}", &(idx + 1).to_string());
             let mismatch = |expected: &str, actual: &str| format!("cannot pass a value of type '{}' as {}, which has type '{}'", actual, what(), expected);
             self.flows_into(arg, param, current, &Slot { what: &what, mismatch: &mismatch, fallback: call });
@@ -344,7 +404,12 @@ impl<'a> Checker<'a> {
             match &node {
                 Expression::FunctionCall { function, args, loc } => {
                     if let Some((label, params)) = self.parameters_of_call(function) {
-                        self.check_arguments(&label, &params, args, current, *loc);
+                        // An extern's other parameters are C types, which codegen checks with
+                        // extern-specific hints ("pass its 'c_str()'").
+                        let is_extern = self.module.externs.iter().any(|e| e.name == *function);
+                        self.check_arguments_where(&label, &params, args, current, *loc, |p| {
+                            !is_extern || p.is_extern_function_type() || p.is_function_type()
+                        });
                     }
                 }
                 Expression::MethodCall { this, method, args, loc } => {

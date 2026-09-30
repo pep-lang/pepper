@@ -311,6 +311,9 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
     if let Some(ty) = shared_function_type_name(input)? {
         return Ok(ty);
     }
+    if let Some(ty) = extern_function_type_name(input)? {
+        return Ok(ty);
+    }
     let mut ty = type_name_base(input)?;
     // End of the last token of the type, excluding trailing whitespace.
     let mut end = ty.span.end;
@@ -356,6 +359,12 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
 /// generic type. `=>` is right-associative: `(int) => (int) => int` returns a
 /// function. A parenthesized list not followed by `=>` is not a type.
 fn function_type_name(input: &mut &str) -> Result<TypeName> {
+    function_type_of(input, type_name)
+}
+
+/// A function type whose parameter and return types `element` parses (C
+/// types such as `void*` in an `extern` function type).
+fn function_type_of(input: &mut &str, element: fn(&mut &str) -> Result<TypeName>) -> Result<TypeName> {
     let before = *input;
     let start = pos(input);
     *input = &input[1..];
@@ -366,7 +375,7 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
             *input = &input[1..];
             break;
         }
-        match type_name(input) {
+        match element(input) {
             Ok(ty) => params.push(ty),
             Err(_) => {
                 *input = before;
@@ -392,7 +401,7 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
     }
     *input = &input[2..];
     ws(input)?;
-    let ret = type_name(input)?;
+    let ret = element(input)?;
     // End at the return type's last token, not the whitespace after it.
     let end = ret.span.end;
     let mut generic_types = vec![ret];
@@ -405,8 +414,25 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
 /// one only directly before a function type, so it stays usable as a name.
 /// Returns `None` (consuming nothing) when the input is not one.
 fn shared_function_type_name(input: &mut &str) -> Result<Option<TypeName>> {
-    const KEYWORD: &str = "shared";
-    let Some(rest) = input.strip_prefix(KEYWORD) else { return Ok(None) };
+    prefixed_function_type_name(input, "shared", SHARED_FUNCTION_TYPE, type_name)
+}
+
+/// C function pointer type `extern (P1, P2) => R`, lowered to
+/// `__extern_function<R, P1, P2>`. Its parameter and return types may be C
+/// types (`void*`), as in an `extern` declaration. Returns `None` (consuming
+/// nothing) when the input is not one.
+fn extern_function_type_name(input: &mut &str) -> Result<Option<TypeName>> {
+    prefixed_function_type_name(input, "extern", EXTERN_FUNCTION_TYPE, extern_type_name)
+}
+
+/// A function type written after `keyword`, renamed to `name`.
+fn prefixed_function_type_name(
+    input: &mut &str,
+    keyword: &str,
+    name: &str,
+    element: fn(&mut &str) -> Result<TypeName>,
+) -> Result<Option<TypeName>> {
+    let Some(rest) = input.strip_prefix(keyword) else { return Ok(None) };
     if rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(None);
     }
@@ -418,9 +444,9 @@ fn shared_function_type_name(input: &mut &str) -> Result<Option<TypeName>> {
         *input = before;
         return Ok(None);
     }
-    match function_type_name(input) {
+    match function_type_of(input, element) {
         Ok(mut ty) => {
-            ty.name = SHARED_FUNCTION_TYPE.to_string();
+            ty.name = name.to_string();
             ty.span.start = start;
             Ok(Some(ty))
         }
@@ -1608,6 +1634,7 @@ fn statement(input: &mut &str) -> Result<Statement> {
     let is_kw = |kw: &str| keyword(&mut { *input }, kw);
     let is_var_decl = is_kw("var")
         || is_kw("const")
+        || starts_extern_function_type(input)
         || (input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
             && ![
                 "if", "while", "return", "break", "continue", "struct", "extern", "import", "true", "false",
@@ -1885,6 +1912,7 @@ fn extern_type_name(input: &mut &str) -> Result<TypeName> {
         if input.starts_with('*') {
             *input = &input[1..];
             ty.name.push('*');
+            ty.span.end = pos(input);
         } else {
             break;
         }
@@ -1930,6 +1958,13 @@ fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
     *input = &input[1..];
     ws(input)?;
     Ok((params, variadic))
+}
+
+/// Whether the input starts with a C function pointer type (`extern (`),
+/// which declares a variable or field, not an extern function.
+fn starts_extern_function_type(input: &str) -> bool {
+    let Some(rest) = input.strip_prefix("extern") else { return false };
+    !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') && rest.trim_start().starts_with('(')
 }
 
 fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
@@ -2503,7 +2538,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             continue;
         }
 
-        if keyword(&mut { *input }, "extern") {
+        if keyword(&mut { *input }, "extern") && !starts_extern_function_type(input) {
             let m = extern_function_declaration(input, m_attrs)?;
             ws(input)?;
             methods.push(m);
@@ -2628,7 +2663,10 @@ fn declaration_body(input: &mut &str, leading: Vec<Attribute>) -> Result<Declara
     if input.starts_with("type") && !input[4..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Ok(Declaration::TypeAlias(type_alias_declaration(input, leading)?));
     }
-    if input.starts_with("extern") && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+    if input.starts_with("extern")
+        && !input[6..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+        && !starts_extern_function_type(input)
+    {
         return Ok(Declaration::Function(extern_function_declaration(input, leading)?));
     }
     let before = *input;
@@ -3064,6 +3102,20 @@ mod tests {
         let args: Vec<String> = ty.generic_types.iter().map(|t| t.to_string()).collect();
         assert_eq!(args, ["bool", "int", "String"]);
         assert_eq!(ty.to_string(), "(int, String) => bool");
+    }
+
+    #[test]
+    fn extern_function_types() {
+        let ty = parse_type("extern (void*, int) => int");
+        assert_eq!(ty.name, EXTERN_FUNCTION_TYPE);
+        let args: Vec<String> = ty.generic_types.iter().map(|t| t.to_string()).collect();
+        assert_eq!(args, ["int", "void*", "int"]);
+        assert_eq!(ty.to_string(), "extern (void*, int) => int");
+        assert_eq!(parse_type("extern () => void*").to_string(), "extern () => void*");
+        // `extern (` starts a field or variable, not an extern function.
+        assert!(starts_extern_function_type("extern (int) => int f;"));
+        assert!(!starts_extern_function_type("extern int abs(int x);"));
+        assert!(!starts_extern_function_type("externs"));
     }
 
     #[test]

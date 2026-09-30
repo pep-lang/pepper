@@ -645,10 +645,14 @@ pub fn sync_closures(module: &mut Module) -> bool {
         let mut visit = |expr: &Expression, expected: Option<&TypeName>, current: Option<&TypeName>| {
             let Expression::MakeClosure { value, closure, .. } = expr else { return };
             let entry = learned.entry(closure.clone()).or_default();
-            if let Some(ty) = expected.filter(|t| t.is_function_type()) {
+            // A C function pointer slot types a closure like the plain
+            // function type of its signature; `shared_functions` then
+            // converts a closure that captures nothing.
+            let expected = expected.and_then(|t| if t.is_function_type() { Some(t.clone()) } else { t.extern_as_function() });
+            if let Some(ty) = expected {
                 // A fully known type wins over a partly known one.
                 if entry.expected.as_ref().is_none_or(|e| e.contains_auto() && !ty.contains_auto()) {
-                    entry.expected = Some(ty.clone());
+                    entry.expected = Some(ty);
                 }
             }
             if let Expression::FunctionCall { args, .. } = value.as_ref() {

@@ -383,6 +383,28 @@ fn shared_function_types() {
     assert_runs("shared_functions", SHARED_FUNCTIONS_PROGRAM);
 }
 
+/// A C function pointer (`extern (P) => R`) is a code address: thread
+/// bodies may capture and call one.
+const C_FUNCTION_POINTERS_PROGRAM: &str = r#"
+import async;
+
+twice(x: int): int { return x * 2; }
+
+main(): int {
+    extern (int) => int f = twice;
+    var total = Atomic<int>(0);
+    var worker = async.Thread.spawn(() => { total.fetch_add(f(21)); });
+    worker.join();
+    assert(total.load() == 42, "the thread called the C function pointer");
+    return 0;
+}
+"#;
+
+#[test]
+fn threads_share_c_function_pointers() {
+    assert_runs("c_function_pointers", C_FUNCTION_POINTERS_PROGRAM);
+}
+
 #[test]
 fn shared_counts_are_atomic() {
     assert_runs("shared_counts", SHARED_COUNTS_PROGRAM);
@@ -402,6 +424,7 @@ fn all_programs() -> Vec<(&'static str, &'static str)> {
         ("exported_globals", EXPORTED_GLOBALS_PROGRAM),
         ("closure_body", CLOSURE_BODY_PROGRAM),
         ("shared_functions", SHARED_FUNCTIONS_PROGRAM),
+        ("c_function_pointers", C_FUNCTION_POINTERS_PROGRAM),
     ]
 }
 

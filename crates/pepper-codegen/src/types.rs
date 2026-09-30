@@ -34,8 +34,9 @@ fn scalar_type<'ctx>(context: &'ctx Context, name: &str) -> Option<BasicTypeEnum
         "f64" | "double" => BasicTypeEnum::FloatType(context.f64_type()),
         "void" | "__auto" => BasicTypeEnum::IntType(context.i32_type()),
         _ => {
-            // Pointer types: `T*`, `void*`.
-            if name.ends_with('*') {
+            // Pointer types: `T*`, `void*`, and C function pointers
+            // (`extern (P) => R`, spelled `__extern_function<R, P>`).
+            if name.ends_with('*') || name.starts_with("__extern_function<") {
                 return Some(BasicTypeEnum::PointerType(context.ptr_type(inkwell::AddressSpace::default())));
             }
             return None;

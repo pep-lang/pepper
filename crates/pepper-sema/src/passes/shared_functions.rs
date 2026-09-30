@@ -24,6 +24,14 @@
 //!   the shared object itself through plain steps would race with the
 //!   threads that also hold it.
 //!
+//! A C function pointer slot (`extern (P...) => R`) takes a value that has
+//! no object at all: a named function (`FunctionRef`), or a closure
+//! creation that captures nothing (a closure literal, a static method or
+//! an unbound method reference), whose `__call` is copied into a free
+//! function. Either becomes that function's address, `FunctionPointer`,
+//! typed with the slot's type. A closure that captures a value cannot
+//! convert: C calls the function with its arguments alone.
+//!
 //! Runs once every type is final (after the last `resolve_resolvables` and
 //! `synthesize_function_types`), before `check_function_types`, which then
 //! sees matching types wherever a conversion applied. The adapters it adds
@@ -86,13 +94,26 @@ struct Converter {
     methods: HashMap<String, HashMap<String, Vec<TypeName>>>,
     /// Closure struct (by name and by type) → its capture fields.
     captures: HashMap<String, Vec<VariableDef>>,
+    /// Closure struct (by name and by type) → its `__call` method.
+    calls: HashMap<String, FunctionDef>,
     added: Vec<StructDef>,
+    /// Free functions made from closures converted to C function pointers.
+    added_functions: Vec<FunctionDef>,
 }
 
 impl Converter {
     /// `value` flows into a slot of type `expected`.
     fn convert(&mut self, value: &mut Expression, expected: &TypeName, current: Option<&TypeName>, site: Site) {
         let expected = parsed(expected);
+        if expected.is_extern_function_type() {
+            if let Expression::Ternary { true_expr, false_expr, .. } = value {
+                self.convert(true_expr, &expected, current, site);
+                self.convert(false_expr, &expected, current, site);
+                return;
+            }
+            self.to_extern(value, &expected, site);
+            return;
+        }
         if !expected.is_function_type() {
             return;
         }
@@ -129,6 +150,58 @@ impl Converter {
             }
             _ => {}
         }
+    }
+
+    /// Replace a value with no state (a named function, a closure that
+    /// captures nothing) by the address of a function, typed as the C
+    /// function pointer type `expected`. Any other value is left for
+    /// `check_function_types` to report.
+    fn to_extern(&mut self, value: &mut Expression, expected: &TypeName, site: Site) {
+        let Some(signature) = expected.extern_as_function() else { return };
+        let loc = value.loc();
+        let function = match value {
+            Expression::FunctionRef { function, ty, .. } if same_signature(&parsed(ty), &signature) => function.clone(),
+            Expression::MakeClosure { closure, ty, loc, .. } if same_signature(&parsed(ty), &signature) => {
+                if let Some(capture) = self.captures.get(closure.as_str()).and_then(|c| c.first()) {
+                    let at = if capture.loc.is_none() { *loc } else { capture.loc };
+                    let captured = match capture.name.as_str() {
+                        RECEIVER_FIELD => "its receiver".to_string(),
+                        THIS_FIELD => "'this'".to_string(),
+                        name => format!("'{}'", name),
+                    };
+                    let what = if capture.name == RECEIVER_FIELD { "method value" } else { "closure" };
+                    let message = format!(
+                        "{} {} C function pointer type '{}' captures {}; a C function pointer cannot hold captured values",
+                        what,
+                        site.verb(),
+                        expected.display(),
+                        captured
+                    );
+                    let advice = "pass what the callback needs through the C function's context argument instead";
+                    let declared = (!capture.type_loc.is_none()).then_some(capture.type_loc);
+                    crate::errors::report(Diagnostic::error(message).at(at).with_note(advice, declared));
+                    return;
+                }
+                let Some(call) = self.calls.get(closure.as_str()) else { return };
+                // A free function: a `.` in the name would read as a method.
+                let spelled: String = closure.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
+                let name = format!("{}_c_function", spelled);
+                if !self.added_functions.iter().any(|f| f.name == name) {
+                    let mut function = call.clone();
+                    function.name = name.clone();
+                    function.parent = None;
+                    function.is_static = false;
+                    self.added_functions.push(function);
+                }
+                name
+            }
+            _ => return,
+        };
+        *value = Expression::Cast {
+            expr: Box::new(Expression::FunctionPointer { owner: None, function, loc }),
+            ty: expected.clone(),
+            loc,
+        };
     }
 
     /// Every value closure `closure` captures must be thread-safe.
@@ -298,13 +371,108 @@ impl Converter {
     }
 }
 
+/// Whether C can pass or return a value of type `ty` directly: a number,
+/// `bool`, a pointer, or another C function pointer.
+fn is_c_type(ty: &TypeName) -> bool {
+    let name = canonical(ty).to_string();
+    crate::arithmetic::is_numeric_type(&name) || name.ends_with('*') || parsed(ty).is_extern_function_type()
+}
+
+/// The first part of a C function pointer type nested anywhere in `ty`
+/// that C cannot pass, with the C function pointer type it is part of.
+fn non_c_part(ty: &TypeName) -> Option<(TypeName, TypeName)> {
+    let ty = parsed(ty);
+    for sub in &ty.sub_types {
+        if let Some(found) = non_c_part(sub) {
+            return Some(found);
+        }
+    }
+    if !ty.is_extern_function_type() {
+        return None;
+    }
+    let ret = ty.function_return().filter(|r| r.to_string() != crate::type_name::VOID && !is_c_type(r));
+    ret.into_iter().chain(ty.function_params().iter().filter(|p| !is_c_type(p))).next().map(|part| (part.clone(), ty.clone()))
+}
+
+/// Every local variable declared in `block`, nested blocks included.
+fn locals(block: &Block, visit: &mut dyn FnMut(&VariableDef)) {
+    for stmt in &block.items {
+        match stmt {
+            Statement::Declaration(Declaration::Variable(var)) => visit(var),
+            Statement::Block(inner) => locals(inner, visit),
+            Statement::Branch(branch) => {
+                locals(&branch.if_block, visit);
+                if let Some(else_block) = &branch.else_block {
+                    locals(else_block, visit);
+                }
+            }
+            Statement::While(wh) => locals(&wh.block, visit),
+            _ => {}
+        }
+    }
+}
+
+/// Report a C function pointer type, wherever a variable, field or
+/// parameter declares one, whose signature has a type C cannot pass.
+fn check_c_signatures(module: &Module) {
+    let mut reported = false;
+    let mut check = |var: &VariableDef| {
+        if reported {
+            return;
+        }
+        if let Some((part, whole)) = non_c_part(&var.ty) {
+            let message = format!(
+                "C function pointer type '{}' cannot use '{}'; C passes only numbers, 'bool' and pointers",
+                whole.display(),
+                part.display()
+            );
+            let at = if var.type_loc.is_none() { var.loc } else { var.type_loc };
+            crate::errors::report(Diagnostic::error(message).at(at));
+            reported = true;
+        }
+    };
+    let function = |f: &FunctionDef, check: &mut dyn FnMut(&VariableDef)| {
+        for param in &f.parameters {
+            check(param);
+        }
+        if let Some(body) = &f.body {
+            locals(body, check);
+        }
+    };
+    for f in module.functions.iter().filter(|f| !f.is_generic_func) {
+        function(f, &mut check);
+    }
+    for st in module.structs.iter().filter(|st| st.generic_params.is_empty()) {
+        for field in &st.field_members {
+            check(field);
+        }
+        for m in st.method_members.iter().chain([&st.constructor]) {
+            function(m, &mut check);
+        }
+    }
+    for e in &module.externs {
+        for param in &e.parameters {
+            check(param);
+        }
+    }
+    for var in &module.globals {
+        check(var);
+    }
+}
+
 /// Apply the conversions between plain and `shared` function types (see
 /// the module docs).
 pub fn shared_functions(module: &mut Module) {
+    check_c_signatures(module);
     let concrete = |st: &StructDef| !(st.ty.is_generic() && st.name == st.ty.name);
     let params = |f: &FunctionDef| -> Vec<TypeName> { f.parameters.iter().map(|p| p.ty.clone()).collect() };
     let mut captures = HashMap::new();
+    let mut calls = HashMap::new();
     for st in module.structs.iter().filter(|st| crate::passes::closures::is_closure_struct(&st.name)) {
+        if let Some(call) = st.method_members.iter().find(|m| m.name == crate::passes::closures::CALL_METHOD) {
+            calls.insert(st.ty.to_string(), call.clone());
+            calls.insert(st.name.clone(), call.clone());
+        }
         let fields: Vec<VariableDef> = st
             .field_members
             .iter()
@@ -317,7 +485,13 @@ pub fn shared_functions(module: &mut Module) {
     let mut converter = Converter {
         table: StructTable::build(module),
         safe: ThreadSafeStructs::of(module),
-        functions: module.functions.iter().filter(|f| !f.is_generic_func).map(|f| (f.name.clone(), params(f))).collect(),
+        functions: module
+            .functions
+            .iter()
+            .filter(|f| !f.is_generic_func)
+            .map(|f| (f.name.clone(), params(f)))
+            .chain(module.externs.iter().map(|e| (e.name.clone(), e.parameters.iter().map(|p| p.ty.clone()).collect())))
+            .collect(),
         constructors: module
             .structs
             .iter()
@@ -331,7 +505,9 @@ pub fn shared_functions(module: &mut Module) {
             .map(|st| (st.name.clone(), st.method_members.iter().map(|m| (m.name.clone(), params(m))).collect()))
             .collect(),
         captures,
+        calls,
         added: vec![],
+        added_functions: vec![],
     };
     for function in &mut module.functions {
         converter.function(function, None);
@@ -354,4 +530,5 @@ pub fn shared_functions(module: &mut Module) {
         }
     }
     module.structs.extend(converter.added);
+    module.functions.extend(converter.added_functions);
 }

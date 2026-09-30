@@ -3106,7 +3106,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 args,
                 ..
             } => self.codegen_call(name, args),
-            Expression::FunctionRef { function, ty } => Ok(BasicValueEnum::PointerValue(
+            Expression::FunctionRef { function, ty, .. } => Ok(BasicValueEnum::PointerValue(
                 self.function_object(function, &ty.to_string())?,
             )),
             Expression::Invoke { callee, args } => self.codegen_invoke(callee, args),
@@ -3560,6 +3560,64 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// LLVM signature of a function value's invoke entry point: the function
     /// object first, then the declared parameters.
+    /// Call through a C function pointer (`extern (P...) => R`): a plain
+    /// indirect call with the C calling convention, no function object.
+    /// Its parameter and return types are C types, so nothing is counted.
+    fn codegen_call_c_function(
+        &mut self,
+        callee: &Expression,
+        fn_ty: &TypeName,
+        args: &[Expression],
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        if args.len() != fn_ty.function_params().len() {
+            return Err(format!(
+                "a function of type {} takes {} argument(s), but {} were given",
+                fn_ty.display(),
+                fn_ty.function_params().len(),
+                args.len()
+            ));
+        }
+        let mut params: Vec<BasicTypeEnum<'ctx>> = vec![];
+        for param in fn_ty.function_params() {
+            params.push(self.abi_type(&param.to_string())?);
+        }
+        let ret = fn_ty.function_return().ok_or_else(|| format!("not a function type: {}", fn_ty.display()))?;
+        let c_type = if is_void(ret) {
+            let meta: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = params.iter().map(|p| (*p).into()).collect();
+            self.context.void_type().fn_type(&meta, false)
+        } else {
+            llvm_fn_type(self.abi_type(&ret.to_string())?, &params, false)
+        };
+        let target = self.codegen_expr(callee)?.into_pointer_value();
+        // Calling a null C function pointer panics, never jumps through null.
+        if self.functions.contains_key("_pep_assert") {
+            let is_set = self.builder.build_is_not_null(target, "fn_set").map_err(|e| e.to_string())?;
+            let msg = self
+                .builder
+                .build_global_string_ptr("called a null C function pointer", "str")
+                .map_err(|e| e.to_string())?
+                .as_pointer_value();
+            self.call_function("_pep_assert", vec![is_set.into(), msg.into()])?;
+        }
+        let mut arg_vals: Vec<BasicValueEnum<'ctx>> = vec![];
+        let mut arg_names: Vec<String> = vec![];
+        for arg in args {
+            let v = self.codegen_expr(arg)?;
+            arg_names.push(self.numeric_source_name(arg, &v));
+            arg_vals.push(v);
+        }
+        let coerced = self.coerce_args(c_type, &arg_vals, &arg_names);
+        let meta: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = coerced.iter().map(|a| (*a).into()).collect();
+        let call = self
+            .builder
+            .build_indirect_call(c_type, target, &meta, "call")
+            .map_err(|e| e.to_string())?;
+        Ok(call
+            .try_as_basic_value()
+            .basic()
+            .unwrap_or_else(|| self.context.i32_type().const_zero().into()))
+    }
+
     fn invoke_fn_type(&self, fn_ty: &TypeName) -> Result<inkwell::types::FunctionType<'ctx>, String> {
         let mut params: Vec<BasicTypeEnum<'ctx>> = vec![self.context.ptr_type(inkwell::AddressSpace::default()).into()];
         for param in fn_ty.function_params() {
@@ -3797,6 +3855,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             .value_sema_type(callee)
             .ok_or_else(|| "cannot call a value of unknown type".to_string())?;
         let fn_ty = pepper_sema::passes::gather_generics::parse_type_string(&callee_ty_name);
+        if fn_ty.is_extern_function_type() {
+            return self.codegen_call_c_function(callee, &fn_ty, args);
+        }
         if !fn_ty.is_function_type() {
             return Err(format!("cannot call a value of type '{}'", fn_ty.display()));
         }

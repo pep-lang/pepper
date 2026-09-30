@@ -53,7 +53,7 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
 closures, modules, `Result`-based error handling, iteration (with `map` and
 `filter` adapters),
-`with` blocks, weak references, and calling C. The standard library covers strings, arrays, hash
+`with` blocks, weak references, and calling C (including C callbacks). The standard library covers strings, arrays, hash
 maps and sets, atomics, threads, and file-system access. That is enough to write real
 programs, but expect gaps.
 Some that you will meet quickly:

@@ -189,9 +189,9 @@ fn function_type_mismatch() {
             "function_type_mismatch",
             "square(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n"
         ),
-        "main.pep:3:12: error: variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'\n\
+        "main.pep:3:30: error: variable 'f' expects a function of type '(String) => int', but was given a function of type '(int) => int'\n\
          \x20   3 |     var f: (String) => int = square;\n\
-         \x20     |            ^~~~~~~~~~~~~~~"
+         \x20     |                              ^~~~~~"
     );
 }
 
@@ -1159,4 +1159,64 @@ fn duplicate_override_notes_the_other_declaration() {
     let err = error_of_files("duplicate_override_note", main, &files);
     assert!(err.starts_with("b.pep:2:1: error: override 'describe<Point>' is also declared in a.pep"), "{}", err);
     assert!(err.contains("a.pep:3:1: note: also declared here\n    3 | describe<Point>"), "{}", err);
+}
+
+#[test]
+fn c_function_pointer_from_a_capturing_closure() {
+    assert_eq!(
+        error_of(
+            "c_function_pointer_capture",
+            "extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) => int compare);\nmain(): int {\n    var bias = 1;\n    qsort(_pep_malloc(4), 0, 4, (a, b) => bias);\n    return 0;\n}\n"
+        ),
+        "main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) => int' captures 'bias'; a C function pointer cannot hold captured values\n\
+         \x20   4 |     qsort(_pep_malloc(4), 0, 4, (a, b) => bias);\n\
+         \x20     |                                           ^~~~\n\
+         main.pep:3:9: note: pass what the callback needs through the C function's context argument instead\n\
+         \x20   3 |     var bias = 1;\n\
+         \x20     |         ^~~~"
+    );
+}
+
+#[test]
+fn c_function_pointer_mismatches() {
+    assert_eq!(
+        error_of(
+            "c_function_pointer_from_value",
+            "main(): int {\n    var g: (int) => int = (x) => x;\n    var f: extern (int) => int = g;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:34: error: cannot initialize variable 'f' of type 'extern (int) => int' with a value of type '(int) => int'; only a named function or a closure that captures nothing converts to a C function pointer\n\
+         \x20   3 |     var f: extern (int) => int = g;\n\
+         \x20     |                                  ^"
+    );
+    assert_eq!(
+        error_of(
+            "c_function_pointer_signature",
+            "take(s: long): int { return 0; }\nmain(): int {\n    var f: extern (int) => int = take;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:34: error: cannot initialize variable 'f' of type 'extern (int) => int' with a value of type '(long) => int'; the parameter and return types must match exactly\n\
+         \x20   3 |     var f: extern (int) => int = take;\n\
+         \x20     |                                  ^~~~"
+    );
+    assert_eq!(
+        error_of(
+            "c_function_pointer_to_function_value",
+            "twice(x: int): int { return x * 2; }\nmain(): int {\n    var f: extern (int) => int = twice;\n    var g: (int) => int = f;\n    return g(1);\n}\n"
+        ),
+        "main.pep:4:27: error: cannot initialize variable 'g' of type '(int) => int' with a value of type 'extern (int) => int'; wrap it in a closure that calls it\n\
+         \x20   4 |     var g: (int) => int = f;\n\
+         \x20     |                           ^"
+    );
+}
+
+#[test]
+fn c_function_pointer_type_with_a_struct() {
+    assert_eq!(
+        error_of(
+            "c_function_pointer_struct",
+            "take(s: String): int { return 0; }\nmain(): int {\n    var f: extern (String) => int = take;\n    return 0;\n}\n"
+        ),
+        "main.pep:3:12: error: C function pointer type 'extern (String) => int' cannot use 'String'; C passes only numbers, 'bool' and pointers\n\
+         \x20   3 |     var f: extern (String) => int = take;\n\
+         \x20     |            ^~~~~~~~~~~~~~~~~~~~~~"
+    );
 }

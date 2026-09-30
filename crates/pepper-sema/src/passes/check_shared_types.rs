@@ -55,7 +55,8 @@ impl ThreadSafeStructs {
 /// [`unsafe_part`], given the thread-safe structs.
 pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<TypeName> {
     let name = ty.to_string();
-    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_shared_function_type() {
+    // A C function pointer is a code address, the same on every thread.
+    if INTEGRAL_TYPES.contains(name.as_str()) || ty.is_shared_function_type() || ty.is_extern_function_type() {
         return None;
     }
     if ty.is_function_type() {
@@ -72,7 +73,7 @@ pub(crate) fn unsafe_part_in(ty: &TypeName, safe: &ThreadSafeStructs) -> Option<
     }
     // Some passes carry a type as a flat name (`__function<void>`).
     let parsed = parse_type_string(&name);
-    if parsed.is_function_type() {
+    if parsed.is_function_type() || parsed.is_extern_function_type() {
         return unsafe_part_in(&parsed, safe);
     }
     Some(ty.clone())

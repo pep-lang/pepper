@@ -99,10 +99,20 @@ pub const FUNCTION_TYPE: &str = "__function";
 /// `__shared_function<R, P1, P2>`.
 pub const SHARED_FUNCTION_TYPE: &str = "__shared_function";
 
+/// Internal name of a C function pointer type: `extern (P1, P2) => R` is
+/// `__extern_function<R, P1, P2>`.
+pub const EXTERN_FUNCTION_TYPE: &str = "__extern_function";
+
 impl Display for TypeName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if (self.name == FUNCTION_TYPE || self.name == SHARED_FUNCTION_TYPE) && !self.generic_types.is_empty() {
-            let shared = if self.name == SHARED_FUNCTION_TYPE { "shared " } else { "" };
+        if (self.name == FUNCTION_TYPE || self.name == SHARED_FUNCTION_TYPE || self.name == EXTERN_FUNCTION_TYPE)
+            && !self.generic_types.is_empty()
+        {
+            let shared = match self.name.as_str() {
+                SHARED_FUNCTION_TYPE => "shared ",
+                EXTERN_FUNCTION_TYPE => "extern ",
+                _ => "",
+            };
             return write!(f, "{}({}) => {}", shared, join(&self.generic_types[1..], ", "), self.generic_types[0]);
         }
         if self.generic_types.is_empty() {

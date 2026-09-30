@@ -32,6 +32,10 @@ pub const FUNCTION: &str = "__function";
 /// Internal name of thread-safe function types: `shared (P1, P2) => R` is
 /// `__shared_function<R, P1, P2>`.
 pub const SHARED_FUNCTION: &str = "__shared_function";
+/// Internal name of C function pointer types: `extern (P1, P2) => R` is
+/// `__extern_function<R, P1, P2>`. Not reference-counted; lowers to a bare
+/// pointer, like `void*`.
+pub const EXTERN_FUNCTION: &str = "__extern_function";
 /// `__weak<T>`: a weak reference to a struct `T` (`std::weak_ptr<T>`).
 pub const WEAK: &str = "__weak";
 
@@ -144,6 +148,24 @@ impl TypeName {
         (self.name == FUNCTION || self.name == SHARED_FUNCTION) && !self.sub_types.is_empty()
     }
 
+    /// A C function pointer type `extern (P...) => R`. Not a function type
+    /// in the `is_function_type` sense: it has no object and no counts.
+    pub fn is_extern_function_type(&self) -> bool {
+        self.name == EXTERN_FUNCTION && !self.sub_types.is_empty()
+    }
+
+    /// A type whose values can be called: a function type or a C function
+    /// pointer type.
+    pub fn is_callable(&self) -> bool {
+        self.is_function_type() || self.is_extern_function_type()
+    }
+
+    /// The plain function type `(P...) => R` with the signature of this C
+    /// function pointer type.
+    pub fn extern_as_function(&self) -> Option<TypeName> {
+        self.is_extern_function_type().then(|| Self::with_args(FUNCTION, self.sub_types.clone()))
+    }
+
     /// A thread-safe function type `shared (P...) => R`.
     pub fn is_shared_function_type(&self) -> bool {
         self.name == SHARED_FUNCTION && !self.sub_types.is_empty()
@@ -178,20 +200,26 @@ impl TypeName {
 
     /// Return type of a function type.
     pub fn function_return(&self) -> Option<&TypeName> {
-        if self.is_function_type() { self.sub_types.first() } else { None }
+        if self.is_function_type() || self.is_extern_function_type() { self.sub_types.first() } else { None }
     }
 
     /// Parameter types of a function type.
     pub fn function_params(&self) -> &[TypeName] {
-        if self.is_function_type() { &self.sub_types[1..] } else { &[] }
+        if self.is_function_type() || self.is_extern_function_type() { &self.sub_types[1..] } else { &[] }
     }
 
     /// The type as the programmer writes it: `(int) => bool` for function
     /// types (recursively), `Name<args>` otherwise. For error messages.
     pub fn display(&self) -> String {
-        if self.is_function_type() {
+        if self.is_function_type() || self.is_extern_function_type() {
             let params: Vec<String> = self.function_params().iter().map(|p| p.display()).collect();
-            let shared = if self.is_shared_function_type() { "shared " } else { "" };
+            let shared = if self.is_shared_function_type() {
+                "shared "
+            } else if self.is_extern_function_type() {
+                "extern "
+            } else {
+                ""
+            };
             return format!("{}({}) => {}", shared, params.join(", "), self.sub_types[0].display());
         }
         if self.is_generic() {
