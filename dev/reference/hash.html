@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -185,7 +185,7 @@
 <h1 id="hashmap-and-hashset"><a class="header" href="#hashmap-and-hashset">HashMap and HashSet</a></h1>
 <p>Source: <code>runtime/hash.pep</code></p>
 <h2 id="hash"><a class="header" href="#hash">hash</a></h2>
-<pre><code class="language-pepper">hash&lt;T&gt;(T value): u64
+<pre><code class="language-pepper">hash&lt;T&gt;(value: T): u64
 </code></pre>
 <p>Returns a 64-bit FNV-1a hash of <code>value</code>, the hash <code>HashMap</code> and <code>HashSet</code>
 use for their keys.</p>
@@ -224,7 +224,7 @@ argument is released afterwards.</p>
     var b = hash&lt;int&gt;(5);   # a == b
 </code></pre>
 <h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
-<pre><code class="language-pepper">hash&lt;String&gt;(String value): u64
+<pre><code class="language-pepper">hash&lt;String&gt;(value: String): u64
 </code></pre>
 <p>Returns a 64-bit FNV-1a hash of a String’s bytes, so equal strings hash
 equally wherever they are stored. Keeps equal <code>String</code> keys of a
@@ -274,7 +274,7 @@ stays small.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
-<pre><code class="language-pepper">construct(ulong initial_capacity = 8)
+<pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
 </code></pre>
 <p>Creates an empty map whose table has room for at least
 <code>initial_capacity</code> slots.</p>
@@ -291,7 +291,7 @@ three arrays of that many slots.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
-<pre><code class="language-pepper">void grow()
+<pre><code class="language-pepper">grow()
 </code></pre>
 <p>Doubles the table and reinserts every entry, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
@@ -299,7 +299,7 @@ costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves entries to new slots. Reference counts are unchanged overall:
 each entry is acquired by the new arrays and released by the old ones.</p>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">int count()
+<pre><code class="language-pepper">count(): int
 </code></pre>
 <p>Returns the number of entries in the map. O(1).</p>
 <p><strong>Returns</strong></p>
@@ -307,7 +307,7 @@ each entry is acquired by the new arrays and released by the old ones.</p>
 <li>the number of live key-value pairs</li>
 </ul>
 <h4 id="empty"><a class="header" href="#empty">empty</a></h4>
-<pre><code class="language-pepper">bool empty()
+<pre><code class="language-pepper">empty(): bool
 </code></pre>
 <p>Returns whether the map has no entries. O(1).</p>
 <p><strong>Returns</strong></p>
@@ -315,7 +315,7 @@ each entry is acquired by the new arrays and released by the old ones.</p>
 <li>true when <code>count()</code> is 0</li>
 </ul>
 <h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity()
+<pre><code class="language-pepper">capacity(): ulong
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 The map grows before its entries and tombstones reach half of it. O(1).</p>
@@ -324,7 +324,7 @@ The map grows before its entries and tombstones reach half of it. O(1).</p>
 <li>the current slot count</li>
 </ul>
 <h4 id="cap"><a class="header" href="#cap">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
@@ -333,12 +333,12 @@ the table.</p>
 <li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
-<pre><code class="language-pepper">void clear()
+<pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes every entry and releases the map’s references to their keys
 and values. The table keeps its capacity. Runs in O(capacity).</p>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
-<pre><code class="language-pepper">HashMap&lt;K, V&gt; copy(Copies copies)
+<pre><code class="language-pepper">copy(copies: Copies): HashMap&lt;K, V&gt;
 </code></pre>
 <p>Returns a deep copy: a new map holding a copy of each key and value,
 made with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashMap
@@ -356,7 +356,7 @@ cost of copying the entries.</p>
 <li>the copy</li>
 </ul>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
-<pre><code class="language-pepper">bool contains(K key)
+<pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether the map has an entry for <code>key</code>. Expected O(1).</p>
 <p><strong>Parameters</strong></p>
@@ -368,7 +368,7 @@ cost of copying the entries.</p>
 <li>true when <code>key</code> is present</li>
 </ul>
 <h4 id="insert"><a class="header" href="#insert">insert</a></h4>
-<pre><code class="language-pepper">bool insert(K key, V value)
+<pre><code class="language-pepper">insert(key: K, value: V): bool
 </code></pre>
 <p>Maps <code>key</code> to <code>value</code>, adding a new entry or overwriting the value of
 an existing one.</p>
@@ -391,7 +391,7 @@ table (see <code>grow</code>). Expected O(1); a grow costs O(capacity).</p>
     m.insert(1, 20);   # false: overwritten; m.get(1) == 20
 </code></pre>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
-<pre><code class="language-pepper">V get(K key)
+<pre><code class="language-pepper">get(key: K): V
 </code></pre>
 <p>Returns the value stored for <code>key</code>, or the default of <code>V</code> when <code>key</code>
 is absent.</p>
@@ -409,7 +409,7 @@ value. Expected O(1).</p>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
-<pre><code class="language-pepper">bool remove(K key)
+<pre><code class="language-pepper">remove(key: K): bool
 </code></pre>
 <p>Removes the entry for <code>key</code>, releasing the map’s references to its key
 and value. Does nothing when <code>key</code> is absent.</p>
@@ -425,7 +425,7 @@ table grows. Expected O(1).</p>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
-<pre><code class="language-pepper">V [](K key)
+<pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: returns the value for <code>key</code>, or the default of <code>V</code>
 (0, or a null reference for struct types) when <code>key</code> is absent. The
@@ -443,7 +443,7 @@ same as <code>get</code>. A missing key is not inserted.</p>
     var n = m["missing"];   # 0; m is still empty
 </code></pre>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
-<pre><code class="language-pepper">V [](K key, V value)
+<pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: inserts <code>key</code> or overwrites its value, the
 same as <code>insert</code>.</p>
@@ -509,7 +509,7 @@ may change, and writing to them breaks the set.</p>
 </code></pre>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="hashset-1"><a class="header" href="#hashset-1">HashSet()</a></h4>
-<pre><code class="language-pepper">construct(ulong initial_capacity = 8)
+<pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
 </code></pre>
 <p>Creates an empty set whose table has room for at least
 <code>initial_capacity</code> slots.</p>
@@ -535,14 +535,14 @@ a set is expected, so an array literal can initialize one.</p>
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="grow-1"><a class="header" href="#grow-1">grow</a></h4>
-<pre><code class="language-pepper">void grow()
+<pre><code class="language-pepper">grow()
 </code></pre>
 <p>Doubles the table and reinserts every member, dropping all tombstones.</p>
 <p><code>insert</code> calls it automatically. Calling it directly is safe but only
 costs memory. Runs in O(capacity). It replaces the table’s arrays and
 moves members to new slots.</p>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
-<pre><code class="language-pepper">int count()
+<pre><code class="language-pepper">count(): int
 </code></pre>
 <p>Returns the number of members in the set. O(1).</p>
 <p><strong>Returns</strong></p>
@@ -550,7 +550,7 @@ moves members to new slots.</p>
 <li>the number of members</li>
 </ul>
 <h4 id="empty-1"><a class="header" href="#empty-1">empty</a></h4>
-<pre><code class="language-pepper">bool empty()
+<pre><code class="language-pepper">empty(): bool
 </code></pre>
 <p>Returns whether the set has no members. O(1).</p>
 <p><strong>Returns</strong></p>
@@ -558,7 +558,7 @@ moves members to new slots.</p>
 <li>true when <code>count()</code> is 0</li>
 </ul>
 <h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
-<pre><code class="language-pepper">ulong capacity()
+<pre><code class="language-pepper">capacity(): ulong
 </code></pre>
 <p>Returns the number of slots in the table, a power of two and at least 8.
 O(1).</p>
@@ -567,7 +567,7 @@ O(1).</p>
 <li>the current slot count</li>
 </ul>
 <h4 id="cap-1"><a class="header" href="#cap-1">cap</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] ulong cap()
+<pre><code class="language-pepper">[Deprecated("use 'capacity' instead", "capacity")] cap(): ulong
 </code></pre>
 <p>Deprecated: use <code>capacity</code> instead. Returns the number of slots in
 the table.</p>
@@ -576,12 +576,12 @@ the table.</p>
 <li>the same as <code>capacity()</code></li>
 </ul>
 <h4 id="clear-1"><a class="header" href="#clear-1">clear</a></h4>
-<pre><code class="language-pepper">void clear()
+<pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes every member and releases the set’s references to them. The
 table keeps its capacity. Runs in O(capacity).</p>
 <h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
-<pre><code class="language-pepper">bool contains(K key)
+<pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether <code>key</code> is a member of the set. Expected O(1).</p>
 <p><strong>Parameters</strong></p>
@@ -593,7 +593,7 @@ table keeps its capacity. Runs in O(capacity).</p>
 <li>true when <code>key</code> is a member</li>
 </ul>
 <h4 id="insert-1"><a class="header" href="#insert-1">insert</a></h4>
-<pre><code class="language-pepper">bool insert(K key)
+<pre><code class="language-pepper">insert(key: K): bool
 </code></pre>
 <p>Adds <code>key</code> to the set if it is not already a member.</p>
 <p>A new member is acquired, and the insert may first grow the table
@@ -609,7 +609,7 @@ O(capacity).</p>
 <li>true when <code>key</code> was added, false when it was already a member</li>
 </ul>
 <h4 id="remove-1"><a class="header" href="#remove-1">remove</a></h4>
-<pre><code class="language-pepper">bool remove(K key)
+<pre><code class="language-pepper">remove(key: K): bool
 </code></pre>
 <p>Removes <code>key</code> from the set, releasing the set’s reference to the
 member. Does nothing when <code>key</code> is not a member. The slot becomes a
@@ -623,7 +623,7 @@ tombstone (see <code>_tombstones</code>). Expected O(1).</p>
 <li>true when <code>key</code> was a member and was removed, false otherwise</li>
 </ul>
 <h4 id="operator--2"><a class="header" href="#operator--2">operator []</a></h4>
-<pre><code class="language-pepper">K [](K key)
+<pre><code class="language-pepper">[](key: K): K
 </code></pre>
 <p>Reads <code>s[key]</code>: returns the stored member equal to <code>key</code>, or the
 default of <code>K</code> (0, or a null reference for struct types) when <code>key</code> is
@@ -640,7 +640,7 @@ element is not inserted.</p>
 <li>the stored member equal to <code>key</code>, or the default of <code>K</code></li>
 </ul>
 <h4 id="operator--3"><a class="header" href="#operator--3">operator []</a></h4>
-<pre><code class="language-pepper">K [](K key, K value)
+<pre><code class="language-pepper">[](key: K, value: K): K
 </code></pre>
 <p>Writes <code>s[key] = value</code>: makes <code>key</code> a member, the same as
 <code>insert(key)</code>.</p>
@@ -671,7 +671,7 @@ while iterating makes the iterator’s next <code>next()</code> or <code>current
     }
 </code></pre>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
-<pre><code class="language-pepper">HashSet&lt;K&gt; copy(Copies copies)
+<pre><code class="language-pepper">copy(copies: Copies): HashSet&lt;K&gt;
 </code></pre>
 <p>Returns a deep copy: a new set holding a copy of each element, made
 with <code>copies.copy</code>. This is how <code>copy(value)</code> copies a HashSet (the

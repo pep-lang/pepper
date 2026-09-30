@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -238,7 +238,7 @@ junctions included), which is not followed.</p>
 false. Entries are normally obtained from <code>Directory.entries()</code>.</p>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="metadata"><a class="header" href="#metadata">metadata</a></h4>
-<pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
+<pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
 <p>Returns the metadata of the entry, following symlinks, exactly like
 <code>Path.metadata()</code> on the entry’s <code>path</code>. The file system is queried
@@ -284,7 +284,7 @@ afresh.</p>
 Use <code>Directory.open</code> to get one for an existing directory.</p>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="open"><a class="header" href="#open">open</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;Directory&gt; open(Path path)
+<pre><code class="language-pepper">static open(path: Path): IoResult&lt;Directory&gt;
 </code></pre>
 <p>Checks that <code>path</code> exists and is a directory (following symlinks) and
 returns a <code>Directory</code> for it. Nothing is kept open, so the directory
@@ -306,7 +306,7 @@ can still be renamed or removed afterwards.</p>
     }
 </code></pre>
 <h4 id="create"><a class="header" href="#create">create</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;void&gt; create(Path path)
+<pre><code class="language-pepper">static create(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Creates one directory (<code>mkdir</code> on POSIX, with mode 0777 less the
 umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.</p>
@@ -323,7 +323,7 @@ umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.
 <li><code>create_all</code></li>
 </ul>
 <h4 id="create_all"><a class="header" href="#create_all">create_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;void&gt; create_all(Path path)
+<pre><code class="language-pepper">static create_all(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Creates a directory and any missing parents, like <code>mkdir -p</code>.
 Succeeds without doing anything when <code>path</code> is empty or already a
@@ -345,7 +345,7 @@ directories at the same time.</p>
     var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;void&gt; remove(Path path)
+<pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Removes an empty directory (<code>rmdir</code> on POSIX, <code>RemoveDirectoryW</code> on
 Windows).</p>
@@ -362,7 +362,7 @@ Windows).</p>
 <li><code>remove_all</code></li>
 </ul>
 <h4 id="remove_all"><a class="header" href="#remove_all">remove_all</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;void&gt; remove_all(Path path)
+<pre><code class="language-pepper">static remove_all(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Removes <code>path</code> and, if it is a directory, everything inside it,
 recursively. Symlinks are removed, never followed, so nothing outside
@@ -393,7 +393,7 @@ Windows a read-only file inside the tree is such a failure
     }
 </code></pre>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;Path&gt; current()
+<pre><code class="language-pepper">static current(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
 are resolved (<code>getcwd</code> on POSIX, <code>GetCurrentDirectoryW</code> on Windows).</p>
@@ -406,7 +406,7 @@ are resolved (<code>getcwd</code> on POSIX, <code>GetCurrentDirectoryW</code> on
 <li><code>set_current</code></li>
 </ul>
 <h4 id="set_current"><a class="header" href="#set_current">set_current</a></h4>
-<pre><code class="language-pepper">static IoResult&lt;void&gt; set_current(Path path)
+<pre><code class="language-pepper">static set_current(path: Path): IoResult&lt;void&gt;
 </code></pre>
 <p>Changes the process’s current directory (<code>chdir</code> on POSIX,
 <code>SetCurrentDirectoryW</code> on Windows). This affects the whole process,
@@ -425,7 +425,7 @@ resolve against the new directory.</p>
 <li><code>current</code></li>
 </ul>
 <h4 id="temp"><a class="header" href="#temp">temp</a></h4>
-<pre><code class="language-pepper">static Path temp()
+<pre><code class="language-pepper">static temp(): Path
 </code></pre>
 <p>Returns the directory for temporary files. It is not created or
 checked, so it may not exist.</p>
@@ -445,7 +445,7 @@ a root, or <code>.</code> if that call fails.</p>
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="entries"><a class="header" href="#entries">entries</a></h4>
-<pre><code class="language-pepper">IoResult&lt;DirEntry[]&gt; entries()
+<pre><code class="language-pepper">entries(): IoResult&lt;DirEntry[]&gt;
 </code></pre>
 <p>Reads the directory’s listing now, all at once: every entry except
 <code>.</code> and <code>..</code>, in the order the operating system returns them (not

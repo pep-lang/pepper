@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -238,7 +238,7 @@ which a <code>for</code> loop drives through the trait.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
-<pre><code class="language-pepper">bool next()
+<pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
 <p>The first call moves to the first element, if any. Once it returns
@@ -248,7 +248,7 @@ false it must keep returning false.</p>
 <li>true if there is a current element, false when the elements are exhausted</li>
 </ul>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
-<pre><code class="language-pepper">T current()
+<pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
 <p>Calling it before the first <code>next()</code>, or after <code>next()</code> returned false,
@@ -320,7 +320,7 @@ passed through the transform function.</p>
 </ul>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
-<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
 <p>Makes an iterator over <code>transform</code> applied to the elements of <code>source</code>.</p>
 <p><strong>Parameters</strong></p>
@@ -330,7 +330,7 @@ passed through the transform function.</p>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
-<pre><code class="language-pepper">bool next()
+<pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
 <p><strong>Returns</strong></p>
@@ -338,7 +338,7 @@ passed through the transform function.</p>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
 <h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
-<pre><code class="language-pepper">U current()
+<pre><code class="language-pepper">current(): U
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
 <p><strong>Returns</strong></p>
@@ -360,7 +360,7 @@ iterator that the test function accepts.</p>
 </ul>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
-<pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; bool keep)
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
 <p>Makes an iterator over the elements of <code>source</code> that <code>keep</code> accepts.</p>
 <p><strong>Parameters</strong></p>
@@ -370,7 +370,7 @@ iterator that the test function accepts.</p>
 </ul>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
-<pre><code class="language-pepper">bool next()
+<pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element that the test function accepts.</p>
 <p><strong>Returns</strong></p>
@@ -378,7 +378,7 @@ iterator that the test function accepts.</p>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
 <h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
-<pre><code class="language-pepper">T current()
+<pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
 <p><strong>Returns</strong></p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -221,7 +221,7 @@ threads.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
-<pre><code class="language-pepper">void call(ThreadBody body)
+<pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
 <p>Runs <code>body</code> if no call has run a body yet; otherwise waits until that
 run has finished. Everything the body did is visible to the caller
@@ -239,7 +239,7 @@ when this returns.</p>
 <pre><code class="language-pepper">    config_once.call(load_config);
 </code></pre>
 <h4 id="is_done"><a class="header" href="#is_done">is_done</a></h4>
-<pre><code class="language-pepper">bool is_done()
+<pre><code class="language-pepper">is_done(): bool
 </code></pre>
 <p>Reports whether a body has finished running.</p>
 <p><strong>Returns</strong></p>
@@ -283,7 +283,7 @@ compile error.</p>
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
-<pre><code class="language-pepper">construct(shared () =&gt; T initializer)
+<pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
 <p>Creates a Lazy whose value <code>initializer</code> builds on the first <code>get()</code>.
 Nothing runs yet.</p>
@@ -297,7 +297,7 @@ Nothing runs yet.</p>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
-<pre><code class="language-pepper">T get()
+<pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the value, building it with the initializer on the first call.</p>
 <p>For a struct <code>T</code> the caller gets its own reference.</p>
@@ -310,7 +310,7 @@ Nothing runs yet.</p>
 <li>if the initializer itself calls <code>get()</code> on the same Lazy</li>
 </ul>
 <h4 id="is_built"><a class="header" href="#is_built">is_built</a></h4>
-<pre><code class="language-pepper">bool is_built()
+<pre><code class="language-pepper">is_built(): bool
 </code></pre>
 <p>Reports whether the value has been built.</p>
 <p><strong>Returns</strong></p>

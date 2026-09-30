@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -235,7 +235,7 @@ threads.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="channel-1"><a class="header" href="#channel-1">Channel()</a></h4>
-<pre><code class="language-pepper">construct(ulong capacity = 0)
+<pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
 <p>Creates an open, empty channel.</p>
 <p><strong>Parameters</strong></p>
@@ -252,7 +252,7 @@ threads.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="send"><a class="header" href="#send">send</a></h4>
-<pre><code class="language-pepper">bool send([Move] T value)
+<pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
 <p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
 <p><code>value</code> must be a new value: nothing else may reference it. The caller
@@ -274,7 +274,7 @@ Pass <code>move(x)</code> to send a variable’s value, or <code>copy(x)</code> 
     lines.send(move(line));   # line is null now
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
-<pre><code class="language-pepper">bool try_send([Move] T value)
+<pre><code class="language-pepper">try_send([Move] value: T): bool
 </code></pre>
 <p>Queues <code>value</code> only if there is room right now, without waiting. The
 value is dropped when it is not queued.</p>
@@ -287,7 +287,7 @@ value is dropped when it is not queued.</p>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
 <h4 id="receive"><a class="header" href="#receive">receive</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; receive()
+<pre><code class="language-pepper">receive(): Result&lt;T&gt;
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
 <p><strong>Returns</strong></p>
@@ -301,7 +301,7 @@ value is dropped when it is not queued.</p>
     }
 </code></pre>
 <h4 id="try_receive"><a class="header" href="#try_receive">try_receive</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; try_receive()
+<pre><code class="language-pepper">try_receive(): Result&lt;T&gt;
 </code></pre>
 <p>Takes the next value if one is waiting, without waiting.</p>
 <p><strong>Returns</strong></p>
@@ -309,7 +309,7 @@ value is dropped when it is not queued.</p>
 <li>the value, or an error if none is waiting (see <code>is_closed()</code> to tell an empty channel from a closed one)</li>
 </ul>
 <h4 id="receive_for"><a class="header" href="#receive_for">receive_for</a></h4>
-<pre><code class="language-pepper">Result&lt;T&gt; receive_for(ulong milliseconds)
+<pre><code class="language-pepper">receive_for(milliseconds: ulong): Result&lt;T&gt;
 </code></pre>
 <p>Like <code>receive()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
 <p><strong>Parameters</strong></p>
@@ -321,14 +321,14 @@ value is dropped when it is not queued.</p>
 <li>the value, or an error if the time ran out or once the channel is closed and empty</li>
 </ul>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
-<pre><code class="language-pepper">void close()
+<pre><code class="language-pepper">close()
 </code></pre>
 <p>Closes the channel and wakes every waiting sender and receiver.</p>
 <p>Later sends fail. Values already queued stay, and receivers still get
 them; after the last one, <code>receive()</code> returns an error and <code>for</code> loops
 end. Closing a closed channel does nothing.</p>
 <h4 id="is_closed"><a class="header" href="#is_closed">is_closed</a></h4>
-<pre><code class="language-pepper">bool is_closed()
+<pre><code class="language-pepper">is_closed(): bool
 </code></pre>
 <p>Reports whether <code>close()</code> has been called.</p>
 <p><strong>Returns</strong></p>
@@ -336,7 +336,7 @@ end. Closing a closed channel does nothing.</p>
 <li>true once the channel is closed, even while values are still queued</li>
 </ul>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
-<pre><code class="language-pepper">ulong count()
+<pre><code class="language-pepper">count(): ulong
 </code></pre>
 <p>Returns the number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
@@ -345,7 +345,7 @@ change it as soon as it returns.</p>
 <li>the number of queued values</li>
 </ul>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
-<pre><code class="language-pepper">ChannelIterator&lt;T&gt; iterate()
+<pre><code class="language-pepper">iterate(): ChannelIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator that receives until the channel is closed and
 empty. A <code>for</code> loop over the channel calls it.</p>
@@ -384,7 +384,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
 <p>The value the last successful <code>next()</code> received.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
-<pre><code class="language-pepper">construct(Channel&lt;T&gt; source)
+<pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
 <p>Creates an iterator that receives from <code>source</code>. <code>source.iterate()</code>
 does the same.</p>
@@ -394,7 +394,7 @@ does the same.</p>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
-<pre><code class="language-pepper">bool next()
+<pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
 <p><strong>Returns</strong></p>
@@ -402,7 +402,7 @@ does the same.</p>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
 <h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
-<pre><code class="language-pepper">T current()
+<pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
 <p><strong>Returns</strong></p>

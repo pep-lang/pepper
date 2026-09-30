@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -188,7 +188,7 @@ not thread-safe with the original, so it can be handed to another thread;
 <code>Copyable&lt;T&gt;</code> lets a type say how it is copied.</p>
 <p>Source: <code>runtime/copy.pep</code></p>
 <h2 id="copy"><a class="header" href="#copy">copy</a></h2>
-<pre><code class="language-pepper">copy&lt;T&gt;(T value): T
+<pre><code class="language-pepper">copy&lt;T&gt;(value: T): T
 </code></pre>
 <p>Returns a copy of <code>value</code> that shares no non-thread-safe object with it,
 so the copy can be handed to another thread.</p>
@@ -224,7 +224,7 @@ or a trait value is a compile error.</p>
     copied[0].append(" lovelace");   # names[0] is still "ada"
 </code></pre>
 <h2 id="move"><a class="header" href="#move">move</a></h2>
-<pre><code class="language-pepper">move&lt;T&gt;([MoveSource] T value): T
+<pre><code class="language-pepper">move&lt;T&gt;([MoveSource] value: T): T
 </code></pre>
 <p>Hands over the reference <code>value</code> holds and leaves it null, with no copy
 and no change to any count: the result is the same object.</p>
@@ -294,7 +294,7 @@ already made, so objects referenced twice stay shared.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
-<pre><code class="language-pepper">T copy(Copies copies)
+<pre><code class="language-pepper">copy(copies: Copies): T
 </code></pre>
 <p>Returns a copy of this value, for <code>copy</code>.</p>
 <p>Copy each struct value this one holds with <code>copies.copy(value)</code>. A

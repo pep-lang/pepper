@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -185,7 +185,7 @@
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
 <p>Source: <code>runtime/internals.pep</code></p>
 <h2 id="assert"><a class="header" href="#assert">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: String): void
+<pre><code class="language-pepper">assert(condition: bool, message: String)
 </code></pre>
 <p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
 <p>The check always runs; there is no release mode that removes it. A
@@ -204,7 +204,7 @@ builds no <code>String</code>. Any other message is evaluated before the call.</
 <pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;): void
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;)
 </code></pre>
 <p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
 NUL-terminated C string. A string literal message picks this overload,

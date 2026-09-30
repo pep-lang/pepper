@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -245,7 +245,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
-<pre><code class="language-pepper">construct(String name, ThreadBody body)
+<pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
 <p>Creates a <code>Thread</code> value for a thread that is already running. Programs
 get threads from <code>spawn</code> and <code>current()</code> instead; a <code>Thread</code> made
@@ -257,7 +257,7 @@ directly is not attached to any thread and cannot be joined.</p>
 </ul>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
-<pre><code class="language-pepper">static Thread spawn(ThreadBody body, String name = "")
+<pre><code class="language-pepper">static spawn(body: ThreadBody, name: String = ""): Thread
 </code></pre>
 <p>Starts a new thread that runs <code>body</code>.</p>
 <p>The new thread starts right away and runs until <code>body</code> returns. Its
@@ -280,7 +280,7 @@ directly is not attached to any thread and cannot be joined.</p>
     worker.join();
 </code></pre>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
-<pre><code class="language-pepper">static Thread current()
+<pre><code class="language-pepper">static current(): Thread
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
 <p>For a thread started with <code>spawn</code> this is the <code>Thread</code> that <code>spawn</code>
@@ -297,7 +297,7 @@ cannot be joined.</p>
     print(me.name(), "\n");   # "main" on the main thread
 </code></pre>
 <h4 id="sleep"><a class="header" href="#sleep">sleep</a></h4>
-<pre><code class="language-pepper">static void sleep(ulong milliseconds)
+<pre><code class="language-pepper">static sleep(milliseconds: ulong)
 </code></pre>
 <p>Pauses the calling thread for at least <code>milliseconds</code> milliseconds.</p>
 <p>The operating system may sleep longer, but never shorter.</p>
@@ -307,7 +307,7 @@ cannot be joined.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
-<pre><code class="language-pepper">ThreadId id()
+<pre><code class="language-pepper">id(): ThreadId
 </code></pre>
 <p>Returns the thread’s id, which no other thread in the program has.</p>
 <p><strong>Returns</strong></p>
@@ -315,7 +315,7 @@ cannot be joined.</p>
 <li>the thread’s id</li>
 </ul>
 <h4 id="name"><a class="header" href="#name">name</a></h4>
-<pre><code class="language-pepper">String name()
+<pre><code class="language-pepper">name(): String
 </code></pre>
 <p>Returns the name the thread was given.</p>
 <p><strong>Returns</strong></p>
@@ -323,7 +323,7 @@ cannot be joined.</p>
 <li>the name passed to <code>spawn</code>, <code>main</code> for the main thread, or an empty String for an unnamed thread</li>
 </ul>
 <h4 id="is_finished"><a class="header" href="#is_finished">is_finished</a></h4>
-<pre><code class="language-pepper">bool is_finished()
+<pre><code class="language-pepper">is_finished(): bool
 </code></pre>
 <p>Reports whether the thread’s body has returned.</p>
 <p>A thread that is not finished may finish at any moment, so a <code>false</code>
@@ -334,7 +334,7 @@ result can be out of date by the time it is used. Always false for a
 <li>true once the body has returned</li>
 </ul>
 <h4 id="is_joinable"><a class="header" href="#is_joinable">is_joinable</a></h4>
-<pre><code class="language-pepper">bool is_joinable()
+<pre><code class="language-pepper">is_joinable(): bool
 </code></pre>
 <p>Reports whether <code>join()</code> can be called: the thread was started by
 <code>spawn</code> and has not been joined yet.</p>
@@ -343,7 +343,7 @@ result can be out of date by the time it is used. Always false for a
 <li>true if the thread can be joined</li>
 </ul>
 <h4 id="join"><a class="header" href="#join">join</a></h4>
-<pre><code class="language-pepper">void join()
+<pre><code class="language-pepper">join()
 </code></pre>
 <p>Waits for the thread’s body to return.</p>
 <p>Returns right away if it already has. A thread can be joined once; a

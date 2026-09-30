@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -214,7 +214,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
-<pre><code class="language-pepper">[Implicit] construct(String value = "")
+<pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
 <p>Creates a path holding <code>value</code> as is: no validation, normalization or
 separator conversion.</p>
@@ -234,7 +234,7 @@ takes a <code>Path</code> also accepts text.</p>
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="separator"><a class="header" href="#separator">separator</a></h4>
-<pre><code class="language-pepper">static String separator()
+<pre><code class="language-pepper">static separator(): String
 </code></pre>
 <p>Returns the separator this platform inserts when it builds a path.</p>
 <p><strong>Returns</strong></p>
@@ -242,7 +242,7 @@ takes a <code>Path</code> also accepts text.</p>
 <li><code>"/"</code> on POSIX, <code>"\"</code> on Windows (where <code>/</code> is also accepted as a separator on input)</li>
 </ul>
 <h4 id="dot_index"><a class="header" href="#dot_index">dot_index</a></h4>
-<pre><code class="language-pepper">static ulong dot_index(String name)
+<pre><code class="language-pepper">static dot_index(name: String): ulong
 </code></pre>
 <p>Returns the byte offset of the dot that starts the extension in the
 file name <code>name</code>: the last <code>.</code> that is not the first byte. A leading
@@ -257,7 +257,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
-<pre><code class="language-pepper">String to_string()
+<pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the path’s text, the same String the Path holds, not a copy.</p>
 <p><strong>Returns</strong></p>
@@ -265,7 +265,7 @@ dot (<code>.bashrc</code>) starts the name, not an extension.</p>
 <li>the path as a String</li>
 </ul>
 <h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
-<pre><code class="language-pepper">bool is_empty()
+<pre><code class="language-pepper">is_empty(): bool
 </code></pre>
 <p>Returns whether the path has no text at all. The empty path means “no
 path”: it is what <code>parent()</code> returns for a root or a bare name, and
@@ -275,7 +275,7 @@ file-system operations on it fail.</p>
 <li>true when the path’s text is <code>""</code></li>
 </ul>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
-<pre><code class="language-pepper">bool is_absolute()
+<pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
 <p>Returns whether the path is absolute, meaning it does not depend on
 the current directory. Pure text: the path need not exist.</p>
@@ -289,7 +289,7 @@ path is relative.</p>
 <li>true when the path is absolute</li>
 </ul>
 <h4 id="is_relative"><a class="header" href="#is_relative">is_relative</a></h4>
-<pre><code class="language-pepper">bool is_relative()
+<pre><code class="language-pepper">is_relative(): bool
 </code></pre>
 <p>Returns whether the path is relative: the opposite of
 <code>is_absolute()</code>. The empty path is relative.</p>
@@ -298,7 +298,7 @@ path is relative.</p>
 <li>true when the path is not absolute</li>
 </ul>
 <h4 id="join"><a class="header" href="#join">join</a></h4>
-<pre><code class="language-pepper">Path join(Path other)
+<pre><code class="language-pepper">join(other: Path): Path
 </code></pre>
 <p>Returns this path with <code>other</code> appended as further components.</p>
 <p>A platform separator is inserted between the two unless this path
@@ -324,7 +324,7 @@ normalized: <code>a</code> joined with <code>../b</code> is <code>a/../b</code>.
     var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 </code></pre>
 <h4 id="join_str"><a class="header" href="#join_str">join_str</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] Path join_str(String other)
+<pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] join_str(other: String): Path
 </code></pre>
 <p>Returns this path with the String <code>other</code> appended, exactly like
 <code>join(Path(other))</code>. Deprecated: <code>join</code> accepts a <code>String</code> directly,
@@ -347,7 +347,7 @@ since a <code>String</code> converts to a <code>Path</code> implicitly.</p>
     var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 </code></pre>
 <h4 id="has_root_or_prefix"><a class="header" href="#has_root_or_prefix">has_root_or_prefix</a></h4>
-<pre><code class="language-pepper">bool has_root_or_prefix()
+<pre><code class="language-pepper">has_root_or_prefix(): bool
 </code></pre>
 <p>Returns whether the path starts with a root separator or, on Windows,
 a drive or UNC prefix. This is what makes <code>join</code> replace instead of
@@ -358,7 +358,7 @@ as <code>\x</code> and <code>C:x</code>. On POSIX it equals <code>is_absolute()<
 <li>true when the path has a root separator or a prefix</li>
 </ul>
 <h4 id="parent"><a class="header" href="#parent">parent</a></h4>
-<pre><code class="language-pepper">Path parent()
+<pre><code class="language-pepper">parent(): Path
 </code></pre>
 <p>Returns the path without its last component. Pure text: <code>..</code> is not
 resolved, so the parent of <code>a/..</code> is <code>a</code>.</p>
@@ -378,7 +378,7 @@ name keeps the root and prefix (<code>/a</code> gives <code>/</code>, <code>C:\x
     var none = io.Path("/").parent();         # "" (empty)
 </code></pre>
 <h4 id="file_name"><a class="header" href="#file_name">file_name</a></h4>
-<pre><code class="language-pepper">String file_name()
+<pre><code class="language-pepper">file_name(): String
 </code></pre>
 <p>Returns the last component of the path, ignoring trailing separators
 (<code>a/b/</code> gives <code>b</code>).</p>
@@ -393,7 +393,7 @@ name keeps the root and prefix (<code>/a</code> gives <code>/</code>, <code>C:\x
     var none = io.Path("a/..").file_name();         # ""
 </code></pre>
 <h4 id="file_stem"><a class="header" href="#file_stem">file_stem</a></h4>
-<pre><code class="language-pepper">String file_stem()
+<pre><code class="language-pepper">file_stem(): String
 </code></pre>
 <p>Returns the file name without its extension: everything before the
 last dot, unless that dot is the first character.</p>
@@ -402,7 +402,7 @@ last dot, unless that dot is the first character.</p>
 <li>the stem (<code>c.tar</code> for <code>c.tar.gz</code>, <code>.bashrc</code> for <code>.bashrc</code>, <code>foo</code> for <code>foo.</code>), or <code>""</code> when there is no file name (see <code>file_name()</code>)</li>
 </ul>
 <h4 id="extension"><a class="header" href="#extension">extension</a></h4>
-<pre><code class="language-pepper">String extension()
+<pre><code class="language-pepper">extension(): String
 </code></pre>
 <p>Returns the file name’s extension, without its dot: the text after
 the last dot, unless that dot is the first character. Only the file
@@ -412,7 +412,7 @@ name counts; a dot in a directory name (<code>a.b/c</code>) is not an extension.
 <li>the extension (<code>gz</code> for <code>c.tar.gz</code>), or <code>""</code> when there is none (<code>noext</code>, <code>.bashrc</code>, <code>foo.</code>) or no file name</li>
 </ul>
 <h4 id="with_extension"><a class="header" href="#with_extension">with_extension</a></h4>
-<pre><code class="language-pepper">Path with_extension(String ext)
+<pre><code class="language-pepper">with_extension(ext: String): Path
 </code></pre>
 <p>Returns this path with its file name’s extension replaced by <code>ext</code>,
 added when it has none, or removed when <code>ext</code> is empty. Trailing
@@ -433,7 +433,7 @@ separators after the file name are dropped.</p>
     var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
 </code></pre>
 <h4 id="components"><a class="header" href="#components">components</a></h4>
-<pre><code class="language-pepper">Array&lt;String&gt; components()
+<pre><code class="language-pepper">components(): Array&lt;String&gt;
 </code></pre>
 <p>Returns the path split into its components: the prefix (Windows drive
 or UNC share, such as <code>C:</code>), then the root separator (one character,
@@ -452,7 +452,7 @@ are dropped, except a leading one in a path with no prefix or root
     var d = io.Path("./a/b").components();            # [".", "a", "b"]
 </code></pre>
 <h4 id="normalize"><a class="header" href="#normalize">normalize</a></h4>
-<pre><code class="language-pepper">Path normalize()
+<pre><code class="language-pepper">normalize(): Path
 </code></pre>
 <p>Returns the path cleaned up lexically, without touching the file
 system: <code>.</code> parts and repeated or trailing separators are dropped, and
@@ -478,7 +478,7 @@ resolves.</p>
     var q = io.Path("a/..").normalize();         # "."
 </code></pre>
 <h4 id="exists"><a class="header" href="#exists">exists</a></h4>
-<pre><code class="language-pepper">bool exists()
+<pre><code class="language-pepper">exists(): bool
 </code></pre>
 <p>Returns whether something exists at this path, following symlinks. A
 relative path is resolved against the current directory.</p>
@@ -490,7 +490,7 @@ directory that cannot be read, and the empty path all give false. Use
 <li>true when the path (or a symlink’s target) can be stat’ed</li>
 </ul>
 <h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
-<pre><code class="language-pepper">bool is_file()
+<pre><code class="language-pepper">is_file(): bool
 </code></pre>
 <p>Returns whether the path names a regular file, following symlinks.</p>
 <p><strong>Returns</strong></p>
@@ -498,7 +498,7 @@ directory that cannot be read, and the empty path all give false. Use
 <li>true for a regular file or a symlink to one; false for anything else, and on any error (including a missing path)</li>
 </ul>
 <h4 id="is_directory"><a class="header" href="#is_directory">is_directory</a></h4>
-<pre><code class="language-pepper">bool is_directory()
+<pre><code class="language-pepper">is_directory(): bool
 </code></pre>
 <p>Returns whether the path names a directory, following symlinks.</p>
 <p><strong>Returns</strong></p>
@@ -506,7 +506,7 @@ directory that cannot be read, and the empty path all give false. Use
 <li>true for a directory or a symlink to one; false for anything else, and on any error (including a missing path)</li>
 </ul>
 <h4 id="is_dir"><a class="header" href="#is_dir">is_dir</a></h4>
-<pre><code class="language-pepper">[Deprecated("use 'is_directory' instead", "is_directory")] bool is_dir()
+<pre><code class="language-pepper">[Deprecated("use 'is_directory' instead", "is_directory")] is_dir(): bool
 </code></pre>
 <p>Deprecated: use <code>is_directory</code> instead. Returns whether the path
 names a directory, following symlinks.</p>
@@ -515,7 +515,7 @@ names a directory, following symlinks.</p>
 <li>the same as <code>is_directory()</code></li>
 </ul>
 <h4 id="metadata"><a class="header" href="#metadata">metadata</a></h4>
-<pre><code class="language-pepper">IoResult&lt;Metadata&gt; metadata()
+<pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
 <p>Returns the metadata of the file or directory at this path, following
 symlinks: the result describes the target (so on POSIX <code>is_symlink</code> is
@@ -538,7 +538,7 @@ opened for attributes only.</p>
     }
 </code></pre>
 <h4 id="symlink_metadata"><a class="header" href="#symlink_metadata">symlink_metadata</a></h4>
-<pre><code class="language-pepper">IoResult&lt;Metadata&gt; symlink_metadata()
+<pre><code class="language-pepper">symlink_metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
 <p>Returns the metadata of the path itself without following a symlink
 at the end of it, so for a symlink <code>is_symlink</code> is true and the rest
@@ -556,7 +556,7 @@ link. For anything that is not a symlink it equals <code>metadata()</code>.</p>
 <li><code>metadata</code></li>
 </ul>
 <h4 id="canonicalize"><a class="header" href="#canonicalize">canonicalize</a></h4>
-<pre><code class="language-pepper">IoResult&lt;Path&gt; canonicalize()
+<pre><code class="language-pepper">canonicalize(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the absolute path the file system resolves this path to:
 relative to the current directory, with every symlink, <code>.</code> and <code>..</code>
@@ -581,7 +581,7 @@ removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).
     }
 </code></pre>
 <h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
-<pre><code class="language-pepper">bool ==(Path rhs)
+<pre><code class="language-pepper">==(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths have exactly the same text. The comparison
 is byte by byte, with no normalization and case-sensitive on every
@@ -597,7 +597,7 @@ results to ignore spelling differences.</p>
 <li>true when both paths’ texts are equal</li>
 </ul>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator !=</a></h4>
-<pre><code class="language-pepper">bool !=(Path rhs)
+<pre><code class="language-pepper">!=(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths differ in their text: the opposite of <code>==</code>,
 with the same byte-by-byte comparison.</p>

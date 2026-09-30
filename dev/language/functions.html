@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -294,8 +294,10 @@ returned, or used as an operand or condition: <code>var x = log("hi");</code> re
 <p>A function without a return type gets one from its <code>return</code> statements. It
 returns <code>void</code> when no <code>return</code> has a value, and otherwise the type of the first
 <code>return</code> that has one, so <code>half(x: double) { return x / 2; }</code> returns a
-<code>double</code>. <code>main</code> with no return type returns an <code>int</code>, and reaching its closing
-brace exits with 0.</p>
+<code>double</code>. A generic function’s return type is inferred for each
+specialization, so <code>first&lt;T&gt;(a: T, b: T) { return a; }</code> returns an <code>int</code> for
+<code>first&lt;int&gt;</code>. <code>main</code> with no return type returns an <code>int</code>, and reaching its
+closing brace exits with 0.</p>
 <p>Writing the return type is still clearer for a function that returns a value,
 and it lets the compiler check each <code>return</code> against it.</p>
 <h2 id="parameters"><a class="header" href="#parameters">Parameters</a></h2>

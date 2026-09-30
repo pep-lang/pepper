@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -237,7 +237,7 @@ so destroy one only after the threads that used it have exited.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
-<pre><code class="language-pepper">T get()
+<pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the calling thread’s value.</p>
 <p>For a struct <code>T</code> the caller gets its own reference. Only for a
@@ -247,7 +247,7 @@ thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var va
 <li>the value this thread last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
 </ul>
 <h4 id="set"><a class="header" href="#set">set</a></h4>
-<pre><code class="language-pepper">void set([Move] T value)
+<pre><code class="language-pepper">set([Move] value: T)
 </code></pre>
 <p>Stores <code>value</code> as the calling thread’s value, replacing (and, for a
 struct <code>T</code>, releasing) the one it held. Other threads’ values are not
@@ -260,7 +260,7 @@ checks.</p>
 <li><code>value</code> — the new value for this thread</li>
 </ul>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
-<pre><code class="language-pepper">ThreadLocalGuard&lt;T&gt; enter()
+<pre><code class="language-pepper">enter(): ThreadLocalGuard&lt;T&gt;
 </code></pre>
 <p>Returns the guard that a <code>with</code> block enters to reach the calling
 thread’s value: <code>with (var value = local.enter()) { ... }</code>. The body
@@ -283,7 +283,7 @@ no value (for a struct <code>T</code>).</p>
     }
 </code></pre>
 <h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
-<pre><code class="language-pepper">bool is_set()
+<pre><code class="language-pepper">is_set(): bool
 </code></pre>
 <p>Reports whether the calling thread has stored a value since it started
 or last called <code>clear()</code>.</p>
@@ -292,7 +292,7 @@ or last called <code>clear()</code>.</p>
 <li>true if this thread has a value</li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
-<pre><code class="language-pepper">void clear()
+<pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes the calling thread’s value, releasing it for a struct <code>T</code>.
 <code>get()</code> returns the default of <code>T</code> afterwards.</p>
@@ -309,7 +309,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 </ul>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
-<pre><code class="language-pepper">construct(ThreadLocal&lt;T&gt; local)
+<pre><code class="language-pepper">construct(local: ThreadLocal&lt;T&gt;)
 </code></pre>
 <p>Creates the guard for the calling thread’s value of <code>local</code>; the same
 as <code>local.enter()</code>.</p>
@@ -319,7 +319,7 @@ as <code>local.enter()</code>.</p>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="enter-1"><a class="header" href="#enter-1">enter</a></h4>
-<pre><code class="language-pepper">T enter()
+<pre><code class="language-pepper">enter(): T
 </code></pre>
 <p>Returns the calling thread’s value, for the <code>with</code> header to bind.</p>
 <p><strong>Returns</strong></p>
@@ -327,7 +327,7 @@ as <code>local.enter()</code>.</p>
 <li>this thread’s value, or the default of <code>T</code> (null for a struct) when it has none</li>
 </ul>
 <h4 id="exit"><a class="header" href="#exit">exit</a></h4>
-<pre><code class="language-pepper">void exit()
+<pre><code class="language-pepper">exit()
 </code></pre>
 <p>Does nothing: the value stays with the thread.</p>
 

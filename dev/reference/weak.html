@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -225,7 +225,7 @@ freely.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
-<pre><code class="language-pepper">construct(T target)
+<pre><code class="language-pepper">construct(target: T)
 </code></pre>
 <p>Creates a weak reference to <code>target</code>’s object.</p>
 <p><strong>Parameters</strong></p>
@@ -234,7 +234,7 @@ freely.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="expired"><a class="header" href="#expired">expired</a></h4>
-<pre><code class="language-pepper">bool expired()
+<pre><code class="language-pepper">expired(): bool
 </code></pre>
 <p>Reports whether the object has been destroyed.</p>
 <p>A <code>false</code> result can be out of date by the time it is used; enter the
@@ -244,7 +244,7 @@ reference with <code>with</code> to use the object.</p>
 <li>true once the object has been destroyed, or if the reference was made from null</li>
 </ul>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
-<pre><code class="language-pepper">T enter()
+<pre><code class="language-pepper">enter(): T
 </code></pre>
 <p>Upgrades the weak reference for a <code>with</code> block.</p>
 <p><strong>Returns</strong></p>
@@ -252,7 +252,7 @@ reference with <code>with</code> to use the object.</p>
 <li>a new strong reference to the object, or null once it has been destroyed</li>
 </ul>
 <h4 id="exit"><a class="header" href="#exit">exit</a></h4>
-<pre><code class="language-pepper">void exit()
+<pre><code class="language-pepper">exit()
 </code></pre>
 <p>Leaves the scope. The strong reference <code>enter()</code> returned is released
 by the <code>with</code> block itself, so there is nothing to do.</p>

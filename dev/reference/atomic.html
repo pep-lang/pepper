@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -214,7 +214,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
-<pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
+<pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
 <p>Creates an Atomic holding <code>value</code>.</p>
 <p>For a struct <code>T</code> the Atomic acquires a reference to <code>value</code>.</p>
@@ -228,7 +228,7 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
-<pre><code class="language-pepper">T load()
+<pre><code class="language-pepper">load(): T
 </code></pre>
 <p>Atomically reads the current value, with acquire ordering.</p>
 <p>For a struct <code>T</code> the returned reference is acquired for the caller, so
@@ -238,7 +238,7 @@ it stays valid even if another thread stores a new value afterwards.</p>
 <li>the value currently stored</li>
 </ul>
 <h4 id="store"><a class="header" href="#store">store</a></h4>
-<pre><code class="language-pepper">void store(T v)
+<pre><code class="language-pepper">store(v: T)
 </code></pre>
 <p>Atomically replaces the stored value with <code>v</code>, with release ordering.</p>
 <p>For a struct <code>T</code> this is a <code>shared_ptr</code> assignment: the slot acquires
@@ -249,7 +249,7 @@ exchange, so concurrent stores never leak or double-release.</p>
 <li><code>v</code> — the new value</li>
 </ul>
 <h4 id="compare_exchange"><a class="header" href="#compare_exchange">compare_exchange</a></h4>
-<pre><code class="language-pepper">bool compare_exchange(T expected, T desired)
+<pre><code class="language-pepper">compare_exchange(expected: T, desired: T): bool
 </code></pre>
 <p>Atomically replaces the stored value with <code>desired</code> if and only if it
 currently equals <code>expected</code> (a compare-and-swap).</p>
@@ -275,7 +275,7 @@ failure no reference count changes.</p>
     }
 </code></pre>
 <h4 id="exchange"><a class="header" href="#exchange">exchange</a></h4>
-<pre><code class="language-pepper">T exchange(T v)
+<pre><code class="language-pepper">exchange(v: T): T
 </code></pre>
 <p>Atomically replaces the stored value with <code>v</code> and returns the value it
 replaced.</p>
@@ -295,7 +295,7 @@ acquires <code>v</code>, and the caller owns the returned reference.</p>
     var old = e.exchange(2);   # old == 1, e.load() == 2
 </code></pre>
 <h4 id="is_lock_free"><a class="header" href="#is_lock_free">is_lock_free</a></h4>
-<pre><code class="language-pepper">bool is_lock_free()
+<pre><code class="language-pepper">is_lock_free(): bool
 </code></pre>
 <p>Reports whether this Atomic’s slot fits a native atomic instruction,
 so its operations never need a lock or an atomic library call.</p>
@@ -307,7 +307,7 @@ the stored value.</p>
 <li>true when the operations are lock-free</li>
 </ul>
 <h4 id="fetch_add"><a class="header" href="#fetch_add">fetch_add</a></h4>
-<pre><code class="language-pepper">T fetch_add(T v)
+<pre><code class="language-pepper">fetch_add(v: T): T
 </code></pre>
 <p>Atomically adds <code>v</code> to the stored value and returns the value before
 the addition, like <code>std::atomic&lt;T&gt;::fetch_add</code>.</p>
@@ -327,7 +327,7 @@ program when it runs.</p>
     var old = c.fetch_add(5);   # old == 10, c.load() == 15
 </code></pre>
 <h4 id="fetch_sub"><a class="header" href="#fetch_sub">fetch_sub</a></h4>
-<pre><code class="language-pepper">T fetch_sub(T v)
+<pre><code class="language-pepper">fetch_sub(v: T): T
 </code></pre>
 <p>Atomically subtracts <code>v</code> from the stored value and returns the value
 before the subtraction, like <code>std::atomic&lt;T&gt;::fetch_sub</code>.</p>
@@ -342,7 +342,7 @@ compiles but aborts the program when it runs.</p>
 <li>the value stored immediately before the subtraction</li>
 </ul>
 <h4 id="fetch_and"><a class="header" href="#fetch_and">fetch_and</a></h4>
-<pre><code class="language-pepper">T fetch_and(T v)
+<pre><code class="language-pepper">fetch_and(v: T): T
 </code></pre>
 <p>Atomically replaces the stored value with its bitwise AND with <code>v</code> and
 returns the value before the operation, like
@@ -358,7 +358,7 @@ the program when it runs.</p>
 <li>the value stored immediately before the operation</li>
 </ul>
 <h4 id="fetch_or"><a class="header" href="#fetch_or">fetch_or</a></h4>
-<pre><code class="language-pepper">T fetch_or(T v)
+<pre><code class="language-pepper">fetch_or(v: T): T
 </code></pre>
 <p>Atomically replaces the stored value with its bitwise OR with <code>v</code> and
 returns the value before the operation, like
@@ -374,7 +374,7 @@ the program when it runs.</p>
 <li>the value stored immediately before the operation</li>
 </ul>
 <h4 id="fetch_xor"><a class="header" href="#fetch_xor">fetch_xor</a></h4>
-<pre><code class="language-pepper">T fetch_xor(T v)
+<pre><code class="language-pepper">fetch_xor(v: T): T
 </code></pre>
 <p>Atomically replaces the stored value with its bitwise XOR with <code>v</code> and
 returns the value before the operation, like

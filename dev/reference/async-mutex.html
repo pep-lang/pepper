@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-286f519f.js";
+            window.path_to_searchindex_js = "../searchindex-288db992.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b64c440f.js"></script>
@@ -238,7 +238,7 @@ program, so a Mutex is never left “poisoned”.</p>
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
-<pre><code class="language-pepper">construct([Move] T value)
+<pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
 <p>Creates an unlocked Mutex that owns <code>value</code>.</p>
 <p><code>value</code> must be a new value, such as a constructor call, <code>copy(x)</code> or
@@ -257,7 +257,7 @@ its reference over, so nothing is copied.</p>
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
-<pre><code class="language-pepper">MutexGuard&lt;T&gt; lock()
+<pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
 <p>Waits until the calling thread holds the lock, and returns the guard
 that a <code>with</code> block enters to reach the value.</p>
@@ -279,7 +279,7 @@ else holds the lock until its last reference is released.</p>
     }
 </code></pre>
 <h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
-<pre><code class="language-pepper">MutexGuard&lt;T&gt; try_lock()
+<pre><code class="language-pepper">try_lock(): MutexGuard&lt;T&gt;
 </code></pre>
 <p>Takes the lock only if no thread holds it right now, without waiting.</p>
 <p>In <code>with (var v = mutex.try_lock()) { ... } else { ... }</code>, the body runs
@@ -297,7 +297,7 @@ calling thread already holding the lock counts as busy.</p>
     }
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
-<pre><code class="language-pepper">T replace([Move] T value)
+<pre><code class="language-pepper">replace([Move] value: T): T
 </code></pre>
 <p>Replaces the whole value and returns the one the Mutex held, which the
 caller then owns outright: nothing else references it any more.</p>
@@ -319,7 +319,7 @@ the constructor, and is handed over without a copy.</p>
 <pre><code class="language-pepper">    var done = pending.replace(Array&lt;Job&gt;());   # take every job at once
 </code></pre>
 <h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
-<pre><code class="language-pepper">bool is_held()
+<pre><code class="language-pepper">is_held(): bool
 </code></pre>
 <p>Reports whether the calling thread holds the lock.</p>
 <p><strong>Returns</strong></p>
@@ -327,7 +327,7 @@ the constructor, and is handed over without a copy.</p>
 <li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) on this thread and the guard’s destruction</li>
 </ul>
 <h4 id="condition"><a class="header" href="#condition">condition</a></h4>
-<pre><code class="language-pepper">Condition&lt;T&gt; condition()
+<pre><code class="language-pepper">condition(): Condition&lt;T&gt;
 </code></pre>
 <p>Returns a new condition variable that waits on this Mutex.</p>
 <p>Create it once and share it, as the Mutex is shared: every thread that
@@ -369,7 +369,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 a <code>try_lock()</code> that found the lock busy.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
-<pre><code class="language-pepper">construct(Mutex&lt;T&gt; source, bool wait = true)
+<pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
 </code></pre>
 <p>Locks <code>source</code> and creates the guard that holds it; the same as
 <code>source.lock()</code> (or <code>source.try_lock()</code> when <code>wait</code> is false).</p>
@@ -384,7 +384,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
-<pre><code class="language-pepper">T enter()
+<pre><code class="language-pepper">enter(): T
 </code></pre>
 <p>Returns the Mutex’s value, for the <code>with</code> header to bind.</p>
 <p>For a struct <code>T</code> the caller gets its own reference.</p>
@@ -393,7 +393,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
 </ul>
 <h4 id="exit"><a class="header" href="#exit">exit</a></h4>
-<pre><code class="language-pepper">void exit()
+<pre><code class="language-pepper">exit()
 </code></pre>
 <p>Unlocks the Mutex if the guard holds it. The destructor calls it;
 calling it again does nothing.</p>
@@ -444,7 +444,7 @@ usually while it still holds the lock.</p>
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
-<pre><code class="language-pepper">construct(Mutex&lt;T&gt; mutex)
+<pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
 </code></pre>
 <p>Creates a condition variable that waits on <code>mutex</code>. <code>mutex.condition()</code>
 does the same.</p>
@@ -458,7 +458,7 @@ does the same.</p>
 </ul>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
-<pre><code class="language-pepper">void wait()
+<pre><code class="language-pepper">wait()
 </code></pre>
 <p>Unlocks the Mutex, sleeps until another thread calls <code>notify_one()</code> or
 <code>notify_all()</code>, and locks the Mutex again before returning.</p>
@@ -476,7 +476,7 @@ that re-checks what it waits for.</p>
     }
 </code></pre>
 <h4 id="wait_for"><a class="header" href="#wait_for">wait_for</a></h4>
-<pre><code class="language-pepper">bool wait_for(ulong milliseconds)
+<pre><code class="language-pepper">wait_for(milliseconds: ulong): bool
 </code></pre>
 <p>Like <code>wait()</code>, but gives up after about <code>milliseconds</code> milliseconds.
 The Mutex is locked again before it returns either way.</p>
@@ -493,13 +493,13 @@ The Mutex is locked again before it returns either way.</p>
 <li>if the calling thread does not hold the Mutex</li>
 </ul>
 <h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
-<pre><code class="language-pepper">void notify_one()
+<pre><code class="language-pepper">notify_one()
 </code></pre>
 <p>Wakes one thread waiting on this condition, if any. The caller does
 not need to hold the Mutex, but usually does, having just changed the
 value.</p>
 <h4 id="notify_all"><a class="header" href="#notify_all">notify_all</a></h4>
-<pre><code class="language-pepper">void notify_all()
+<pre><code class="language-pepper">notify_all()
 </code></pre>
 <p>Wakes every thread waiting on this condition. Each locks the Mutex in
 turn before its <code>wait()</code> returns.</p>
