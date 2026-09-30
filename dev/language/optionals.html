@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4b91f40c.js";
+            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-845c075c.js"></script>
@@ -182,7 +182,8 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="optional-values"><a class="header" href="#optional-values">Optional values</a></h1>
-<p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>: either <strong>Some</strong>,
+<p>A value that may be missing has the type <code>Optional&lt;T&gt;</code>, written <code>T?</code> for
+short: either <strong>Some</strong>,
 holding a <code>T</code>, or <strong>None</strong>, holding nothing. It plays the role of Rust’s
 <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>. Use it instead of a null reference or a
 sentinel such as <code>-1</code> or <code>""</code>: the type tells the caller that the value can be
@@ -204,7 +205,8 @@ find_adult(people: Array&lt;Person&gt;): Optional&lt;Person&gt; {
     return Optional&lt;Person&gt;.none();
 }
 
-index_of(text: String, wanted: String): Optional&lt;ulong&gt; {
+# `ulong?` is shorthand for `Optional&lt;ulong&gt;`.
+index_of(text: String, wanted: String): ulong? {
     var i: ulong = 0;
     while (i &lt; text.length()) {
         if (text[i] == wanted) { return Optional&lt;ulong&gt;.some(i); }
@@ -233,8 +235,28 @@ main(): int {
     # Optional&lt;T&gt;() is None, like Optional&lt;T&gt;.none().
     var nothing = Optional&lt;int&gt;();
     assert(nothing.is_none(), "Optional() is None");
+
+    # An optional slot that is not given a value starts as None.
+    var later: String?;
+    assert(later.is_none(), "unassigned optionals are None");
     return 0;
 }
+</code></pre>
+<h2 id="the-t-shorthand"><a class="header" href="#the-t-shorthand">The <code>T?</code> shorthand</a></h2>
+<p><code>T?</code> means <code>Optional&lt;T&gt;</code> wherever a type is written: <code>x: int?</code>,
+<code>find(key: String): Node?</code>, <code>Array&lt;Node?&gt;</code>, a field <code>Token? leaf;</code>. The <code>?</code>
+applies to everything before it, so <code>int[]?</code> is an optional array, and
+<code>Array&lt;int?&gt;</code> is an array of optional values.</p>
+<p>A C-style declaration inside a function body, such as <code>Node? n = m;</code>, is read
+as a declaration only when a name follows the <code>?</code> and then <code>=</code>, <code>;</code> or the end
+of the line; <code>a ? b : c</code> stays a conditional expression.</p>
+<h2 id="optional-slots-start-as-none"><a class="header" href="#optional-slots-start-as-none">Optional slots start as None</a></h2>
+<p>A variable or field of an optional type that is not given a value starts as
+None, not null:</p>
+<pre><code class="language-pepper">struct Node {
+    Token? leaf;   # None until assigned
+}
+var count: int?;   # None
 </code></pre>
 <h2 id="creating-and-checking-optionals"><a class="header" href="#creating-and-checking-optionals">Creating and checking optionals</a></h2>
 <div class="table-wrapper">
@@ -264,7 +286,6 @@ know <em>why</em>, return a <a href="results.html"><code>Result</code></a> inste
 error.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li>There is no <code>T?</code> shorthand yet: write <code>Optional&lt;T&gt;</code>.</li>
 <li>An optional is checked with <code>is_some()</code> or <code>is_none()</code> and read with
 <code>value()</code> or <code>value_or</code>; <code>match</code> does not work on it yet. <code>Optional</code> will
 become an <a href="enums.html">enum</a> with <code>None</code> and <code>Some(value)</code> cases once enum

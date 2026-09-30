@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4b91f40c.js";
+            window.path_to_searchindex_js = "../searchindex-01cdfa3d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-845c075c.js"></script>
@@ -193,6 +193,8 @@ None, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s 
 value may be missing: the type says so, and reading the value goes through
 <code>value()</code>, which checks, or <code>value_or()</code>, which cannot fail. It works for
 every type, including those that have no null, such as <code>int</code>.</p>
+<p><code>T?</code> is shorthand for <code>Optional&lt;T&gt;</code>, and a variable or field of an
+optional type that is not given a value starts as None.</p>
 <p>Build one with the static <code>some</code> or <code>none</code> functions, or <code>Optional&lt;T&gt;()</code>
 for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
 <p><strong>Type parameters</strong></p>
@@ -200,7 +202,7 @@ for None, and test it with <code>is_some()</code> or <code>is_none()</code>.</p>
 <li><code>T</code> — the type of the value a Some optional holds</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    find_even(values: Array&lt;int&gt;): Optional&lt;int&gt; {
+<pre><code class="language-pepper">    find_even(values: Array&lt;int&gt;): int? {
         for (var v in values) {
             if (v % 2 == 0) { return Optional&lt;int&gt;.some(v); }
         }
