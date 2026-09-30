@@ -136,6 +136,21 @@ Outside a task, the same calls block the thread as before. A socket belongs
 to the worker whose task made it: tasks started with `spawn_local` can share
 it, and each spawned task makes its own.
 
+### Files
+
+`File.read`, `write` and `write_all` in a task park the task until the
+system call is done, and the worker runs other tasks meanwhile. With the
+`IoUring` backend the kernel does the read or write itself; with the others
+a thread from `run_blocking`'s pool makes the blocking call. Opening,
+seeking, `metadata` and the other `File` calls still block the thread, as
+they are quick on local disks. A cancel or a `timeout` does not cut a read
+or write short: it takes effect once the call returns.
+
+The array a read fills or a write sends from is in use until the call
+returns, so growing it from another task meanwhile panics ("Array: the
+buffer is in use by an I/O operation"). A `String` passed to `write_all` is
+copied first.
+
 ### Accepting on every worker
 
 An `io.SharedTcpListener` is a listening socket that any thread can accept
@@ -243,8 +258,8 @@ through the same messages.
 
 ## Current status
 
-- Files block the thread on every platform; asynchronous files come
-  later.
+- `File` calls other than `read`, `write` and `write_all` (opening,
+  seeking, `sync`, directories) block the thread in a task.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is
   built on fiber local storage); elsewhere the tasks of a thread share it.
 

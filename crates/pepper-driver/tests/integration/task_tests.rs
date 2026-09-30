@@ -948,8 +948,124 @@ main(): int {
 }
 "##;
 
+/// File reads and writes in tasks: the task waits while the worker runs
+/// others, on the pool or (Linux) io_uring; results match; nothing leaks.
+const FILES_PROGRAM: &str = r##"
+import async;
+import io;
+
+const ticks = Atomic<long>(0);
+
+# Writes `size` patterned bytes to `path`, reads them back in 64 KiB reads,
+# and checks them. Returns how many reads it took.
+round_trip(path: io.Path, size: ulong): long {
+    var data = Array<u8>();
+    var i: ulong = 0;
+    while (i < size) {
+        data.append((i % 251) as u8);
+        i = i + 1;
+    }
+    var out = io.File.create(path).value();
+    assert(out.write_all(data).is_ok(), "write_all");
+    assert(out.write_all("tail").is_ok(), "write_all string");
+    out.close();
+    var file = io.File.open(path).value();
+    var back = Array<u8>();
+    var reads: long = 0;
+    while (true) {
+        var r = file.read(back, 65536);
+        assert(r.is_ok(), "read");
+        if (r.value() == 0) {
+            break;
+        }
+        reads = reads + 1;
+    }
+    file.close();
+    assert(back.count() == size + 4, "every byte came back");
+    i = 0;
+    while (i < size) {
+        assert(back[i] == (i % 251) as u8, "the bytes match");
+        i = i + 1;
+    }
+    assert(back[size] == 116 && back[size + 3] == 108, "the string came last");
+    return reads;
+}
+
+main(): int {
+    async.Thread.current();
+    var path = io.Directory.temp().join("SCRATCH.bin");
+    var before = _pep_live_allocs();
+    async.run_with(async.RuntimeOptions().workers(1), () => {
+        var stop = Atomic<int>(0);
+        var ticker = async.Task<void>.spawn_local(() => {
+            while (stop.load() == 0) {
+                ticks.fetch_add(1);
+                async.yield_now();
+            }
+        });
+        var reads = round_trip(path, 1048576);
+        assert(reads >= 16, "read in chunks");
+        assert(ticks.load() >= reads, "the worker ran another task during each read");
+
+        # Errors come back as errors.
+        var missing = io.File.open(io.Directory.temp().join("SCRATCH-missing.bin"));
+        assert(missing.is_err() && missing.error().is_not_found(), "not found");
+
+        # Several tasks at once.
+        var tasks = Array<async.Task<long>>();
+        var names = Array<String>();
+        names.append("SCRATCH-0.bin");
+        names.append("SCRATCH-1.bin");
+        names.append("SCRATCH-2.bin");
+        names.append("SCRATCH-3.bin");
+        var n: ulong = 0;
+        while (n < 4) {
+            var name = names[n];
+            tasks.append(async.Task<long>.spawn_local(() => {
+                var p = io.Directory.temp().join(name);
+                var r = round_trip(p, 200000);
+                io.File.remove(p);
+                return r;
+            }));
+            n = n + 1;
+        }
+        for (var t in tasks) {
+            assert(t.join().value() >= 4, "each task read its file");
+        }
+        stop.store(1);
+        ticker.join();
+    });
+    io.File.remove(path);
+    assert(_pep_live_allocs() == before, "a run frees everything it allocated");
+    print("ok");
+    return 0;
+}
+"##;
+
+/// Growing an array that a file read in a task is filling panics.
+const PINNED_PROGRAM: &str = r##"
+import async;
+import io;
+
+main(): int {
+    var path = io.Directory.temp().join("SCRATCH.bin");
+    io.File.write_text(path, "some bytes");
+    async.run_with(async.RuntimeOptions().workers(1), () => {
+        var buffer = Array<u8>();
+        var file = io.File.open(path).value();
+        var reader = async.Task<void>.spawn_local(() => {
+            file.read(buffer, 64);
+        });
+        async.yield_now();
+        buffer.reserve(buffer.capacity() + 1);
+        reader.join();
+    });
+    return 0;
+}
+"##;
+
 fn programs() -> Vec<(&'static str, &'static str)> {
-    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM)]
+    vec![("sockets", SOCKETS_PROGRAM), ("spawn", SPAWN_PROGRAM), ("blocking", BLOCKING_PROGRAM), ("sync", SYNC_PROGRAM), ("files", FILES_PROGRAM)]
 }
 
 #[test]
@@ -1034,6 +1150,34 @@ fn sync_objects_park_tasks() {
 fn sync_objects_park_tasks_with_poll() {
     let source = SYNC_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
     assert_runs("task_sync_poll", &source);
+}
+
+/// A scratch name unique to this test process.
+fn scratch(program: &str, name: &str) -> String {
+    program.replace("SCRATCH", &format!("pepper_task_{}_{}", name, std::process::id()))
+}
+
+#[test]
+fn files_park_their_task() {
+    assert_runs("task_files", &scratch(FILES_PROGRAM, "files"));
+}
+
+#[test]
+fn files_park_their_task_with_poll() {
+    let source = FILES_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.Poll)");
+    assert_runs("task_files_poll", &scratch(&source, "files_poll"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn files_park_their_task_with_io_uring() {
+    let source = FILES_PROGRAM.replace("async.RuntimeOptions()", "async.RuntimeOptions().backend(async.Backend.IoUring)");
+    assert_runs("task_files_io_uring", &scratch(&source, "files_io_uring"));
+}
+
+#[test]
+fn growing_a_pinned_array_panics() {
+    assert_panics("task_pinned", &scratch(PINNED_PROGRAM, "pinned"), "Array: the buffer is in use by an I/O operation");
 }
 
 #[test]

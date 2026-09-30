@@ -279,8 +279,14 @@ struct _Worker {
     var _ready_interests: Array<int>;
     # The tasks waiting on each registered socket.
     var _waits: HashMap<ulong, _SocketWaits>;
-    # How many tasks are parked on sockets.
+    # How many tasks are parked on sockets or file transfers.
     var _io_waiting: ulong;
+    # Tasks parked on a file transfer the driver runs, by id, and the
+    # results of finished transfers not yet taken.
+    var _file_waits: HashMap<ulong, _TaskCore>;
+    var _file_results: HashMap<ulong, long>;
+    var _finished_tasks: Array<ulong>;
+    var _finished_results: Array<long>;
     # Tasks parked on a `Mutex`, `Condition` or `Channel`, by id (see
     # sync_wait.pep).
     var _sync_waits: HashMap<ulong, _TaskCore>;
@@ -303,6 +309,10 @@ struct _Worker {
         this._ready_interests = Array<int>();
         this._waits = HashMap<ulong, _SocketWaits>();
         this._sync_waits = HashMap<ulong, _TaskCore>();
+        this._file_waits = HashMap<ulong, _TaskCore>();
+        this._file_results = HashMap<ulong, long>();
+        this._finished_tasks = Array<ulong>();
+        this._finished_results = Array<long>();
         this._ready = Array<_TaskCore>();
         this._timers = Array<_Timer>();
         this._tasks = Array<_TaskCore>();
@@ -557,6 +567,18 @@ struct _Worker {
         }
         this._ready_handles.clear();
         this._ready_interests.clear();
+        this._driver._finished_files(this._finished_tasks, this._finished_results);
+        i = 0;
+        while (i < this._finished_tasks.count()) {
+            var task = this._finished_tasks[i];
+            this._file_results.insert(task, this._finished_results[i]);
+            if (this._file_waits.contains(task)) {
+                this._wake(this._file_waits.get(task));
+            }
+            i = i + 1;
+        }
+        this._finished_tasks.clear();
+        this._finished_results.clear();
     }
 
     # Wakes every task in `tasks` and empties it.
@@ -771,6 +793,43 @@ extend _Worker with io._IoWaiter {
             }
         }
     }
+
+    _file_transfer(transfer: io._FileTransfer): long {
+        var me = this._current;
+        var descriptor = _async_file_descriptor(transfer._handle);
+        if (!this._driver._start_file(descriptor, transfer._address(), transfer._count, transfer._write, me._id)) {
+            return run_blocking<long>(() => {
+                return transfer._run();
+            });
+        }
+        # Neither a cancel nor a deadline ends the wait: the kernel is using
+        # `buffer`.
+        var deadline = me._deadline;
+        me._deadline = 0;
+        this._file_waits.insert(me._id, me);
+        this._io_waiting = this._io_waiting + 1;
+        while (!this._file_results.contains(me._id)) {
+            this._park();
+        }
+        this._io_waiting = this._io_waiting - 1;
+        this._file_waits.remove(me._id);
+        var result = this._file_results.get(me._id);
+        this._file_results.remove(me._id);
+        me._deadline = deadline;
+        return result;
+    }
+}
+
+# A file handle as the drivers take it. Only io_uring (Linux) runs file
+# transfers itself.
+[Target(!OS(Windows))]
+_async_file_descriptor(handle: io.FileHandle): long {
+    return handle as long;
+}
+
+[Target(OS(Windows))]
+_async_file_descriptor(handle: io.FileHandle): long {
+    return -1;
 }
 
 # The thread-local key whose value is the current thread's worker: a

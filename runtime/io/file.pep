@@ -4,6 +4,7 @@ import "path";
 import "sys_posix";
 import "sys_windows";
 import "types";
+import "wait";
 
 extern int fflush(void* stream);
 
@@ -198,7 +199,7 @@ export _io_chunk_size(): ulong {
 export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> {
     ulong done = 0;
     while (done < n) {
-        var r = _io_sys_write(h, p + done, n - done);
+        var r = _io_file_transfer(h, p + done, n - done, true);
         if (r.is_err()) {
             return IoResult<void>.err(r.error());
         }
@@ -482,7 +483,9 @@ export struct File {
             return IoResult<ulong>.ok(0);
         }
         buf.reserve(buf._size + max);
-        var r = _io_sys_read(_handle, buf._data + buf._size, max);
+        buf._pins = buf._pins + 1;
+        var r = _io_file_transfer(_handle, buf._data + buf._size, max, false);
+        buf._pins = buf._pins - 1;
         if (r.is_ok()) {
             buf._size = buf._size + r.value();
         }
@@ -550,7 +553,10 @@ export struct File {
         if (c.is_err()) {
             return IoResult<ulong>.err(c.error());
         }
-        return _io_sys_write(_handle, data._data, data._size);
+        data._pins = data._pins + 1;
+        var r = _io_file_transfer(_handle, data._data, data._size, true);
+        data._pins = data._pins - 1;
+        return r;
     }
 
     ## Writes all of `data`, repeating the write until every byte is
@@ -568,7 +574,10 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(_handle, data._data, data._size);
+        data._pins = data._pins + 1;
+        var r = _io_write_all_raw(_handle, data._data, data._size);
+        data._pins = data._pins - 1;
+        return r;
     }
 
     ## Writes all of the UTF-8 bytes of `s`, as `write_all` does for bytes.
@@ -588,7 +597,16 @@ export struct File {
         if (c.is_err()) {
             return c;
         }
-        return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size());
+        if (!_io_in_task()) {
+            return _io_write_all_raw(_handle, s.c_str() as __ptr<u8>, s.size());
+        }
+        # Another task could change `s` while the write waits, so write a
+        # copy.
+        __ptr<u8> bytes = _pep_malloc(s.size() + 1);
+        _io_copy_bytes(bytes, s.c_str() as __ptr<u8>, s.size());
+        var r = _io_write_all_raw(_handle, bytes, s.size());
+        _pep_free(bytes);
+        return r;
     }
 
     ## Deprecated: use `write_all` instead. Writes all of the UTF-8 bytes of
@@ -951,4 +969,11 @@ export struct File {
     static remove(path: Path): IoResult<void> {
         return _io_sys_unlink(path);
     }
+}
+
+extern void memcpy(void* dest, void* src, ulong n);
+
+# Copies `n` bytes from `source` to `target`.
+_io_copy_bytes(target: __ptr<u8>, source: __ptr<u8>, n: ulong) {
+    memcpy(target, source, n);
 }

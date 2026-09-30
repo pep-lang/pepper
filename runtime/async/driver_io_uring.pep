@@ -32,6 +32,10 @@
 # poll32_events at 28, user_data at 32. A completion entry is 16 bytes:
 # user_data at 0, res (i32) at 8.
 #
+# Files: `_start_file` queues an IORING_OP_READ or IORING_OP_WRITE at the
+# file's position (offset -1), mapped in `_files` to the task waiting for
+# it, and the completion's result goes back through `_finished_files`.
+#
 # The doorbell is an eventfd with its own poll request, whose user data is
 # `_async_doorbell_key()`; the poll that sees it reads it back to 0 and
 # queues a new request.
@@ -70,6 +74,11 @@ const _IO_URING_FEATURES: uint = 257;
 # Opcodes.
 const _IO_URING_OP_POLL_ADD: u8 = 6;
 const _IO_URING_OP_POLL_REMOVE: u8 = 7;
+const _IO_URING_OP_READ: u8 = 22;
+const _IO_URING_OP_WRITE: u8 = 23;
+
+# The most bytes one read or write asks for, as on POSIX.
+const _IO_URING_MAX_TRANSFER: ulong = 2147479552;
 
 # io_uring_enter flags: IORING_ENTER_GETEVENTS, IORING_ENTER_EXT_ARG.
 const _IO_URING_GETEVENTS: uint = 1;
@@ -114,6 +123,11 @@ export struct _IoUringDriver {
     var _reading: HashMap<ulong, ulong>;
     var _writing: HashMap<ulong, ulong>;
     var _next_request: ulong;
+    # Each file transfer in flight: its user data, and the task it is for.
+    var _files: HashMap<ulong, ulong>;
+    # File transfers finished since `_finished_files` last took them.
+    var _finished_tasks: Array<ulong>;
+    var _finished_results: Array<long>;
     # A struct io_uring_getevents_arg (24 bytes) followed by the
     # __kernel_timespec it points to (16 bytes), for timed waits.
     var _wait_argument: __ptr<u8>;
@@ -125,6 +139,9 @@ export struct _IoUringDriver {
         this._reading = HashMap<ulong, ulong>();
         this._writing = HashMap<ulong, ulong>();
         this._next_request = 1;
+        this._files = HashMap<ulong, ulong>();
+        this._finished_tasks = Array<ulong>();
+        this._finished_results = Array<long>();
     }
 
     # A new driver, or none when the system has no usable io_uring.
@@ -149,7 +166,8 @@ export struct _IoUringDriver {
     }
 
     # Queues a submission entry, first submitting what is queued when the
-    # ring is full.
+    # ring is full. `events` is poll32_events for a poll and the length for a
+    # read or write, whose offset is always the file's position (-1).
     _queue(opcode: u8, fd: long, address: ulong, events: uint, data: ulong) {
         if (this._tail - _async_io_uring_load(this._rings, this._sq_head) >= this._sq_entries) {
             this._enter(0, false);
@@ -160,7 +178,12 @@ export struct _IoUringDriver {
         entry[0] = opcode;
         ((entry + 4) as __ptr<int>)[0] = fd as int;
         ((entry + 16) as __ptr<ulong>)[0] = address;
-        ((entry + 28) as __ptr<uint>)[0] = events;
+        if (opcode == _IO_URING_OP_READ || opcode == _IO_URING_OP_WRITE) {
+            ((entry + 8) as __ptr<ulong>)[0] = ~(0 as ulong);
+            ((entry + 24) as __ptr<uint>)[0] = events;
+        } else {
+            ((entry + 28) as __ptr<uint>)[0] = events;
+        }
         ((entry + 32) as __ptr<ulong>)[0] = data;
         ((this._rings + this._sq_array) as __ptr<uint>)[index as ulong] = index;
         this._tail = this._tail + 1;
@@ -237,7 +260,12 @@ extend _IoUringDriver with _Driver {
             var data = (entry as __ptr<ulong>)[0];
             var result = ((entry + 8) as __ptr<int>)[0];
             head = head + 1;
-            if (data == _async_doorbell_key()) {
+            if (this._files.contains(data)) {
+                # A file transfer: the count, or -errno as -1 minus the code.
+                this._finished_tasks.append(this._files.get(data));
+                this._finished_results.append(result >= 0 ? result as long : -1 + result as long);
+                this._files.remove(data);
+            } else if (data == _async_doorbell_key()) {
                 _async_io_uring_drain(this._bell);
                 this._arm_bell();
             } else if (this._requests.contains(data)) {
@@ -293,6 +321,30 @@ extend _IoUringDriver with _Driver {
 
     _release(handle: io.SocketHandle) {
         this._forget(handle);
+    }
+
+    _start_file(handle: long, buffer: ulong, count: ulong, write: bool, task: ulong): bool {
+        var data = this._next_request;
+        this._next_request = data + 1;
+        this._files.insert(data, task);
+        var length = count;
+        if (length > _IO_URING_MAX_TRANSFER) {
+            length = _IO_URING_MAX_TRANSFER;
+        }
+        var opcode = write ? _IO_URING_OP_WRITE : _IO_URING_OP_READ;
+        this._queue(opcode, handle, buffer, length as uint, data);
+        return true;
+    }
+
+    _finished_files(tasks: Array<ulong>, results: Array<long>) {
+        for (var task in this._finished_tasks) {
+            tasks.append(task);
+        }
+        for (var result in this._finished_results) {
+            results.append(result);
+        }
+        this._finished_tasks.clear();
+        this._finished_results.clear();
     }
 
     _doorbell(): _Doorbell {

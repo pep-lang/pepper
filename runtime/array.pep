@@ -63,6 +63,11 @@ export struct Array<T> {
     ## that an `ArrayIterator` can detect changes made while it runs. Its
     ## value carries no other meaning.
     ulong _version;
+    ## The number of I/O operations using the buffer right now (a file read
+    ## or write in a task, which another thread or the kernel carries out
+    ## while other tasks run). While it is not 0 the buffer must not move,
+    ## so growing it panics.
+    ulong _pins;
 
     ## Creates an empty Array, optionally preallocating room for `capacity`
     ## elements.
@@ -141,12 +146,14 @@ export struct Array<T> {
     ## existing elements, which costs O(count).
     ##
     ## @param capacity the minimum number of element slots required
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
     ##     var a = Array<int>();
     ##     a.reserve(8);   # a.capacity() >= 8
     ##     a.reserve(2);   # no effect: capacity never shrinks
     reserve(capacity: ulong) {
         if (capacity > _capacity) {
+            assert(_pins == 0, "Array: the buffer is in use by an I/O operation");
             _data = _pep_realloc(_data, sizeof<T>() * _capacity, sizeof<T>() * capacity);
             _capacity = capacity;
         }
@@ -157,6 +164,8 @@ export struct Array<T> {
     ##
     ## `append` and `insert` call this themselves; callers rarely need it.
     ## Does not change the elements or invalidate iterators.
+    ##
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
     grow() {
         if (_size >= _capacity) {
             ulong next = _capacity * 2;
@@ -211,6 +220,7 @@ export struct Array<T> {
     ## Invalidates running iterators.
     ##
     ## @param item the element to add
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
     ##     var a = Array<int>();
     ##     a.append(1);
@@ -233,6 +243,7 @@ export struct Array<T> {
     ## @param idx the position `item` will occupy; from 0 through `count()`
     ## @param item the element to insert
     ## @panics if `idx <= count()` does not hold ("Array insert index out of bounds")
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @example
     ##     var a = Array<int>();
     ##     a.append(1);
@@ -534,6 +545,7 @@ export struct Array<T> {
     ## Array's running iterators when `rhs` is not empty.
     ##
     ## @param rhs the Array whose elements are copied
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @see +=
     append_all(rhs: Array<T>) {
         # Snapshot the bound: with `a += a` (rhs aliases this), appending

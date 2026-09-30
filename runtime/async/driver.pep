@@ -71,6 +71,21 @@ export trait _Driver {
     # `io.TcpStream.into_transfer`): stops watching it.
     _release(handle: io.SocketHandle);
 
+    # Starts reading `count` bytes into the memory at address `buffer` from
+    # the file `handle` (or writing them from it, when `write`) at the
+    # file's position, for the task `task`; false if this driver cannot (the
+    # worker then runs the call on a pool thread). `_finished_files` reports
+    # it. (The address is a ulong: a `__ptr` parameter in a trait method
+    # does not compile yet.)
+    _start_file(handle: long, buffer: ulong, count: ulong, write: bool, task: ulong): bool {
+        return false;
+    }
+
+    # Moves the file transfers finished since the last call to `tasks` and
+    # `results` (a byte count, or -1 minus the error code, as
+    # `io._io_file_transfer_raw` returns).
+    _finished_files(tasks: Array<ulong>, results: Array<long>) {}
+
     # The doorbell that ends this driver's waits early, from any thread.
     _doorbell(): _Doorbell;
 

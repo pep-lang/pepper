@@ -152,6 +152,9 @@ existing elements, which costs O(count).
 **Parameters**
 - `capacity` — the minimum number of element slots required
 
+**Panics**
+- if the buffer must grow while an I/O operation in a task is using it
+
 **Example**
 ```pepper
     var a = Array<int>();
@@ -170,6 +173,9 @@ capacity (to at least 4); otherwise does nothing.
 
 `append` and `insert` call this themselves; callers rarely need it.
 Does not change the elements or invalidate iterators.
+
+**Panics**
+- if the buffer must grow while an I/O operation in a task is using it
 
 #### operator []
 
@@ -241,6 +247,9 @@ Invalidates running iterators.
 **Parameters**
 - `item` — the element to add
 
+**Panics**
+- if the buffer must grow while an I/O operation in a task is using it
+
 **Example**
 ```pepper
     var a = Array<int>();
@@ -268,6 +277,7 @@ Invalidates running iterators.
 
 **Panics**
 - if `idx <= count()` does not hold ("Array insert index out of bounds")
+- if the buffer must grow while an I/O operation in a task is using it
 
 **Example**
 ```pepper
@@ -521,6 +531,9 @@ Array's running iterators when `rhs` is not empty.
 
 **Parameters**
 - `rhs` — the Array whose elements are copied
+
+**Panics**
+- if the buffer must grow while an I/O operation in a task is using it
 
 **See also**
 - `+=`

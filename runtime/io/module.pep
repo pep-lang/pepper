@@ -74,3 +74,4 @@ export _IO_WAIT_READY;
 export _IO_WAIT_CANCELLED;
 export _IO_WAIT_TIMED_OUT;
 export _IO_WAIT_UNWATCHED;
+export _FileTransfer;
