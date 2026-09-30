@@ -1042,7 +1042,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             let slot = match self.types.get(&element_name) {
                 Some(t) if types::is_object(&t) => self.context.ptr_type(inkwell::AddressSpace::default()).into(),
                 Some(t) => t,
-                None => return Err(format!("unknown type name '{}'", element.display())),
+                // A tuple in a generic base (`(K, V)`) names its type
+                // parameters; only its specializations are emitted.
+                None => return Ok(()),
             };
             slots.push(slot);
             elements.push(element_name);
@@ -1138,6 +1140,101 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .into_struct_value();
         }
         Ok(value.into())
+    }
+
+    /// Whether tuple values `l` and `r` of type `tuple` are equal: every
+    /// element compares equal, each as `==` compares it on its own.
+    fn tuple_equal(
+        &mut self,
+        tuple: &str,
+        l: BasicValueEnum<'ctx>,
+        r: BasicValueEnum<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let mut all = self.context.bool_type().const_int(1, false);
+        for (index, element) in elements.iter().enumerate() {
+            let a = self
+                .builder
+                .build_extract_value(l.into_struct_value(), index as u32, "lhs_element")
+                .map_err(|e| e.to_string())?;
+            let b = self
+                .builder
+                .build_extract_value(r.into_struct_value(), index as u32, "rhs_element")
+                .map_err(|e| e.to_string())?;
+            let same = self.value_equal(element, a, b)?;
+            all = self.builder.build_and(all, same, "tuple_equal").map_err(|e| e.to_string())?;
+        }
+        Ok(all)
+    }
+
+    /// `a == b` for two values of sema type `ty`, as an `i1`: a tuple
+    /// element-wise, a struct through its `==` when it declares one (else by
+    /// identity), a trait value by object, anything else by value.
+    fn value_equal(
+        &mut self,
+        ty: &str,
+        a: BasicValueEnum<'ctx>,
+        b: BasicValueEnum<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        if self.tuples.contains_key(ty) {
+            return self.tuple_equal(ty, a, b);
+        }
+        let method = format!("{}.==", ty);
+        if self.functions.contains_key(&method) {
+            let result = self.call_function(&method, vec![a, b])?;
+            return Ok(llvm_ops::as_bool(self.context, &self.builder, result));
+        }
+        let eq = inkwell::IntPredicate::EQ;
+        let (a, b) = match (a, b) {
+            (BasicValueEnum::ArrayValue(_), BasicValueEnum::ArrayValue(_)) => {
+                (self.object_pointer(a)?.into(), self.object_pointer(b)?.into())
+            }
+            other => other,
+        };
+        match (a, b) {
+            (BasicValueEnum::IntValue(x), BasicValueEnum::IntValue(y)) => {
+                self.builder.build_int_compare(eq, x, y, "element_equal").map_err(|e| e.to_string())
+            }
+            (BasicValueEnum::FloatValue(x), BasicValueEnum::FloatValue(y)) => self
+                .builder
+                .build_float_compare(inkwell::FloatPredicate::OEQ, x, y, "element_equal")
+                .map_err(|e| e.to_string()),
+            (BasicValueEnum::PointerValue(x), BasicValueEnum::PointerValue(y)) => {
+                let i64 = self.context.i64_type();
+                let x = self.builder.build_ptr_to_int(x, i64, "lhs_address").map_err(|e| e.to_string())?;
+                let y = self.builder.build_ptr_to_int(y, i64, "rhs_address").map_err(|e| e.to_string())?;
+                self.builder.build_int_compare(eq, x, y, "element_equal").map_err(|e| e.to_string())
+            }
+            _ => Err(format!("cannot compare values of type '{}'", ty)),
+        }
+    }
+
+    /// `hash<T>` of a tuple value: each element's hash folded through
+    /// FNV-1a in order. An element hashes as `hash<E>` would: through the
+    /// program's `hash<E>` when there is one (`hash<String>` by content),
+    /// else by identity for references and by value otherwise.
+    fn tuple_hash(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let mut h = self.context.i64_type().const_int(0xcbf29ce484222325, false);
+        for (index, element) in elements.iter().enumerate() {
+            let item = self
+                .builder
+                .build_extract_value(value.into_struct_value(), index as u32, "element")
+                .map_err(|e| e.to_string())?;
+            let element_hash = if self.tuples.contains_key(element) {
+                self.tuple_hash(element, item)?
+            } else if self.functions.contains_key(&format!("hash<{}>", element)) {
+                self.call_function(&format!("hash<{}>", element), vec![item])?.into_int_value()
+            } else {
+                let item = match item {
+                    BasicValueEnum::ArrayValue(_) => self.object_pointer(item)?.into(),
+                    other => other,
+                };
+                self.hash_value_to_i64(&item)?
+            };
+            h = self.fnv_fold_8(h, &element_hash)?;
+        }
+        Ok(h)
     }
 
     /// Load vtable slot `slot` of trait value `value`.
@@ -3270,6 +3367,15 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let lowered = self.types.get(&ty.to_string());
                 let is_reference = lowered.is_some_and(|t| types::is_object(&t))
                     || self.is_trait_name(&ty.to_string());
+                if self.tuples.contains_key(&ty.to_string()) {
+                    let arg_temp = self.owned_temp_type(arg);
+                    let val = self.codegen_expr(arg)?;
+                    let h = self.tuple_hash(&ty.to_string(), val)?;
+                    if let Some(ty) = arg_temp {
+                        self.release_temp(&ty, val)?;
+                    }
+                    return Ok(h.into());
+                }
                 match lowered {
                     Some(_) if is_reference => {
                         // An owned-rvalue argument is a temporary: its
@@ -4363,6 +4469,16 @@ impl<'ctx> CodeGenerator<'ctx> {
             // print call has consumed it.
             let value_temp = self.owned_temp_type(arg);
             let value = self.codegen_expr(arg)?;
+            // A tuple prints on one line: `(1, two, 3.000000)`.
+            if let Some(tuple) = self.value_sema_type(arg).filter(|t| self.tuples.contains_key(t)) {
+                self.write_tuple(&tuple, value)?;
+                let newline = self.literal_text("\n")?;
+                self.call_function("_pep_write", vec![newline])?;
+                if let Some(ty) = value_temp {
+                    self.release_temp(&ty, value)?;
+                }
+                continue;
+            }
             match value {
                 BasicValueEnum::PointerValue(_) => {
                     self.call_function("_pep_print", vec![value])?;
@@ -4401,6 +4517,72 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
         Ok(self.context.i32_type().const_zero().into())
+    }
+
+    /// A pointer to a NUL-terminated global holding `text`.
+    fn literal_text(&mut self, text: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        let global = self.builder.build_global_string_ptr(text, "print_text").map_err(|e| e.to_string())?;
+        Ok(global.as_pointer_value().into())
+    }
+
+    /// Write tuple `value` without a newline: `(a, b)`, each element as
+    /// `print` writes it (a `String` as its text, a nested tuple the same
+    /// way).
+    fn write_tuple(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<(), String> {
+        let elements = self.tuples.get(tuple).cloned().unwrap_or_default();
+        let open = self.literal_text("(")?;
+        self.call_function("_pep_write", vec![open])?;
+        for (index, element) in elements.iter().enumerate() {
+            if index > 0 {
+                let separator = self.literal_text(", ")?;
+                self.call_function("_pep_write", vec![separator])?;
+            }
+            let item = self
+                .builder
+                .build_extract_value(value.into_struct_value(), index as u32, "element")
+                .map_err(|e| e.to_string())?;
+            if self.tuples.contains_key(element) {
+                self.write_tuple(element, item)?;
+                continue;
+            }
+            match item {
+                BasicValueEnum::IntValue(v) => {
+                    let unsigned = v.get_type().get_bit_width() == 1 || llvm_ops::is_unsigned_int_type(element);
+                    let i64 = self.context.i64_type();
+                    let wide = if v.get_type().get_bit_width() >= 64 {
+                        v
+                    } else if unsigned {
+                        self.builder.build_int_z_extend(v, i64, "printw").map_err(|e| e.to_string())?
+                    } else {
+                        self.builder.build_int_s_extend(v, i64, "printw").map_err(|e| e.to_string())?
+                    };
+                    self.call_function("_pep_write_int", vec![wide.into()])?;
+                }
+                BasicValueEnum::FloatValue(v) => {
+                    let double = self
+                        .builder
+                        .build_float_cast(v, self.context.f64_type(), "printf64")
+                        .map_err(|e| e.to_string())?;
+                    self.call_function("_pep_write_float", vec![double.into()])?;
+                }
+                BasicValueEnum::PointerValue(_) if element == "String" => {
+                    let text = self.call_function("String.c_str", vec![item])?;
+                    self.call_function("_pep_write", vec![text])?;
+                }
+                BasicValueEnum::PointerValue(_) if element.ends_with('*') => {
+                    self.call_function("_pep_write", vec![item])?;
+                }
+                _ => {
+                    return Err(format!(
+                        "cannot print a tuple with an element of type '{}'",
+                        pepper_sema::passes::gather_generics::parse_type_string(element).display()
+                    ))
+                }
+            }
+        }
+        let close = self.literal_text(")")?;
+        self.call_function("_pep_write", vec![close])?;
+        Ok(())
     }
 
     /// Default-argument expressions for the parameters a call did not supply.
@@ -4737,6 +4919,30 @@ impl<'ctx> CodeGenerator<'ctx> {
         let rhs_temp = self.owned_temp_type(rhs);
         let lhs_val = self.codegen_expr(lhs)?;
         let rhs_val = self.codegen_expr(rhs)?;
+        // Tuples compare element-wise (`===` too: a tuple has no identity).
+        if let (BasicValueEnum::StructValue(_), Some(tuple)) =
+            (lhs_val, self.value_sema_type(lhs).filter(|t| self.tuples.contains_key(t)))
+        {
+            let same = self.tuple_equal(&tuple, lhs_val, rhs_val)?;
+            let result = match op {
+                BinaryOp::Equal => same,
+                BinaryOp::NotEqual => self.builder.build_not(same, "tuple_not_equal").map_err(|e| e.to_string())?,
+                _ => {
+                    return Err(format!(
+                        "invalid operands to binary expression ('{}' and '{}')",
+                        pepper_sema::passes::gather_generics::parse_type_string(&tuple).display(),
+                        pepper_sema::passes::gather_generics::parse_type_string(&tuple).display()
+                    ))
+                }
+            };
+            if let Some(ty) = lhs_temp {
+                self.release_temp(&ty, lhs_val)?;
+            }
+            if let Some(ty) = rhs_temp {
+                self.release_temp(&ty, rhs_val)?;
+            }
+            return Ok(result.into());
+        }
         // Trait values compare by identity, like the struct references they
         // hold: the same object is the same value, whatever the vtable.
         if matches!(lhs_val, BasicValueEnum::ArrayValue(_))

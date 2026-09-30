@@ -189,8 +189,9 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
                 name_span: s.name_span,
                 ty: format!("{} {}", if s.enumeration.is_some() { "enum" } else { "struct" }, type_string(&ast::TypeName {
                     name: s.name.clone(),
-                    generic_types: s.generic_params.iter().map(|p| ast::TypeName { name: p.name.clone(), generic_types: vec![], span: Span::none() }).collect(),
+                    generic_types: s.generic_params.iter().map(|p| ast::TypeName { name: p.name.clone(), generic_types: vec![], span: Span::none(), labels: vec![] }).collect(),
                     span: Span::none(),
+                    labels: vec![],
                 })),
             }),
             ast::Declaration::Trait(t) => out.push(Symbol {
@@ -229,6 +230,14 @@ fn locals_at(block: &ast::Block, offset: usize) -> Vec<Symbol> {
     out
 }
 
+/// The named bindings of a destructuring pattern, nested ones included.
+fn push_pattern(bindings: &[ast::DestructureBinding], out: &mut Vec<Symbol>) {
+    for b in bindings.iter().flat_map(|b| b.leaves()).filter(|b| b.name != "_") {
+        let ty = if b.type_name.name == "__auto" { String::new() } else { b.type_name.to_string() };
+        out.push(Symbol { name: b.name.clone(), name_span: b.name_span, ty });
+    }
+}
+
 fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>) {
     for stmt in &block.statements {
         let s = stmt.span();
@@ -241,6 +250,7 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                         ty: variable_type(v),
                     });
                 }
+                ast::Statement::Destructure(d) => push_pattern(&d.bindings, out),
                 _ => {}
             }
         } else if s.start <= offset && offset < s.end {
@@ -263,11 +273,15 @@ fn collect_locals_upto(block: &ast::Block, offset: usize, out: &mut Vec<Symbol>)
                 }
                 ast::Statement::For(f) => {
                     if f.block.span.start <= offset && offset < f.block.span.end {
-                        out.push(Symbol {
-                            name: f.binding.name.clone(),
-                            name_span: f.binding.name_span,
-                            ty: variable_type(&f.binding),
-                        });
+                        if f.pattern.is_empty() {
+                            out.push(Symbol {
+                                name: f.binding.name.clone(),
+                                name_span: f.binding.name_span,
+                                ty: variable_type(&f.binding),
+                            });
+                        } else {
+                            push_pattern(&f.pattern, out);
+                        }
                         collect_locals_upto(&f.block, offset, out);
                     }
                 }

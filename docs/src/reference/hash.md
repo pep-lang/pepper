@@ -91,7 +91,7 @@ removed-slot tombstones), so it never shrinks, and churn (many inserts and
 removals of different keys) can keep growing it even while `count()`
 stays small.
 
-There is no iterator, and entries have no defined order.
+`iterate()` visits the entries as `(key, value)` tuples, in no defined order.
 
 **Type parameters**
 - `K` — the key type; hashed with `hash<K>` and compared with `==`
@@ -349,6 +349,30 @@ same as `insert`.
     m["hello"] = 5;
 ```
 
+#### iterate
+
+```pepper
+iterate(): HashMapIterator<K, V>
+```
+
+Returns an iterator over the entries as `(key, value)` tuples, in no
+defined order; `for (var (key, value) in map)` drives it.
+
+The iterator holds a reference to the map. Changing a value through an
+existing key while iterating is allowed; adding or removing an entry
+makes the iterator's next `next()` or `current()` panic.
+
+**Returns**
+- an iterator positioned before the first entry
+
+**Example**
+```pepper
+    var total = 0;
+    for (var (name, age) in ages) {
+        total += age;
+    }
+```
+
 ## HashSet
 
 ```pepper
@@ -367,8 +391,8 @@ destroyed.
 
 Membership tests, inserts, and removals take expected O(1) time. The
 table doubles before an insert of a new element would fill half of it
-(members plus tombstones), and it never shrinks. There is no iterator, and
-members have no defined order. The lowercase fields and the `_find_slot`
+(members plus tombstones), and it never shrinks. `iterate()` visits the
+members, in no defined order. The lowercase fields and the `_find_slot`
 and `grow` methods are the table's internal state: they are public but
 may change, and writing to them breaks the set.
 
@@ -558,6 +582,28 @@ A set stores only keys, so `value` is ignored.
 **Returns**
 - `key` (the argument, not an existing equal member), the value of the assignment expression
 
+#### iterate
+
+```pepper
+iterate(): HashSetIterator<K>
+```
+
+Returns an iterator over the members, in no defined order;
+`for (var x in set)` drives it.
+
+The iterator holds a reference to the set. Adding or removing a member
+while iterating makes the iterator's next `next()` or `current()` panic.
+
+**Returns**
+- an iterator positioned before the first member
+
+**Example**
+```pepper
+    for (var name in seen) {
+        print(name);
+    }
+```
+
 #### copy
 
 ```pepper
@@ -578,3 +624,131 @@ of copying the elements.
 
 **Returns**
 - the copy
+
+## HashMapIterator
+
+```pepper
+struct HashMapIterator<K, V>
+```
+
+An `Iterator<(K, V)>` over the entries of a `HashMap`, as `(key, value)`
+tuples in no defined order; returned by `HashMap.iterate()` and driven by
+`for (var (key, value) in map)`.
+
+Holds a reference to the map. It is fail-fast: adding or removing an
+entry after the iterator was created makes its next `next()` or
+`current()` panic.
+
+**Type parameters**
+- `K` — the key type of the map
+- `V` — the value type of the map
+
+**See also**
+- `HashMap.iterate`
+
+### Constructor
+
+#### HashMapIterator()
+
+```pepper
+construct(source: HashMap<K, V>)
+```
+
+Creates an iterator positioned before the first entry of `source`.
+
+**Parameters**
+- `source` — the map to iterate
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next entry.
+
+**Returns**
+- true when there is a current entry, false once every entry was visited
+
+**Panics**
+- if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
+
+#### current
+
+```pepper
+current(): (K, V)
+```
+
+Returns the entry the last successful `next()` moved to.
+
+**Returns**
+- the current entry as a `(key, value)` tuple
+
+**Panics**
+- if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
+- if `next()` was never called or already returned false ("HashMapIterator.current() without an entry")
+
+## HashSetIterator
+
+```pepper
+struct HashSetIterator<K>
+```
+
+An `Iterator<K>` over the members of a `HashSet`, in no defined order;
+returned by `HashSet.iterate()` and driven by `for (var x in set)`.
+
+Holds a reference to the set. It is fail-fast: adding or removing a member
+after the iterator was created makes its next `next()` or `current()`
+panic.
+
+**Type parameters**
+- `K` — the element type of the set
+
+**See also**
+- `HashSet.iterate`
+
+### Constructor
+
+#### HashSetIterator()
+
+```pepper
+construct(source: HashSet<K>)
+```
+
+Creates an iterator positioned before the first member of `source`.
+
+**Parameters**
+- `source` — the set to iterate
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next member.
+
+**Returns**
+- true when there is a current member, false once every member was visited
+
+**Panics**
+- if a member was added or removed since the iterator was created ("HashSet modified during iteration")
+
+#### current
+
+```pepper
+current(): K
+```
+
+Returns the member the last successful `next()` moved to.
+
+**Returns**
+- the current member
+
+**Panics**
+- if a member was added or removed since the iterator was created ("HashSet modified during iteration")
+- if `next()` was never called or already returned false ("HashSetIterator.current() without a member")

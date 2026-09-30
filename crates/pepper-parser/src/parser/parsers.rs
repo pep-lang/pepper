@@ -387,7 +387,7 @@ fn type_name(input: &mut &str) -> Result<TypeName> {
         *input = &probe[1..];
         end = pos(input);
         let start = ty.span.start;
-        ty = TypeName { name: OPTIONAL_TYPE.to_string(), generic_types: vec![ty], span: Span { start, end } };
+        ty = TypeName { name: OPTIONAL_TYPE.to_string(), generic_types: vec![ty], span: Span { start, end }, labels: vec![] };
     }
 
     // pointer suffix: one or more `*` (e.g. char*, void**). Parsed in every
@@ -453,8 +453,25 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
     // Not a function type: try `(A, B, ...)`.
     *input = &input[1..];
     let mut elements = vec![];
+    let mut labels = vec![];
     loop {
         ws(input)?;
+        // An optional label, `line:` in `(line: int, column: int)`.
+        let mut probe = *input;
+        let label = match identifier(&mut probe) {
+            Ok(name) => {
+                let _ = ws(&mut probe);
+                if probe.starts_with(':') && !probe.starts_with("::") {
+                    *input = &probe[1..];
+                    ws(input)?;
+                    name
+                } else {
+                    String::new()
+                }
+            }
+            Err(_) => String::new(),
+        };
+        labels.push(label);
         match type_name(input) {
             Ok(ty) => elements.push(ty),
             Err(_) => {
@@ -474,7 +491,10 @@ fn function_type_name(input: &mut &str) -> Result<TypeName> {
         *input = before;
         return Err(bt(input));
     }
-    Ok(TypeName { name: TUPLE_TYPE.to_string(), generic_types: elements, span: Span { start, end: pos(input) } })
+    if labels.iter().all(String::is_empty) {
+        labels.clear();
+    }
+    Ok(TypeName { name: TUPLE_TYPE.to_string(), generic_types: elements, span: Span { start, end: pos(input) }, labels })
 }
 
 /// A function type whose parameter and return types `element` parses (C
@@ -521,7 +541,7 @@ fn function_type_of(input: &mut &str, element: fn(&mut &str) -> Result<TypeName>
     let end = ret.span.end;
     let mut generic_types = vec![ret];
     generic_types.extend(params);
-    Ok(TypeName { name: FUNCTION_TYPE.to_string(), generic_types, span: Span { start, end } })
+    Ok(TypeName { name: FUNCTION_TYPE.to_string(), generic_types, span: Span { start, end }, labels: vec![] })
 }
 
 /// Thread-safe function type `shared (P1, P2) => R`, lowered to
@@ -628,7 +648,7 @@ fn type_name_base(input: &mut &str) -> Result<TypeName> {
         }
     }
 
-    Ok(TypeName { name, generic_types, span: Span { start, end } })
+    Ok(TypeName { name, generic_types, span: Span { start, end }, labels: vec![] })
 }
 
 fn string_constant(input: &mut &str) -> Result<Literal> {
@@ -1641,11 +1661,32 @@ fn for_loop(input: &mut &str) -> Result<For> {
         *input = &input[1..];
         ws(input)?;
     }
-    // Past `for`, a malformed header is an error, not a different statement.
-    let binding = variable_declaration(input, vec![]).map_err(|_| cut(input))?;
-    if binding.is_const || binding.default_value.is_some() {
-        return Err(cut(input));
-    }
+    // `for (var (k, v) in pairs)`: a tuple pattern.
+    let mut pattern = vec![];
+    let binding = if keyword(&mut { *input }, "var") && input[3..].trim_start().starts_with('(') {
+        let binding_start = pos(input);
+        *input = input[3..].trim_start();
+        *input = &input[1..];
+        pattern = destructure_bindings(input)?;
+        let span = Span { start: binding_start, end: pos(input) };
+        VariableDecl {
+            attributes: vec![],
+            name: String::new(),
+            name_span: span,
+            type_name: TypeName::auto(),
+            default_value: None,
+            is_const: false,
+            span,
+            is_exported: false,
+        }
+    } else {
+        // Past `for`, a malformed header is an error, not a different statement.
+        let binding = variable_declaration(input, vec![]).map_err(|_| cut(input))?;
+        if binding.is_const || binding.default_value.is_some() {
+            return Err(cut(input));
+        }
+        binding
+    };
     ws(input)?;
     if !input.starts_with("in") || input[2..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         return Err(cut(input));
@@ -1664,7 +1705,7 @@ fn for_loop(input: &mut &str) -> Result<For> {
     let block = block(input, vec![])?;
     let end = block.span.end;
     ws(input)?;
-    Ok(For { binding, iterable, block, span: Span { start, end } })
+    Ok(For { binding, pattern, iterable, block, span: Span { start, end } })
 }
 
 /// `with (var x = scope) { ... } else { ... }`, `with (Type x = scope) ...`,
@@ -1811,6 +1852,7 @@ fn pattern(input: &mut &str) -> Result<Pattern> {
         name: segments.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join("."),
         generic_types: vec![],
         span: Span { start: first.start, end: segments.last().map(|(_, s)| s.end).unwrap_or(first.end) },
+        labels: vec![],
     });
     let mut rest = *input;
     ws(&mut rest)?;
@@ -1869,31 +1911,7 @@ fn destructure(input: &mut &str) -> Result<Option<Destructure>> {
         return Ok(None);
     }
     *input = &rest[1..];
-    let mut bindings = vec![];
-    loop {
-        ws(input)?;
-        let name_start = pos(input);
-        let name = identifier(input).inspect_err(|_| expected(input, "identifier"))?;
-        let name_span = Span { start: name_start, end: pos(input) };
-        ws(input)?;
-        let mut ty = TypeName::auto();
-        if input.starts_with(':') {
-            *input = &input[1..];
-            ws(input)?;
-            ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
-            ws(input)?;
-        }
-        bindings.push(DestructureBinding { name, name_span, type_name: ty });
-        if input.starts_with(',') {
-            *input = &input[1..];
-            continue;
-        }
-        if input.starts_with(')') {
-            *input = &input[1..];
-            break;
-        }
-        return Err(cut_expecting(input, "')'"));
-    }
+    let bindings = destructure_bindings(input)?;
     ws(input)?;
     if !input.starts_with('=') || input.starts_with("==") {
         return Err(cut_expecting(input, "'='"));
@@ -1906,6 +1924,43 @@ fn destructure(input: &mut &str) -> Result<Option<Destructure>> {
         return Err(cut_expecting(input, "';'"));
     }
     Ok(Some(Destructure { bindings, value, is_const, span }))
+}
+
+/// The bindings of a destructuring pattern after its `(`, through its `)`:
+/// `name [: Type]` or a nested `( ... )`, separated by commas.
+fn destructure_bindings(input: &mut &str) -> Result<Vec<DestructureBinding>> {
+    let mut bindings = vec![];
+    loop {
+        ws(input)?;
+        let name_start = pos(input);
+        if input.starts_with('(') {
+            *input = &input[1..];
+            let nested = destructure_bindings(input)?;
+            let name_span = Span { start: name_start, end: pos(input) };
+            bindings.push(DestructureBinding { name: String::new(), name_span, type_name: TypeName::auto(), nested });
+        } else {
+            let name = identifier(input).inspect_err(|_| expected(input, "identifier"))?;
+            let name_span = Span { start: name_start, end: pos(input) };
+            ws(input)?;
+            let mut ty = TypeName::auto();
+            if input.starts_with(':') {
+                *input = &input[1..];
+                ws(input)?;
+                ty = type_name(input).inspect_err(|_| expected(input, "type"))?;
+            }
+            bindings.push(DestructureBinding { name, name_span, type_name: ty, nested: vec![] });
+        }
+        ws(input)?;
+        if input.starts_with(',') {
+            *input = &input[1..];
+            continue;
+        }
+        if input.starts_with(')') {
+            *input = &input[1..];
+            return Ok(bindings);
+        }
+        return Err(cut_expecting(input, "')'"));
+    }
 }
 
 /// After a `TypeName name` style declaration the next token must end the
@@ -2183,7 +2238,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
 
     // Syntax 2: `first` is the return type, next identifier is the name.
     if input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || input.starts_with('[') {
-        let mut return_type = TypeName { name: first, generic_types: vec![], span: Span { start, end: pos(input) } };
+        let mut return_type = TypeName { name: first, generic_types: vec![], span: Span { start, end: pos(input) }, labels: vec![] };
         // Array suffix on the return type (`int[] echo(...)`).
         while input.starts_with('[') {
             *input = &input[1..];
@@ -2655,7 +2710,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
     let name_ok = input.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
         || OPERATORS.iter().any(|op| input.starts_with(op));
     if name_ok {
-        let return_type = TypeName { name: first, generic_types: vec![], span: Span { start: name_span_start, end: name_span_end } };
+        let return_type = TypeName { name: first, generic_types: vec![], span: Span { start: name_span_start, end: name_span_end }, labels: vec![] };
         let name_span2_start = pos(input);
         let name = match identifier(input) {
             Ok(n) => n,
@@ -3590,7 +3645,7 @@ fn ptr_check_stmt(s: &Statement) -> std::result::Result<(), PostParseError> {
         Statement::Return(r) => r.expr.as_ref().map_or(Ok(()), ptr_check_expr),
         Statement::LoopBreak(_) => Ok(()),
         Statement::Destructure(d) => {
-            for b in &d.bindings {
+            for b in d.bindings.iter().flat_map(|b| b.leaves()) {
                 ptr_check_type(&b.type_name)?;
             }
             ptr_check_expr(&d.value)

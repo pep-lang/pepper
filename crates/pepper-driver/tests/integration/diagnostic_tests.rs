@@ -1740,3 +1740,29 @@ fn extension_and_trait_overload_diagnostics() {
          \x20     |     ^~~"
     );
 }
+
+#[test]
+fn tuple_labels_all_or_none() {
+    assert_eq!(
+        error_of("tuple_labels_all_or_none", "f(): (line: int, int) {\n    return (1, 2);\n}\n"),
+        "main.pep:1:18: error: missing label for element 1 of a labeled tuple: label every element or none\n\
+         \x20   1 | f(): (line: int, int) {\n\
+         \x20     |                  ^~~\n\
+         main.pep:1:13: note: element labeled 'line' here\n\
+         \x20   1 | f(): (line: int, int) {\n\
+         \x20     |             ^~~"
+    );
+}
+
+#[test]
+fn tuple_label_duplicate() {
+    assert_eq!(
+        error_of("tuple_label_duplicate", "f(): (x: int, x: int) {\n    return (1, 2);\n}\n"),
+        "main.pep:1:18: error: duplicate label 'x' in tuple type\n\
+         \x20   1 | f(): (x: int, x: int) {\n\
+         \x20     |                  ^~~\n\
+         main.pep:1:10: note: previous label here\n\
+         \x20   1 | f(): (x: int, x: int) {\n\
+         \x20     |          ^~~"
+    );
+}

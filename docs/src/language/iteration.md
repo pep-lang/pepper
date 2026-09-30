@@ -62,8 +62,9 @@ export trait Iterable<T> {
   returning `false` after that). `current()` returns the element `next()`
   moved to.
 - An **iterable** is a collection that hands out a fresh iterator from
-  `iterate()`. `Array<T>` returns an `ArrayIterator<T>` and `String` returns a
-  `StringIterator`.
+  `iterate()`. `Array<T>` returns an `ArrayIterator<T>`, `String` returns a
+  `StringIterator`, and `HashMap<K, V>` and `HashSet<K>` return a
+  `HashMapIterator<K, V>` and a `HashSetIterator<K>`.
 
 `for (var x in source) { body }` behaves exactly like this:
 
@@ -88,8 +89,11 @@ main.pep:4:19: error: type 'Foo' is not iterable: implement Iterable<T> (iterate
       |                   ^
 ```
 
-`HashMap` and `HashSet` do not implement the protocol yet, so they cannot be
-used in a `for` loop.
+`HashMap<K, V>` yields each entry as a [tuple](tuples.md) `(K, V)`, so
+`for (var (name, age) in ages)` names both parts; `HashSet<K>` yields its
+members. Both visit entries in no particular order. Changing a value
+(`ages[name] = …` for a key already present) is fine while looping, but adding
+or removing an entry stops the program at the iterator's next step.
 
 ## Adapters
 

@@ -10,6 +10,9 @@ thread_local! {
     /// The file being built, whose id every location built carries. Set by
     /// [`build_file`] for the duration of one build.
     static FILE: std::cell::Cell<FileId> = const { std::cell::Cell::new(FileId(0)) };
+    /// The first bad tuple label [`type_name_from`] met. It returns a plain
+    /// type, so [`build_file`] reports this once the build finishes.
+    static LABEL_ERROR: std::cell::RefCell<Option<Diagnostic>> = const { std::cell::RefCell::new(None) };
 }
 
 /// `span` in the file being built.
@@ -25,13 +28,49 @@ fn type_name_from(t: &ast::TypeName) -> TypeName {
             name: base.to_string(),
             generic_types: t.generic_types.clone(),
             span: ast::Span::none(),
+            labels: t.labels.clone(),
         });
         return TypeName::with_args("Array", vec![element]);
+    }
+    // `Tuple<A, B>` is another spelling of the tuple type `(A, B)`.
+    if t.name == "Tuple" && args.len() >= 2 {
+        return TypeName::with_args(crate::type_name::TUPLE, args);
     }
     if args.is_empty() {
         TypeName::new(&t.name)
     } else {
-        TypeName::with_args(&t.name, args)
+        check_labels(t);
+        let mut ty = TypeName::with_args(&t.name, args);
+        ty.labels = t.labels.clone();
+        ty
+    }
+}
+
+/// Records an error for a tuple type that labels some elements but not all,
+/// or uses one label twice. The parser has no label spans, so the error sits
+/// on the element's type, just after its label.
+fn check_labels(t: &ast::TypeName) {
+    let error = if let Some(i) = t.labels.iter().position(String::is_empty) {
+        let j = t.labels.iter().position(|l| !l.is_empty()).unwrap_or(0);
+        Some(
+            Diagnostic::error(format!("missing label for element {} of a labeled tuple: label every element or none", i))
+                .at(loc(t.generic_types[i].span))
+                .with_note(format!("element labeled '{}' here", t.labels[j]), Some(loc(t.generic_types[j].span))),
+        )
+    } else {
+        t.labels.iter().enumerate().skip(1).find_map(|(i, label)| {
+            let first = t.labels[..i].iter().position(|l| l == label)?;
+            Some(
+                Diagnostic::error(format!("duplicate label '{}' in tuple type", label))
+                    .at(loc(t.generic_types[i].span))
+                    .with_note("previous label here", Some(loc(t.generic_types[first].span))),
+            )
+        })
+    };
+    if let Some(error) = error {
+        LABEL_ERROR.with(|e| {
+            e.borrow_mut().get_or_insert(error);
+        });
     }
 }
 
@@ -335,17 +374,23 @@ fn statement(stmt: &ast::Statement) -> Result<Statement, Diagnostic> {
 /// The hidden local holding the tuple a destructuring reads:
 /// `var __tuple_N = Destructure(value, count);`.
 fn hidden_tuple(value: &ast::Expression, count: usize) -> Result<(VariableDef, String, Loc), Diagnostic> {
+    let at = loc(value.span());
+    let (hidden, name) = hidden_tuple_of(expression(value)?, count, at);
+    Ok((hidden, name, at))
+}
+
+/// [`hidden_tuple`] of a value already built, located at `at`.
+fn hidden_tuple_of(value: Expression, count: usize, at: Loc) -> (VariableDef, String) {
     let n = TUPLES.with(|c| {
         let n = c.get();
         c.set(n + 1);
         n
     });
     let name = format!("__tuple_{}", n);
-    let at = loc(value.span());
     let hidden = VariableDef {
         name: name.clone(),
         ty: TypeName::auto(),
-        default: Some(Expression::Destructure { value: Box::new(expression(value)?), count, loc: at }),
+        default: Some(Expression::Destructure { value: Box::new(value), count, loc: at }),
         hidden: true,
         kind: Kind::Variable,
         attributes: vec![],
@@ -353,7 +398,7 @@ fn hidden_tuple(value: &ast::Expression, count: usize) -> Result<(VariableDef, S
         type_loc: Loc::NONE,
         is_const: false,
     };
-    Ok((hidden, name, at))
+    (hidden, name)
 }
 
 /// Element `index` of the hidden tuple local `tuple`, located at `at`.
@@ -380,21 +425,36 @@ fn tuple_element(tuple: &str, index: usize, at: Loc) -> Expression {
 fn destructure(d: &ast::Destructure) -> Result<Vec<Statement>, Diagnostic> {
     let (hidden, tuple, _) = hidden_tuple(&d.value, d.bindings.len())?;
     let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
-    for (index, binding) in d.bindings.iter().enumerate() {
+    items.extend(bind_elements(&tuple, &d.bindings, d.is_const)?);
+    Ok(items)
+}
+
+/// `var name = tuple.index;` for each binding of a pattern over the hidden
+/// tuple local `tuple`, skipping `_`. A nested pattern gets a hidden tuple
+/// local of its own, initialized from its element.
+fn bind_elements(tuple: &str, bindings: &[ast::DestructureBinding], is_const: bool) -> Result<Vec<Statement>, Diagnostic> {
+    let mut items = vec![];
+    for (index, binding) in bindings.iter().enumerate() {
+        let at = loc(binding.name_span);
+        if !binding.nested.is_empty() {
+            let (hidden, inner) = hidden_tuple_of(tuple_element(tuple, index, at), binding.nested.len(), at);
+            items.push(Statement::Declaration(Declaration::Variable(hidden)));
+            items.extend(bind_elements(&inner, &binding.nested, is_const)?);
+            continue;
+        }
         if binding.name == "_" {
             continue;
         }
-        let at = loc(binding.name_span);
         items.push(Statement::Declaration(Declaration::Variable(VariableDef {
             name: binding.name.clone(),
             ty: type_name_from(&binding.type_name),
-            default: Some(tuple_element(&tuple, index, at)),
+            default: Some(tuple_element(tuple, index, at)),
             hidden: false,
             kind: Kind::Variable,
             attributes: vec![],
             loc: at,
             type_loc: if binding.type_name.span.is_empty() { Loc::NONE } else { loc(binding.type_name.span) },
-            is_const: d.is_const,
+            is_const,
         })));
     }
     Ok(items)
@@ -417,19 +477,33 @@ fn destructuring_assignment(lhs: &ast::Expression, rhs: &ast::Expression, span: 
     let ast::Expression::Tuple { elements, .. } = lhs else { unreachable!("checked by the caller") };
     let (hidden, tuple, _) = hidden_tuple(rhs, elements.len())?;
     let mut items = vec![Statement::Declaration(Declaration::Variable(hidden))];
-    for (index, place) in elements.iter().enumerate() {
+    assign_elements(&tuple, elements, span, &mut items)?;
+    Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
+}
+
+/// `place = tuple.index;` for each place of `(a, b.f, _) = ...` over the
+/// hidden tuple local `tuple`, skipping `_`. A nested `(c, d)` gets a hidden
+/// tuple local of its own, initialized from its element.
+fn assign_elements(tuple: &str, places: &[ast::Expression], span: ast::Span, items: &mut Vec<Statement>) -> Result<(), Diagnostic> {
+    for (index, place) in places.iter().enumerate() {
         if matches!(place, ast::Expression::SymbolRef { id, .. } if id == "_") {
             continue;
         }
         let at = loc(place.span());
+        if let ast::Expression::Tuple { elements, .. } = place {
+            let (hidden, inner) = hidden_tuple_of(tuple_element(tuple, index, at), elements.len(), at);
+            items.push(Statement::Declaration(Declaration::Variable(hidden)));
+            assign_elements(&inner, elements, span, items)?;
+            continue;
+        }
         items.push(Statement::Expression(Expression::Binary {
             op: BinaryOp::Assign,
             lhs: Box::new(expression(place)?),
-            rhs: Box::new(tuple_element(&tuple, index, at)),
+            rhs: Box::new(tuple_element(tuple, index, at)),
             loc: loc(span),
         }));
     }
-    Ok(Statement::Block(Block { name: String::new(), items, attributes: vec![] }))
+    Ok(())
 }
 
 thread_local! {
@@ -489,13 +563,20 @@ fn for_loop(f: &ast::For) -> Result<Statement, Diagnostic> {
         type_loc: Loc::NONE,
         is_const: false,
     };
-    let mut element = variable_def(&f.binding, Kind::Variable)?;
-    element.default = Some(Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![], loc: at });
-    let body = Block {
-        name: String::new(),
-        items: vec![Statement::Declaration(Declaration::Variable(element)), Statement::Block(block(&f.block)?)],
-        attributes: vec![],
-    };
+    let current = Expression::MethodCall { this: iterator_ref(), method: "current".to_string(), args: vec![], loc: at };
+    let mut items = vec![];
+    if f.pattern.is_empty() {
+        let mut element = variable_def(&f.binding, Kind::Variable)?;
+        element.default = Some(current);
+        items.push(Statement::Declaration(Declaration::Variable(element)));
+    } else {
+        // `for (var (k, v) in pairs)`: destructure each element.
+        let (hidden, tuple) = hidden_tuple_of(current, f.pattern.len(), loc(f.binding.span));
+        items.push(Statement::Declaration(Declaration::Variable(hidden)));
+        items.extend(bind_elements(&tuple, &f.pattern, false)?);
+    }
+    items.push(Statement::Block(block(&f.block)?));
+    let body = Block { name: String::new(), items, attributes: vec![] };
     Ok(Statement::Block(Block {
         name: String::new(),
         items: vec![
@@ -1062,9 +1143,14 @@ pub fn build(module: &ast::Module) -> Result<Module, Diagnostic> {
 /// [`build`], with every location pointing into `file`.
 pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnostic> {
     let previous = FILE.with(|f| f.replace(file));
+    let previous_error = LABEL_ERROR.with(|e| e.take());
     let built = build_module(module);
+    let label_error = LABEL_ERROR.with(|e| e.replace(previous_error));
     FILE.with(|f| f.set(previous));
-    built
+    match label_error {
+        Some(error) => Err(error),
+        None => built,
+    }
 }
 
 fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {

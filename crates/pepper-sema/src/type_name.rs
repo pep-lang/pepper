@@ -10,11 +10,33 @@ pub enum TypeFlags {
     Function,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct TypeName {
     pub name: String,
     pub sub_types: Vec<TypeName>,
     pub flags: TypeFlags,
+    /// A tuple type's element labels (`line` in `(line: int, column: int)`),
+    /// one per element, empty for an unlabeled one; empty when none is
+    /// labeled. Labels name elements but are not part of the type's
+    /// identity: equality, hashing and `to_string` ignore them, so
+    /// `(line: int, column: int)` and `(int, int)` are the same type.
+    pub labels: Vec<String>,
+}
+
+impl PartialEq for TypeName {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.sub_types == other.sub_types && self.flags == other.flags
+    }
+}
+
+impl Eq for TypeName {}
+
+impl std::hash::Hash for TypeName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.sub_types.hash(state);
+        self.flags.hash(state);
+    }
 }
 
 pub const AUTO: &str = "__auto";
@@ -100,6 +122,7 @@ impl TypeName {
             name: name.to_string(),
             sub_types: vec![],
             flags: TypeFlags::Scalar,
+            labels: vec![],
         }
     }
 
@@ -108,6 +131,7 @@ impl TypeName {
             name: name.to_string(),
             sub_types: args,
             flags: TypeFlags::Scalar,
+            labels: vec![],
         }
     }
 
@@ -132,6 +156,7 @@ impl TypeName {
             name: name.to_string(),
             sub_types: args,
             flags: TypeFlags::Function,
+            labels: vec![],
         }
     }
 
@@ -202,8 +227,17 @@ impl TypeName {
 
     /// The type of element `name` (`"0"`, `"1"`, ...) of a tuple type.
     pub fn tuple_element(&self, name: &str) -> Option<&TypeName> {
-        let index: usize = name.parse().ok()?;
-        self.tuple_elements().get(index)
+        self.tuple_elements().get(self.tuple_index(name)?)
+    }
+
+    /// The position of tuple element `name`: its digits (`0`), or its
+    /// label (`line`).
+    pub fn tuple_index(&self, name: &str) -> Option<usize> {
+        let index = match name.parse::<usize>() {
+            Ok(index) => index,
+            Err(_) => self.labels.iter().position(|l| l == name)?,
+        };
+        (index < self.tuple_elements().len()).then_some(index)
     }
 
     /// A weak reference type `__weak<T>`.
@@ -248,7 +282,15 @@ impl TypeName {
             return format!("{}({}) => {}", shared, params.join(", "), self.sub_types[0].display());
         }
         if self.is_tuple() {
-            let elements: Vec<String> = self.sub_types.iter().map(|t| t.display()).collect();
+            let elements: Vec<String> = self
+                .sub_types
+                .iter()
+                .enumerate()
+                .map(|(i, t)| match self.labels.get(i).filter(|l| !l.is_empty()) {
+                    Some(label) => format!("{}: {}", label, t.display()),
+                    None => t.display(),
+                })
+                .collect();
             return format!("({})", elements.join(", "));
         }
         if self.is_generic() {

@@ -133,7 +133,10 @@ pub fn lower_destructures(module: &mut Module) {
         }
         Expression::MemberRef { lhs, name, loc } => {
             if let Some(ty) = crate::static_type::of(lhs, &table, current).filter(|t| t.is_tuple()) {
-                if ty.tuple_element(name).is_none() {
+                // A label (`t.line`) names its position from here on.
+                if let Some(index) = ty.tuple_index(name) {
+                    *name = index.to_string();
+                } else {
                     let count = ty.tuple_elements().len();
                     crate::errors::report(Diagnostic::error(format!(
                         "no member named '{}' in '{}': its elements are '0' to '{}'",

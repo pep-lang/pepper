@@ -322,6 +322,22 @@ macro_rules! scope_walker {
                 self.exit_declaration();
             }
 
+            /// The bindings of a destructuring pattern, nested ones included,
+            /// bound in the current scope (`_` binds nothing).
+            fn bind_pattern(&mut self, bindings: &$($m)? [pepper_parser::ast::DestructureBinding]) {
+                for b in bindings {
+                    if !b.nested.is_empty() {
+                        self.bind_pattern(&$($m)? b.nested);
+                        continue;
+                    }
+                    self.visit_type_name(&$($m)? b.type_name);
+                    let marked = self.visit_binding(&b.type_name, None);
+                    if b.name != "_" {
+                        self.scopes_mut().bind_value(&b.name, marked);
+                    }
+                }
+            }
+
             /// A block, unless platform selection drops it.
             fn walk_block(&mut self, block: &$($m)? Block) {
                 if keep(&block.attributes).unwrap_or(true) {
@@ -358,9 +374,13 @@ macro_rules! scope_walker {
                         // variable's scope.
                         self.visit_expression(&$($m)? f.iterable);
                         self.scopes_mut().push(Scope::Values(HashSet::new()));
-                        self.visit_type_name(&$($m)? f.binding.type_name);
-                        let marked = self.visit_binding(&f.binding.type_name, Some(&f.iterable));
-                        self.scopes_mut().bind_value(&f.binding.name, marked);
+                        if f.pattern.is_empty() {
+                            self.visit_type_name(&$($m)? f.binding.type_name);
+                            let marked = self.visit_binding(&f.binding.type_name, Some(&f.iterable));
+                            self.scopes_mut().bind_value(&f.binding.name, marked);
+                        } else {
+                            self.bind_pattern(&$($m)? f.pattern);
+                        }
                         self.walk_block(&$($m)? f.block);
                         self.scopes_mut().pop();
                     }
@@ -391,13 +411,7 @@ macro_rules! scope_walker {
                         // The value is evaluated before the bindings exist;
                         // they belong to the enclosing block.
                         self.visit_expression(&$($m)? d.value);
-                        for b in &$($m)? d.bindings {
-                            self.visit_type_name(&$($m)? b.type_name);
-                            let marked = self.visit_binding(&b.type_name, None);
-                            if b.name != "_" {
-                                self.scopes_mut().bind_value(&b.name, marked);
-                            }
-                        }
+                        self.bind_pattern(&$($m)? d.bindings);
                     }
                     Statement::Match(m) => {
                         self.visit_expression(&$($m)? m.value);

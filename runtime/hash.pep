@@ -77,7 +77,7 @@ export hash<String>(String value): u64 {
 ## removals of different keys) can keep growing it even while `count()`
 ## stays small.
 ##
-## There is no iterator, and entries have no defined order.
+## `iterate()` visits the entries as `(key, value)` tuples, in no defined order.
 ##
 ## @typeParam K the key type; hashed with `hash<K>` and compared with `==`
 ## @typeParam V the value type
@@ -109,6 +109,9 @@ export struct HashMap<K, V> {
     ## until an insert reuses them or `grow` or `clear` resets them.
     ## Internal.
     int _tombstones;
+    ## Counts the changes that add or remove entries (and table growth), so
+    ## an iterator can tell that the map changed under it. Internal.
+    ulong _version;
 
     ## Creates an empty map whose table has room for at least
     ## `initial_capacity` slots.
@@ -216,6 +219,7 @@ export struct HashMap<K, V> {
         _values = new_values;
         _state = new_state;
         _capacity = new_cap;
+        _version += 1;
         _tombstones = 0;
     }
 
@@ -264,6 +268,7 @@ export struct HashMap<K, V> {
         }
         _size = 0;
         _tombstones = 0;
+        _version += 1;
     }
 
     ## Returns a deep copy: a new map holding a copy of each key and value,
@@ -345,6 +350,7 @@ export struct HashMap<K, V> {
                     _tombstones = _tombstones - 1;
                 }
                 _size = _size + 1;
+                _version += 1;
                 return true;
             }
             i = i + 1;
@@ -391,6 +397,7 @@ export struct HashMap<K, V> {
         _values._data[slot] = __default<V>();
         _state._data[slot] = 1;
         _size = _size - 1;
+        _version += 1;
         _tombstones = _tombstones + 1;
         return true;
     }
@@ -422,6 +429,23 @@ export struct HashMap<K, V> {
         return value;
     }
 
+    ## Returns an iterator over the entries as `(key, value)` tuples, in no
+    ## defined order; `for (var (key, value) in map)` drives it.
+    ##
+    ## The iterator holds a reference to the map. Changing a value through an
+    ## existing key while iterating is allowed; adding or removing an entry
+    ## makes the iterator's next `next()` or `current()` panic.
+    ##
+    ## @returns an iterator positioned before the first entry
+    ## @example
+    ##     var total = 0;
+    ##     for (var (name, age) in ages) {
+    ##         total += age;
+    ##     }
+    iterate(): HashMapIterator<K, V> {
+        return HashMapIterator<K, V>(this);
+    }
+
     # No explicit slot loop here: each occupied slot holds exactly one ref
     # (acquired on insert), and the keys/values arrays' destructors null
     # every slot (Size == capacity), releasing it exactly once. The field
@@ -446,8 +470,8 @@ export struct HashMap<K, V> {
 ##
 ## Membership tests, inserts, and removals take expected O(1) time. The
 ## table doubles before an insert of a new element would fill half of it
-## (members plus tombstones), and it never shrinks. There is no iterator, and
-## members have no defined order. The lowercase fields and the `_find_slot`
+## (members plus tombstones), and it never shrinks. `iterate()` visits the
+## members, in no defined order. The lowercase fields and the `_find_slot`
 ## and `grow` methods are the table's internal state: they are public but
 ## may change, and writing to them breaks the set.
 ##
@@ -476,6 +500,9 @@ export struct HashSet<K> {
     ## until an insert reuses them or `grow` or `clear` resets them.
     ## Internal.
     int _tombstones;
+    ## Counts the changes that add or remove members (and table growth), so
+    ## an iterator can tell that the set changed under it. Internal.
+    ulong _version;
 
     ## Creates an empty set whose table has room for at least
     ## `initial_capacity` slots.
@@ -570,6 +597,7 @@ export struct HashSet<K> {
         _keys = new_keys;
         _state = new_state;
         _capacity = new_cap;
+        _version += 1;
         _tombstones = 0;
     }
 
@@ -617,6 +645,7 @@ export struct HashSet<K> {
         }
         _size = 0;
         _tombstones = 0;
+        _version += 1;
     }
 
     ## Returns whether `key` is a member of the set. Expected O(1).
@@ -665,6 +694,7 @@ export struct HashSet<K> {
                     _tombstones = _tombstones - 1;
                 }
                 _size = _size + 1;
+                _version += 1;
                 return true;
             }
             i = i + 1;
@@ -688,6 +718,7 @@ export struct HashSet<K> {
         _keys._data[slot] = __default<K>();
         _state._data[slot] = 1;
         _size = _size - 1;
+        _version += 1;
         _tombstones = _tombstones + 1;
         return true;
     }
@@ -724,6 +755,21 @@ export struct HashSet<K> {
         return key;
     }
 
+    ## Returns an iterator over the members, in no defined order;
+    ## `for (var x in set)` drives it.
+    ##
+    ## The iterator holds a reference to the set. Adding or removing a member
+    ## while iterating makes the iterator's next `next()` or `current()` panic.
+    ##
+    ## @returns an iterator positioned before the first member
+    ## @example
+    ##     for (var name in seen) {
+    ##         print(name);
+    ##     }
+    iterate(): HashSetIterator<K> {
+        return HashSetIterator<K>(this);
+    }
+
     ## Returns a deep copy: a new set holding a copy of each element, made
     ## with `copies.copy`. This is how `copy(value)` copies a HashSet (the
     ## `Copyable<HashSet<K>>` implementation); call `copy(set)` rather than
@@ -756,6 +802,126 @@ export struct HashSet<K> {
     destruct {
     }
 }
+
+## An `Iterator<(K, V)>` over the entries of a `HashMap`, as `(key, value)`
+## tuples in no defined order; returned by `HashMap.iterate()` and driven by
+## `for (var (key, value) in map)`.
+##
+## Holds a reference to the map. It is fail-fast: adding or removing an
+## entry after the iterator was created makes its next `next()` or
+## `current()` panic.
+##
+## @typeParam K the key type of the map
+## @typeParam V the value type of the map
+## @see HashMap.iterate
+export struct HashMapIterator<K, V> {
+    ## The map being iterated.
+    HashMap<K, V> _source;
+    ## The slot of the current entry; meaningful once `_started` is set.
+    ulong _index;
+    ## The map's `_version` when iteration began.
+    ulong _version;
+    ## Whether `next()` has been called.
+    bool _started;
+
+    ## Creates an iterator positioned before the first entry of `source`.
+    ##
+    ## @param source the map to iterate
+    construct(source: HashMap<K, V>) {
+        _source = source;
+        _version = source._version;
+    }
+
+    ## Advances to the next entry.
+    ##
+    ## @returns true when there is a current entry, false once every entry was visited
+    ## @panics if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
+    next(): bool {
+        assert(_source._version == _version, "HashMap modified during iteration");
+        if (_started) {
+            if (_index < _source._capacity) {
+                _index = _index + 1;
+            }
+        } else {
+            _started = true;
+        }
+        while (_index < _source._capacity and _source._state._data[_index] != 2) {
+            _index = _index + 1;
+        }
+        return _index < _source._capacity;
+    }
+
+    ## Returns the entry the last successful `next()` moved to.
+    ##
+    ## @returns the current entry as a `(key, value)` tuple
+    ## @panics if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
+    ## @panics if `next()` was never called or already returned false ("HashMapIterator.current() without an entry")
+    current(): (K, V) {
+        assert(_source._version == _version, "HashMap modified during iteration");
+        assert(_started and _index < _source._capacity, "HashMapIterator.current() without an entry");
+        return (_source._keys._data[_index], _source._values._data[_index]);
+    }
+}
+
+## An `Iterator<K>` over the members of a `HashSet`, in no defined order;
+## returned by `HashSet.iterate()` and driven by `for (var x in set)`.
+##
+## Holds a reference to the set. It is fail-fast: adding or removing a member
+## after the iterator was created makes its next `next()` or `current()`
+## panic.
+##
+## @typeParam K the element type of the set
+## @see HashSet.iterate
+export struct HashSetIterator<K> {
+    ## The set being iterated.
+    HashSet<K> _source;
+    ## The slot of the current member; meaningful once `_started` is set.
+    ulong _index;
+    ## The set's `_version` when iteration began.
+    ulong _version;
+    ## Whether `next()` has been called.
+    bool _started;
+
+    ## Creates an iterator positioned before the first member of `source`.
+    ##
+    ## @param source the set to iterate
+    construct(source: HashSet<K>) {
+        _source = source;
+        _version = source._version;
+    }
+
+    ## Advances to the next member.
+    ##
+    ## @returns true when there is a current member, false once every member was visited
+    ## @panics if a member was added or removed since the iterator was created ("HashSet modified during iteration")
+    next(): bool {
+        assert(_source._version == _version, "HashSet modified during iteration");
+        if (_started) {
+            if (_index < _source._capacity) {
+                _index = _index + 1;
+            }
+        } else {
+            _started = true;
+        }
+        while (_index < _source._capacity and _source._state._data[_index] != 2) {
+            _index = _index + 1;
+        }
+        return _index < _source._capacity;
+    }
+
+    ## Returns the member the last successful `next()` moved to.
+    ##
+    ## @returns the current member
+    ## @panics if a member was added or removed since the iterator was created ("HashSet modified during iteration")
+    ## @panics if `next()` was never called or already returned false ("HashSetIterator.current() without a member")
+    current(): K {
+        assert(_source._version == _version, "HashSet modified during iteration");
+        assert(_started and _index < _source._capacity, "HashSetIterator.current() without a member");
+        return _source._keys._data[_index];
+    }
+}
+
+extend HashSetIterator<K> with Iterator<K> {}
 
 extend HashMap<K, V> with Copyable<HashMap<K, V>> {}
 

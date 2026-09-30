@@ -197,6 +197,7 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
             .or_else(|| b.else_block.as_ref().and_then(|e| in_block(e, offset))),
         ast::Statement::While(w) => in_expression_types(&w.condition, offset).or_else(|| in_block(&w.block, offset)),
         ast::Statement::For(f) => in_variable(&f.binding, offset)
+            .or_else(|| f.pattern.iter().flat_map(|b| b.leaves()).find_map(|b| in_type_name(&b.type_name, offset)))
             .or_else(|| in_expression_types(&f.iterable, offset))
             .or_else(|| in_block(&f.block, offset)),
         ast::Statement::With(w) => w
@@ -211,6 +212,7 @@ fn in_statement(stmt: &ast::Statement, offset: usize) -> Option<&ast::TypeName> 
         ast::Statement::Destructure(d) => d
             .bindings
             .iter()
+            .flat_map(|b| b.leaves())
             .find_map(|b| in_type_name(&b.type_name, offset))
             .or_else(|| in_expression_types(&d.value, offset)),
         ast::Statement::Match(m) => in_expression_types(&m.value, offset)

@@ -21,6 +21,25 @@ value. Its main use is returning several values from a function:
   element 0 of element 1. An element that does not exist is a compile error.
 - Elements are read-only. `t.0 = 3` is a compile error; build a new tuple
   instead: `t = (3, t.1);`.
+- `Tuple<A, B>` is another spelling of `(A, B)`, for places where a type in
+  angle brackets reads better.
+
+## Labels
+
+A tuple type can name its elements: `(line: int, column: int)`. A label is
+another name for a position, so `p.line` and `p.0` read the same element:
+
+```pepper
+{{#include ../../examples/tuples-labels.pep}}
+```
+
+- Labels belong to the type you write, not to the value. A labeled tuple and
+  an unlabeled one with the same element types are the same type, so each
+  converts to the other freely.
+- Either every element has a label or none does, and labels in one tuple must
+  differ.
+- A tuple value cannot have labels yet: write `(3, 7)` where a
+  `(line: int, column: int)` is expected, not `(line: 3, column: 7)`.
 
 ## Destructuring
 
@@ -35,6 +54,9 @@ value. Its main use is returning several values from a function:
 - A name may state its type, `var (_, top: long) = …`; the element converts
   to it. Without one, the variable takes the element's type.
 - `const (a, b) = …` declares constants.
+- Patterns nest: `var (id, (name, age)) = …` takes an element that is itself
+  a tuple apart.
+- A `for` loop destructures each element: `for (var (name, count) in pairs)`.
 - `(a, b) = value;` assigns to places that already exist: variables, fields
   (`p.x`) and array elements. The whole right side is evaluated before any
   assignment, so `(a, b) = (b, a)` swaps.
@@ -57,14 +79,28 @@ if you had assigned it to a variable:
 A tuple is thread-safe when all its elements are, so a module-scope
 `const origin: (int, long) = (0, 0);` is allowed.
 
+## Collections, comparing and printing
+
+A tuple works anywhere a type does, including as a type argument:
+`Array<(int, String)>`, `HashMap<(int, int), String>`. Iterating a `HashMap`
+yields `(key, value)` tuples:
+
+```pepper
+{{#include ../../examples/tuples-collections.pep}}
+```
+
+- `==` and `!=` compare element by element. Each element compares the way it
+  would on its own: a type with an `==` operator (such as `String`) uses it,
+  and any other struct compares by identity (the same object).
+- A tuple can be a `HashMap` key or a `HashSet` member. Its hash combines the
+  hashes of its elements, so equal tuples hash equally.
+- `print((1, "two"))` prints `(1, two)`.
+- `copy(t)` (see [Copying a value](memory.md#copying-a-value-with-copy)) copies each element: a struct
+  element as `copy` would copy it on its own, anything thread-safe as is.
+
 ## Current limitations
 
 These come in later phases:
 
-- Tuples cannot be generic type arguments yet (`Array<(int, String)>`,
-  `HashMap<String, (int, int)>`), and there is no `Tuple<A, B>` spelling.
-- Tuples cannot be compared with `==`, hashed, or passed to `print`.
-- Elements cannot be named (`(line: int, column: int)`).
-- Destructuring does not nest (`var (a, (b, c)) = …`) and does not work in a
-  `for` loop (`for (var (k, v) in map)`).
+- A tuple value cannot have labels (`(line: 3, column: 7)`).
 - `match` cannot match tuple patterns.

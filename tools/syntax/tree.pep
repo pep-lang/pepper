@@ -114,7 +114,9 @@ export const node_closure_parameters = 45;
 ## `name [: TYPE]`
 export const node_closure_parameter = 46;
 ## `(var | const) CLOSURE_PARAMETERS = expression ;`, a destructuring
-## declaration such as `var (a, b: long, _) = f();`.
+## declaration such as `var (a, b: long, _) = f();`, or `var CLOSURE_PARAMETERS`
+## alone as the pattern of `for (var (k, v) in pairs)`. A nested pattern is a
+## `CLOSURE_PARAMETERS` among the bindings.
 export const node_destructure = 60;
 ## `( expression, expression, ... )`, a tuple literal.
 export const node_tuple = 61;

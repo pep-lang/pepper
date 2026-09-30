@@ -78,6 +78,10 @@ pub struct TypeName {
     pub generic_types: Vec<TypeName>,
     /// Span of the whole type as written (`int[]`, `Array<int>`, ...).
     pub span: Span,
+    /// A tuple type's element labels, `line` and `column` in
+    /// `(line: int, column: int)`: one per element, empty for an unlabeled
+    /// element. Empty when no element is labeled.
+    pub labels: Vec<String>,
 }
 
 /// Internal name of a type sema infers (`var x = 1;`).
@@ -89,6 +93,7 @@ impl TypeName {
             name: AUTO_TYPE.to_string(),
             generic_types: vec![],
             span: Span::none(),
+            labels: vec![],
         }
     }
 }
@@ -121,7 +126,16 @@ impl Display for TypeName {
             return write!(f, "{}({}) => {}", shared, join(&self.generic_types[1..], ", "), self.generic_types[0]);
         }
         if self.name == TUPLE_TYPE && !self.generic_types.is_empty() {
-            return write!(f, "({})", join(&self.generic_types, ", "));
+            let elements: Vec<String> = self
+                .generic_types
+                .iter()
+                .enumerate()
+                .map(|(i, t)| match self.labels.get(i).filter(|l| !l.is_empty()) {
+                    Some(label) => format!("{}: {}", label, t),
+                    None => t.to_string(),
+                })
+                .collect();
+            return write!(f, "({})", elements.join(", "));
         }
         if self.generic_types.is_empty() {
             write!(f, "{}", self.name)
@@ -515,7 +529,11 @@ pub struct While {
 /// declaration with no default value.
 #[derive(Debug, Clone)]
 pub struct For {
+    /// The loop variable. With a `pattern` it has an empty name.
     pub binding: VariableDecl,
+    /// `for (var (k, v) in pairs)`: the tuple pattern each element is
+    /// destructured into. Empty for a plain binding.
+    pub pattern: Vec<DestructureBinding>,
     pub iterable: Expression,
     pub block: Block,
     pub span: Span,
@@ -551,6 +569,35 @@ pub struct DestructureBinding {
     pub name: String,
     pub name_span: Span,
     pub type_name: TypeName,
+    /// A nested pattern, `(b, c)` in `var (a, (b, c)) = ...`: its bindings,
+    /// with an empty `name`. Empty for a plain binding.
+    pub nested: Vec<DestructureBinding>,
+}
+
+impl DestructureBinding {
+    /// Every named binding in this one and its nested patterns, in order
+    /// (`_` included).
+    pub fn leaves(&self) -> Vec<&DestructureBinding> {
+        if self.nested.is_empty() {
+            vec![self]
+        } else {
+            self.nested.iter().flat_map(|b| b.leaves()).collect()
+        }
+    }
+}
+
+impl Display for DestructureBinding {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if !self.nested.is_empty() {
+            let inner: Vec<String> = self.nested.iter().map(|b| b.to_string()).collect();
+            return write!(f, "({})", inner.join(", "));
+        }
+        if self.type_name.name == AUTO_TYPE {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{}: {}", self.name, self.type_name)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1099,6 +1146,10 @@ impl Display for While {
 
 impl Display for For {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if !self.pattern.is_empty() {
+            let pattern: Vec<String> = self.pattern.iter().map(|b| b.to_string()).collect();
+            return write!(f, "for (var ({}) in {}) {}", pattern.join(", "), self.iterable, self.block);
+        }
         write!(f, "for ({} in {}) {}", self.binding, self.iterable, self.block)
     }
 }
@@ -1143,11 +1194,7 @@ impl Display for Statement {
             Statement::Return(r) => write!(f, "{};", r),
             Statement::LoopBreak(l) => write!(f, "{};", if l.kind == LoopBreakKind::Break { "break" } else { "continue" }),
             Statement::Destructure(d) => {
-                let bindings: Vec<String> = d
-                    .bindings
-                    .iter()
-                    .map(|b| if b.type_name.name == AUTO_TYPE { b.name.clone() } else { format!("{}: {}", b.name, b.type_name) })
-                    .collect();
+                let bindings: Vec<String> = d.bindings.iter().map(|b| b.to_string()).collect();
                 write!(f, "{} ({}) = {};", if d.is_const { "const" } else { "var" }, bindings.join(", "), d.value)
             }
             Statement::Match(m) => write!(f, "{}", m),

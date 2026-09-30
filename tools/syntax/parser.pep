@@ -374,6 +374,11 @@ struct Parser {
                 _take(node);
                 break;
             }
+            # A tuple element's label, `line:` in `(line: int, column: int)`.
+            if (_at_name() and _peek_at(1).is(":")) {
+                _take(node);
+                _take(node);
+            }
             node.add(_type_name());
             if (_failed) {
                 return;
@@ -1055,7 +1060,15 @@ struct Parser {
         if (parenthesized) {
             _take(node);
         }
-        node.add(_variable_declaration(Array<Node>()));
+        if (_at_word("var") and _peek_at(1).is("(")) {
+            # `for (var (k, v) in pairs)`: a pattern.
+            var pattern = Node(node_destructure);
+            _take(pattern);
+            pattern.add(_binding_pattern());
+            node.add(pattern);
+        } else {
+            node.add(_variable_declaration(Array<Node>()));
+        }
         if (_failed) {
             return node;
         }
@@ -1207,44 +1220,57 @@ struct Parser {
         return _at_end() or _at(";") or _at("}") or _peek().newlines_before > 0;
     }
 
-    # `(var | const) (name [: Type], ...) = value`.
+    # `(var | const) PATTERN = value`.
     _destructure(): Node {
         var node = Node(node_destructure);
         _take(node);
-        var bindings = Node(node_closure_parameters);
-        _take(bindings);
-        while (true) {
-            if (!_at_name()) {
-                _fail("expected variable name");
-                return node;
-            }
-            var binding = Node(node_closure_parameter);
-            _take(binding);
-            if (_at(":")) {
-                _take(binding);
-                binding.add(_type_name());
-                if (_failed) {
-                    return node;
-                }
-            }
-            bindings.add(binding);
-            if (_at(",")) {
-                _take(bindings);
-                continue;
-            }
-            _expect(bindings, ")");
-            if (_failed) {
-                return node;
-            }
-            break;
+        node.add(_binding_pattern());
+        if (_failed) {
+            return node;
         }
-        node.add(bindings);
         _expect(node, "=");
         if (_failed) {
             return node;
         }
         node.add(_expression());
         return node;
+    }
+
+    # `( binding, ... )` of a destructuring, where a binding is
+    # `name [: Type]` or a nested pattern.
+    _binding_pattern(): Node {
+        var bindings = Node(node_closure_parameters);
+        _take(bindings);
+        while (true) {
+            if (_at("(")) {
+                bindings.add(_binding_pattern());
+                if (_failed) {
+                    return bindings;
+                }
+            } else {
+                if (!_at_name()) {
+                    _fail("expected variable name");
+                    return bindings;
+                }
+                var binding = Node(node_closure_parameter);
+                _take(binding);
+                if (_at(":")) {
+                    _take(binding);
+                    binding.add(_type_name());
+                    if (_failed) {
+                        return bindings;
+                    }
+                }
+                bindings.add(binding);
+            }
+            if (_at(",")) {
+                _take(bindings);
+                continue;
+            }
+            _expect(bindings, ")");
+            return bindings;
+        }
+        return bindings;
     }
 
     # `var name`, `const name` or `Type name`, then `[: Type] [= value]`.

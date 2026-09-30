@@ -7,6 +7,7 @@ extern void memset(void* p, int c, ulong n);
 extern int memcmp(void* a, void* b, ulong n);
 extern char* getenv(char* name);
 extern int puts(char* s);
+extern int putchar(int c);
 extern void abort();
 extern int fflush(void* stream);
 
@@ -449,5 +450,29 @@ export _pep_print_int(v: long) {
 export _pep_print_float(v: double) {
     var s = floatstr(v);
     puts(s);
+    _pep_free(s);
+}
+
+# Without the newline, for printing a tuple on one line.
+export _pep_write(s: __ptr<char>) {
+    if (s == __null) {
+        return;
+    }
+    ulong i = 0;
+    while (s[i] != 0) {
+        putchar(s[i]);
+        i += 1;
+    }
+}
+
+export _pep_write_int(v: long) {
+    var s = dec(v);
+    _pep_write(s);
+    _pep_free(s);
+}
+
+export _pep_write_float(v: double) {
+    var s = floatstr(v);
+    _pep_write(s);
     _pep_free(s);
 }

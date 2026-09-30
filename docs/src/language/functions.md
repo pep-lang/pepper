@@ -147,8 +147,8 @@ A function can take type parameters in angle brackets after its name, such as
 
 `print` is a built-in function that writes its arguments to standard output,
 each on its own line. It accepts any number of arguments, and each one can be a
-`String`, an integer, a `bool` (printed as `1` or `0`), or a floating-point
-number.
+`String`, an integer, a `bool` (printed as `1` or `0`), a floating-point
+number, or a [tuple](tuples.md) of these (printed as `(1, two)`).
 
 ```pepper
 {{#include ../../examples/functions-print.pep}}

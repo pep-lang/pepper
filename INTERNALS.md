@@ -338,13 +338,22 @@ with no extension, and `module_name()` is the output's stem.
     once its arguments are typed. The tuple type `(A, B)` is
     `TypeName { name: "__tuple", sub_types }` (`type_name::TUPLE`,
     `is_tuple`), displayed as `(A, B)`; `t.0` is a `MemberRef` named `"0"`.
+    `Tuple<A, B>` builds the same type. Labels (`(line: int, column: int)`)
+    ride on `TypeName::labels`, which equality, hashing and `Display` ignore
+    (`display()` shows them); `check_labels` rejects a partly labeled or
+    duplicate set, and `lower_destructures` renames `p.line` to `p.0`
+    (`tuple_index`).
   - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
     with `Expression::Destructure { value: e, count }` followed by
     `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block
     (`destructure`). `(a, p.x) = e;` becomes a block holding the hidden
     local and one assignment per place (`destructuring_assignment`), so the
     right side is evaluated first. `tuples::lower_destructures` checks the
-    count and removes the `Destructure` node.
+    count and removes the `Destructure` node. A nested pattern
+    (`DestructureBinding::nested`) gets its own hidden local bound from the
+    outer one's element (`bind_elements`, `assign_elements`), and
+    `for (var (k, v) in e)` (`For::pattern`) binds the loop's element to a
+    hidden variable and destructures it at the top of the body.
   - An `enum` is an `ast::StructDecl` whose `enumeration` is set, so
     linking, visibility, exports and name mangling treat it as a struct.
     `enum_def` builds an `EnumDef` in `module.enums` instead (cases with
@@ -721,6 +730,16 @@ reference held per reference element.
   takes element `k` without acquiring and clears it in the hidden tuple, so
   the binding holds the only reference, as a C++ structured binding would;
   `_` elements stay in the hidden tuple until its scope exits.
+- **Comparing, hashing, printing.** `codegen_binary` sends a tuple `==`/`!=`
+  to `tuple_equal`, which compares element by element (`value_equal`: an
+  element's own `==` when its type has one, else by value or identity).
+  `Expression::Address` on a tuple (what `hash<T>` uses) is `tuple_hash`,
+  which folds each element's `hash<E>` (or its bytes) with FNV-1a, so a tuple
+  is a `HashMap` key. `print` writes a tuple with `write_tuple` through the
+  runtime's `_pep_write*` helpers.
+- **Generic bases.** A tuple naming a generic parameter (`(K, V)` inside
+  `HashMap`) is skipped by `register_tuple`; only its specializations get a
+  layout.
 
 ### 4.1 Object emission, linking, running (`driver/src/lib.rs`, `linker.rs`)
 

@@ -111,6 +111,9 @@ enum Plan {
     /// A struct copied by its `_pep_copy` method; `copyable` when the struct
     /// implements `Copyable<T>` itself.
     Object { copyable: bool },
+    /// A tuple with an element that is not thread-safe: a new tuple of each
+    /// element's copy.
+    Tuple,
     Blocked(Blocker),
 }
 
@@ -208,6 +211,9 @@ fn plan(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Plan {
     if module.traits.iter().any(|t| t.name == ty.name) {
         return Plan::Blocked(Blocker::Trait(ty.clone()));
     }
+    if ty.is_tuple() {
+        return Plan::Tuple;
+    }
     let Some(st) = struct_named(module, ty) else {
         return Plan::Same;
     };
@@ -263,6 +269,7 @@ fn first_blocker(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName) -> Op
             Plan::Same => return None,
             Plan::Blocked(blocker) => return Some(blocker),
             Plan::Object { copyable } => copyable,
+            Plan::Tuple => false,
         };
         for (inner, hop) in contained(module, ty, copyable) {
             path.push(hop);
@@ -451,6 +458,10 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
                 }
                 Lowering::Object
             }
+            Plan::Tuple => match first_blocker(module, &safe, ty) {
+                Some((_, blocker)) => Lowering::Fail(format!("cannot copy '{}', which {}", ty.display(), blocker.what())),
+                None => Lowering::Tuple(tuple_parts(module, &safe, ty, &mut needed)),
+            },
             Plan::Blocked(blocker) => Lowering::Fail(format!("cannot copy '{}', which {}", ty.display(), blocker.what())),
         };
         lowered.push((ty.clone(), lowering));
@@ -476,6 +487,7 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
             *e = match lowering {
                 Lowering::Same => value,
                 Lowering::Object => Expression::MethodCall { this: Box::new(copies), method: format!("_copy_object<{}>", ty), args: vec![value], loc },
+                Lowering::Tuple(parts) => copy_tuple(&ty, parts, value, &copies, loc),
                 Lowering::Fail(message) => Expression::FunctionCall {
                     function: format!("_pep_copy_failed<{}>", ty),
                     args: vec![Expression::StringLiteral { value: message.clone(), is_raw: true, loc: Loc::NONE }],
@@ -491,8 +503,62 @@ pub fn synthesize_copies(module: &mut Module) -> bool {
 enum Lowering {
     Same,
     Object,
+    /// A new tuple of each element's copy.
+    Tuple(Vec<Part>),
     /// A panic with this message: nothing the program asks for copies a `T`.
     Fail(String),
+}
+
+/// How a tuple copies one element.
+enum Part {
+    /// Thread-safe: the element itself.
+    Same,
+    /// A struct, through `copies._copy_object<T>`.
+    Object(TypeName),
+    /// A nested tuple, element by element.
+    Tuple(TypeName, Vec<Part>),
+}
+
+/// How to copy each element of tuple `ty`, whose elements can all be
+/// copied; records each struct element in `needed` so it gets `_pep_copy`.
+fn tuple_parts(module: &Module, safe: &ThreadSafeStructs, ty: &TypeName, needed: &mut Vec<(String, bool)>) -> Vec<Part> {
+    ty.sub_types
+        .iter()
+        .map(|element| match plan(module, safe, element) {
+            Plan::Object { copyable } => {
+                let name = element.to_string();
+                if !needed.iter().any(|(n, _)| *n == name) {
+                    needed.push((name, copyable));
+                }
+                Part::Object(element.clone())
+            }
+            Plan::Tuple => Part::Tuple(element.clone(), tuple_parts(module, safe, element, needed)),
+            Plan::Same | Plan::Blocked(_) => Part::Same,
+        })
+        .collect()
+}
+
+/// `(copy of value.0, copy of value.1, ...)`. `value` is the parameter of
+/// `Copies.copy<T>`, so reading it once per element is safe.
+fn copy_tuple(ty: &TypeName, parts: &[Part], value: Expression, copies: &Expression, loc: Loc) -> Expression {
+    let args = parts
+        .iter()
+        .enumerate()
+        .map(|(i, part)| {
+            let element = Expression::MemberRef { lhs: Box::new(value.clone()), name: i.to_string(), loc };
+            match part {
+                Part::Same => element,
+                Part::Object(t) => Expression::MethodCall {
+                    this: Box::new(copies.clone()),
+                    method: format!("_copy_object<{}>", t),
+                    args: vec![element],
+                    loc,
+                },
+                Part::Tuple(t, inner) => copy_tuple(t, inner, element, copies, loc),
+            }
+        })
+        .collect();
+    Expression::FunctionCall { function: ty.to_string(), args, loc }
 }
 
 fn collect_calls(function: &mut FunctionDef, calls: &mut Vec<(TypeName, Loc)>) {
@@ -605,7 +671,8 @@ fn cannot_copy(module: &Module, root: &TypeName, fallback: Loc, path: Vec<Hop>, 
     for hop in &path {
         diagnostic = match hop {
             Hop::Field { owner, field, loc } => {
-                diagnostic.with_note(format!("'{}' reaches it through field '{}'", owner.display(), field), loc.known())
+                let step = if owner.is_tuple() { format!("element {}", field) } else { format!("field '{}'", field) };
+                diagnostic.with_note(format!("'{}' reaches it through {}", owner.display(), step), loc.known())
             }
             // A runtime container's `copy` method is not the program's to
             // change: point only at a `Copyable` method in the error's file.

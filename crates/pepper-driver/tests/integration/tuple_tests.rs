@@ -3,7 +3,10 @@
 //! value that holds one reference to each element, like a `std::tuple` of
 //! `shared_ptr`s (passes/tuples.rs, codegen's `register_tuple`).
 
+use clap::Parser;
 use pepper_codegen::CodeGenerator;
+use std::path::PathBuf;
+use std::process::Command;
 
 fn run(source: &str) -> i32 {
     let mut module = pepper_driver::compiler::compile_with_runtime("test.pep", source).expect("compile");
@@ -33,6 +36,35 @@ pair(a: int, b: int): (Node, Node) {
     return (Node(a), Node(b));
 }
 "#;
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Builds `source` into an executable and runs it; returns whether it
+/// exited cleanly and its stdout.
+fn run_exe(name: &str, source: &str) -> (bool, String) {
+    // chdir so runtime discovery resolves like the CLI.
+    std::env::set_current_dir(repo_root()).unwrap();
+    let dir = std::env::temp_dir().join(format!("pepper_tuple_{}_{}", name, std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("main.pep");
+    std::fs::write(&src, source).unwrap();
+    let exe = dir.join(if cfg!(windows) { "main.exe" } else { "main" });
+    let options = pepper_driver::Options::parse_from(vec![
+        "pepper".to_string(),
+        src.to_string_lossy().into_owned(),
+        "-o".to_string(),
+        exe.to_string_lossy().into_owned(),
+        "--build".to_string(),
+        dir.join("build").to_string_lossy().into_owned(),
+    ]);
+    pepper_driver::run(options).expect("compile + link");
+    let output = Command::new(&exe).output().expect("spawn");
+    let _ = std::fs::remove_dir_all(dir);
+    (output.status.success(), String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n"))
+}
 
 fn with_node(body: &str) -> String {
     format!("{}{}", NODE, body)
@@ -209,4 +241,241 @@ test(): int {
 "#,
     );
     assert_eq!(run(&src), 0);
+}
+
+#[test]
+fn generic_arguments_equality_and_hashing() {
+    let src = with_node(
+        r#"
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var a = Array<(int, String)>();
+        a.append((1, "one"));
+        a.append((2, "two"));
+        if (a[1].1 != "two") { return 1; }
+        if (!a.contains((2, "t" + "wo"))) { return 2; }
+        if (!((1, "x") == (1, "x")) || !((1, "x") != (1, "y"))) { return 3; }
+        if ((1, (2.5, true)) != (1, (2.5, true))) { return 4; }
+        var n = Node(1);
+        if ((n, 1) != (n, 1)) { return 5; }
+        if ((Node(1), 1) == (Node(1), 1)) { return 6; }
+        var m = HashMap<(int, String), int>();
+        m[(1, "a")] = 10;
+        m[(2, "b")] = 20;
+        if (m[(1, "a")] != 10 || !m.contains((2, "b"))) { return 7; }
+        var by_name = HashMap<String, (int, Node)>();
+        by_name["p"] = (3, Node(4));
+        if (by_name["p"].1.value != 4) { return 8; }
+        var spelled = HashMap<Tuple<int, int>, String>();
+        spelled[(1, 2)] = "x";
+        var u: Tuple<int, String> = (1, "a");
+        var v: (int, String) = u;
+        if (spelled[(1, 2)] != "x" || v != (1, "a")) { return 9; }
+        a.remove_at(0);
+    }
+    if (_pep_live_allocs() != before) { return 10; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(run(&src), 0);
+}
+
+#[test]
+fn nested_and_for_loop_destructuring() {
+    let src = with_node(
+        r#"
+nested(): (int, (String, Node)) {
+    return (1, ("x", Node(9)));
+}
+
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var (a, (s, n)) = nested();
+        if (a != 1 || s != "x" || n.value != 9) { return 1; }
+        if (__refcount<Node>(n) != 1) { return 2; }
+        var (_, (_, m: Node)) = nested();
+        if (m.value != 9) { return 3; }
+        var b = 0;
+        var t = "";
+        (b, (t, _)) = nested();
+        if (b != 1 || t != "x") { return 4; }
+        var pairs = Array<(String, int)>();
+        pairs.append(("a", 1));
+        pairs.append(("b", 2));
+        var total = 0;
+        var names = "";
+        for (var (name, count) in pairs) {
+            total += count;
+            names = names + name;
+        }
+        if (total != 3 || names != "ab") { return 5; }
+        var trios = Array<(int, (int, Node))>();
+        trios.append((1, (2, Node(3))));
+        for (var (x, (y, z)) in trios) {
+            if (x + y + z.value != 6) { return 6; }
+        }
+    }
+    if (_pep_live_allocs() != before) { return 7; }
+    return 0;
+}
+"#,
+    );
+    assert_eq!(run(&src), 0);
+}
+
+#[test]
+fn labeled_elements() {
+    let src = r#"
+struct Token {
+    var at: (line: int, column: int);
+}
+
+position(): (line: int, column: int) {
+    return (3, 7);
+}
+
+span(): (start: (line: int, column: int), length: int) {
+    return (position(), 4);
+}
+
+column_of(p: (line: int, column: int)): int {
+    return p.column;
+}
+
+test(): int {
+    var p = position();
+    if (p.line != 3 || p.column != 7 || p.0 != 3) { return 1; }
+    if (position().column != 7) { return 2; }
+    var plain: (int, int) = p;
+    var back: (line: int, column: int) = plain;
+    if (back.line != 3) { return 3; }
+    if (column_of((1, 2)) != 2) { return 4; }
+    var t = Token();
+    t.at = (5, 6);
+    if (t.at.column != 6) { return 5; }
+    if (span().start.column != 7 || span().length != 4) { return 6; }
+    var (line, column) = p;
+    if (line != 3 || column != 7) { return 7; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
+fn map_and_set_iteration() {
+    let src = r#"
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var ages = HashMap<String, int>();
+        ages["ada"] = 36;
+        ages["alan"] = 41;
+        ages["grace"] = 85;
+        ages.remove("alan");
+        var total = 0;
+        var names = 0;
+        for (var (name, age) in ages) {
+            total += age;
+            names += name.size() as int;
+        }
+        if (total != 121 || names != 8) { return 1; }
+        var seen = HashSet<String>();
+        seen.insert("x");
+        seen.insert("yy");
+        var size = 0;
+        for (var s in seen) {
+            size += s.size() as int;
+        }
+        if (size != 3) { return 2; }
+        for (var entry in ages) {
+            ages[entry.0] = entry.1 + 1;
+        }
+        if (ages["ada"] != 37) { return 3; }
+    }
+    if (_pep_live_allocs() != before) { return 4; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
+fn inserting_while_iterating_a_map_panics() {
+    let (ok, stdout) = run_exe(
+        "iterate_insert",
+        r#"
+main(): int {
+    var m = HashMap<int, int>();
+    m[1] = 1;
+    for (var (k, v) in m) {
+        m[k + 100] = v;
+    }
+    return 0;
+}
+"#,
+    );
+    assert!(!ok, "expected a panic; stdout: {stdout:?}");
+    assert!(stdout.contains("HashMap modified during iteration"), "stdout: {stdout:?}");
+}
+
+#[test]
+fn print_writes_tuples() {
+    let (ok, stdout) = run_exe(
+        "print",
+        r#"
+main(): int {
+    var s = "two";
+    print((1, s, (2.5, true)), 7);
+    print((-3, "x" + "y"));
+    return 0;
+}
+"#,
+    );
+    assert!(ok, "stdout: {stdout:?}");
+    assert_eq!(stdout, "(1, two, (2.500000, 1))\n7\n(-3, xy)\n");
+}
+
+#[test]
+fn deep_copies_copy_each_element() {
+    let src = r#"
+struct Leaf {
+    var value: int = 0;
+    construct(this.value = 0) {}
+}
+
+test(): int {
+    var before = _pep_live_allocs();
+    {
+        var n = Leaf(1);
+        var a = Array<(String, (Leaf, int))>();
+        a.append(("x", (n, 2)));
+        a.append(("y", (n, 3)));
+        var b = copy(a);
+        if (b.count() != 2 || b[1].0 != "y" || b[1].1.1 != 3) { return 1; }
+        if (b[0].1.0 === n) { return 2; }
+        if (b[0].1.0 !== b[1].1.0) { return 3; }
+        b[0].1.0.value = 9;
+        if (n.value != 1) { return 4; }
+        var t = copy((n, 5));
+        if (t.0 === n || t.0.value != 1 || t.1 != 5) { return 5; }
+        var plain = copy((1, 2.5));
+        if (plain.1 != 2.5) { return 6; }
+    }
+    if (_pep_live_allocs() != before) { return 7; }
+    return 0;
+}
+"#;
+    assert_eq!(run(src), 0);
+}
+
+#[test]
+fn copying_a_tuple_names_the_element_that_blocks_it() {
+    let src = with_node("test(): int {\n    var p: (int, Node) = (1, Node(2));\n    var t = copy(p);\n    return 0;\n}\n");
+    let Err(error) = pepper_driver::compiler::compile_with_runtime("test.pep", &src) else { panic!("copy must fail") };
+    assert!(error.contains("error: cannot copy '(int, Node)' because it contains 'Node'"), "{error}");
+    assert!(error.contains("note: '(int, Node)' reaches it through element 1"), "{error}");
 }

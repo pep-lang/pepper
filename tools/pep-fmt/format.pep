@@ -980,6 +980,9 @@ export struct Formatter {
                 result.add(_leaf(child)).add(text(" "));
             } else if (child.is_token("=>")) {
                 result.add(text(" ")).add(_leaf(child)).add(text(" "));
+            } else if (child.is_token(":")) {
+                # A tuple element's label: `line: int`.
+                result.add(_leaf(child)).add(text(" "));
             } else if (child.is_token("shared") or child.is_token("extern")) {
                 result.add(_leaf(child)).add(text(" "));
             } else {
