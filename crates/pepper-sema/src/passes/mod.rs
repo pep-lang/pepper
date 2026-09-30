@@ -5,6 +5,7 @@
 use crate::model::*;
 use std::mem;
 
+pub mod entry_point;
 pub mod resolve_literals;
 pub mod resolve_type_aliases;
 pub mod overloads;
@@ -74,6 +75,8 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // First pass
     // Enum cases (`Color.Red`) before anything infers a type from them.
     step!(crate::enums::resolve_enum_cases(module));
+    // `main(args: String[])` becomes a `main()` that passes the arguments.
+    step!(entry_point::lower_main_arguments(module));
     step!(check_bindings::check_bindings(module));
     step!(synthesize_function_types(module));
     step!(resolve_literals(module));

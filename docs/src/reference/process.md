@@ -21,17 +21,21 @@ quoted argument with spaces is one element. Each call builds a new array.
 On Windows the arguments are in the process's ANSI code page, so text
 outside it is not preserved.
 
+`main` receives the same array when it is declared
+`main(args: String[]): int`; `arguments()` reads it anywhere else.
+
 **Returns**
 - the program name followed by its arguments
 
 **Example**
 ```pepper
-    main(): int {
-        var parts = arguments();
-        if (parts.count() > 1) {
-            print(parts[1]);
+    verbose(): bool {
+        for (var argument in arguments()) {
+            if (argument == "-v") {
+                return true;
+            }
         }
-        return 0;
+        return false;
     }
 ```
 

@@ -26,16 +26,27 @@ extern int fflush(void* stream);
 ## On Windows the arguments are in the process's ANSI code page, so text
 ## outside it is not preserved.
 ##
+## `main` receives the same array when it is declared
+## `main(args: String[]): int`; `arguments()` reads it anywhere else.
+##
 ## @returns the program name followed by its arguments
 ## @example
-##     main(): int {
-##         var parts = arguments();
-##         if (parts.count() > 1) {
-##             print(parts[1]);
+##     verbose(): bool {
+##         for (var argument in arguments()) {
+##             if (argument == "-v") {
+##                 return true;
+##             }
 ##         }
-##         return 0;
+##         return false;
 ##     }
 export arguments(): Array<String> {
+    return _arguments();
+}
+
+# The arguments a `main(args: String[])` receives: the compiler's
+# synthesized `main()` calls this (sema's `passes::entry_point`), under a
+# name a program's own `arguments` cannot shadow.
+export _pep_arguments(): Array<String> {
     return _arguments();
 }
 

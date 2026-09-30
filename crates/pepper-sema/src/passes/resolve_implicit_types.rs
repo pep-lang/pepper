@@ -606,7 +606,7 @@ fn finish_return_inference(function: &mut FunctionDef, scopes: &mut Scopes) -> b
     };
     let inferred = if returns.is_empty() {
         // `main` is the process entry point: falling off its end exits 0.
-        TypeName::new(if function.name == "main" && function.parent.is_none() { "int" } else { "void" })
+        TypeName::new(if crate::passes::entry_point::is_entry_point(function) { "int" } else { "void" })
     } else {
         match returns.into_iter().find(|t| !t.is_empty() && !t.is_auto()) {
             Some(ty) => ty,

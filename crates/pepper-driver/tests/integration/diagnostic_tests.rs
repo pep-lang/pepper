@@ -2353,6 +2353,39 @@ fn tuple_literal_label_mismatch() {
 }
 
 #[test]
+fn main_with_a_parameter_that_is_not_string_array() {
+    assert_eq!(
+        error_of("main_params_type", "main(args: int[]): int {\n    return 0;\n}\n"),
+        "main.pep:1:12: error: 'main' must take no parameters or one 'String[]'\n\
+         \x20   1 | main(args: int[]): int {\n\
+         \x20     |            ^~~~~"
+    );
+}
+
+#[test]
+fn main_with_two_parameters() {
+    assert_eq!(
+        error_of("main_params_count", "main(args: String[], extra: int): int {\n    return 0;\n}\n"),
+        "main.pep:1:22: error: 'main' must take no parameters or one 'String[]'\n\
+         \x20   1 | main(args: String[], extra: int): int {\n\
+         \x20     |                      ^~~~~"
+    );
+}
+
+#[test]
+fn main_declared_in_both_forms() {
+    assert_eq!(
+        error_of("main_both_forms", "main(): int {\n    return 0;\n}\nmain(args: String[]): int {\n    return 1;\n}\n"),
+        "main.pep:4:1: error: redefinition of 'main'\n\
+         \x20   4 | main(args: String[]): int {\n\
+         \x20     | ^~~~\n\
+         main.pep:1:1: note: previous definition is here\n\
+         \x20   1 | main(): int {\n\
+         \x20     | ^~~~"
+    );
+}
+
+#[test]
 fn match_expression_and_is_errors_point_at_the_token() {
     let shape = "enum Shape {\n    Circle(radius: int),\n    Empty,\n}\n";
     assert_eq!(

@@ -34,7 +34,8 @@ consistently. The first form is the one used throughout this book.
 - **Order does not matter.** A function can call functions declared later in
   the file, and can call itself.
 - **The program starts at `main`.** `main(): int` returns the process's exit
-  code; return 0 for success. See
+  code; return 0 for success. To receive the command-line arguments, declare
+  it `main(args: String[]): int` instead. See
   [Command-line arguments and exit](#command-line-arguments-and-exit).
 - **Calls must match the declaration.** Passing the wrong number of arguments
   is a compile error:
@@ -177,10 +178,17 @@ literal picks, so a literal message builds nothing when the assertion holds. See
 
 ## Command-line arguments and exit
 
-`arguments()` returns the program's command-line arguments as an
-`Array<String>`: element 0 is the program as it was started, and the
-arguments typed after it follow in order. `exit(code)` ends the program at
-once with status `code`, from anywhere, after flushing what was printed.
+`main` comes in two forms. `main(): int` takes nothing. `main(args:
+String[]): int` receives the program's command-line arguments: element 0 is
+the program as it was started, and the arguments typed after it follow in
+order. Declare the parameter only when the program reads it, as a Windows
+console program declares `argc`/`argv` only when it needs them. Any other
+parameter list on `main` is an error, and so is declaring both forms.
+
+Elsewhere, `arguments()` returns the same array, so code outside `main` can
+read the arguments without having them passed down. `exit(code)` ends the
+program at once with status `code`, from anywhere, after flushing what was
+printed.
 
 ```pepper
 {{#include ../../examples/functions-arguments.pep}}

@@ -59,3 +59,45 @@ fn exit_ends_with_the_code_and_keeps_printed_output() {
     assert_eq!(stdout_of(&output), "before\n");
     assert_eq!(output.status.code(), Some(7));
 }
+
+#[test]
+fn main_receives_the_arguments_when_it_declares_them() {
+    let output = run_with(
+        "main_args",
+        "main(args: String[]): int {\n    var index = 1;\n    while (index < args.count()) {\n        print(\"[\" + args[index] + \"]\");\n        index = index + 1;\n    }\n    return args[0].contains(\"main_args\") ? args.count() as int : 100;\n}\n",
+        &["one", "two words", ""],
+    );
+    assert_eq!(stdout_of(&output), "[one]\n[two words]\n[]\n");
+    assert_eq!(output.status.code(), Some(4));
+}
+
+#[test]
+fn main_with_arguments_falls_off_its_end_with_zero() {
+    let output = run_with(
+        "main_args_implicit",
+        "main(args: String[]) {\n    if (args.count() > 1) {\n        return 3;\n    }\n}\n",
+        &[],
+    );
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn a_void_main_with_arguments_exits_zero() {
+    let output = run_with(
+        "main_args_void",
+        "main(args: String[]): void {\n    print(args.count());\n}\n",
+        &["x"],
+    );
+    assert_eq!(stdout_of(&output), "2\n");
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn main_arguments_ignore_a_program_function_named_arguments() {
+    let output = run_with(
+        "main_args_shadow",
+        "arguments(): int {\n    return 9;\n}\nmain(args: String[]): int {\n    return (args.count() as int) * 10 + arguments();\n}\n",
+        &["a", "b"],
+    );
+    assert_eq!(output.status.code(), Some(39));
+}

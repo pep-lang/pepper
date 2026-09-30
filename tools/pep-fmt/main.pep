@@ -29,14 +29,13 @@ usage(): String {
         + "  -h       show this help\n";
 }
 
-main(): int {
-    var parts = arguments();
+main(args: String[]): int {
     var write = false;
     var check = false;
     var paths = Array<Path>();
     ulong index = 1;
-    while (index < parts.count()) {
-        var part = parts[index];
+    while (index < args.count()) {
+        var part = args[index];
         if (part == "-w") {
             write = true;
         } else if (part == "--check") {
