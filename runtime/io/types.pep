@@ -288,12 +288,22 @@ export struct IoError {
     is_address_not_available(): bool { return _io_sys_is_address_not_available(code); }
 
     ## Returns whether an operation gave up because the peer did not answer
-    ## in time, such as a connection attempt to an unreachable host.
+    ## in time, such as a connection attempt to an unreachable host, or
+    ## because an `async.timeout` scope around it expired.
     ##
     ## Matches `ETIMEDOUT` on POSIX and `WSAETIMEDOUT` on Windows.
     ##
     ## @returns true when the operation timed out
     is_timed_out(): bool { return _io_sys_is_timed_out(code); }
+
+    ## Returns whether an operation stopped because the task waiting for it
+    ## was cancelled (see `async.Task.cancel`).
+    ##
+    ## Matches `ECANCELED` on POSIX, and `ERROR_OPERATION_ABORTED` or
+    ## `ERROR_CANCELLED` on Windows.
+    ##
+    ## @returns true when cancellation ended the operation
+    is_cancelled(): bool { return _io_sys_is_cancelled(code); }
 }
 
 ## The result of an io operation: a value on success, an `IoError` on

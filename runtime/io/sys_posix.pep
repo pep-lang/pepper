@@ -16,6 +16,13 @@ import "types";
 # ── C functions ──────────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))]
+extern int pthread_key_create(void* key, void* destructor);
+[Target(!OS(Windows))]
+extern void* pthread_getspecific(ulong key);
+[Target(!OS(Windows))]
+extern int pthread_setspecific(ulong key, void* value);
+
+[Target(!OS(Windows))]
 extern int open(char* path, int flags, ...);
 [Target(!OS(Windows))]
 extern long read(int fd, void* buf, ulong n);
@@ -184,6 +191,22 @@ export _io_sys_code_bad_handle(): ErrorCode {
 export _io_sys_code_write_zero(): ErrorCode {
     return 5;
 }  # EIO
+
+[Target(OS(Linux))]
+export _io_sys_code_cancelled(): ErrorCode {
+    return 125;
+}  # ECANCELED
+
+[Target(OS(Mac))]
+export _io_sys_code_cancelled(): ErrorCode {
+    return 89;
+}  # ECANCELED
+
+[Target(OS(Linux))]
+export _io_sys_is_cancelled(code: ErrorCode): bool { return code == 125; }
+
+[Target(OS(Mac))]
+export _io_sys_is_cancelled(code: ErrorCode): bool { return code == 89; }
 
 [Target(!OS(Windows))]
 export _io_posix_err_none(): IoResult<void> {
@@ -709,4 +732,30 @@ export _io_sys_temp_dir(): Path {
         n = n - 1;
     }
     return Path(_io_slice(s, 0, n));
+}
+
+# ── Thread-local keys ────────────────────────────────────────────────────────
+
+# A new thread-local key (pthread_key_t is 4 bytes on Linux, 8 on macOS; the
+# slot is zeroed first so either reads back whole).
+[Target(!OS(Windows))]
+export _io_sys_key_create(): ulong {
+    __ptr<ulong> key = _pep_malloc(8);
+    key[0] = 0;
+    if (pthread_key_create(key, __null) != 0) {
+        panic("io: the operating system has no thread-local keys left");
+    }
+    ulong created = key[0];
+    _pep_free(key);
+    return created;
+}
+
+[Target(!OS(Windows))]
+export _io_sys_key_get(key: ulong): __ptr<void> {
+    return pthread_getspecific(key);
+}
+
+[Target(!OS(Windows))]
+export _io_sys_key_set(key: ulong, value: __ptr<void>) {
+    pthread_setspecific(key, value);
 }

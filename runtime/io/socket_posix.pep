@@ -13,6 +13,7 @@ import "address";
 import "socket";
 import "sys_posix";
 import "types";
+import "wait";
 
 # ── C functions ──────────────────────────────────────────────────────────────
 
@@ -34,6 +35,10 @@ extern long recvfrom(int fd, void* buffer, ulong length, int flags, void* addres
 extern long sendto(int fd, void* buffer, ulong length, int flags, void* address, uint address_length);
 [Target(!OS(Windows))]
 extern int shutdown(int fd, int how);
+[Target(!OS(Windows))]
+extern int getsockopt(int fd, int level, int name, void* value, uint* length);
+[Target(!OS(Windows))]
+extern int poll(void* descriptors, ulong count, int timeout);
 [Target(!OS(Windows))]
 extern int setsockopt(int fd, int level, int name, void* value, uint length);
 [Target(!OS(Windows))]
@@ -88,13 +93,21 @@ export _io_so_broadcast(): int {
 
 [Target(OS(Linux))]
 export _io_sock_cloexec(): int {
-    return 524288;
-}  # 0x80000, or'ed into the type
+    return 526336;
+}  # SOCK_CLOEXEC | SOCK_NONBLOCK, or'ed into the type
 
 [Target(OS(Mac))]
 export _io_sock_cloexec(): int {
     return 0;
 }  # none: fcntl instead
+
+[Target(OS(Linux))]
+export _io_so_error(): int { return 4; }
+
+[Target(OS(Mac))]
+export _io_so_error(): int {
+    return 4103;
+}  # 0x1007
 
 [Target(OS(Linux))]
 export _io_msg_nosignal(): int {
@@ -142,6 +155,28 @@ export _io_sys_is_timed_out(code: ErrorCode): bool { return code == 110; }
 [Target(OS(Mac))]
 export _io_sys_is_timed_out(code: ErrorCode): bool { return code == 60; }
 
+[Target(OS(Linux))]
+export _io_sys_code_timed_out(): ErrorCode {
+    return 110;
+}  # ETIMEDOUT
+
+[Target(OS(Mac))]
+export _io_sys_code_timed_out(): ErrorCode { return 60; }
+
+# EAGAIN (the same value as EWOULDBLOCK): a non-blocking call would block.
+[Target(OS(Linux))]
+export _io_posix_would_block(code: ErrorCode): bool { return code == 11; }
+
+[Target(OS(Mac))]
+export _io_posix_would_block(code: ErrorCode): bool { return code == 35; }
+
+# EINPROGRESS: a non-blocking connect has started.
+[Target(OS(Linux))]
+export _io_posix_in_progress(code: ErrorCode): bool { return code == 115; }
+
+[Target(OS(Mac))]
+export _io_posix_in_progress(code: ErrorCode): bool { return code == 36; }
+
 # Code for a stream that ended before the bytes asked for: EIO.
 [Target(!OS(Windows))]
 export _io_sys_code_unexpected_end(): ErrorCode { return 5; }
@@ -180,6 +215,7 @@ export _io_sys_socket_valid(h: SocketHandle): bool {
 
 [Target(!OS(Windows))]
 export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
+    _io_socket_forget(h);
     return _io_sys_close(h);
 }
 
@@ -233,8 +269,9 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
-# A new close-on-exec socket (SOCK_STREAM 1 or SOCK_DGRAM 2) that never
-# raises SIGPIPE.
+# A new non-blocking, close-on-exec socket (SOCK_STREAM 1 or SOCK_DGRAM 2)
+# that never raises SIGPIPE. Every socket is non-blocking: a call that would
+# block waits in `_io_socket_wait` and tries again.
 [Target(!OS(Windows))]
 export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     var family = _io_af_inet();
@@ -253,14 +290,15 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     return IoResult<SocketHandle>.ok(fd);
 }
 
-# macOS: close-on-exec and SO_NOSIGPIPE, which Linux gets from the type and
-# send flags.
+# macOS: close-on-exec, non-blocking and SO_NOSIGPIPE, which Linux gets
+# from the type and send flags.
 [Target(OS(Linux))]
 export _io_posix_socket_setup(fd: int) {}
 
 [Target(OS(Mac))]
 export _io_posix_socket_setup(fd: int) {
     fcntl(fd, 2, 1);                               # F_SETFD, FD_CLOEXEC
+    fcntl(fd, 4, 4);                               # F_SETFL, O_NONBLOCK
     _io_posix_set_int_option(fd, 65535, 4130, 1);  # SOL_SOCKET, SO_NOSIGPIPE (0x1022)
 }
 
@@ -311,15 +349,83 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
     return _io_socket_check(listen(h, backlog));
 }
 
+# A non-blocking connect returns EINPROGRESS (or EINTR, after which the
+# connection carries on too); it has finished when the socket is writable,
+# and SO_ERROR says how.
 [Target(!OS(Windows))]
 export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var result = _io_socket_check(connect(h, buffer, length as uint));
+    var rc = connect(h, buffer, length as uint);
     _pep_free(buffer);
-    return result;
+    if (rc == 0) {
+        return _io_ok_void();
+    }
+    var e = IoError.last();
+    if (!_io_posix_in_progress(e.code) && !e.is_interrupted()) {
+        return IoResult<void>.err(e);
+    }
+    var waited = _io_socket_wait(h, _IO_WRITABLE);
+    if (waited.is_err()) {
+        return waited;
+    }
+    var slot = _pep_malloc(8) as __ptr<int>;
+    var size = (slot + 1) as __ptr<uint>;
+    slot[0] = 0;
+    size[0] = 4;
+    var got = getsockopt(h, _io_sol_socket(), _io_so_error(), slot, size);
+    var code = slot[0];
+    _pep_free(slot);
+    if (got != 0) {
+        return _io_posix_err_none();
+    }
+    if (code != 0) {
+        return IoResult<void>.err(IoError(code, _io_sys_error_message(code)));
+    }
+    return _io_ok_void();
 }
 
+# Blocks the thread until `h` is ready for `interest` (poll(2)).
+[Target(!OS(Windows))]
+export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+    var descriptor = _pep_malloc(8) as __ptr<int>;
+    var events = descriptor as __ptr<u16>;
+    descriptor[0] = h;
+    events[2] = 1;  # POLLIN
+    if (interest == _IO_WRITABLE) {
+        events[2] = 4;  # POLLOUT
+    }
+    events[3] = 0;
+    while (true) {
+        if (poll(descriptor, 1, -1) >= 0) {
+            _pep_free(descriptor);
+            return _io_ok_void();
+        }
+        var e = IoError.last();
+        if (!e.is_interrupted()) {
+            _pep_free(descriptor);
+            return IoResult<void>.err(e);
+        }
+    }
+    return _io_ok_void();
+}
+
+# After a failed call: waits for `interest` when `e` says the call would
+# block, and succeeds when the call should be tried again (it would have
+# blocked, or a signal interrupted it); otherwise fails with the error to
+# return.
+[Target(!OS(Windows))]
+export _io_posix_retry(h: SocketHandle, e: IoError, interest: int): IoResult<void> {
+    if (_io_posix_would_block(e.code)) {
+        return _io_socket_wait(h, interest);
+    }
+    if (e.is_interrupted()) {
+        return _io_ok_void();
+    }
+    return IoResult<void>.err(e);
+}
+
+# The accepted socket is non-blocking and close-on-exec like the others.
 [Target(OS(Linux))]
 export _io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
     return accept4(fd, address, length, _io_sock_cloexec());
@@ -347,11 +453,11 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
             _pep_free(length);
             return IoResult<(SocketHandle, SocketAddress)>.ok((fd, peer));
         }
-        var e = IoError.last();
-        if (!e.is_interrupted()) {
+        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);
-            return IoResult<(SocketHandle, SocketAddress)>.err(e);
+            return IoResult<(SocketHandle, SocketAddress)>.err(retry.error());
         }
     }
     return IoResult<(SocketHandle, SocketAddress)>.err(IoError(4, "interrupted"));
@@ -364,9 +470,9 @@ export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong)
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var e = IoError.last();
-        if (!e.is_interrupted()) {
-            return IoResult<ulong>.err(e);
+        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        if (retry.is_err()) {
+            return IoResult<ulong>.err(retry.error());
         }
     }
     return IoResult<ulong>.ok(0);
@@ -379,9 +485,9 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
         if (r >= 0) {
             return IoResult<ulong>.ok(r as ulong);
         }
-        var e = IoError.last();
-        if (!e.is_interrupted()) {
-            return IoResult<ulong>.err(e);
+        var retry = _io_posix_retry(h, IoError.last(), _IO_WRITABLE);
+        if (retry.is_err()) {
+            return IoResult<ulong>.err(retry.error());
         }
     }
     return IoResult<ulong>.ok(0);
@@ -397,10 +503,10 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
             _pep_free(buffer);
             return IoResult<ulong>.ok(r as ulong);
         }
-        var e = IoError.last();
-        if (!e.is_interrupted()) {
+        var retry = _io_posix_retry(h, IoError.last(), _IO_WRITABLE);
+        if (retry.is_err()) {
             _pep_free(buffer);
-            return IoResult<ulong>.err(e);
+            return IoResult<ulong>.err(retry.error());
         }
     }
     return IoResult<ulong>.ok(0);
@@ -422,11 +528,11 @@ export _io_sys_socket_receive_from(
             _pep_free(length);
             return IoResult<(ulong, SocketAddress)>.ok((r as ulong, from));
         }
-        var e = IoError.last();
-        if (!e.is_interrupted()) {
+        var retry = _io_posix_retry(h, IoError.last(), _IO_READABLE);
+        if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);
-            return IoResult<(ulong, SocketAddress)>.err(e);
+            return IoResult<(ulong, SocketAddress)>.err(retry.error());
         }
     }
     return IoResult<(ulong, SocketAddress)>.err(IoError(4, "interrupted"));

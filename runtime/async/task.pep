@@ -4,7 +4,7 @@
 ## `run(body)` turns the calling thread into a worker and runs `body` as its
 ## first task. A task starts others with `Task<T>.spawn_local`, and gives
 ## the thread to the others whenever it waits: `sleep`, `yield_now`, and
-## `Task.join`. Nothing preempts a task, so a task that computes for a long
+## `Task.join`, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
 ## time without waiting keeps every other task on its worker waiting too.
 ##
 ## A task is a green thread (a fiber): an ordinary function with its own
@@ -26,21 +26,44 @@
 # that returns, so every reference a task's frame held is released before
 # the fiber switches away for the last time.
 #
-# A task is parked (`_parked`) while it waits on a timer or a join. Waking
-# puts a parked task back on the ready queue once, however many things try
-# to wake it; a woken task re-checks what it waited for. A timer carries the
-# sequence number its sleep started with, so a timer that outlives its sleep
-# (the task was cancelled) wakes nothing.
+# A task is parked (`_parked`) while it waits on a timer, a join, or a
+# socket. Waking puts a parked task back on the ready queue once, however
+# many things try to wake it; a woken task re-checks what it waited for. A
+# timer carries the sequence number of the wait that set it, so a timer that
+# outlives its wait (the task was woken some other way) wakes nothing.
+#
+# Sockets: the worker is the thread's `io._IoWaiter` (see io/wait.pep). A
+# socket call that would block parks its task in `_wait_ready` until the
+# driver (driver_epoll.pep, driver_kqueue.pep, driver_windows.pep) reports
+# the socket ready. A socket is registered with the driver (epoll and kqueue
+# edge-triggered; WSAPoll is handed the waiting sockets on each poll) the
+# first time a task waits on it, and `_waits` maps it to the tasks waiting
+# on it. When
+# no task is ready the loop blocks in the driver until the next timer; while
+# tasks run it polls the driver without blocking every `_POLL_INTERVAL`
+# tasks, so waiting sockets are not starved.
+#
+# A timeout (`Deadline`) sets the task's `_deadline`, and every wait inside
+# it also sets a timer for the deadline.
 
+import io;
+import "driver_epoll";
+import "driver_kqueue";
+import "driver_windows";
 import "fiber_posix";
 import "fiber_windows";
 import "sys_posix";
 import "sys_windows";
 
+# How many tasks run between two non-blocking polls of the driver.
+const _POLL_INTERVAL = 61;
+
 ## Why `Task.join` did not return the task's value.
 export struct TaskError {
     ## A description of what went wrong.
     const message: String;
+    # A timeout ended the wait, rather than cancellation.
+    var _timed_out: bool;
 
     ## Creates a task error.
     ##
@@ -49,13 +72,27 @@ export struct TaskError {
         this.message = message;
     }
 
-    ## Returns whether the task was cancelled, or the task waiting for it was
-    ## (the only reason so far).
+    ## Returns whether the task was cancelled, or the task waiting for it was.
     ##
     ## @returns true when cancellation ended the wait
     is_cancelled(): bool {
-        return true;
+        return !this._timed_out;
     }
+
+    ## Returns whether a `timeout` around the `join` expired before the task
+    ## finished. The task itself carries on.
+    ##
+    ## @returns true when a timeout ended the wait
+    is_timed_out(): bool {
+        return this._timed_out;
+    }
+}
+
+# The error `join` returns when a timeout expires.
+_async_timed_out_error(): TaskError {
+    var error = TaskError("the wait for the task timed out");
+    error._timed_out = true;
+    return error;
 }
 
 ## Settings for `run_with`, built by chaining: `RuntimeOptions().stack_size(65536)`.
@@ -95,8 +132,11 @@ struct _TaskCore {
     var _cancelled: bool;
     # Waiting to be woken (sleeping or joining), and not on the ready queue.
     var _parked: bool;
-    # The sequence number of the timer the task sleeps on, or 0.
-    var _sleep_sequence: ulong;
+    # The sequence number of the timer the task's wait set, or 0.
+    var _wait_sequence: ulong;
+    # When the innermost `timeout` around the running code expires (monotonic
+    # milliseconds), or 0.
+    var _deadline: ulong;
     # Tasks parked in `join` on this one.
     var _joiners: Array<_TaskCore>;
     # The task's position in the worker's `_tasks`.
@@ -109,7 +149,7 @@ struct _TaskCore {
     }
 }
 
-# A sleeping task's wake-up time.
+# When to wake a waiting task.
 struct _Timer {
     var _deadline: ulong;
     var _sequence: ulong;
@@ -141,9 +181,21 @@ struct _Worker {
     # Fibers whose tasks finished, for the next tasks.
     var _idle: Array<__ptr<void>>;
     var _stack_size: ulong;
+    # The I/O driver's descriptor and its event buffer.
+    var _driver: long;
+    var _events: __ptr<u8>;
+    # The tasks waiting on each registered socket.
+    var _waits: HashMap<ulong, _SocketWaits>;
+    # How many tasks are parked on sockets.
+    var _io_waiting: ulong;
+    # Tasks run since the driver was last polled.
+    var _since_poll: ulong;
 
     construct(stack_size: ulong) {
         this._scheduler = _async_fiber_thread_context();
+        this._driver = _async_driver_open();
+        this._events = _async_driver_events();
+        this._waits = HashMap<ulong, _SocketWaits>();
         this._ready = Array<_TaskCore>();
         this._timers = Array<_Timer>();
         this._tasks = Array<_TaskCore>();
@@ -229,6 +281,27 @@ struct _Worker {
         return first;
     }
 
+    # Sets a timer that wakes `core` at `deadline` unless its current wait
+    # ends first.
+    _set_timer(core: _TaskCore, deadline: ulong) {
+        var sequence = this._timer_sequence;
+        this._timer_sequence = sequence + 1;
+        core._wait_sequence = sequence;
+        this._add_timer(_Timer(deadline, sequence, core));
+    }
+
+    # Parks the running task until something wakes it, or its deadline
+    # passes.
+    _park() {
+        var me = this._current;
+        if (me._deadline != 0) {
+            this._set_timer(me, me._deadline);
+        }
+        me._parked = true;
+        _async_suspend(this);
+        me._wait_sequence = 0;
+    }
+
     # Wakes every task whose timer has expired.
     _fire_timers() {
         var now = _async_sys_monotonic_milliseconds();
@@ -237,11 +310,64 @@ struct _Worker {
                 return;
             }
             var timer = this._remove_first_timer();
-            if (timer._task._sleep_sequence == timer._sequence) {
-                timer._task._sleep_sequence = 0;
+            if (timer._task._wait_sequence == timer._sequence) {
+                timer._task._wait_sequence = 0;
                 this._wake(timer._task);
             }
         }
+    }
+
+    # Waits up to `timeout` milliseconds (forever when negative) for socket
+    # events, and wakes the tasks they let continue.
+    _poll(timeout: long) {
+        this._since_poll = 0;
+        var count: ulong = 0;
+        if (_async_driver_uses_interest()) {
+            # A driver without registrations (WSAPoll): pass the sockets
+            # tasks wait on, and what for.
+            var handles = Array<ulong>();
+            var interests = Array<int>();
+            for (var entry in this._waits) {
+                var (key, waits) = entry;
+                var interest = 0;
+                if (waits._readers.count() > 0) {
+                    interest = interest | io._IO_READABLE;
+                }
+                if (waits._writers.count() > 0) {
+                    interest = interest | io._IO_WRITABLE;
+                }
+                if (interest != 0) {
+                    handles.append(key);
+                    interests.append(interest);
+                }
+            }
+            count = _async_driver_poll_interest(this._driver, handles, interests, this._events, timeout);
+        } else {
+            count = _async_driver_poll(this._driver, this._events, timeout);
+        }
+        var i: ulong = 0;
+        while (i < count) {
+            var key = _async_driver_event_handle(this._events, i) as ulong;
+            if (this._waits.contains(key)) {
+                var waits = this._waits.get(key);
+                var interest = _async_driver_event_interest(this._events, i);
+                if ((interest & io._IO_READABLE) != 0) {
+                    this._wake_all(waits._readers);
+                }
+                if ((interest & io._IO_WRITABLE) != 0) {
+                    this._wake_all(waits._writers);
+                }
+            }
+            i = i + 1;
+        }
+    }
+
+    # Wakes every task in `tasks` and empties it.
+    _wake_all(tasks: Array<_TaskCore>) {
+        for (var core in tasks) {
+            this._wake(core);
+        }
+        tasks.clear();
     }
 
     # Runs one ready task until it waits or finishes.
@@ -299,11 +425,24 @@ struct _Worker {
             this._fire_timers();
             if (this._has_ready()) {
                 this._run_one();
-            } else if (this._timers.count() > 0) {
-                var now = _async_sys_monotonic_milliseconds();
-                var deadline = this._timers[0]._deadline;
-                if (deadline > now) {
-                    _async_sys_sleep(deadline - now);
+                this._since_poll = this._since_poll + 1;
+                if (this._io_waiting > 0 && this._since_poll >= _POLL_INTERVAL) {
+                    this._poll(0);
+                }
+            } else if (this._timers.count() > 0 || this._io_waiting > 0) {
+                var timeout: long = -1;
+                if (this._timers.count() > 0) {
+                    var now = _async_sys_monotonic_milliseconds();
+                    var deadline = this._timers[0]._deadline;
+                    timeout = 0;
+                    if (deadline > now) {
+                        timeout = (deadline - now) as long;
+                    }
+                }
+                if (this._io_waiting > 0) {
+                    this._poll(timeout);
+                } else if (timeout > 0) {
+                    _async_sys_sleep(timeout as ulong);
                 }
             } else {
                 panic("async.run: every task is waiting for another task and none can continue");
@@ -311,13 +450,90 @@ struct _Worker {
         }
     }
 
-    # Frees the fibers and the thread context.
+    # Frees the fibers, the driver and the thread context.
     _close() {
         for (var fiber in this._idle) {
             _async_fiber_destroy(fiber);
         }
         this._idle.clear();
+        this._waits.clear();
+        _async_driver_close(this._driver);
+        _pep_free(this._events);
         _async_fiber_release_thread_context(this._scheduler);
+    }
+}
+
+# The tasks waiting on one socket.
+struct _SocketWaits {
+    var _readers: Array<_TaskCore>;
+    var _writers: Array<_TaskCore>;
+
+    construct() {
+        this._readers = Array<_TaskCore>();
+        this._writers = Array<_TaskCore>();
+    }
+}
+
+# Removes `core` from `tasks`, if it is there.
+_async_remove_task(tasks: Array<_TaskCore>, core: _TaskCore) {
+    var i: ulong = 0;
+    while (i < tasks.count()) {
+        if (tasks[i]._id == core._id) {
+            tasks.remove_at(i);
+            return;
+        }
+        i = i + 1;
+    }
+}
+
+# How the sockets in io wait (see io/wait.pep).
+extend _Worker with io._IoWaiter {
+    _in_task(): bool {
+        return this._running;
+    }
+
+    _wait_ready(handle: io.SocketHandle, interest: int): int {
+        var me = this._current;
+        if (me._cancelled) {
+            return io._IO_WAIT_CANCELLED;
+        }
+        if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
+            return io._IO_WAIT_TIMED_OUT;
+        }
+        var key = handle as ulong;
+        if (!this._waits.contains(key)) {
+            if (!_async_driver_register(this._driver, handle)) {
+                return io._IO_WAIT_UNWATCHED;
+            }
+            this._waits.insert(key, _SocketWaits());
+        }
+        var waits = this._waits.get(key);
+        var queue = waits._readers;
+        if (interest == io._IO_WRITABLE) {
+            queue = waits._writers;
+        }
+        queue.append(me);
+        this._io_waiting = this._io_waiting + 1;
+        this._park();
+        this._io_waiting = this._io_waiting - 1;
+        _async_remove_task(queue, me);
+        if (me._cancelled) {
+            return io._IO_WAIT_CANCELLED;
+        }
+        if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
+            return io._IO_WAIT_TIMED_OUT;
+        }
+        return io._IO_WAIT_READY;
+    }
+
+    _forget(handle: io.SocketHandle) {
+        var key = handle as ulong;
+        if (this._waits.contains(key)) {
+            var waits = this._waits.get(key);
+            this._wake_all(waits._readers);
+            this._wake_all(waits._writers);
+            this._waits.remove(key);
+        }
     }
 }
 
@@ -341,7 +557,7 @@ _async_cancel(worker: _Worker, core: _TaskCore) {
         return;
     }
     core._cancelled = true;
-    core._sleep_sequence = 0;
+    core._wait_sequence = 0;
     worker._wake(core);
 }
 
@@ -440,8 +656,8 @@ export struct Task<T> {
     ## meanwhile.
     ##
     ## @returns the body's result, or a `TaskError` if the task was cancelled
-    ##   before it finished or the task calling `join` was cancelled while it
-    ##   waited
+    ##   before it finished, the task calling `join` was cancelled while it
+    ##   waited, or a `timeout` around the `join` expired first
     ## @panics if a task joins itself, or if called outside `run` on a task
     ##   that has not finished
     join(): Result<T, TaskError> {
@@ -454,11 +670,14 @@ export struct Task<T> {
             this._core._joiners.append(me);
             while (!this._core._finished) {
                 if (me._cancelled) {
-                    _async_forget_joiner(this._core, me);
+                    _async_remove_task(this._core._joiners, me);
                     return Result<T, TaskError>.err(TaskError("the waiting task was cancelled"));
                 }
-                me._parked = true;
-                _async_suspend(worker);
+                if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
+                    _async_remove_task(this._core._joiners, me);
+                    return Result<T, TaskError>.err(_async_timed_out_error());
+                }
+                worker._park();
             }
         }
         if (this._core._cancelled) {
@@ -483,18 +702,6 @@ export struct Task<T> {
     ## @returns true once the task has finished
     is_finished(): bool {
         return this._core._finished;
-    }
-}
-
-# Removes `joiner` from the tasks waiting for `core`.
-_async_forget_joiner(core: _TaskCore, joiner: _TaskCore) {
-    var i: ulong = 0;
-    while (i < core._joiners.count()) {
-        if (core._joiners[i]._id == joiner._id) {
-            core._joiners.remove_at(i);
-            return;
-        }
-        i = i + 1;
     }
 }
 
@@ -536,8 +743,10 @@ export run_with(options: RuntimeOptions, body: () => void) {
     __ptr<_Worker> slot = _pep_malloc(8);
     slot[0] = worker;
     _async_fiber_key_set(_async_worker_key, slot);
+    io._io_set_waiter(worker);
     var first = worker._spawn(body);
     worker._run_until(first);
+    io._io_clear_waiter();
     _async_fiber_key_set(_async_worker_key, __null);
     slot[0] = __default<_Worker>();
     _pep_free(slot);
@@ -559,7 +768,8 @@ export yield_now() {
 }
 
 ## Waits at least `milliseconds`. In a task, other tasks run meanwhile, and
-## a cancelled task returns at once; outside one, the thread sleeps.
+## a cancelled task returns at once, as does one whose `timeout` expires
+## first; outside a task, the thread sleeps.
 ##
 ## @param milliseconds how long to wait
 export sleep(milliseconds: ulong) {
@@ -576,12 +786,14 @@ export sleep(milliseconds: ulong) {
     if (me._cancelled) {
         return;
     }
-    var sequence = worker._timer_sequence;
-    worker._timer_sequence = sequence + 1;
-    me._sleep_sequence = sequence;
-    worker._add_timer(_Timer(_async_sys_monotonic_milliseconds() + milliseconds, sequence, me));
+    var until = _async_sys_monotonic_milliseconds() + milliseconds;
+    if (me._deadline != 0 && me._deadline < until) {
+        until = me._deadline;
+    }
+    worker._set_timer(me, until);
     me._parked = true;
     _async_suspend(worker);
+    me._wait_sequence = 0;
 }
 
 ## Returns whether the running task has been cancelled (see `Task.cancel`),
@@ -597,4 +809,88 @@ export is_cancelled(): bool {
         return false;
     }
     return worker._current._cancelled;
+}
+
+## A time limit on the waits inside a `with` block, made by `timeout`.
+##
+## While the block runs, a socket call that has to wait fails with an
+## `IoError` for which `is_timed_out()` holds once the limit passes,
+## `Task.join` fails with a `TaskError` for which `is_timed_out()` holds,
+## and `sleep` returns early. Code that does not wait is never interrupted.
+## Timeouts nest: an inner one cannot extend an outer one.
+export struct Deadline {
+    # When the limit passes, in monotonic milliseconds.
+    var _at: ulong;
+    # The task the block runs in, and its deadline before the block.
+    var _core: _TaskCore;
+    var _previous: ulong;
+    var _entered: bool;
+
+    ## Creates a limit `milliseconds` from now. Use `timeout` instead.
+    ##
+    ## @param milliseconds how long from now the limit passes
+    construct(milliseconds: ulong) {
+        this._at = _async_sys_monotonic_milliseconds() + milliseconds;
+    }
+
+    destruct {
+        this.exit();
+    }
+
+    ## Starts applying the limit to the running task; a `with` block calls
+    ## it.
+    ##
+    ## @returns this deadline
+    ## @panics outside a task
+    enter(): Deadline {
+        assert(_async_on_worker() && _async_worker()._running, "async.timeout: not called from a task");
+        var core = _async_worker()._current;
+        this._core = core;
+        this._previous = core._deadline;
+        if (core._deadline == 0 || this._at < core._deadline) {
+            core._deadline = this._at;
+        }
+        this._entered = true;
+        return this;
+    }
+
+    ## Stops applying the limit; the end of the `with` block calls it.
+    exit() {
+        if (this._entered) {
+            this._entered = false;
+            this._core._deadline = this._previous;
+        }
+    }
+
+    ## Returns whether the limit has passed.
+    ##
+    ## @returns true once the time is up
+    is_expired(): bool {
+        return _async_sys_monotonic_milliseconds() >= this._at;
+    }
+}
+
+extend Deadline with Scoped<Deadline> {}
+
+## Returns a time limit for a `with` block: the waits inside it give up
+## `milliseconds` from now (see `Deadline`).
+##
+## @param milliseconds how long the block's waits may take in all
+## @returns the limit, for a `with` header
+## @example
+##     import async;
+##     import io;
+##
+##     main(): int {
+##         async.run(() => {
+##             var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+##             with (var deadline = async.timeout(50)) {
+##                 var accepted = listener.accept();   # nobody connects
+##                 assert(accepted.error().is_timed_out(), "timed out");
+##             }
+##         });
+##         return 0;
+##     }
+export timeout(milliseconds: ulong): Deadline {
+    return Deadline(milliseconds);
 }

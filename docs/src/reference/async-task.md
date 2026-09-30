@@ -8,7 +8,7 @@ small stack, switching only where they wait.
 `run(body)` turns the calling thread into a worker and runs `body` as its
 first task. A task starts others with `Task<T>.spawn_local`, and gives
 the thread to the others whenever it waits: `sleep`, `yield_now`, and
-`Task.join`. Nothing preempts a task, so a task that computes for a long
+`Task.join`, and whenever a socket call would block. Nothing preempts a task, so a task that computes for a long
 time without waiting keeps every other task on its worker waiting too.
 
 A task is a green thread (a fiber): an ordinary function with its own
@@ -56,11 +56,22 @@ Creates a task error.
 is_cancelled(): bool
 ```
 
-Returns whether the task was cancelled, or the task waiting for it was
-(the only reason so far).
+Returns whether the task was cancelled, or the task waiting for it was.
 
 **Returns**
 - true when cancellation ended the wait
+
+#### is_timed_out
+
+```pepper
+is_timed_out(): bool
+```
+
+Returns whether a `timeout` around the `join` expired before the task
+finished. The task itself carries on.
+
+**Returns**
+- true when a timeout ended the wait
 
 ## RuntimeOptions
 
@@ -173,7 +184,7 @@ Waits for the task to finish and returns its value. Other tasks run
 meanwhile.
 
 **Returns**
-- the body's result, or a `TaskError` if the task was cancelled before it finished or the task calling `join` was cancelled while it waited
+- the body's result, or a `TaskError` if the task was cancelled before it finished, the task calling `join` was cancelled while it waited, or a `timeout` around the `join` expired first
 
 **Panics**
 - if a task joins itself, or if called outside `run` on a task that has not finished
@@ -264,7 +275,8 @@ sleep(milliseconds: ulong)
 ```
 
 Waits at least `milliseconds`. In a task, other tasks run meanwhile, and
-a cancelled task returns at once; outside one, the thread sleeps.
+a cancelled task returns at once, as does one whose `timeout` expires
+first; outside a task, the thread sleeps.
 
 **Parameters**
 - `milliseconds` — how long to wait
@@ -280,3 +292,98 @@ so a long computation can stop early. False outside a task.
 
 **Returns**
 - true when the running task was asked to stop
+
+## Deadline
+
+```pepper
+struct Deadline
+```
+
+A time limit on the waits inside a `with` block, made by `timeout`.
+
+While the block runs, a socket call that has to wait fails with an
+`IoError` for which `is_timed_out()` holds once the limit passes,
+`Task.join` fails with a `TaskError` for which `is_timed_out()` holds,
+and `sleep` returns early. Code that does not wait is never interrupted.
+Timeouts nest: an inner one cannot extend an outer one.
+
+### Constructor
+
+#### Deadline()
+
+```pepper
+construct(milliseconds: ulong)
+```
+
+Creates a limit `milliseconds` from now. Use `timeout` instead.
+
+**Parameters**
+- `milliseconds` — how long from now the limit passes
+
+### Methods
+
+#### enter
+
+```pepper
+enter(): Deadline
+```
+
+Starts applying the limit to the running task; a `with` block calls
+it.
+
+**Returns**
+- this deadline
+
+**Panics**
+- outside a task
+
+#### exit
+
+```pepper
+exit()
+```
+
+Stops applying the limit; the end of the `with` block calls it.
+
+#### is_expired
+
+```pepper
+is_expired(): bool
+```
+
+Returns whether the limit has passed.
+
+**Returns**
+- true once the time is up
+
+## timeout
+
+```pepper
+timeout(milliseconds: ulong): Deadline
+```
+
+Returns a time limit for a `with` block: the waits inside it give up
+`milliseconds` from now (see `Deadline`).
+
+**Parameters**
+- `milliseconds` — how long the block's waits may take in all
+
+**Returns**
+- the limit, for a `with` header
+
+**Example**
+```pepper
+    import async;
+    import io;
+
+    main(): int {
+        async.run(() => {
+            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            with (var deadline = async.timeout(50)) {
+                var accepted = listener.accept();   # nobody connects
+                assert(accepted.error().is_timed_out(), "timed out");
+            }
+        });
+        return 0;
+    }
+```

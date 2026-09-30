@@ -1,11 +1,10 @@
 # Networking
 
 The `io` module has TCP and UDP sockets, IP and socket addresses, and host
-name lookup. Every call blocks the calling thread until it completes, like
-`File`. To serve several connections at once, give each one its own
-[thread](threads.md). [Tasks](tasks.md) exist, but a socket call in a task
-still blocks the whole thread; parking only the task is planned (see
-[Current status](#current-status)).
+name lookup. In a plain program every call blocks the calling thread until
+it completes, like `File`. To serve several connections at once, give each
+one its own [thread](threads.md), or its own [task](tasks.md#sockets): in a
+task, a call that has to wait parks only that task.
 
 ## Addresses
 
@@ -107,11 +106,9 @@ program take over the port.
 
 ## Current status
 
-- Every call blocks its thread. There are no timeouts, no non-blocking mode,
-  and no way to wait on several sockets at once yet. The event loop's next
-  step (drivers over epoll, kqueue, IOCP and io_uring) will park the calling
-  [task](tasks.md) instead of blocking the thread, with no change to this
-  API.
+- Outside a task every call blocks its thread, with no timeout. In a task
+  a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
+  limits how long it may wait.
 - Unix domain sockets and TLS are not supported yet.
 - IPv6 scope ids (`fe80::1%eth0`) are not supported.
 

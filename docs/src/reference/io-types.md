@@ -439,12 +439,28 @@ is_timed_out(): bool
 ```
 
 Returns whether an operation gave up because the peer did not answer
-in time, such as a connection attempt to an unreachable host.
+in time, such as a connection attempt to an unreachable host, or
+because an `async.timeout` scope around it expired.
 
 Matches `ETIMEDOUT` on POSIX and `WSAETIMEDOUT` on Windows.
 
 **Returns**
 - true when the operation timed out
+
+#### is_cancelled
+
+```pepper
+is_cancelled(): bool
+```
+
+Returns whether an operation stopped because the task waiting for it
+was cancelled (see `async.Task.cancel`).
+
+Matches `ECANCELED` on POSIX, and `ERROR_OPERATION_ABORTED` or
+`ERROR_CANCELLED` on Windows.
+
+**Returns**
+- true when cancellation ended the operation
 
 ## IoResult
 

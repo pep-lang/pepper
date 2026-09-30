@@ -4,14 +4,16 @@
 #
 # Winsock is started once per process with WSAStartup before the first
 # socket or lookup, and never cleaned up. Sockets are created overlapped
-# (so the event loop can later drive them through I/O completion ports) and
-# not inherited by child processes. Errors come from WSAGetLastError, whose
+# (so the event loop can later drive them through I/O completion ports),
+# non-blocking (a call that would block waits in `_io_socket_wait` and tries
+# again), and not inherited by child processes. Errors come from WSAGetLastError, whose
 # WSAE* codes FormatMessageW describes like any other system error.
 
 import "address";
 import "socket";
 import "sys_windows";
 import "types";
+import "wait";
 
 # ── C functions (ws2_32, kernel32) ───────────────────────────────────────────
 
@@ -70,6 +72,15 @@ extern int GetAddrInfoW(ushort* node, ushort* service, void* hints, void* result
 [Link("ws2_32")]
 extern void FreeAddrInfoW(void* list);
 [Target(OS(Windows))]
+[Link("ws2_32")]
+extern int ioctlsocket(ulong s, int command, uint* argument);
+[Target(OS(Windows))]
+[Link("ws2_32")]
+extern int getsockopt(ulong s, int level, int name, void* value, int* length);
+[Target(OS(Windows))]
+[Link("ws2_32")]
+extern int WSAPoll(void* descriptors, uint count, int timeout);
+[Target(OS(Windows))]
 extern int SetHandleInformation(ulong h, uint mask, uint flags);  # the SOCKET as a HANDLE
 
 # ── Startup ──────────────────────────────────────────────────────────────────
@@ -117,6 +128,9 @@ export _io_sys_is_timed_out(code: ErrorCode): bool {
     return code == 10060;  # WSAETIMEDOUT
 }
 
+[Target(OS(Windows))]
+export _io_sys_code_timed_out(): ErrorCode { return 10060; }
+
 # Code for a stream that ended before the bytes asked for: ERROR_HANDLE_EOF.
 [Target(OS(Windows))]
 export _io_sys_code_unexpected_end(): ErrorCode { return 38; }
@@ -160,7 +174,28 @@ export _io_sys_socket_valid(h: SocketHandle): bool {
 
 [Target(OS(Windows))]
 export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
+    _io_socket_forget(h);
     return _io_win_socket_check(closesocket(h));
+}
+
+# Blocks the thread until `h` is ready for `interest`, or reports an error
+# (WSAPoll).
+[Target(OS(Windows))]
+export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+    var descriptor = _pep_malloc(16) as __ptr<ulong>;
+    var events = descriptor as __ptr<u16>;
+    descriptor[0] = h;
+    events[4] = 256;  # POLLRDNORM
+    if (interest == _IO_WRITABLE) {
+        events[4] = 16;  # POLLWRNORM
+    }
+    events[5] = 0;
+    var rc = WSAPoll(descriptor, 1, -1);
+    _pep_free(descriptor);
+    if (rc < 0) {
+        return IoResult<void>.err(_io_win_socket_error());
+    }
+    return _io_ok_void();
 }
 
 # ── sockaddr ─────────────────────────────────────────────────────────────────
@@ -190,7 +225,9 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
-# A new overlapped, non-inheritable socket (SOCK_STREAM 1 or SOCK_DGRAM 2).
+# A new overlapped, non-inheritable, non-blocking socket (SOCK_STREAM 1 or
+# SOCK_DGRAM 2). Every socket is non-blocking: a call that would block waits
+# in `_io_socket_wait` and tries again.
 [Target(OS(Windows))]
 export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     _io_win_socket_startup();
@@ -206,7 +243,28 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     if (!_io_sys_socket_valid(s)) {
         return IoResult<SocketHandle>.err(_io_win_socket_error());
     }
+    _io_win_set_non_blocking(s);
     return IoResult<SocketHandle>.ok(s);
+}
+
+# FIONBIO: makes `s` non-blocking.
+[Target(OS(Windows))]
+export _io_win_set_non_blocking(s: SocketHandle) {
+    var on = _pep_malloc(4) as __ptr<uint>;
+    on[0] = 1;
+    ioctlsocket(s, -2147195266, on);  # FIONBIO (0x8004667E)
+    _pep_free(on);
+}
+
+# After a failed call: waits for `interest` when `e` says the call would
+# block (WSAEWOULDBLOCK), and succeeds when the call should be tried again;
+# otherwise fails with the error to return.
+[Target(OS(Windows))]
+export _io_win_retry(h: SocketHandle, e: IoError, interest: int): IoResult<void> {
+    if (e.code == 10035) {  # WSAEWOULDBLOCK
+        return _io_socket_wait(h, interest);
+    }
+    return IoResult<void>.err(e);
 }
 
 [Target(OS(Windows))]
@@ -258,28 +316,61 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
     return _io_win_socket_check(listen(h, backlog));
 }
 
+# A non-blocking connect fails with WSAEWOULDBLOCK; it has finished when the
+# socket is writable (or reports an error), and SO_ERROR says how.
 [Target(OS(Windows))]
 export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var result = _io_win_socket_check(connect(h, buffer, length));
+    var rc = connect(h, buffer, length);
     _pep_free(buffer);
-    return result;
+    if (rc == 0) {
+        return _io_ok_void();
+    }
+    var e = _io_win_socket_error();
+    if (e.code != 10035) {  # WSAEWOULDBLOCK
+        return IoResult<void>.err(e);
+    }
+    var waited = _io_socket_wait(h, _IO_WRITABLE);
+    if (waited.is_err()) {
+        return waited;
+    }
+    var slot = _pep_malloc(8) as __ptr<int>;
+    var size = slot + 1;
+    slot[0] = 0;
+    size[0] = 4;
+    var got = getsockopt(h, 65535, 4103, slot, size);  # SOL_SOCKET, SO_ERROR
+    var code = slot[0];
+    _pep_free(slot);
+    if (got != 0) {
+        return IoResult<void>.err(_io_win_socket_error());
+    }
+    if (code != 0) {
+        return IoResult<void>.err(IoError(code as ErrorCode, _io_sys_error_message(code as ErrorCode)));
+    }
+    return _io_ok_void();
 }
 
 [Target(OS(Windows))]
 export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _pep_malloc(4) as __ptr<int>;
-    length[0] = _io_sockaddr_capacity() as int;
-    var s = accept(h, buffer, length);
-    if (!_io_sys_socket_valid(s)) {
-        var e = _io_win_socket_error();
-        _pep_free(buffer);
-        _pep_free(length);
-        return IoResult<(SocketHandle, SocketAddress)>.err(e);
+    var s = _io_sys_socket_invalid();
+    while (true) {
+        length[0] = _io_sockaddr_capacity() as int;
+        s = accept(h, buffer, length);
+        if (_io_sys_socket_valid(s)) {
+            break;
+        }
+        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_READABLE);
+        if (retry.is_err()) {
+            _pep_free(buffer);
+            _pep_free(length);
+            return IoResult<(SocketHandle, SocketAddress)>.err(retry.error());
+        }
     }
     SetHandleInformation(s, 1, 0);  # HANDLE_FLAG_INHERIT off
+    _io_win_set_non_blocking(s);
     var peer = _io_sockaddr_read(buffer);
     _pep_free(buffer);
     _pep_free(length);
@@ -288,34 +379,51 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
 
 [Target(OS(Windows))]
 export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<ulong> {
-    var r = recv(h, destination, _io_win_max_socket_rw(n), 0);
-    if (r < 0) {
-        return IoResult<ulong>.err(_io_win_socket_error());
+    while (true) {
+        var r = recv(h, destination, _io_win_max_socket_rw(n), 0);
+        if (r >= 0) {
+            return IoResult<ulong>.ok(r as ulong);
+        }
+        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_READABLE);
+        if (retry.is_err()) {
+            return IoResult<ulong>.err(retry.error());
+        }
     }
-    return IoResult<ulong>.ok(r as ulong);
+    return IoResult<ulong>.ok(0);
 }
 
 [Target(OS(Windows))]
 export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResult<ulong> {
-    var r = send(h, source, _io_win_max_socket_rw(n), 0);
-    if (r < 0) {
-        return IoResult<ulong>.err(_io_win_socket_error());
+    while (true) {
+        var r = send(h, source, _io_win_max_socket_rw(n), 0);
+        if (r >= 0) {
+            return IoResult<ulong>.ok(r as ulong);
+        }
+        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_WRITABLE);
+        if (retry.is_err()) {
+            return IoResult<ulong>.err(retry.error());
+        }
     }
-    return IoResult<ulong>.ok(r as ulong);
+    return IoResult<ulong>.ok(0);
 }
 
 [Target(OS(Windows))]
 export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
     var buffer = _pep_malloc(_io_sockaddr_capacity()) as __ptr<u8>;
     var length = _io_sockaddr_write(buffer, address);
-    var r = sendto(h, source, _io_win_max_socket_rw(n), 0, buffer, length);
-    if (r < 0) {
-        var e = _io_win_socket_error();
-        _pep_free(buffer);
-        return IoResult<ulong>.err(e);
+    while (true) {
+        var r = sendto(h, source, _io_win_max_socket_rw(n), 0, buffer, length);
+        if (r >= 0) {
+            _pep_free(buffer);
+            return IoResult<ulong>.ok(r as ulong);
+        }
+        var retry = _io_win_retry(h, _io_win_socket_error(), _IO_WRITABLE);
+        if (retry.is_err()) {
+            _pep_free(buffer);
+            return IoResult<ulong>.err(retry.error());
+        }
     }
-    _pep_free(buffer);
-    return IoResult<ulong>.ok(r as ulong);
+    return IoResult<ulong>.ok(0);
 }
 
 # A datagram longer than `n` is truncated to `n` bytes; Winsock reports that
@@ -329,15 +437,24 @@ export _io_sys_socket_receive_from(
     var length = _pep_malloc(4) as __ptr<int>;
     length[0] = _io_sockaddr_capacity() as int;
     var limit = _io_win_max_socket_rw(n);
-    var r = recvfrom(h, destination, limit, 0, buffer, length);
-    if (r < 0) {
+    var r = 0;
+    while (true) {
+        length[0] = _io_sockaddr_capacity() as int;
+        r = recvfrom(h, destination, limit, 0, buffer, length);
+        if (r >= 0) {
+            break;
+        }
         var e = _io_win_socket_error();
-        if (e.code != 10040) {  # WSAEMSGSIZE
+        if (e.code == 10040) {  # WSAEMSGSIZE
+            r = limit;
+            break;
+        }
+        var retry = _io_win_retry(h, e, _IO_READABLE);
+        if (retry.is_err()) {
             _pep_free(buffer);
             _pep_free(length);
-            return IoResult<(ulong, SocketAddress)>.err(e);
+            return IoResult<(ulong, SocketAddress)>.err(retry.error());
         }
-        r = limit;
     }
     var from = _io_sockaddr_read(buffer);
     _pep_free(buffer);

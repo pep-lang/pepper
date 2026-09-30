@@ -35,6 +35,7 @@ import "file";
 import "path";
 import "socket";
 import "types";
+import "wait";
 
 export FileHandle;
 export ErrorCode;
@@ -60,3 +61,14 @@ export resolve;
 export TcpListener;
 export TcpStream;
 export UdpSocket;
+
+# For the async module's task runtime only (see wait.pep); not public API.
+export _IoWaiter;
+export _io_set_waiter;
+export _io_clear_waiter;
+export _IO_READABLE;
+export _IO_WRITABLE;
+export _IO_WAIT_READY;
+export _IO_WAIT_CANCELLED;
+export _IO_WAIT_TIMED_OUT;
+export _IO_WAIT_UNWATCHED;

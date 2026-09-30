@@ -5,7 +5,9 @@ has its own small stack, and tasks take turns: one runs until it waits (for
 a timer, for another task, or by yielding), and then another runs. This is
 the model of Go's goroutines and of libuv or tokio event loops, without
 `async`/`await`: a function that waits looks like any other function, and
-any function can wait, however deep in the call stack.
+any function can wait, however deep in the call stack. A socket call that
+has to wait parks only its task, so one thread can serve thousands of
+connections.
 
 Tasks live in the `async` module:
 
@@ -45,12 +47,50 @@ Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 `yield_now()` now and then.
 
+## Sockets
+
+A socket call in a task that would have to wait (for a connection, for data,
+or for room to send) parks the task and lets the others run until the
+socket is ready. The socket API is the same one a plain program uses; only
+the waiting differs:
+
+```pepper
+{{#include ../../examples/tasks-echo.pep}}
+```
+
+Outside a task, the same calls block the thread as before.
+
+On Linux the runtime waits on sockets with epoll, on macOS with kqueue,
+and on Windows with WSAPoll.
+When no task is ready to run, it blocks in the driver until a socket is
+ready or the next timer is due; while tasks are running, it also checks the
+sockets every few dozen tasks, so a busy task cannot starve the network.
+
+## Timeouts
+
+`async.timeout(milliseconds)` limits how long the waits inside a `with`
+block may take:
+
+```pepper
+{{#include ../../examples/tasks-timeout.pep}}
+```
+
+Once the limit passes, a socket call that has to wait fails with an
+`IoError` for which `is_timed_out()` holds, `join` fails with a `TaskError`
+for which `is_timed_out()` holds (the task it waited for carries on), and
+`sleep` returns early. Code that does not wait is never interrupted. The
+limit ends with the block. Timeouts nest, and an inner one cannot extend an
+outer one. `deadline.is_expired()` says whether the limit has passed.
+`timeout` panics outside a task.
+
 ## Cancelling
 
 `task.cancel()` asks a task to stop. Nothing stops it by force: from then on
 `async.is_cancelled()` is true inside it, `sleep` returns at once, and
 `join` on it fails with a `TaskError` whose `is_cancelled()` is true. A
-task waiting in `join` returns the same error when it is cancelled itself.
+task waiting in `join` returns the same error when it is cancelled itself,
+and a socket call waiting in a cancelled task fails with an `IoError` whose
+`is_cancelled()` is true.
 When the first task of a `run` returns, every task still running is
 cancelled, and `run` waits for each to finish:
 
@@ -76,9 +116,10 @@ program as a thread would. Stacks are reused for later tasks.
 - A runtime runs on one thread: `spawn_local` is the only way to start a
   task. Tasks that run on several threads at once, and `run_blocking` for
   work that would block the thread, are planned.
-- Sockets and files still block the whole thread when called in a task.
-  Making them park only the calling task, over epoll, kqueue, IOCP and
-  io_uring, is the next step, along with timeouts (`async.timeout`).
+- On Windows, the runtime waits on sockets with WSAPoll, which looks at
+  every waiting socket on each poll; an I/O completion port driver that
+  scales to many connections is next. Files block the thread on every
+  platform. io_uring on Linux comes later.
 - On Windows, a `ThreadLocal` has a separate value in each task (it is
   built on fiber local storage); elsewhere the tasks of a thread share it.
 - `Mutex`, `Channel`, `Condition` and `Thread.sleep` block the thread, and

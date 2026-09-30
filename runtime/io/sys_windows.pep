@@ -65,6 +65,12 @@ extern uint FormatMessageW(uint flags, void* source, uint id, uint language, ush
 [Target(OS(Windows))]
 extern int MultiByteToWideChar(uint codepage, uint flags, char* src, int src_len, ushort* dst, int dst_len);
 [Target(OS(Windows))]
+extern uint TlsAlloc();
+[Target(OS(Windows))]
+extern void* TlsGetValue(uint index);
+[Target(OS(Windows))]
+extern int TlsSetValue(uint index, void* value);
+[Target(OS(Windows))]
 extern int WideCharToMultiByte(
     uint codepage, uint flags, ushort* src, int src_len, char* dst, int dst_len, void* default_char, int* used_default
 );
@@ -204,6 +210,16 @@ export _io_sys_code_bad_handle(): ErrorCode {
 export _io_sys_code_write_zero(): ErrorCode {
     return 29;
 }  # WRITE_FAULT
+
+[Target(OS(Windows))]
+export _io_sys_code_cancelled(): ErrorCode {
+    return 995;
+}  # OPERATION_ABORTED
+
+[Target(OS(Windows))]
+export _io_sys_is_cancelled(code: ErrorCode): bool {
+    return code == 995 || code == 1223;  # OPERATION_ABORTED, CANCELLED
+}
 
 # A BOOL result: nonzero -> Ok, 0 -> the GetLastError() error.
 [Target(OS(Windows))]
@@ -660,4 +676,25 @@ export _io_sys_temp_dir(): Path {
         end = end - 1;
     }
     return Path(_io_slice(s, 0, end));
+}
+
+# ── Thread-local keys ────────────────────────────────────────────────────────
+
+# Thread local storage, not fiber local storage: every task on a thread
+# shares the value.
+[Target(OS(Windows))]
+export _io_sys_key_create(): ulong {
+    var index = TlsAlloc();
+    assert(index != 4294967295, "io: no thread-local keys left");  # TLS_OUT_OF_INDEXES
+    return index as ulong;
+}
+
+[Target(OS(Windows))]
+export _io_sys_key_get(key: ulong): __ptr<void> {
+    return TlsGetValue(key as uint);
+}
+
+[Target(OS(Windows))]
+export _io_sys_key_set(key: ulong, value: __ptr<void>) {
+    TlsSetValue(key as uint, value);
 }
