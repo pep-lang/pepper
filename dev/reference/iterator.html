@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d55bbaee.js";
+            window.path_to_searchindex_js = "../searchindex-2eb4247d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b106f5d9.js"></script>
@@ -307,8 +307,8 @@ gets this method.</p>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">struct MapIterator&lt;T, U&gt;
 </code></pre>
-<p>The iterator <code>Iterator.map</code> returns: each element of <code>Source</code>, passed
-through <code>Transform</code>.</p>
+<p>The iterator <code>Iterator.map</code> returns: each element of the source iterator,
+passed through the transform function.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the source’s elements</li>
@@ -318,19 +318,6 @@ through <code>Transform</code>.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">Iterator&lt;T&gt; Source
-</code></pre>
-<p>The iterator whose elements are transformed.</p>
-<h4 id="transform"><a class="header" href="#transform">Transform</a></h4>
-<pre><code class="language-pepper">(T) =&gt; U Transform
-</code></pre>
-<p>The function applied to each element.</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">U Value
-</code></pre>
-<p>The current element, <code>Transform</code> of the source’s current element.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
@@ -345,7 +332,7 @@ through <code>Transform</code>.</p>
 <h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
-<p>Advances to the next element, and applies <code>Transform</code> to it.</p>
+<p>Advances to the next element, and applies the transform function to it.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
@@ -361,8 +348,8 @@ through <code>Transform</code>.</p>
 <h2 id="filteriterator"><a class="header" href="#filteriterator">FilterIterator</a></h2>
 <pre><code class="language-pepper">struct FilterIterator&lt;T&gt;
 </code></pre>
-<p>The iterator <code>Iterator.filter</code> returns: the elements of <code>Source</code> that
-<code>Keep</code> accepts.</p>
+<p>The iterator <code>Iterator.filter</code> returns: the elements of the source
+iterator that the test function accepts.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the elements</li>
@@ -371,15 +358,6 @@ through <code>Transform</code>.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="source-1"><a class="header" href="#source-1">Source</a></h4>
-<pre><code class="language-pepper">Iterator&lt;T&gt; Source
-</code></pre>
-<p>The iterator whose elements are tested.</p>
-<h4 id="keep"><a class="header" href="#keep">Keep</a></h4>
-<pre><code class="language-pepper">(T) =&gt; bool Keep
-</code></pre>
-<p>The test an element must pass.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; bool keep)
@@ -394,7 +372,7 @@ through <code>Transform</code>.</p>
 <h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
-<p>Advances to the next element that <code>Keep</code> accepts.</p>
+<p>Advances to the next element that the test function accepts.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>

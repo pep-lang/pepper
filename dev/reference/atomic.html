@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d55bbaee.js";
+            window.path_to_searchindex_js = "../searchindex-2eb4247d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b106f5d9.js"></script>
@@ -212,14 +212,6 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
         return 0;
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="data"><a class="header" href="#data">Data</a></h4>
-<pre><code class="language-pepper">const Data: __ptr&lt;T&gt;
-</code></pre>
-<p>The heap slot the value lives in: <code>sizeof&lt;T&gt;()</code> bytes for a POD <code>T</code>,
-or one reference pointer for a struct <code>T</code>. Allocated by the
-constructor and never null afterwards. Internal storage; access it only
-through the methods, which keep every access atomic.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())

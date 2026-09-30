@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d55bbaee.js";
+            window.path_to_searchindex_js = "../searchindex-2eb4247d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b106f5d9.js"></script>
@@ -225,28 +225,6 @@ next step of such a loop panics with “Array modified during iteration”.</p>
         return total;   # 7
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="data"><a class="header" href="#data">Data</a></h4>
-<pre><code class="language-pepper">__ptr&lt;T&gt; Data
-</code></pre>
-<p>The element buffer: <code>Capacity</code> slots, of which the first <code>Size</code> hold
-live elements and the rest are zeroed (null for struct <code>T</code>). Null while
-<code>Capacity</code> is 0. Internal storage; use the methods instead of touching
-it directly.</p>
-<h4 id="size"><a class="header" href="#size">Size</a></h4>
-<pre><code class="language-pepper">ulong Size
-</code></pre>
-<p>The number of live elements; always at most <code>Capacity</code>. Read it through <code>count()</code>.</p>
-<h4 id="capacity"><a class="header" href="#capacity">Capacity</a></h4>
-<pre><code class="language-pepper">ulong Capacity
-</code></pre>
-<p>The number of element slots allocated in <code>Data</code>; never shrinks. Read it through <code>capacity()</code>.</p>
-<h4 id="version"><a class="header" href="#version">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p>The modification counter: incremented by every mutating operation so
-that an <code>ArrayIterator</code> can detect changes made while it runs. Its
-value carries no other meaning.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="array-2"><a class="header" href="#array-2">Array()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -290,7 +268,7 @@ panic.</p>
 <ul>
 <li>the element count; 0 for an empty Array</li>
 </ul>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
 <pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of elements the Array can hold before its buffer
@@ -458,7 +436,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array pop on empty Array”)</li>
+<li>if the Array is empty (“Array pop on empty Array”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var top = a.pop();
@@ -473,7 +451,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array first on empty Array”)</li>
+<li>if the Array is empty (“Array first on empty Array”)</li>
 </ul>
 <h4 id="last"><a class="header" href="#last">last</a></h4>
 <pre><code class="language-pepper">T last()
@@ -486,7 +464,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array last on empty Array”)</li>
+<li>if the Array is empty (“Array last on empty Array”)</li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -610,7 +588,7 @@ capacity equals this Array’s <code>count()</code>.</p>
 <p>Reports whether both Arrays have the same count and pairwise equal
 elements, compared with <code>==</code> as <code>find</code> does.</p>
 <p>Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. Capacity is not compared.</p>
+equal. <code>capacity()</code> is not compared.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array to compare with</li>
@@ -694,24 +672,6 @@ the iterator was created (see <code>Array</code> for which operations count), it
         var x = it.current();
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">Array&lt;T&gt; Source
-</code></pre>
-<p>The Array being iterated; the iterator holds a reference to it for its whole lifetime.</p>
-<h4 id="index"><a class="header" href="#index">Index</a></h4>
-<pre><code class="language-pepper">ulong Index
-</code></pre>
-<p>The position of the current element in <code>Source</code>. Meaningful only after
-<code>Started</code> is set; equals <code>Source.count()</code> once iteration has finished.</p>
-<h4 id="version-1"><a class="header" href="#version-1">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p>The <code>Source.Version</code> recorded when iteration began; a mismatch means the Array was modified.</p>
-<h4 id="started"><a class="header" href="#started">Started</a></h4>
-<pre><code class="language-pepper">bool Started
-</code></pre>
-<p>Whether <code>next()</code> has been called at least once; the first call stays at index 0 instead of advancing.</p>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">bool next()
@@ -725,7 +685,7 @@ returning false.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source.Version == Version</code> does not hold, that is, the Array was modified since the iterator was created (“Array modified during iteration”)</li>
+<li>if the Array was modified since the iterator was created (“Array modified during iteration”)</li>
 </ul>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">T current()
@@ -737,9 +697,9 @@ returning false.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source.Version == Version</code> does not hold, that is, the Array was modified since the iterator was created (“Array modified during iteration”)</li>
-<li>if <code>Started</code> does not hold, that is, <code>next()</code> was never called (“ArrayIterator.current() before next()”)</li>
-<li>if <code>Index &lt; Source.Size</code> does not hold, that is, <code>next()</code> already returned false (“ArrayIterator.current() past the end”)</li>
+<li>if the Array was modified since the iterator was created (“Array modified during iteration”)</li>
+<li>if <code>next()</code> was never called (“ArrayIterator.current() before next()”)</li>
+<li>if <code>next()</code> already returned false (“ArrayIterator.current() past the end”)</li>
 </ul>
 
                     </main>

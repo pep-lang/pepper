@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d55bbaee.js";
+            window.path_to_searchindex_js = "searchindex-2eb4247d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b106f5d9.js"></script>
@@ -7417,19 +7417,19 @@ ends abnormally (SIGABRT on POSIX).</p>
 (<code>"text"</code>) are <code>String</code> values.</p>
 <p>Two measures describe a String, and each API says which one it uses:</p>
 <ul>
-<li><strong>Code points</strong> (Unicode characters): <code>Length</code>, <code>length()</code>, <code>empty()</code>,
+<li><strong>Code points</strong> (Unicode characters): <code>length()</code>, <code>empty()</code>,
 the indexer <code>s[i]</code>, <code>substr</code>, and iteration.</li>
-<li><strong>Bytes</strong> of UTF-8: <code>Size</code>, <code>size()</code>, <code>find</code>, <code>starts_with</code>, and
-<code>ends_with</code>. <code>Size</code> is the authoritative length, so the data may
+<li><strong>Bytes</strong> of UTF-8: <code>size()</code>, <code>find</code>, <code>starts_with</code>, and
+<code>ends_with</code>. The byte size is the authoritative length, so the data may
 contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
 <p>A String is a reference type: <code>var b = a;</code> shares one object, so
 <code>append</code>, <code>+=</code>, and <code>grow</code> are visible through every reference. Use
 <code>clone()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
 content.</p>
-<p><code>append</code>, <code>+=</code>, and <code>grow</code> increment <code>Version</code>. A <code>StringIterator</code>
-panics when it sees a <code>Version</code> other than the one it started with, so
-modifying a String while a <code>for</code> loop iterates it panics.</p>
+<p>A <code>StringIterator</code> panics when the String has been changed by <code>append</code>,
+<code>+=</code>, or <code>grow</code> since the iterator was created, so modifying a String
+while a <code>for</code> loop iterates it panics.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var s = "héllo";
     assert(s.length() == 5, "5 code points");
@@ -7441,49 +7441,27 @@ modifying a String while a <code>for</code> loop iterates it panics.</p>
         print(c);   # one code point per line
     }
 </code></pre>
-<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
-<h4 id="data"><a class="header" href="#data">Data</a></h4>
-<pre><code class="language-pepper">__ptr&lt;char&gt; Data
-</code></pre>
-<p>The heap buffer: <code>Size</code> bytes of UTF-8 followed by a NUL terminator,
-or <code>__null</code> for a String built with no data (<code>String()</code>). The String
-owns it and frees it on destruction. <code>append</code> and <code>grow</code> may move it.</p>
-<h4 id="length"><a class="header" href="#length">Length</a></h4>
-<pre><code class="language-pepper">ulong Length
-</code></pre>
-<p>The number of Unicode code points. The constructor and <code>append</code> keep
-it current; <code>grow</code> does not update it.</p>
-<h4 id="size"><a class="header" href="#size">Size</a></h4>
-<pre><code class="language-pepper">ulong Size
-</code></pre>
-<p>The number of bytes of UTF-8 in <code>Data</code>, not counting the NUL terminator.</p>
-<h4 id="version"><a class="header" href="#version">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p>A modification counter, incremented by <code>append</code> and <code>grow</code>. A
-<code>StringIterator</code> compares it to detect modification during iteration.
-<code>clone()</code> starts the copy at 0.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="string-2"><a class="header" href="#string-2">String()</a></h4>
-<pre><code class="language-pepper">construct(__ptr&lt;char&gt; data = __null, this.Size = 0, this.Length = 0)
+<pre><code class="language-pepper">construct(__ptr&lt;char&gt; data = __null, ulong size = 0, ulong length = 0)
 </code></pre>
-<p>Creates a String by copying <code>Size</code> bytes of <code>data</code> into a new
+<p>Creates a String by copying <code>size</code> bytes of <code>data</code> into a new
 NUL-terminated buffer. With no arguments, it creates an empty String
-whose <code>Data</code> is <code>__null</code>.</p>
-<p>When <code>data</code> is not <code>__null</code> and <code>Size</code> is 0, <code>data</code> is treated as a
+whose <code>c_str()</code> is <code>__null</code>.</p>
+<p>When <code>data</code> is not <code>__null</code> and <code>size</code> is 0, <code>data</code> is treated as a
 NUL-terminated C string:</p>
 <ul>
-<li>with <code>Length</code> nonzero, <code>Size</code> becomes the byte length of its first
-<code>Length</code> code points (0 if the C string is not valid UTF-8);</li>
-<li>with <code>Length</code> 0, <code>Size</code> becomes the C string’s whole byte length.</li>
+<li>with <code>length</code> nonzero, <code>size</code> becomes the byte length of its first
+<code>length</code> code points (0 if the C string is not valid UTF-8);</li>
+<li>with <code>length</code> 0, <code>size</code> becomes the C string’s whole byte length.</li>
 </ul>
-<p>When <code>Length</code> is 0, it is counted from the bytes. A nonzero <code>Length</code> is
-trusted, not checked against the data. Runs in O(Size).</p>
+<p>When <code>length</code> is 0, it is counted from the bytes. A nonzero <code>length</code> is
+trusted, not checked against the data. Runs in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>data</code> — the bytes to copy; <code>__null</code> for an empty String (then pass no sizes, because they are stored as given)</li>
-<li><code>this.Size</code> — the number of bytes to copy from <code>data</code>; 0 treats <code>data</code> as a NUL-terminated C string</li>
-<li><code>this.Length</code> — the number of code points in those bytes</li>
+<li><code>size</code> — the number of bytes to copy from <code>data</code>; 0 treats <code>data</code> as a NUL-terminated C string</li>
+<li><code>length</code> — the number of code points in those bytes</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var empty = String();
@@ -7509,10 +7487,10 @@ whole count 0.</p>
 <li>the number of code points, or 0 for invalid UTF-8</li>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<h4 id="length"><a class="header" href="#length">length</a></h4>
 <pre><code class="language-pepper">ulong length()
 </code></pre>
-<p>Returns the number of Unicode code points (<code>Length</code>). O(1).</p>
+<p>Returns the number of Unicode code points. O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the length in code points, not bytes</li>
@@ -7522,27 +7500,27 @@ whole count 0.</p>
 <li><code>size</code></li>
 </ul>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
-<pre><code class="language-pepper">void grow(ulong newSize)
+<pre><code class="language-pepper">void grow(ulong new_size)
 </code></pre>
-<p>Extends the byte buffer to <code>newSize</code> bytes and fills the new bytes
-with zeros. Does nothing when <code>newSize</code> is not greater than <code>Size</code>.</p>
-<p>A low-level primitive for <code>append</code>. It sets <code>Size</code> but not <code>Length</code>,
+<p>Extends the byte buffer to <code>new_size</code> bytes and fills the new bytes
+with zeros. Does nothing when <code>new_size</code> is not greater than <code>size()</code>.</p>
+<p>A low-level primitive for <code>append</code>. It updates <code>size()</code> but not <code>length()</code>,
 so the zero bytes it adds are not counted as code points until the
-caller overwrites them and fixes <code>Length</code>. When it grows the buffer,
-it increments <code>Version</code> and may reallocate <code>Data</code>, which invalidates
-pointers from <code>c_str()</code>. Runs in O(newSize).</p>
+caller overwrites them and fixes the length. When it grows the buffer,
+it invalidates running iterators and may reallocate the buffer, which invalidates
+pointers from <code>c_str()</code>. Runs in O(new_size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>newSize</code> — the new byte length</li>
+<li><code>new_size</code> — the new byte length</li>
 </ul>
 <h4 id="append"><a class="header" href="#append">append</a></h4>
 <pre><code class="language-pepper">void append(String rhs)
 </code></pre>
-<p>Appends the content of <code>rhs</code> to this String in place, updating <code>Size</code>
-and <code>Length</code>.</p>
-<p>Always increments <code>Version</code>, even when <code>rhs</code> is empty, so appending
-during iteration panics. It may reallocate <code>Data</code>. Every reference to
-this String sees the change. Runs in O(Size + rhs.Size).</p>
+<p>Appends the content of <code>rhs</code> to this String in place, updating <code>size()</code>
+and <code>length()</code>.</p>
+<p>Always invalidates running iterators, even when <code>rhs</code> is empty, so
+appending during iteration panics. It may reallocate the buffer. Every reference to
+this String sees the change. Runs in O(size() + rhs.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append; it is not modified</li>
@@ -7557,7 +7535,7 @@ this String sees the change. Runs in O(Size + rhs.Size).</p>
 <p>Returns the code point at code-point index <code>idx</code> as a new
 one-code-point String.</p>
 <p>A negative <code>idx</code> counts from the end (<code>s[-1]</code> is the last code point).
-<code>Length</code> is added until the index is non-negative, so any negative
+<code>length()</code> is added until the index is non-negative, so any negative
 index wraps, and <code>s[-7]</code> of a 3-code-point String is <code>s[2]</code>. Runs in
 O(idx) because it walks the UTF-8 bytes. Use <code>for (var c in s)</code> to
 visit every code point in O(size).</p>
@@ -7582,8 +7560,8 @@ visit every code point in O(size).</p>
 <pre><code class="language-pepper">bool ==(String rhs)
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> have the same content, compared
-byte by byte. Strings with different <code>Length</code> are unequal without
-comparing bytes. Runs in O(Size).</p>
+byte by byte. Strings with different <code>length()</code> are unequal without
+comparing bytes. Runs in O(size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -7597,7 +7575,7 @@ comparing bytes. Runs in O(Size).</p>
 </code></pre>
 <p>Appends <code>rhs</code> in place, like <code>append</code>, and returns this same String,
 not a copy. <code>s += t</code> modifies the object that every reference to <code>s</code>
-shares, and increments <code>Version</code>.</p>
+shares, and invalidates running iterators.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append</li>
@@ -7610,10 +7588,10 @@ shares, and increments <code>Version</code>.</p>
 <pre><code class="language-pepper">    var s = "a";
     s += "b";   # s == "ab"
 </code></pre>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<h4 id="size"><a class="header" href="#size">size</a></h4>
 <pre><code class="language-pepper">ulong size()
 </code></pre>
-<p>Returns the number of bytes of UTF-8 (<code>Size</code>), not counting the NUL
+<p>Returns the number of bytes of UTF-8, not counting the NUL
 terminator. O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
@@ -7645,7 +7623,7 @@ panic.</p>
 <h4 id="empty"><a class="header" href="#empty">empty</a></h4>
 <pre><code class="language-pepper">bool empty()
 </code></pre>
-<p>Returns whether the String has no code points (<code>Length</code> is 0). O(1).</p>
+<p>Returns whether the String has no code points. O(1).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when <code>length()</code> is 0</li>
@@ -7653,7 +7631,7 @@ panic.</p>
 <h4 id="c_str"><a class="header" href="#c_str">c_str</a></h4>
 <pre><code class="language-pepper">__ptr&lt;char&gt; c_str()
 </code></pre>
-<p>Returns the String’s buffer as a NUL-terminated C string (<code>Data</code>).</p>
+<p>Returns the String’s buffer as a NUL-terminated C string.</p>
 <p>The pointer is owned by the String. It is valid until the String is
 destroyed or <code>append</code>, <code>+=</code>, or <code>grow</code> reallocates it. It is <code>__null</code>
 for a String built with no data (<code>String()</code>), so check it before you
@@ -7666,8 +7644,7 @@ pass it to C. C functions stop at the first NUL byte in the content.</p>
 <pre><code class="language-pepper">String clone()
 </code></pre>
 <p>Returns a new String with the same content and its own buffer, so
-later changes to either String do not affect the other. The copy’s
-<code>Version</code> starts at 0. Runs in O(Size).</p>
+later changes to either String do not affect the other. Runs in O(size()).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an independent copy of this String</li>
@@ -7681,7 +7658,7 @@ when it does not occur.</p>
 <code>substr</code>, convert it with <code>String.length_of(s.c_str(), offset)</code>.
 An empty <code>needle</code> is found at 0 unless this String is empty, in which
 case the result is -1. The result is also -1 when either String is not
-valid UTF-8. Runs in O(Size * needle.Size).</p>
+valid UTF-8. Runs in O(size() * needle.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -7700,7 +7677,7 @@ valid UTF-8. Runs in O(Size * needle.Size).</p>
 </code></pre>
 <p>Returns whether <code>needle</code> occurs in this String (<code>find(needle) &gt;= 0</code>).
 Because of that, an empty String contains nothing, not even <code>""</code>.
-Runs in O(Size * needle.Size).</p>
+Runs in O(size() * needle.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>needle</code> — the text to search for</li>
@@ -7713,7 +7690,7 @@ Runs in O(Size * needle.Size).</p>
 <pre><code class="language-pepper">bool starts_with(String prefix)
 </code></pre>
 <p>Returns whether this String begins with the bytes of <code>prefix</code>. An
-empty <code>prefix</code> always matches. Runs in O(prefix.Size).</p>
+empty <code>prefix</code> always matches. Runs in O(prefix.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>prefix</code> — the text to test for</li>
@@ -7726,7 +7703,7 @@ empty <code>prefix</code> always matches. Runs in O(prefix.Size).</p>
 <pre><code class="language-pepper">bool ends_with(String suffix)
 </code></pre>
 <p>Returns whether this String ends with the bytes of <code>suffix</code>. An empty
-<code>suffix</code> always matches. Runs in O(suffix.Size).</p>
+<code>suffix</code> always matches. Runs in O(suffix.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>suffix</code> — the text to test for</li>
@@ -7741,7 +7718,7 @@ empty <code>prefix</code> always matches. Runs in O(prefix.Size).</p>
 <p>Returns a new String of up to <code>count</code> code points starting at
 code-point index <code>start</code>. Both arguments count code points, not bytes.</p>
 <p><code>count</code> is clamped to the code points that remain. When <code>start</code> is at
-or past <code>length()</code>, the result is an empty String. Runs in O(Size).</p>
+or past <code>length()</code>, the result is an empty String. Runs in O(size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>start</code> — the code-point index of the first code point to copy</li>
@@ -7761,7 +7738,7 @@ or past <code>length()</code>, the result is an empty String. Runs in O(Size).</
 <pre><code class="language-pepper">bool !=(String rhs)
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> differ in content, the negation
-of <code>==</code>. Runs in O(Size).</p>
+of <code>==</code>. Runs in O(size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to compare with</li>
@@ -7774,7 +7751,7 @@ of <code>==</code>. Runs in O(Size).</p>
 <pre><code class="language-pepper">String +(String rhs)
 </code></pre>
 <p>Returns a new String that holds this String followed by <code>rhs</code>. Neither
-operand is modified. Runs in O(Size + rhs.Size).</p>
+operand is modified. Runs in O(size() + rhs.size()).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the String to append to the copy</li>
@@ -7792,38 +7769,15 @@ operand is modified. Runs in O(Size + rhs.Size).</p>
 <p>An <code>Iterator&lt;String&gt;</code> over a String’s code points, returned by
 <code>String.iterate()</code> and used by <code>for (var c in s)</code>.</p>
 <p>Call <code>next()</code> to advance, then <code>current()</code> for the code point it moved
-to. The iterator records the String’s <code>Version</code> when it is created, and
-both methods panic if the String has been modified since. Create it with
-<code>String.iterate()</code>: a default-constructed <code>StringIterator()</code> has a null
-<code>Source</code>.</p>
+to. Both methods panic if the String has been modified since the
+iterator was created. Create it with <code>String.iterate()</code>: a
+default-constructed <code>StringIterator()</code> has no String to walk.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var it = "ab".iterate();
     while (it.next()) {
         print(it.current());   # "a", then "b"
     }
 </code></pre>
-<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
-<h4 id="source"><a class="header" href="#source">Source</a></h4>
-<pre><code class="language-pepper">String Source
-</code></pre>
-<p>The String being iterated. The iterator holds a reference to it.</p>
-<h4 id="offset"><a class="header" href="#offset">Offset</a></h4>
-<pre><code class="language-pepper">ulong Offset
-</code></pre>
-<p>The byte offset in <code>Source</code> of the current code point.</p>
-<h4 id="nextoffset"><a class="header" href="#nextoffset">NextOffset</a></h4>
-<pre><code class="language-pepper">ulong NextOffset
-</code></pre>
-<p>The byte offset in <code>Source</code> of the code point after the current one,
-or <code>Source.Size</code> at the end.</p>
-<h4 id="version-1"><a class="header" href="#version-1">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p><code>Source.Version</code> when iteration began; a mismatch means modification.</p>
-<h4 id="started"><a class="header" href="#started">Started</a></h4>
-<pre><code class="language-pepper">bool Started
-</code></pre>
-<p>Whether <code>next()</code> has been called at least once.</p>
 <h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">bool next()
@@ -7838,7 +7792,7 @@ bytes, as one final “code point”.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source</code> was modified (its <code>Version</code> changed) since the iterator was created</li>
+<li>if the String was modified since the iterator was created</li>
 </ul>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">String current()
@@ -7851,7 +7805,7 @@ a new one-code-point String.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source</code> was modified since the iterator was created</li>
+<li>if the String was modified since the iterator was created</li>
 <li>if <code>next()</code> has not been called yet</li>
 <li>if <code>next()</code> has returned false (the iterator is past the end)</li>
 </ul>
@@ -7899,28 +7853,6 @@ next step of such a loop panics with “Array modified during iteration”.</p>
         return total;   # 7
     }
 </code></pre>
-<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
-<h4 id="data-1"><a class="header" href="#data-1">Data</a></h4>
-<pre><code class="language-pepper">__ptr&lt;T&gt; Data
-</code></pre>
-<p>The element buffer: <code>Capacity</code> slots, of which the first <code>Size</code> hold
-live elements and the rest are zeroed (null for struct <code>T</code>). Null while
-<code>Capacity</code> is 0. Internal storage; use the methods instead of touching
-it directly.</p>
-<h4 id="size-2"><a class="header" href="#size-2">Size</a></h4>
-<pre><code class="language-pepper">ulong Size
-</code></pre>
-<p>The number of live elements; always at most <code>Capacity</code>. Read it through <code>count()</code>.</p>
-<h4 id="capacity"><a class="header" href="#capacity">Capacity</a></h4>
-<pre><code class="language-pepper">ulong Capacity
-</code></pre>
-<p>The number of element slots allocated in <code>Data</code>; never shrinks. Read it through <code>capacity()</code>.</p>
-<h4 id="version-2"><a class="header" href="#version-2">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p>The modification counter: incremented by every mutating operation so
-that an <code>ArrayIterator</code> can detect changes made while it runs. Its
-value carries no other meaning.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="array-2"><a class="header" href="#array-2">Array()</a></h4>
 <pre><code class="language-pepper">construct(ulong capacity = 0)
@@ -7964,7 +7896,7 @@ panic.</p>
 <ul>
 <li>the element count; 0 for an empty Array</li>
 </ul>
-<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
 <pre><code class="language-pepper">ulong capacity()
 </code></pre>
 <p>Returns the number of elements the Array can hold before its buffer
@@ -8132,7 +8064,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array pop on empty Array”)</li>
+<li>if the Array is empty (“Array pop on empty Array”)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var top = a.pop();
@@ -8147,7 +8079,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array first on empty Array”)</li>
+<li>if the Array is empty (“Array first on empty Array”)</li>
 </ul>
 <h4 id="last"><a class="header" href="#last">last</a></h4>
 <pre><code class="language-pepper">T last()
@@ -8160,7 +8092,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Size &gt; 0</code> does not hold, that is, the Array is empty (“Array last on empty Array”)</li>
+<li>if the Array is empty (“Array last on empty Array”)</li>
 </ul>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">void clear()
@@ -8284,7 +8216,7 @@ capacity equals this Array’s <code>count()</code>.</p>
 <p>Reports whether both Arrays have the same count and pairwise equal
 elements, compared with <code>==</code> as <code>find</code> does.</p>
 <p>Runs in O(count); stops at the first difference. Two empty Arrays are
-equal. Capacity is not compared.</p>
+equal. <code>capacity()</code> is not compared.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>rhs</code> — the Array to compare with</li>
@@ -8368,24 +8300,6 @@ the iterator was created (see <code>Array</code> for which operations count), it
         var x = it.current();
     }
 </code></pre>
-<h3 id="fields-1-1"><a class="header" href="#fields-1-1">Fields</a></h3>
-<h4 id="source-1"><a class="header" href="#source-1">Source</a></h4>
-<pre><code class="language-pepper">Array&lt;T&gt; Source
-</code></pre>
-<p>The Array being iterated; the iterator holds a reference to it for its whole lifetime.</p>
-<h4 id="index"><a class="header" href="#index">Index</a></h4>
-<pre><code class="language-pepper">ulong Index
-</code></pre>
-<p>The position of the current element in <code>Source</code>. Meaningful only after
-<code>Started</code> is set; equals <code>Source.count()</code> once iteration has finished.</p>
-<h4 id="version-1-1"><a class="header" href="#version-1-1">Version</a></h4>
-<pre><code class="language-pepper">ulong Version
-</code></pre>
-<p>The <code>Source.Version</code> recorded when iteration began; a mismatch means the Array was modified.</p>
-<h4 id="started-1"><a class="header" href="#started-1">Started</a></h4>
-<pre><code class="language-pepper">bool Started
-</code></pre>
-<p>Whether <code>next()</code> has been called at least once; the first call stays at index 0 instead of advancing.</p>
 <h3 id="methods-1-2"><a class="header" href="#methods-1-2">Methods</a></h3>
 <h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
 <pre><code class="language-pepper">bool next()
@@ -8399,7 +8313,7 @@ returning false.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source.Version == Version</code> does not hold, that is, the Array was modified since the iterator was created (“Array modified during iteration”)</li>
+<li>if the Array was modified since the iterator was created (“Array modified during iteration”)</li>
 </ul>
 <h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
 <pre><code class="language-pepper">T current()
@@ -8411,9 +8325,9 @@ returning false.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>Source.Version == Version</code> does not hold, that is, the Array was modified since the iterator was created (“Array modified during iteration”)</li>
-<li>if <code>Started</code> does not hold, that is, <code>next()</code> was never called (“ArrayIterator.current() before next()”)</li>
-<li>if <code>Index &lt; Source.Size</code> does not hold, that is, <code>next()</code> already returned false (“ArrayIterator.current() past the end”)</li>
+<li>if the Array was modified since the iterator was created (“Array modified during iteration”)</li>
+<li>if <code>next()</code> was never called (“ArrayIterator.current() before next()”)</li>
+<li>if <code>next()</code> already returned false (“ArrayIterator.current() past the end”)</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/hash.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="hashmap-and-hashset"><a class="header" href="#hashmap-and-hashset">HashMap and HashSet</a></h1>
@@ -8508,7 +8422,7 @@ state: they are public but may change, and writing to them breaks the map.</p>
     assert(ages.remove("alan"), "removed");
     assert(ages.count() == 1, "one entry left");
 </code></pre>
-<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="keys"><a class="header" href="#keys">keys</a></h4>
 <pre><code class="language-pepper">Array&lt;K&gt; keys
 </code></pre>
@@ -8525,12 +8439,12 @@ live value. Internal: <code>grow</code> replaces it.</p>
 </code></pre>
 <p>The occupancy of each slot: 0 is empty, 1 is a tombstone (a removed
 entry that still extends probe sequences), 2 is occupied. Internal.</p>
-<h4 id="capacity-2"><a class="header" href="#capacity-2">capacity</a></h4>
+<h4 id="capacity-1"><a class="header" href="#capacity-1">capacity</a></h4>
 <pre><code class="language-pepper">ulong capacity
 </code></pre>
 <p>The number of slots in the table: always a power of two and at least
 8. Internal; read it with <code>cap()</code>.</p>
-<h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
 <pre><code class="language-pepper">int size
 </code></pre>
 <p>The number of live entries. Internal; read it with <code>count()</code>.</p>
@@ -8748,7 +8662,7 @@ may change, and writing to them breaks the set.</p>
     assert(!seen.insert("a"), "already a member");
     assert(seen.count() == 2, "two members");
 </code></pre>
-<h3 id="fields-1-2"><a class="header" href="#fields-1-2">Fields</a></h3>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="keys-1"><a class="header" href="#keys-1">keys</a></h4>
 <pre><code class="language-pepper">Array&lt;K&gt; keys
 </code></pre>
@@ -9043,8 +8957,8 @@ gets this method.</p>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">struct MapIterator&lt;T, U&gt;
 </code></pre>
-<p>The iterator <code>Iterator.map</code> returns: each element of <code>Source</code>, passed
-through <code>Transform</code>.</p>
+<p>The iterator <code>Iterator.map</code> returns: each element of the source iterator,
+passed through the transform function.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the source’s elements</li>
@@ -9054,19 +8968,6 @@ through <code>Transform</code>.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
-<h4 id="source-2"><a class="header" href="#source-2">Source</a></h4>
-<pre><code class="language-pepper">Iterator&lt;T&gt; Source
-</code></pre>
-<p>The iterator whose elements are transformed.</p>
-<h4 id="transform"><a class="header" href="#transform">Transform</a></h4>
-<pre><code class="language-pepper">(T) =&gt; U Transform
-</code></pre>
-<p>The function applied to each element.</p>
-<h4 id="value"><a class="header" href="#value">Value</a></h4>
-<pre><code class="language-pepper">U Value
-</code></pre>
-<p>The current element, <code>Transform</code> of the source’s current element.</p>
 <h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; U transform)
@@ -9081,7 +8982,7 @@ through <code>Transform</code>.</p>
 <h4 id="next-1-1"><a class="header" href="#next-1-1">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
-<p>Advances to the next element, and applies <code>Transform</code> to it.</p>
+<p>Advances to the next element, and applies the transform function to it.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
@@ -9097,8 +8998,8 @@ through <code>Transform</code>.</p>
 <h2 id="filteriterator"><a class="header" href="#filteriterator">FilterIterator</a></h2>
 <pre><code class="language-pepper">struct FilterIterator&lt;T&gt;
 </code></pre>
-<p>The iterator <code>Iterator.filter</code> returns: the elements of <code>Source</code> that
-<code>Keep</code> accepts.</p>
+<p>The iterator <code>Iterator.filter</code> returns: the elements of the source
+iterator that the test function accepts.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the elements</li>
@@ -9107,15 +9008,6 @@ through <code>Transform</code>.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
-<h4 id="source-1-1"><a class="header" href="#source-1-1">Source</a></h4>
-<pre><code class="language-pepper">Iterator&lt;T&gt; Source
-</code></pre>
-<p>The iterator whose elements are tested.</p>
-<h4 id="keep"><a class="header" href="#keep">Keep</a></h4>
-<pre><code class="language-pepper">(T) =&gt; bool Keep
-</code></pre>
-<p>The test an element must pass.</p>
 <h3 id="constructor-1-2"><a class="header" href="#constructor-1-2">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(Iterator&lt;T&gt; source, (T) =&gt; bool keep)
@@ -9130,7 +9022,7 @@ through <code>Transform</code>.</p>
 <h4 id="next-2-1"><a class="header" href="#next-2-1">next</a></h4>
 <pre><code class="language-pepper">bool next()
 </code></pre>
-<p>Advances to the next element that <code>Keep</code> accepts.</p>
+<p>Advances to the next element that the test function accepts.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
@@ -9294,11 +9186,6 @@ freely.</p>
         }
     }
 </code></pre>
-<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
-<h4 id="target"><a class="header" href="#target">Target</a></h4>
-<pre><code class="language-pepper">__weak&lt;T&gt; Target
-</code></pre>
-<p>The weak reference itself.</p>
 <h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(T target)
@@ -9343,7 +9230,7 @@ by the <code>with</code> block itself, so there is nothing to do.</p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
     var n = r.Error.Message.length();   # 4
 </code></pre>
-<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
+<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">Message</a></h4>
 <pre><code class="language-pepper">String Message
 </code></pre>
@@ -9388,12 +9275,12 @@ and <code>value()</code> returns nothing, so it only checks that the result is O
         return b.ok_or(0);   # 0
     }
 </code></pre>
-<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h3 id="fields-1-1"><a class="header" href="#fields-1-1">Fields</a></h3>
 <h4 id="isok"><a class="header" href="#isok">IsOk</a></h4>
 <pre><code class="language-pepper">bool IsOk
 </code></pre>
 <p>Whether this result is Ok (<code>Value</code> is live) rather than Err (<code>Error</code> is live).</p>
-<h4 id="value-1"><a class="header" href="#value-1">Value</a></h4>
+<h4 id="value"><a class="header" href="#value">Value</a></h4>
 <pre><code class="language-pepper">TValue Value
 </code></pre>
 <p>The success value; meaningful only when <code>IsOk</code> is true, otherwise the default of <code>TValue</code>.</p>
@@ -9463,7 +9350,7 @@ type’s default (zero for a POD type, null for a struct type).</p>
 <ul>
 <li>true when <code>Error</code> holds the outcome</li>
 </ul>
-<h4 id="value-1-1"><a class="header" href="#value-1-1">value</a></h4>
+<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
 <pre><code class="language-pepper">TValue value()
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
@@ -9530,14 +9417,6 @@ thread-safe (itself <code>[Shared]</code>); <code>Atomic&lt;String&gt;</code> is
         return 0;
     }
 </code></pre>
-<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
-<h4 id="data-2"><a class="header" href="#data-2">Data</a></h4>
-<pre><code class="language-pepper">const Data: __ptr&lt;T&gt;
-</code></pre>
-<p>The heap slot the value lives in: <code>sizeof&lt;T&gt;()</code> bytes for a POD <code>T</code>,
-or one reference pointer for a struct <code>T</code>. Allocated by the
-constructor and never null afterwards. Internal storage; access it only
-through the methods, which keep every access atomic.</p>
 <h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(T value = __default&lt;T&gt;())
@@ -9824,7 +9703,7 @@ whole <code>FILE_ATTRIBUTE_*</code> word of the file (<code>FILE_ATTRIBUTE_READO
 <ul>
 <li><code>Metadata</code></li>
 </ul>
-<h2 id="offset-1"><a class="header" href="#offset-1">Offset</a></h2>
+<h2 id="offset"><a class="header" href="#offset">Offset</a></h2>
 <pre><code class="language-pepper">type Offset = long
 </code></pre>
 <p>A byte position or distance within a file, as taken and returned by the
@@ -9862,7 +9741,7 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
         }
     }
 </code></pre>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">Code</a></h4>
 <pre><code class="language-pepper">ErrorCode Code
 </code></pre>
@@ -10048,7 +9927,7 @@ dots are ASCII, so splitting at them never cuts a character in two.</p>
         print(p.to_string());
     }
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
 <h4 id="value-2"><a class="header" href="#value-2">Value</a></h4>
 <pre><code class="language-pepper">String Value
 </code></pre>
@@ -10484,7 +10363,7 @@ sharing read, write and delete access with other openers.</p>
     }
     var f = r.Value;
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="read"><a class="header" href="#read">Read</a></h4>
 <pre><code class="language-pepper">bool Read
 </code></pre>
@@ -10634,8 +10513,8 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
         var bytes = m.Value.Size;
     }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
-<h4 id="size-4"><a class="header" href="#size-4">Size</a></h4>
+<h3 id="fields-1-2"><a class="header" href="#fields-1-2">Fields</a></h3>
+<h4 id="size-2"><a class="header" href="#size-2">Size</a></h4>
 <pre><code class="language-pepper">ulong Size
 </code></pre>
 <p>The file’s length in bytes.</p>
@@ -11281,7 +11160,7 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
         i = i + 1;
     }
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-6"><a class="header" href="#fields-6">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">Path</a></h4>
 <pre><code class="language-pepper">Path Path
 </code></pre>
@@ -11346,7 +11225,7 @@ afresh.</p>
         io.Directory.remove_all(io.Directory.temp().join("scratch"));
     }
 </code></pre>
-<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
+<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
 <h4 id="path-1-1"><a class="header" href="#path-1-1">Path</a></h4>
 <pre><code class="language-pepper">Path Path
 </code></pre>
@@ -11646,7 +11525,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
         return 0;
     }
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="id"><a class="header" href="#id">Id</a></h4>
 <pre><code class="language-pepper">const Id: ThreadId
 </code></pre>
@@ -11827,7 +11706,7 @@ so destroy one only after the threads that used it have exited.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">Key</a></h4>
 <pre><code class="language-pepper">const Key: ulong
 </code></pre>
@@ -11971,8 +11850,8 @@ threads.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
-<h4 id="capacity-3"><a class="header" href="#capacity-3">Capacity</a></h4>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h4 id="capacity-2"><a class="header" href="#capacity-2">Capacity</a></h4>
 <pre><code class="language-pepper">const Capacity: ulong
 </code></pre>
 <p>The most values that may wait before <code>send</code> blocks, or 0 for no limit.</p>
@@ -12136,8 +12015,8 @@ without naming it. It belongs to the thread that runs the loop.</p>
         total = total + values.current();
     }
 </code></pre>
-<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
-<h4 id="source-3"><a class="header" href="#source-3">Source</a></h4>
+<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h4 id="source"><a class="header" href="#source">Source</a></h4>
 <pre><code class="language-pepper">const Source: Channel&lt;T&gt;
 </code></pre>
 <p>The channel it receives from.</p>
@@ -12224,7 +12103,7 @@ program, so a Mutex is never left “poisoned”.</p>
         }
     }
 </code></pre>
-<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="lock-1"><a class="header" href="#lock-1">Lock</a></h4>
 <pre><code class="language-pepper">const Lock: __ptr&lt;void&gt;
 </code></pre>
@@ -12336,8 +12215,8 @@ it to another thread.</p>
         totals.Requests.fetch_add(1);
     }   # unlocked here
 </code></pre>
-<h3 id="fields-1-8"><a class="header" href="#fields-1-8">Fields</a></h3>
-<h4 id="source-4"><a class="header" href="#source-4">Source</a></h4>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h4 id="source-1"><a class="header" href="#source-1">Source</a></h4>
 <pre><code class="language-pepper">const Source: Mutex&lt;T&gt;
 </code></pre>
 <p>The Mutex this guard locks.</p>
@@ -12521,7 +12400,7 @@ threads.</p>
         setup.call(initialize);   # only the first caller runs it
     }
 </code></pre>
-<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="state-3"><a class="header" href="#state-3">State</a></h4>
 <pre><code class="language-pepper">const State: Atomic&lt;int&gt;
 </code></pre>
@@ -12609,7 +12488,7 @@ compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="fields-1-9"><a class="header" href="#fields-1-9">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="initializer"><a class="header" href="#initializer">Initializer</a></h4>
 <pre><code class="language-pepper">const Initializer: shared () =&gt; T
 </code></pre>
