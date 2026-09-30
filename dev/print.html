@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eae996f7.js";
+            window.path_to_searchindex_js = "searchindex-d631bdcf.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f308eb6b.js"></script>
+        <script src="toc-6f6f7138.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1694,7 +1694,8 @@ the file, and can call itself.</p>
 </li>
 <li>
 <p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process’s exit
-code; return 0 for success.</p>
+code; return 0 for success. See
+<a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
 </li>
 <li>
 <p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments
@@ -1823,6 +1824,30 @@ main(): int {
 (<code>assert(n &gt; 0, name + " must be positive")</code>), or a C string, which a string
 literal picks, so a literal message builds nothing when the assertion holds. See
 <a href="#built-in-functions">Built-in functions</a>.</p>
+<h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
+<p><code>arguments()</code> returns the program’s command-line arguments as an
+<code>Array&lt;String&gt;</code>: element 0 is the program as it was started, and the
+arguments typed after it follow in order. <code>exit(code)</code> ends the program at
+once with status <code>code</code>, from anywhere, after flushing what was printed.</p>
+<pre><code class="language-pepper"># arguments() holds the program name, then each command-line argument.
+main(): int {
+    var parts = arguments();
+    if (parts.count() &gt; 2) {
+        print("usage: greet [NAME]");
+        exit(2);  # ends the program here, with status 2
+    }
+    var name = "world";
+    if (parts.count() == 2) {
+        name = parts[1];
+    }
+    print("Hello, " + name + "!");
+    return 0;
+}
+</code></pre>
+<p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
+not released and destructors do not run. Prefer returning from <code>main</code>, and
+keep <code>exit</code> for ending from deep inside a call. See
+<a href="#arguments-and-exit">Arguments and exit</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as
@@ -8178,10 +8203,13 @@ clang: error: linker command failed with exit code 1 (use -v to see invocation)
 </code></pre>
 <p>The object the linker names is the one for the file that made the call, in
 <code>.pep/build/&lt;name&gt;.units/</code>. Symbols of your own functions appear as the
-compiler spells them for the linker: a name that is not just letters, digits,
-<code>_</code> and <code>.</code> is written <code>_P</code> followed by the name with other characters as
-<code>_</code> and two hex digits, so <code>Array&lt;int&gt;.count</code> appears as
-<code>_PArray_3cint_3e.count</code>. <code>extern</code> functions keep their C names.</p>
+compiler spells them for the linker: <code>main</code> and a method such as
+<code>Point.length</code> keep their names, and any other name is written <code>_P</code> followed
+by the name with <code>_</code> doubled and other characters as <code>_</code> and two hex digits,
+so a function <code>parse</code> appears as <code>_Pparse</code> and <code>Array&lt;int&gt;.count</code> as
+<code>_PArray_3cint_3e.count</code>. That way a Pepper function never collides with a C
+library function of the same name, such as <code>exit</code>. <code>extern</code> functions keep
+their C names.</p>
 <p>To fix it, check the spelling of the extern against the C function (or use
 <a href="#binding-to-a-different-symbol-name"><code>[LinkName]</code></a> when the names
 differ), then add the library that defines it with <code>[Link]</code> or <code>-l</code>.</p>
@@ -8873,14 +8901,26 @@ declarations; the program means exactly what it meant before.</p>
 <p>Build it with the compiler, with the <code>tools</code> folder on the import path:</p>
 <pre><code class="language-bash">pepper -I tools tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
-<p>It reads a source file on standard input and writes the formatted file to
-standard output:</p>
-<pre><code class="language-bash">pep-fmt &lt; main.pep &gt; formatted.pep
+<p>Give it files or directories, like <code>gofmt</code>:</p>
+<pre><code class="language-bash">pep-fmt main.pep            # print the formatted file to standard output
+pep-fmt -w main.pep src/    # rewrite each file that is not formatted
+pep-fmt --check src/        # list each file that is not formatted
+pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
-<p>If the file does not parse, <code>pep-fmt</code> writes nothing to standard output,
-prints the first syntax error to standard error, and exits with status 1:</p>
-<pre><code class="language-text">&lt;stdin&gt;:2:14: error: expected ')'
+<p>A directory stands for every <code>.pep</code> file under it, in name order, skipping
+directories whose names start with <code>.</code> (such as <code>.git</code> and the <code>.pep</code> build
+cache). <code>-w</code> rewrites only the files whose formatting changes. <code>--check</code>
+changes nothing, prints the path of each file that <code>-w</code> would rewrite, and
+exits with status 1 if there is one, which suits a CI step. The two can be
+combined.</p>
+<p>If a file does not parse, <code>pep-fmt</code> leaves it untouched, prints the first
+syntax error to standard error, and exits with status 1 after the other
+files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
+<pre><code class="language-text">main.pep:2:14: error: expected ')'
 </code></pre>
+<p>A file that cannot be read or written also exits with status 1, and an
+unknown option exits with status 2 after printing the usage (<code>pep-fmt -h</code>
+prints it too).</p>
 <h2 id="the-style"><a class="header" href="#the-style">The style</a></h2>
 <p><strong>Layout.</strong> Indentation is 4 spaces. A brace goes on the same line as the
 declaration or statement that owns it, and <code>else</code> goes between the braces:</p>
@@ -9037,6 +9077,51 @@ picks this overload, so it allocates nothing.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    panic("unreachable");
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="arguments-and-exit"><a class="header" href="#arguments-and-exit">Arguments and exit</a></h1>
+<p>The running program: its command-line arguments and how it ends.</p>
+<p>Source: <code>runtime/process.pep</code></p>
+<h2 id="arguments"><a class="header" href="#arguments">arguments</a></h2>
+<pre><code class="language-pepper">arguments(): Array&lt;String&gt;
+</code></pre>
+<p>Returns the program’s command-line arguments.</p>
+<p>Element 0 is the program as it was started (usually its path), and the
+arguments typed after it follow in order, as the shell passed them: a
+quoted argument with spaces is one element. Each call builds a new array.</p>
+<p>On Windows the arguments are in the process’s ANSI code page, so text
+outside it is not preserved.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the program name followed by its arguments</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    main(): int {
+        var parts = arguments();
+        if (parts.count() &gt; 1) {
+            print(parts[1]);
+        }
+        return 0;
+    }
+</code></pre>
+<h2 id="exit"><a class="header" href="#exit">exit</a></h2>
+<pre><code class="language-pepper">exit(code: int)
+</code></pre>
+<p>Ends the program at once with status <code>code</code>.</p>
+<p>Flushes standard output and every other C output stream first, so text
+printed so far is not lost. Nothing else runs: locals are not released,
+destructors do not run, and other threads stop where they are. Returning
+from <code>main</code> is the usual way to end; <code>exit</code> is for ending from deep inside
+a call.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>code</code> — the exit status: 0 for success, anything else for failure (only its low 8 bits reach a POSIX parent)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">    if (arguments().count() &lt; 2) {
+        print("usage: tool FILE");
+        exit(2);
+    }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/string.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="string"><a class="header" href="#string">String</a></h1>
@@ -10910,7 +10995,7 @@ body is skipped and its <code>else</code> block runs instead.</p>
 <ul>
 <li>the value the <code>with</code> header binds</li>
 </ul>
-<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<h4 id="exit-1"><a class="header" href="#exit-1">exit</a></h4>
 <pre><code class="language-pepper">exit()
 </code></pre>
 <p>Leaves the scope. Implementations call it from their destructor.</p>
@@ -10984,7 +11069,7 @@ reference with <code>with</code> to use the object.</p>
 <ul>
 <li>a new strong reference to the object, or null once it has been destroyed</li>
 </ul>
-<h4 id="exit-1"><a class="header" href="#exit-1">exit</a></h4>
+<h4 id="exit-2"><a class="header" href="#exit-2">exit</a></h4>
 <pre><code class="language-pepper">void exit()
 </code></pre>
 <p>Leaves the scope. The strong reference <code>enter()</code> returned is released
@@ -13694,7 +13779,7 @@ as <code>local.enter()</code>.</p>
 <ul>
 <li>this thread’s value, or the default of <code>T</code> (null for a struct) when it has none</li>
 </ul>
-<h4 id="exit-2"><a class="header" href="#exit-2">exit</a></h4>
+<h4 id="exit-3"><a class="header" href="#exit-3">exit</a></h4>
 <pre><code class="language-pepper">void exit()
 </code></pre>
 <p>Does nothing: the value stays with the thread.</p>
@@ -14185,7 +14270,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
 </ul>
-<h4 id="exit-3"><a class="header" href="#exit-3">exit</a></h4>
+<h4 id="exit-4"><a class="header" href="#exit-4">exit</a></h4>
 <pre><code class="language-pepper">void exit()
 </code></pre>
 <p>Unlocks the Mutex if the guard holds it. The destructor calls it;

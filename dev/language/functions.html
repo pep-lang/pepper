@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eae996f7.js";
+            window.path_to_searchindex_js = "../searchindex-d631bdcf.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f308eb6b.js"></script>
+        <script src="../toc-6f6f7138.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -253,7 +253,8 @@ the file, and can call itself.</p>
 </li>
 <li>
 <p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process’s exit
-code; return 0 for success.</p>
+code; return 0 for success. See
+<a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
 </li>
 <li>
 <p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments
@@ -382,6 +383,30 @@ main(): int {
 (<code>assert(n &gt; 0, name + " must be positive")</code>), or a C string, which a string
 literal picks, so a literal message builds nothing when the assertion holds. See
 <a href="../reference/internals.html">Built-in functions</a>.</p>
+<h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
+<p><code>arguments()</code> returns the program’s command-line arguments as an
+<code>Array&lt;String&gt;</code>: element 0 is the program as it was started, and the
+arguments typed after it follow in order. <code>exit(code)</code> ends the program at
+once with status <code>code</code>, from anywhere, after flushing what was printed.</p>
+<pre><code class="language-pepper"># arguments() holds the program name, then each command-line argument.
+main(): int {
+    var parts = arguments();
+    if (parts.count() &gt; 2) {
+        print("usage: greet [NAME]");
+        exit(2);  # ends the program here, with status 2
+    }
+    var name = "world";
+    if (parts.count() == 2) {
+        name = parts[1];
+    }
+    print("Hello, " + name + "!");
+    return 0;
+}
+</code></pre>
+<p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
+not released and destructors do not run. Prefer returning from <code>main</code>, and
+keep <code>exit</code> for ending from deep inside a call. See
+<a href="../reference/process.html">Arguments and exit</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function’s name used without a call is a value that you can store in a
 variable, pass to another function, or return, and a closure such as
