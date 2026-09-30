@@ -4,7 +4,7 @@
 
 use crate::type_name::TypeName;
 use pepper_parser::ast;
-pub use pepper_parser::diagnostic::{Diagnostic, Loc};
+pub use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
 
 // ── Binary operators (port of Model/BinaryOps.h) ─────────────────────────────
 
@@ -670,6 +670,28 @@ pub struct ExtensionDef {
     pub attributes: Vec<ast::Attribute>,
     /// Location of the extended type.
     pub loc: Loc,
+    /// Marked `export`: files that import its file may use its methods.
+    pub is_exported: bool,
+}
+
+/// Per file, the other files whose exported extensions it may use (from
+/// `modules::FileScope::extensions`), plus the prelude files, whose
+/// exported extensions every file may use. An extension is always visible
+/// in its own file.
+#[derive(Debug, Clone, Default)]
+pub struct ExtensionScopes {
+    pub prelude: std::collections::HashSet<u32>,
+    /// Indexed by `FileId`; empty when the module was not linked.
+    pub visible: Vec<std::collections::HashSet<u32>>,
+}
+
+impl ExtensionScopes {
+    /// Whether code in file `from` may use the methods of an extension
+    /// declared in file `file`.
+    pub fn sees(&self, from: FileId, file: FileId, exported: bool) -> bool {
+        let Some(visible) = self.visible.get(from.0 as usize) else { return true };
+        file == from || (exported && (self.prelude.contains(&file.0) || visible.contains(&file.0)))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -779,6 +801,10 @@ pub struct Module {
     /// members' names (`get$1`, `get$2`). A specialization's methods keep
     /// their base's member names. Filled by `overloads::name_overloads`.
     pub method_overload_sets: std::collections::BTreeMap<String, std::collections::BTreeMap<String, Vec<String>>>,
+    /// Which files' extensions each file sees, for choosing among the
+    /// members of a method overload set an extension adds to. Empty (every
+    /// extension visible) unless the module was linked from a program.
+    pub extension_scopes: ExtensionScopes,
     /// Each call or function value that named an overload set: its callee's
     /// location and the member it resolved to, for the language server.
     pub call_targets: Vec<(Loc, String)>,

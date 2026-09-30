@@ -133,6 +133,14 @@ impl Program {
         order
     }
 
+    /// Which files' extensions each file sees (see [`crate::model::ExtensionScopes`]).
+    pub fn extension_scopes(&self) -> crate::model::ExtensionScopes {
+        crate::model::ExtensionScopes {
+            prelude: (0..self.files.len()).filter(|&i| self.files[i].prelude || self.files[i].prelude_part).map(|i| i as u32).collect(),
+            visible: self.scopes.iter().map(|scope| scope.extensions.iter().map(|&i| i as u32).collect()).collect(),
+        }
+    }
+
     /// The files as the visibility check sees them.
     pub fn source_files(&self) -> Vec<SourceFile<'_>> {
         self.files

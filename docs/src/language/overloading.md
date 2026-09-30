@@ -155,6 +155,32 @@ coexist:
   expected function type, like a free function below; without one the
   error is `cannot infer the type of 'f' from overloaded method 'Money.add'`.
 
+## Extensions and traits
+
+An [extension](traits-and-extensions.md#extensions)'s methods join the
+struct's overload set of their name, and a trait may declare several methods
+of one name. Each of a trait's overloads is implemented by the conforming
+type's method with the same parameter types, and a call through a value of
+the trait type picks among the trait's members the same way:
+
+```pepper
+{{#include ../../examples/overloading-traits.pep}}
+```
+
+- **An extension member with a body method's parameters** is
+  `redefinition of 'area'`, with a note at the method it repeats.
+- **A call sees only the extensions visible in its file** (see
+  [Visibility](visibility.md#members-of-structs-and-extensions)): a private
+  extension's overload is never a candidate in another file, so importing a
+  file can add candidates to a call. If an added candidate makes a call
+  ambiguous, the error's notes point at each candidate, the extension's
+  included.
+- **A trait's default method** is copied into a conforming type that lacks a
+  method with its parameter types, even when the type has other methods of
+  that name; the copy joins their set.
+- **A missing overload** is named with its parameter types:
+  `'Square' does not implement 'area(int)', required by trait 'Shape'`.
+
 ## Overloaded functions as values
 
 The name of an overload set, written without a call, is a value only where
@@ -193,8 +219,6 @@ An expected type that matches no member is `address of overloaded function
 - **Constructors** do not overload: a struct has one constructor. Use
   default arguments, or a [static method](structs.md#static-methods) for each
   alternative.
-- **Extension methods** do not join a struct's overload set: an extension
-  method with the name of one of the struct's methods is not a new member.
 - **Unary operators** cannot be declared at all yet.
 - **`extern` functions** do not overload.
 - **Overloads across files** do not merge: a file's own functions of a name

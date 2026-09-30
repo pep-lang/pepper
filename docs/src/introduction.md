@@ -68,9 +68,8 @@ Some that you will meet quickly:
 - A constructor marked `[Implicit]` converts a value into its struct
   wherever the struct is expected, so `io.Path` parameters accept a `String`
   (see [implicit conversions](language/structs.md#implicit-conversions)).
-- Free functions, methods and operators can be
-  [overloaded](language/overloading.md); constructors and extension methods
-  cannot yet.
+- Free functions, methods, operators, extension methods and trait members
+  can be [overloaded](language/overloading.md); constructors cannot yet.
 - Generic parameters cannot require a trait yet (no `<T: Shape>`).
 - Threads can share only thread-safe values, which the compiler checks,
   closure captures included. Channels, mutexes, `Once` and `Lazy` carry and

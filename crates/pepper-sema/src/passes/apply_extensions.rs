@@ -2,6 +2,7 @@
 //! target struct, record traits; two-pass applied-set.
 
 use crate::model::{Diagnostic, ExtensionDef, FunctionDef, Module, StructDef, TraitDef};
+use crate::passes::overloads::set_name;
 use crate::passes::specialize_structs::{substitute, substitute_block};
 use crate::type_name::TypeName;
 use std::cell::RefCell;
@@ -58,14 +59,26 @@ fn conform(
         if required.is_generic_func && st.generic_methods.iter().any(|m| m.name == required.name) {
             continue;
         }
-        if let Some(have) = st.method_members.iter().find(|m| m.name == required.name) {
+        // The struct's methods of the member's name, overloads included; the
+        // one with the declared parameter types implements it.
+        let set = set_name(&required.name);
+        let candidates: Vec<&FunctionDef> = st.method_members.iter().filter(|m| set_name(&m.name) == set).collect();
+        if let Some(have) = candidates.iter().find(|m| same_parameters(m, required, &type_map)) {
+            check_signature(st, have, required, trait_name, &type_map, traits);
+            continue;
+        }
+        if let ([have], None, true) = (candidates.as_slice(), &required.body, set == required.name) {
+            // Report how the one method of that name differs, unless the
+            // trait overloads the name and that method is another member's.
             check_signature(st, have, required, trait_name, &type_map, traits);
             continue;
         }
         match &required.body {
             Some(_) => {
                 let mut method = clone_method(required, &st.name);
-                method.trait_default = Some(def.methods.iter().map(|m| m.name.clone()).collect());
+                // A copied default joins the struct's overload set of its name.
+                method.name = set.to_string();
+                method.trait_default = Some(def.methods.iter().map(|m| set_name(&m.name).to_string()).collect());
                 substitute(&mut method.ty, &type_map);
                 for param in &mut method.parameters {
                     substitute(&mut param.ty, &type_map);
@@ -80,18 +93,48 @@ fn conform(
                     st.method_members.push(method);
                 }
             }
-            None => crate::errors::report(
-                Diagnostic::error(format!(
-                    "'{}' does not implement '{}', required by trait '{}'",
-                    st.ty.display(),
-                    required.name,
-                    trait_name.display()
-                ))
-                .at(ext.loc)
-                .with_note(format!("'{}' declared here", required.name), Some(required.loc)),
-            ),
+            None => {
+                // An overloaded member is named with its parameter types.
+                let wanted = if set == required.name {
+                    set.to_string()
+                } else {
+                    let params: Vec<String> = required
+                        .parameters
+                        .iter()
+                        .map(|p| {
+                            let mut ty = p.ty.clone();
+                            substitute(&mut ty, &type_map);
+                            ty.display()
+                        })
+                        .collect();
+                    format!("{}({})", set, params.join(", "))
+                };
+                crate::errors::report(
+                    Diagnostic::error(format!(
+                        "'{}' does not implement '{}', required by trait '{}'",
+                        st.ty.display(),
+                        wanted,
+                        trait_name.display()
+                    ))
+                    .at(ext.loc)
+                    .with_note(format!("'{}' declared here", wanted), Some(required.loc)),
+                )
+            }
         }
     }
+}
+
+/// Whether `have` takes the parameter types trait member `required`
+/// declares (with the trait's type arguments substituted).
+fn same_parameters(have: &FunctionDef, required: &FunctionDef, type_map: &[(String, TypeName)]) -> bool {
+    use crate::passes::check_function_types::canonical;
+    have.is_static == required.is_static
+        && have.parameters.len() == required.parameters.len()
+        && have.parameters.iter().zip(&required.parameters).all(|(h, r)| {
+            let mut declared = r.ty.clone();
+            substitute(&mut declared, type_map);
+            canonical(&h.ty) == canonical(&declared)
+        })
 }
 
 /// A trait method's implementation must have the declared signature: a call
@@ -192,6 +235,11 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
             for st in &mut module.structs {
                 if st.name == target_name || st.ty.to_string() == target_name {
                     apply_to_struct(st, ext, &module.traits);
+                    // An extension's methods join the struct's overload sets.
+                    let Some(sets) = crate::passes::overloads::group_methods(&mut st.method_members, &st.name) else { return };
+                    if !sets.is_empty() {
+                        module.method_overload_sets.insert(st.name.clone(), sets);
+                    }
                 }
             }
         }

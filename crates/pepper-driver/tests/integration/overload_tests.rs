@@ -3,7 +3,8 @@
 //! (see `pepper_sema::passes::overloads`). Covers the ranking (exact,
 //! promotion, conversion, `[Implicit]` constructor), generic members and the
 //! non-generic tie-breaker, calls in generic code, function values, closure
-//! arguments, and the shared_ptr lifetime of arguments to a resolved call.
+//! arguments, and the shared_ptr lifetime of arguments to a resolved call;
+//! then methods, operators, extension methods and traits.
 
 use pepper_codegen::CodeGenerator;
 use pepper_sema::model::Module as SemaModule;
@@ -406,4 +407,78 @@ extend Meter {
 test(): int { var m = Meter(5); return m.total(); }
 "#;
     assert_eq!(value(source), 106);
+}
+
+#[test]
+fn extension_methods_join_the_struct_s_set() {
+    let source = r#"
+struct Meter {
+    int n;
+    construct(int v) { n = v; }
+    add(x: int): int { return n + x; }
+}
+extend Meter {
+    add(s: String): int { return 100; }
+    add(x: int, y: int): int { return n + x + y; }
+    total(): int { return add(1) + add("s") + this.add(1, 2); }
+}
+test(): int {
+    var m = Meter(5);
+    var f: (String) => int = m.add;
+    # 6 + 100 + 7 + (6 + 100 + 8) + 100
+    return m.add(1) + m.add("x") + m.add(1, 1) + m.total() + f("q");
+}
+"#;
+    assert_eq!(value(source), 327);
+}
+
+#[test]
+fn a_trait_member_is_implemented_by_the_overload_with_its_parameters() {
+    let source = r#"
+trait Scaled {
+    scale(by: int): int;
+    label(): int { return 40; }
+}
+struct Box {
+    int n;
+    construct(int v) { n = v; }
+    scale(by: String): int { return 7; }
+    scale(by: int): int { return n * by; }
+    label(x: int): int { return x; }
+}
+extend Box with Scaled {}
+show(s: Scaled): int { return s.scale(3) + s.label(); }
+test(): int {
+    var b = Box(2);
+    # (6 + 40) * 100 + 7 * 10 + 1, and the default joined `label`'s set
+    return show(b) * 100 + b.scale("x") * 10 + b.label(1) + b.label() * 0;
+}
+"#;
+    assert_eq!(value(source), 4671);
+}
+
+#[test]
+fn a_trait_s_overloads_are_separate_slots() {
+    let source = r#"
+trait Shape {
+    area(): int;
+    area(scale: int): int;
+    describe(): int { return area() * 1000 + area(2); }
+}
+struct Square {
+    int side;
+    construct(int v) { side = v; }
+    area(): int { return side * side; }
+    area(scale: int): int { return side * side * scale; }
+}
+extend Square with Shape {}
+total(s: Shape): int { return s.area() * 100 + s.area(3); }
+test(): int {
+    var q = Square(2);
+    var s: Shape = q;
+    # 412, then 4008 through the trait value
+    return total(q) * 10000 + s.describe();
+}
+"#;
+    assert_eq!(value(source), 4124008);
 }

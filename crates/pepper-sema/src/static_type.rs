@@ -58,7 +58,11 @@ impl StructTable {
         // lookups of an instance nothing declares.
         let trait_info = |t: &crate::model::TraitType| StructInfo {
             fields: vec![],
-            methods: t.methods.iter().map(|m| m.name.clone()).collect(),
+            methods: t
+                .methods
+                .iter()
+                .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
+                .collect(),
             returns: t
                 .methods
                 .iter()

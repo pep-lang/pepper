@@ -593,6 +593,7 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
         methods: e.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?,
         attributes: e.attributes.clone(),
         loc: loc(e.target.span),
+        is_exported: e.is_exported,
     })
 }
 

@@ -38,6 +38,9 @@ pub struct StructDesc<'ctx> {
     pub fields: Vec<(String, String)>,
     /// method name → return-type sema string.
     pub method_returns: HashMap<String, String>,
+    /// method name → parameter sema type strings, for finding the member of
+    /// an overload set that implements a trait slot.
+    pub method_params: HashMap<String, Vec<String>>,
 }
 
 /// A trait used as a type (`Shape`, `Iterator<int>`): its dispatchable
@@ -500,6 +503,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 .map(|f| (f.name.clone(), f.ty.to_string()))
                 .collect(),
             method_returns: HashMap::new(),
+            method_params: HashMap::new(),
         };
         self.structs.insert(st.name.clone(), desc);
 
@@ -525,6 +529,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         let struct_name = st.name.clone();
         let mut methods: HashMap<String, String> = HashMap::new();
         let mut method_returns: HashMap<String, String> = HashMap::new();
+        let mut method_params: HashMap<String, Vec<String>> = HashMap::new();
         let mut static_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for method in &st.method_members {
             // Mangle `<Struct>.<name>`, inject `this` first for non-static.
@@ -584,11 +589,13 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             methods.insert(method.name.clone(), mangled);
             method_returns.insert(method.name.clone(), method.ty.to_string());
+            method_params.insert(method.name.clone(), method.parameters.iter().map(|p| p.ty.to_string()).collect());
         }
         if let Some(desc) = self.structs.get_mut(&st.name) {
             desc.methods = methods;
             desc.static_methods = static_names;
             desc.method_returns = method_returns;
+            desc.method_params = method_params;
         }
         Ok(())
     }
@@ -1004,10 +1011,25 @@ impl<'ctx> CodeGenerator<'ctx> {
             ("__release".to_string(), None),
             ("__acquire".to_string(), None),
         ];
+        // A slot of an overloaded name takes the struct's member of that
+        // name with the slot's parameter types.
+        let implementer = |name: &str, params: &[String]| -> String {
+            let Some(st) = self.structs.get(from) else { return name.to_string() };
+            let set = pepper_sema::passes::overloads::set_name(name);
+            let mut found = st
+                .method_params
+                .iter()
+                .filter(|(m, p)| pepper_sema::passes::overloads::set_name(m) == set && p.as_slice() == params)
+                .map(|(m, _)| m.clone());
+            match (found.next(), found.next()) {
+                (Some(m), None) => m,
+                _ => name.to_string(),
+            }
+        };
         members.extend(
             desc.methods
                 .iter()
-                .map(|(name, _, ret)| (name.clone(), Some(ret.clone()))),
+                .map(|(name, params, ret)| (implementer(name, params), Some(ret.clone()))),
         );
         let mut entries: Vec<PointerValue<'ctx>> = vec![];
         for (member, declared) in &members {

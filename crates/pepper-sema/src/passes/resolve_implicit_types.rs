@@ -313,13 +313,13 @@ fn type_of_expr(expr: &Expression, scopes: &Scopes, current_struct: Option<&Type
                 TypeName::auto()
             }
         }
-        Expression::MethodCall { this, method, args, .. } => {
+        Expression::MethodCall { this, method, args, loc } => {
             let this_type = type_of_expr(this, scopes, current_struct);
             if this_type.is_empty() || this_type.is_auto() {
                 return TypeName::auto();
             }
             if scopes.overloads.is_method_set(&this_type, method) {
-                return select_method_overload(&this_type, method, args, scopes, current_struct)
+                return select_method_overload(&this_type, method, args, *loc, scopes, current_struct)
                     .map(|c| c.ret)
                     .unwrap_or_else(TypeName::auto);
             }
@@ -856,6 +856,7 @@ fn select_method_overload(
     receiver: &TypeName,
     method: &str,
     args: &[Expression],
+    at: Loc,
     scopes: &Scopes,
     current: Option<&TypeName>,
 ) -> Option<crate::passes::overloads::Choice> {
@@ -867,7 +868,7 @@ fn select_method_overload(
     if mentions_unbound(receiver) || infos.iter().any(|i| i.ty.as_ref().is_some_and(mentions_unbound)) {
         return None;
     }
-    match scopes.overloads.select_method(receiver, method, &infos) {
+    match scopes.overloads.select_method(receiver, method, &infos, at) {
         crate::passes::overloads::Outcome::Chosen(choice) => Some(choice),
         _ => None,
     }
@@ -884,7 +885,7 @@ fn resolve_method_overload(e: &mut Expression, scopes: &Scopes, current: Option<
     if receiver.is_empty() || receiver.contains_auto() || !scopes.overloads.is_method_set(&receiver, method) {
         return;
     }
-    let Some(choice) = select_method_overload(&receiver, method, args, scopes, current) else { return };
+    let Some(choice) = select_method_overload(&receiver, method, args, *loc, scopes, current) else { return };
     crate::passes::overloads::apply_choice(method, args, &choice);
     scopes.resolved.borrow_mut().push((*loc, crate::passes::overloads::method_target(&receiver, &choice.callee)));
 }

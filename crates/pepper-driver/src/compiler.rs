@@ -39,7 +39,12 @@ fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
 /// globals are in initialization order (see [`Program::initialization_order`]).
 pub fn merge(program: &Program) -> Result<SemaModule, String> {
     program.check()?;
-    let mut module = SemaModule { warnings: program.warnings(), linked: true, ..SemaModule::default() };
+    let mut module = SemaModule {
+        warnings: program.warnings(),
+        linked: true,
+        extension_scopes: program.extension_scopes(),
+        ..SemaModule::default()
+    };
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
     }

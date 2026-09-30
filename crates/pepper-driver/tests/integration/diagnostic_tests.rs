@@ -1379,3 +1379,43 @@ fn overloaded_method_diagnostics() {
     let value = error_of("method_overload_value", main);
     assert!(value.starts_with("main.pep:7:15: error: cannot infer the type of 'g' from overloaded method 'S.get'\n"), "{}", value);
 }
+
+#[test]
+fn extension_and_trait_overload_diagnostics() {
+    // An extension member with the same parameters as a body method.
+    let main = "struct S {\n    get(x: int): int { return 1; }\n}\nextend S {\n    get(y: int): int { return 2; }\n}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("extension_overload_redefinition", main),
+        "main.pep:5:5: error: redefinition of 'get'\n\
+         \x20   5 |     get(y: int): int { return 2; }\n\
+         \x20     |     ^~~\n\
+         main.pep:2:5: note: previous definition is here\n\
+         \x20   2 |     get(x: int): int { return 1; }\n\
+         \x20     |     ^~~"
+    );
+
+    // A conforming struct lacks one of a trait's overloads.
+    let main = "trait Shape {\n    area(): int;\n    area(scale: int): int;\n}\nstruct Square {\n    area(): int { return 1; }\n}\nextend Square with Shape {}\nmain(): int { return 0; }\n";
+    assert_eq!(
+        error_of("trait_overload_missing", main),
+        "main.pep:8:8: error: 'Square' does not implement 'area(int)', required by trait 'Shape'\n\
+         \x20   8 | extend Square with Shape {}\n\
+         \x20     |        ^~~~~~\n\
+         main.pep:3:5: note: 'area(int)' declared here\n\
+         \x20   3 |     area(scale: int): int;\n\
+         \x20     |     ^~~~"
+    );
+
+    // A private extension's overload is not a candidate in another file.
+    let lib = "export struct Meter {\n    add(x: int): int { return x; }\n}\nextend Meter {\n    add(s: String): int { return 0; }\n}\n";
+    let main = "import \"lib\";\nmain(): int {\n    var m = Meter();\n    return m.add(\"x\");\n}\n";
+    assert_eq!(
+        error_of_files("extension_overload_hidden", main, &[("lib.pep", lib)]),
+        "main.pep:4:14: error: no matching function for call to 'add'\n\
+         \x20   4 |     return m.add(\"x\");\n\
+         \x20     |              ^~~\n\
+         lib.pep:2:5: note: candidate function not viable: no known conversion from 'String' to 'int' for 1st argument\n\
+         \x20   2 |     add(x: int): int { return x; }\n\
+         \x20     |     ^~~"
+    );
+}

@@ -24,6 +24,9 @@ same file, another file, or the standard library:
   They can use `this` and name the struct's fields directly, and they are
   called the same way.
 - A type can have any number of extensions.
+- An extension method may share its name with the struct's methods if its
+  parameter types differ: it joins their
+  [overload set](overloading.md#extensions-and-traits).
 - An extension in another file is usable only where that file (or its
   module) is imported, and only if it is exported; the standard library's
   extensions are usable everywhere. See
@@ -59,6 +62,9 @@ signatures ending in `;`. Then declare that a type has the trait with
   stands for the type that has the trait.
 - `extend Square with Shape, Printable { ... }` attaches several traits at
   once.
+- A trait can declare several methods of one name with different parameter
+  types; the type implements each with the method whose parameter types
+  match (see [Overloading](overloading.md#extensions-and-traits)).
 - The methods in the extension are ordinary methods of the struct, so you
   call them on a `Square` as usual.
 

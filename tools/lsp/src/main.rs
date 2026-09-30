@@ -680,7 +680,7 @@ type Program = pepper_sema::program::Program;
 /// in the document (`program[0]`) are reported; other files that fail to
 /// build are skipped. Locations carry the file's index in `program`.
 fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
-    let mut module = SemaModule { linked: true, ..SemaModule::default() };
+    let mut module = SemaModule { linked: true, extension_scopes: program.extension_scopes(), ..SemaModule::default() };
     // Indexed like the files, as the passes that read source text expect.
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
