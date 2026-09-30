@@ -82,9 +82,18 @@ pub struct ModuleRoots {
     by_dir: std::cell::RefCell<std::collections::HashMap<PathBuf, Option<PathBuf>>>,
     /// path as given -> normalized.
     normalized: std::cell::RefCell<std::collections::HashMap<PathBuf, PathBuf>>,
+    /// The project directory (normalized): a file under it and outside any
+    /// module is namespaced by its path from here.
+    project: Option<PathBuf>,
 }
 
 impl ModuleRoots {
+    /// Module folders for a program built in the project directory
+    /// `project` (the directory the compiler runs in).
+    pub fn for_project(project: Option<&Path>) -> Self {
+        ModuleRoots { project: project.map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf())), ..Self::default() }
+    }
+
     fn normalized(&self, path: &Path) -> PathBuf {
         if let Some(p) = self.normalized.borrow().get(path) {
             return p.clone();
@@ -116,8 +125,12 @@ impl ModuleRoots {
     /// The namespace of the file `path` (see
     /// `pepper_parser::namespace`): for a file of a module, the module's
     /// name and the file's path inside it (`io/file` for `io/file.pep`);
-    /// otherwise the file's name. Without its extension, and with any
-    /// character a namespace cannot hold replaced by `_`.
+    /// for another file under the project directory, its path from there
+    /// (`tests/util` for `tests/util.pep`); otherwise the file's name.
+    /// Without its extension, and with any character a namespace cannot
+    /// hold replaced by `_`. It depends only on the path, never on which
+    /// other files the program loads, so a file's symbols are the same in
+    /// every program.
     pub fn namespace_of(&self, path: &Path) -> String {
         let normalized = self.normalized(path);
         let stem = normalized.with_extension("");
@@ -128,7 +141,10 @@ impl ModuleRoots {
                 let parts: Vec<String> = inner.iter().map(|c| c.to_string_lossy().into_owned()).collect();
                 format!("{}/{}", module, parts.join("/"))
             }
-            None => stem.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            None => match self.project.as_ref().and_then(|project| stem.strip_prefix(project).ok()) {
+                Some(inner) => inner.iter().map(|c| c.to_string_lossy().into_owned()).collect::<Vec<_>>().join("/"),
+                None => stem.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            },
         };
         key.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '/' { c } else { '_' }).collect()
     }
@@ -186,4 +202,37 @@ pub fn resolve_forced(name: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
 /// form `canonicalize` returns on Windows all compare equal.
 pub fn path_key(path: &Path) -> String {
     normalized(path).to_string_lossy().into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ModuleRoots;
+    use std::path::PathBuf;
+
+    /// A fresh directory tree: `project/tests/util.pep`,
+    /// `project/geo/module.pep`, `project/geo/shapes.pep`, and
+    /// `elsewhere/util.pep`.
+    fn tree(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("pepper_files_namespaces_{}_{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for file in ["project/tests/util.pep", "project/geo/module.pep", "project/geo/shapes.pep", "elsewhere/util.pep"] {
+            let path = root.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "").unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn namespaces_come_from_paths() {
+        let root = tree("paths");
+        let roots = ModuleRoots::for_project(Some(&root.join("project")));
+        // A module's file: the module name and its path inside the module.
+        assert_eq!(roots.namespace_of(&root.join("project/geo/shapes.pep")), "geo/shapes");
+        // Under the project, outside any module: the path from the project.
+        assert_eq!(roots.namespace_of(&root.join("project/tests/util.pep")), "tests/util");
+        // Outside the project: the file's name.
+        assert_eq!(roots.namespace_of(&root.join("elsewhere/util.pep")), "util");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

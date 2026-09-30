@@ -143,9 +143,12 @@ with no extension, and `module_name()` is the output's stem.
   declarations, and every reference to them, a mangled name
   (`pepper_parser::namespace::mangle`: `helper@io/file`), keyed on the
   file's `ProgramFile::namespace`, which `load` computes with
-  `ModuleRoots::namespace_of` (module name plus path inside the module, or
-  the file stem outside any module; made unique with `#2`, `#3` in load
-  order). Exports, externs, and concrete overrides keep their names; so do
+  `ModuleRoots::namespace_of` (module name plus path inside the module;
+  outside any module, the path from the project directory, the one the
+  compiler runs in, such as `tests/util`; the file stem only for a file
+  outside both, made unique with `#2`, `#3` in load order). A namespace
+  depends only on the file's path, so a file's symbols are the same in
+  every program that loads it, which the build cache relies on. Exports, externs, and concrete overrides keep their names; so do
   the root file's private names, unless another file keeps the same name
   (so `main` and a JIT test's `test` stay findable). `own_names` decides
   this. Which generic functions are concrete overrides (`hash<int>`, and

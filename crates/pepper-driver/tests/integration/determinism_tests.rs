@@ -60,7 +60,11 @@ fn same_program_compiles_to_the_same_ir() {
         .iter()
         .zip(first.iter().zip(&second))
         .filter(|(_, (a, b))| a != b)
-        .map(|(entry, _)| entry.strip_prefix(repo_root()).unwrap_or(entry).display().to_string())
+        .map(|(entry, (a, b))| {
+            let name = entry.strip_prefix(repo_root()).unwrap_or(entry).display().to_string();
+            let (x, y) = a.lines().zip(b.lines()).find(|(x, y)| x != y).unwrap_or(("<end>", "<end>"));
+            format!("{name}\n  first: {x}\n  second: {y}")
+        })
         .collect();
-    assert!(differing.is_empty(), "compiled twice to different IR: {}", differing.join(", "));
+    assert!(differing.is_empty(), "compiled twice to different IR: {}", differing.join("\n"));
 }

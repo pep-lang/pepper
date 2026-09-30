@@ -229,7 +229,7 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
     // Lenient mode: files that could not be loaded, by key -> why.
     let mut failed: HashMap<String, String> = HashMap::new();
     // Module folders, looked up once per directory for this load.
-    let roots = ModuleRoots::default();
+    let roots = ModuleRoots::for_project(std::env::current_dir().ok().as_deref());
 
     // A stack: the root is popped first, and each file's imports are loaded
     // before the prelude.
@@ -408,8 +408,9 @@ pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mod
             }
         }
     }
-    // Namespaces must be unique: `util.pep` beside the root and a runtime
-    // `util.pep`, both outside any module, are told apart by load order.
+    // Namespaces must be unique. Paths already make them so, except for
+    // files outside the project directory and any module, which fall back
+    // to their name: two such `util.pep`s are told apart by load order.
     let mut taken = std::collections::HashSet::new();
     for f in &mut files {
         let base = f.namespace.clone();

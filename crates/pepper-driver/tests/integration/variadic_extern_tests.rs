@@ -39,7 +39,7 @@ fn variadic_declaration_is_variadic_in_llvm() {
 /// Windows the UCRT defines `snprintf` inline in its headers, so the symbol
 /// only exists in `legacy_stdio_definitions.lib`, which the JIT never loads.
 fn build_and_run(name: &str, source: &str) -> i32 {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf();
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf();
     std::env::set_current_dir(&root).unwrap();
     let dir = std::env::temp_dir().join(format!("pepper_variadic_{name}"));
     std::fs::create_dir_all(&dir).unwrap();
