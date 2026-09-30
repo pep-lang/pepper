@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-724e5204.js";
+            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -259,13 +259,15 @@ threads.</p>
 hands its reference over and the value itself is queued, with no copy.
 Pass <code>move(x)</code> to send a variable’s value, or <code>copy(x)</code> to keep using
 <code>x</code>.</p>
+<p>In a task (see <code>run</code>), waiting parks the task and its worker runs
+other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send; a new value, which the compiler checks</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
+<li>true if the value was queued, false if the channel is closed or the task’s wait was cancelled or timed out (the value is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var line = "hello";
@@ -290,9 +292,11 @@ value is dropped when it is not queued.</p>
 <pre><code class="language-pepper">receive(): Result&lt;T&gt;
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
+<p>In a task (see <code>run</code>), waiting parks the task and its worker runs
+other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, or an error once the channel is closed and empty</li>
+<li>the value, or an error once the channel is closed and empty, or when the task’s wait was cancelled or timed out</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var job = jobs.receive();
@@ -318,7 +322,7 @@ value is dropped when it is not queued.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, or an error if the time ran out or once the channel is closed and empty</li>
+<li>the value, or an error if the time ran out, once the channel is closed and empty, or when the task’s wait was cancelled</li>
 </ul>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
 <pre><code class="language-pepper">close()

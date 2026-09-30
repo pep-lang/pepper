@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-724e5204.js";
+            window.path_to_searchindex_js = "searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e51e852e.js"></script>
@@ -7232,7 +7232,8 @@ operating system’s thread ids. A <code>ThreadId</code> can be compared and use
 <code>HashMap</code> key.</li>
 <li><code>is_finished()</code> reports whether the body has returned. <code>is_joinable()</code>
 reports whether <code>join()</code> may be called.</li>
-<li><code>Thread.sleep(milliseconds)</code> pauses the calling thread.</li>
+<li><code>Thread.sleep(milliseconds)</code> pauses the calling thread (in a task, only
+the task: see <a href="#waiting">Tasks</a>).</li>
 <li>Dropping every reference to a <code>Thread</code> without joining it <strong>detaches</strong> the
 thread. It keeps running, and its resources are freed when it finishes.</li>
 <li>A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</li>
@@ -7449,7 +7450,9 @@ are declared, and each file’s after those of the files it imports and of the
 runtime. So an initializer may use the variables of the files it imports.</p>
 <h2 id="channels"><a class="header" href="#channels">Channels</a></h2>
 <p>A <code>Channel&lt;T&gt;</code> carries values from threads that send to threads that
-receive, with any number of each, like a Go channel:</p>
+receive, with any number of each, like a Go channel. (In a
+<a href="#mutexes-channels-and-conditions">task</a>, a wait parks only the
+task, and so do the waits of <code>Mutex</code> and <code>Condition</code> below.)</p>
 <pre><code class="language-pepper">import async;
 
 # The main thread sends numbers to a pool of workers, and the workers send
@@ -7794,9 +7797,9 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li><code>wait()</code> must run while the calling thread holds the Mutex, normally
+<li><code>wait()</code> must run while the caller holds the Mutex, normally
 inside its <code>with</code> block. It unlocks, sleeps until notified, and locks again
-before returning. It panics if the thread does not hold the Mutex.</li>
+before returning. It panics if the caller does not hold the Mutex.</li>
 <li>A thread can wake without a notification (a spurious wakeup), and another
 thread may get to the value first, so always wait in a loop that re-checks
 what it waits for.</li>
@@ -8194,6 +8197,78 @@ main(): int {
 <p>Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 <code>yield_now()</code> now and then.</p>
+<p><code>Thread.sleep</code> in a task is <code>async.sleep</code>.</p>
+<h2 id="mutexes-channels-and-conditions"><a class="header" href="#mutexes-channels-and-conditions">Mutexes, channels and conditions</a></h2>
+<p>The <a href="#threads-and-shared-data">synchronization types</a> work in tasks too. When a task
+has to wait for a <code>Mutex</code>, for a value from a <code>Channel</code> or for room in a
+bounded one, or in <code>Condition.wait</code>, it parks and its worker runs other
+tasks, just as it does for a socket. The task that holds the lock or will
+send the value can be on the same worker, on another worker, or a plain
+thread:</p>
+<pre><code class="language-pepper">import async;
+
+struct Log {
+    var lines: Array&lt;String&gt;;
+    construct() {
+        this.lines = Array&lt;String&gt;();
+    }
+}
+
+const log = async.Mutex&lt;Log&gt;(Log());
+const jobs = async.Channel&lt;int&gt;(2);
+
+main(): int {
+    # One worker: every task below shares one thread.
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # The consumer parks in the channel until a value arrives.
+        var consumer = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            var total = 0;
+            for (var job in jobs) {
+                total = total + job;
+            }
+            return total;
+        });
+        # A task may hold the lock while it waits; the other task parks
+        # until it is free.
+        var writer = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            with (var l = log.lock()) {
+                l.lines.append("first");
+                async.sleep(10);
+                l.lines.append("second");
+            }
+        });
+        async.yield_now();
+        with (var l = log.lock()) {
+            l.lines.append("third");
+        }
+        writer.join();
+
+        # The producer parks while the bounded channel is full.
+        var i = 1;
+        while (i &lt;= 5) {
+            jobs.send(i);
+            i = i + 1;
+        }
+        jobs.close();
+        assert(consumer.join().value() == 15, "every job arrived");
+    });
+    with (var l = log.lock()) {
+        assert(l.lines[2] == "third", "the lock waited for the writer");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each task counts as its own holder of a <code>Mutex</code>, so two tasks on one
+worker exclude each other, and a task may hold a lock across its own
+waits (a <code>sleep</code>, a socket call, another lock).</li>
+<li>A cancel, or a <code>timeout</code> around the call, ends a channel wait: <code>send</code>
+returns false and <code>receive</code> returns an error (and a <code>for</code> loop over the
+channel ends). A task waiting for a <code>Mutex</code> still gets the lock, and
+<code>Condition.wait</code> still waits for a notification, since the caller’s loop
+would only wait again; <code>wait_for</code> returns when its own time runs out.</li>
+<li>Outside a task they block the thread, as before.</li>
+</ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
 <p>A socket call in a task that would have to wait (for a connection, for data,
 or for room to send) parks the task and lets the others run until the
@@ -8448,8 +8523,8 @@ stack is reserved address space with a guard page below it; only the pages
 the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.</p>
 <p>Each worker has its own ready queue, timers and backend. Workers talk
-through a queue of messages each (a spawned task finished, or was
-cancelled) and a <em>doorbell</em> that ends a worker’s wait in its backend from
+through a queue of messages each (a spawned task finished, was cancelled,
+or was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends a worker’s wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
 completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
 a second socket sends to) with <code>poll()</code>. <code>run_blocking</code>’s pool threads are
@@ -8460,8 +8535,6 @@ plain threads that report back through the same messages.</p>
 asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
-<li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
-every task on it, when called in a task. Use <code>async.sleep</code> in tasks.</li>
 </ul>
 <p>The <a href="#tasks-1">reference page</a> documents every function.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -16246,7 +16319,10 @@ cannot be joined.</p>
 <pre><code class="language-pepper">static sleep(milliseconds: ulong)
 </code></pre>
 <p>Pauses the calling thread for at least <code>milliseconds</code> milliseconds.</p>
-<p>The operating system may sleep longer, but never shorter.</p>
+<p>The operating system may sleep longer, but never shorter. In a task
+(see <code>run</code>), it is <code>async.sleep</code>: the task waits and its worker thread
+runs other tasks, and a cancel or the task’s <code>timeout</code> ends the wait
+early.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
@@ -16505,9 +16581,10 @@ its own small stack, switching only where they wait.</p>
 others, and runs <code>body</code> as the first task. A task starts others with
 <code>Task&lt;T&gt;.spawn_local</code> (on its own worker) or <code>spawn</code> (on any worker), and
 gives its worker to the other tasks there whenever it waits: <code>sleep</code>,
-<code>yield_now</code>, and <code>Task.join</code>, and whenever a socket call would block.
-Nothing preempts a task, so a task that computes for a long time without
-waiting keeps every other task on its worker waiting too.</p>
+<code>yield_now</code>, and <code>Task.join</code>, whenever a socket call would block, and
+whenever it waits on a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>. Nothing
+preempts a task, so a task that computes for a long time without waiting
+keeps every other task on its worker waiting too.</p>
 <p>A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
 function called in a task can wait without being marked in any way.</p>
@@ -17122,13 +17199,15 @@ threads.</p>
 hands its reference over and the value itself is queued, with no copy.
 Pass <code>move(x)</code> to send a variable’s value, or <code>copy(x)</code> to keep using
 <code>x</code>.</p>
+<p>In a task (see <code>run</code>), waiting parks the task and its worker runs
+other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the value to send; a new value, which the compiler checks</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true if the value was queued, false if the channel is closed (the value is dropped)</li>
+<li>true if the value was queued, false if the channel is closed or the task’s wait was cancelled or timed out (the value is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var line = "hello";
@@ -17153,9 +17232,11 @@ value is dropped when it is not queued.</p>
 <pre><code class="language-pepper">receive(): Result&lt;T&gt;
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
+<p>In a task (see <code>run</code>), waiting parks the task and its worker runs
+other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, or an error once the channel is closed and empty</li>
+<li>the value, or an error once the channel is closed and empty, or when the task’s wait was cancelled or timed out</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">    var job = jobs.receive();
@@ -17181,7 +17262,7 @@ value is dropped when it is not queued.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, or an error if the time ran out or once the channel is closed and empty</li>
+<li>the value, or an error if the time ran out, once the channel is closed and empty, or when the task’s wait was cancelled</li>
 </ul>
 <h4 id="close-3"><a class="header" href="#close-3">close</a></h4>
 <pre><code class="language-pepper">close()
@@ -17300,6 +17381,11 @@ numbers pass freely. <code>Mutex&lt;int&gt;</code> is a compile error: use <code
 threads. It is not re-entrant: locking it again on the thread that holds
 it panics instead of deadlocking. A panic while it is held ends the
 program, so a Mutex is never left “poisoned”.</p>
+<p>In a task (see <code>run</code>), waiting for the lock parks the task, not its worker
+thread, so the other tasks there keep running, including one that holds
+the lock. Each task counts as its own holder, and a task may hold the
+lock across a wait of its own (a <code>sleep</code>, a socket call). A cancel does
+not end the wait for the lock.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the protected value’s type, a struct type</li>
@@ -17412,10 +17498,11 @@ the constructor, and is handed over without a copy.</p>
 <h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
 <pre><code class="language-pepper">is_held(): bool
 </code></pre>
-<p>Reports whether the calling thread holds the lock.</p>
+<p>Reports whether the caller holds the lock: the calling task, in a task,
+or else the calling thread.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) on this thread and the guard’s destruction</li>
+<li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) by the caller and the guard’s destruction</li>
 </ul>
 <h4 id="condition"><a class="header" href="#condition">condition</a></h4>
 <pre><code class="language-pepper">condition(): Condition&lt;T&gt;
@@ -17501,6 +17588,9 @@ spurious wakeup), so always wait in a loop that re-checks the value.</p>
 <p>A thread that changes the value calls <code>notify_one()</code> or <code>notify_all()</code>,
 usually while it still holds the lock.</p>
 <p>A Condition is <code>[Shared]</code>, like its Mutex.</p>
+<p>In a task (see <code>run</code>), <code>wait()</code> parks the task, not its worker thread. A
+cancel does not end it, since the caller’s loop would only wait again;
+<code>wait_for()</code> still returns when its time runs out.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the Mutex’s value type</li>
@@ -17586,13 +17676,13 @@ The Mutex is locked again before it returns either way.</p>
 <h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
 <pre><code class="language-pepper">notify_one()
 </code></pre>
-<p>Wakes one thread waiting on this condition, if any. The caller does
+<p>Wakes one thread or task waiting on this condition, if any. The caller does
 not need to hold the Mutex, but usually does, having just changed the
 value.</p>
 <h4 id="notify_all"><a class="header" href="#notify_all">notify_all</a></h4>
 <pre><code class="language-pepper">notify_all()
 </code></pre>
-<p>Wakes every thread waiting on this condition. Each locks the Mutex in
+<p>Wakes every thread and task waiting on this condition. Each locks the Mutex in
 turn before its <code>wait()</code> returns.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/once.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="asynconcepep"><a class="header" href="#asynconcepep">async/once.pep</a></h1>

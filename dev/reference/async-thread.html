@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-724e5204.js";
+            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -300,7 +300,10 @@ cannot be joined.</p>
 <pre><code class="language-pepper">static sleep(milliseconds: ulong)
 </code></pre>
 <p>Pauses the calling thread for at least <code>milliseconds</code> milliseconds.</p>
-<p>The operating system may sleep longer, but never shorter.</p>
+<p>The operating system may sleep longer, but never shorter. In a task
+(see <code>run</code>), it is <code>async.sleep</code>: the task waits and its worker thread
+runs other tasks, and a cancel or the task’s <code>timeout</code> ends the wait
+early.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>

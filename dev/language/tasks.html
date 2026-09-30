@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-724e5204.js";
+            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -342,6 +342,78 @@ main(): int {
 <p>Tasks are never interrupted. A task that computes for a long time without
 waiting keeps every other task waiting, so a long loop should call
 <code>yield_now()</code> now and then.</p>
+<p><code>Thread.sleep</code> in a task is <code>async.sleep</code>.</p>
+<h2 id="mutexes-channels-and-conditions"><a class="header" href="#mutexes-channels-and-conditions">Mutexes, channels and conditions</a></h2>
+<p>The <a href="threads.html">synchronization types</a> work in tasks too. When a task
+has to wait for a <code>Mutex</code>, for a value from a <code>Channel</code> or for room in a
+bounded one, or in <code>Condition.wait</code>, it parks and its worker runs other
+tasks, just as it does for a socket. The task that holds the lock or will
+send the value can be on the same worker, on another worker, or a plain
+thread:</p>
+<pre><code class="language-pepper">import async;
+
+struct Log {
+    var lines: Array&lt;String&gt;;
+    construct() {
+        this.lines = Array&lt;String&gt;();
+    }
+}
+
+const log = async.Mutex&lt;Log&gt;(Log());
+const jobs = async.Channel&lt;int&gt;(2);
+
+main(): int {
+    # One worker: every task below shares one thread.
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # The consumer parks in the channel until a value arrives.
+        var consumer = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            var total = 0;
+            for (var job in jobs) {
+                total = total + job;
+            }
+            return total;
+        });
+        # A task may hold the lock while it waits; the other task parks
+        # until it is free.
+        var writer = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            with (var l = log.lock()) {
+                l.lines.append("first");
+                async.sleep(10);
+                l.lines.append("second");
+            }
+        });
+        async.yield_now();
+        with (var l = log.lock()) {
+            l.lines.append("third");
+        }
+        writer.join();
+
+        # The producer parks while the bounded channel is full.
+        var i = 1;
+        while (i &lt;= 5) {
+            jobs.send(i);
+            i = i + 1;
+        }
+        jobs.close();
+        assert(consumer.join().value() == 15, "every job arrived");
+    });
+    with (var l = log.lock()) {
+        assert(l.lines[2] == "third", "the lock waited for the writer");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each task counts as its own holder of a <code>Mutex</code>, so two tasks on one
+worker exclude each other, and a task may hold a lock across its own
+waits (a <code>sleep</code>, a socket call, another lock).</li>
+<li>A cancel, or a <code>timeout</code> around the call, ends a channel wait: <code>send</code>
+returns false and <code>receive</code> returns an error (and a <code>for</code> loop over the
+channel ends). A task waiting for a <code>Mutex</code> still gets the lock, and
+<code>Condition.wait</code> still waits for a notification, since the caller’s loop
+would only wait again; <code>wait_for</code> returns when its own time runs out.</li>
+<li>Outside a task they block the thread, as before.</li>
+</ul>
 <h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
 <p>A socket call in a task that would have to wait (for a connection, for data,
 or for room to send) parks the task and lets the others run until the
@@ -596,8 +668,8 @@ stack is reserved address space with a guard page below it; only the pages
 the task touches use memory, and a task that overflows its stack crashes the
 program as a thread would. Stacks are reused for later tasks.</p>
 <p>Each worker has its own ready queue, timers and backend. Workers talk
-through a queue of messages each (a spawned task finished, or was
-cancelled) and a <em>doorbell</em> that ends a worker’s wait in its backend from
+through a queue of messages each (a spawned task finished, was cancelled,
+or was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends a worker’s wait in its backend from
 another thread: an eventfd with epoll, a user event with kqueue, a posted
 completion with IOCP, and a pipe (on Windows, a loopback UDP socket that
 a second socket sends to) with <code>poll()</code>. <code>run_blocking</code>’s pool threads are
@@ -608,8 +680,6 @@ plain threads that report back through the same messages.</p>
 asynchronous files, come later.</li>
 <li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
 built on fiber local storage); elsewhere the tasks of a thread share it.</li>
-<li><code>Mutex</code>, <code>Channel</code>, <code>Condition</code> and <code>Thread.sleep</code> block the thread, and
-every task on it, when called in a task. Use <code>async.sleep</code> in tasks.</li>
 </ul>
 <p>The <a href="../reference/async-task.html">reference page</a> documents every function.</p>
 

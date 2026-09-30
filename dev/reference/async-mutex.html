@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-724e5204.js";
+            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -209,6 +209,11 @@ numbers pass freely. <code>Mutex&lt;int&gt;</code> is a compile error: use <code
 threads. It is not re-entrant: locking it again on the thread that holds
 it panics instead of deadlocking. A panic while it is held ends the
 program, so a Mutex is never left “poisoned”.</p>
+<p>In a task (see <code>run</code>), waiting for the lock parks the task, not its worker
+thread, so the other tasks there keep running, including one that holds
+the lock. Each task counts as its own holder, and a task may hold the
+lock across a wait of its own (a <code>sleep</code>, a socket call). A cancel does
+not end the wait for the lock.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the protected value’s type, a struct type</li>
@@ -321,10 +326,11 @@ the constructor, and is handed over without a copy.</p>
 <h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
 <pre><code class="language-pepper">is_held(): bool
 </code></pre>
-<p>Reports whether the calling thread holds the lock.</p>
+<p>Reports whether the caller holds the lock: the calling task, in a task,
+or else the calling thread.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) on this thread and the guard’s destruction</li>
+<li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) by the caller and the guard’s destruction</li>
 </ul>
 <h4 id="condition"><a class="header" href="#condition">condition</a></h4>
 <pre><code class="language-pepper">condition(): Condition&lt;T&gt;
@@ -410,6 +416,9 @@ spurious wakeup), so always wait in a loop that re-checks the value.</p>
 <p>A thread that changes the value calls <code>notify_one()</code> or <code>notify_all()</code>,
 usually while it still holds the lock.</p>
 <p>A Condition is <code>[Shared]</code>, like its Mutex.</p>
+<p>In a task (see <code>run</code>), <code>wait()</code> parks the task, not its worker thread. A
+cancel does not end it, since the caller’s loop would only wait again;
+<code>wait_for()</code> still returns when its time runs out.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the Mutex’s value type</li>
@@ -495,13 +504,13 @@ The Mutex is locked again before it returns either way.</p>
 <h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
 <pre><code class="language-pepper">notify_one()
 </code></pre>
-<p>Wakes one thread waiting on this condition, if any. The caller does
+<p>Wakes one thread or task waiting on this condition, if any. The caller does
 not need to hold the Mutex, but usually does, having just changed the
 value.</p>
 <h4 id="notify_all"><a class="header" href="#notify_all">notify_all</a></h4>
 <pre><code class="language-pepper">notify_all()
 </code></pre>
-<p>Wakes every thread waiting on this condition. Each locks the Mutex in
+<p>Wakes every thread and task waiting on this condition. Each locks the Mutex in
 turn before its <code>wait()</code> returns.</p>
 
                     </main>

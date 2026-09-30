@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-724e5204.js";
+            window.path_to_searchindex_js = "../searchindex-5e8712dd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e51e852e.js"></script>
@@ -189,9 +189,10 @@ its own small stack, switching only where they wait.</p>
 others, and runs <code>body</code> as the first task. A task starts others with
 <code>Task&lt;T&gt;.spawn_local</code> (on its own worker) or <code>spawn</code> (on any worker), and
 gives its worker to the other tasks there whenever it waits: <code>sleep</code>,
-<code>yield_now</code>, and <code>Task.join</code>, and whenever a socket call would block.
-Nothing preempts a task, so a task that computes for a long time without
-waiting keeps every other task on its worker waiting too.</p>
+<code>yield_now</code>, and <code>Task.join</code>, whenever a socket call would block, and
+whenever it waits on a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>. Nothing
+preempts a task, so a task that computes for a long time without waiting
+keeps every other task on its worker waiting too.</p>
 <p>A task is a green thread (a fiber): an ordinary function with its own
 stack, so code that waits looks the same as code that does not, and a
 function called in a task can wait without being marked in any way.</p>
