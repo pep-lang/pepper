@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f8fbc384.js";
+            window.path_to_searchindex_js = "searchindex-9db0f184.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-458d6a6b.js"></script>
@@ -226,7 +226,7 @@ structs with constructors, destructors and methods, enums (with cases that carry
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types), function types and
-closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling, <code>Optional</code> values, iteration (with <code>map</code> and
+closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum), <code>Optional</code> values, iteration (with <code>map</code> and
 <code>filter</code> adapters),
 <code>with</code> blocks, weak references, and calling C (including C callbacks). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, and <code>$"{name}"</code> interpolation), sortable arrays, hash
@@ -4353,8 +4353,8 @@ case names, not literals, and a match on <code>int</code> takes literals, not na
 </ul>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
-<li><a href="#optional-values"><code>Optional</code></a> and <a href="#error-handling-with-result"><code>Result</code></a> are not enums yet,
-so they cannot be matched.</li>
+<li><a href="#optional-values"><code>Optional</code></a> is not an enum yet, so it cannot be matched.
+<a href="#error-handling-with-result"><code>Result</code></a> is one (<code>Ok(value)</code>, <code>Err(error)</code>).</li>
 <li>An enum whose cases carry nothing cannot be generic. The methods of any
 enum cannot be generic yet. An enum cannot declare operators or indexers
 yet; <code>==</code> and <code>!=</code> are built in for enums whose cases carry nothing.</li>
@@ -6052,9 +6052,11 @@ broken invariant, use <code>assert</code> or <code>panic</code> instead.</p>
 without an import. The <a href="#result">Result reference</a> lists every
 member.</p>
 <h2 id="creating-and-checking-results"><a class="header" href="#creating-and-checking-results">Creating and checking results</a></h2>
-<p><code>Result&lt;TValue, TError&gt;</code> works like Rust’s <code>Result&lt;T, E&gt;</code>. You build one with
-the static functions <code>ok</code> and <code>err</code>, and ask which it is with <code>is_ok()</code> and
-<code>is_err()</code>:</p>
+<p><code>Result&lt;TValue, TError&gt;</code> works like Rust’s <code>Result&lt;T, E&gt;</code>. It is an
+<a href="#enums-and-match">enum</a> with two cases, <code>Ok(value: TValue)</code> and <code>Err(error: TError)</code>.
+You build one with a case or with the static functions <code>ok</code> and <code>err</code>, and
+read it with <a href="#match-1"><code>match</code></a>, <a href="#match-expressions-is-and-literal-patterns"><code>is</code></a>,
+or its methods:</p>
 <pre><code class="language-pepper"># A function that can fail returns a Result instead of a plain value.
 parse_digit(String s): Result&lt;int&gt; {
     if (s == "0") { return Result&lt;int&gt;.ok(0); }
@@ -6068,7 +6070,6 @@ main(): int {
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
     assert(good.value() == 2, "value() returns the value");
-    assert(good.value() == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
     assert(bad.is_err(), "x does not parse");
@@ -6082,9 +6083,13 @@ main(): int {
     Result&lt;int, Error&gt; spelled_out = good;
     assert(spelled_out.value() == 2, "the same type");
 
-    # A default-constructed Result is an Err with a default error.
-    var empty = Result&lt;int&gt;();
-    assert(empty.is_err(), "Result() is an Err");
+    # Result is an enum: its cases build values too, and match reads them.
+    var parsed = Result&lt;int&gt;.Ok(7);
+    var doubled = match (parsed) { Ok(n) =&gt; n * 2, Err(e) =&gt; 0 };
+    assert(doubled == 14, "match binds the value");
+    if (bad is Err(e)) {
+        assert(e.message.length() &gt; 0, "is binds the error");
+    }
 
     # An operation with no value to return uses void.
     var done = Result&lt;void&gt;.ok();
@@ -6100,8 +6105,8 @@ main(): int {
 <tr><th>Member</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
-<tr><td><code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
+<tr><td><code>Result&lt;T&gt;.Ok(value)</code>, <code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
+<tr><td><code>Result&lt;T&gt;.Err(error)</code>, <code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
 <tr><td><code>is_ok()</code>, <code>is_err()</code></td><td>Report which kind the result is.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Result.value on an Err value</code> if the result is an Err.</td></tr>
 <tr><td><code>error()</code></td><td>Returns the error; panics with <code>Result.error on an Ok value</code> if the result is Ok.</td></tr>
@@ -6114,23 +6119,32 @@ values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). <code>Error</code> is a struct
 with one field, <code>String message</code>: <code>Error("boom").message</code> is <code>"boom"</code>.</p>
 <p>Use <code>value()</code> when an Err would be a bug in your program, since it stops the
-program. When an Err is an expected outcome, test with <code>is_ok()</code> or <code>is_err()</code>,
-or supply a fallback with <code>ok_or</code>.</p>
+program. When an Err is an expected outcome, <code>match</code> on the result, test it
+with <code>is</code> (<code>if (r is Err(e)) { ... }</code>) or <code>is_ok()</code>, or supply a fallback with
+<code>ok_or</code>.</p>
 <h3 id="check-before-you-read"><a class="header" href="#check-before-you-read">Check before you read</a></h3>
-<p>Pepper has no union types, so a <code>Result</code> stores both a value and an error in
-private fields, and only one of them is meaningful. <code>value()</code> and <code>error()</code>
-check which one you asked for and panic on the wrong one, so call <code>value()</code>
-only after checking <code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
+<p>A <code>Result</code> holds either its value or its error, never both. A <code>match</code> or an
+<code>is</code> test reads the one it holds, so it cannot pick the wrong one. <code>value()</code>
+and <code>error()</code> panic on the wrong one, so call <code>value()</code> only after checking
+<code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
+<p>A slot of type <code>Result</code> that is never given a value holds null, as for any
+enum whose cases carry values: <code>Result&lt;int&gt;()</code> is an error, since only the
+cases make values.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
 uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
-argument erases what it types, so <code>Result&lt;void&gt;</code> holds no value, <code>ok()</code>
-takes no argument, and <code>value()</code> returns nothing: calling it only checks that
-the result is Ok. Using that call as a value, as in <code>var x = done.value();</code>, is
-a compile error, as it is for any function that returns <code>void</code>.</p>
-<pre><code class="language-pepper">var done = Result&lt;void&gt;.ok();
+argument erases what it types, so in <code>Result&lt;void&gt;</code> the case <code>Ok</code> carries
+nothing, <code>ok()</code> takes no argument, and <code>value()</code> returns nothing: calling it
+only checks that the result is Ok. Using that call as a value, as in
+<code>var x = done.value();</code>, is a compile error, as it is for any function that
+returns <code>void</code>.</p>
+<pre><code class="language-pepper">var done = Result&lt;void&gt;.Ok;   # or Result&lt;void&gt;.ok()
 var failed = Result&lt;void&gt;.err(Error("disk full"));
 done.value();   # panics if `done` is an Err
+match (failed) {
+    Ok =&gt; {}
+    Err(e) =&gt; { print(e.message); }
+}
 </code></pre>
 <h2 id="custom-error-types-and-propagation"><a class="header" href="#custom-error-types-and-propagation">Custom error types and propagation</a></h2>
 <p>Any type can be the error type. A struct lets you carry details the caller can
@@ -6218,8 +6232,8 @@ main(): int {
 }
 </code></pre>
 <p>Pepper does not yet have a shorthand for propagation (such as Rust’s <code>?</code>
-operator), and <a href="#match-1"><code>match</code></a> does not work on a <code>Result</code> yet, so
-each fallible call is checked with <code>if</code> as shown above.</p>
+operator), so each fallible call is checked with <code>if</code>, <code>is</code> or <code>match</code> as
+shown above.</p>
 <h2 id="results-from-the-io-module"><a class="header" href="#results-from-the-io-module">Results from the io module</a></h2>
 <p>The <a href="#the-io-module">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
@@ -12246,18 +12260,21 @@ wherever an <code>Error</code> is expected, as in <code>Result&lt;int&gt;.err("b
 <li><code>message</code> — the description of the failure; defaults to the empty string</li>
 </ul>
 <h2 id="result-1"><a class="header" href="#result-1">Result</a></h2>
-<pre><code class="language-pepper">struct Result&lt;TValue, TError=Error&gt;
+<pre><code class="language-pepper">enum Result&lt;TValue, TError=Error&gt;
 </code></pre>
 <p>The outcome of an operation that can fail: either Ok, holding a <code>TValue</code>,
 or Err, holding a <code>TError</code>, like Rust’s <code>Result&lt;T, E&gt;</code>.</p>
-<p>Build one with the static <code>ok</code> or <code>err</code> functions and test it with
-<code>is_ok()</code> or <code>is_err()</code>, then read the outcome with <code>value()</code> or
-<code>error()</code>, each of which panics on the wrong kind of result. <code>TError</code>
-defaults to <code>Error</code>, so <code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
+<p>An enum with the cases <code>Ok(value)</code> and <code>Err(error)</code>. Build one with a
+case (<code>Result&lt;int&gt;.Ok(42)</code>) or the static <code>ok</code> or <code>err</code> functions, and
+read it with <code>match</code> or <code>is</code> (<code>if (r is Err(e)) { ... }</code>), or with
+<code>is_ok()</code>, <code>is_err()</code>, <code>value()</code> and <code>error()</code>; <code>value()</code> and <code>error()</code>
+panic on the wrong kind of result. <code>TError</code> defaults to <code>Error</code>, so
+<code>Result&lt;int&gt;</code> is <code>Result&lt;int, Error&gt;</code>.</p>
 <p><code>Result&lt;void&gt;</code> is the result of an operation that returns nothing on
 success, like Rust’s <code>Result&lt;(), E&gt;</code>. A <code>void</code> type argument erases what
-it types: that instance holds no value, <code>ok()</code> takes no argument,
-and <code>value()</code> returns nothing, so it only checks that the result is Ok.</p>
+it types: that instance’s <code>Ok</code> carries nothing (<code>Result&lt;void&gt;.Ok</code>, and
+the pattern <code>Ok</code>), <code>ok()</code> takes no argument, and <code>value()</code> returns
+nothing, so it only checks that the result is Ok.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>TValue</code> — the type of the value an Ok result carries; <code>void</code> when there is none</li>
@@ -12269,24 +12286,32 @@ and <code>value()</code> returns nothing, so it only checks that the result is O
         if (a.value() != 42) { return 1; }
         var b = Result&lt;int&gt;.err(Error("boom"));
         if (!b.is_err()) { return 2; }
+        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length() };   # 4
         return b.ok_or(0);   # 0
     }
 </code></pre>
-<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
-<h4 id="result-2"><a class="header" href="#result-2">Result()</a></h4>
-<pre><code class="language-pepper">construct()
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="ok"><a class="header" href="#ok">Ok</a></h4>
+<pre><code class="language-pepper">Ok(value: TValue)
 </code></pre>
-<p>Creates an Err result whose error and value both hold their type’s
-default (zero for a POD type, null for a struct type).</p>
-<p>Prefer <code>ok</code> or <code>err</code>, which set the live field.</p>
-<p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var e = Result&lt;int&gt;();   # e.is_ok() == false
+<p>The operation succeeded with <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the success value</li>
+</ul>
+<h4 id="err"><a class="header" href="#err">Err</a></h4>
+<pre><code class="language-pepper">Err(error: TError)
 </code></pre>
+<p>The operation failed with <code>error</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>error</code> — the failure value</li>
+</ul>
 <h3 id="static-methods-2"><a class="header" href="#static-methods-2">Static methods</a></h3>
-<h4 id="ok"><a class="header" href="#ok">ok</a></h4>
-<pre><code class="language-pepper">static Result&lt;TValue, TError&gt; ok(TValue v)
+<h4 id="ok-1"><a class="header" href="#ok-1">ok</a></h4>
+<pre><code class="language-pepper">static ok(v: TValue): Result&lt;TValue, TError&gt;
 </code></pre>
-<p>Returns an Ok result holding <code>v</code>.</p>
+<p>Returns an Ok result holding <code>v</code>; the same as <code>Result.Ok(v)</code>.</p>
 <p>For a struct <code>TValue</code> the result acquires a reference to <code>v</code>.</p>
 <p>For <code>Result&lt;void&gt;</code>, <code>ok()</code> takes no argument.</p>
 <p><strong>Parameters</strong></p>
@@ -12301,10 +12326,10 @@ default (zero for a POD type, null for a struct type).</p>
 <pre><code class="language-pepper">    var r = Result&lt;int&gt;.ok(42);
     var done = Result&lt;void&gt;.ok();
 </code></pre>
-<h4 id="err"><a class="header" href="#err">err</a></h4>
-<pre><code class="language-pepper">static Result&lt;TValue, TError&gt; err(TError e)
+<h4 id="err-1"><a class="header" href="#err-1">err</a></h4>
+<pre><code class="language-pepper">static err(e: TError): Result&lt;TValue, TError&gt;
 </code></pre>
-<p>Returns an Err result holding <code>e</code>.</p>
+<p>Returns an Err result holding <code>e</code>; the same as <code>Result.Err(e)</code>.</p>
 <p>For a struct <code>TError</code> the result acquires a reference to <code>e</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -12319,7 +12344,7 @@ default (zero for a POD type, null for a struct type).</p>
 </code></pre>
 <h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
-<pre><code class="language-pepper">bool is_ok()
+<pre><code class="language-pepper">is_ok(): bool
 </code></pre>
 <p>Reports whether this result is Ok.</p>
 <p><strong>Returns</strong></p>
@@ -12327,7 +12352,7 @@ default (zero for a POD type, null for a struct type).</p>
 <li>true when the result holds a value</li>
 </ul>
 <h4 id="is_err"><a class="header" href="#is_err">is_err</a></h4>
-<pre><code class="language-pepper">bool is_err()
+<pre><code class="language-pepper">is_err(): bool
 </code></pre>
 <p>Reports whether this result is Err.</p>
 <p><strong>Returns</strong></p>
@@ -12335,7 +12360,7 @@ default (zero for a POD type, null for a struct type).</p>
 <li>true when the result holds an error</li>
 </ul>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
-<pre><code class="language-pepper">TValue value()
+<pre><code class="language-pepper">value(): TValue
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
 <p>For a struct <code>TValue</code> the caller gets its own reference; the result
@@ -12354,7 +12379,7 @@ result is Ok.</p>
 <pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
 </code></pre>
 <h4 id="error-2"><a class="header" href="#error-2">error</a></h4>
-<pre><code class="language-pepper">TError error()
+<pre><code class="language-pepper">error(): TError
 </code></pre>
 <p>Returns the failure value, panicking if this result is Ok.</p>
 <p>For a struct <code>TError</code> the caller gets its own reference; the result
@@ -12371,7 +12396,7 @@ keeps its reference too.</p>
 <pre><code class="language-pepper">    var e = Result&lt;int&gt;.err(Error("boom")).error();   # e.message == "boom"
 </code></pre>
 <h4 id="ok_or"><a class="header" href="#ok_or">ok_or</a></h4>
-<pre><code class="language-pepper">TValue ok_or(TValue fallback)
+<pre><code class="language-pepper">ok_or(fallback: TValue): TValue
 </code></pre>
 <p>Returns the success value, or <code>fallback</code> if this result is Err.</p>
 <p>Never panics. <code>fallback</code> is evaluated by the caller whether or not it
@@ -13767,7 +13792,7 @@ one.</p>
 <p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
 (<code>mode &amp; 07777</code>, for example 256 for owner read); on Windows the
 <code>FILE_ATTRIBUTE_*</code> bits.</p>
-<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
+<h3 id="constructor-1-3"><a class="header" href="#constructor-1-3">Constructor</a></h3>
 <h4 id="metadata-1-1"><a class="header" href="#metadata-1-1">Metadata()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -14462,7 +14487,7 @@ afresh.</p>
 <pre><code class="language-pepper">Path path
 </code></pre>
 <p>The directory’s path, as given to <code>open</code>.</p>
-<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
+<h3 id="constructor-1-4"><a class="header" href="#constructor-1-4">Constructor</a></h3>
 <h4 id="directory-2"><a class="header" href="#directory-2">Directory()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -15137,7 +15162,7 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
     while (stream.read(reply, 4096).value() &gt; 0) {
     }
 </code></pre>
-<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
+<h3 id="constructor-1-5"><a class="header" href="#constructor-1-5">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -15808,7 +15833,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-thread value</li>
 </ul>
-<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
+<h3 id="constructor-1-6"><a class="header" href="#constructor-1-6">Constructor</a></h3>
 <h4 id="threadlocalguard-1"><a class="header" href="#threadlocalguard-1">ThreadLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(ThreadLocal&lt;T&gt; local)
 </code></pre>
@@ -16080,7 +16105,7 @@ without naming it. It belongs to the thread that runs the loop.</p>
 <pre><code class="language-pepper">T Current
 </code></pre>
 <p>The value the last successful <code>next()</code> received.</p>
-<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
+<h3 id="constructor-1-7"><a class="header" href="#constructor-1-7">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(Channel&lt;T&gt; source)
 </code></pre>
@@ -16293,7 +16318,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
 </code></pre>
 <p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
 a <code>try_lock()</code> that found the lock busy.</p>
-<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
+<h3 id="constructor-1-8"><a class="header" href="#constructor-1-8">Constructor</a></h3>
 <h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
 <pre><code class="language-pepper">construct(Mutex&lt;T&gt; source, bool wait = true)
 </code></pre>
@@ -16529,7 +16554,7 @@ compile error.</p>
         return 0;
     }
 </code></pre>
-<h3 id="constructor-1-10"><a class="header" href="#constructor-1-10">Constructor</a></h3>
+<h3 id="constructor-1-9"><a class="header" href="#constructor-1-9">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(shared () =&gt; T initializer)
 </code></pre>

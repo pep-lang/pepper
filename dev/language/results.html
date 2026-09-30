@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f8fbc384.js";
+            window.path_to_searchindex_js = "../searchindex-9db0f184.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-458d6a6b.js"></script>
@@ -192,9 +192,11 @@ broken invariant, use <code>assert</code> or <code>panic</code> instead.</p>
 without an import. The <a href="../reference/result.html">Result reference</a> lists every
 member.</p>
 <h2 id="creating-and-checking-results"><a class="header" href="#creating-and-checking-results">Creating and checking results</a></h2>
-<p><code>Result&lt;TValue, TError&gt;</code> works like Rust’s <code>Result&lt;T, E&gt;</code>. You build one with
-the static functions <code>ok</code> and <code>err</code>, and ask which it is with <code>is_ok()</code> and
-<code>is_err()</code>:</p>
+<p><code>Result&lt;TValue, TError&gt;</code> works like Rust’s <code>Result&lt;T, E&gt;</code>. It is an
+<a href="enums.html">enum</a> with two cases, <code>Ok(value: TValue)</code> and <code>Err(error: TError)</code>.
+You build one with a case or with the static functions <code>ok</code> and <code>err</code>, and
+read it with <a href="enums.html#match"><code>match</code></a>, <a href="enums.html#match-expressions-is-and-literal-patterns"><code>is</code></a>,
+or its methods:</p>
 <pre><code class="language-pepper"># A function that can fail returns a Result instead of a plain value.
 parse_digit(String s): Result&lt;int&gt; {
     if (s == "0") { return Result&lt;int&gt;.ok(0); }
@@ -208,7 +210,6 @@ main(): int {
     assert(good.is_ok(), "2 parses");
     assert(!good.is_err(), "is_err is the opposite of is_ok");
     assert(good.value() == 2, "value() returns the value");
-    assert(good.value() == 2, "the Value field holds it too");
 
     var bad = parse_digit("x");
     assert(bad.is_err(), "x does not parse");
@@ -222,9 +223,13 @@ main(): int {
     Result&lt;int, Error&gt; spelled_out = good;
     assert(spelled_out.value() == 2, "the same type");
 
-    # A default-constructed Result is an Err with a default error.
-    var empty = Result&lt;int&gt;();
-    assert(empty.is_err(), "Result() is an Err");
+    # Result is an enum: its cases build values too, and match reads them.
+    var parsed = Result&lt;int&gt;.Ok(7);
+    var doubled = match (parsed) { Ok(n) =&gt; n * 2, Err(e) =&gt; 0 };
+    assert(doubled == 14, "match binds the value");
+    if (bad is Err(e)) {
+        assert(e.message.length() &gt; 0, "is binds the error");
+    }
 
     # An operation with no value to return uses void.
     var done = Result&lt;void&gt;.ok();
@@ -240,8 +245,8 @@ main(): int {
 <tr><th>Member</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
-<tr><td><code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
+<tr><td><code>Result&lt;T&gt;.Ok(value)</code>, <code>Result&lt;T&gt;.ok(value)</code></td><td>Creates an Ok result holding <code>value</code>.</td></tr>
+<tr><td><code>Result&lt;T&gt;.Err(error)</code>, <code>Result&lt;T&gt;.err(error)</code></td><td>Creates an Err result holding <code>error</code>.</td></tr>
 <tr><td><code>is_ok()</code>, <code>is_err()</code></td><td>Report which kind the result is.</td></tr>
 <tr><td><code>value()</code></td><td>Returns the value; panics with <code>Result.value on an Err value</code> if the result is an Err.</td></tr>
 <tr><td><code>error()</code></td><td>Returns the error; panics with <code>Result.error on an Ok value</code> if the result is Ok.</td></tr>
@@ -254,23 +259,32 @@ values of the two spellings can be assigned to each other freely (the compiler
 does generate a separate specialization for each spelling). <code>Error</code> is a struct
 with one field, <code>String message</code>: <code>Error("boom").message</code> is <code>"boom"</code>.</p>
 <p>Use <code>value()</code> when an Err would be a bug in your program, since it stops the
-program. When an Err is an expected outcome, test with <code>is_ok()</code> or <code>is_err()</code>,
-or supply a fallback with <code>ok_or</code>.</p>
+program. When an Err is an expected outcome, <code>match</code> on the result, test it
+with <code>is</code> (<code>if (r is Err(e)) { ... }</code>) or <code>is_ok()</code>, or supply a fallback with
+<code>ok_or</code>.</p>
 <h3 id="check-before-you-read"><a class="header" href="#check-before-you-read">Check before you read</a></h3>
-<p>Pepper has no union types, so a <code>Result</code> stores both a value and an error in
-private fields, and only one of them is meaningful. <code>value()</code> and <code>error()</code>
-check which one you asked for and panic on the wrong one, so call <code>value()</code>
-only after checking <code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
+<p>A <code>Result</code> holds either its value or its error, never both. A <code>match</code> or an
+<code>is</code> test reads the one it holds, so it cannot pick the wrong one. <code>value()</code>
+and <code>error()</code> panic on the wrong one, so call <code>value()</code> only after checking
+<code>is_ok()</code>, and <code>error()</code> only after checking <code>is_err()</code>.</p>
+<p>A slot of type <code>Result</code> that is never given a value holds null, as for any
+enum whose cases carry values: <code>Result&lt;int&gt;()</code> is an error, since only the
+cases make values.</p>
 <h3 id="results-with-no-value"><a class="header" href="#results-with-no-value">Results with no value</a></h3>
 <p>An operation that has nothing to return on success, such as deleting a file,
 uses <code>void</code> as its value type, like <code>Result&lt;(), E&gt;</code> in Rust. A <code>void</code> type
-argument erases what it types, so <code>Result&lt;void&gt;</code> holds no value, <code>ok()</code>
-takes no argument, and <code>value()</code> returns nothing: calling it only checks that
-the result is Ok. Using that call as a value, as in <code>var x = done.value();</code>, is
-a compile error, as it is for any function that returns <code>void</code>.</p>
-<pre><code class="language-pepper">var done = Result&lt;void&gt;.ok();
+argument erases what it types, so in <code>Result&lt;void&gt;</code> the case <code>Ok</code> carries
+nothing, <code>ok()</code> takes no argument, and <code>value()</code> returns nothing: calling it
+only checks that the result is Ok. Using that call as a value, as in
+<code>var x = done.value();</code>, is a compile error, as it is for any function that
+returns <code>void</code>.</p>
+<pre><code class="language-pepper">var done = Result&lt;void&gt;.Ok;   # or Result&lt;void&gt;.ok()
 var failed = Result&lt;void&gt;.err(Error("disk full"));
 done.value();   # panics if `done` is an Err
+match (failed) {
+    Ok =&gt; {}
+    Err(e) =&gt; { print(e.message); }
+}
 </code></pre>
 <h2 id="custom-error-types-and-propagation"><a class="header" href="#custom-error-types-and-propagation">Custom error types and propagation</a></h2>
 <p>Any type can be the error type. A struct lets you carry details the caller can
@@ -358,8 +372,8 @@ main(): int {
 }
 </code></pre>
 <p>Pepper does not yet have a shorthand for propagation (such as Rust’s <code>?</code>
-operator), and <a href="enums.html#match"><code>match</code></a> does not work on a <code>Result</code> yet, so
-each fallible call is checked with <code>if</code> as shown above.</p>
+operator), so each fallible call is checked with <code>if</code>, <code>is</code> or <code>match</code> as
+shown above.</p>
 <h2 id="results-from-the-io-module"><a class="header" href="#results-from-the-io-module">Results from the io module</a></h2>
 <p>The <a href="../reference/io-module.html">io module</a> is a good model of a library built
 on <code>Result</code>. Every operation that can fail returns an <code>IoResult&lt;T&gt;</code>, a type
